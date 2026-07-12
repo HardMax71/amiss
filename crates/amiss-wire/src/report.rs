@@ -230,7 +230,7 @@ pub fn invocation_failure_wire(
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
         ("compatibility", string("experimental")),
-        ("engine", engine_value(engine)),
+        ("engine", engine_block(engine)),
         (
             "evaluation",
             object(vec![
@@ -296,7 +296,10 @@ pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, 
     (descriptor, digest)
 }
 
-fn engine_value(engine: &EngineProvenance) -> Value {
+/// The complete engine block: contract, version, digest, provenance, policy
+/// version, and the three adapter descriptors with their digests.
+#[must_use]
+pub fn engine_block(engine: &EngineProvenance) -> Value {
     let adapter_rows: Vec<Value> = Adapter::ALL
         .iter()
         .map(|adapter| {
@@ -679,6 +682,106 @@ impl FindingKind {
             | Self::OpaqueHtmlRegion
             | Self::ObservationCorrelationAmbiguous
             | Self::UnlinkedDocument => Disposition::Record,
+        }
+    }
+}
+
+pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile/v1";
+
+/// The zero-capability sandbox descriptor the engine asserts for itself, and
+/// its digest. A future wrapper verifies rather than asserts it.
+#[must_use]
+pub fn sandbox_descriptor() -> (Value, Digest) {
+    let descriptor = object(vec![
+        ("schema", string(SANDBOX_SCHEMA)),
+        ("profile", string("scanner-v0-zero-capability-v1")),
+        ("isolation", string("process")),
+        ("network", string("denied")),
+        ("child_processes", string("denied")),
+        ("repository_processes", string("denied")),
+        ("credentials", string("absent")),
+        ("secrets", string("absent")),
+        ("shared_cache", string("denied")),
+        ("workspace", string("read-only")),
+        ("environment", string("scanner-process-env-v1")),
+        (
+            "physical_memory",
+            object(vec![("maximum_bytes", Value::Integer(1_073_741_824))]),
+        ),
+        (
+            "temporary_storage",
+            object(vec![
+                ("kind", string("private-bounded")),
+                ("maximum_bytes", Value::Integer(67_108_864)),
+            ]),
+        ),
+        (
+            "watchdog",
+            object(vec![("maximum_milliseconds", Value::Integer(120_000))]),
+        ),
+    ]);
+    let digest = hj(SANDBOX_SCHEMA, &descriptor);
+    (descriptor, digest)
+}
+
+impl FindingKind {
+    #[must_use]
+    pub const fn evidence_class(self) -> &'static str {
+        match self {
+            Self::ExplicitTargetMissing
+            | Self::ExplicitTargetTypeMismatch
+            | Self::InvalidReference => "deterministic-structural",
+            Self::UnsupportedCapability
+            | Self::UnsupportedReferenceSemantics
+            | Self::UnsupportedDocumentFormat
+            | Self::UnsupportedTargetKind
+            | Self::UnsupportedVersionScope => "unsupported",
+            Self::DependencyChangedSubjectUnchanged
+            | Self::DependencyAndSubjectCochanged
+            | Self::SubjectChanged => "impact-observation",
+            Self::ExplicitReferenceRemoved
+            | Self::DocumentRemoved
+            | Self::ExternalOutOfScope
+            | Self::OpaqueMdxRegion
+            | Self::OpaqueHtmlRegion
+            | Self::ObservationCorrelationAmbiguous
+            | Self::UnlinkedDocument => "coverage-boundary",
+            Self::PolicyWeakened
+            | Self::CoverageReduced
+            | Self::ControlPlaneChanged
+            | Self::DebtWorsened
+            | Self::DebtExpired
+            | Self::WaiverInvalid => "control-plane",
+        }
+    }
+
+    #[must_use]
+    pub const fn invariant_class(self) -> &'static str {
+        match self {
+            Self::ExplicitTargetMissing
+            | Self::ExplicitTargetTypeMismatch
+            | Self::InvalidReference => "ratcheted",
+            Self::UnsupportedCapability => "analysis-integrity",
+            Self::UnsupportedReferenceSemantics
+            | Self::UnsupportedDocumentFormat
+            | Self::UnsupportedTargetKind
+            | Self::UnsupportedVersionScope
+            | Self::DependencyChangedSubjectUnchanged
+            | Self::DependencyAndSubjectCochanged
+            | Self::SubjectChanged
+            | Self::ExplicitReferenceRemoved
+            | Self::DocumentRemoved
+            | Self::ExternalOutOfScope
+            | Self::OpaqueMdxRegion
+            | Self::OpaqueHtmlRegion
+            | Self::ObservationCorrelationAmbiguous
+            | Self::UnlinkedDocument => "advisory",
+            Self::PolicyWeakened
+            | Self::CoverageReduced
+            | Self::ControlPlaneChanged
+            | Self::DebtWorsened
+            | Self::DebtExpired
+            | Self::WaiverInvalid => "absolute",
         }
     }
 }

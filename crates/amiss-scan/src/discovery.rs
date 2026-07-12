@@ -31,6 +31,10 @@ pub struct DocumentRecord {
     pub path: String,
     pub classification: Classification,
     pub status: DocumentStatus,
+    pub oid: Oid,
+    pub mode: GitMode,
+    pub byte_count: u64,
+    pub raw_digest: Option<amiss_wire::digest::Digest>,
 }
 
 /// One side's complete discovery: every classified path in repository byte
@@ -162,11 +166,16 @@ pub fn discover(
             discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
             continue;
         };
-        let status = side_status(repo, git, scan, classification, &path, &entry)?;
+        let (status, byte_count, raw_digest) =
+            side_status(repo, git, scan, classification, &path, &entry)?;
         discovery.documents.push(DocumentRecord {
             path,
             classification,
             status,
+            oid: entry.oid.clone(),
+            mode: entry.mode,
+            byte_count,
+            raw_digest,
         });
     }
     Ok(discovery)
@@ -183,13 +192,25 @@ fn side_status(
     classification: Classification,
     path: &str,
     entry: &TreeEntry,
-) -> Result<DocumentStatus, Error> {
+) -> Result<(DocumentStatus, u64, Option<amiss_wire::digest::Digest>), Error> {
     if excluded_by_built_in(path) {
-        return Ok(DocumentStatus::ExcludedBuiltIn);
+        return Ok((DocumentStatus::ExcludedBuiltIn, 0, None));
     }
     match entry.mode {
-        GitMode::Symlink => return Ok(DocumentStatus::Unsupported(UnsupportedKind::Symlink)),
-        GitMode::Gitlink => return Ok(DocumentStatus::Unsupported(UnsupportedKind::Gitlink)),
+        GitMode::Symlink => {
+            return Ok((
+                DocumentStatus::Unsupported(UnsupportedKind::Symlink),
+                0,
+                None,
+            ));
+        }
+        GitMode::Gitlink => {
+            return Ok((
+                DocumentStatus::Unsupported(UnsupportedKind::Gitlink),
+                0,
+                None,
+            ));
+        }
         GitMode::Tree => return Err(Error::Git(GitDefect::ObjectUnreadable)),
         GitMode::RegularFile | GitMode::ExecutableFile => {}
     }
@@ -204,18 +225,26 @@ fn side_status(
         Err(defect) => {
             let defect = Error::from(defect);
             if defect.is_document_scoped() {
-                return Ok(DocumentStatus::Failed(defect));
+                return Ok((DocumentStatus::Failed(defect), 0, None));
             }
             return Err(defect);
         }
     };
-    scan.charge_document_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
+    let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
+    scan.charge_document_bytes(byte_count)?;
+    let raw = amiss_wire::digest::hb(crate::resolve::RAW_EVIDENCE_DOMAIN, &object.body);
     if lfs::is_pointer(&object.body) {
-        return Ok(DocumentStatus::Unsupported(UnsupportedKind::LfsPointer));
+        return Ok((
+            DocumentStatus::Unsupported(UnsupportedKind::LfsPointer),
+            byte_count,
+            Some(raw),
+        ));
     }
     match scan_bytes(scan, classification.adapter(), &object.body) {
-        Ok(scanned) => Ok(DocumentStatus::Scanned(scanned)),
-        Err(defect) if defect.is_document_scoped() => Ok(DocumentStatus::Failed(defect)),
+        Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),
+        Err(defect) if defect.is_document_scoped() => {
+            Ok((DocumentStatus::Failed(defect), byte_count, Some(raw)))
+        }
         Err(defect) => Err(defect),
     }
 }

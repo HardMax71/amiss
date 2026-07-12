@@ -184,8 +184,17 @@ fn reference_scope(observation: &Observation) -> Value {
     ])
 }
 
+/// The wire resolution row.
+#[must_use]
+pub fn resolution_value_public(resolution: &crate::resolve::Resolution) -> Value {
+    resolution_row(resolution)
+}
+
 fn resolution_value(observation: &Observation) -> Value {
-    let resolution = &observation.resolution;
+    resolution_row(&observation.resolution)
+}
+
+fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
     let nullable = |text: Option<String>| text.map_or(Value::Null, Value::String);
     Value::Object(vec![
         (

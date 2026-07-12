@@ -9,6 +9,8 @@ pub mod lfs;
 #[cfg(unix)]
 pub mod observe;
 #[cfg(unix)]
+pub mod report;
+#[cfg(unix)]
 pub mod resolve;
 pub mod resources;
 pub mod scan;
@@ -24,6 +26,8 @@ pub use discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, Unsupport
 pub use document::{Classification, classify, excluded_by_built_in};
 #[cfg(unix)]
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
+#[cfg(unix)]
+pub use report::{Built, Setup, SnapshotIdentity, construct};
 #[cfg(unix)]
 pub use resolve::{GithubContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};
