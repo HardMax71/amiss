@@ -242,15 +242,7 @@ pub struct TreeIdentity {
 impl TreeIdentity {
     #[must_use]
     pub fn new(object_format: ObjectFormat, tree_oid: String) -> Option<Self> {
-        let expected = match object_format {
-            ObjectFormat::Sha1 => 40,
-            ObjectFormat::Sha256 => 64,
-        };
-        let ok = tree_oid.len() == expected
-            && tree_oid
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
-        if ok {
+        if oid_hex(object_format, &tree_oid) {
             Some(Self {
                 object_format,
                 tree_oid,
@@ -259,4 +251,35 @@ impl TreeIdentity {
             None
         }
     }
+}
+
+/// Full lowercase object ID for one declared object format.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Oid(String);
+
+impl Oid {
+    #[must_use]
+    pub fn new(object_format: ObjectFormat, raw: String) -> Option<Self> {
+        if oid_hex(object_format, &raw) {
+            Some(Self(raw))
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn oid_hex(object_format: ObjectFormat, raw: &str) -> bool {
+    let expected = match object_format {
+        ObjectFormat::Sha1 => 40,
+        ObjectFormat::Sha256 => 64,
+    };
+    raw.len() == expected
+        && raw
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
