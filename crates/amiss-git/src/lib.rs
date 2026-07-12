@@ -1,5 +1,7 @@
 pub mod object;
 #[cfg(unix)]
+mod pack;
+#[cfg(unix)]
 pub mod repo;
 pub mod resources;
 
@@ -16,8 +18,6 @@ pub enum Error {
     ObjectMissing,
     ObjectWrongKind,
     ObjectUnreadable,
-    /// Interim: absent loose while packs exist; dies with the pack slice.
-    PackLookupUnimplemented,
     ResourceLimit {
         resource: ResourceName,
         configured_limit: u64,

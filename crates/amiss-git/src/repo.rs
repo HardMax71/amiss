@@ -2,19 +2,25 @@ use std::fs::File;
 use std::io::Read as _;
 use std::os::fd::OwnedFd;
 use std::path::Path;
+use std::sync::OnceLock;
 
+use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{ObjectFormat, Oid};
 use rustix::fs::{Mode, OFlags, openat};
 use rustix::io::Errno;
 
 use crate::Error;
-use crate::object::{Object, ObjectKind, decode_loose, discard_to_unreadable};
-use crate::resources::GitResources;
+use crate::object::{Object, ObjectKind, decode_loose, discard_to_unreadable, hex, verify_oid};
+use crate::pack::{
+    self, PackSet, apply_delta, inflate_exact, kind_of, parse_entry_header, parse_ofs_distance,
+};
+use crate::resources::{GitResources, crossing};
 
 #[derive(Debug)]
 pub struct Repository {
     objects: OwnedFd,
     object_format: ObjectFormat,
+    packs: OnceLock<Result<PackSet, Error>>,
 }
 
 fn dir_flags() -> OFlags {
@@ -46,6 +52,7 @@ impl Repository {
         Ok(Self {
             objects,
             object_format,
+            packs: OnceLock::new(),
         })
     }
 
@@ -53,24 +60,11 @@ impl Repository {
     ///
     /// # Errors
     ///
-    /// `ObjectMissing` when no loose or pack row holds the OID,
+    /// `ObjectMissing` when no loose or validated pack row holds the OID,
     /// `ObjectUnreadable` for any corruption or non-ordinary entry, and
-    /// `ResourceLimit` for cap crossings; pack lookup is the next slice.
+    /// `ResourceLimit` for cap crossings.
     pub fn read_object(&self, resources: &mut GitResources, oid: &Oid) -> Result<Object, Error> {
-        let hex = oid.as_str();
-        let fan = hex.get(..2).ok_or(Error::ObjectUnreadable)?;
-        let rest = hex.get(2..).ok_or(Error::ObjectUnreadable)?;
-        let fan_fd = match openat(&self.objects, fan, dir_flags(), Mode::empty()) {
-            Ok(fd) => fd,
-            Err(errno) if errno == Errno::NOENT => return Err(self.absent()),
-            Err(_) => return Err(Error::ObjectUnreadable),
-        };
-        let file_fd = match openat(&fan_fd, rest, file_flags(), Mode::empty()) {
-            Ok(fd) => fd,
-            Err(errno) if errno == Errno::NOENT => return Err(self.absent()),
-            Err(_) => return Err(Error::ObjectUnreadable),
-        };
-        self.decode(resources, oid, file_fd)
+        self.read_full(resources, oid, 1)
     }
 
     /// # Errors
@@ -88,6 +82,130 @@ impl Repository {
             Ok(object)
         } else {
             Err(Error::ObjectWrongKind)
+        }
+    }
+
+    fn read_full(
+        &self,
+        resources: &mut GitResources,
+        oid: &Oid,
+        depth: u64,
+    ) -> Result<Object, Error> {
+        let limit = resources.limits().delta_depth;
+        if depth > limit {
+            return Err(crossing(ResourceName::GitDeltaDepth, limit, depth));
+        }
+        let hex_text = oid.as_str();
+        let fan = hex_text.get(..2).ok_or(Error::ObjectUnreadable)?;
+        let rest = hex_text.get(2..).ok_or(Error::ObjectUnreadable)?;
+        let fan_fd = match openat(&self.objects, fan, dir_flags(), Mode::empty()) {
+            Ok(fd) => fd,
+            Err(errno) if errno == Errno::NOENT => return self.read_packed(resources, oid, depth),
+            Err(_) => return Err(Error::ObjectUnreadable),
+        };
+        let file_fd = match openat(&fan_fd, rest, file_flags(), Mode::empty()) {
+            Ok(fd) => fd,
+            Err(errno) if errno == Errno::NOENT => return self.read_packed(resources, oid, depth),
+            Err(_) => return Err(Error::ObjectUnreadable),
+        };
+        self.decode(resources, oid, file_fd)
+    }
+
+    fn pack_set(&self, resources: &mut GitResources) -> Result<&PackSet, Error> {
+        let built = self
+            .packs
+            .get_or_init(|| pack::build(&self.objects, self.object_format, resources));
+        match built {
+            Ok(set) => {
+                for (name, size) in &set.index_sizes {
+                    resources.charge_index(name, *size)?;
+                }
+                Ok(set)
+            }
+            Err(defect) => Err(defect.clone()),
+        }
+    }
+
+    fn read_packed(
+        &self,
+        resources: &mut GitResources,
+        oid: &Oid,
+        depth: u64,
+    ) -> Result<Object, Error> {
+        let raw = oid_raw(oid).ok_or(Error::ObjectUnreadable)?;
+        let Some((pack_index, offset)) = self.pack_set(resources)?.locate(&raw) else {
+            return Err(Error::ObjectMissing);
+        };
+        let (kind, body) = self.read_pack_at(resources, pack_index, offset, depth)?;
+        let raw_header = format!("{} {}\0", kind.as_str(), body.len()).into_bytes();
+        verify_oid(self.object_format, oid, &raw_header, &body)?;
+        Ok(Object { kind, body })
+    }
+
+    fn read_pack_at(
+        &self,
+        resources: &mut GitResources,
+        pack_index: usize,
+        offset: u64,
+        depth: u64,
+    ) -> Result<(ObjectKind, Vec<u8>), Error> {
+        let limit = resources.limits().delta_depth;
+        if depth > limit {
+            return Err(crossing(ResourceName::GitDeltaDepth, limit, depth));
+        }
+        let inflated_cap = resources.limits().inflated_object_bytes;
+        let entry = {
+            let set = self.pack_set(resources)?;
+            let pack = set.packs.get(pack_index).ok_or(Error::ObjectUnreadable)?;
+            pack.read_interval(resources, offset)?
+        };
+        let header = parse_entry_header(&entry)?;
+        let after_header = entry
+            .get(header.header_len..)
+            .ok_or(Error::ObjectUnreadable)?;
+
+        match header.type_code {
+            1..=4 => {
+                let body = inflate_exact(after_header, header.size, inflated_cap)?;
+                Ok((kind_of(header.type_code)?, body))
+            }
+            6 => {
+                let (distance, used) = parse_ofs_distance(after_header)?;
+                let base_offset = offset
+                    .checked_sub(distance)
+                    .ok_or(Error::ObjectUnreadable)?;
+                let base_known = {
+                    let set = self.pack_set(resources)?;
+                    let pack = set.packs.get(pack_index).ok_or(Error::ObjectUnreadable)?;
+                    pack.row_at(base_offset).is_some()
+                };
+                if !base_known {
+                    return Err(Error::ObjectUnreadable);
+                }
+                let (kind, base) =
+                    self.read_pack_at(resources, pack_index, base_offset, depth.saturating_add(1))?;
+                let script_bytes = after_header.get(used..).ok_or(Error::ObjectUnreadable)?;
+                let script = inflate_exact(script_bytes, header.size, inflated_cap)?;
+                Ok((kind, apply_delta(&base, &script, inflated_cap)?))
+            }
+            7 => {
+                let width = self.oid_width();
+                let base_raw = after_header.get(..width).ok_or(Error::ObjectUnreadable)?;
+                let base_oid =
+                    Oid::new(self.object_format, hex(base_raw)).ok_or(Error::ObjectUnreadable)?;
+                let base = self.read_full(resources, &base_oid, depth.saturating_add(1))?;
+                let script_bytes = after_header.get(width..).ok_or(Error::ObjectUnreadable)?;
+                let script = inflate_exact(script_bytes, header.size, inflated_cap)?;
+                Ok((base.kind, apply_delta(&base.body, &script, inflated_cap)?))
+            }
+            _ => Err(Error::ObjectUnreadable),
+        }
+    }
+
+    const fn oid_width(&self) -> usize {
+        match self.object_format {
+            ObjectFormat::Sha1 => 20,
+            ObjectFormat::Sha256 => 32,
         }
     }
 
@@ -111,11 +229,11 @@ impl Repository {
             .read_to_end(&mut compressed)
             .map_err(discard_to_unreadable)?;
         if u64::try_from(read).unwrap_or(u64::MAX) > stream_cap {
-            return Err(Error::ResourceLimit {
-                resource: amiss_wire::controls::ResourceName::GitCompressedObjectBytes,
-                configured_limit: stream_cap,
-                observed_lower_bound: stream_cap.saturating_add(1),
-            });
+            return Err(crossing(
+                ResourceName::GitCompressedObjectBytes,
+                stream_cap,
+                stream_cap.saturating_add(1),
+            ));
         }
         decode_loose(
             &compressed,
@@ -124,27 +242,22 @@ impl Repository {
             resources.limits().inflated_object_bytes,
         )
     }
+}
 
-    fn absent(&self) -> Error {
-        match openat(&self.objects, "pack", dir_flags(), Mode::empty()) {
-            Err(errno) if errno == Errno::NOENT => Error::ObjectMissing,
-            Err(_) => Error::ObjectUnreadable,
-            Ok(fd) => match rustix::fs::Dir::read_from(&fd) {
-                Err(_) => Error::ObjectUnreadable,
-                Ok(mut dir) => {
-                    let has_entries = dir.any(|entry| {
-                        entry.is_ok_and(|e| {
-                            let name = e.file_name().to_bytes();
-                            name != b"." && name != b".."
-                        })
-                    });
-                    if has_entries {
-                        Error::PackLookupUnimplemented
-                    } else {
-                        Error::ObjectMissing
-                    }
-                }
-            },
-        }
+fn oid_raw(oid: &Oid) -> Option<Vec<u8>> {
+    let text = oid.as_str();
+    if !text.len().is_multiple_of(2) {
+        return None;
     }
+    let mut out = Vec::with_capacity(text.len().checked_div(2)?);
+    for pair in text.as_bytes().chunks_exact(2) {
+        let [high, low] = pair else { return None };
+        let value = |byte: u8| match byte {
+            b'0'..=b'9' => Some(byte.wrapping_sub(b'0')),
+            b'a'..=b'f' => Some(byte.wrapping_sub(b'a').wrapping_add(10)),
+            _ => None,
+        };
+        out.push(value(*high)?.wrapping_shl(4) | value(*low)?);
+    }
+    Some(out)
 }

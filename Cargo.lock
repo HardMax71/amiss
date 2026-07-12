@@ -20,6 +20,7 @@ name = "amiss-git"
 version = "0.0.0"
 dependencies = [
  "amiss-wire",
+ "crc32fast",
  "flate2",
  "rustix",
  "sha1-checked",

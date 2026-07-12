@@ -6,6 +6,7 @@ publish.workspace = true
 
 [dependencies]
 amiss-wire = { path = "../amiss-wire" }
+crc32fast = "1"
 flate2 = "1"
 rustix = { version = "1", features = ["fs"] }
 sha1-checked = "0.10"

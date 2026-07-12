@@ -125,17 +125,18 @@ fn missing_and_unavailable_are_distinct() {
 }
 
 #[test]
-fn pack_presence_is_not_treated_as_missing() {
+fn junk_pack_names_are_ignored() {
     let dir = make_repo();
     let pack_dir = dir.path().join(".git/objects/pack");
     fs::create_dir_all(&pack_dir).unwrap();
     fs::write(pack_dir.join("pack-junk.idx"), b"junk").unwrap();
+    fs::write(pack_dir.join("tmp_pack_x"), b"junk").unwrap();
     let repo = open(dir.path());
     let mut res = GitResources::new(GitLimits::CONTRACT);
     let absent = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
     assert_eq!(
         repo.read_object(&mut res, &absent).unwrap_err(),
-        Error::PackLookupUnimplemented
+        Error::ObjectMissing
     );
 }
 

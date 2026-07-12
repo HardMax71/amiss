@@ -26,6 +26,16 @@ impl ObjectKind {
         }
     }
 
+    pub(crate) const fn from_pack_type(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Self::Commit),
+            2 => Some(Self::Tree),
+            3 => Some(Self::Blob),
+            4 => Some(Self::Tag),
+            _ => None,
+        }
+    }
+
     fn from_token(token: &[u8]) -> Option<Self> {
         match token {
             b"blob" => Some(Self::Blob),
@@ -166,7 +176,24 @@ pub(crate) fn discard_to_unreadable<T>(_defect: T) -> Error {
     Error::ObjectUnreadable
 }
 
-fn verify_oid(
+pub(crate) fn ordinary_digest(object_format: ObjectFormat, data: &[u8]) -> Vec<u8> {
+    match object_format {
+        ObjectFormat::Sha1 => {
+            let mut hasher = sha1_checked::Sha1::builder()
+                .detect_collision(false)
+                .build();
+            hasher.update(data);
+            hasher.try_finalize().hash().to_vec()
+        }
+        ObjectFormat::Sha256 => {
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(data);
+            hasher.finalize().to_vec()
+        }
+    }
+}
+
+pub(crate) fn verify_oid(
     object_format: ObjectFormat,
     oid: &Oid,
     raw_header: &[u8],
@@ -201,7 +228,7 @@ fn verify_oid(
     }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     let mut out = String::new();
     for byte in bytes {
         out.push(hex_digit(u32::from(byte.wrapping_shr(4))));
