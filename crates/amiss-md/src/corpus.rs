@@ -3,7 +3,7 @@ use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 
-use crate::accounting::{Fault, Work, charge};
+use crate::extract::{Extraction, Occurrence, analyze};
 
 pub const SCHEMA: &str = "amiss/parser-profile-corpus/v1";
 
@@ -447,18 +447,110 @@ fn rfind_within(hay: &[u8], needle: &[u8], from: usize, before: usize) -> Option
     (at >= from).then_some(at)
 }
 
-fn work_value(work: Result<Work, Fault>) -> Value {
-    match work {
-        Ok(charged) => Value::Object(vec![
-            (
-                "nesting".to_owned(),
-                Value::Integer(i64::try_from(charged.nesting).unwrap_or(i64::MAX)),
+fn span_value(span: (usize, usize)) -> Value {
+    Value::Array(vec![
+        Value::Integer(clamp(span.0)),
+        Value::Integer(clamp(span.1)),
+    ])
+}
+
+fn occurrence_value(entry: &Occurrence) -> Value {
+    Value::Object(vec![
+        (
+            "block_kind".to_owned(),
+            Value::String(entry.block_kind.as_str().to_owned()),
+        ),
+        ("block_span".to_owned(), span_value(entry.block_span)),
+        (
+            "node_path".to_owned(),
+            Value::Array(
+                entry
+                    .node_path
+                    .iter()
+                    .map(|index| Value::Integer(clamp(*index)))
+                    .collect(),
             ),
-            (
-                "nodes".to_owned(),
-                Value::Integer(i64::try_from(charged.nodes).unwrap_or(i64::MAX)),
+        ),
+        (
+            "raw_destination".to_owned(),
+            Value::String(entry.raw_destination.clone()),
+        ),
+        (
+            "semantic_destination".to_owned(),
+            Value::String(entry.semantic_destination.clone()),
+        ),
+        (
+            "source_construct".to_owned(),
+            Value::String(entry.construct.as_str().to_owned()),
+        ),
+        ("span".to_owned(), span_value(entry.span)),
+    ])
+}
+
+fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
+    vec![
+        (
+            "occurrences".to_owned(),
+            Value::Array(
+                extraction
+                    .occurrences
+                    .iter()
+                    .map(occurrence_value)
+                    .collect(),
             ),
-        ]),
+        ),
+        (
+            "opaque".to_owned(),
+            Value::Object(vec![
+                (
+                    "frontmatter_bytes".to_owned(),
+                    Value::Integer(clamp(extraction.opaque.frontmatter_bytes)),
+                ),
+                (
+                    "html".to_owned(),
+                    Value::Array(
+                        extraction
+                            .opaque
+                            .html
+                            .iter()
+                            .map(|span| span_value(*span))
+                            .collect(),
+                    ),
+                ),
+                (
+                    "mdx".to_owned(),
+                    Value::Array(
+                        extraction
+                            .opaque
+                            .mdx
+                            .iter()
+                            .map(|span| span_value(*span))
+                            .collect(),
+                    ),
+                ),
+            ]),
+        ),
+    ]
+}
+
+fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
+    match analyze(adapter, source) {
+        Ok(analysis) => {
+            let mut members = vec![
+                (
+                    "nesting".to_owned(),
+                    Value::Integer(i64::try_from(analysis.work.nesting).unwrap_or(i64::MAX)),
+                ),
+                (
+                    "nodes".to_owned(),
+                    Value::Integer(i64::try_from(analysis.work.nodes).unwrap_or(i64::MAX)),
+                ),
+            ];
+            if let Some(extraction) = &analysis.extraction {
+                members.extend(extraction_members(extraction));
+            }
+            Value::Object(members)
+        }
         Err(fault) => Value::Object(vec![(
             "fault".to_owned(),
             Value::String(AnalysisErrorCode::from(fault).as_str().to_owned()),
@@ -476,7 +568,7 @@ fn case_value(case: &Case) -> Value {
         .map(|adapter| {
             (
                 adapter.grammar_profile().to_owned(),
-                work_value(charge(*adapter, case.source.as_bytes())),
+                profile_value(*adapter, case.source.as_bytes()),
             )
         })
         .collect();

@@ -141,6 +141,21 @@ pub enum SourceConstruct {
 }
 
 impl SourceConstruct {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InlineLink => "markdown-inline-link",
+            Self::FullReferenceLink => "markdown-full-reference-link",
+            Self::CollapsedReferenceLink => "markdown-collapsed-reference-link",
+            Self::ShortcutReferenceLink => "markdown-shortcut-reference-link",
+            Self::Autolink => "markdown-autolink",
+            Self::InlineImage => "markdown-inline-image",
+            Self::FullReferenceImage => "markdown-full-reference-image",
+            Self::CollapsedReferenceImage => "markdown-collapsed-reference-image",
+            Self::ShortcutReferenceImage => "markdown-shortcut-reference-image",
+        }
+    }
+
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "markdown-inline-link" => Ok(Self::InlineLink),

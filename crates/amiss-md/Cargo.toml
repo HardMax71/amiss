@@ -25,6 +25,10 @@ name = "corpus"
 path = "tests/corpus.rs"
 
 [[test]]
+name = "extract"
+path = "tests/extract.rs"
+
+[[test]]
 name = "frontmatter"
 path = "tests/frontmatter.rs"
 

@@ -19,49 +19,66 @@ pub struct Work {
 
 /// The parse-phase faults an adapter can raise, in the contract's precedence.
 /// A grammar rejection is attributable to the source and is therefore
-/// `DOCUMENT_INVALID`, not a parser failure. `PARSER_PANIC` is reserved for a
-/// panic that bypasses the parser's own result, which the engine must catch
-/// rather than abort on.
+/// `DocumentInvalid`, not a parser failure. `ParserError` is the parser
+/// breaking its own tree contract after accepting the source, `ParserPanic` a
+/// panic that bypasses its result (which the engine must catch rather than
+/// abort on), and `InvalidSourceSpan` a returned tree whose byte spans violate
+/// the closed source contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
     DocumentInvalid,
+    ParserError,
     ParserPanic,
+    InvalidSourceSpan,
 }
 
 impl From<Fault> for AnalysisErrorCode {
     fn from(fault: Fault) -> Self {
         match fault {
             Fault::DocumentInvalid => Self::DocumentInvalid,
+            Fault::ParserError => Self::ParserError,
             Fault::ParserPanic => Self::ParserPanic,
+            Fault::InvalidSourceSpan => Self::InvalidSourceSpan,
         }
     }
 }
 
-/// Charges one document against the adapter's grammar. Frontmatter is
-/// recognized first and contributes no node; only the suffix reaches the
-/// parser. An empty document still charges one root node at depth one.
+/// Recognizes frontmatter, hands only the suffix to the adapter's grammar, and
+/// guards the parse. `None` is the plain adapter, which runs no grammar.
+pub(crate) fn parsed(
+    adapter: Adapter,
+    source: &[u8],
+) -> Result<Option<(Node, usize, &str)>, Fault> {
+    let Some(options) = parse_options(adapter) else {
+        return Ok(None);
+    };
+    let text = str::from_utf8(source).map_err(|_invalid| Fault::DocumentInvalid)?;
+    let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
+    let suffix = text.get(suffix_offset..).ok_or(Fault::DocumentInvalid)?;
+    let guarded = catch_unwind(AssertUnwindSafe(|| to_mdast(suffix, &options)))
+        .map_err(|_panic| Fault::ParserPanic)?;
+    let tree = guarded.map_err(|_rejected| Fault::DocumentInvalid)?;
+    Ok(Some((tree, suffix_offset, suffix)))
+}
+
+/// Charges one document against the adapter's grammar. Frontmatter contributes
+/// no node; an empty document still charges one root node at depth one.
 ///
 /// # Errors
 ///
 /// `DocumentInvalid` when the bytes are not UTF-8 under a parsing adapter or
 /// the grammar rejects the source, and `ParserPanic` when the parser panics.
 pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, Fault> {
-    let Some(options) = parse_options(adapter) else {
-        return Ok(plain(source));
-    };
-    let text = str::from_utf8(source).map_err(|_invalid| Fault::DocumentInvalid)?;
-    let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
-    let suffix = text.get(suffix_offset..).ok_or(Fault::DocumentInvalid)?;
-    let parsed = catch_unwind(AssertUnwindSafe(|| to_mdast(suffix, &options)))
-        .map_err(|_panic| Fault::ParserPanic)?;
-    let tree = parsed.map_err(|_rejected| Fault::DocumentInvalid)?;
-    Ok(walk(&tree))
+    match parsed(adapter, source)? {
+        None => Ok(plain(source)),
+        Some((tree, _offset, _suffix)) => Ok(walk(&tree)),
+    }
 }
 
 /// Counts the root and every node reachable through the ordered `children` of
 /// the logical tree. Iterative because a hostile document may nest deeper than
 /// the stack allows.
-fn walk(root: &Node) -> Work {
+pub(crate) fn walk(root: &Node) -> Work {
     let mut work = Work {
         nodes: 0,
         nesting: 0,
@@ -80,7 +97,7 @@ fn walk(root: &Node) -> Work {
 
 /// One synthetic root plus one synthetic paragraph for every maximal run of
 /// nonblank lines. Depth is one with no run and two otherwise.
-fn plain(source: &[u8]) -> Work {
+pub(crate) fn plain(source: &[u8]) -> Work {
     let mut runs: u64 = 0;
     let mut inside = false;
     for line in scan(source) {

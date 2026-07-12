@@ -1,10 +1,12 @@
 # Parser-profile corpus
 
 `parser-profile-corpus-v1.json` is the gate the scanner spec puts in front of parser
-integration. Each case carries its raw source, what upstream says about it, and the exact node
-count and depth that `parser-work-accounting-v1` charges for it under every profile. Nothing
-downstream (spans, extraction, addresses, the evaluator) may be built against a parser that does
-not reproduce this manifest.
+integration. Each case carries its raw source, what upstream says about it, the exact node count
+and depth that `parser-work-accounting-v1` charges for it under every profile, and, under the two
+parsing profiles, the full extraction goldens: every occurrence with both destination
+representations, its byte span, its node-path address, its block owner, and the document's opaque
+partition. An implementation that does not reproduce this manifest may not sit under the
+evaluator.
 
 The manifest is canonical JSON with a trailing newline, and its digest is pinned in
 `crates/amiss-md/tests/corpus.rs`. Regenerate with:
@@ -110,6 +112,46 @@ bundle is too, since it runs acorn at each candidate. A document built to exploi
 unterminated string holding a million braces) would be slow here and slow upstream. The resource
 ceilings have to bound it; that work is not in this slice.
 
+## The extraction goldens
+
+An occurrence is one supported syntax node: an inline link or image, a full, collapsed, or
+shortcut reference form, or an autolink, where all four autolink shapes (angle URI, angle email,
+`www.`, protocol and email literals) share the one `markdown-autolink` construct and differ in
+their tokens. Footnote references are not links, definitions consumed by nothing produce nothing,
+and anything inside raw HTML or a flattened image label produces no node, so nothing is extracted
+from it.
+
+Each occurrence publishes two destination representations, because they answer different
+questions. `raw_destination` is the exact source-token byte slice: angle brackets dropped, titles
+and whitespace excluded, and for reference forms the token of the first winning definition in
+document order, never the consuming label. `semantic_destination` is the token after the
+construct's own decoding (backslash escapes and character references for link destinations,
+verbatim bytes for angle URIs, `mailto:` and `http://` prefixes for email and `www.` literals),
+which is exactly the value the parser publishes as the node's URL. So `[a](&amp;b)` records
+`&amp;b` and `&b`, and the pair pins both the spelling and the meaning.
+
+Spans are zero-based half-open byte offsets into the raw document; a span endpoint never splits a
+CRLF pair. `node_path` is the zero-based child-index path from the post-frontmatter root to the
+syntax node itself, not to its owner, and frontmatter shifts every byte offset while shifting no
+path. The block owner follows the override order the spec fixes (nearest ancestor list item,
+otherwise nearest table cell, otherwise nearest paragraph, otherwise the document root), so a link
+in a heading is owned by the root, and raw HTML never owns anything.
+
+The opaque partition is frontmatter first, then MDX intervals, then raw-HTML intervals on what
+remains: spans sorted, contained spans discarded, overlapping or exactly adjacent spans unioned. A
+JSX element's outer span covers its Markdown-looking children, so nothing inside one is extracted.
+The three interval families never overlap, and a Markdown document has no MDX intervals as an MDX
+document has no raw-HTML nodes.
+
+Two locators read source bytes rather than the tree, because the tree does not carry them. The
+destination token is found by walking past the label (`](`, optional whitespace, angle or bare
+form under CommonMark's escape and balanced-parenthesis rules), where a destination on the next
+line may resume behind a block quote's own `>` markers, which are line prefix, not destination
+bytes. And an image's label end is found by a bracket scanner (images, unlike links, may hold
+links in their labels), with backslash escapes and code spans stepped over. Both locators fault
+loudly as `INVALID_SOURCE_SPAN` or `PARSER_ERROR` rather than guessing, which is how four corpus
+documents caught their first two bugs: indented definitions and image labels holding links.
+
 ## Recorded divergences
 
 GFM example 628 autolinks `ftp://foo.bar.baz`. The pinned bundle does not, and neither does
@@ -172,8 +214,11 @@ unmatched JSX tag is `DOCUMENT_INVALID`, not a parser failure.
 Published profiles: `commonmark-gfm-v1`, `mdx-source-v1`, and `plain-zero-lexer-v1`. Every case is
 charged under all three, so a grammar change anywhere moves the manifest.
 
-Still to land before the gate is actually closed: extraction, span, address, owner, and opaque
-goldens, which this manifest does not yet carry.
+With extraction, span, address, owner, and opaque goldens in the manifest, every golden family
+the spec names for this gate is present. What the corpus still cannot prove is tree-shape equality
+with the frozen Node oracle (nothing upstream publishes mdast node counts), and the two recorded
+parser bugs stand until markdown-rs fixes land: the `[link[^1]](#)` link this parser does not
+form, and the two documents that panic it.
 
 The manifest names the families and profiles it covers, so a partial corpus cannot be mistaken
 for a complete one.
