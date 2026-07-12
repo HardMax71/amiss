@@ -38,6 +38,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-scan"
+version = "0.0.0"
+dependencies = [
+ "amiss-md",
+ "amiss-wire",
+]
+
+[[package]]
 name = "amiss-wire"
 version = "0.0.0"
 dependencies = [

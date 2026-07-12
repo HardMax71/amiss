@@ -1,0 +1,12 @@
+[package]
+name = "amiss-scan"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+amiss-md = { path = "../amiss-md" }
+amiss-wire = { path = "../amiss-wire" }
+
+[lints]
+workspace = true
