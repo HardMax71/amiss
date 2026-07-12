@@ -1,3 +1,5 @@
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 use markdown::mdast::Node;
@@ -15,17 +17,22 @@ pub struct Work {
     pub nesting: u64,
 }
 
+/// The parse-phase faults an adapter can raise, in the contract's precedence.
+/// A grammar rejection is attributable to the source and is therefore
+/// `DOCUMENT_INVALID`, not a parser failure. `PARSER_PANIC` is reserved for a
+/// panic that bypasses the parser's own result, which the engine must catch
+/// rather than abort on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
     DocumentInvalid,
-    ParserError,
+    ParserPanic,
 }
 
 impl From<Fault> for AnalysisErrorCode {
     fn from(fault: Fault) -> Self {
         match fault {
             Fault::DocumentInvalid => Self::DocumentInvalid,
-            Fault::ParserError => Self::ParserError,
+            Fault::ParserPanic => Self::ParserPanic,
         }
     }
 }
@@ -36,8 +43,8 @@ impl From<Fault> for AnalysisErrorCode {
 ///
 /// # Errors
 ///
-/// `DocumentInvalid` when the bytes are not UTF-8 under a parsing adapter, and
-/// `ParserError` when the grammar rejects the suffix.
+/// `DocumentInvalid` when the bytes are not UTF-8 under a parsing adapter or
+/// the grammar rejects the source, and `ParserPanic` when the parser panics.
 pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, Fault> {
     let Some(options) = parse_options(adapter) else {
         return Ok(plain(source));
@@ -45,13 +52,15 @@ pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, Fault> {
     let text = str::from_utf8(source).map_err(|_invalid| Fault::DocumentInvalid)?;
     let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
     let suffix = text.get(suffix_offset..).ok_or(Fault::DocumentInvalid)?;
-    let tree = to_mdast(suffix, &options).map_err(|_rejected| Fault::ParserError)?;
+    let parsed = catch_unwind(AssertUnwindSafe(|| to_mdast(suffix, &options)))
+        .map_err(|_panic| Fault::ParserPanic)?;
+    let tree = parsed.map_err(|_rejected| Fault::DocumentInvalid)?;
     Ok(walk(&tree))
 }
 
 /// Counts the root and every node reachable through the ordered `children` of
 /// the logical tree. Iterative because a hostile document may nest deeper than
-/// the stack, and this binary aborts on panic.
+/// the stack allows.
 fn walk(root: &Node) -> Work {
     let mut work = Work {
         nodes: 0,

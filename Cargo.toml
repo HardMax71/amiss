@@ -55,4 +55,4 @@ allow_attributes_without_reason = "deny"
 
 [profile.release]
 overflow-checks = true
-panic = "abort"
+panic = "unwind"

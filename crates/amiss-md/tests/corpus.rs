@@ -1,56 +1,47 @@
+mod fixtures;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_md::corpus::{self, Case};
+use amiss_md::corpus;
 use amiss_wire::digest::hb;
 use amiss_wire::json::canonical;
-use sha2::{Digest as _, Sha256};
 
-/// The corpus identity. Regenerating with `AMISS_CORPUS_BLESS=1` rewrites the
-/// manifest; this constant must then be updated by hand, so no golden can move
-/// without the move appearing in review.
-const CORPUS_DIGEST: &str =
-    "sha256:133cc1f8ebad8b55c9e4aa1bedad40465b017f7c67f41ecd7a30fb7cb1f6d128";
-
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn input(name: &str, pin: &str) -> Vec<u8> {
-    let path = root().join("corpus/inputs").join(name);
-    let bytes = fs::read(path).unwrap();
-    let mut hex = String::from("sha256:");
-    for byte in Sha256::digest(&bytes) {
-        hex.push(char::from_digit(u32::from(byte >> 4), 16).unwrap());
-        hex.push(char::from_digit(u32::from(byte & 0x0f), 16).unwrap());
-    }
-    assert_eq!(hex, pin, "{name} drifted from its pinned digest");
-    bytes
-}
+use fixtures::harvest;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn cases() -> Vec<Case> {
-    let commonmark = corpus::commonmark(&input(
-        "commonmark-0.31.2.spec.json",
-        corpus::COMMONMARK_PIN,
-    ))
-    .unwrap();
-    let gfm_text = String::from_utf8(input("gfm-0.29.spec.txt", corpus::GFM_PIN)).unwrap();
-    let mut all = commonmark;
-    all.extend(corpus::gfm(&gfm_text));
-    all
-}
+/// The corpus identity. Regenerating with `AMISS_CORPUS_BLESS=1` rewrites the
+/// manifest; this constant must then be updated by hand, so no golden can move
+/// without the move appearing in review.
+const CORPUS_DIGEST: &str =
+    "sha256:17f79a78deb083c12bec05979821def24f66b35914579879fb3697518e05d1de";
 
 /// The manifest is the gate: every case's raw source with its exact node count
 /// and depth under every published profile. It is regenerated here and must
 /// reproduce the checked-in bytes and digest exactly.
 #[test]
 fn manifest_reproduces() {
-    let cases = cases();
-    assert_eq!(cases.len(), 1324, "652 CommonMark plus 672 GFM examples");
+    let (cases, skipped) = harvest();
+    assert_eq!(
+        cases.len(),
+        1581,
+        "652 CommonMark, 672 GFM, 257 MDX fixtures"
+    );
+    assert_eq!(
+        skipped.iter().map(|(_, count)| *count).sum::<usize>(),
+        8,
+        "the only dropped fixtures pass a variable rather than a literal source"
+    );
 
-    let mut wire = canonical(&corpus::manifest(&cases));
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_silenced| {}));
+    let built = corpus::manifest(&cases, &skipped);
+    std::panic::set_hook(previous);
+
+    let mut wire = canonical(&built);
     wire.push(b'\n');
     let digest = hb(corpus::SCHEMA, &wire).to_string();
     let path = root().join("corpus/parser-profile-corpus-v1.json");

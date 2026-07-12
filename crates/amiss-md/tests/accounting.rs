@@ -125,7 +125,7 @@ fn only_a_parsing_adapter_requires_utf8() {
         "DOCUMENT_INVALID"
     );
     assert_eq!(
-        AnalysisErrorCode::from(Fault::ParserError).as_str(),
-        "PARSER_ERROR"
+        AnalysisErrorCode::from(Fault::ParserPanic).as_str(),
+        "PARSER_PANIC"
     );
 }

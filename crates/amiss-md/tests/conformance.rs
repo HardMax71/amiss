@@ -1,41 +1,57 @@
-use std::fs;
-use std::path::Path;
+mod fixtures;
 
-use amiss_md::corpus::{self, Case};
+use amiss_md::corpus::{self, Case, Expect};
 use amiss_md::profile::parse_options;
 use amiss_wire::model::Adapter;
 use markdown::{CompileOptions, Options, ParseOptions, to_html_with_options};
-use sha2::{Digest as _, Sha256};
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn input(name: &str, pin: &str) -> Vec<u8> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../corpus/inputs")
-        .join(name);
-    let bytes = fs::read(path).unwrap();
-    let mut hex = String::from("sha256:");
-    for byte in Sha256::digest(&bytes) {
-        hex.push(char::from_digit(u32::from(byte >> 4), 16).unwrap());
-        hex.push(char::from_digit(u32::from(byte & 0x0f), 16).unwrap());
-    }
-    assert_eq!(hex, pin, "{name} drifted from its pinned digest");
-    bytes
-}
+use fixtures::harvest;
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn cases() -> Vec<Case> {
-    let commonmark = corpus::commonmark(&input(
-        "commonmark-0.31.2.spec.json",
-        corpus::COMMONMARK_PIN,
-    ))
-    .unwrap();
-    let gfm_text = String::from_utf8(input("gfm-0.29.spec.txt", corpus::GFM_PIN)).unwrap();
-    let mut all = commonmark;
-    all.extend(corpus::gfm(&gfm_text));
-    all
-}
+/// GFM 0.29 is `cmark-gfm`'s text, while the pinned parse additions are the
+/// `remark-gfm` bundle, so one example is expected to differ. Example 628
+/// autolinks `ftp://`; the pinned bundle recognizes only `www.`, `http://`,
+/// `https://`, and email, which is what github.com itself does.
+const GFM_DIVERGENCE: [&str; 1] = ["gfm-0.29/628"];
 
-fn render(source: &str, parse: ParseOptions, tagfilter: bool) -> String {
+/// The MDX suites test one extension at a time, so a few of their expectations
+/// belong to a construct set that is not `mdx-source-v1`, and their throwaway
+/// HTML extensions do not drop line endings the way a real MDX compiler does.
+/// Neither kind of difference is a grammar difference, and asserting the set
+/// exactly means a real one cannot hide among them.
+///
+/// `micromark-mdx-expression-3.0.1/50` indents `{}` by four spaces and expects
+/// an indented code block. MDX removes indented code, and this profile removes
+/// it too, so the expression is an expression.
+///
+/// The other five differ only in surviving line endings, with identical
+/// content: the suites' extensions buffer and drop a tag, while a compiler that
+/// understands MDX also slurps the line ending the tag left behind.
+const MDX_HTML_DIVERGENCE: [&str; 6] = [
+    "micromark-mdx-expression-3.0.1/50",
+    "micromark-mdx-jsx-3.0.2/107",
+    "micromark-mdx-jsx-3.0.2/128",
+    "micromark-mdx-jsx-3.0.2/129",
+    "micromark-mdx-jsx-3.0.2/140",
+    "micromark-mdx-jsx-3.0.2/141",
+];
+
+/// Every reason the pinned bundle gives for a rejection this profile does not
+/// make. Each one needs a JavaScript parser or its syntax tree, and this
+/// profile reads only the lexical grammar of embedded code, never its syntax.
+/// None of them moves an opaque interval, so extraction is unaffected: the
+/// scanner reads a document that MDX itself would refuse to compile, and its
+/// code regions stay opaque either way.
+const JAVASCRIPT_REASONS: [&str; 7] = [
+    "with acorn",
+    "acorn` instance",
+    "empty expression",
+    "only spread elements are supported",
+    "expected an object spread",
+    "only a single spread is supported",
+    "only import/exports are supported",
+];
+
+fn render(source: &str, parse: ParseOptions, tagfilter: bool) -> Option<String> {
     to_html_with_options(
         source,
         &Options {
@@ -48,17 +64,22 @@ fn render(source: &str, parse: ParseOptions, tagfilter: bool) -> String {
             },
         },
     )
-    .unwrap_or_default()
+    .ok()
+}
+
+fn family(name: &str) -> Vec<Case> {
+    let (cases, _skipped) = harvest();
+    cases
+        .into_iter()
+        .filter(|case| case.family == name)
+        .collect()
 }
 
 /// The core half of the grammar pin: with the extensions off, the parser
 /// reproduces every executable `CommonMark` 0.31.2 example.
 #[test]
 fn reproduces_commonmark_0_31_2() {
-    let cases: Vec<Case> = cases()
-        .into_iter()
-        .filter(|case| case.family == corpus::COMMONMARK_FAMILY)
-        .collect();
+    let cases = family(corpus::COMMONMARK_FAMILY);
     assert_eq!(
         cases.len(),
         652,
@@ -67,7 +88,10 @@ fn reproduces_commonmark_0_31_2() {
 
     let mut broken = Vec::new();
     for case in &cases {
-        if render(&case.source, ParseOptions::default(), false) != case.html {
+        let Expect::Html(want) = &case.expect else {
+            panic!("every CommonMark example publishes HTML")
+        };
+        if render(&case.source, ParseOptions::default(), false).as_ref() != Some(want) {
             broken.push(case.case_id());
         }
     }
@@ -79,33 +103,17 @@ fn reproduces_commonmark_0_31_2() {
     );
 }
 
-/// GFM 0.29 is `cmark-gfm`'s text, while the pinned parse additions are the
-/// `remark-gfm` bundle, so one example is expected to differ. Example 628
-/// autolinks `ftp://`; the pinned bundle recognizes only `www.`, `http://`,
-/// `https://`, and email, which is what github.com itself does. The set is
-/// asserted exactly, so a second divergence fails the run.
-const KNOWN_DIVERGENCE: [&str; 1] = ["gfm-0.29/628"];
-
 /// The extension half: every example GFM 0.29 marks with an extension and
 /// executes, under the pinned `commonmark-gfm-v1` options. That document's
-/// untagged examples are `CommonMark` 0.29, which 0.31.2 supersedes, so they are
-/// corpus inputs rather than goldens here.
+/// untagged examples are `CommonMark` 0.29, which 0.31.2 supersedes, so they
+/// are corpus inputs rather than goldens here.
 #[test]
 fn reproduces_gfm_0_29_extensions() {
-    let Some(pinned) = parse_options(Adapter::Markdown) else {
-        panic!("the markdown adapter must pin parse options")
-    };
-    let cases: Vec<Case> = cases()
-        .into_iter()
-        .filter(|case| case.family == corpus::GFM_FAMILY)
-        .collect();
-    assert_eq!(cases.len(), 672, "the pinned GFM corpus is 672 examples");
-
     let mut checked = 0_usize;
     let mut skipped = 0_usize;
     let mut broken = Vec::new();
-    for case in &cases {
-        let Some(tag) = case.tag.as_deref() else {
+    for case in &family(corpus::GFM_FAMILY) {
+        let (Some(tag), Expect::Html(want)) = (case.tag.as_deref(), &case.expect) else {
             continue;
         };
         if !case.executable() {
@@ -113,19 +121,91 @@ fn reproduces_gfm_0_29_extensions() {
             continue;
         }
         checked = checked.saturating_add(1);
-        let options = ParseOptions {
-            constructs: pinned.constructs.clone(),
-            gfm_strikethrough_single_tilde: pinned.gfm_strikethrough_single_tilde,
-            ..ParseOptions::default()
+        let Some(options) = parse_options(Adapter::Markdown) else {
+            panic!("the markdown adapter must pin parse options")
         };
-        if render(&case.source, options, tag == "tagfilter") != case.html {
+        if render(&case.source, options, tag == "tagfilter").as_ref() != Some(want) {
             broken.push(case.case_id());
         }
     }
     assert_eq!(checked, 22, "GFM 0.29 executes 22 extension examples");
     assert_eq!(skipped, 2, "GFM 0.29 disables its 2 task-list examples");
     assert_eq!(
-        broken, KNOWN_DIVERGENCE,
+        broken, GFM_DIVERGENCE,
         "GFM extension examples diverge from the pinned bundle beyond the recorded case"
     );
+}
+
+/// The MDX half. The suites are the grammar's own fixtures, so this profile
+/// must accept everything they accept, produce their HTML, and reject what they
+/// reject except where rejecting needs a JavaScript syntax tree.
+#[test]
+fn reproduces_mdx_syntax_and_errors() {
+    let (all, skipped) = harvest();
+    let cases: Vec<Case> = all
+        .into_iter()
+        .filter(|case| {
+            matches!(
+                case.family,
+                corpus::MDX_JSX_FAMILY | corpus::MDX_EXPRESSION_FAMILY | corpus::MDX_ESM_FAMILY
+            )
+        })
+        .collect();
+    assert_eq!(cases.len(), 257, "the pinned MDX suites hold 257 fixtures");
+    assert_eq!(
+        skipped.iter().map(|(_, count)| *count).sum::<usize>(),
+        8,
+        "the only dropped fixtures pass a variable rather than a literal source"
+    );
+
+    let mut over_rejected = Vec::new();
+    let mut html_differs = Vec::new();
+    let mut accepted_anyway = Vec::new();
+    let mut agreed = 0_usize;
+
+    for case in &cases {
+        let Some(options) = parse_options(Adapter::Mdx) else {
+            panic!("the mdx adapter must pin parse options")
+        };
+        let ours = render(&case.source, options, false);
+        match (&case.expect, ours) {
+            (Expect::Rejected(reason), Some(_accepted)) => {
+                assert!(
+                    JAVASCRIPT_REASONS
+                        .iter()
+                        .any(|known| reason.contains(known)),
+                    "{} is accepted here and rejected upstream for a reason that is not about \
+                     JavaScript syntax: {reason}",
+                    case.case_id()
+                );
+                accepted_anyway.push(case.case_id());
+            }
+            (Expect::Rejected(_reason), None) => agreed = agreed.saturating_add(1),
+            (Expect::Accepted | Expect::Html(_), None) => over_rejected.push(case.case_id()),
+            (Expect::Accepted, Some(_accepted)) => agreed = agreed.saturating_add(1),
+            (Expect::Html(want), Some(got)) => {
+                if &got == want {
+                    agreed = agreed.saturating_add(1);
+                } else {
+                    html_differs.push(case.case_id());
+                }
+            }
+        }
+    }
+
+    assert!(
+        over_rejected.is_empty(),
+        "this profile rejects what the pinned grammar accepts: {over_rejected:?}"
+    );
+    html_differs.sort();
+    assert_eq!(
+        html_differs, MDX_HTML_DIVERGENCE,
+        "MDX output differs beyond the recorded cases"
+    );
+    assert_eq!(
+        accepted_anyway.len(),
+        26,
+        "the JavaScript-syntax rejections this profile does not make"
+    );
+    assert_eq!(agreed, 225, "fixtures that agree exactly");
 }
