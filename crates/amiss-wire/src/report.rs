@@ -275,24 +275,32 @@ pub fn invocation_failure_wire(
     Some(wire)
 }
 
+/// One adapter's complete contract descriptor and its digest, which every
+/// occurrence embeds through its observation-identity input.
+#[must_use]
+pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, Digest) {
+    let descriptor = object(vec![
+        ("schema", string(ADAPTER_CONTRACT_SCHEMA)),
+        ("adapter_id", string(adapter.adapter_id())),
+        ("parser_name", string(adapter.parser_name())),
+        ("parser_version", string(&engine.version)),
+        ("grammar_profile", string(adapter.grammar_profile())),
+        (
+            "frontmatter_contract",
+            string(adapter.frontmatter_contract()),
+        ),
+        ("source_projection", string(adapter.source_projection())),
+        ("structural_address", string(adapter.structural_address())),
+    ]);
+    let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
+    (descriptor, digest)
+}
+
 fn engine_value(engine: &EngineProvenance) -> Value {
     let adapter_rows: Vec<Value> = Adapter::ALL
         .iter()
         .map(|adapter| {
-            let descriptor = object(vec![
-                ("schema", string(ADAPTER_CONTRACT_SCHEMA)),
-                ("adapter_id", string(adapter.adapter_id())),
-                ("parser_name", string(adapter.parser_name())),
-                ("parser_version", string(&engine.version)),
-                ("grammar_profile", string(adapter.grammar_profile())),
-                (
-                    "frontmatter_contract",
-                    string(adapter.frontmatter_contract()),
-                ),
-                ("source_projection", string(adapter.source_projection())),
-                ("structural_address", string(adapter.structural_address())),
-            ]);
-            let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
+            let (descriptor, digest) = adapter_contract(engine, *adapter);
             object(vec![
                 ("adapter_id", string(adapter.adapter_id())),
                 ("contract_descriptor", descriptor),

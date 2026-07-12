@@ -1,7 +1,11 @@
 #[cfg(unix)]
+pub mod correlate;
+#[cfg(unix)]
 pub mod discovery;
 pub mod document;
 pub mod lfs;
+#[cfg(unix)]
+pub mod observe;
 #[cfg(unix)]
 pub mod resolve;
 pub mod resources;
@@ -11,6 +15,8 @@ use amiss_md::Fault;
 use amiss_wire::controls::ResourceName;
 use amiss_wire::report::AnalysisErrorCode;
 
+#[cfg(unix)]
+pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
 #[cfg(unix)]
 pub use discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover};
 pub use document::{Classification, classify, excluded_by_built_in};
@@ -30,6 +36,7 @@ pub enum Error {
     Parse(Fault),
     Git(GitDefect),
     UnrepresentablePath,
+    Internal,
     ResourceLimit {
         resource: ResourceName,
         configured_limit: u64,
@@ -79,6 +86,7 @@ impl Error {
             Self::Git(GitDefect::ObjectWrongKind) => AnalysisErrorCode::GitObjectWrongKind,
             Self::Git(GitDefect::ObjectUnreadable) => AnalysisErrorCode::GitObjectUnreadable,
             Self::UnrepresentablePath => AnalysisErrorCode::UnrepresentablePath,
+            Self::Internal => AnalysisErrorCode::InternalError,
             Self::ResourceLimit { .. } => AnalysisErrorCode::ResourceLimitExceeded,
         }
     }
@@ -90,6 +98,7 @@ impl Error {
     pub const fn is_document_scoped(&self) -> bool {
         match self {
             Self::Parse(_) | Self::Git(_) | Self::UnrepresentablePath => true,
+            Self::Internal => false,
             Self::ResourceLimit { resource, .. } => matches!(
                 resource,
                 ResourceName::DocumentBlobBytes
