@@ -4,13 +4,36 @@ use sha2::{Digest as _, Sha256};
 
 use crate::json::{Value, canonical};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Digest([u8; 32]);
 
 impl Digest {
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+
+    /// Parses the `sha256:` wire form with exactly 64 lowercase hex digits.
+    #[must_use]
+    pub fn from_wire(raw: &str) -> Option<Self> {
+        let hex = raw.strip_prefix("sha256:")?;
+        if hex.len() != 64 {
+            return None;
+        }
+        let mut out = [0_u8; 32];
+        for (slot, pair) in out.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
+            let [high, low] = pair else { return None };
+            *slot = hex_value(*high)?.wrapping_shl(4) | hex_value(*low)?;
+        }
+        Some(Self(out))
+    }
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte.wrapping_sub(b'0')),
+        b'a'..=b'f' => Some(byte.wrapping_sub(b'a').wrapping_add(10)),
+        _ => None,
     }
 }
 

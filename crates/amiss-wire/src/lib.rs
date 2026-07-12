@@ -1,5 +1,8 @@
+pub mod controls;
+pub mod de;
 pub mod digest;
 pub mod json;
+pub mod model;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitClass {
