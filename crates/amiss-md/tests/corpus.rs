@@ -17,7 +17,7 @@ fn root() -> PathBuf {
 /// manifest; this constant must then be updated by hand, so no golden can move
 /// without the move appearing in review.
 const CORPUS_DIGEST: &str =
-    "sha256:17f79a78deb083c12bec05979821def24f66b35914579879fb3697518e05d1de";
+    "sha256:e992411de9070490c3c17586e4edbae3a791b09de5f94d914b379a8dada04544";
 
 /// The manifest is the gate: every case's raw source with its exact node count
 /// and depth under every published profile. It is regenerated here and must
@@ -27,13 +27,13 @@ fn manifest_reproduces() {
     let (cases, skipped) = harvest();
     assert_eq!(
         cases.len(),
-        1581,
-        "652 CommonMark, 672 GFM, 257 MDX fixtures"
+        1639,
+        "652 CommonMark, 672 GFM, 257 MDX, 29 GFM-bundle, 29 github footnote"
     );
     assert_eq!(
         skipped.iter().map(|(_, count)| *count).sum::<usize>(),
-        8,
-        "the only dropped fixtures pass a variable rather than a literal source"
+        12,
+        "dropped fixtures pass a variable or concatenate their source"
     );
 
     let previous = std::panic::take_hook();

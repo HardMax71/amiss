@@ -5,7 +5,7 @@ use amiss_md::profile::parse_options;
 use amiss_wire::model::Adapter;
 use markdown::{CompileOptions, Options, ParseOptions, to_html_with_options};
 
-use fixtures::harvest;
+use fixtures::{github_pairs, harvest};
 
 /// GFM 0.29 is `cmark-gfm`'s text, while the pinned parse additions are the
 /// `remark-gfm` bundle, so one example is expected to differ. Example 628
@@ -152,10 +152,19 @@ fn reproduces_mdx_syntax_and_errors() {
         })
         .collect();
     assert_eq!(cases.len(), 257, "the pinned MDX suites hold 257 fixtures");
+    let dropped: usize = skipped
+        .iter()
+        .filter(|(family, _)| {
+            matches!(
+                *family,
+                corpus::MDX_JSX_FAMILY | corpus::MDX_EXPRESSION_FAMILY | corpus::MDX_ESM_FAMILY
+            )
+        })
+        .map(|(_, count)| *count)
+        .sum();
     assert_eq!(
-        skipped.iter().map(|(_, count)| *count).sum::<usize>(),
-        8,
-        "the only dropped fixtures pass a variable rather than a literal source"
+        dropped, 8,
+        "the only dropped MDX fixtures pass a variable rather than a literal source"
     );
 
     let mut over_rejected = Vec::new();
@@ -208,4 +217,196 @@ fn reproduces_mdx_syntax_and_errors() {
         "the JavaScript-syntax rejections this profile does not make"
     );
     assert_eq!(agreed, 225, "fixtures that agree exactly");
+}
+
+/// A back-reference's `aria-label` is a compile option with no parse meaning.
+/// micromark 2.1.0 writes one per reference; `markdown-rs` has a single static
+/// string and cannot express that. The scanner renders no HTML, so the label is
+/// erased on both sides rather than compared.
+fn erase_labels(html: &str) -> String {
+    let mut out = String::new();
+    let mut rest = html;
+    while let Some(at) = rest.find("aria-label=\"") {
+        let (before, after) = rest.split_at(at);
+        out.push_str(before);
+        out.push_str("aria-label=\"\"");
+        let inside = after.get("aria-label=\"".len()..).unwrap_or_default();
+        let end = inside
+            .find('"')
+            .map_or(inside.len(), |at| at.saturating_add(1));
+        rest = inside.get(end..).unwrap_or_default();
+    }
+    out.push_str(rest);
+    out
+}
+
+/// github.com drops the source of an image that points at nothing but a search
+/// or a hash, so the suite drops it on the rendered side too.
+fn erase_search_sources(html: &str) -> String {
+    let bytes = html.as_bytes();
+    let mut out: Vec<u8> = Vec::new();
+    let mut at = 0_usize;
+    while let Some(&byte) = bytes.get(at) {
+        let opens = bytes
+            .get(at..)
+            .is_some_and(|rest| rest.starts_with(b"src=\""));
+        let empty = matches!(bytes.get(at.saturating_add(5)), Some(&(b'?' | b'#')));
+        let quote = bytes
+            .get(at.saturating_add(5)..)
+            .and_then(|rest| rest.iter().position(|byte| *byte == b'"'));
+        if let Some(end) = quote.filter(|_at| opens && empty) {
+            out.extend_from_slice(b"src=\"\"");
+            at = at.saturating_add(6).saturating_add(end);
+            continue;
+        }
+        out.push(byte);
+        at = at.saturating_add(1);
+    }
+    String::from_utf8(out).unwrap_or_default()
+}
+
+/// The compensations the suite itself applies for bugs in github.com's renderer,
+/// so that what remains is a difference in this implementation rather than in
+/// GitHub. Each is keyed to the document it belongs to, exactly as upstream
+/// keys them.
+fn compensate(name: &str, expected: &str) -> String {
+    let mut html = expected.to_owned();
+    if name == "calls" {
+        html = html.replace("%5e", "%5E");
+    }
+    if name.starts_with("constructs-in-footnotes") {
+        html = html.replacen(
+            "<pre lang=\"js\"><code>",
+            "<pre><code class=\"language-js\">",
+            1,
+        );
+    }
+    if name == "constructs-in-identifiers" {
+        html = html.replacen(
+            "<a id=\"user-content-fnref-https://example.com\"",
+            "<a href=\"#user-content-fn-https://example.com\" id=\"user-content-fnref-https://example.com\"",
+            1,
+        );
+        html = html.replacen(
+            "<a id=\"user-content-fnref-://example.com\"",
+            "<a href=\"#user-content-fn-://example.com\" id=\"user-content-fnref-://example.com\"",
+            1,
+        );
+        html = html.replacen(
+            "<li id=\"user-content-fn-https://example.com\">\n<p>a \u{21a9}</p>",
+            "<li id=\"user-content-fn-https://example.com\">\n<p>a <a href=\"#user-content-fnref-https://example.com\" data-footnote-backref=\"\" aria-label=\"\" class=\"data-footnote-backref\">\u{21a9}</a></p>",
+            1,
+        );
+        html = html.replacen(
+            "<li id=\"user-content-fn-://example.com\">\n<p>a \u{21a9}</p>",
+            "<li id=\"user-content-fn-://example.com\">\n<p>a <a href=\"#user-content-fnref-://example.com\" data-footnote-backref=\"\" aria-label=\"\" class=\"data-footnote-backref\">\u{21a9}</a></p>",
+            1,
+        );
+        html = html.replace("![image](#)", "<img src=\"\" alt=\"image\" />");
+    }
+    if name == "footnotes-in-constructs" {
+        html = html.replacen(
+            "<a href=\"#\">link<sup></sup></a><a href=\"#user-content-fn-5\" id=\"user-content-fnref-5\" data-footnote-ref=\"\" aria-describedby=\"footnote-label\">4</a>",
+            "<a href=\"#\">link<sup><a href=\"#user-content-fn-5\" id=\"user-content-fnref-5\" data-footnote-ref=\"\" aria-describedby=\"footnote-label\">4</a></sup></a>",
+            1,
+        );
+    }
+    html
+}
+
+/// A suite that configures the extension away from what this profile pins is
+/// testing another profile, so its HTML is not a golden for this one. Those
+/// documents stay in the corpus as inputs; only the comparison is skipped.
+fn other_profile(config: &str) -> bool {
+    [
+        "singleTilde: false",
+        "gfmFootnote({",
+        "gfmFootnoteHtml({",
+        "disable",
+    ]
+    .iter()
+    .any(|marker| config.contains(marker))
+}
+
+fn rendered(source: &str) -> Option<String> {
+    let options = parse_options(Adapter::Markdown)?;
+    let mut html = render(source, options, false)?;
+    if !html.is_empty() && !html.ends_with('\n') {
+        html.push('\n');
+    }
+    Some(html)
+}
+
+/// Footnotes and single-tilde strikethrough are the pinned bundle's additions
+/// beyond formal GFM 0.29, so they carry their own suites.
+#[test]
+fn reproduces_the_footnote_and_tilde_suites() {
+    let (all, _skipped) = harvest();
+    let mut checked = 0_usize;
+    let mut elsewhere = 0_usize;
+    let mut broken = Vec::new();
+    for case in &all {
+        if !matches!(
+            case.family,
+            corpus::FOOTNOTE_FAMILY | corpus::STRIKETHROUGH_FAMILY
+        ) {
+            continue;
+        }
+        let Expect::Html(want) = &case.expect else {
+            continue;
+        };
+        if other_profile(&case.config) {
+            elsewhere = elsewhere.saturating_add(1);
+            continue;
+        }
+        checked = checked.saturating_add(1);
+        let want = erase_labels(want);
+        let want = if want.is_empty() || want.ends_with('\n') {
+            want
+        } else {
+            format!("{want}\n")
+        };
+        if rendered(&case.source).map(|html| erase_labels(&html)) != Some(want) {
+            broken.push(case.case_id());
+        }
+    }
+    assert_eq!(checked, 22, "fixtures under the pinned configuration");
+    assert_eq!(elsewhere, 7, "fixtures that configure another profile");
+    assert!(
+        broken.is_empty(),
+        "footnote or tilde fixtures differ: {broken:?}"
+    );
+}
+
+/// The footnote suite also renders 29 documents against the HTML github.com
+/// itself produces, which is where the interactions the spec names live: a
+/// footnote call against a link, an image, a duplicate definition, a reference
+/// definition, and nesting inside every container.
+///
+/// One of them differs, and it is this implementation that is wrong.
+/// `markdown-rs` 1.0.0 does not form a link whose label holds a footnote call,
+/// so `[link[^1]](#)` stays literal where the pinned grammar makes it a link.
+/// The scanner would miss that reference. It is recorded here, and it is worth
+/// reporting upstream.
+const GITHUB_DIVERGENCE: [&str; 1] = ["footnotes-in-constructs"];
+
+#[test]
+fn reproduces_githubs_own_footnote_rendering() {
+    let pairs = github_pairs();
+    assert_eq!(pairs.len(), 29, "the pinned footnote fixture directory");
+
+    let mut broken = Vec::new();
+    for (name, source, html) in &pairs {
+        let want = erase_labels(&compensate(name, html));
+        let ours = rendered(source)
+            .map(|rendered| erase_labels(&erase_search_sources(&rendered)))
+            .unwrap_or_default();
+        if ours != want {
+            broken.push(name.clone());
+        }
+    }
+    assert_eq!(
+        broken, GITHUB_DIVERGENCE,
+        "github footnote rendering differs beyond the recorded case"
+    );
 }

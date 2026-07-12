@@ -27,14 +27,30 @@ silently break a pin.
 | `inputs/micromark-mdx-jsx-3.0.2.test.js` | micromark-extension-mdx-jsx, commit `ad0a49c` | 141 |
 | `inputs/micromark-mdx-expression-3.0.1.test.js` | micromark-extension-mdx-expression, commit `2891b75` | 85 |
 | `inputs/micromark-mdxjs-esm-3.0.0.test.js` | micromark-extension-mdxjs-esm, commit `7cc9131` | 31 |
+| `inputs/micromark-gfm-footnote-2.1.0.test.js` | micromark-extension-gfm-footnote, commit `df527f5` | 18 |
+| `inputs/micromark-gfm-strikethrough-2.1.0.test.js` | micromark-extension-gfm-strikethrough, commit `a3a75cc` | 11 |
+| `inputs/gfm-footnote-fixtures/` | the same suite's documents and github.com's HTML for them | 29 |
 
-The three MDX suites are the grammar's own fixtures. They are JavaScript, so the harness reads
-each `micromark(...)` call out of them: the first argument is the source, an enclosing
-`assert.throws` means upstream rejects it, and the equality's second argument is the HTML it
-expects. Eight calls pass a variable rather than a literal and cannot be read this way; all eight
-test acorn token positions, and the manifest records the count per family so a dropped fixture is
-never silent. Those commits are the ones npm published `remark-mdx@3.1.1` and its extensions
-from.
+The five JavaScript suites are the grammars' own fixtures, so the harness reads each
+`micromark(...)` call out of them: the first argument is the source, an enclosing `assert.throws`
+means upstream rejects it, and the equality's second argument is the HTML it expects. A source
+assembled by concatenation is refused rather than truncated to its first literal. Twelve calls
+cannot be read as a literal, and the manifest records the count per family, so a dropped fixture
+is never silent: eight test acorn token positions, two build a 999-character identifier by
+concatenation, and two pass a variable. Those commits are the ones npm published
+`remark-mdx@3.1.1`, `remark-gfm@4.0.1`, and their extensions from.
+
+Footnotes and single-tilde strikethrough are the pinned bundle's additions beyond formal GFM 0.29,
+which is why they carry suites of their own rather than living in the 0.29 spec text. Seven of
+their fixtures configure the extension away from what this profile pins (a different footnote
+label, a clobber prefix, single tilde turned off, a construct disabled). They are testing another
+profile, so they stay in the corpus as inputs and only their HTML comparison is skipped.
+
+The footnote suite also renders 29 documents against the HTML github.com itself produces for them.
+That is where the interactions the spec names live: a footnote call against a link, against an
+image, against a duplicate definition, against a reference definition, and nested inside every
+container. The directory is pinned whole, by one digest over the canonical JSON of every file in
+it, so a fixture cannot be edited, added, or dropped without the pin moving.
 
 ## What the grammar pin rests on
 
@@ -51,7 +67,9 @@ The equivalence is not asserted on lineage alone. It is held up by upstream grou
   pinned `commonmark-gfm-v1` options, except the one divergence below;
 - of the 257 MDX fixtures, none is rejected here that the pinned grammar accepts, 166 of the 172
   that publish HTML reproduce it exactly, and every remaining difference is one of the recorded
-  cases below.
+  cases below;
+- all 22 footnote and tilde fixtures under the pinned configuration reproduce their HTML, and 28
+  of the 29 documents reproduce what github.com renders for them.
 
 What the Rust pipeline cannot prove on its own is mdast shape equality with the Node oracle for
 node counts and depths, since no upstream publishes those. They are a property of the tree, and
@@ -113,6 +131,27 @@ GFM's two task-list examples are marked `disabled` upstream and are not executed
 own suite either. They remain corpus inputs with node and depth goldens; only their HTML is
 skipped.
 
+## The one document github.com renders and this does not
+
+`footnotes-in-constructs` holds `[link[^1]](#)`, a footnote call inside a link label. The pinned
+grammar makes that a link, and so does github.com. `markdown-rs` 1.0.0 does not: the brackets stay
+literal and no link node is built. `[link](#)` and `[a *b* c](#)` are links, so it is the footnote
+call in the label that does it.
+
+This one matters more than a rendering difference, because the scanner reads links. A
+`[see the guide[^1]](./guide.md)` in a repository would go unseen, and the reference it carries
+would be missing from the report rather than wrong in it. That is under-reporting, which is the
+safer direction to fail in but still a hole, and it is disclosed here rather than discovered later.
+It is worth reporting upstream. The conformance test asserts the divergence set is exactly this
+one document.
+
+Comparing against github.com's HTML needs two normalizations, both stated rather than hidden. The
+suite's own compensations for bugs in GitHub's renderer are applied exactly as upstream applies
+them, so that what remains is a difference here rather than a difference there. And a
+back-reference's `aria-label` is erased on both sides: micromark 2.1.0 writes one per reference
+(`Back to reference 1`), `markdown-rs` has a single static string and cannot express that. It is a
+compile option with no parse meaning, and the scanner renders no HTML.
+
 ## An upstream bug, and what the contract says to do about it
 
 `markdown-rs` 1.0.0 fails an internal assertion on `a [open <b> close](c) </b> d.`, and on the
@@ -133,10 +172,8 @@ unmatched JSX tag is `DOCUMENT_INVALID`, not a parser failure.
 Published profiles: `commonmark-gfm-v1`, `mdx-source-v1`, and `plain-zero-lexer-v1`. Every case is
 charged under all three, so a grammar change anywhere moves the manifest.
 
-Still to land before the gate is actually closed:
-
-- the pinned `remark-gfm` footnote and single- and double-tilde examples;
-- extraction, span, address, owner, and opaque goldens, which this manifest does not yet carry.
+Still to land before the gate is actually closed: extraction, span, address, owner, and opaque
+goldens, which this manifest does not yet carry.
 
 The manifest names the families and profiles it covers, so a partial corpus cannot be mistaken
 for a complete one.

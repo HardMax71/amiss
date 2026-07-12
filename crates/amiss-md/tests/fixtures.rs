@@ -60,5 +60,64 @@ pub(crate) fn harvest() -> (Vec<Case>, Vec<(&'static str, usize)>) {
         cases.extend(harvested);
         skipped.push((family, dropped));
     }
+
+    let gfm_suites = [
+        (
+            corpus::FOOTNOTE_FAMILY,
+            "micromark-gfm-footnote-2.1.0.test.js",
+            corpus::FOOTNOTE_PIN,
+        ),
+        (
+            corpus::STRIKETHROUGH_FAMILY,
+            "micromark-gfm-strikethrough-2.1.0.test.js",
+            corpus::STRIKETHROUGH_PIN,
+        ),
+    ];
+    for (family, file, pin) in gfm_suites {
+        let Fixtures {
+            cases: harvested,
+            skipped: dropped,
+        } = corpus::micromark_fixtures(family, &text(file, pin));
+        cases.extend(harvested);
+        skipped.push((family, dropped));
+    }
+
+    cases.extend(corpus::github_fixtures(&github_pairs()));
+    skipped.push((corpus::GITHUB_FOOTNOTE_FAMILY, 0));
     (cases, skipped)
+}
+
+/// The footnote fixture directory: one document and the HTML github.com renders
+/// for it, per name, in sorted order.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+pub(crate) fn github_pairs() -> Vec<(String, String, String)> {
+    let dir = root().join("corpus/inputs/gfm-footnote-fixtures");
+    let mut files: Vec<(String, String)> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+            (name, fs::read_to_string(&path).unwrap())
+        })
+        .collect();
+    files.sort();
+    assert_eq!(
+        corpus::directory_digest(&files),
+        corpus::GITHUB_FOOTNOTE_PIN,
+        "the footnote fixture directory drifted from its pin"
+    );
+
+    let mut pairs: Vec<(String, String, String)> = files
+        .iter()
+        .filter_map(|(name, body)| {
+            let stem = name.strip_suffix(".md")?;
+            let html = files
+                .iter()
+                .find(|(other, _)| other == &format!("{stem}.html"))
+                .map(|(_, html)| html.clone())?;
+            Some((stem.to_owned(), body.clone(), html))
+        })
+        .collect();
+    pairs.sort();
+    pairs
 }

@@ -1,4 +1,5 @@
-use amiss_wire::json::{Value, parse};
+use amiss_wire::digest::hb;
+use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 
@@ -25,6 +26,21 @@ pub const MDX_ESM_FAMILY: &str = "micromark-mdxjs-esm-3.0.0";
 pub const MDX_ESM_PIN: &str =
     "sha256:fdffc20bfaef4fcbdc6640a7fef9dfa6ec35715d455baeadd8a6c34e866a3151";
 
+pub const FOOTNOTE_FAMILY: &str = "micromark-gfm-footnote-2.1.0";
+pub const FOOTNOTE_PIN: &str =
+    "sha256:41a437756e5c4615dfe9269acb23acbc74d8b01d9f7cabb4f121e8ca7e5d1a18";
+
+pub const STRIKETHROUGH_FAMILY: &str = "micromark-gfm-strikethrough-2.1.0";
+pub const STRIKETHROUGH_PIN: &str =
+    "sha256:b7bdf617e8535348265bb8d91f0c7da65b7849e150460a44b063b22640e5178b";
+
+/// The footnote suite also drives a directory of documents against the HTML
+/// github.com itself renders for them. That directory is pinned whole, by one
+/// digest over the canonical JSON of every file in it.
+pub const GITHUB_FOOTNOTE_FAMILY: &str = "github-gfm-footnote-2.1.0";
+pub const GITHUB_FOOTNOTE_PIN: &str =
+    "sha256:24829d3c8c494684d63bd3d613578504371f0da8b8ef1a6bbae5a7093fa27e1a";
+
 /// Every case is charged under every profile, so a grammar change anywhere
 /// moves the manifest. The manifest names what it covers, so a reader never
 /// mistakes a partial corpus for a complete one.
@@ -49,6 +65,7 @@ pub struct Case {
     pub tag: Option<String>,
     pub source: String,
     pub expect: Expect,
+    pub config: String,
 }
 
 impl Case {
@@ -103,6 +120,7 @@ pub fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
                 tag: None,
                 source: text("markdown")?,
                 expect: Expect::Html(text("html")?),
+                config: String::new(),
             })
         })
         .collect()
@@ -156,6 +174,7 @@ pub fn gfm(spec_text: &str) -> Vec<Case> {
                 tag: tag.clone(),
                 source: source.replace('\u{2192}', "\t"),
                 expect: Expect::Html(html.replace('\u{2192}', "\t")),
+                config: String::new(),
             });
             continue;
         }
@@ -181,7 +200,8 @@ pub struct Fixtures {
 /// Reads a micromark extension's own test suite. Each `micromark(...)` call is
 /// one fixture: the first argument is the source, an enclosing `assert.throws`
 /// means upstream rejects it, and the regular expression after the closure is
-/// the reason it gives.
+/// the reason it gives. A source assembled by concatenation is refused rather
+/// than truncated to its first literal.
 #[must_use]
 pub fn micromark_fixtures(family: &'static str, text: &str) -> Fixtures {
     let bytes = text.as_bytes();
@@ -193,10 +213,15 @@ pub fn micromark_fixtures(family: &'static str, text: &str) -> Fixtures {
     while let Some(call) = find(bytes, b"micromark(", at) {
         let opened = call.saturating_add("micromark(".len());
         at = opened;
-        let Some((source, _end)) = js_literal(bytes, skip_space(bytes, opened)) else {
+        let Some((source, after)) = js_literal(bytes, skip_space(bytes, opened)) else {
             skipped = skipped.saturating_add(1);
             continue;
         };
+        let ends_the_argument = matches!(bytes.get(skip_space(bytes, after)), Some(&b',' | &b')'));
+        if !ends_the_argument {
+            skipped = skipped.saturating_add(1);
+            continue;
+        }
         number = number.saturating_add(1);
         let block = rfind(bytes, b"t.test(", call).unwrap_or(0);
         let name = js_literal(
@@ -216,9 +241,21 @@ pub fn micromark_fixtures(family: &'static str, text: &str) -> Fixtures {
             tag: None,
             source,
             expect,
+            config: config(bytes, opened, after),
         });
     }
     Fixtures { cases, skipped }
+}
+
+/// Everything the call passes after the source. A suite that configures the
+/// extension away from what this profile pins is testing another profile, and
+/// the reader of the fixture has to be able to see that.
+fn config(bytes: &[u8], opened: usize, after_source: usize) -> String {
+    let closed = call_end(bytes, opened).unwrap_or(after_source);
+    let body = bytes
+        .get(after_source..closed.saturating_sub(1))
+        .unwrap_or_default();
+    String::from_utf8_lossy(body).into_owned()
 }
 
 /// An accepted fixture is compared against the HTML the suite writes as the
@@ -474,6 +511,9 @@ pub fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
         (MDX_JSX_FAMILY, MDX_JSX_PIN),
         (MDX_EXPRESSION_FAMILY, MDX_EXPRESSION_PIN),
         (MDX_ESM_FAMILY, MDX_ESM_PIN),
+        (FOOTNOTE_FAMILY, FOOTNOTE_PIN),
+        (STRIKETHROUGH_FAMILY, STRIKETHROUGH_PIN),
+        (GITHUB_FOOTNOTE_FAMILY, GITHUB_FOOTNOTE_PIN),
     ];
     let family_rows: Vec<Value> = families
         .iter()
@@ -504,4 +544,35 @@ pub fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
             Value::Array(cases.iter().map(case_value).collect()),
         ),
     ])
+}
+
+/// The documents the footnote suite renders against github.com's own HTML.
+/// Cases are numbered by sorted name so the manifest never moves with the
+/// directory listing.
+#[must_use]
+pub fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
+    pairs
+        .iter()
+        .enumerate()
+        .map(|(index, (name, source, html))| Case {
+            family: GITHUB_FOOTNOTE_FAMILY,
+            number: index.saturating_add(1),
+            section: name.clone(),
+            tag: None,
+            source: source.clone(),
+            expect: Expect::Html(html.clone()),
+            config: String::new(),
+        })
+        .collect()
+}
+
+/// One digest over a whole directory, so a fixture cannot be edited, added, or
+/// dropped without the pin moving.
+#[must_use]
+pub fn directory_digest(files: &[(String, String)]) -> String {
+    let members: Vec<(String, Value)> = files
+        .iter()
+        .map(|(name, body)| (name.clone(), Value::String(body.clone())))
+        .collect();
+    hb(GITHUB_FOOTNOTE_FAMILY, &canonical(&Value::Object(members))).to_string()
 }
