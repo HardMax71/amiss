@@ -1,0 +1,61 @@
+minimum_prek_version: "0.4.9"
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+exclude: ^docs/ # frozen research dossier with its own validator
+
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: no-file-start-comments
+        name: no file-start comments
+        entry: >-
+          awk 'FNR==1{j=0} !j&&NF{sub(/^[ \t]+/,""); if(/^\/[\/*]/||(/^#/&&!/^#[![]/)){print FILENAME": file starts with a comment";e=1} j=1} END{exit e}'
+        language: system
+        types: [text]
+        exclude: (^|/)Cargo\.lock$|\.md$
+      - id: typos
+        name: typos
+        entry: typos
+        language: system
+      - id: fmt
+        name: cargo fmt
+        entry: cargo fmt --
+        language: system
+        types: [rust]
+      - id: clippy
+        name: cargo clippy
+        entry: cargo clippy --workspace --all-targets --locked -- -D warnings
+        language: system
+        types_or: [rust, toml]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: nextest
+        name: cargo nextest
+        entry: cargo nextest run --workspace
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: deny
+        name: cargo deny
+        entry: cargo deny check
+        language: system
+        files: (^|/)(Cargo\.(toml|lock)|deny\.toml)$
+        pass_filenames: false
+        stages: [pre-push]
+      - id: shear
+        name: cargo shear
+        entry: cargo shear
+        language: system
+        types_or: [rust, toml]
+        pass_filenames: false
+        stages: [pre-push]

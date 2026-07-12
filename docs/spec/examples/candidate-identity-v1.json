@@ -1,0 +1,28 @@
+{
+  "schema": "assure/scanner-candidate-identity/v1",
+  "mode": "commit-pair",
+  "event_kind": "explicit-commit-pair",
+  "finality": "explicit-replay",
+  "repository": {
+    "host": "github.com",
+    "owner": "acme",
+    "name": "spec-to-rest"
+  },
+  "ref": "refs/heads/main",
+  "default_branch_ref": "refs/heads/main",
+  "base": {
+    "kind": "git-commit",
+    "object_format": "sha1",
+    "commit_oid": "1111111111111111111111111111111111111111",
+    "tree_oid": "2222222222222222222222222222222222222222"
+  },
+  "candidate": {
+    "kind": "git-commit",
+    "object_format": "sha1",
+    "commit_oid": "3333333333333333333333333333333333333333",
+    "tree_oid": "4444444444444444444444444444444444444444"
+  },
+  "materialization": "git-objects",
+  "skip_worktree_paths": 0,
+  "index_only_materialized_paths": 0
+}

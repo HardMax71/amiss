@@ -1,0 +1,98 @@
+{
+  "schema": "assure/frontmatter-vectors/v1",
+  "contract": "frontmatter-v1",
+  "cases": [
+    {
+      "id": "FM-001-no-bom-exact-bound",
+      "bom": false,
+      "opener": "---",
+      "closer": "---",
+      "payload_bytes": 65528,
+      "closer_at_eof": true,
+      "expected": true,
+      "expected_frontmatter_bytes": 65536
+    },
+    {
+      "id": "FM-002-no-bom-over-bound",
+      "bom": false,
+      "opener": "---",
+      "closer": "---",
+      "payload_bytes": 65529,
+      "closer_at_eof": true,
+      "expected": false,
+      "expected_frontmatter_bytes": null
+    },
+    {
+      "id": "FM-003-bom-exact-bound",
+      "bom": true,
+      "opener": "---",
+      "closer": "...",
+      "payload_bytes": 65528,
+      "closer_at_eof": true,
+      "expected": true,
+      "expected_frontmatter_bytes": 65536
+    },
+    {
+      "id": "FM-004-bom-over-bound",
+      "bom": true,
+      "opener": "---",
+      "closer": "---",
+      "payload_bytes": 65529,
+      "closer_at_eof": true,
+      "expected": false,
+      "expected_frontmatter_bytes": null
+    },
+    {
+      "id": "FM-005-plus-matched",
+      "bom": false,
+      "opener": "+++",
+      "closer": "+++",
+      "payload_bytes": 3,
+      "closer_at_eof": false,
+      "expected": true,
+      "expected_frontmatter_bytes": 12
+    },
+    {
+      "id": "FM-006-mismatched-closer",
+      "bom": false,
+      "opener": "+++",
+      "closer": "---",
+      "payload_bytes": 3,
+      "closer_at_eof": true,
+      "expected": false,
+      "expected_frontmatter_bytes": null
+    },
+    {
+      "id": "FM-007-no-closer",
+      "bom": true,
+      "opener": "---",
+      "closer": null,
+      "payload_bytes": 3,
+      "closer_at_eof": true,
+      "expected": false,
+      "expected_frontmatter_bytes": null
+    },
+    {
+      "id": "FM-008-crlf-matched",
+      "bom": false,
+      "opener": "---",
+      "closer": "---",
+      "payload_bytes": 3,
+      "newline": "crlf",
+      "closer_at_eof": false,
+      "expected": true,
+      "expected_frontmatter_bytes": 15
+    },
+    {
+      "id": "FM-009-bare-cr-matched-at-eof",
+      "bom": false,
+      "opener": "+++",
+      "closer": "+++",
+      "payload_bytes": 3,
+      "newline": "cr",
+      "closer_at_eof": true,
+      "expected": true,
+      "expected_frontmatter_bytes": 11
+    }
+  ]
+}

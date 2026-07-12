@@ -1,0 +1,88 @@
+{
+  "schema": "assure/waiver-bundle/v1",
+  "repository": {
+    "host": "github.com",
+    "owner": "acme",
+    "name": "spec-to-rest"
+  },
+  "ref": "refs/heads/main",
+  "organization_floor_digest": "sha256:464a7c6d84ab06c1fd0766b983b8027af18ada5dcefd1ba3252c0cc459430a48",
+  "created_at": "2026-07-10T00:00:00Z",
+  "items": [
+    {
+      "waiver_id": "waiver/readme-missing-example",
+      "finding_kind": "explicit-target-missing",
+      "key_input": {
+        "schema": "assure/scanner-finding-key-input/v1",
+        "finding_kind": "explicit-target-missing",
+        "scope": {
+          "kind": "reference",
+          "document": "README.md",
+          "source_construct": "markdown-inline-link",
+          "normalized_target_intent": {
+            "kind": "repository-path",
+            "path": "docs/example.md",
+            "target_kind": "either",
+            "query_digest": null,
+            "fragment_digest": null
+          },
+          "occurrence": {
+            "kind": "source-projection",
+            "source_projection_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+          }
+        }
+      },
+      "finding_key": "sha256:9af3ca4e06d1de6adbb2d3c1b9ce459e510ac4cd2db3bda0fbf2d8efa9a31dd2",
+      "authorized_fact": {
+        "schema": "assure/scanner-fact/v1",
+        "finding_kind": "explicit-target-missing",
+        "key_input": {
+          "schema": "assure/scanner-finding-key-input/v1",
+          "finding_kind": "explicit-target-missing",
+          "scope": {
+            "kind": "reference",
+            "document": "README.md",
+            "source_construct": "markdown-inline-link",
+            "normalized_target_intent": {
+              "kind": "repository-path",
+              "path": "docs/example.md",
+              "target_kind": "either",
+              "query_digest": null,
+              "fragment_digest": null
+            },
+            "occurrence": {
+              "kind": "source-projection",
+              "source_projection_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          }
+        },
+        "evidence": {
+          "kind": "reference",
+          "resolution": {
+            "status": "missing",
+            "code": "path-not-found",
+            "path": "docs/example.md",
+            "entry_kind": null,
+            "git_mode": null,
+            "raw_digest": null,
+            "projection_digest": null,
+            "content_availability": "not-applicable"
+          },
+          "occurrence_multiplicity": 1
+        }
+      },
+      "authorized_fact_digest": "sha256:11da69192bfb718dd2575ae5ad23354f4fa7f8c2295cb4542202ef437eb50b1a",
+      "candidate_tree": {
+        "object_format": "sha1",
+        "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "owner": "team:docs-platform",
+      "issuer": "team:release-engineering",
+      "reason": "Release-critical exception for the exact candidate tree.",
+      "created_at": "2026-07-10T00:00:00Z",
+      "not_before": "2026-07-10T00:00:00Z",
+      "expires_at": "2026-07-12T00:00:00Z",
+      "residual_disposition": "warn"
+    }
+  ]
+}
