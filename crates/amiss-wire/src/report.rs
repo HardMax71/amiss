@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::digest::{Digest, hj};
 use crate::json::{Value, canonical};
+use crate::model::Adapter;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner-v0";
 pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine/v1";
@@ -275,48 +276,25 @@ pub fn invocation_failure_wire(
 }
 
 fn engine_value(engine: &EngineProvenance) -> Value {
-    let adapters = [
-        (
-            "markdown-v1",
-            "amiss-markdown-adapter",
-            "commonmark-gfm-v1",
-            "frontmatter-v1",
-            "source-projection-v1",
-            "markdown-ast-node-path",
-        ),
-        (
-            "mdx-v1",
-            "amiss-mdx-adapter",
-            "mdx-source-v1",
-            "frontmatter-v1",
-            "source-projection-v1",
-            "mdx-ast-node-path",
-        ),
-        (
-            "plain-advisory-v1",
-            "amiss-plain-advisory",
-            "plain-zero-lexer-v1",
-            "none",
-            "none",
-            "none",
-        ),
-    ];
-    let adapter_rows: Vec<Value> = adapters
+    let adapter_rows: Vec<Value> = Adapter::ALL
         .iter()
-        .map(|(id, parser, grammar, frontmatter, projection, address)| {
+        .map(|adapter| {
             let descriptor = object(vec![
                 ("schema", string(ADAPTER_CONTRACT_SCHEMA)),
-                ("adapter_id", string(id)),
-                ("parser_name", string(parser)),
+                ("adapter_id", string(adapter.adapter_id())),
+                ("parser_name", string(adapter.parser_name())),
                 ("parser_version", string(&engine.version)),
-                ("grammar_profile", string(grammar)),
-                ("frontmatter_contract", string(frontmatter)),
-                ("source_projection", string(projection)),
-                ("structural_address", string(address)),
+                ("grammar_profile", string(adapter.grammar_profile())),
+                (
+                    "frontmatter_contract",
+                    string(adapter.frontmatter_contract()),
+                ),
+                ("source_projection", string(adapter.source_projection())),
+                ("structural_address", string(adapter.structural_address())),
             ]);
             let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
             object(vec![
-                ("adapter_id", string(id)),
+                ("adapter_id", string(adapter.adapter_id())),
                 ("contract_descriptor", descriptor),
                 ("contract_digest", string(&digest.to_string())),
             ])

@@ -283,3 +283,69 @@ fn oid_hex(object_format: ObjectFormat, raw: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
+
+/// The three closed source adapters. Every wire string an adapter contributes
+/// (identity, grammar profile, frontmatter contract, projection, address
+/// scheme) is frozen here so no call site can spell one by hand.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Adapter {
+    Markdown,
+    Mdx,
+    PlainAdvisory,
+}
+
+impl Adapter {
+    pub const ALL: [Self; 3] = [Self::Markdown, Self::Mdx, Self::PlainAdvisory];
+
+    #[must_use]
+    pub const fn adapter_id(self) -> &'static str {
+        match self {
+            Self::Markdown => "markdown-v1",
+            Self::Mdx => "mdx-v1",
+            Self::PlainAdvisory => "plain-advisory-v1",
+        }
+    }
+
+    #[must_use]
+    pub const fn parser_name(self) -> &'static str {
+        match self {
+            Self::Markdown => "amiss-markdown-adapter",
+            Self::Mdx => "amiss-mdx-adapter",
+            Self::PlainAdvisory => "amiss-plain-advisory",
+        }
+    }
+
+    #[must_use]
+    pub const fn grammar_profile(self) -> &'static str {
+        match self {
+            Self::Markdown => "commonmark-gfm-v1",
+            Self::Mdx => "mdx-source-v1",
+            Self::PlainAdvisory => "plain-zero-lexer-v1",
+        }
+    }
+
+    #[must_use]
+    pub const fn frontmatter_contract(self) -> &'static str {
+        match self {
+            Self::Markdown | Self::Mdx => "frontmatter-v1",
+            Self::PlainAdvisory => "none",
+        }
+    }
+
+    #[must_use]
+    pub const fn source_projection(self) -> &'static str {
+        match self {
+            Self::Markdown | Self::Mdx => "source-projection-v1",
+            Self::PlainAdvisory => "none",
+        }
+    }
+
+    #[must_use]
+    pub const fn structural_address(self) -> &'static str {
+        match self {
+            Self::Markdown => "markdown-ast-node-path",
+            Self::Mdx => "mdx-ast-node-path",
+            Self::PlainAdvisory => "none",
+        }
+    }
+}
