@@ -1,3 +1,6 @@
+pub mod digest;
+pub mod json;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitClass {
     /// Complete evaluation, no effective blocking finding.
@@ -16,17 +19,5 @@ impl ExitClass {
             Self::BlockingFindings => 1,
             Self::Failure => 2,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ExitClass;
-
-    #[test]
-    fn exit_codes_are_contract() {
-        assert_eq!(ExitClass::Success.code(), 0);
-        assert_eq!(ExitClass::BlockingFindings.code(), 1);
-        assert_eq!(ExitClass::Failure.code(), 2);
     }
 }

@@ -23,6 +23,12 @@ repos:
         language: system
         types: [text]
         exclude: (^|/)Cargo\.lock$|\.md$
+      - id: no-tests-in-src
+        name: tests live outside src/
+        entry: >-
+          awk '/#\[test\]|#\[cfg\(test\)\]/{print FILENAME": test code inside implementation";e=1} END{exit e}'
+        language: system
+        files: ^crates/[^/]+/src/.*\.rs$
       - id: typos
         name: typos
         entry: typos
