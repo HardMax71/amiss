@@ -8,7 +8,7 @@ pub mod resources;
 pub use object::{Commit, Object, ObjectKind, TreeEntry, parse_commit, parse_tree};
 #[cfg(unix)]
 pub use repo::Repository;
-pub use resources::{GitLimits, GitResources};
+pub use resources::{GitLimits, GitResources, ValueCap};
 
 use amiss_wire::controls::ResourceName;
 

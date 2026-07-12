@@ -14,6 +14,17 @@ pub struct GitLimits {
     pub pack_index_bytes: u64,
     pub aggregate_pack_index_bytes: u64,
     pub delta_depth: u64,
+    pub tree_entries_per_snapshot: u64,
+    pub raw_path_bytes: u64,
+}
+
+/// A smaller contextual inflated cap (a document, target, or control blob)
+/// that applies before the general Git object cap when the object header
+/// declares a larger value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ValueCap {
+    pub resource: ResourceName,
+    pub limit: u64,
 }
 
 impl GitLimits {
@@ -26,6 +37,8 @@ impl GitLimits {
         pack_index_bytes: 536_870_912,
         aggregate_pack_index_bytes: 1_073_741_824,
         delta_depth: 128,
+        tree_entries_per_snapshot: 1_000_000,
+        raw_path_bytes: 4_096,
     };
 }
 

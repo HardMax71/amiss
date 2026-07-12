@@ -51,6 +51,19 @@ pub fn scan_document(
     source: &[u8],
 ) -> Result<Scanned, Error> {
     resources.charge_document(length(source))?;
+    scan_bytes(resources, adapter, source)
+}
+
+/// Parses and extracts one already admitted document body.
+///
+/// # Errors
+///
+/// Everything `scan_document` fails with except the admission crossings.
+pub fn scan_bytes(
+    resources: &mut ScanResources,
+    adapter: Adapter,
+    source: &[u8],
+) -> Result<Scanned, Error> {
     let analysis = analyze(adapter, source).map_err(Error::Parse)?;
     resources.charge_work(analysis.work.nodes, analysis.work.nesting)?;
 

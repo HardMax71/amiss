@@ -14,7 +14,7 @@ use crate::object::{Object, ObjectKind, decode_loose, discard_to_unreadable, hex
 use crate::pack::{
     self, PackSet, apply_delta, inflate_exact, kind_of, parse_entry_header, parse_ofs_distance,
 };
-use crate::resources::{GitResources, crossing};
+use crate::resources::{GitResources, ValueCap, crossing};
 
 #[derive(Debug)]
 pub struct Repository {
@@ -64,7 +64,7 @@ impl Repository {
     /// `ObjectUnreadable` for any corruption or non-ordinary entry, and
     /// `ResourceLimit` for cap crossings.
     pub fn read_object(&self, resources: &mut GitResources, oid: &Oid) -> Result<Object, Error> {
-        self.read_full(resources, oid, 1)
+        self.read_full(resources, oid, 1, None)
     }
 
     /// # Errors
@@ -85,11 +85,35 @@ impl Repository {
         }
     }
 
+    /// Reads one object under a smaller contextual inflated cap, which applies
+    /// before the general Git object cap when a header declares a larger
+    /// value. The cap binds the requested object only, never a delta base.
+    ///
+    /// # Errors
+    ///
+    /// Everything `read_expected` fails with; a declared size past the cap is
+    /// a `ResourceLimit` carrying the cap's own resource.
+    pub fn read_expected_capped(
+        &self,
+        resources: &mut GitResources,
+        oid: &Oid,
+        expected: ObjectKind,
+        cap: ValueCap,
+    ) -> Result<Object, Error> {
+        let object = self.read_full(resources, oid, 1, Some(&cap))?;
+        if object.kind == expected {
+            Ok(object)
+        } else {
+            Err(Error::ObjectWrongKind)
+        }
+    }
+
     fn read_full(
         &self,
         resources: &mut GitResources,
         oid: &Oid,
         depth: u64,
+        value_cap: Option<&ValueCap>,
     ) -> Result<Object, Error> {
         let limit = resources.limits().delta_depth;
         if depth > limit {
@@ -100,15 +124,19 @@ impl Repository {
         let rest = hex_text.get(2..).ok_or(Error::ObjectUnreadable)?;
         let fan_fd = match openat(&self.objects, fan, dir_flags(), Mode::empty()) {
             Ok(fd) => fd,
-            Err(errno) if errno == Errno::NOENT => return self.read_packed(resources, oid, depth),
+            Err(errno) if errno == Errno::NOENT => {
+                return self.read_packed(resources, oid, depth, value_cap);
+            }
             Err(_) => return Err(Error::ObjectUnreadable),
         };
         let file_fd = match openat(&fan_fd, rest, file_flags(), Mode::empty()) {
             Ok(fd) => fd,
-            Err(errno) if errno == Errno::NOENT => return self.read_packed(resources, oid, depth),
+            Err(errno) if errno == Errno::NOENT => {
+                return self.read_packed(resources, oid, depth, value_cap);
+            }
             Err(_) => return Err(Error::ObjectUnreadable),
         };
-        self.decode(resources, oid, file_fd)
+        self.decode(resources, oid, file_fd, value_cap)
     }
 
     fn pack_set(&self, resources: &mut GitResources) -> Result<&PackSet, Error> {
@@ -131,12 +159,13 @@ impl Repository {
         resources: &mut GitResources,
         oid: &Oid,
         depth: u64,
+        value_cap: Option<&ValueCap>,
     ) -> Result<Object, Error> {
         let raw = oid_raw(oid).ok_or(Error::ObjectUnreadable)?;
         let Some((pack_index, offset)) = self.pack_set(resources)?.locate(&raw) else {
             return Err(Error::ObjectMissing);
         };
-        let (kind, body) = self.read_pack_at(resources, pack_index, offset, depth)?;
+        let (kind, body) = self.read_pack_at(resources, pack_index, offset, depth, value_cap)?;
         let raw_header = format!("{} {}\0", kind.as_str(), body.len()).into_bytes();
         verify_oid(self.object_format, oid, &raw_header, &body)?;
         Ok(Object { kind, body })
@@ -148,6 +177,7 @@ impl Repository {
         pack_index: usize,
         offset: u64,
         depth: u64,
+        value_cap: Option<&ValueCap>,
     ) -> Result<(ObjectKind, Vec<u8>), Error> {
         let limit = resources.limits().delta_depth;
         if depth > limit {
@@ -166,6 +196,11 @@ impl Repository {
 
         match header.type_code {
             1..=4 => {
+                if let Some(value) = value_cap
+                    && header.size > value.limit
+                {
+                    return Err(crossing(value.resource, value.limit, header.size));
+                }
                 let body = inflate_exact(after_header, header.size, inflated_cap)?;
                 Ok((kind_of(header.type_code)?, body))
             }
@@ -182,24 +217,37 @@ impl Repository {
                 if !base_known {
                     return Err(Error::ObjectUnreadable);
                 }
-                let (kind, base) =
-                    self.read_pack_at(resources, pack_index, base_offset, depth.saturating_add(1))?;
+                let (kind, base) = self.read_pack_at(
+                    resources,
+                    pack_index,
+                    base_offset,
+                    depth.saturating_add(1),
+                    None,
+                )?;
                 let script_bytes = after_header.get(used..).ok_or(Error::ObjectUnreadable)?;
                 let script = inflate_exact(script_bytes, header.size, inflated_cap)?;
-                Ok((kind, apply_delta(&base, &script, inflated_cap)?))
+                Ok((kind, apply_delta(&base, &script, inflated_cap, value_cap)?))
             }
             7 => {
                 let width = self.oid_width();
                 let base_raw = after_header.get(..width).ok_or(Error::ObjectUnreadable)?;
                 let base_oid =
                     Oid::new(self.object_format, hex(base_raw)).ok_or(Error::ObjectUnreadable)?;
-                let base = self.read_full(resources, &base_oid, depth.saturating_add(1))?;
+                let base = self.read_full(resources, &base_oid, depth.saturating_add(1), None)?;
                 let script_bytes = after_header.get(width..).ok_or(Error::ObjectUnreadable)?;
                 let script = inflate_exact(script_bytes, header.size, inflated_cap)?;
-                Ok((base.kind, apply_delta(&base.body, &script, inflated_cap)?))
+                Ok((
+                    base.kind,
+                    apply_delta(&base.body, &script, inflated_cap, value_cap)?,
+                ))
             }
             _ => Err(Error::ObjectUnreadable),
         }
+    }
+
+    #[must_use]
+    pub const fn object_format(&self) -> ObjectFormat {
+        self.object_format
     }
 
     const fn oid_width(&self) -> usize {
@@ -214,6 +262,7 @@ impl Repository {
         resources: &mut GitResources,
         oid: &Oid,
         fd: OwnedFd,
+        value_cap: Option<&ValueCap>,
     ) -> Result<Object, Error> {
         let file = File::from(fd);
         let metadata = file.metadata().map_err(discard_to_unreadable)?;
@@ -240,6 +289,7 @@ impl Repository {
             self.object_format,
             oid,
             resources.limits().inflated_object_bytes,
+            value_cap,
         )
     }
 }

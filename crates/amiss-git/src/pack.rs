@@ -13,7 +13,7 @@ use rustix::io::Errno;
 
 use crate::Error;
 use crate::object::{ObjectKind, discard_to_unreadable, ordinary_digest};
-use crate::resources::{GitResources, crossing};
+use crate::resources::{GitResources, ValueCap, crossing};
 
 #[derive(Debug)]
 pub(crate) struct PackSet {
@@ -552,11 +552,21 @@ pub(crate) fn inflate_exact(data: &[u8], expected: u64, cap: u64) -> Result<Vec<
     Ok(out)
 }
 
-pub(crate) fn apply_delta(base: &[u8], script: &[u8], cap: u64) -> Result<Vec<u8>, Error> {
+pub(crate) fn apply_delta(
+    base: &[u8],
+    script: &[u8],
+    cap: u64,
+    value_cap: Option<&ValueCap>,
+) -> Result<Vec<u8>, Error> {
     let (source_size, at) = leb128(script, 0)?;
     let (target_size, mut at) = leb128(script, at)?;
     if source_size != u64::try_from(base.len()).map_err(discard_to_unreadable)? {
         return Err(Error::ObjectUnreadable);
+    }
+    if let Some(value) = value_cap
+        && target_size > value.limit
+    {
+        return Err(crossing(value.resource, value.limit, target_size));
     }
     if target_size > cap {
         return Err(crossing(ResourceName::GitObjectBytes, cap, target_size));

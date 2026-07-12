@@ -6,6 +6,7 @@ use flate2::bufread::ZlibDecoder;
 use sha2::Digest as _;
 
 use crate::Error;
+use crate::resources::ValueCap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ObjectKind {
@@ -77,9 +78,10 @@ pub fn decode_loose(
     object_format: ObjectFormat,
     oid: &Oid,
     inflated_cap: u64,
+    value_cap: Option<&ValueCap>,
 ) -> Result<Object, Error> {
     let mut decoder = ZlibDecoder::new(compressed);
-    let header = read_header(&mut decoder, inflated_cap)?;
+    let header = read_header(&mut decoder, inflated_cap, value_cap)?;
     let mut body = vec![0_u8; header.size];
     fill_exact(&mut decoder, &mut body)?;
     let mut probe = [0_u8; 1];
@@ -103,7 +105,12 @@ struct Header {
     raw: Vec<u8>,
 }
 
-fn read_header(decoder: &mut ZlibDecoder<&[u8]>, inflated_cap: u64) -> Result<Header, Error> {
+fn read_header(
+    decoder: &mut ZlibDecoder<&[u8]>,
+    inflated_cap: u64,
+    value_cap: Option<&ValueCap>,
+) -> Result<Header, Error> {
+    const MAX_SAFE: u64 = 9_007_199_254_740_991;
     let mut raw: Vec<u8> = Vec::new();
     let mut token: Vec<u8> = Vec::new();
     let kind = loop {
@@ -121,6 +128,7 @@ fn read_header(decoder: &mut ZlibDecoder<&[u8]>, inflated_cap: u64) -> Result<He
     let mut value: u64 = 0;
     let mut digits: usize = 0;
     let mut leading_zero = false;
+    let mut saturated = false;
     loop {
         let byte = next_byte(decoder)?;
         raw.push(byte);
@@ -137,16 +145,30 @@ fn read_header(decoder: &mut ZlibDecoder<&[u8]>, inflated_cap: u64) -> Result<He
         value = value
             .saturating_mul(10)
             .saturating_add(u64::from(byte.wrapping_sub(b'0')));
-        if value > inflated_cap {
-            return Err(Error::ResourceLimit {
-                resource: ResourceName::GitObjectBytes,
-                configured_limit: inflated_cap,
-                observed_lower_bound: value,
-            });
+        if value > MAX_SAFE {
+            value = MAX_SAFE;
+            saturated = true;
+            break;
         }
     }
-    if digits == 0 {
+    if digits == 0 && !saturated {
         return Err(Error::ObjectUnreadable);
+    }
+    if let Some(cap) = value_cap
+        && value > cap.limit
+    {
+        return Err(Error::ResourceLimit {
+            resource: cap.resource,
+            configured_limit: cap.limit,
+            observed_lower_bound: value,
+        });
+    }
+    if value > inflated_cap {
+        return Err(Error::ResourceLimit {
+            resource: ResourceName::GitObjectBytes,
+            configured_limit: inflated_cap,
+            observed_lower_bound: value,
+        });
     }
     let size = usize::try_from(value).map_err(discard_to_unreadable)?;
     Ok(Header { kind, size, raw })

@@ -41,8 +41,10 @@ dependencies = [
 name = "amiss-scan"
 version = "0.0.0"
 dependencies = [
+ "amiss-git",
  "amiss-md",
  "amiss-wire",
+ "tempfile",
 ]
 
 [[package]]

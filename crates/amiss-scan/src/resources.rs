@@ -101,6 +101,16 @@ impl ScanResources {
     /// The document count, per-document byte, or aggregate byte crossing,
     /// checked in that order.
     pub fn charge_document(&mut self, declared_bytes: u64) -> Result<(), Error> {
+        self.admit_document()?;
+        self.charge_document_bytes(declared_bytes)
+    }
+
+    /// Counts one selected document, before its bytes are read.
+    ///
+    /// # Errors
+    ///
+    /// The document count crossing.
+    pub fn admit_document(&mut self) -> Result<(), Error> {
         self.documents = self.documents.saturating_add(1);
         if self.documents > self.limits.documents_per_snapshot {
             return Err(crossing(
@@ -109,6 +119,16 @@ impl ScanResources {
                 self.limits.documents_per_snapshot.saturating_add(1),
             ));
         }
+        Ok(())
+    }
+
+    /// Charges one admitted document's declared byte size.
+    ///
+    /// # Errors
+    ///
+    /// The per-document byte crossing, then the aggregate crossing; a member
+    /// rejected by the first is never charged to the second.
+    pub fn charge_document_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
         if declared_bytes > self.limits.document_blob_bytes {
             return Err(crossing(
                 ResourceName::DocumentBlobBytes,
