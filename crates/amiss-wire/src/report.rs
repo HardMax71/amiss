@@ -384,3 +384,133 @@ fn object(members: Vec<(&str, Value)>) -> Value {
 fn string(value: &str) -> Value {
     Value::String(value.to_owned())
 }
+
+/// The six resolution statuses. The status is total in the code: no other
+/// pairing exists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ResolutionStatus {
+    Resolved,
+    Missing,
+    TypeMismatch,
+    Unsupported,
+    Invalid,
+    ExternalOutOfScope,
+}
+
+impl ResolutionStatus {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Resolved => "resolved",
+            Self::Missing => "missing",
+            Self::TypeMismatch => "type-mismatch",
+            Self::Unsupported => "unsupported",
+            Self::Invalid => "invalid",
+            Self::ExternalOutOfScope => "external-out-of-scope",
+        }
+    }
+}
+
+/// The closed resolution codes in schema declaration order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ResolutionCode {
+    ExactPath,
+    PathNotFound,
+    TargetTypeMismatch,
+    SymlinkEntry,
+    GitlinkEntry,
+    UnsupportedQuerySemantics,
+    UnsupportedFragmentSemantics,
+    UnsupportedVersionScope,
+    SiteRouteUnsupported,
+    NetworkPathUnsupported,
+    CodeFragmentUnevaluated,
+    InvalidUri,
+    InvalidPercentEncoding,
+    DecodedPathControl,
+    PathTraversal,
+    BackslashSeparator,
+    EncodedSlash,
+    InvalidFragmentEncoding,
+    InvalidReference,
+    ExternalUrl,
+    ForeignRepository,
+}
+
+impl ResolutionCode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExactPath => "exact-path",
+            Self::PathNotFound => "path-not-found",
+            Self::TargetTypeMismatch => "target-type-mismatch",
+            Self::SymlinkEntry => "symlink-entry",
+            Self::GitlinkEntry => "gitlink-entry",
+            Self::UnsupportedQuerySemantics => "unsupported-query-semantics",
+            Self::UnsupportedFragmentSemantics => "unsupported-fragment-semantics",
+            Self::UnsupportedVersionScope => "unsupported-version-scope",
+            Self::SiteRouteUnsupported => "site-route-unsupported",
+            Self::NetworkPathUnsupported => "network-path-unsupported",
+            Self::CodeFragmentUnevaluated => "code-fragment-unevaluated",
+            Self::InvalidUri => "invalid-uri",
+            Self::InvalidPercentEncoding => "invalid-percent-encoding",
+            Self::DecodedPathControl => "decoded-path-control",
+            Self::PathTraversal => "path-traversal",
+            Self::BackslashSeparator => "backslash-separator",
+            Self::EncodedSlash => "encoded-slash",
+            Self::InvalidFragmentEncoding => "invalid-fragment-encoding",
+            Self::InvalidReference => "invalid-reference",
+            Self::ExternalUrl => "external-url",
+            Self::ForeignRepository => "foreign-repository",
+        }
+    }
+
+    #[must_use]
+    pub const fn status(self) -> ResolutionStatus {
+        match self {
+            Self::ExactPath => ResolutionStatus::Resolved,
+            Self::PathNotFound => ResolutionStatus::Missing,
+            Self::TargetTypeMismatch => ResolutionStatus::TypeMismatch,
+            Self::SymlinkEntry
+            | Self::GitlinkEntry
+            | Self::UnsupportedQuerySemantics
+            | Self::UnsupportedFragmentSemantics
+            | Self::UnsupportedVersionScope
+            | Self::SiteRouteUnsupported
+            | Self::NetworkPathUnsupported
+            | Self::CodeFragmentUnevaluated => ResolutionStatus::Unsupported,
+            Self::InvalidUri
+            | Self::InvalidPercentEncoding
+            | Self::DecodedPathControl
+            | Self::PathTraversal
+            | Self::BackslashSeparator
+            | Self::EncodedSlash
+            | Self::InvalidFragmentEncoding
+            | Self::InvalidReference => ResolutionStatus::Invalid,
+            Self::ExternalUrl | Self::ForeignRepository => ResolutionStatus::ExternalOutOfScope,
+        }
+    }
+}
+
+/// The five target-intent variants an occurrence can carry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IntentKind {
+    RepositoryPath,
+    SameRepositoryGithub,
+    ExternalUrl,
+    SiteRoute,
+    Unsupported,
+}
+
+impl IntentKind {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RepositoryPath => "repository-path",
+            Self::SameRepositoryGithub => "same-repository-github",
+            Self::ExternalUrl => "external-url",
+            Self::SiteRoute => "site-route",
+            Self::Unsupported => "unsupported",
+        }
+    }
+}

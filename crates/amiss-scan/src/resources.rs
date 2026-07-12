@@ -15,6 +15,8 @@ pub struct ScanLimits {
     pub parser_nodes_per_snapshot: u64,
     pub references_per_document: u64,
     pub references_per_snapshot: u64,
+    pub referenced_target_blob_bytes: u64,
+    pub aggregate_referenced_target_bytes_per_snapshot: u64,
 }
 
 impl ScanLimits {
@@ -28,6 +30,8 @@ impl ScanLimits {
         parser_nodes_per_snapshot: 5_000_000,
         references_per_document: 4_096,
         references_per_snapshot: 1_000_000,
+        referenced_target_blob_bytes: 16_777_216,
+        aggregate_referenced_target_bytes_per_snapshot: 536_870_912,
     };
 }
 
@@ -43,6 +47,7 @@ pub struct ScanResources {
     document_bytes: u64,
     nodes: u64,
     references: u64,
+    target_bytes: u64,
 }
 
 pub(crate) const fn crossing(
@@ -66,6 +71,7 @@ impl ScanResources {
             document_bytes: 0,
             nodes: 0,
             references: 0,
+            target_bytes: 0,
         }
     }
 
@@ -92,6 +98,31 @@ impl ScanResources {
     #[must_use]
     pub const fn references(&self) -> u64 {
         self.references
+    }
+
+    #[must_use]
+    pub const fn target_bytes(&self) -> u64 {
+        self.target_bytes
+    }
+
+    /// Charges one referenced target's declared byte size to the snapshot
+    /// aggregate; the per-value cap is enforced where the read happens.
+    ///
+    /// # Errors
+    ///
+    /// The aggregate crossing, observing the prior charged total plus this
+    /// member.
+    pub fn charge_target_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
+        let total = self.target_bytes.saturating_add(declared_bytes);
+        if total > self.limits.aggregate_referenced_target_bytes_per_snapshot {
+            return Err(crossing(
+                ResourceName::AggregateReferencedTargetBytesPerSnapshot,
+                self.limits.aggregate_referenced_target_bytes_per_snapshot,
+                total,
+            ));
+        }
+        self.target_bytes = total;
+        Ok(())
     }
 
     /// Admits one selected document of `declared_bytes`.

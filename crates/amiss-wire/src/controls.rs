@@ -220,6 +220,17 @@ pub enum GitMode {
 }
 
 impl GitMode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RegularFile => "100644",
+            Self::ExecutableFile => "100755",
+            Self::Tree => "040000",
+            Self::Symlink => "120000",
+            Self::Gitlink => "160000",
+        }
+    }
+
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "100644" => Ok(Self::RegularFile),

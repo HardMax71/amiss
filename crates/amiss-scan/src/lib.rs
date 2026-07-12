@@ -2,6 +2,8 @@
 pub mod discovery;
 pub mod document;
 pub mod lfs;
+#[cfg(unix)]
+pub mod resolve;
 pub mod resources;
 pub mod scan;
 
@@ -12,6 +14,8 @@ use amiss_wire::report::AnalysisErrorCode;
 #[cfg(unix)]
 pub use discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover};
 pub use document::{Classification, classify, excluded_by_built_in};
+#[cfg(unix)]
+pub use resolve::{GithubContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};
 pub use scan::{Scanned, ScannedOccurrence, SpanDisplay, scan_bytes, scan_document};
 

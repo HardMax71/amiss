@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{Oid, RepoPath};
@@ -41,6 +43,20 @@ pub struct SnapshotDiscovery {
     pub outside_document_set: u64,
     pub tree_entries: u64,
     pub path_defects: Vec<Error>,
+    pub entries: BTreeMap<String, (GitMode, Oid)>,
+}
+
+impl SnapshotDiscovery {
+    /// Whether a path is a scanned structured document on this side, which is
+    /// what accepting a query requires.
+    #[must_use]
+    pub fn is_scanned_structured(&self, path: &str) -> bool {
+        self.documents.iter().any(|record| {
+            record.path == path
+                && record.classification != Classification::PlainAdvisory
+                && matches!(record.status, DocumentStatus::Scanned(_))
+        })
+    }
 }
 
 struct Frame {
@@ -73,6 +89,7 @@ pub fn discover(
         outside_document_set: 0,
         tree_entries: 0,
         path_defects: Vec::new(),
+        entries: BTreeMap::new(),
     };
     let root = repo.read_expected(git, root_tree, ObjectKind::Tree)?;
     let mut frames = vec![Frame {
@@ -124,6 +141,9 @@ pub fn discover(
             continue;
         }
 
+        discovery
+            .entries
+            .insert(path.clone(), (entry.mode, entry.oid.clone()));
         if entry.mode == GitMode::Tree {
             if frames.iter().any(|ancestor| ancestor.oid == entry.oid) {
                 return Err(Error::Git(GitDefect::ObjectUnreadable));
