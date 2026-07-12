@@ -592,27 +592,17 @@ fn native(
     };
 
     if path_part.is_empty() {
-        let intent = Intent {
-            kind: IntentKind::RepositoryPath,
-            repository_path: Some(document_path.to_owned()),
-            target_kind: Some(TargetKind::Either),
-            external_scheme: None,
-            query: query.clone(),
-            fragment: fragment.clone(),
-        };
-        let row = lookup(
+        return self_target(
             repo,
             git,
             scan,
             cache,
             snapshot,
             document_path,
-            TargetKind::Either,
+            is_image,
             query.as_deref(),
             fragment.as_deref(),
-            false,
-        )?;
-        return Ok((intent, row));
+        );
     }
     if path_part.contains('\\') {
         return Ok(terminal(
@@ -635,6 +625,8 @@ fn native(
             return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
         }
         TargetKind::Tree
+    } else if is_image {
+        TargetKind::Blob
     } else {
         TargetKind::Either
     };
@@ -684,6 +676,51 @@ fn native(
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
+        false,
+    )?;
+    Ok((intent, row))
+}
+
+/// An empty native destination targets the source document itself, whether
+/// or not a query or fragment is present.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the resolver context is the contract's"
+)]
+fn self_target(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    document_path: &str,
+    is_image: bool,
+    query: Option<&str>,
+    fragment: Option<&str>,
+) -> Result<(Intent, Resolution), Error> {
+    let self_kind = if is_image {
+        TargetKind::Blob
+    } else {
+        TargetKind::Either
+    };
+    let intent = Intent {
+        kind: IntentKind::RepositoryPath,
+        repository_path: Some(document_path.to_owned()),
+        target_kind: Some(self_kind),
+        external_scheme: None,
+        query: query.map(str::to_owned),
+        fragment: fragment.map(str::to_owned),
+    };
+    let row = lookup(
+        repo,
+        git,
+        scan,
+        cache,
+        snapshot,
+        document_path,
+        self_kind,
+        query,
+        fragment,
         false,
     )?;
     Ok((intent, row))

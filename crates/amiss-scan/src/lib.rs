@@ -3,6 +3,8 @@ pub mod correlate;
 #[cfg(unix)]
 pub mod discovery;
 pub mod document;
+#[cfg(unix)]
+pub mod evaluate;
 pub mod lfs;
 #[cfg(unix)]
 pub mod observe;
@@ -20,6 +22,8 @@ pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
 #[cfg(unix)]
 pub use discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover};
 pub use document::{Classification, classify, excluded_by_built_in};
+#[cfg(unix)]
+pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
 #[cfg(unix)]
 pub use resolve::{GithubContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};

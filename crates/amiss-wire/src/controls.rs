@@ -208,6 +208,16 @@ pub enum EntryKind {
 }
 
 impl EntryKind {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Blob => "blob",
+            Self::Tree => "tree",
+            Self::Symlink => "symlink",
+            Self::Gitlink => "gitlink",
+        }
+    }
+
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "blob" => Ok(Self::Blob),
@@ -261,6 +271,16 @@ pub enum ContentAvailability {
 }
 
 impl ContentAvailability {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::NotRead => "not-read",
+            Self::NotApplicable => "not-applicable",
+            Self::LfsPointerOnly => "lfs-pointer-only",
+        }
+    }
+
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "available" => Ok(Self::Available),

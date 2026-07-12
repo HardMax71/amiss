@@ -97,6 +97,7 @@ fn observation(spec: &Spec) -> Observation {
             &spec.intent,
         ),
         document: spec.document.clone(),
+        span: (0, 1),
         adapter: Adapter::Markdown,
         construct: SourceConstruct::InlineLink,
         intent: spec.intent.clone(),

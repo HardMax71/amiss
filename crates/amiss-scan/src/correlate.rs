@@ -14,6 +14,7 @@ use crate::{Error, observe};
 pub struct Observation {
     pub id: Digest,
     pub document: String,
+    pub span: (usize, usize),
     pub adapter: Adapter,
     pub construct: SourceConstruct,
     pub intent: Intent,

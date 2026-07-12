@@ -522,3 +522,163 @@ impl IntentKind {
         }
     }
 }
+
+/// The four finding scopes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FindingScope {
+    Reference,
+    Observation,
+    Document,
+    Control,
+}
+
+/// The closed disposition values a policy step can produce.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Disposition {
+    Record,
+    Warn,
+    Fail,
+}
+
+impl Disposition {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Record => "record",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+        }
+    }
+}
+
+/// The complete closed v0 finding taxonomy, in schema declaration order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FindingKind {
+    ExplicitTargetMissing,
+    ExplicitTargetTypeMismatch,
+    InvalidReference,
+    UnsupportedReferenceSemantics,
+    UnsupportedDocumentFormat,
+    UnsupportedTargetKind,
+    UnsupportedVersionScope,
+    UnsupportedCapability,
+    DependencyChangedSubjectUnchanged,
+    DependencyAndSubjectCochanged,
+    SubjectChanged,
+    ExplicitReferenceRemoved,
+    DocumentRemoved,
+    ExternalOutOfScope,
+    OpaqueMdxRegion,
+    OpaqueHtmlRegion,
+    ObservationCorrelationAmbiguous,
+    UnlinkedDocument,
+    PolicyWeakened,
+    CoverageReduced,
+    ControlPlaneChanged,
+    DebtWorsened,
+    DebtExpired,
+    WaiverInvalid,
+}
+
+impl FindingKind {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExplicitTargetMissing => "explicit-target-missing",
+            Self::ExplicitTargetTypeMismatch => "explicit-target-type-mismatch",
+            Self::InvalidReference => "invalid-reference",
+            Self::UnsupportedReferenceSemantics => "unsupported-reference-semantics",
+            Self::UnsupportedDocumentFormat => "unsupported-document-format",
+            Self::UnsupportedTargetKind => "unsupported-target-kind",
+            Self::UnsupportedVersionScope => "unsupported-version-scope",
+            Self::UnsupportedCapability => "unsupported-capability",
+            Self::DependencyChangedSubjectUnchanged => "dependency-changed-subject-unchanged",
+            Self::DependencyAndSubjectCochanged => "dependency-and-subject-cochanged",
+            Self::SubjectChanged => "subject-changed",
+            Self::ExplicitReferenceRemoved => "explicit-reference-removed",
+            Self::DocumentRemoved => "document-removed",
+            Self::ExternalOutOfScope => "external-out-of-scope",
+            Self::OpaqueMdxRegion => "opaque-mdx-region",
+            Self::OpaqueHtmlRegion => "opaque-html-region",
+            Self::ObservationCorrelationAmbiguous => "observation-correlation-ambiguous",
+            Self::UnlinkedDocument => "unlinked-document",
+            Self::PolicyWeakened => "policy-weakened",
+            Self::CoverageReduced => "coverage-reduced",
+            Self::ControlPlaneChanged => "control-plane-changed",
+            Self::DebtWorsened => "debt-worsened",
+            Self::DebtExpired => "debt-expired",
+            Self::WaiverInvalid => "waiver-invalid",
+        }
+    }
+
+    /// The closed key-scope assignment.
+    #[must_use]
+    pub const fn scope(self) -> FindingScope {
+        match self {
+            Self::ExplicitTargetMissing | Self::ExplicitTargetTypeMismatch => {
+                FindingScope::Reference
+            }
+            Self::InvalidReference
+            | Self::UnsupportedReferenceSemantics
+            | Self::UnsupportedTargetKind
+            | Self::UnsupportedVersionScope
+            | Self::DependencyChangedSubjectUnchanged
+            | Self::DependencyAndSubjectCochanged
+            | Self::SubjectChanged
+            | Self::ExplicitReferenceRemoved
+            | Self::ExternalOutOfScope
+            | Self::ObservationCorrelationAmbiguous => FindingScope::Observation,
+            Self::UnsupportedDocumentFormat
+            | Self::DocumentRemoved
+            | Self::OpaqueMdxRegion
+            | Self::OpaqueHtmlRegion
+            | Self::UnlinkedDocument => FindingScope::Document,
+            Self::UnsupportedCapability
+            | Self::PolicyWeakened
+            | Self::CoverageReduced
+            | Self::ControlPlaneChanged
+            | Self::DebtWorsened
+            | Self::DebtExpired
+            | Self::WaiverInvalid => FindingScope::Control,
+        }
+    }
+
+    /// The first policy-step result for a candidate fact under
+    /// `scanner-policy-defaults-v1`, per profile.
+    #[must_use]
+    pub const fn built_in_disposition(self, enforce: bool) -> Disposition {
+        match self {
+            Self::ExplicitTargetMissing
+            | Self::ExplicitTargetTypeMismatch
+            | Self::InvalidReference => {
+                if enforce {
+                    Disposition::Fail
+                } else {
+                    Disposition::Warn
+                }
+            }
+            Self::UnsupportedCapability
+            | Self::PolicyWeakened
+            | Self::CoverageReduced
+            | Self::ControlPlaneChanged
+            | Self::DebtWorsened
+            | Self::DebtExpired
+            | Self::WaiverInvalid => Disposition::Fail,
+            Self::DependencyChangedSubjectUnchanged | Self::ExplicitReferenceRemoved => {
+                Disposition::Warn
+            }
+            Self::UnsupportedReferenceSemantics
+            | Self::UnsupportedDocumentFormat
+            | Self::UnsupportedTargetKind
+            | Self::UnsupportedVersionScope
+            | Self::DependencyAndSubjectCochanged
+            | Self::SubjectChanged
+            | Self::DocumentRemoved
+            | Self::ExternalOutOfScope
+            | Self::OpaqueMdxRegion
+            | Self::OpaqueHtmlRegion
+            | Self::ObservationCorrelationAmbiguous
+            | Self::UnlinkedDocument => Disposition::Record,
+        }
+    }
+}
