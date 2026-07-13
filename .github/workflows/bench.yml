@@ -29,7 +29,8 @@ jobs:
             target
           key: bench-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: bench-
-      - run: cargo bench --workspace --locked
+      - shell: bash
+        run: cargo bench --workspace --locked 2>&1 | tee benches.txt
       - shell: bash
         run: >-
           cargo nextest run -p amiss-scan --test eligibility --release --locked
@@ -42,6 +43,6 @@ jobs:
         with:
           name: promotion-evidence
           path: |
-            target/criterion
+            benches.txt
             eligibility.txt
             measurement.txt

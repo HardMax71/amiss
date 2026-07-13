@@ -11,7 +11,7 @@ bench = false
 sha2.workspace = true
 
 [dev-dependencies]
-criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+divan = "0.1.21"
 
 [[bench]]
 name = "wire"

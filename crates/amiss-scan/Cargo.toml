@@ -14,7 +14,7 @@ amiss-wire = { path = "../amiss-wire" }
 
 [dev-dependencies]
 amiss-fixtures = { path = "../amiss-fixtures" }
-criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+divan = "0.1.21"
 dhat = "0.3"
 jsonschema = "0.26"
 serde_json = "1"

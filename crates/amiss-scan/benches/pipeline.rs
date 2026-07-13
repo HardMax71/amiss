@@ -5,11 +5,16 @@ use amiss_scan::report::RequestDigests;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
-use criterion::{Criterion, criterion_group, criterion_main};
+use divan::Bencher;
+
+fn main() {
+    divan::main();
+}
 
 /// One complete evaluation over the representative repository: the
 /// incremental-latency figure the promotion gate asks to see measured.
-fn pipeline(bencher: &mut Criterion) {
+#[divan::bench(sample_count = 10)]
+fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
     let dir = tempfile::TempDir::new().unwrap_or_else(|defect| panic!("tempdir: {defect}"));
     amiss_fixtures::representative_repository(dir.path(), 500)
         .unwrap_or_else(|defect| panic!("fixture repository: {defect}"));
@@ -35,13 +40,7 @@ fn pipeline(bencher: &mut Criterion) {
         external_defect: None,
         errors_retained: 64,
     };
-
-    let mut group = bencher.benchmark_group("pipeline");
-    group.sample_size(10);
-    group.bench_function("commit-pair/500-docs", |bench| {
-        bench.iter(|| commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate));
-    });
-    group.finish();
+    bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate));
 }
 
 fn revision(root: &std::path::Path, spec: &str) -> Oid {
@@ -49,6 +48,3 @@ fn revision(root: &std::path::Path, spec: &str) -> Oid {
         .unwrap_or_else(|defect| panic!("rev-parse: {defect}"));
     Oid::new(ObjectFormat::Sha1, raw.trim().to_owned()).unwrap_or_else(|| panic!("oid for {spec}"))
 }
-
-criterion_group!(benches, pipeline);
-criterion_main!(benches);

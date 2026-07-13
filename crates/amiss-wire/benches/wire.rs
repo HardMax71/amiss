@@ -1,6 +1,11 @@
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, canonical, canonical_length, parse};
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use divan::counter::BytesCount;
+use divan::{Bencher, black_box};
+
+fn main() {
+    divan::main();
+}
 
 /// A synthetic wire-shaped value: wide sorted-on-emit objects, escape-dense
 /// strings, and nested rows, around eight megabytes canonical.
@@ -18,7 +23,7 @@ fn synthetic_value() -> Value {
                 "nested".to_owned(),
                 Value::Array(vec![
                     Value::String("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned()),
-                    Value::Bool(index % 2 == 0),
+                    Value::Bool(index.is_multiple_of(2)),
                     Value::Null,
                 ]),
             ),
@@ -33,30 +38,45 @@ fn synthetic_value() -> Value {
     ])
 }
 
-fn wire(bencher: &mut Criterion) {
+#[divan::bench(sample_count = 20)]
+fn canonicalize(bencher: Bencher<'_, '_>) {
     let value = synthetic_value();
-    let bytes = canonical(&value);
-    let length = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-
-    let mut group = bencher.benchmark_group("wire");
-    group.throughput(Throughput::Bytes(length));
-    group.bench_function("canonical", |bench| bench.iter(|| canonical(&value)));
-    group.bench_function("counting-pass", |bench| {
-        bench.iter(|| canonical_length(&value));
-    });
-    group.bench_function("hj", |bench| {
-        bench.iter(|| hj("amiss/scanner-report-payload/v1", &value));
-    });
-    group.bench_function("parse", |bench| bench.iter(|| parse(&bytes)));
-    group.bench_function("hb", |bench| {
-        bench.iter(|| hb("amiss/raw-evidence/v1", &bytes));
-    });
-    group.finish();
+    let length = canonical_length(&value);
+    bencher
+        .counter(BytesCount::new(length))
+        .bench_local(|| canonical(black_box(&value)));
 }
 
-criterion_group! {
-    name = benches;
-    config = Criterion::default().sample_size(20);
-    targets = wire
+#[divan::bench(sample_count = 20)]
+fn counting_pass(bencher: Bencher<'_, '_>) {
+    let value = synthetic_value();
+    let length = canonical_length(&value);
+    bencher
+        .counter(BytesCount::new(length))
+        .bench_local(|| canonical_length(black_box(&value)));
 }
-criterion_main!(benches);
+
+#[divan::bench(sample_count = 20)]
+fn digest_value(bencher: Bencher<'_, '_>) {
+    let value = synthetic_value();
+    let length = canonical_length(&value);
+    bencher
+        .counter(BytesCount::new(length))
+        .bench_local(|| hj("amiss/scanner-report-payload/v1", black_box(&value)));
+}
+
+#[divan::bench(sample_count = 20)]
+fn parse_wire(bencher: Bencher<'_, '_>) {
+    let bytes = canonical(&synthetic_value());
+    bencher
+        .counter(BytesCount::of_slice(&bytes))
+        .bench_local(|| parse(black_box(&bytes)));
+}
+
+#[divan::bench(sample_count = 20)]
+fn digest_bytes(bencher: Bencher<'_, '_>) {
+    let bytes = canonical(&synthetic_value());
+    bencher
+        .counter(BytesCount::of_slice(&bytes))
+        .bench_local(|| hb("amiss/raw-evidence/v1", black_box(&bytes)));
+}
