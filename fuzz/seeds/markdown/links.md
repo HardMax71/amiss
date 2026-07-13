@@ -1,0 +1,17 @@
+---
+title: seed
+---
+
+# Guide
+
+See [inline](docs/a.md#frag?x=1) and ![img](assets/logo.png "t").
+
+[full][ref] and [collapsed][] and [shortcut].
+
+[ref]: docs/b.md
+[collapsed]: <docs/c d.md> (title)
+[shortcut]: https://example.com/x
+
+Autolink <https://example.com/auto> and `code [not](a.md)`.
+
+> [amiss:claim v1]: governed/definition.md

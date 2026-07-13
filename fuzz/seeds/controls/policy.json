@@ -1,0 +1,14 @@
+{
+  "schema": "amiss/scanner-policy/v1",
+  "document_includes": [
+    { "path": "docs/adr", "kind": "tree" },
+    { "path": "docs/spec.rst", "kind": "document" }
+  ],
+  "protected_inventory": [
+    "README.md",
+    "docs/architecture.md"
+  ],
+  "finding_dispositions": [
+    { "finding_kind": "explicit-target-missing", "disposition": "fail" }
+  ]
+}
