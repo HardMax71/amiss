@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:assure:schema:scanner-snapshot-request:v1",
+  "title": "Assure scanner snapshot request v1",
+  "description": "The materialization request of the wrapper-to-engine wire: how the snapshots are supplied. The repository handle ordinal is fixed by the published handle table so the request bytes are identical across the in-process and future subprocess lanes; pre_acquired is the networkless promise that every needed object is already in the primary object database. Its diagnostic digest domain is assure/scanner-snapshot-request/v1 over the exact bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "materialization", "repository_handle", "pre_acquired"],
+  "properties": {
+    "schema": {
+      "const": "assure/scanner-snapshot-request/v1"
+    },
+    "materialization": {
+      "description": "git-objects pairs with evaluation mode commit-pair; index pairs with evaluation mode index. Any other pairing is an invalid invocation.",
+      "enum": ["git-objects", "index"]
+    },
+    "repository_handle": {
+      "const": 3
+    },
+    "pre_acquired": {
+      "const": true
+    }
+  }
+}
