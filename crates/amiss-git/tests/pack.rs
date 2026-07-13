@@ -272,3 +272,63 @@ fn duplicate_objects_across_packs_resolve() {
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
     assert_eq!(read_blob(&repo, &blob_v1).unwrap(), file_v(1).into_bytes());
 }
+
+/// The concurrent-repack fixture the spec's E0 set requires.
+///
+/// A repack moves an object out of the loose store into a pack that did not
+/// exist when the scanner enumerated the pack directory, and prunes the loose
+/// copy. A reader that enumerates once and never again sees a present object
+/// as missing, which is a false failure on a healthy repository. This is not
+/// hypothetical: git runs `gc --auto` from an ordinary commit, detached, and
+/// it repacked this repository underneath a live scan.
+///
+/// The spec tolerates the loss ("a repack race may yield missing/unreadable
+/// but never a different valid object's bytes"). Git re-reads its pack
+/// directory on a miss rather than taking the loss, and so does this, which is
+/// what the read below proves. The safety half of that sentence is proven with
+/// it: what the re-read finds is content-addressed before it is returned, so a
+/// race can cost a directory read and can never substitute another object.
+#[test]
+fn a_repack_under_a_live_reader_never_loses_a_present_object() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("first.txt"), "first\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "first"]);
+    git(root, &["repack", "-adq"]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let first = Oid::new(
+        ObjectFormat::Sha1,
+        git(root, &["rev-parse", "HEAD"]).trim().to_owned(),
+    )
+    .unwrap();
+    repo.read_expected(&mut resources, &first, ObjectKind::Commit)
+        .expect("the packed commit reads, which enumerates the pack directory");
+
+    fs::write(root.join("second.txt"), "second\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "second"]);
+    let second = Oid::new(
+        ObjectFormat::Sha1,
+        git(root, &["rev-parse", "HEAD"]).trim().to_owned(),
+    )
+    .unwrap();
+    git(root, &["repack", "-adq"]);
+
+    let object = repo
+        .read_expected(&mut resources, &second, ObjectKind::Commit)
+        .expect("an object repacked out from under the reader is still found");
+    let commit = parse_commit(ObjectFormat::Sha1, &object.body).expect("the commit grammar holds");
+    assert_eq!(
+        commit.parents.first().map(Oid::as_str),
+        Some(first.as_str()),
+        "the object found after the repack is the one that was asked for"
+    );
+    assert!(
+        repo.has_object(&mut resources, &second).unwrap(),
+        "presence agrees with the read"
+    );
+}

@@ -20,6 +20,7 @@ pub struct Repository {
     objects: File,
     object_format: ObjectFormat,
     packs: OnceLock<Result<PackSet, Error>>,
+    repacked: OnceLock<Result<PackSet, Error>>,
 }
 
 impl Repository {
@@ -42,6 +43,7 @@ impl Repository {
             objects,
             object_format,
             packs: OnceLock::new(),
+            repacked: OnceLock::new(),
         })
     }
 
@@ -120,10 +122,15 @@ impl Repository {
         self.decode(resources, oid, loose, value_cap)
     }
 
-    fn pack_set(&self, resources: &mut GitResources) -> Result<&PackSet, Error> {
-        let built = self
-            .packs
-            .get_or_init(|| pack::build(&self.objects, self.object_format, resources));
+    /// One pack enumeration, with its index sizes charged. Charging is by pack
+    /// name and idempotent, so a second enumeration pays only for the packs the
+    /// first one never saw.
+    fn enumeration<'set>(
+        &'set self,
+        cell: &'set OnceLock<Result<PackSet, Error>>,
+        resources: &mut GitResources,
+    ) -> Result<&'set PackSet, Error> {
+        let built = cell.get_or_init(|| pack::build(&self.objects, self.object_format, resources));
         match built {
             Ok(set) => {
                 for (name, size) in &set.index_sizes {
@@ -135,6 +142,33 @@ impl Repository {
         }
     }
 
+    /// Locates a packed OID, re-reading the pack directory once when the first
+    /// enumeration misses.
+    ///
+    /// A concurrent repack moves an object out of the loose store and into a
+    /// pack that did not exist when the first enumeration ran, which leaves a
+    /// present object looking absent. Git re-reads its pack directory on a miss
+    /// for exactly this reason, and so does this. The re-read goes through the
+    /// same held objects handle, so the no-follow boundary is unchanged, and
+    /// anything it finds is still content-addressed before use. A race can
+    /// therefore cost one extra directory read, and can never yield another
+    /// object's bytes. Exactly one re-read happens per repository, so a store
+    /// that is genuinely missing an object still settles as missing.
+    fn locate_packed(
+        &self,
+        resources: &mut GitResources,
+        raw: &[u8],
+    ) -> Result<Option<(&PackSet, usize, u64)>, Error> {
+        let enumerated = self.enumeration(&self.packs, resources)?;
+        if let Some((pack_index, offset)) = enumerated.locate(raw) {
+            return Ok(Some((enumerated, pack_index, offset)));
+        }
+        let repacked = self.enumeration(&self.repacked, resources)?;
+        Ok(repacked
+            .locate(raw)
+            .map(|(pack_index, offset)| (repacked, pack_index, offset)))
+    }
+
     fn read_packed(
         &self,
         resources: &mut GitResources,
@@ -143,10 +177,11 @@ impl Repository {
         value_cap: Option<&ValueCap>,
     ) -> Result<Object, Error> {
         let raw = oid_raw(oid).ok_or(Error::ObjectUnreadable)?;
-        let Some((pack_index, offset)) = self.pack_set(resources)?.locate(&raw) else {
+        let Some((set, pack_index, offset)) = self.locate_packed(resources, &raw)? else {
             return Err(Error::ObjectMissing);
         };
-        let (kind, body) = self.read_pack_at(resources, pack_index, offset, depth, value_cap)?;
+        let (kind, body) =
+            self.read_pack_at(resources, set, pack_index, offset, depth, value_cap)?;
         let raw_header = format!("{} {}\0", kind.as_str(), body.len()).into_bytes();
         verify_oid(self.object_format, oid, &raw_header, &body)?;
         Ok(Object { kind, body })
@@ -155,6 +190,7 @@ impl Repository {
     fn read_pack_at(
         &self,
         resources: &mut GitResources,
+        set: &PackSet,
         pack_index: usize,
         offset: u64,
         depth: u64,
@@ -166,7 +202,6 @@ impl Repository {
         }
         let inflated_cap = resources.limits().inflated_object_bytes;
         let entry = {
-            let set = self.pack_set(resources)?;
             let pack = set.packs.get(pack_index).ok_or(Error::ObjectUnreadable)?;
             pack.read_interval(resources, offset)?
         };
@@ -191,7 +226,6 @@ impl Repository {
                     .checked_sub(distance)
                     .ok_or(Error::ObjectUnreadable)?;
                 let base_known = {
-                    let set = self.pack_set(resources)?;
                     let pack = set.packs.get(pack_index).ok_or(Error::ObjectUnreadable)?;
                     pack.row_at(base_offset).is_some()
                 };
@@ -200,6 +234,7 @@ impl Repository {
                 }
                 let (kind, base) = self.read_pack_at(
                     resources,
+                    set,
                     pack_index,
                     base_offset,
                     depth.saturating_add(1),
@@ -279,7 +314,7 @@ impl Repository {
         let Some(raw) = oid_raw(oid) else {
             return Err(Error::ObjectUnreadable);
         };
-        Ok(self.pack_set(resources)?.locate(&raw).is_some())
+        Ok(self.locate_packed(resources, &raw)?.is_some())
     }
 
     /// The end-of-scan race check: reopens the current index entry, rereads
