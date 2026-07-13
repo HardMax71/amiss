@@ -56,6 +56,40 @@ jobs:
       - run: cargo test --locked --release
         working-directory: fuzz
 
+  platform-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - id: nextest
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo-tools
+          key: tools-${{ runner.os }}-nextest0.9.140
+      - if: steps.nextest.outputs.cache-hit != 'true'
+        run: cargo install --locked --root ~/.cargo-tools cargo-nextest@0.9.140
+      - shell: bash
+        run: echo "$HOME/.cargo-tools/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            fuzz/target
+          key: platform-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock') }}
+          restore-keys: platform-${{ runner.os }}-
+      - run: cargo nextest run --workspace --locked
+      - run: cargo test --locked --release
+        working-directory: fuzz
+
   coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 45

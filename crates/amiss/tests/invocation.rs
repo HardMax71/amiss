@@ -294,6 +294,31 @@ fn rejects_non_unicode_argv_before_lossy_conversion() {
     );
 }
 
+#[cfg(windows)]
+#[test]
+fn rejects_unpaired_surrogate_argv_before_lossy_conversion() {
+    use std::os::windows::ffi::OsStringExt as _;
+
+    let mut tokens = argv(&[
+        "check",
+        "--repo",
+        ".",
+        "--object-format",
+        "sha1",
+        "--base",
+        BASE_A,
+        "--candidate",
+        HEAD_B,
+        "--profile",
+        "observe",
+    ]);
+    tokens.push(OsString::from_wide(&[0xD800]));
+    assert_eq!(
+        rejected_codes(parse(&tokens)),
+        vec![Code::InvalidInvocation]
+    );
+}
+
 fn argv_strings(tokens: &[&str]) -> Vec<String> {
     tokens.iter().map(|token| (*token).to_owned()).collect()
 }

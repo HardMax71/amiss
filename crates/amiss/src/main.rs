@@ -51,7 +51,6 @@ fn main() -> ExitCode {
     }
 }
 
-#[cfg(unix)]
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     use amiss_scan::pipeline::{SetupShell, commit_pair};
@@ -150,14 +149,6 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     exit_class(built.exit_code)
 }
 
-#[cfg(not(unix))]
-#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(_invocation: &Invocation, _reserve: &mut FatalSerializer) -> ExitCode {
-    eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
-    ExitCode::from(ExitClass::Failure.code())
-}
-
-#[cfg(unix)]
 fn fatal(
     invocation: &Invocation,
     engine: &EngineProvenance,
@@ -210,10 +201,8 @@ fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
     }
 }
 
-#[cfg(unix)]
 struct View(Vec<(String, amiss_wire::json::Value)>);
 
-#[cfg(unix)]
 impl View {
     fn of(value: Option<&amiss_wire::json::Value>) -> Self {
         use amiss_wire::json::Value;
@@ -308,7 +297,6 @@ impl View {
 /// order, and exact totals; every repository-derived scalar passes through
 /// `human-atom-v1`, and no source excerpt, raw destination, or query value
 /// appears.
-#[cfg(unix)]
 #[expect(clippy::print_stdout, reason = "the human output channel")]
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let envelope = View::of(Some(&built.envelope));
@@ -345,7 +333,6 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     totals(&payload);
 }
 
-#[cfg(unix)]
 #[expect(clippy::print_stdout, reason = "the human output channel")]
 fn totals(payload: &View) {
     let summary = payload.view("summary");
@@ -384,7 +371,6 @@ fn totals(payload: &View) {
 
 /// The deterministic scope explanation the human projection may add: the
 /// closed built-in document classes and this run's discovered surface.
-#[cfg(unix)]
 #[expect(clippy::print_stdout, reason = "the human output channel")]
 fn explain(payload: &View) {
     println!("scope: built-in documents are *.md, *.mdx, *.markdown, six extensionless");
@@ -399,7 +385,6 @@ fn explain(payload: &View) {
     );
 }
 
-#[cfg(unix)]
 fn exit_class(code: i64) -> ExitCode {
     match code {
         0 => ExitCode::from(ExitClass::Success.code()),

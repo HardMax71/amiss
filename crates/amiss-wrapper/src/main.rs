@@ -447,7 +447,6 @@ fn verify_exceptions(
     Ok((time, debt, waiver))
 }
 
-#[cfg(unix)]
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run(engine: &EngineProvenance, args: &Args, reserve: &mut FatalSerializer) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
@@ -583,16 +582,6 @@ fn publish(
     }
     emit_to(output, &wire);
     exit_class(built.exit_code)
-}
-
-#[cfg(not(unix))]
-#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(_engine: &EngineProvenance, _args: &Args, _reserve: &mut FatalSerializer) -> ExitCode {
-    eprintln!(
-        "amiss-wrapper: {}",
-        AnalysisErrorCode::InternalError.as_str()
-    );
-    ExitCode::from(ExitClass::Failure.code())
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]

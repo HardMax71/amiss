@@ -27,5 +27,9 @@ path = "tests/invocation.rs"
 name = "no_write"
 path = "tests/no_write.rs"
 
+[[test]]
+name = "portable"
+path = "tests/portable.rs"
+
 [lints]
 workspace = true

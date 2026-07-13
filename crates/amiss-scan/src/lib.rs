@@ -1,21 +1,13 @@
-#[cfg(unix)]
 pub mod adoption;
 pub mod correlate;
-#[cfg(unix)]
 pub mod discovery;
 pub mod document;
-#[cfg(unix)]
 pub mod evaluate;
 pub mod lfs;
-#[cfg(unix)]
 pub mod observe;
-#[cfg(unix)]
 pub mod pipeline;
-#[cfg(unix)]
 pub mod policy;
-#[cfg(unix)]
 pub mod report;
-#[cfg(unix)]
 pub mod resolve;
 pub mod resources;
 pub mod scan;
@@ -24,22 +16,15 @@ use amiss_md::Fault;
 use amiss_wire::controls::ResourceName;
 use amiss_wire::report::AnalysisErrorCode;
 
-#[cfg(unix)]
 pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
-#[cfg(unix)]
 pub use discovery::{
     DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover, discover_index,
 };
 pub use document::{Classification, classify, excluded_by_built_in};
-#[cfg(unix)]
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
-#[cfg(unix)]
 pub use pipeline::{SetupShell, commit_pair};
-#[cfg(unix)]
 pub use policy::{Effects, Includes, PolicySide};
-#[cfg(unix)]
 pub use report::{Built, Setup, SnapshotIdentity, construct, construct_incomplete};
-#[cfg(unix)]
 pub use resolve::{GithubContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};
 pub use scan::{Scanned, ScannedOccurrence, SpanDisplay, scan_bytes, scan_document};
