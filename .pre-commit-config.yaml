@@ -47,7 +47,7 @@ repos:
         stages: [pre-push]
       - id: nextest
         name: cargo nextest
-        entry: cargo nextest run --workspace
+        entry: cargo nextest run --workspace --locked
         language: system
         pass_filenames: false
         stages: [pre-push]

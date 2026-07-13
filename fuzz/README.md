@@ -28,6 +28,11 @@ cargo +nightly fuzz run <target> --features harness corpus/<target> seeds/<targe
 Targets: `json`, `controls`, `requests`, `markdown`, `git_index`,
 `git_objects`, `human`.
 
+CI runs the smoke on every pull request and push to main. The fuzz-long
+workflow runs every target for twenty minutes nightly under
+AddressSanitizer, carries the corpus across runs in a cache, and uploads
+any crash input as an artifact.
+
 The markdown target neutralizes the default panic hook: the engine
 classifies caught parser panics per contract, and the hook would otherwise
 abort at panic time before the sanctioned catch runs. A panic escaping the
