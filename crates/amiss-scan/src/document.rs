@@ -9,6 +9,7 @@ pub enum Classification {
     StructuredMdx,
     ExtensionlessMarkdown,
     PlainAdvisory,
+    PolicyIncluded,
 }
 
 const EXTENSIONLESS: [&str; 6] = [
@@ -38,15 +39,19 @@ impl Classification {
             Self::StructuredMdx => "structured-mdx",
             Self::ExtensionlessMarkdown => "extensionless-markdown",
             Self::PlainAdvisory => "plain-advisory",
+            Self::PolicyIncluded => "policy-included",
         }
     }
 
+    /// The native adapter, where one exists: a policy include installs no
+    /// parser.
     #[must_use]
-    pub const fn adapter(self) -> Adapter {
+    pub const fn adapter(self) -> Option<Adapter> {
         match self {
-            Self::StructuredMarkdown | Self::ExtensionlessMarkdown => Adapter::Markdown,
-            Self::StructuredMdx => Adapter::Mdx,
-            Self::PlainAdvisory => Adapter::PlainAdvisory,
+            Self::StructuredMarkdown | Self::ExtensionlessMarkdown => Some(Adapter::Markdown),
+            Self::StructuredMdx => Some(Adapter::Mdx),
+            Self::PlainAdvisory => Some(Adapter::PlainAdvisory),
+            Self::PolicyIncluded => None,
         }
     }
 }

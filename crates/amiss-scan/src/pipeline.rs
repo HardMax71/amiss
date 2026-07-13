@@ -45,45 +45,6 @@ fn detail(error: &Error, path: Option<&str>) -> ErrorDetail {
     }
 }
 
-fn evaluate_side(
-    repo: &Repository,
-    git_resources: &mut GitResources,
-    engine: &EngineProvenance,
-    github: Option<&GithubContext>,
-    commit_oid: &Oid,
-) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
-    let commit_object = repo
-        .read_expected(git_resources, commit_oid, ObjectKind::Commit)
-        .map_err(|defect| detail(&Error::from(defect), None))?;
-    let commit = parse_commit(repo.object_format(), &commit_object.body)
-        .map_err(|defect| detail(&Error::from(defect), None))?;
-    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
-    let discovery = discover(repo, git_resources, &mut scan_resources, &commit.tree)
-        .map_err(|defect| detail(&defect, None))?;
-
-    let (side, failures) = side_observations(
-        repo,
-        git_resources,
-        &mut scan_resources,
-        engine,
-        github,
-        &discovery,
-    )?;
-    let identity = SnapshotIdentity {
-        object_format: format_str(repo.object_format()),
-        commit_oid: commit_oid.as_str().to_owned(),
-        tree_oid: commit.tree.as_str().to_owned(),
-    };
-    Ok((
-        Evaluated {
-            identity,
-            discovery,
-            side,
-        },
-        failures,
-    ))
-}
-
 /// Builds one side's observations from its discovery: every scanned
 /// occurrence resolved against this same snapshot, and every failed document
 /// or path defect carried as a typed error detail.
@@ -113,6 +74,9 @@ fn side_observations(
             }
             DocumentStatus::ExcludedBuiltIn | DocumentStatus::Unsupported(_) => {}
             DocumentStatus::Scanned(scanned) => {
+                let Some(adapter) = record.classification.adapter() else {
+                    continue;
+                };
                 for occurrence in &scanned.occurrences {
                     let (intent, resolution) = resolve(
                         repo,
@@ -127,19 +91,13 @@ fn side_observations(
                     )
                     .map_err(|defect| detail(&defect, Some(&record.path)))?;
                     observations.push(Observation {
-                        id: occurrence_id(
-                            engine,
-                            record.classification.adapter(),
-                            &record.path,
-                            occurrence,
-                            &intent,
-                        ),
+                        id: occurrence_id(engine, adapter, &record.path, occurrence, &intent),
                         document: record.path.clone(),
                         span: occurrence.occurrence.span,
                         display: occurrence.display,
                         block_kind: occurrence.occurrence.block_kind,
                         node_path: occurrence.occurrence.node_path.clone(),
-                        adapter: record.classification.adapter(),
+                        adapter,
                         construct: occurrence.occurrence.construct,
                         intent,
                         raw_destination_digest: occurrence.raw_destination_digest,
@@ -172,56 +130,331 @@ pub fn commit_pair(
     candidate_oid: &Oid,
 ) -> Built {
     let mut git_resources = GitResources::new(amiss_git::GitLimits::CONTRACT);
-    let incomplete =
-        |setup: &Setup, details: Vec<ErrorDetail>| construct_incomplete(setup, &details);
     let placeholder = |oid: &Oid| SnapshotIdentity {
         object_format: format_str(repo.object_format()),
         commit_oid: oid.as_str().to_owned(),
         tree_oid: oid.as_str().to_owned(),
     };
+    let fallback_setup = |shell: &SetupShell| {
+        shell.with(
+            placeholder(base_oid),
+            CandidateBlock::Commit(placeholder(candidate_oid)),
+        )
+    };
 
-    let base = evaluate_side(repo, &mut git_resources, engine, github, base_oid);
-    let candidate = evaluate_side(repo, &mut git_resources, engine, github, candidate_oid);
+    let trees = resolve_tree(repo, &mut git_resources, base_oid).and_then(|base_tree| {
+        resolve_tree(repo, &mut git_resources, candidate_oid)
+            .map(|candidate_tree| (base_tree, candidate_tree))
+    });
+    let (base_tree, candidate_tree) = match trees {
+        Ok(pair) => pair,
+        Err(defect_detail) => {
+            return construct_incomplete(&fallback_setup(setup_shell), &[defect_detail]);
+        }
+    };
+
+    let mut control_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let policies = acquire_policies(
+        repo,
+        &mut git_resources,
+        &mut control_resources,
+        &base_tree.0,
+        &candidate_tree.0,
+    );
+    let (base_policy, candidate_policy) = match policies {
+        Ok(pair) => pair,
+        Err(details) => {
+            let mut setup = fallback_setup(setup_shell);
+            setup.controls_unavailable = Some("invalid-repository-policy");
+            return construct_incomplete(&setup, &details);
+        }
+    };
+    let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
+
+    let base = evaluate_tree(
+        repo,
+        &mut git_resources,
+        engine,
+        github,
+        &includes,
+        base_tree,
+    );
+    let candidate = evaluate_tree(
+        repo,
+        &mut git_resources,
+        engine,
+        github,
+        &includes,
+        candidate_tree,
+    );
     match (base, candidate) {
         (Ok((base, base_failures)), Ok((candidate, candidate_failures))) => {
-            let setup = setup_shell.with(
+            let effects = crate::policy::effects(
+                &base_policy,
+                &candidate_policy,
+                &inventory_lookup(&candidate.discovery),
+            );
+            let mut setup = setup_shell.with(
                 base.identity.clone(),
                 CandidateBlock::Commit(candidate.identity.clone()),
             );
+            setup.policy = effects;
             let mut failures = base_failures;
             failures.extend(candidate_failures);
             if !failures.is_empty() {
-                return incomplete(&setup, failures);
+                return construct_incomplete(&setup, &failures);
             }
             match correlate(&base.side, &candidate.side) {
                 Ok(comparisons) => {
                     construct(&setup, &base.discovery, &candidate.discovery, &comparisons)
                 }
-                Err(defect) => incomplete(&setup, vec![detail(&defect, None)]),
+                Err(defect) => construct_incomplete(&setup, &[detail(&defect, None)]),
             }
         }
-        (Err(defect), Ok((candidate, _))) => {
-            let setup = setup_shell.with(
-                placeholder(base_oid),
-                CandidateBlock::Commit(candidate.identity.clone()),
-            );
-            incomplete(&setup, vec![defect])
+        (Err(defect), Ok(_)) | (Ok(_), Err(defect)) => {
+            construct_incomplete(&fallback_setup(setup_shell), &[defect])
         }
-        (Ok((base, _)), Err(defect)) => {
-            let setup = setup_shell.with(
-                base.identity.clone(),
-                CandidateBlock::Commit(placeholder(candidate_oid)),
-            );
-            incomplete(&setup, vec![defect])
-        }
-        (Err(base_defect), Err(candidate_defect)) => {
-            let setup = setup_shell.with(
-                placeholder(base_oid),
-                CandidateBlock::Commit(placeholder(candidate_oid)),
-            );
-            incomplete(&setup, vec![base_defect, candidate_defect])
-        }
+        (Err(base_defect), Err(candidate_defect)) => construct_incomplete(
+            &fallback_setup(setup_shell),
+            &[base_defect, candidate_defect],
+        ),
     }
+}
+
+/// The candidate state of one inventory path under the obligation test.
+fn inventory_lookup(
+    discovery: &SnapshotDiscovery,
+) -> impl Fn(&str) -> crate::policy::InventoryState {
+    move |path: &str| {
+        if let Some(record) = discovery
+            .documents
+            .iter()
+            .find(|record| record.path == path)
+        {
+            return match record.status {
+                DocumentStatus::Scanned(_) => crate::policy::InventoryState::Scanned,
+                DocumentStatus::ExcludedBuiltIn
+                | DocumentStatus::Unsupported(_)
+                | DocumentStatus::Failed(_) => crate::policy::InventoryState::Unsupported,
+            };
+        }
+        if discovery.entries.contains_key(path) {
+            return crate::policy::InventoryState::Outside;
+        }
+        crate::policy::InventoryState::Missing
+    }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
+fn staged_result(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    scan_resources: &mut ScanResources,
+    engine: &EngineProvenance,
+    github: Option<&GithubContext>,
+    setup: &Setup,
+    base_evaluated: &Evaluated,
+    base_failures: Vec<ErrorDetail>,
+    candidate_discovery: &SnapshotDiscovery,
+) -> Built {
+    let candidate = side_observations(
+        repo,
+        git_resources,
+        scan_resources,
+        engine,
+        github,
+        candidate_discovery,
+    );
+    let (candidate_side, candidate_failures) = match candidate {
+        Ok(result) => result,
+        Err(defect_detail) => return construct_incomplete(setup, &[defect_detail]),
+    };
+    let mut failures = base_failures;
+    failures.extend(candidate_failures);
+    if !failures.is_empty() {
+        return construct_incomplete(setup, &failures);
+    }
+    match correlate(&base_evaluated.side, &candidate_side) {
+        Ok(comparisons) => construct(
+            setup,
+            &base_evaluated.discovery,
+            candidate_discovery,
+            &comparisons,
+        ),
+        Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
+    }
+}
+
+fn candidate_unavailable(
+    setup_shell: &SetupShell,
+    base: SnapshotIdentity,
+    defect: &Error,
+) -> Built {
+    let setup = setup_shell.with(
+        base,
+        CandidateBlock::Unavailable(vec![unavailable_reason(defect)]),
+    );
+    construct_incomplete(&setup, &[detail(defect, None)])
+}
+
+/// One pinned read of the raw index, its parsed logical form, and the
+/// skip-worktree count.
+fn pinned_index(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+) -> Result<(Vec<u8>, amiss_git::LogicalIndex, u64), Error> {
+    let initial = repo.read_index_bytes(git_resources).map_err(Error::from)?;
+    let index = amiss_git::parse_index_file(repo.object_format(), &initial).map_err(Error::from)?;
+    let skip_worktree_paths = u64::try_from(
+        index
+            .entries
+            .iter()
+            .filter(|entry| entry.skip_worktree)
+            .count(),
+    )
+    .unwrap_or(u64::MAX);
+    Ok((initial, index, skip_worktree_paths))
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
+fn staged_base(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    engine: &EngineProvenance,
+    github: Option<&GithubContext>,
+    includes: &crate::policy::Includes,
+    setup_shell: &SetupShell,
+    base_placeholder: SnapshotIdentity,
+    base_tree: (Oid, SnapshotIdentity),
+) -> Result<(Evaluated, Vec<ErrorDetail>), Box<Built>> {
+    evaluate_tree(repo, git_resources, engine, github, includes, base_tree).map_err(
+        |defect_detail| {
+            let setup = setup_shell.with(
+                base_placeholder,
+                CandidateBlock::Unavailable(vec!["not-evaluated"]),
+            );
+            Box::new(construct_incomplete(&setup, &[defect_detail]))
+        },
+    )
+}
+
+fn staged_policy(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    setup_shell: &SetupShell,
+    base_placeholder: &SnapshotIdentity,
+    base_tree: &Oid,
+    index: &amiss_git::LogicalIndex,
+) -> Result<
+    (
+        crate::policy::PolicySide,
+        crate::policy::PolicySide,
+        crate::policy::Includes,
+    ),
+    Box<Built>,
+> {
+    let mut control_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let bail = |details: &[ErrorDetail]| {
+        let mut setup = setup_shell.with(
+            base_placeholder.clone(),
+            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+        );
+        setup.controls_unavailable = Some("invalid-repository-policy");
+        Box::new(construct_incomplete(&setup, details))
+    };
+    let base = crate::policy::acquire(repo, git_resources, &mut control_resources, base_tree)
+        .map_err(|details| bail(&details))?;
+    let staged = index
+        .entries
+        .iter()
+        .find(|entry| entry.path == amiss_wire::controls::SCANNER_POLICY_PATH.as_bytes());
+    let candidate = match staged {
+        None => crate::policy::PolicySide::default(),
+        Some(entry) => crate::policy::acquire_entry(
+            repo,
+            git_resources,
+            &mut control_resources,
+            entry.mode,
+            &entry.oid,
+        )
+        .map_err(|details| bail(&details))?,
+    };
+    let includes = crate::policy::Includes::union(&base, &candidate);
+    Ok((base, candidate, includes))
+}
+
+fn resolve_tree(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    commit_oid: &Oid,
+) -> Result<(Oid, SnapshotIdentity), ErrorDetail> {
+    let commit_object = repo
+        .read_expected(git_resources, commit_oid, ObjectKind::Commit)
+        .map_err(|defect| detail(&Error::from(defect), None))?;
+    let commit = parse_commit(repo.object_format(), &commit_object.body)
+        .map_err(|defect| detail(&Error::from(defect), None))?;
+    Ok((
+        commit.tree.clone(),
+        SnapshotIdentity {
+            object_format: format_str(repo.object_format()),
+            commit_oid: commit_oid.as_str().to_owned(),
+            tree_oid: commit.tree.as_str().to_owned(),
+        },
+    ))
+}
+
+fn acquire_policies(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    control_resources: &mut ScanResources,
+    base_tree: &Oid,
+    candidate_tree: &Oid,
+) -> Result<(crate::policy::PolicySide, crate::policy::PolicySide), Vec<ErrorDetail>> {
+    let base = crate::policy::acquire(repo, git_resources, control_resources, base_tree)?;
+    let candidate = crate::policy::acquire(repo, git_resources, control_resources, candidate_tree)?;
+    Ok((base, candidate))
+}
+
+fn evaluate_tree(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    engine: &EngineProvenance,
+    github: Option<&GithubContext>,
+    includes: &crate::policy::Includes,
+    tree: (Oid, SnapshotIdentity),
+) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
+    let (tree_oid, identity) = tree;
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let discovery = discover(
+        repo,
+        git_resources,
+        &mut scan_resources,
+        includes,
+        &tree_oid,
+    )
+    .map_err(|defect| detail(&defect, None))?;
+    let (side, failures) = side_observations(
+        repo,
+        git_resources,
+        &mut scan_resources,
+        engine,
+        github,
+        &discovery,
+    )?;
+    Ok((
+        Evaluated {
+            identity,
+            discovery,
+            side,
+        },
+        failures,
+    ))
 }
 
 /// Everything of the run identity except the two snapshot identities.
@@ -244,6 +477,8 @@ impl SetupShell {
             default_branch_ref: self.default_branch_ref.clone(),
             base,
             candidate,
+            policy: crate::policy::Effects::default(),
+            controls_unavailable: None,
         }
     }
 }
@@ -310,39 +545,16 @@ pub fn staged_index(
         commit_oid: base_oid.as_str().to_owned(),
         tree_oid: base_oid.as_str().to_owned(),
     };
-    let unavailable = |base: SnapshotIdentity, defect: &Error, path: Option<&str>| {
-        let setup = setup_shell.with(
-            base,
-            CandidateBlock::Unavailable(vec![unavailable_reason(defect)]),
-        );
-        construct_incomplete(&setup, &[detail(defect, path)])
-    };
 
-    let initial = match repo.read_index_bytes(&mut git_resources) {
-        Ok(bytes) => bytes,
+    let (initial, index, skip_worktree_paths) = match pinned_index(repo, &mut git_resources) {
+        Ok(pinned) => pinned,
         Err(defect) => {
-            let defect = Error::from(defect);
-            return unavailable(base_placeholder, &defect, None);
+            return candidate_unavailable(setup_shell, base_placeholder, &defect);
         }
     };
-    let index = match amiss_git::parse_index_file(repo.object_format(), &initial) {
-        Ok(index) => index,
-        Err(defect) => {
-            let defect = Error::from(defect);
-            return unavailable(base_placeholder, &defect, None);
-        }
-    };
-    let skip_worktree_paths = u64::try_from(
-        index
-            .entries
-            .iter()
-            .filter(|entry| entry.skip_worktree)
-            .count(),
-    )
-    .unwrap_or(u64::MAX);
 
-    let base = match evaluate_side(repo, &mut git_resources, engine, github, base_oid) {
-        Ok(evaluated) => evaluated,
+    let base_tree = match resolve_tree(repo, &mut git_resources, base_oid) {
+        Ok(tree) => tree,
         Err(defect_detail) => {
             let setup = setup_shell.with(
                 base_placeholder,
@@ -351,49 +563,63 @@ pub fn staged_index(
             return construct_incomplete(&setup, &[defect_detail]);
         }
     };
-    let (base_evaluated, base_failures) = base;
+    let (base_policy, candidate_policy, includes) = match staged_policy(
+        repo,
+        &mut git_resources,
+        setup_shell,
+        &base_placeholder,
+        &base_tree.0,
+        &index,
+    ) {
+        Ok(acquired) => acquired,
+        Err(built) => return *built,
+    };
+    let (base_evaluated, base_failures) = match staged_base(
+        repo,
+        &mut git_resources,
+        engine,
+        github,
+        &includes,
+        setup_shell,
+        base_placeholder,
+        base_tree,
+    ) {
+        Ok(evaluated) => evaluated,
+        Err(built) => return *built,
+    };
 
     let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
     let candidate_discovery = match crate::discovery::discover_index(
         repo,
         &mut git_resources,
         &mut scan_resources,
+        &includes,
         &index,
     ) {
         Ok(discovery) => discovery,
         Err(defect) => {
-            return unavailable(base_evaluated.identity, &defect, None);
+            return candidate_unavailable(setup_shell, base_evaluated.identity, &defect);
         }
     };
     let candidate_block = index_candidate_block(repo, base_oid, &index, skip_worktree_paths);
-    let setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
+    let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
+    setup.policy = crate::policy::effects(
+        &base_policy,
+        &candidate_policy,
+        &inventory_lookup(&candidate_discovery),
+    );
 
-    let (candidate_side, candidate_failures) = match side_observations(
+    let built = staged_result(
         repo,
         &mut git_resources,
         &mut scan_resources,
         engine,
         github,
+        &setup,
+        &base_evaluated,
+        base_failures,
         &candidate_discovery,
-    ) {
-        Ok(result) => result,
-        Err(defect_detail) => return construct_incomplete(&setup, &[defect_detail]),
-    };
-
-    let mut failures = base_failures;
-    failures.extend(candidate_failures);
-    if !failures.is_empty() {
-        return construct_incomplete(&setup, &failures);
-    }
-    let built = match correlate(&base_evaluated.side, &candidate_side) {
-        Ok(comparisons) => construct(
-            &setup,
-            &base_evaluated.discovery,
-            &candidate_discovery,
-            &comparisons,
-        ),
-        Err(defect) => construct_incomplete(&setup, &[detail(&defect, None)]),
-    };
+    );
 
     if let Err(defect) = repo.verify_index_unchanged(&mut git_resources, &initial) {
         let defect = Error::from(defect);

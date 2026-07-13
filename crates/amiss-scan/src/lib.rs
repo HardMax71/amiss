@@ -11,6 +11,8 @@ pub mod observe;
 #[cfg(unix)]
 pub mod pipeline;
 #[cfg(unix)]
+pub mod policy;
+#[cfg(unix)]
 pub mod report;
 #[cfg(unix)]
 pub mod resolve;
@@ -32,6 +34,8 @@ pub use document::{Classification, classify, excluded_by_built_in};
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
 #[cfg(unix)]
 pub use pipeline::{SetupShell, commit_pair};
+#[cfg(unix)]
+pub use policy::{Effects, Includes, PolicySide};
 #[cfg(unix)]
 pub use report::{Built, Setup, SnapshotIdentity, construct, construct_incomplete};
 #[cfg(unix)]

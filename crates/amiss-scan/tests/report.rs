@@ -59,7 +59,14 @@ fn snapshot(
         .unwrap();
     let commit = parse_commit(ObjectFormat::Sha1, &commit_object.body).unwrap();
     let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
-    let discovery = discover(repo, git_resources, &mut scan_resources, &commit.tree).unwrap();
+    let discovery = discover(
+        repo,
+        git_resources,
+        &mut scan_resources,
+        &amiss_scan::Includes::default(),
+        &commit.tree,
+    )
+    .unwrap();
 
     let mut cache = TargetCache::default();
     let mut observations: Vec<Observation> = Vec::new();
@@ -69,6 +76,9 @@ fn snapshot(
             documents.insert(record.path.clone(), (record.mode, raw));
         }
         let DocumentStatus::Scanned(scanned) = &record.status else {
+            continue;
+        };
+        let Some(adapter) = record.classification.adapter() else {
             continue;
         };
         for occurrence in &scanned.occurrences {
@@ -92,19 +102,13 @@ fn snapshot(
             )
             .unwrap();
             observations.push(Observation {
-                id: occurrence_id(
-                    &engine(),
-                    record.classification.adapter(),
-                    &record.path,
-                    occurrence,
-                    &intent,
-                ),
+                id: occurrence_id(&engine(), adapter, &record.path, occurrence, &intent),
                 document: record.path.clone(),
                 span: occurrence.occurrence.span,
                 display: occurrence.display,
                 block_kind: occurrence.occurrence.block_kind,
                 node_path: occurrence.occurrence.node_path.clone(),
-                adapter: record.classification.adapter(),
+                adapter,
                 construct: occurrence.occurrence.construct,
                 intent,
                 raw_destination_digest: occurrence.raw_destination_digest,
@@ -170,6 +174,8 @@ fn a_complete_report_validates_against_the_schema() {
         default_branch_ref: None,
         base: base_identity,
         candidate: CandidateBlock::Commit(candidate_identity),
+        policy: amiss_scan::Effects::default(),
+        controls_unavailable: None,
     };
     let built = construct(&setup, &base_discovery, &candidate_discovery, &comparisons);
 

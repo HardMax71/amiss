@@ -83,6 +83,7 @@ fn run(
         &repo,
         &mut git_resources,
         &mut scan_resources,
+        &amiss_scan::Includes::default(),
         &head_tree(dir),
     )
 }
@@ -102,6 +103,7 @@ fn a_snapshot_discovers_every_class_in_path_order() {
                 DocumentStatus::Unsupported(UnsupportedKind::Symlink) => "symlink",
                 DocumentStatus::Unsupported(UnsupportedKind::Gitlink) => "gitlink",
                 DocumentStatus::Unsupported(UnsupportedKind::LfsPointer) => "lfs-pointer",
+                DocumentStatus::Unsupported(UnsupportedKind::Format) => "unsupported-format",
                 DocumentStatus::Failed(_) => "failed",
             };
             (record.path.clone(), record.classification.as_str(), status)
@@ -173,6 +175,7 @@ fn excluded_documents_are_never_admitted_or_read() {
         &repo,
         &mut git_resources,
         &mut scan_resources,
+        &amiss_scan::Includes::default(),
         &head_tree(dir.path()),
     )
     .unwrap();

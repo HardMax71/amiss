@@ -5,6 +5,7 @@ use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in};
+use crate::policy::Includes;
 use crate::resources::{ScanResources, crossing};
 use crate::scan::{Scanned, scan_bytes};
 use crate::{Error, GitDefect, lfs};
@@ -16,6 +17,7 @@ pub enum UnsupportedKind {
     Symlink,
     Gitlink,
     LfsPointer,
+    Format,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,6 +88,7 @@ pub fn discover(
     repo: &Repository,
     git: &mut GitResources,
     scan: &mut ScanResources,
+    includes: &Includes,
     root_tree: &Oid,
 ) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = SnapshotDiscovery {
@@ -162,12 +165,16 @@ pub fn discover(
             continue;
         }
 
-        let Some(classification) = classify(&path) else {
-            discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
-            continue;
+        let classification = match classify(&path) {
+            Some(native) => native,
+            None if includes.matches(&path) => Classification::PolicyIncluded,
+            None => {
+                discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
+                continue;
+            }
         };
         let (status, byte_count, raw_digest) =
-            side_status(repo, git, scan, classification, &path, &entry)?;
+            side_status(repo, git, scan, includes, classification, &path, &entry)?;
         discovery.documents.push(DocumentRecord {
             path,
             classification,
@@ -194,6 +201,7 @@ pub fn discover_index(
     repo: &Repository,
     git: &mut GitResources,
     scan: &mut ScanResources,
+    includes: &Includes,
     index: &amiss_git::LogicalIndex,
 ) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = SnapshotDiscovery {
@@ -238,9 +246,13 @@ pub fn discover_index(
         discovery
             .entries
             .insert(path.to_owned(), (entry.mode, entry.oid.clone()));
-        let Some(classification) = classify(path) else {
-            discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
-            continue;
+        let classification = match classify(path) {
+            Some(native) => native,
+            None if includes.matches(path) => Classification::PolicyIncluded,
+            None => {
+                discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
+                continue;
+            }
         };
         let tree_entry = TreeEntry {
             mode: entry.mode,
@@ -248,7 +260,7 @@ pub fn discover_index(
             oid: entry.oid.clone(),
         };
         let (status, byte_count, raw_digest) =
-            side_status(repo, git, scan, classification, path, &tree_entry)?;
+            side_status(repo, git, scan, includes, classification, path, &tree_entry)?;
         discovery.documents.push(DocumentRecord {
             path: path.to_owned(),
             classification,
@@ -270,11 +282,12 @@ fn side_status(
     repo: &Repository,
     git: &mut GitResources,
     scan: &mut ScanResources,
+    includes: &Includes,
     classification: Classification,
     path: &str,
     entry: &TreeEntry,
 ) -> Result<(DocumentStatus, u64, Option<amiss_wire::digest::Digest>), Error> {
-    if excluded_by_built_in(path) {
+    if excluded_by_built_in(path) && !includes.matches(path) {
         return Ok((DocumentStatus::ExcludedBuiltIn, 0, None));
     }
     match entry.mode {
@@ -321,7 +334,14 @@ fn side_status(
             Some(raw),
         ));
     }
-    match scan_bytes(scan, classification.adapter(), &object.body) {
+    let Some(adapter) = classification.adapter() else {
+        return Ok((
+            DocumentStatus::Unsupported(UnsupportedKind::Format),
+            byte_count,
+            Some(raw),
+        ));
+    };
+    match scan_bytes(scan, adapter, &object.body) {
         Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),
         Err(defect) if defect.is_document_scoped() => {
             Ok((DocumentStatus::Failed(defect), byte_count, Some(raw)))

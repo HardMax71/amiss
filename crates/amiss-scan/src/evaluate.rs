@@ -59,6 +59,7 @@ impl Attribution {
 pub enum LocationSide {
     Base,
     Candidate,
+    Control,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,6 +85,7 @@ pub struct Finding {
     pub location: Location,
     pub configured_disposition: Disposition,
     pub effective_disposition: Disposition,
+    pub repository_step: Option<Disposition>,
 }
 
 fn key_digest(input: &Value) -> Digest {
@@ -336,6 +338,7 @@ fn simple(
         location,
         configured_disposition: configured,
         effective_disposition: configured,
+        repository_step: None,
     }
 }
 
@@ -365,6 +368,119 @@ fn base_occurrences(comparisons: &[Comparison]) -> Vec<&Observation> {
 /// errors never enter, and the result is in canonical finding-key order.
 #[must_use]
 pub fn evaluate(
+    documents: &[DocumentInput],
+    comparisons: &[Comparison],
+    enforce: bool,
+) -> Vec<Finding> {
+    evaluate_with_policy(
+        documents,
+        comparisons,
+        enforce,
+        &crate::policy::Effects::default(),
+    )
+}
+
+/// The full projection with the candidate policy applied: the raise-only
+/// repository step on structural candidate facts, and the weakening and
+/// coverage control findings the comparison produced.
+#[must_use]
+pub fn evaluate_with_policy(
+    documents: &[DocumentInput],
+    comparisons: &[Comparison],
+    enforce: bool,
+    policy: &crate::policy::Effects,
+) -> Vec<Finding> {
+    let mut findings = ordinary(documents, comparisons, enforce);
+    for finding in &mut findings {
+        if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
+            continue;
+        }
+        let Some((_kind, raised)) = policy.raised.iter().find(|(kind, _)| *kind == finding.kind)
+        else {
+            continue;
+        };
+        if *raised > finding.effective_disposition {
+            finding.effective_disposition = *raised;
+            finding.repository_step = Some(*raised);
+        }
+    }
+    for seed in &policy.controls {
+        findings.push(control_finding(seed, policy, enforce));
+    }
+    findings.sort_by_key(|finding| finding.finding_key);
+    findings
+}
+
+fn control_finding(
+    seed: &crate::policy::ControlSeed,
+    policy: &crate::policy::Effects,
+    enforce: bool,
+) -> Finding {
+    let scope = Value::Object(vec![
+        ("kind".to_owned(), Value::String("control".to_owned())),
+        (
+            "control_path".to_owned(),
+            seed.control_path.clone().map_or(Value::Null, Value::String),
+        ),
+        ("rule_id".to_owned(), Value::String(seed.rule_id.clone())),
+    ]);
+    let (key_value, digest) = key_input(seed.kind, scope);
+    let nullable_digest = |value: Option<Digest>| {
+        value.map_or(Value::Null, |digest| Value::String(digest.to_string()))
+    };
+    let fact = Value::Object(vec![
+        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
+        (
+            "finding_kind".to_owned(),
+            Value::String(seed.kind.as_str().to_owned()),
+        ),
+        ("key_input".to_owned(), key_value.clone()),
+        (
+            "evidence".to_owned(),
+            Value::Object(vec![
+                ("kind".to_owned(), Value::String("control".to_owned())),
+                (
+                    "control_path".to_owned(),
+                    seed.control_path.clone().map_or(Value::Null, Value::String),
+                ),
+                ("rule_id".to_owned(), Value::String(seed.rule_id.clone())),
+                ("base_control_state".to_owned(), Value::Null),
+                (
+                    "base_control_digest".to_owned(),
+                    nullable_digest(policy.base_digest),
+                ),
+                ("candidate_control_state".to_owned(), Value::Null),
+                (
+                    "candidate_control_digest".to_owned(),
+                    nullable_digest(policy.candidate_digest),
+                ),
+                ("exception".to_owned(), Value::Null),
+            ]),
+        ),
+    ]);
+    let fact_digest = hj(FACT_DOMAIN, &fact);
+    let configured = seed.kind.built_in_disposition(enforce);
+    Finding {
+        kind: seed.kind,
+        key_input: key_value,
+        finding_key: digest,
+        attribution: Attribution::NotApplicable,
+        base_fact: None,
+        candidate_fact: Some((fact, fact_digest)),
+        member_count: 1,
+        observation_ids: Vec::new(),
+        location: Location {
+            side: LocationSide::Control,
+            path: seed.control_path.clone(),
+            span: None,
+        },
+        configured_disposition: configured,
+        effective_disposition: configured,
+        repository_step: None,
+    }
+}
+
+fn ordinary(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     enforce: bool,
@@ -605,6 +721,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
             location,
             configured_disposition: configured,
             effective_disposition: configured,
+            repository_step: None,
         });
     }
 }

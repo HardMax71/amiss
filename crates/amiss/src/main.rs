@@ -172,6 +172,8 @@ fn fatal(invocation: &Invocation, engine: &EngineProvenance, details: &[ErrorDet
         default_branch_ref: None,
         base: identity(&invocation.base),
         candidate,
+        policy: amiss_scan::policy::Effects::default(),
+        controls_unavailable: None,
     };
     let built = construct_incomplete(&setup, details);
     match invocation.format {

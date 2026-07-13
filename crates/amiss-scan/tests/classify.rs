@@ -70,7 +70,7 @@ fn advisory_basenames_run_no_grammar() {
     assert_eq!(classify("a/b.cursorrules"), None);
     assert_eq!(
         Classification::PlainAdvisory.adapter(),
-        Adapter::PlainAdvisory
+        Some(Adapter::PlainAdvisory)
     );
 }
 
@@ -78,13 +78,13 @@ fn advisory_basenames_run_no_grammar() {
 fn classifications_map_to_their_adapters() {
     assert_eq!(
         Classification::StructuredMarkdown.adapter(),
-        Adapter::Markdown
+        Some(Adapter::Markdown)
     );
     assert_eq!(
         Classification::ExtensionlessMarkdown.adapter(),
-        Adapter::Markdown
+        Some(Adapter::Markdown)
     );
-    assert_eq!(Classification::StructuredMdx.adapter(), Adapter::Mdx);
+    assert_eq!(Classification::StructuredMdx.adapter(), Some(Adapter::Mdx));
     assert_eq!(
         Classification::StructuredMarkdown.as_str(),
         "structured-markdown"

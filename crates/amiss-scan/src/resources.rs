@@ -17,6 +17,8 @@ pub struct ScanLimits {
     pub references_per_snapshot: u64,
     pub referenced_target_blob_bytes: u64,
     pub aggregate_referenced_target_bytes_per_snapshot: u64,
+    pub selected_control_blob_bytes: u64,
+    pub aggregate_selected_control_bytes_per_snapshot: u64,
 }
 
 impl ScanLimits {
@@ -32,6 +34,8 @@ impl ScanLimits {
         references_per_snapshot: 1_000_000,
         referenced_target_blob_bytes: 16_777_216,
         aggregate_referenced_target_bytes_per_snapshot: 536_870_912,
+        selected_control_blob_bytes: 16_777_216,
+        aggregate_selected_control_bytes_per_snapshot: 67_108_864,
     };
 }
 
@@ -48,6 +52,7 @@ pub struct ScanResources {
     nodes: u64,
     references: u64,
     target_bytes: u64,
+    control_bytes: u64,
 }
 
 pub(crate) const fn crossing(
@@ -72,6 +77,7 @@ impl ScanResources {
             nodes: 0,
             references: 0,
             target_bytes: 0,
+            control_bytes: 0,
         }
     }
 
@@ -103,6 +109,25 @@ impl ScanResources {
     #[must_use]
     pub const fn target_bytes(&self) -> u64 {
         self.target_bytes
+    }
+
+    /// Charges one selected control blob's declared size to the snapshot
+    /// aggregate; the per-value cap is enforced where the read happens.
+    ///
+    /// # Errors
+    ///
+    /// The aggregate crossing, observing the prior total plus this member.
+    pub fn charge_control_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
+        let total = self.control_bytes.saturating_add(declared_bytes);
+        if total > self.limits.aggregate_selected_control_bytes_per_snapshot {
+            return Err(crossing(
+                ResourceName::AggregateSelectedControlBytesPerSnapshot,
+                self.limits.aggregate_selected_control_bytes_per_snapshot,
+                total,
+            ));
+        }
+        self.control_bytes = total;
+        Ok(())
     }
 
     /// Charges one referenced target's declared byte size to the snapshot

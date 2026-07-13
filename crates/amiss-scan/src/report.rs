@@ -10,7 +10,7 @@ use amiss_wire::report::{
 use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
 use crate::evaluate::{
-    Attribution, DocumentInput, DocumentSide, FACT_SCHEMA, Finding, LocationSide, evaluate,
+    Attribution, DocumentInput, DocumentSide, FACT_SCHEMA, Finding, LocationSide,
 };
 use crate::{Impact, observe};
 
@@ -99,7 +99,9 @@ pub struct IndexCandidate {
     pub skip_worktree_paths: u64,
 }
 
-/// The run identity a complete local report carries.
+/// The run identity a complete local report carries, plus the acquired
+/// policy effects and, for an invalid-policy run, the unavailable-controls
+/// reason.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Setup {
     pub engine: EngineProvenance,
@@ -109,6 +111,8 @@ pub struct Setup {
     pub default_branch_ref: Option<String>,
     pub base: SnapshotIdentity,
     pub candidate: CandidateBlock,
+    pub policy: crate::policy::Effects,
+    pub controls_unavailable: Option<&'static str>,
 }
 
 /// A constructed complete report: the envelope value, its canonical wire
@@ -295,7 +299,7 @@ fn side_facets(
             "scanned",
             None,
             ContentAvailability::Available,
-            Some(record.classification.adapter()),
+            record.classification.adapter(),
         ),
         DocumentStatus::ExcludedBuiltIn => (
             "excluded-built-in",
@@ -319,6 +323,12 @@ fn side_facets(
             "unsupported",
             Some("gitlink-document"),
             ContentAvailability::NotRead,
+            None,
+        ),
+        DocumentStatus::Unsupported(UnsupportedKind::Format) => (
+            "unsupported",
+            Some("unsupported-document-format"),
+            ContentAvailability::Available,
             None,
         ),
         DocumentStatus::Failed(_) => ("scanned", None, ContentAvailability::NotRead, None),
@@ -542,6 +552,7 @@ fn finding_value(
                     string(match finding.location.side {
                         LocationSide::Base => "base",
                         LocationSide::Candidate => "candidate",
+                        LocationSide::Control => "control",
                     }),
                 ),
                 ("path", nullable(finding.location.path.as_deref())),
@@ -584,7 +595,7 @@ fn trace_value(finding: &Finding, enforce: bool) -> Vec<Value> {
         ])];
     }
     let profile = if enforce { "enforce" } else { "observe" };
-    vec![object(vec![
+    let mut steps = vec![object(vec![
         ("source", string("built-in")),
         (
             "rule_id",
@@ -594,8 +605,30 @@ fn trace_value(finding: &Finding, enforce: bool) -> Vec<Value> {
             )),
         ),
         ("before", string(finding.configured_disposition.as_str())),
-        ("after", string(finding.effective_disposition.as_str())),
-    ])]
+        (
+            "after",
+            string(
+                finding
+                    .repository_step
+                    .map_or(finding.effective_disposition, |_raised| {
+                        finding.configured_disposition
+                    })
+                    .as_str(),
+            ),
+        ),
+    ])];
+    if let Some(raised) = finding.repository_step {
+        steps.push(object(vec![
+            ("source", string("repository-policy")),
+            (
+                "rule_id",
+                string(&format!("repository/{}", finding.kind.as_str())),
+            ),
+            ("before", string(finding.configured_disposition.as_str())),
+            ("after", string(raised.as_str())),
+        ]));
+    }
+    steps
 }
 
 fn location_span_value(finding: &Finding) -> Value {
@@ -738,6 +771,13 @@ fn evaluation_value(setup: &Setup) -> Value {
 }
 
 fn controls_value(setup: &Setup) -> Value {
+    if let Some(reason) = setup.controls_unavailable {
+        return object(vec![
+            ("status", string("unavailable")),
+            ("request_digest", Value::Null),
+            ("reasons", Value::Array(vec![string(reason)])),
+        ]);
+    }
     let none_provenance = || {
         object(vec![
             ("status", string("none")),
@@ -751,8 +791,17 @@ fn controls_value(setup: &Setup) -> Value {
             "profile",
             string(if setup.enforce { "enforce" } else { "observe" }),
         ),
-        ("base_repository_policy_digest", Value::Null),
-        ("candidate_repository_policy_digest", Value::Null),
+        (
+            "base_repository_policy_digest",
+            setup.policy.base_digest.map_or(Value::Null, digest_value),
+        ),
+        (
+            "candidate_repository_policy_digest",
+            setup
+                .policy
+                .candidate_digest
+                .map_or(Value::Null, digest_value),
+        ),
         ("organization_floor", none_provenance()),
         ("debt_snapshot", none_provenance()),
         ("waiver_bundle", none_provenance()),
@@ -1026,7 +1075,8 @@ pub fn construct(
 ) -> Built {
     let paired = paired_documents(base, candidate);
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
-    let findings = evaluate(&inputs, comparisons, setup.enforce);
+    let findings =
+        crate::evaluate::evaluate_with_policy(&inputs, comparisons, setup.enforce, &setup.policy);
 
     let document_rows: Vec<(String, Value)> = paired
         .iter()

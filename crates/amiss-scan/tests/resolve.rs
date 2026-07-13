@@ -92,7 +92,14 @@ fn bed_with(limits: ScanLimits) -> Bed {
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
     let mut git_resources = GitResources::new(GitLimits::CONTRACT);
     let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
-    let snapshot = discover(&repo, &mut git_resources, &mut scan_resources, &tree).unwrap();
+    let snapshot = discover(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &amiss_scan::Includes::default(),
+        &tree,
+    )
+    .unwrap();
     Bed {
         _dir: dir,
         repo,
