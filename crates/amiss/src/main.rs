@@ -62,20 +62,6 @@ fn run(invocation: &Invocation) -> ExitCode {
         eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
         return failure;
     };
-    let CandidateSelector::Commit(candidate_oid) = &invocation.candidate else {
-        // The staged-index snapshot is not built yet; the run is honestly
-        // incomplete rather than approximated.
-        return fatal(
-            invocation,
-            &engine,
-            &[ErrorDetail {
-                code: AnalysisErrorCode::InternalError,
-                path: None,
-                resource: None,
-            }],
-        );
-    };
-
     let repo = match amiss_git::Repository::open(&invocation.repo, invocation.object_format) {
         Ok(repo) => repo,
         Err(defect) => {
@@ -88,6 +74,10 @@ fn run(invocation: &Invocation) -> ExitCode {
                 amiss_git::Error::ObjectUnreadable | amiss_git::Error::ResourceLimit { .. } => {
                     AnalysisErrorCode::GitObjectUnreadable
                 }
+                amiss_git::Error::IndexInvalid => AnalysisErrorCode::GitIndexInvalid,
+                amiss_git::Error::IndexUnmerged => AnalysisErrorCode::GitIndexUnmerged,
+                amiss_git::Error::IntentToAdd => AnalysisErrorCode::GitIntentToAdd,
+                amiss_git::Error::SnapshotChanged => AnalysisErrorCode::GitSnapshotChanged,
             };
             return fatal(
                 invocation,
@@ -125,14 +115,23 @@ fn run(invocation: &Invocation) -> ExitCode {
             .as_ref()
             .map(|identity| identity.default_branch_ref.as_str().to_owned()),
     };
-    let built = commit_pair(
-        &repo,
-        &shell.engine,
-        github.as_ref(),
-        &shell,
-        &invocation.base,
-        candidate_oid,
-    );
+    let built = match &invocation.candidate {
+        CandidateSelector::Commit(candidate_oid) => commit_pair(
+            &repo,
+            &shell.engine,
+            github.as_ref(),
+            &shell,
+            &invocation.base,
+            candidate_oid,
+        ),
+        CandidateSelector::Index => amiss_scan::pipeline::staged_index(
+            &repo,
+            &shell.engine,
+            github.as_ref(),
+            &shell,
+            &invocation.base,
+        ),
+    };
     match invocation.format {
         OutputFormat::Json => emit(&built.wire),
         OutputFormat::Human => human(&built),
@@ -160,8 +159,10 @@ fn fatal(invocation: &Invocation, engine: &EngineProvenance, details: &[ErrorDet
         tree_oid: oid.as_str().to_owned(),
     };
     let candidate = match &invocation.candidate {
-        CandidateSelector::Commit(oid) => identity(oid),
-        CandidateSelector::Index => identity(&invocation.base),
+        CandidateSelector::Commit(oid) => amiss_scan::report::CandidateBlock::Commit(identity(oid)),
+        CandidateSelector::Index => {
+            amiss_scan::report::CandidateBlock::Unavailable(vec!["not-evaluated"])
+        }
     };
     let setup = Setup {
         engine: engine.clone(),

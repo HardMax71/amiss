@@ -1,3 +1,4 @@
+pub mod index;
 pub mod object;
 #[cfg(unix)]
 mod pack;
@@ -5,6 +6,7 @@ mod pack;
 pub mod repo;
 pub mod resources;
 
+pub use index::{IndexEntry, LogicalIndex, parse_index_file};
 pub use object::{Commit, Object, ObjectKind, TreeEntry, parse_commit, parse_tree};
 #[cfg(unix)]
 pub use repo::Repository;
@@ -18,6 +20,10 @@ pub enum Error {
     ObjectMissing,
     ObjectWrongKind,
     ObjectUnreadable,
+    IndexInvalid,
+    IndexUnmerged,
+    IntentToAdd,
+    SnapshotChanged,
     ResourceLimit {
         resource: ResourceName,
         configured_limit: u64,

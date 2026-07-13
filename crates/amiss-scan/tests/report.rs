@@ -7,7 +7,7 @@ use std::process::Command;
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::correlate::{Observation, Side, correlate};
 use amiss_scan::observe::occurrence_id;
-use amiss_scan::report::{Setup, SnapshotIdentity, construct};
+use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, construct};
 use amiss_scan::resolve::TargetCache;
 use amiss_scan::{DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery, discover, resolve};
 use amiss_wire::controls::SourceConstruct;
@@ -169,7 +169,7 @@ fn a_complete_report_validates_against_the_schema() {
         candidate_ref: None,
         default_branch_ref: None,
         base: base_identity,
-        candidate: candidate_identity,
+        candidate: CandidateBlock::Commit(candidate_identity),
     };
     let built = construct(&setup, &base_discovery, &candidate_discovery, &comparisons);
 

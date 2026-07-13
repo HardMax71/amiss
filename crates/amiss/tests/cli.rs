@@ -163,26 +163,54 @@ fn an_unreadable_repository_is_a_fatal_incomplete_envelope() {
 }
 
 #[test]
-fn index_mode_is_honestly_incomplete_for_now() {
-    let (dir, base, _candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
-    let (code, stdout, _stderr) = amiss(&[
+fn index_mode_scans_the_staged_snapshot() {
+    let (dir, _base, candidate) = fixture();
+    let root = dir.path();
+    fs::write(root.join("docs/staged.md"), "# Staged\n\n[up](guide.md)\n").unwrap_or_default();
+    git(root, &["add", "docs/staged.md"]);
+    fs::write(
+        root.join("docs/staged.md"),
+        "worktree drift with [broken](nowhere.md)\n",
+    )
+    .unwrap_or_default();
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, stdout, stderr) = amiss(&[
         "check",
         "--repo",
         &repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &candidate,
         "--index",
         "--profile",
         "observe",
         "--format",
         "json",
     ]);
-    assert_eq!(code, 2);
+    assert_eq!((code, stderr.as_str()), (0, ""));
     let payload = payload(&stdout);
-    assert_eq!(payload["errors"][0]["code"], "INTERNAL_ERROR");
+    assert_eq!(payload["result"]["status"], "pass");
+    assert_eq!(payload["evaluation"]["mode"], "index");
+    assert_eq!(payload["evaluation"]["materialization"], "index");
+    assert_eq!(payload["evaluation"]["candidate"]["kind"], "index");
+    assert!(
+        payload["evaluation"]["candidate"]["entry_count"]
+            .as_u64()
+            .unwrap_or(0)
+            >= 3
+    );
+    let documents: Vec<&str> = payload["documents"]
+        .as_array()
+        .map(|rows| rows.iter().filter_map(|row| row["path"].as_str()).collect())
+        .unwrap_or_default();
+    assert!(documents.contains(&"docs/staged.md"));
+    assert_eq!(
+        payload["summary"]["references"]["missing"].as_u64(),
+        Some(1),
+        "only the committed missing.md link is missing; the worktree drift is never read"
+    );
 }
 
 #[test]

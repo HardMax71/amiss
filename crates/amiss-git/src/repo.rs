@@ -18,6 +18,7 @@ use crate::resources::{GitResources, ValueCap, crossing};
 
 #[derive(Debug)]
 pub struct Repository {
+    git_dir: OwnedFd,
     objects: OwnedFd,
     object_format: ObjectFormat,
     packs: OnceLock<Result<PackSet, Error>>,
@@ -50,6 +51,7 @@ impl Repository {
         let objects =
             openat(&git_fd, "objects", dir_flags(), Mode::empty()).map_err(unavailable)?;
         Ok(Self {
+            git_dir: git_fd,
             objects,
             object_format,
             packs: OnceLock::new(),
@@ -248,6 +250,111 @@ impl Repository {
     #[must_use]
     pub const fn object_format(&self) -> ObjectFormat {
         self.object_format
+    }
+
+    /// Reads the current raw `.git/index` bytes through the retained handle:
+    /// an ordinary no-follow entry, bounded by the raw staged-index cap with
+    /// the exact declared length observed.
+    ///
+    /// # Errors
+    ///
+    /// `IndexInvalid` for a missing or non-ordinary entry, and the
+    /// `git-index-bytes` crossing for an oversized one.
+    pub fn read_index_bytes(&self, resources: &mut GitResources) -> Result<Vec<u8>, Error> {
+        let fd = openat(&self.git_dir, "index", file_flags(), Mode::empty())
+            .map_err(|_errno| Error::IndexInvalid)?;
+        let file = File::from(fd);
+        let metadata = file.metadata().map_err(|_defect| Error::IndexInvalid)?;
+        if !metadata.file_type().is_file() {
+            return Err(Error::IndexInvalid);
+        }
+        let cap = resources.limits().index_bytes;
+        if metadata.len() > cap {
+            return Err(crossing(ResourceName::GitIndexBytes, cap, metadata.len()));
+        }
+        let mut bytes = Vec::new();
+        let read = file
+            .take(cap.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|_defect| Error::IndexInvalid)?;
+        if u64::try_from(read).unwrap_or(u64::MAX) > cap {
+            return Err(crossing(
+                ResourceName::GitIndexBytes,
+                cap,
+                cap.saturating_add(1),
+            ));
+        }
+        Ok(bytes)
+    }
+
+    /// Whether the primary object database holds the OID, without reading or
+    /// reconstructing the object.
+    ///
+    /// # Errors
+    ///
+    /// Pack enumeration defects and their resource crossings.
+    pub fn has_object(&self, resources: &mut GitResources, oid: &Oid) -> Result<bool, Error> {
+        let hex_text = oid.as_str();
+        let fan = hex_text.get(..2).ok_or(Error::ObjectUnreadable)?;
+        let rest = hex_text.get(2..).ok_or(Error::ObjectUnreadable)?;
+        if let Ok(fan_fd) = openat(&self.objects, fan, dir_flags(), Mode::empty())
+            && openat(&fan_fd, rest, file_flags(), Mode::empty()).is_ok()
+        {
+            return Ok(true);
+        }
+        let Some(raw) = oid_raw(oid) else {
+            return Err(Error::ObjectUnreadable);
+        };
+        Ok(self.pack_set(resources)?.locate(&raw).is_some())
+    }
+
+    /// The end-of-scan race check: reopens the current index entry, rereads
+    /// it boundedly, and accepts byte identity or an equal reparsed logical
+    /// projection. Anything else is solely a snapshot change.
+    ///
+    /// # Errors
+    ///
+    /// `SnapshotChanged`, or the index byte crossing during the reread.
+    pub fn verify_index_unchanged(
+        &self,
+        resources: &mut GitResources,
+        initial: &[u8],
+    ) -> Result<(), Error> {
+        let current = match self.read_index_bytes(resources) {
+            Ok(bytes) => bytes,
+            Err(Error::ResourceLimit {
+                resource,
+                configured_limit,
+                observed_lower_bound,
+            }) => {
+                return Err(Error::ResourceLimit {
+                    resource,
+                    configured_limit,
+                    observed_lower_bound,
+                });
+            }
+            Err(
+                Error::RepositoryUnavailable
+                | Error::ObjectMissing
+                | Error::ObjectWrongKind
+                | Error::ObjectUnreadable
+                | Error::IndexInvalid
+                | Error::IndexUnmerged
+                | Error::IntentToAdd
+                | Error::SnapshotChanged,
+            ) => return Err(Error::SnapshotChanged),
+        };
+        if current == initial {
+            return Ok(());
+        }
+        let before = crate::index::parse_index_file(self.object_format, initial)
+            .map_err(|_defect| Error::SnapshotChanged)?;
+        let after = crate::index::parse_index_file(self.object_format, &current)
+            .map_err(|_defect| Error::SnapshotChanged)?;
+        if before == after {
+            return Ok(());
+        }
+        Err(Error::SnapshotChanged)
     }
 
     const fn oid_width(&self) -> usize {

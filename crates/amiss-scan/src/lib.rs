@@ -24,7 +24,9 @@ use amiss_wire::report::AnalysisErrorCode;
 #[cfg(unix)]
 pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
 #[cfg(unix)]
-pub use discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover};
+pub use discovery::{
+    DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover, discover_index,
+};
 pub use document::{Classification, classify, excluded_by_built_in};
 #[cfg(unix)]
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
@@ -64,6 +66,10 @@ pub enum GitDefect {
     ObjectMissing,
     ObjectWrongKind,
     ObjectUnreadable,
+    IndexInvalid,
+    IndexUnmerged,
+    IntentToAdd,
+    SnapshotChanged,
 }
 
 impl From<amiss_git::Error> for Error {
@@ -73,6 +79,10 @@ impl From<amiss_git::Error> for Error {
             amiss_git::Error::ObjectMissing => Self::Git(GitDefect::ObjectMissing),
             amiss_git::Error::ObjectWrongKind => Self::Git(GitDefect::ObjectWrongKind),
             amiss_git::Error::ObjectUnreadable => Self::Git(GitDefect::ObjectUnreadable),
+            amiss_git::Error::IndexInvalid => Self::Git(GitDefect::IndexInvalid),
+            amiss_git::Error::IndexUnmerged => Self::Git(GitDefect::IndexUnmerged),
+            amiss_git::Error::IntentToAdd => Self::Git(GitDefect::IntentToAdd),
+            amiss_git::Error::SnapshotChanged => Self::Git(GitDefect::SnapshotChanged),
             amiss_git::Error::ResourceLimit {
                 resource,
                 configured_limit,
@@ -97,6 +107,10 @@ impl Error {
             Self::Git(GitDefect::ObjectMissing) => AnalysisErrorCode::GitObjectMissing,
             Self::Git(GitDefect::ObjectWrongKind) => AnalysisErrorCode::GitObjectWrongKind,
             Self::Git(GitDefect::ObjectUnreadable) => AnalysisErrorCode::GitObjectUnreadable,
+            Self::Git(GitDefect::IndexInvalid) => AnalysisErrorCode::GitIndexInvalid,
+            Self::Git(GitDefect::IndexUnmerged) => AnalysisErrorCode::GitIndexUnmerged,
+            Self::Git(GitDefect::IntentToAdd) => AnalysisErrorCode::GitIntentToAdd,
+            Self::Git(GitDefect::SnapshotChanged) => AnalysisErrorCode::GitSnapshotChanged,
             Self::UnrepresentablePath => AnalysisErrorCode::UnrepresentablePath,
             Self::Internal => AnalysisErrorCode::InternalError,
             Self::ResourceLimit { .. } => AnalysisErrorCode::ResourceLimitExceeded,

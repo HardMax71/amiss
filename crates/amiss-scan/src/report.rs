@@ -15,6 +15,61 @@ use crate::evaluate::{
 use crate::{Impact, observe};
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v1";
+pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection/v1";
+pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot/v1";
+
+/// The canonical logical-index projection and the synthetic snapshot input
+/// built over it, with both digests.
+#[must_use]
+pub fn synthetic_candidate(
+    base_object_format: &'static str,
+    base_commit_oid: &str,
+    entries: &[(String, amiss_wire::controls::GitMode, String, bool)],
+    skip_worktree_paths: u64,
+) -> IndexCandidate {
+    let rows: Vec<Value> = entries
+        .iter()
+        .map(|(path, mode, oid, skip)| {
+            let entry_kind = match mode {
+                amiss_wire::controls::GitMode::Symlink => "symlink",
+                amiss_wire::controls::GitMode::Gitlink => "gitlink",
+                amiss_wire::controls::GitMode::RegularFile
+                | amiss_wire::controls::GitMode::ExecutableFile
+                | amiss_wire::controls::GitMode::Tree => "blob",
+            };
+            object(vec![
+                ("path", string(path)),
+                ("entry_kind", string(entry_kind)),
+                ("git_mode", string(mode.as_str())),
+                ("object_format", string(base_object_format)),
+                ("object_oid", string(oid)),
+                ("skip_worktree", Value::Bool(*skip)),
+            ])
+        })
+        .collect();
+    let projection = object(vec![
+        ("schema", string(INDEX_PROJECTION_SCHEMA)),
+        ("entries", Value::Array(rows)),
+    ]);
+    let projection_digest = hj(INDEX_PROJECTION_SCHEMA, &projection);
+    let snapshot_input = object(vec![
+        ("schema", string(SNAPSHOT_SCHEMA)),
+        ("kind", string("index")),
+        ("identity_scope", string("complete-logical-index")),
+        ("base_object_format", string(base_object_format)),
+        ("base_commit_oid", string(base_commit_oid)),
+        ("index_projection_digest", digest_value(projection_digest)),
+    ]);
+    let snapshot_digest = hj(SNAPSHOT_SCHEMA, &snapshot_input);
+    IndexCandidate {
+        base_object_format,
+        base_commit_oid: base_commit_oid.to_owned(),
+        projection_digest,
+        entry_count: u64::try_from(entries.len()).unwrap_or(u64::MAX),
+        snapshot_digest,
+        skip_worktree_paths,
+    }
+}
 
 /// One snapshot's identity in the evaluation block.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,7 +79,27 @@ pub struct SnapshotIdentity {
     pub tree_oid: String,
 }
 
-/// The run identity a complete local commit-pair report carries.
+/// The candidate side of the evaluation identity: a Git commit, the
+/// synthetic complete logical staged index, or the unavailable projection an
+/// incomplete index run reports with its closed reasons.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CandidateBlock {
+    Commit(SnapshotIdentity),
+    Index(IndexCandidate),
+    Unavailable(Vec<&'static str>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IndexCandidate {
+    pub base_object_format: &'static str,
+    pub base_commit_oid: String,
+    pub projection_digest: Digest,
+    pub entry_count: u64,
+    pub snapshot_digest: Digest,
+    pub skip_worktree_paths: u64,
+}
+
+/// The run identity a complete local report carries.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Setup {
     pub engine: EngineProvenance,
@@ -33,7 +108,7 @@ pub struct Setup {
     pub candidate_ref: Option<String>,
     pub default_branch_ref: Option<String>,
     pub base: SnapshotIdentity,
-    pub candidate: SnapshotIdentity,
+    pub candidate: CandidateBlock,
 }
 
 /// A constructed complete report: the envelope value, its canonical wire
@@ -587,11 +662,53 @@ fn snapshot_value(snapshot: &SnapshotIdentity) -> Value {
     ])
 }
 
+fn candidate_value(candidate: &CandidateBlock) -> Value {
+    match candidate {
+        CandidateBlock::Commit(identity) => snapshot_value(identity),
+        CandidateBlock::Index(index) => object(vec![
+            ("kind", string("index")),
+            ("snapshot_schema", string(SNAPSHOT_SCHEMA)),
+            ("identity_scope", string("complete-logical-index")),
+            ("base_object_format", string(index.base_object_format)),
+            ("base_commit_oid", string(&index.base_commit_oid)),
+            (
+                "index_projection_digest",
+                digest_value(index.projection_digest),
+            ),
+            ("entry_count", integer(index.entry_count)),
+            ("snapshot_digest", digest_value(index.snapshot_digest)),
+        ]),
+        CandidateBlock::Unavailable(reasons) => object(vec![
+            ("kind", string("unavailable")),
+            ("request_digest", Value::Null),
+            (
+                "reasons",
+                Value::Array(reasons.iter().map(|reason| string(reason)).collect()),
+            ),
+        ]),
+    }
+}
+
 fn evaluation_value(setup: &Setup) -> Value {
+    let (mode, event_kind, finality, materialization) = match &setup.candidate {
+        CandidateBlock::Commit(_) => (
+            "commit-pair",
+            "explicit-commit-pair",
+            "explicit-replay",
+            "git-objects",
+        ),
+        CandidateBlock::Index(_) | CandidateBlock::Unavailable(_) => {
+            ("index", "local-index", "local-nonfinal", "index")
+        }
+    };
+    let skip = match &setup.candidate {
+        CandidateBlock::Index(index) => index.skip_worktree_paths,
+        CandidateBlock::Commit(_) | CandidateBlock::Unavailable(_) => 0,
+    };
     object(vec![
-        ("mode", string("commit-pair")),
-        ("event_kind", string("explicit-commit-pair")),
-        ("finality", string("explicit-replay")),
+        ("mode", string(mode)),
+        ("event_kind", string(event_kind)),
+        ("finality", string(finality)),
         (
             "repository",
             setup
@@ -611,9 +728,9 @@ fn evaluation_value(setup: &Setup) -> Value {
             nullable(setup.default_branch_ref.as_deref()),
         ),
         ("base", snapshot_value(&setup.base)),
-        ("candidate", snapshot_value(&setup.candidate)),
-        ("materialization", string("git-objects")),
-        ("skip_worktree_paths", integer(0)),
+        ("candidate", candidate_value(&setup.candidate)),
+        ("materialization", string(materialization)),
+        ("skip_worktree_paths", integer(skip)),
         ("index_only_materialized_paths", integer(0)),
         ("evaluation_instant", Value::Null),
         ("trusted_time", Value::Bool(false)),

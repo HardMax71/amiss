@@ -181,6 +181,87 @@ pub fn discover(
     Ok(discovery)
 }
 
+/// Discovery over the complete logical stage-zero index: the synthetic
+/// candidate's entries take the place of a tree walk, under the same entry
+/// budget, path rules, classification, and side outcomes. Blob and symlink
+/// rows must name objects present in the primary database.
+///
+/// # Errors
+///
+/// Everything tree discovery fails with, plus `ObjectMissing` for an index
+/// row whose object is absent.
+pub fn discover_index(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    index: &amiss_git::LogicalIndex,
+) -> Result<SnapshotDiscovery, Error> {
+    let mut discovery = SnapshotDiscovery {
+        documents: Vec::new(),
+        outside_document_set: 0,
+        tree_entries: 0,
+        path_defects: Vec::new(),
+        entries: BTreeMap::new(),
+    };
+    for entry in &index.entries {
+        discovery.tree_entries = discovery.tree_entries.saturating_add(1);
+        let entry_limit = git.limits().tree_entries_per_snapshot;
+        if discovery.tree_entries > entry_limit {
+            return Err(crossing(
+                ResourceName::GitTreeEntriesPerSnapshot,
+                entry_limit,
+                entry_limit.saturating_add(1),
+            ));
+        }
+        let Ok(path) = str::from_utf8(&entry.path) else {
+            discovery.path_defects.push(Error::UnrepresentablePath);
+            continue;
+        };
+        let path_limit = git.limits().raw_path_bytes;
+        let path_bytes = u64::try_from(path.len()).unwrap_or(u64::MAX);
+        if path_bytes > path_limit {
+            discovery.path_defects.push(crossing(
+                ResourceName::RawPathBytes,
+                path_limit,
+                path_bytes,
+            ));
+            continue;
+        }
+        if RepoPath::new(path.to_owned()).is_none() {
+            discovery.path_defects.push(Error::UnrepresentablePath);
+            continue;
+        }
+        if entry.mode != GitMode::Gitlink && !repo.has_object(git, &entry.oid)? {
+            return Err(Error::Git(GitDefect::ObjectMissing));
+        }
+
+        discovery
+            .entries
+            .insert(path.to_owned(), (entry.mode, entry.oid.clone()));
+        let Some(classification) = classify(path) else {
+            discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
+            continue;
+        };
+        let tree_entry = TreeEntry {
+            mode: entry.mode,
+            name: entry.path.clone(),
+            oid: entry.oid.clone(),
+        };
+        let (status, byte_count, raw_digest) =
+            side_status(repo, git, scan, classification, path, &tree_entry)?;
+        discovery.documents.push(DocumentRecord {
+            path: path.to_owned(),
+            classification,
+            status,
+            oid: entry.oid.clone(),
+            mode: entry.mode,
+            byte_count,
+            raw_digest,
+        });
+    }
+    Ok(discovery)
+}
+
 /// One selected non-tree entry's outcome. Exclusion is decided before any
 /// read, a symlink or gitlink is never read, and a regular blob is admitted,
 /// read under the document cap, then recognized as pointer content or
