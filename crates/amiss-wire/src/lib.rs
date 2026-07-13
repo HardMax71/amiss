@@ -1,8 +1,10 @@
+pub mod action;
 pub mod controls;
 pub mod de;
 pub mod digest;
 pub mod human;
 pub mod json;
+pub mod manifest;
 pub mod model;
 pub mod report;
 pub mod requests;

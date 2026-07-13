@@ -53,6 +53,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-bootstrap"
+version = "0.0.0"
+dependencies = [
+ "amiss-git",
+ "amiss-wire",
+ "tempfile",
+]
+
+[[package]]
 name = "amiss-fixtures"
 version = "0.0.0"
 

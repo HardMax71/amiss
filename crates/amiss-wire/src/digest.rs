@@ -53,6 +53,16 @@ impl fmt::Debug for Digest {
     }
 }
 
+/// The plain SHA-256 of exact bytes, with no domain separation: the
+/// manifest's file and binary checksums are ordinary content digests, not
+/// domain-separated identities.
+#[must_use]
+pub fn sha256(bytes: &[u8]) -> Digest {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Digest(hasher.finalize().into())
+}
+
 #[must_use]
 pub fn hb(domain: &str, bytes: &[u8]) -> Digest {
     let mut hasher = with_domain(domain);

@@ -75,7 +75,10 @@ pub enum Profile {
 }
 
 impl Profile {
-    pub(crate) fn decode(path: &str, value: Value) -> Result<Self, Error> {
+    /// # Errors
+    ///
+    /// A value outside the closed `observe`/`enforce` pair.
+    pub fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "observe" => Ok(Self::Observe),
             "enforce" => Ok(Self::Enforce),
@@ -829,7 +832,10 @@ impl ConstraintPlatform {
         }
     }
 
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
+    /// # Errors
+    ///
+    /// A value outside the closed six-platform table.
+    pub fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "linux-x86_64" => Ok(Self::LinuxX8664),
             "linux-aarch64" => Ok(Self::LinuxAarch64),
@@ -1180,7 +1186,12 @@ fn waiver_sort_key(item: &WaiverItem) -> (ObjectFormat, &str, Digest, &str) {
     )
 }
 
-pub(crate) fn root(bytes: &[u8]) -> Result<Value, Error> {
+/// The one restricted-JSON root every control document parses through.
+///
+/// # Errors
+///
+/// Any strict-JSON defect, carried as `ErrorKind::Json`.
+pub fn root(bytes: &[u8]) -> Result<Value, Error> {
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
