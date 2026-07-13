@@ -38,6 +38,66 @@ jobs:
       - run: prek run --all-files --hook-stage pre-push
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
 
+  self-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 2 # a scan needs a base, and on a merge checkout HEAD~1 is the pull request's
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: self-scan-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: self-scan-
+      - run: cargo build --locked --release --bin amiss
+      # The repository and branch names arrive as environment variables rather than
+      # as ${{ }} expansions inside the script, because a branch may be named
+      # anything and a workflow that pastes a branch name into a command line runs
+      # it. The owner is lowercased here: github.repository keeps the capitals the
+      # owner signed up with, and the scanner refuses a non-canonical identity.
+      - name: the scanner reads its own repository under enforce
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          status=0
+          ./target/release/amiss \
+            check \
+            --repo . \
+            --object-format sha1 \
+            --base "$(git rev-parse HEAD~1)" \
+            --candidate "$(git rev-parse HEAD)" \
+            --repository "github.com/${REPOSITORY,,}" \
+            --ref "refs/heads/${BRANCH}" \
+            --default-branch-ref "refs/heads/${DEFAULT_BRANCH}" \
+            --profile enforce \
+            --format json > amiss-report.json || status=$?
+          echo "amiss exit ${status}"
+          # The failing rows come out of the report rather than out of --format
+          # human. The human projection is capped at the first 200 findings in
+          # canonical order, so in a repository carrying hundreds of records it can
+          # print every one of them and still never show the one that blocked.
+          if [ "${status}" -ne 0 ] && [ -s amiss-report.json ]; then
+            jq -r '.payload.errors[]
+                   | "error  \(.code)  phase \(.phase)  \(.path // "-")"' amiss-report.json
+            jq -r '.payload.findings[]
+                   | select(.effective_disposition == "fail")
+                   | "fail   \(.kind)  \(.location.path)  bytes \(.location.span.start_byte)-\(.location.span.end_byte)"' amiss-report.json
+          fi
+          exit "${status}"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: amiss-self-report
+          path: amiss-report.json
+
   fuzz-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
