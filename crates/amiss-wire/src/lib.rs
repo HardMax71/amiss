@@ -1,6 +1,7 @@
 pub mod controls;
 pub mod de;
 pub mod digest;
+pub mod human;
 pub mod json;
 pub mod model;
 pub mod report;

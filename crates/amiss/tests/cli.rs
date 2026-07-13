@@ -232,8 +232,16 @@ fn human_output_projects_the_same_result() {
     ]);
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
-    assert!(text.starts_with("amiss: pass ("), "got: {text}");
-    assert!(text.contains("warn explicit-target-missing docs/guide.md"));
+    assert!(text.starts_with("amiss: pass (findings "), "got: {text}");
+    assert!(
+        text.contains("warn explicit-target-missing introduced \"docs/guide.md\" x1"),
+        "the path is an inert quoted atom: {text}"
+    );
+    assert!(
+        text.contains("references: extracted "),
+        "totals close the projection"
+    );
+    assert!(!text.contains('\r'), "LF-only stdout");
 }
 
 #[test]
@@ -509,4 +517,99 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
         1,
         "only the ordinary link is an observation; the governed consumer is suppressed"
     );
+}
+
+#[test]
+fn human_details_truncate_at_two_hundred() {
+    let (dir, _base, candidate) = fixture();
+    let root = dir.path();
+    let mut links = Vec::new();
+    for index in 0..201 {
+        links.push(format!("[l{index}](absent-{index}.md)"));
+    }
+    let body = format!("# Many\n\n{}\n", links.join("\n\n"));
+    fs::write(root.join("docs/many.md"), body).unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "many"]);
+    let many = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &candidate,
+        "--candidate",
+        &many,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    let detail_lines = text
+        .lines()
+        .filter(|line| line.starts_with("warn explicit-target-missing"))
+        .count();
+    assert_eq!(
+        detail_lines, 200,
+        "the first two hundred findings in key order"
+    );
+    assert!(text.contains("details truncated: "), "{text}");
+
+    let (_code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &candidate,
+        "--candidate",
+        &many,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    let payload = payload(&stdout);
+    assert_eq!(
+        payload["summary"]["human_details_truncated"].as_u64(),
+        payload["result"]["finding_count"]
+            .as_u64()
+            .map(|count| count.saturating_sub(200)),
+        "the payload records the truncation regardless of format"
+    );
+}
+
+#[test]
+fn explain_scope_adds_the_deterministic_block() {
+    let (dir, base, candidate) = fixture();
+    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let run = |extra: &[&str]| {
+        let mut args = vec![
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &base,
+            "--candidate",
+            &candidate,
+            "--profile",
+            "observe",
+        ];
+        args.extend_from_slice(extra);
+        amiss(&args)
+    };
+    let (_c, plain, _e) = run(&[]);
+    let (_c, explained, _e) = run(&["--explain-scope"]);
+    let plain = String::from_utf8_lossy(&plain);
+    let explained = String::from_utf8_lossy(&explained);
+    assert!(!plain.contains("scope:"));
+    assert!(explained.contains("scope: built-in documents"));
+    assert!(explained.contains("scope: this run discovered"));
 }

@@ -1135,7 +1135,10 @@ pub fn construct(
                 ("documents", counts.documents),
                 ("references", counts.references),
                 ("findings", counts.findings),
-                ("human_details_truncated", integer(0)),
+                (
+                    "human_details_truncated",
+                    integer(finding_count.saturating_sub(200)),
+                ),
                 ("governed_claims", integer(0)),
                 ("unattested_claims", integer(0)),
             ]),

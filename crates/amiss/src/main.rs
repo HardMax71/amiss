@@ -134,7 +134,7 @@ fn run(invocation: &Invocation) -> ExitCode {
     };
     match invocation.format {
         OutputFormat::Json => emit(&built.wire),
-        OutputFormat::Human => human(&built),
+        OutputFormat::Human => human(&built, invocation.explain_scope),
     }
     exit_class(built.exit_code)
 }
@@ -178,7 +178,7 @@ fn fatal(invocation: &Invocation, engine: &EngineProvenance, details: &[ErrorDet
     let built = construct_incomplete(&setup, details);
     match invocation.format {
         OutputFormat::Json => emit(&built.wire),
-        OutputFormat::Human => human(&built),
+        OutputFormat::Human => human(&built, invocation.explain_scope),
     }
     ExitCode::from(ExitClass::Failure.code())
 }
@@ -193,109 +193,193 @@ fn emit(wire: &[u8]) {
     }
 }
 
-/// A compact deterministic projection of the same payload: the result line,
-/// the counts, and one line per finding in canonical key order. The full
-/// human rendering contract is still to land; nothing here is parsed back.
 #[cfg(unix)]
-#[expect(clippy::print_stdout, reason = "the human output channel")]
-fn human(built: &amiss_scan::report::Built) {
-    use amiss_wire::json::Value;
+struct View(Vec<(String, amiss_wire::json::Value)>);
 
-    let field = |members: &[(String, Value)], name: &str| -> Option<Value> {
-        members
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value.clone())
-    };
-    let Value::Object(envelope) = &built.envelope else {
-        return;
-    };
-    let Some(Value::Object(payload)) = field(envelope, "payload") else {
-        return;
-    };
-    let counts = |name: &str| -> i64 {
-        field(&payload, "result")
-            .and_then(|result| match result {
-                Value::Object(members) => field(&members, name),
+#[cfg(unix)]
+impl View {
+    fn of(value: Option<&amiss_wire::json::Value>) -> Self {
+        use amiss_wire::json::Value;
+        match value {
+            Some(Value::Object(members)) => Self(members.clone()),
+            Some(
                 Value::Null
                 | Value::Bool(_)
                 | Value::Integer(_)
                 | Value::String(_)
-                | Value::Array(_) => None,
-            })
-            .and_then(|value| match value {
-                Value::Integer(number) => Some(number),
+                | Value::Array(_),
+            )
+            | None => Self(Vec::new()),
+        }
+    }
+
+    fn field(&self, name: &str) -> Option<&amiss_wire::json::Value> {
+        self.0
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value)
+    }
+
+    fn view(&self, name: &str) -> Self {
+        Self::of(self.field(name))
+    }
+
+    fn text(&self, name: &str) -> String {
+        use amiss_wire::json::Value;
+        match self.field(name) {
+            Some(Value::String(value)) => value.clone(),
+            Some(
+                Value::Null
+                | Value::Bool(_)
+                | Value::Integer(_)
+                | Value::Array(_)
+                | Value::Object(_),
+            )
+            | None => String::new(),
+        }
+    }
+
+    fn atom_or_dash(&self, name: &str) -> String {
+        use amiss_wire::json::Value;
+        match self.field(name) {
+            Some(Value::String(value)) => amiss_wire::human::atom(value),
+            Some(
+                Value::Null
+                | Value::Bool(_)
+                | Value::Integer(_)
+                | Value::Array(_)
+                | Value::Object(_),
+            )
+            | None => "-".to_owned(),
+        }
+    }
+
+    fn number(&self, name: &str) -> i64 {
+        use amiss_wire::json::Value;
+        match self.field(name) {
+            Some(Value::Integer(value)) => *value,
+            Some(
                 Value::Null
                 | Value::Bool(_)
                 | Value::String(_)
                 | Value::Array(_)
-                | Value::Object(_) => None,
-            })
-            .unwrap_or(0)
-    };
+                | Value::Object(_),
+            )
+            | None => 0,
+        }
+    }
+
+    fn rows(&self, name: &str) -> Vec<Self> {
+        use amiss_wire::json::Value;
+        match self.field(name) {
+            Some(Value::Array(rows)) => rows.iter().map(|row| Self::of(Some(row))).collect(),
+            Some(
+                Value::Null
+                | Value::Bool(_)
+                | Value::Integer(_)
+                | Value::String(_)
+                | Value::Object(_),
+            )
+            | None => Vec::new(),
+        }
+    }
+}
+
+/// The human projection: a non-wire convenience over the same payload that
+/// cannot change facts, ordering, totals, or exit. It prints the result, all
+/// retained analysis errors, the first two hundred findings in canonical
+/// order, and exact totals; every repository-derived scalar passes through
+/// `human-atom-v1`, and no source excerpt, raw destination, or query value
+/// appears.
+#[cfg(unix)]
+#[expect(clippy::print_stdout, reason = "the human output channel")]
+fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
+    let envelope = View::of(Some(&built.envelope));
+    let payload = envelope.view("payload");
+    let result = payload.view("result");
     println!(
-        "amiss: {} ({} findings, {} errors)",
+        "amiss: {} (findings {}, errors {}, exit {})",
         built.status,
-        counts("finding_count"),
-        counts("error_count")
+        result.number("finding_count"),
+        result.number("error_count"),
+        built.exit_code
     );
-    if let Some(Value::Array(findings)) = field(&payload, "findings") {
-        for finding in findings {
-            let Value::Object(members) = finding else {
-                continue;
-            };
-            let text = |name: &str| -> String {
-                match field(&members, name) {
-                    Some(Value::String(value)) => value,
-                    Some(
-                        Value::Null
-                        | Value::Bool(_)
-                        | Value::Integer(_)
-                        | Value::Array(_)
-                        | Value::Object(_),
-                    )
-                    | None => String::new(),
-                }
-            };
-            let path = match field(&members, "location") {
-                Some(Value::Object(location)) => match field(&location, "path") {
-                    Some(Value::String(value)) => value,
-                    Some(
-                        Value::Null
-                        | Value::Bool(_)
-                        | Value::Integer(_)
-                        | Value::Array(_)
-                        | Value::Object(_),
-                    )
-                    | None => String::new(),
-                },
-                Some(
-                    Value::Null
-                    | Value::Bool(_)
-                    | Value::Integer(_)
-                    | Value::String(_)
-                    | Value::Array(_),
-                )
-                | None => String::new(),
-            };
-            println!(
-                "  {} {} {}",
-                text("effective_disposition"),
-                text("kind"),
-                path
-            );
-        }
+    if explain_scope {
+        explain(&payload);
     }
-    if let Some(Value::Array(errors)) = field(&payload, "errors") {
-        for row in errors {
-            let Value::Object(members) = row else {
-                continue;
-            };
-            if let Some(Value::String(code)) = field(&members, "code") {
-                println!("  error {code}");
-            }
-        }
+    for row in payload.rows("errors") {
+        println!(
+            "error {} {} {}",
+            row.text("phase"),
+            row.text("code"),
+            row.atom_or_dash("path")
+        );
     }
+    for finding in payload.rows("findings").iter().take(200) {
+        println!(
+            "{} {} {} {} x{}",
+            finding.text("effective_disposition"),
+            finding.text("kind"),
+            finding.text("attribution"),
+            finding.view("location").atom_or_dash("path"),
+            finding.view("aggregation").number("member_count").max(1)
+        );
+    }
+    totals(&payload);
+}
+
+#[cfg(unix)]
+#[expect(clippy::print_stdout, reason = "the human output channel")]
+fn totals(payload: &View) {
+    let summary = payload.view("summary");
+    let truncated = summary.number("human_details_truncated");
+    if truncated > 0 {
+        println!("details truncated: {truncated}");
+    }
+    let documents = summary.view("documents");
+    println!(
+        "documents: discovered {} scanned {} unsupported {} excluded {} unlinked {}",
+        documents.number("discovered"),
+        documents.number("scanned"),
+        documents.number("unsupported"),
+        documents.number("excluded_builtin"),
+        documents.number("unlinked"),
+    );
+    let references = summary.view("references");
+    println!(
+        "references: extracted {} local {} github {} external {} unsupported {} missing {}",
+        references.number("extracted"),
+        references.number("explicit_local"),
+        references.number("same_repository_github"),
+        references.number("external_out_of_scope"),
+        references.number("unsupported"),
+        references.number("missing"),
+    );
+    let findings = summary.view("findings");
+    println!(
+        "findings: total {} fail {} warn {} record {}",
+        findings.number("total"),
+        findings.number("fail"),
+        findings.number("warn"),
+        findings.number("record"),
+    );
+}
+
+/// The deterministic scope explanation the human projection may add: the
+/// closed built-in document classes and this run's discovered surface.
+#[cfg(unix)]
+#[expect(clippy::print_stdout, reason = "the human output channel")]
+fn explain(payload: &View) {
+    println!("scope: built-in documents are *.md, *.mdx, *.markdown, six extensionless");
+    println!("scope: basenames, and .cursorrules and llms.txt as plain advisory");
+    println!("scope: node_modules, vendor, third_party, dist, build, .next, and target");
+    println!("scope: trees are excluded unless a repository policy includes them");
+    let documents = payload.view("summary").view("documents");
+    println!(
+        "scope: this run discovered {} candidate documents and scanned {}",
+        documents.number("discovered"),
+        documents.number("scanned"),
+    );
 }
 
 #[cfg(unix)]
