@@ -85,6 +85,40 @@ fn a_killed_engine_settles_to_nothing() {
     );
 }
 
+/// An engine that dies on a signal carries no exit code at all, so there is
+/// nothing to compare an accepted class against, and a report it managed to
+/// print before the fault is not evidence that the run finished. This is the
+/// crash arm of the no-accepted-result law, and it is the one arm no synthetic
+/// status can honestly stand in for, so the child really does abort. Only unix
+/// can reach it: a Windows process that faults still exits with a code.
+#[cfg(unix)]
+#[test]
+fn an_engine_that_dies_on_a_signal_settles_to_nothing() {
+    let (wire, expectations) = accepted_report();
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg("kill -ABRT $$")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("a shell that aborts itself");
+    let outcome = supervise(&mut child, Duration::from_secs(30)).unwrap();
+
+    let Supervised::Completed(status) = outcome else {
+        panic!("the child aborted well inside the ceiling; it was not killed by the watchdog");
+    };
+    assert_eq!(
+        status.code(),
+        None,
+        "a process that died on a signal has no exit code to report"
+    );
+    assert_eq!(
+        settle(&Supervised::Completed(status), &wire, &expectations),
+        Err(Defect::Signalled),
+        "a perfectly good envelope from a process that crashed is still not a result"
+    );
+}
+
 /// Text printed before a crash is never read as a result.
 #[test]
 fn a_prefixed_envelope_is_never_a_result() {
