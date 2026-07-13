@@ -17,10 +17,10 @@ use amiss_wire::controls::{
     TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hb, hj};
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::json::canonical;
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, ErrorDetail, PAYLOAD_SCHEMA, unavailable_evaluation_wire,
+    AnalysisErrorCode, EngineProvenance, ErrorDetail, unavailable_evaluation_wire,
 };
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
@@ -530,14 +530,40 @@ fn run(engine: &EngineProvenance, args: &Args) -> ExitCode {
             return failure;
         }
     };
-    if accept(engine, &requests, &built.wire).is_err() {
+    publish(engine, &requests, &built, args.output.as_deref())
+}
+
+/// The acceptance law runs before any byte is published; a violation is a
+/// failed construction with no accepted envelope.
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn publish(
+    engine: &EngineProvenance,
+    requests: &Requests,
+    built: &amiss_scan::Built,
+    output: Option<&Path>,
+) -> ExitCode {
+    let expectations = amiss_wrapper::Expectations {
+        engine_digest: engine.digest.to_string(),
+        base_commit: requests.evaluation.base_commit.as_str().to_owned(),
+        candidate_commit: requests
+            .evaluation
+            .candidate_commit
+            .as_ref()
+            .map(|oid| oid.as_str().to_owned()),
+        floor_digest: requests
+            .controls
+            .organization_floor
+            .as_ref()
+            .map(|floor| floor.expected_digest.to_string()),
+    };
+    if amiss_wrapper::accept(&built.wire, &expectations).is_err() {
         eprintln!(
             "amiss-wrapper: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_str()
         );
-        return failure;
+        return ExitCode::from(ExitClass::Failure.code());
     }
-    emit_to(args.output.as_deref(), &built.wire);
+    emit_to(output, &built.wire);
     exit_class(built.exit_code)
 }
 
@@ -651,88 +677,6 @@ fn build_github(evaluation: &EvaluationRequest) -> Option<amiss_scan::GithubCont
         candidate_ref: candidate_ref.as_str().to_owned(),
         default_ref: default_ref.as_str().to_owned(),
     })
-}
-
-fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
-    match value {
-        Value::Object(members) => members
-            .iter()
-            .find(|(name, _)| name == key)
-            .map(|(_, member)| member),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
-            None
-        }
-    }
-}
-
-fn text<'value>(value: &'value Value, key: &str) -> Option<&'value str> {
-    match member(value, key) {
-        Some(Value::String(text)) => Some(text),
-        _ => None,
-    }
-}
-
-/// The acceptance law: parse one complete schema version and verify the
-/// payload-only digest, the evaluated identities against the request, the
-/// engine digest, the floor digest when supplied and resolved, the
-/// completeness flag against the exit class, and the finding count.
-fn accept(engine: &EngineProvenance, requests: &Requests, wire: &[u8]) -> Result<(), ()> {
-    let trimmed = wire.strip_suffix(b"\n").ok_or(())?;
-    let envelope = amiss_wire::json::parse(trimmed).map_err(|_defect| ())?;
-    let payload = member(&envelope, "payload").ok_or(())?;
-    let recorded = text(&envelope, "payload_digest").ok_or(())?;
-    if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
-        return Err(());
-    }
-    let engine_row = member(payload, "engine").ok_or(())?;
-    if text(engine_row, "engine_digest") != Some(engine.digest.to_string().as_str()) {
-        return Err(());
-    }
-    let evaluation = member(payload, "evaluation").ok_or(())?;
-    let resolved = text(evaluation, "status") != Some("unavailable");
-    if resolved {
-        let base = member(evaluation, "base").ok_or(())?;
-        if text(base, "commit_oid") != Some(requests.evaluation.base_commit.as_str()) {
-            return Err(());
-        }
-        let candidate = member(evaluation, "candidate").ok_or(())?;
-        if let (Some(expected), Some("git-commit")) = (
-            requests.evaluation.candidate_commit.as_ref(),
-            text(candidate, "kind"),
-        ) && text(candidate, "commit_oid") != Some(expected.as_str())
-        {
-            return Err(());
-        }
-        let controls_row = member(payload, "controls").ok_or(())?;
-        let controls_resolved = text(controls_row, "status") != Some("unavailable");
-        if controls_resolved && let Some(expected) = &requests.controls.organization_floor {
-            let floor_row = member(controls_row, "organization_floor").ok_or(())?;
-            if text(floor_row, "digest") != Some(expected.expected_digest.to_string().as_str()) {
-                return Err(());
-            }
-        }
-    }
-    let result = member(payload, "result").ok_or(())?;
-    let exit_code = match member(result, "exit_code") {
-        Some(Value::Integer(code)) => *code,
-        _ => return Err(()),
-    };
-    let complete = member(result, "complete") == Some(&Value::Bool(true));
-    if complete != (exit_code == 0 || exit_code == 1) {
-        return Err(());
-    }
-    let count = match member(result, "finding_count") {
-        Some(Value::Integer(count)) => *count,
-        _ => return Err(()),
-    };
-    let findings = match member(payload, "findings") {
-        Some(Value::Array(rows)) => rows.len(),
-        _ => return Err(()),
-    };
-    if i64::try_from(findings).map_err(|_defect| ())? != count {
-        return Err(());
-    }
-    Ok(())
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]

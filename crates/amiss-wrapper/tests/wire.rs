@@ -494,3 +494,63 @@ fn the_output_flag_writes_the_accepted_envelope() {
     let payload = validated(&written);
     assert_eq!(payload["result"]["status"], "pass");
 }
+
+/// The frozen dossier examples: the indented readable envelope and its exact
+/// one-line `JCS(envelope) || LF` canonicalization.
+fn dossier_example(name: &str) -> Vec<u8> {
+    fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/spec/examples")
+            .join(name),
+    )
+    .unwrap()
+}
+
+fn foreign_expectations() -> amiss_wrapper::Expectations {
+    amiss_wrapper::Expectations {
+        engine_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            .to_owned(),
+        base_commit: "0000000000000000000000000000000000000000".to_owned(),
+        candidate_commit: None,
+        floor_digest: None,
+    }
+}
+
+#[test]
+fn the_indented_example_is_rejected_as_noncanonical() {
+    let indented = dossier_example("scanner-report-v1.json");
+    assert_eq!(
+        amiss_wrapper::accept(&indented, &foreign_expectations()),
+        Err(amiss_wrapper::AcceptanceDefect::Noncanonical),
+        "a readable parsed-value example is not a valid emitted byte fixture"
+    );
+}
+
+#[test]
+fn the_canonical_golden_is_the_canonicalization_of_the_indented_value() {
+    let indented = dossier_example("scanner-report-v1.json");
+    let golden = dossier_example("scanner-report-v1.canonical.json");
+    let parsed = amiss_wire::json::parse(&indented).unwrap();
+    let mut recanonicalized = amiss_wire::json::canonical(&parsed);
+    recanonicalized.push(b'\n');
+    assert_eq!(
+        recanonicalized, golden,
+        "the smoke-checker equivalence holds under this serializer"
+    );
+}
+
+#[test]
+fn the_canonical_golden_clears_the_canonicality_gate() {
+    let golden = dossier_example("scanner-report-v1.canonical.json");
+    let defect = amiss_wrapper::accept(&golden, &foreign_expectations()).unwrap_err();
+    assert_ne!(
+        defect,
+        amiss_wrapper::AcceptanceDefect::Noncanonical,
+        "the exact one-line golden is canonical"
+    );
+    assert_eq!(
+        defect,
+        amiss_wrapper::AcceptanceDefect::PayloadDigest,
+        "the frozen example's digest lives in the research namespace"
+    );
+}
