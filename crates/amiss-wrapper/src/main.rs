@@ -58,8 +58,16 @@ fn main() -> ExitCode {
         emit_to(None, &reserve.wire_bytes(&envelope));
         return failure;
     };
-    run(&engine, &parsed, &mut reserve)
+    if env::var_os(EVALUATOR_SENTINEL).is_some_and(|value| value == "1") {
+        run_evaluator(&engine, &parsed, &mut reserve)
+    } else {
+        run(&engine, &parsed, &mut reserve)
+    }
 }
+
+const EVALUATOR_SENTINEL: &str = "AMISS_WRAPPER_EVALUATOR";
+const WATCHDOG_CEILING: std::time::Duration = std::time::Duration::from_mins(2);
+const SANDBOX_MEMORY_BYTES: u64 = 1_073_741_824;
 
 struct Args {
     repository: PathBuf,
@@ -447,26 +455,57 @@ fn verify_exceptions(
     Ok((time, debt, waiver))
 }
 
-#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(engine: &EngineProvenance, args: &Args, reserve: &mut FatalSerializer) -> ExitCode {
-    let failure = ExitCode::from(ExitClass::Failure.code());
-    let captured = capture_all(args);
-    let requests = match parse_requests(&captured) {
-        Ok(requests) => requests,
+fn parse_gate(
+    engine: &EngineProvenance,
+    captured: &Captured,
+    args: &Args,
+    reserve: &mut FatalSerializer,
+) -> Result<Requests, ExitCode> {
+    match parse_requests(captured) {
+        Ok(requests) => Ok(requests),
         Err(codes) => {
             let codes = if codes.is_empty() {
                 [AnalysisErrorCode::RequestUnreadable].into_iter().collect()
             } else {
                 codes
             };
-            return request_failure(
+            Err(request_failure(
                 engine,
                 &codes,
                 &captured.digests,
                 args.output.as_deref(),
                 reserve,
-            );
+            ))
         }
+    }
+}
+
+/// The supervisor entry: capture and validate the requests in-process, then
+/// run the evaluation out of process under the operational watchdog.
+fn run(engine: &EngineProvenance, args: &Args, reserve: &mut FatalSerializer) -> ExitCode {
+    let captured = capture_all(args);
+    let requests = match parse_gate(engine, &captured, args, reserve) {
+        Ok(requests) => requests,
+        Err(exit) => return exit,
+    };
+    supervise_evaluator(engine, args, &captured, &requests)
+}
+
+/// The evaluator half: sandbox self-restriction, request verification, the
+/// engine, and one envelope written to the supervisor's private report
+/// path. Acceptance never happens here.
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn run_evaluator(
+    engine: &EngineProvenance,
+    args: &Args,
+    reserve: &mut FatalSerializer,
+) -> ExitCode {
+    apply_sandbox();
+    let failure = ExitCode::from(ExitClass::Failure.code());
+    let captured = capture_all(args);
+    let requests = match parse_gate(engine, &captured, args, reserve) {
+        Ok(requests) => requests,
+        Err(exit) => return exit,
     };
 
     let (controls, external_defect) = match verify_controls(&requests.controls) {
@@ -545,19 +584,25 @@ fn run(engine: &EngineProvenance, args: &Args, reserve: &mut FatalSerializer) ->
             return failure;
         }
     };
-    publish(engine, &requests, &built, args.output.as_deref(), reserve)
+    let wire = reserve.wire_bytes(&built.envelope);
+    emit_to(args.output.as_deref(), &wire);
+    exit_class(built.exit_code)
 }
 
 /// The acceptance law runs before any byte is published; a violation is a
 /// failed construction with no accepted envelope.
+/// The supervisor's publication gate: acceptance over the evaluator's exact
+/// report bytes, plus the process-exit consistency law (the evaluator's exit
+/// class must equal the accepted envelope's), then one canonical emission.
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn publish(
+fn publish_wire(
     engine: &EngineProvenance,
     requests: &Requests,
-    built: &amiss_scan::Built,
+    wire: &[u8],
+    evaluator: std::process::ExitStatus,
     output: Option<&Path>,
-    reserve: &mut FatalSerializer,
 ) -> ExitCode {
+    let failure = ExitCode::from(ExitClass::Failure.code());
     let expectations = amiss_wrapper::Expectations {
         engine_digest: engine.digest.to_string(),
         base_commit: requests.evaluation.base_commit.as_str().to_owned(),
@@ -572,17 +617,147 @@ fn publish(
             .as_ref()
             .map(|floor| floor.expected_digest.to_string()),
     };
-    let wire = reserve.wire_bytes(&built.envelope);
-    if amiss_wrapper::accept(&wire, &expectations).is_err() {
+    let Ok(class) = amiss_wrapper::accept(wire, &expectations) else {
         eprintln!(
             "amiss-wrapper: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_str()
         );
-        return ExitCode::from(ExitClass::Failure.code());
+        return failure;
+    };
+    if evaluator.code() != i32::try_from(class).ok() {
+        eprintln!("amiss-wrapper: evaluator-exit-mismatch");
+        return failure;
     }
-    emit_to(output, &wire);
-    exit_class(built.exit_code)
+    emit_to(output, wire);
+    exit_class(class)
 }
+
+/// The supervisor half: stage the captured request bytes into a private
+/// directory, spawn this binary as the evaluator with a clean environment,
+/// hold it to the operational wall ceiling, and publish only an accepted
+/// envelope. A kill or crash yields no envelope; the run just fails.
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn supervise_evaluator(
+    engine: &EngineProvenance,
+    args: &Args,
+    captured: &Captured,
+    requests: &Requests,
+) -> ExitCode {
+    let failure = ExitCode::from(ExitClass::Failure.code());
+    let internal = || {
+        eprintln!(
+            "amiss-wrapper: {}",
+            AnalysisErrorCode::InternalError.as_str()
+        );
+        failure
+    };
+    let Ok(private) = tempfile::TempDir::new() else {
+        return internal();
+    };
+    let Ok(report) = stage_requests(captured, private.path()).and_then(|staged| {
+        let mut child = spawn_evaluator(args, private.path(), &staged)?;
+        match amiss_wrapper::supervise(&mut child, WATCHDOG_CEILING)? {
+            amiss_wrapper::Supervised::Killed => {
+                eprintln!("amiss-wrapper: evaluator-watchdog-kill");
+                Err(std::io::Error::other("watchdog"))
+            }
+            amiss_wrapper::Supervised::Completed(status) => Ok((staged.report, status)),
+        }
+    }) else {
+        return failure;
+    };
+    let (report_path, status) = report;
+    let Ok(wire) = fs::read(report_path) else {
+        eprintln!(
+            "amiss-wrapper: {}",
+            AnalysisErrorCode::ReportConstructionFailed.as_str()
+        );
+        return failure;
+    };
+    publish_wire(engine, requests, &wire, status, args.output.as_deref())
+}
+
+/// The staged evaluator inputs inside the supervisor's private directory.
+struct Staged {
+    evaluation: PathBuf,
+    snapshot: PathBuf,
+    controls: PathBuf,
+    report: PathBuf,
+}
+
+fn stage_requests(captured: &Captured, dir: &Path) -> std::io::Result<Staged> {
+    let (Some(evaluation), Some(snapshot), Some(controls)) =
+        (&captured.evaluation, &captured.snapshot, &captured.controls)
+    else {
+        return Err(std::io::Error::other("unreadable request survived parsing"));
+    };
+    let staged = Staged {
+        evaluation: dir.join("evaluation-request.json"),
+        snapshot: dir.join("snapshot-request.json"),
+        controls: dir.join("controls-request.json"),
+        report: dir.join("report.json"),
+    };
+    fs::write(&staged.evaluation, evaluation)?;
+    fs::write(&staged.snapshot, snapshot)?;
+    fs::write(&staged.controls, controls)?;
+    Ok(staged)
+}
+
+fn spawn_evaluator(
+    args: &Args,
+    private: &Path,
+    staged: &Staged,
+) -> std::io::Result<std::process::Child> {
+    let exe = env::current_exe()?;
+    std::process::Command::new(exe)
+        .arg("check")
+        .arg("--repository")
+        .arg(&args.repository)
+        .arg("--evaluation-request")
+        .arg(&staged.evaluation)
+        .arg("--snapshot-request")
+        .arg(&staged.snapshot)
+        .arg("--controls-request")
+        .arg(&staged.controls)
+        .arg("--output")
+        .arg(&staged.report)
+        .env_clear()
+        .env(EVALUATOR_SENTINEL, "1")
+        .env("TMPDIR", private)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+}
+
+/// Self-restriction for the evaluator process, in safe Rust only: no child
+/// processes (the contract's zero repository-process budget), no core dumps
+/// (the address space holds repository bytes), and the sandbox descriptor's
+/// 1 GiB memory ceiling as an address-space limit. Failures are tolerated,
+/// since a plain process is always self-asserted; network denial is
+/// structural here (the engine has no network code and no network
+/// dependency), and the closed provider-verified mechanisms are the
+/// controller's to enforce.
+#[cfg(unix)]
+fn apply_sandbox() {
+    use rustix::process::{Resource, Rlimit, setrlimit};
+    let zero = Rlimit {
+        current: Some(0),
+        maximum: Some(0),
+    };
+    let _forks = setrlimit(Resource::Nproc, zero);
+    let _core = setrlimit(Resource::Core, zero);
+    let _memory = setrlimit(
+        Resource::As,
+        Rlimit {
+            current: Some(SANDBOX_MEMORY_BYTES),
+            maximum: Some(SANDBOX_MEMORY_BYTES),
+        },
+    );
+}
+
+#[cfg(not(unix))]
+fn apply_sandbox() {}
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn request_failure(

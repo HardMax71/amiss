@@ -9,6 +9,10 @@ autotests = false
 amiss-git = { path = "../amiss-git" }
 amiss-scan = { path = "../amiss-scan" }
 amiss-wire = { path = "../amiss-wire" }
+tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
 
 [dev-dependencies]
 jsonschema = "0.26"
@@ -18,6 +22,10 @@ tempfile = "3"
 [[test]]
 name = "wire"
 path = "tests/wire.rs"
+
+[[test]]
+name = "watchdog"
+path = "tests/watchdog.rs"
 
 [lints]
 workspace = true

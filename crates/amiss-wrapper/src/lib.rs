@@ -61,12 +61,13 @@ fn text<'value>(value: &'value Value, key: &str) -> Option<&'value str> {
 /// digest equals the supplied expected digest when resolved, the
 /// completeness flag agrees with the exit class, and the finding count
 /// equals the findings array length. Text printed before a crash is never
-/// interpreted as a result.
+/// interpreted as a result. Success returns the envelope's exit class, so
+/// the wrapper can hold the evaluator process to it.
 ///
 /// # Errors
 ///
 /// The first applicable defect in the order above.
-pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<(), AcceptanceDefect> {
+pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, AcceptanceDefect> {
     let trimmed = wire
         .strip_suffix(b"\n")
         .ok_or(AcceptanceDefect::Noncanonical)?;
@@ -128,5 +129,42 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<(), Acceptance
     if i64::try_from(findings).map_err(|_defect| AcceptanceDefect::Shape)? != count {
         return Err(AcceptanceDefect::FindingCount);
     }
-    Ok(())
+    Ok(exit_code)
+}
+
+/// The watchdog outcome for one spawned evaluator process.
+#[derive(Debug)]
+pub enum Supervised {
+    /// The evaluator exited on its own within the ceiling.
+    Completed(std::process::ExitStatus),
+    /// The ceiling passed; the evaluator was killed and reaped. A killed
+    /// evaluator yields no accepted envelope.
+    Killed,
+}
+
+/// The operational wall-time watchdog: polls the evaluator until it exits
+/// or the ceiling passes, then kills and reaps it. The kill can never
+/// produce a partial result whose presence depends on runner speed; the
+/// caller fails the run without an envelope.
+///
+/// # Errors
+///
+/// Only `try_wait` failures; kill and reap errors after a timeout are
+/// deliberately ignored because the outcome is already `Killed`.
+pub fn supervise(
+    child: &mut std::process::Child,
+    ceiling: std::time::Duration,
+) -> std::io::Result<Supervised> {
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Supervised::Completed(status));
+        }
+        if start.elapsed() >= ceiling {
+            let _signalled = child.kill();
+            let _reaped = child.wait();
+            return Ok(Supervised::Killed);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
 }

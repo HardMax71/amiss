@@ -119,6 +119,7 @@ dependencies = [
  "amiss-scan",
  "amiss-wire",
  "jsonschema",
+ "rustix",
  "serde_json",
  "tempfile",
 ]
