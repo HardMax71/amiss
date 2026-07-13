@@ -132,7 +132,70 @@ pub fn representative_repository(root: &Path, documents: usize) -> std::io::Resu
     Ok(())
 }
 
-/// One quiet, hermetic git invocation with pinned identity and dates.
+/// Stages a symlink entry, mode 120000, naming `target`. A symlink in a tree
+/// is a blob holding the target path, so recording one needs no worktree
+/// symlink, which an unprivileged Windows process cannot create anyway. The
+/// resulting entry is byte for byte the one `git add` of a real symlink would
+/// write, so the scanner sees the same tree on every platform.
+///
+/// Call this after the worktree has been staged: `git add .` stages deletions
+/// too, and would drop an entry whose path is not in the worktree.
+///
+/// # Errors
+///
+/// Any git invocation failure, as plain I/O errors.
+pub fn stage_symlink(root: &Path, target: &str, name: &str) -> std::io::Result<()> {
+    let scratch = root.join("amiss-symlink-target");
+    std::fs::write(&scratch, target)?;
+    let oid = git(root, &["hash-object", "-w", "--", "amiss-symlink-target"])?;
+    std::fs::remove_file(&scratch)?;
+    git(
+        root,
+        &[
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            &format!("120000,{},{name}", oid.trim()),
+        ],
+    )?;
+    Ok(())
+}
+
+/// A directory reparse point at `link` naming `target`: a symlink on unix, a
+/// junction on Windows. A junction needs no privilege, where a Windows symlink
+/// needs one, so the no-follow boundary stays provable on an ordinary CI
+/// runner rather than only on an elevated one.
+///
+/// # Errors
+///
+/// The underlying link failure, as a plain I/O error.
+#[cfg(unix)]
+pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
+    let status = Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(link)
+        .arg(target)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other("mklink /J failed"))
+    }
+}
+
+/// One quiet, hermetic git invocation with pinned identity and dates. The
+/// global config names a path that does not exist, which every platform reads
+/// as an empty file, where `/dev/null` would not resolve on Windows. Skipping
+/// the system config matters twice over there: it is what carries Git for
+/// Windows' `core.autocrlf=true`, so blobs and worktree bytes stay LF on
+/// every platform and the fixtures hash the same everywhere.
 ///
 /// # Errors
 ///
@@ -142,7 +205,7 @@ pub fn git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")

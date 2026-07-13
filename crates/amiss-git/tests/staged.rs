@@ -1,9 +1,8 @@
-#![cfg(unix)]
-
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use amiss_fixtures::stage_symlink;
 use amiss_git::{Error, GitLimits, GitResources, Repository, parse_index_file};
 use amiss_wire::controls::GitMode;
 use amiss_wire::model::ObjectFormat;
@@ -15,7 +14,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
@@ -38,7 +37,7 @@ fn git_allow_failure(dir: &Path, args: &[&str]) {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_COMMITTER_NAME", "t")
@@ -62,10 +61,9 @@ fn base(dir: &Path) {
     fs::create_dir_all(dir.join("docs")).unwrap();
     fs::write(dir.join("docs/a.md"), "# a\n").unwrap();
     fs::write(dir.join("run.sh"), "#!/bin/sh\n").unwrap();
-    let mode = std::os::unix::fs::PermissionsExt::from_mode(0o755);
-    fs::set_permissions(dir.join("run.sh"), mode).unwrap();
-    std::os::unix::fs::symlink("b.txt", dir.join("alias")).unwrap();
     git(dir, &["add", "."]);
+    git(dir, &["update-index", "--chmod=+x", "--", "run.sh"]);
+    stage_symlink(dir, "b.txt", "alias").unwrap();
     git(
         dir,
         &[

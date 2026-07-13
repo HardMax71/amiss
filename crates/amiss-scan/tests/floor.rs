@@ -1,9 +1,8 @@
-#![cfg(unix)]
-
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use amiss_fixtures::stage_symlink;
 use amiss_git::Repository;
 use amiss_scan::SetupShell;
 use amiss_scan::pipeline::commit_pair;
@@ -20,7 +19,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
@@ -262,8 +261,8 @@ fn floor_inventory_and_protected_paths_emit_control_findings() {
     fs::write(root.join("README.md"), "stable\n").unwrap();
     fs::write(root.join(".github/workflows/scan.yml"), "on: push\n").unwrap();
     fs::write(root.join("assets.bin"), [0_u8, 1, 2]).unwrap();
-    std::os::unix::fs::symlink("README.md", root.join("link.md")).unwrap();
     git(root, &["add", "."]);
+    stage_symlink(root, "README.md", "link.md").unwrap();
     git(root, &["commit", "-qm", "base"]);
     fs::write(
         root.join(".github/workflows/scan.yml"),

@@ -67,6 +67,7 @@ fn main() -> ExitCode {
 
 const EVALUATOR_SENTINEL: &str = "AMISS_WRAPPER_EVALUATOR";
 const WATCHDOG_CEILING: std::time::Duration = std::time::Duration::from_mins(2);
+#[cfg(unix)]
 const SANDBOX_MEMORY_BYTES: u64 = 1_073_741_824;
 
 struct Args {

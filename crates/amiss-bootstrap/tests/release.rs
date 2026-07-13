@@ -1,4 +1,3 @@
-#![cfg(unix)]
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -27,7 +26,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
@@ -153,11 +152,10 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
     fs::write(root.join("dist/launcher.js"), &launcher).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();
     fs::write(root.join("Cargo.lock"), &lock).unwrap();
-    executable(&root.join(&binary_path));
-
     mutate(root);
 
     git(root, &["add", "-A"]);
+    executable(root, &binary_path);
     git(root, &["commit", "-qm", "release"]);
     let commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let tree = git(root, &["rev-parse", "HEAD^{tree}"]).trim().to_owned();
@@ -171,9 +169,15 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
     }
 }
 
-fn executable(path: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+/// The engine's tree entry must be mode 100755. The bit is set on the index
+/// entry, after staging: unix carries it in the worktree, which `git add`
+/// reads and would otherwise overwrite, and Windows has no such bit at all. A
+/// mutation that replaces the engine with something other than a regular file
+/// has no executable bit to set, and says so by leaving the entry alone.
+fn executable(root: &Path, path: &str) {
+    if fs::symlink_metadata(root.join(path)).is_ok_and(|entry| entry.is_file()) {
+        git(root, &["update-index", "--chmod=+x", "--", path]);
+    }
 }
 
 fn string(text: &str) -> Value {
@@ -266,6 +270,10 @@ fn a_bootstrap_whose_bytes_differ_refuses_before_anything_else() {
     assert_eq!(outcome.err(), Some(Refusal::BootstrapDigest));
 }
 
+/// A file that is a symlink, which only a privileged Windows process can
+/// create. The directory sides of the same law run on every platform, in
+/// `amiss-git`'s `boundary.rs`.
+#[cfg(unix)]
 #[test]
 fn a_symlinked_engine_path_refuses() {
     let release = release(|root| {
@@ -345,8 +353,8 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     fs::write(root.join("release-manifest.json"), &manifest_bytes).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();
     fs::write(root.join("Cargo.lock"), &lock).unwrap();
-    executable(&root.join(&binary_path));
     git(root, &["add", "-A"]);
+    executable(root, &binary_path);
     git(root, &["commit", "-qm", "mismatched"]);
 
     let release = Release {

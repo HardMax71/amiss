@@ -1,15 +1,13 @@
 use std::fs::File;
 use std::io::Read as _;
-use std::os::fd::OwnedFd;
 use std::path::Path;
 use std::sync::OnceLock;
 
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{ObjectFormat, Oid};
-use rustix::fs::{Mode, OFlags, openat};
-use rustix::io::Errno;
 
 use crate::Error;
+use crate::handle::{open_dir, open_file, open_root};
 use crate::object::{Object, ObjectKind, decode_loose, discard_to_unreadable, hex, verify_oid};
 use crate::pack::{
     self, PackSet, apply_delta, inflate_exact, kind_of, parse_entry_header, parse_ofs_distance,
@@ -18,22 +16,10 @@ use crate::resources::{GitResources, ValueCap, crossing};
 
 #[derive(Debug)]
 pub struct Repository {
-    git_dir: OwnedFd,
-    objects: OwnedFd,
+    git_dir: File,
+    objects: File,
     object_format: ObjectFormat,
     packs: OnceLock<Result<PackSet, Error>>,
-}
-
-fn dir_flags() -> OFlags {
-    OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::DIRECTORY | OFlags::CLOEXEC
-}
-
-fn file_flags() -> OFlags {
-    OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC
-}
-
-fn unavailable(_errno: Errno) -> Error {
-    Error::RepositoryUnavailable
 }
 
 impl Repository {
@@ -46,12 +32,13 @@ impl Repository {
     /// `RepositoryUnavailable` for a bare repository, `.git` file, symlink,
     /// or missing primary object database.
     pub fn open(root: &Path, object_format: ObjectFormat) -> Result<Self, Error> {
-        let root_fd = rustix::fs::open(root, dir_flags(), Mode::empty()).map_err(unavailable)?;
-        let git_fd = openat(&root_fd, ".git", dir_flags(), Mode::empty()).map_err(unavailable)?;
+        let root_dir = open_root(root)?;
+        let git_dir =
+            open_dir(&root_dir, ".git").map_err(|_defect| Error::RepositoryUnavailable)?;
         let objects =
-            openat(&git_fd, "objects", dir_flags(), Mode::empty()).map_err(unavailable)?;
+            open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?;
         Ok(Self {
-            git_dir: git_fd,
+            git_dir,
             objects,
             object_format,
             packs: OnceLock::new(),
@@ -124,21 +111,13 @@ impl Repository {
         let hex_text = oid.as_str();
         let fan = hex_text.get(..2).ok_or(Error::ObjectUnreadable)?;
         let rest = hex_text.get(2..).ok_or(Error::ObjectUnreadable)?;
-        let fan_fd = match openat(&self.objects, fan, dir_flags(), Mode::empty()) {
-            Ok(fd) => fd,
-            Err(errno) if errno == Errno::NOENT => {
-                return self.read_packed(resources, oid, depth, value_cap);
-            }
-            Err(_) => return Err(Error::ObjectUnreadable),
+        let Some(fan_dir) = absent_to_none(open_dir(&self.objects, fan))? else {
+            return self.read_packed(resources, oid, depth, value_cap);
         };
-        let file_fd = match openat(&fan_fd, rest, file_flags(), Mode::empty()) {
-            Ok(fd) => fd,
-            Err(errno) if errno == Errno::NOENT => {
-                return self.read_packed(resources, oid, depth, value_cap);
-            }
-            Err(_) => return Err(Error::ObjectUnreadable),
+        let Some(loose) = absent_to_none(open_file(&fan_dir, rest))? else {
+            return self.read_packed(resources, oid, depth, value_cap);
         };
-        self.decode(resources, oid, file_fd, value_cap)
+        self.decode(resources, oid, loose, value_cap)
     }
 
     fn pack_set(&self, resources: &mut GitResources) -> Result<&PackSet, Error> {
@@ -261,13 +240,8 @@ impl Repository {
     /// `IndexInvalid` for a missing or non-ordinary entry, and the
     /// `git-index-bytes` crossing for an oversized one.
     pub fn read_index_bytes(&self, resources: &mut GitResources) -> Result<Vec<u8>, Error> {
-        let fd = openat(&self.git_dir, "index", file_flags(), Mode::empty())
-            .map_err(|_errno| Error::IndexInvalid)?;
-        let file = File::from(fd);
+        let file = open_file(&self.git_dir, "index").map_err(|_defect| Error::IndexInvalid)?;
         let metadata = file.metadata().map_err(|_defect| Error::IndexInvalid)?;
-        if !metadata.file_type().is_file() {
-            return Err(Error::IndexInvalid);
-        }
         let cap = resources.limits().index_bytes;
         if metadata.len() > cap {
             return Err(crossing(ResourceName::GitIndexBytes, cap, metadata.len()));
@@ -297,8 +271,8 @@ impl Repository {
         let hex_text = oid.as_str();
         let fan = hex_text.get(..2).ok_or(Error::ObjectUnreadable)?;
         let rest = hex_text.get(2..).ok_or(Error::ObjectUnreadable)?;
-        if let Ok(fan_fd) = openat(&self.objects, fan, dir_flags(), Mode::empty())
-            && openat(&fan_fd, rest, file_flags(), Mode::empty()).is_ok()
+        if let Ok(fan_dir) = open_dir(&self.objects, fan)
+            && open_file(&fan_dir, rest).is_ok()
         {
             return Ok(true);
         }
@@ -368,14 +342,10 @@ impl Repository {
         &self,
         resources: &mut GitResources,
         oid: &Oid,
-        fd: OwnedFd,
+        file: File,
         value_cap: Option<&ValueCap>,
     ) -> Result<Object, Error> {
-        let file = File::from(fd);
         let metadata = file.metadata().map_err(discard_to_unreadable)?;
-        if !metadata.file_type().is_file() {
-            return Err(Error::ObjectUnreadable);
-        }
         resources.charge_compressed(oid.as_str(), metadata.len())?;
 
         let stream_cap = resources.limits().compressed_stream_bytes;
@@ -398,6 +368,17 @@ impl Repository {
             resources.limits().inflated_object_bytes,
             value_cap,
         )
+    }
+}
+
+/// An entry that is simply absent falls through to the pack lookup; a
+/// present but refused entry (a symlink, a directory where a file belongs) is
+/// an unreadable object, never a silent miss.
+fn absent_to_none(opened: std::io::Result<File>) -> Result<Option<File>, Error> {
+    match opened {
+        Ok(file) => Ok(Some(file)),
+        Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_defect) => Err(Error::ObjectUnreadable),
     }
 }
 

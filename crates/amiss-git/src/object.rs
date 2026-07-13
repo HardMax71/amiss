@@ -27,7 +27,6 @@ impl ObjectKind {
         }
     }
 
-    #[cfg(unix)]
     pub(crate) const fn from_pack_type(code: u8) -> Option<Self> {
         match code {
             1 => Some(Self::Commit),

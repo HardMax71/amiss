@@ -1,10 +1,8 @@
-#![cfg(unix)]
-
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::process::Command;
 
+use amiss_fixtures::stage_symlink;
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{DocumentStatus, Error, ScanLimits, ScanResources, UnsupportedKind, discover};
 use amiss_wire::controls::ResourceName;
@@ -17,7 +15,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
@@ -56,8 +54,8 @@ fn fixture() -> TempDir {
     fs::write(root.join("vendor/skip.md"), "[v](x)\n").unwrap();
     fs::write(root.join("llms.txt"), "plain advisory body\n").unwrap();
     fs::write(root.join("pointer.md"), POINTER).unwrap();
-    symlink("README", root.join("linked.md")).unwrap();
     git(root, &["add", "."]);
+    stage_symlink(root, "README", "linked.md").unwrap();
     git(
         root,
         &[

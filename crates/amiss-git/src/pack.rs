@@ -2,16 +2,13 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read as _;
 use std::ops::Bound;
-use std::os::fd::OwnedFd;
-use std::os::unix::fs::FileExt as _;
 
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::ObjectFormat;
 use flate2::bufread::ZlibDecoder;
-use rustix::fs::{Mode, OFlags, openat};
-use rustix::io::Errno;
 
 use crate::Error;
+use crate::handle::{names, open_dir, open_file, read_exact_at};
 use crate::object::{ObjectKind, discard_to_unreadable, ordinary_digest};
 use crate::resources::{GitResources, ValueCap, crossing};
 
@@ -40,14 +37,6 @@ struct ParsedIndex {
     stored_pack_checksum: Vec<u8>,
 }
 
-fn dir_flags() -> OFlags {
-    OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::DIRECTORY | OFlags::CLOEXEC
-}
-
-fn file_flags() -> OFlags {
-    OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC
-}
-
 fn oid_width(object_format: ObjectFormat) -> usize {
     match object_format {
         ObjectFormat::Sha1 => 20,
@@ -56,31 +45,25 @@ fn oid_width(object_format: ObjectFormat) -> usize {
 }
 
 pub(crate) fn build(
-    objects: &OwnedFd,
+    objects: &File,
     object_format: ObjectFormat,
     resources: &mut GitResources,
 ) -> Result<PackSet, Error> {
-    let pack_dir = match openat(objects, "pack", dir_flags(), Mode::empty()) {
-        Ok(fd) => fd,
-        Err(errno) if errno == Errno::NOENT => {
+    let mut pack_dir = match open_dir(objects, "pack") {
+        Ok(dir) => dir,
+        Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => {
             return Ok(PackSet {
                 packs: Vec::new(),
                 index_sizes: Vec::new(),
             });
         }
-        Err(_) => return Err(Error::ObjectUnreadable),
+        Err(_defect) => return Err(Error::ObjectUnreadable),
     };
 
     let limits = resources.limits();
-    let mut names: Vec<Vec<u8>> = Vec::new();
+    let mut entries: Vec<Vec<u8>> = Vec::new();
     let mut seen: u64 = 0;
-    let dir = rustix::fs::Dir::read_from(&pack_dir).map_err(discard_to_unreadable)?;
-    for entry in dir {
-        let entry = entry.map_err(discard_to_unreadable)?;
-        let name = entry.file_name().to_bytes().to_vec();
-        if name == b"." || name == b".." {
-            continue;
-        }
+    for name in names(&mut pack_dir).map_err(discard_to_unreadable)? {
         seen = seen.saturating_add(1);
         if seen > limits.pack_directory_entries {
             return Err(crossing(
@@ -89,13 +72,13 @@ pub(crate) fn build(
                 seen,
             ));
         }
-        names.push(name);
+        entries.push(name.into_bytes());
     }
-    names.sort_unstable();
+    entries.sort_unstable();
 
     let hex_len = oid_width(object_format).saturating_mul(2);
     let mut pairs: BTreeMap<String, (bool, bool)> = BTreeMap::new();
-    for name in &names {
+    for name in &entries {
         let Some((hex_part, is_pack)) = classify(name, hex_len) else {
             continue;
         };
@@ -146,23 +129,14 @@ fn classify(name: &[u8], hex_len: usize) -> Option<(String, bool)> {
 }
 
 fn load_pack(
-    pack_dir: &OwnedFd,
+    pack_dir: &File,
     object_format: ObjectFormat,
     resources: &mut GitResources,
     name_hex: &str,
 ) -> Result<(Pack, u64), Error> {
-    let idx_fd = openat(
-        pack_dir,
-        format!("pack-{name_hex}.idx"),
-        file_flags(),
-        Mode::empty(),
-    )
-    .map_err(discard_to_unreadable)?;
-    let idx_file = File::from(idx_fd);
+    let idx_file =
+        open_file(pack_dir, &format!("pack-{name_hex}.idx")).map_err(discard_to_unreadable)?;
     let idx_meta = idx_file.metadata().map_err(discard_to_unreadable)?;
-    if !idx_meta.file_type().is_file() {
-        return Err(Error::ObjectUnreadable);
-    }
     resources.charge_index(name_hex, idx_meta.len())?;
     let mut idx_bytes = Vec::new();
     let cap = resources.limits().pack_index_bytes;
@@ -179,18 +153,9 @@ fn load_pack(
     }
     let parsed = parse_index(&idx_bytes, object_format)?;
 
-    let pack_fd = openat(
-        pack_dir,
-        format!("pack-{name_hex}.pack"),
-        file_flags(),
-        Mode::empty(),
-    )
-    .map_err(discard_to_unreadable)?;
-    let file = File::from(pack_fd);
+    let file =
+        open_file(pack_dir, &format!("pack-{name_hex}.pack")).map_err(discard_to_unreadable)?;
     let meta = file.metadata().map_err(discard_to_unreadable)?;
-    if !meta.file_type().is_file() {
-        return Err(Error::ObjectUnreadable);
-    }
     let width = oid_width(object_format);
     let trailer = u64::try_from(width).unwrap_or(u64::MAX);
     let size = meta.len();
@@ -199,8 +164,7 @@ fn load_pack(
     }
 
     let mut header = [0_u8; 12];
-    file.read_exact_at(&mut header, 0)
-        .map_err(discard_to_unreadable)?;
+    read_exact_at(&file, &mut header, 0).map_err(discard_to_unreadable)?;
     let (magic, rest) = header.split_at(4);
     let (version, count_bytes) = rest.split_at(4);
     if magic != b"PACK" {
@@ -216,7 +180,7 @@ fn load_pack(
     }
 
     let mut trailer_bytes = vec![0_u8; width];
-    file.read_exact_at(&mut trailer_bytes, size.saturating_sub(trailer))
+    read_exact_at(&file, &mut trailer_bytes, size.saturating_sub(trailer))
         .map_err(discard_to_unreadable)?;
     if trailer_bytes != parsed.stored_pack_checksum {
         return Err(Error::ObjectUnreadable);
@@ -468,9 +432,7 @@ impl Pack {
         let member = format!("pack:{}:{offset}", self.name_hex);
         resources.charge_compressed(&member, length)?;
         let mut bytes = vec![0_u8; usize::try_from(length).map_err(discard_to_unreadable)?];
-        self.file
-            .read_exact_at(&mut bytes, offset)
-            .map_err(discard_to_unreadable)?;
+        read_exact_at(&self.file, &mut bytes, offset).map_err(discard_to_unreadable)?;
         if let (Some(crcs), Some(row)) = (&self.crcs, self.row_at(offset)) {
             let expected = *crcs.get(row).ok_or(Error::ObjectUnreadable)?;
             if crc32fast::hash(&bytes) != expected {

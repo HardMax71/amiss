@@ -8,13 +8,18 @@ publish.workspace = true
 amiss-wire = { path = "../amiss-wire" }
 crc32fast = "1"
 flate2 = "1"
+fs_at = "0.2"
 sha1-checked = "0.10"
 sha2.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1", features = ["fs"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
 tempfile = "3"
 
 [lints]

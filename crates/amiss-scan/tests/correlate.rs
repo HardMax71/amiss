@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use amiss_md::extract::{BlockKind, Occurrence};
 use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, Side, SourceChange, TargetChange, correlate,

@@ -1,8 +1,5 @@
-#![cfg(unix)]
-
 use std::collections::BTreeMap;
 use std::fs;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -15,7 +12,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
@@ -33,13 +30,21 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 /// One filesystem entry's complete identity: bytes for files, targets for
-/// symlinks, presence for directories. Modes are included so a permission
-/// flip counts as a change.
+/// symlinks, presence for directories. Permissions are included whole, so a
+/// permission flip counts as a change on whatever terms the platform keeps
+/// them.
 #[derive(Debug, PartialEq, Eq)]
 enum Entry {
-    File { mode: u32, digest: [u8; 32] },
-    Symlink { target: PathBuf },
-    Directory { mode: u32 },
+    File {
+        permissions: fs::Permissions,
+        digest: [u8; 32],
+    },
+    Symlink {
+        target: PathBuf,
+    },
+    Directory {
+        permissions: fs::Permissions,
+    },
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
@@ -59,12 +64,12 @@ fn snapshot(root: &Path) -> BTreeMap<PathBuf, Entry> {
             } else if metadata.is_dir() {
                 stack.push(path.clone());
                 Entry::Directory {
-                    mode: metadata.permissions().mode() & 0o7777,
+                    permissions: metadata.permissions(),
                 }
             } else {
                 let bytes = fs::read(&path).expect("read file");
                 Entry::File {
-                    mode: metadata.permissions().mode() & 0o7777,
+                    permissions: metadata.permissions(),
                     digest: Sha256::digest(&bytes).into(),
                 }
             };
@@ -200,7 +205,12 @@ fn every_command_leaves_the_repository_byte_identical() {
     }
 }
 
+/// Unix mode bits. Windows has no equivalent: the read-only attribute on a
+/// directory does not stop a process creating files inside it, so a read-only
+/// tree there would prove nothing.
+#[cfg(unix)]
 fn set_writable(root: &Path, writable: bool) {
+    use std::os::unix::fs::PermissionsExt as _;
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
@@ -231,6 +241,7 @@ fn set_writable(root: &Path, writable: bool) {
 
 /// The stronger form: the scanner completes against a repository it cannot
 /// write at all, in both commit-pair and staged-index modes.
+#[cfg(unix)]
 #[test]
 fn a_read_only_repository_scans_completely() {
     let (dir, base, candidate) = fixture(false);

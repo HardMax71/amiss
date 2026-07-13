@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -99,29 +97,6 @@ fn missing_and_unavailable_are_distinct() {
         Repository::open(&dir.path().join("nowhere"), ObjectFormat::Sha1).unwrap_err(),
         Error::RepositoryUnavailable
     );
-
-    let bare = TempDir::new().unwrap();
-    assert_eq!(
-        Repository::open(bare.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
-        "missing .git"
-    );
-
-    let filegit = TempDir::new().unwrap();
-    fs::write(filegit.path().join(".git"), "gitdir: elsewhere\n").unwrap();
-    assert_eq!(
-        Repository::open(filegit.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
-        ".git file is a linked worktree"
-    );
-
-    let symlinked = TempDir::new().unwrap();
-    std::os::unix::fs::symlink(dir.path().join(".git"), symlinked.path().join(".git")).unwrap();
-    assert_eq!(
-        Repository::open(symlinked.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
-        "symlink .git is never followed"
-    );
 }
 
 #[test]
@@ -181,7 +156,17 @@ fn rejects_corrupt_loose_objects() {
             "case {oid:?}"
         );
     }
+}
 
+/// A file that is a symlink, which only a privileged Windows process can
+/// create. The directory sides of the same law are proven on every platform in
+/// `boundary.rs`, where the links are junctions.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_loose_object_is_not_ordinary() {
+    let dir = make_repo();
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits::CONTRACT);
     let linked = write_loose(dir.path(), "blob", b"link target");
     let alias = "e".repeat(40);
     let alias_path = loose_path(dir.path(), &alias);

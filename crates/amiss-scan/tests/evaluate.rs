@@ -1,5 +1,3 @@
-#![cfg(unix)]
-
 use amiss_md::extract::BlockKind;
 use amiss_md::extract::Occurrence;
 use amiss_scan::Observation;

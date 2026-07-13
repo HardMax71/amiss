@@ -1,10 +1,8 @@
-#![cfg(unix)]
-
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::process::Command;
 
+use amiss_fixtures::stage_symlink;
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{
     GithubContext, RAW_EVIDENCE_DOMAIN, TARGET_PROJECTION_DOMAIN, TargetCache,
@@ -23,7 +21,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(args)
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
         .env("GIT_AUTHOR_NAME", "t")
         .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
         .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
@@ -50,7 +48,6 @@ fn fixture() -> TempDir {
     fs::write(root.join("README"), "root doc\n").unwrap();
     fs::write(root.join("llms.txt"), "advisory\n").unwrap();
     fs::write(root.join("pointer.bin"), POINTER).unwrap();
-    symlink("README", root.join("alias")).unwrap();
     fs::create_dir_all(root.join("docs/sub")).unwrap();
     fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
     fs::write(root.join("docs/data.json"), "{}\n").unwrap();
@@ -60,6 +57,7 @@ fn fixture() -> TempDir {
     fs::create_dir_all(root.join("vendor")).unwrap();
     fs::write(root.join("vendor/inside.md"), "hidden\n").unwrap();
     git(root, &["add", "."]);
+    stage_symlink(root, "README", "alias").unwrap();
     git(
         root,
         &[
