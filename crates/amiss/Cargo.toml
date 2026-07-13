@@ -12,6 +12,7 @@ amiss-wire = { path = "../amiss-wire" }
 
 [dev-dependencies]
 serde_json = "1"
+sha2.workspace = true
 tempfile = "3"
 
 [[test]]
@@ -21,6 +22,10 @@ path = "tests/cli.rs"
 [[test]]
 name = "invocation"
 path = "tests/invocation.rs"
+
+[[test]]
+name = "no_write"
+path = "tests/no_write.rs"
 
 [lints]
 workspace = true

@@ -39,6 +39,7 @@ dependencies = [
  "amiss-scan",
  "amiss-wire",
  "serde_json",
+ "sha2",
  "tempfile",
 ]
 
