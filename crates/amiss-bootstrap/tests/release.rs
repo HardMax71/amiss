@@ -88,6 +88,10 @@ fn engine_bytes(platform: ConstraintPlatform) -> Vec<u8> {
     bytes
 }
 
+/// The launcher this repository ships, so the closure these tests validate is
+/// the closure a release publishes, byte for byte.
+const LAUNCHER: &[u8] = include_bytes!("../../../action/launcher.js");
+
 struct Release {
     dir: TempDir,
     commit: String,
@@ -107,7 +111,7 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
     git(root, &["init", "-q"]);
 
     let binary = engine_bytes(platform);
-    let launcher = b"// experimental launcher, never executed on the required path\n".to_vec();
+    let launcher = LAUNCHER.to_vec();
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_str());
 
@@ -263,6 +267,33 @@ fn the_generated_manifest_reparses_to_its_pinned_digest() {
     );
 }
 
+/// `runs.main` is what GitHub executes if a consumer writes
+/// `uses: owner/amiss@sha`, so it is the one file in the tree that can report a
+/// result without running the engine. It may fail and it may explain itself. It
+/// may never exit 0, because a green check nobody earned is the failure this
+/// whole project exists to refuse. Node ships on every runner image the release
+/// targets, so a missing interpreter is a broken environment, not a skip.
+#[test]
+fn the_shipped_launcher_refuses_instead_of_passing() {
+    let output = Command::new("node")
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../action/launcher.js"
+        ))
+        .output()
+        .expect("node runs the launcher; every runner image ships it");
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "the launcher checked nothing, so it owes exit 2"
+    );
+    let said = String::from_utf8(output.stderr).expect("the launcher explains itself in UTF-8");
+    assert!(
+        said.contains("nothing was checked"),
+        "the refusal says what did not happen: {said}"
+    );
+}
+
 #[test]
 fn a_bootstrap_whose_bytes_differ_refuses_before_anything_else() {
     let release = release(|_root| {});
@@ -287,6 +318,68 @@ fn a_symlinked_engine_path_refuses() {
         outcome.err(),
         Some(Refusal::PathNotRegularBlob),
         "a symlink at the artifact path is never followed"
+    );
+}
+
+/// Strips every `launcher` runtime row, wherever it appears. What is left is a
+/// manifest a careless or hostile release could publish: internally consistent,
+/// correctly digested, and silent about the one file `runs.main` names.
+fn strip_launcher_rows(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            items.retain(|item| !is_launcher_row(item));
+            for item in items.iter_mut() {
+                strip_launcher_rows(item);
+            }
+        }
+        Value::Object(members) => {
+            for (_key, member) in members.iter_mut() {
+                strip_launcher_rows(member);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
+    }
+}
+
+fn is_launcher_row(value: &Value) -> bool {
+    let Value::Object(members) = value else {
+        return false;
+    };
+    members.iter().any(|(key, member)| {
+        key == "role" && matches!(member, Value::String(role) if role == "launcher")
+    })
+}
+
+/// `runs.main` is the one file a `uses:` consumer executes, and pinning its
+/// bytes is the whole reason the runtime closure exists. A manifest may not
+/// stay silent about it: the row is required, exactly one, and mode `100644`.
+/// Without this the manifest below validates clean while the launcher it points
+/// at is never resolved in the tree at all.
+#[test]
+fn a_manifest_that_omits_the_launcher_row_is_refused() {
+    let mut restripped: Option<Digest> = None;
+    let mut release = release(|root| {
+        let path = root.join("release-manifest.json");
+        let bytes = fs::read(&path).unwrap();
+        let mut value =
+            amiss_wire::json::parse(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
+                .expect("the manifest parses");
+        strip_launcher_rows(&mut value);
+        restripped = Some(amiss_wire::digest::hj(
+            amiss_wire::manifest::MANIFEST_DOMAIN,
+            &value,
+        ));
+        let mut out = canonical(&value);
+        out.push(b'\n');
+        fs::write(&path, out).unwrap();
+    });
+    release.manifest_digest = restripped.expect("the stripped manifest was digested");
+
+    let outcome = attempt(&release, BOOTSTRAP);
+    assert_eq!(
+        outcome.err(),
+        Some(Refusal::ManifestUnreadable),
+        "a manifest whose closure omits the launcher is not a manifest"
     );
 }
 
@@ -323,17 +416,26 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     git(root, &["init", "-q"]);
 
     let binary = engine_bytes(other);
+    let launcher = LAUNCHER.to_vec();
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_str());
     let mut artifacts = vec![StagedArtifact {
         platform,
         artifact_name: format!("amiss-{}", platform.as_str()),
-        files: vec![StagedFile {
-            path: binary_path.clone(),
-            role: RuntimeRole::Executable,
-            executable: true,
-            bytes: &binary,
-        }],
+        files: vec![
+            StagedFile {
+                path: binary_path.clone(),
+                role: RuntimeRole::Executable,
+                executable: true,
+                bytes: &binary,
+            },
+            StagedFile {
+                path: "dist/launcher.js".to_owned(),
+                role: RuntimeRole::Launcher,
+                executable: false,
+                bytes: &launcher,
+            },
+        ],
     }];
     let build = StagedBuild {
         engine_version: "0.1.0-experimental".to_owned(),
@@ -351,6 +453,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     )
     .unwrap();
     fs::write(root.join("release-manifest.json"), &manifest_bytes).unwrap();
+    fs::write(root.join("dist/launcher.js"), &launcher).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();
     fs::write(root.join("Cargo.lock"), &lock).unwrap();
     git(root, &["add", "-A"]);

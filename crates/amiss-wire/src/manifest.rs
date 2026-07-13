@@ -179,13 +179,22 @@ impl ReleaseArtifact {
         Some(row)
     }
 
-    /// The `launcher` row, if the artifact publishes one. The required path
-    /// never executes it.
+    /// The single `launcher` row, which the closure law requires to be a
+    /// regular mode-`100644` blob, named by the metadata's `runs.main`. The
+    /// required path never executes it. The closure pins its bytes anyway,
+    /// because `runs.main` is exactly what a `uses:` consumer would run, and a
+    /// row the manifest never mentions is a file nobody reviewed.
     #[must_use]
     pub fn launcher(&self) -> Option<&RuntimeFile> {
-        self.runtime_files
+        let mut rows = self
+            .runtime_files
             .iter()
-            .find(|file| file.role == RuntimeRole::Launcher)
+            .filter(|file| file.role == RuntimeRole::Launcher);
+        let row = rows.next()?;
+        if rows.next().is_some() || row.git_mode != GitMode::RegularFile {
+            return None;
+        }
+        Some(row)
     }
 }
 
@@ -314,7 +323,7 @@ fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
         engine_digest,
         runtime_files,
     };
-    if artifact.executable().is_none() {
+    if artifact.executable().is_none() || artifact.launcher().is_none() {
         return fail(&files_path, ErrorKind::Inconsistent);
     }
     Ok(artifact)

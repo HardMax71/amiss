@@ -136,10 +136,7 @@ pub fn validate(
     if executable_platform(&binary) != Some(platform) {
         return Err(Refusal::PlatformBinding);
     }
-    if artifact
-        .launcher()
-        .is_some_and(|row| row.path != metadata.main)
-    {
+    if artifact.launcher().ok_or(Refusal::RuntimeClosure)?.path != metadata.main {
         return Err(Refusal::ActionMetadata);
     }
 

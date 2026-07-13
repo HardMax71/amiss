@@ -67,15 +67,16 @@ jobs:
           path: engines
       - run: cargo build --release --locked -p amiss-bootstrap --bin amiss-manifest
       # The action tree is data: the canonical action.yml, the strict manifest,
-      # the never-executed launcher, and the platform binaries. The manifest
-      # builder derives every platform row from the artifact's own header.
+      # the launcher, and the platform binaries. The manifest builder derives
+      # every platform row from the artifact's own header. The launcher is a
+      # reviewed file in this repository, not a string this workflow prints,
+      # because the manifest pins its bytes and someone has to have read them.
       - shell: bash
         run: |
           set -eu
           mkdir -p action-tree/dist
           cp Cargo.lock action-tree/Cargo.lock
-          printf '// Experimental launcher. The required path never executes it.\n' \
-            > action-tree/dist/launcher.js
+          install -m 0644 action/launcher.js action-tree/dist/launcher.js
           args=""
           for binary in engines/amiss-*; do
             name="$(basename "$binary")"

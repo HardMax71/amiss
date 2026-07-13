@@ -123,6 +123,17 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
     if !engine.executable {
         return Err("the executable row is not mode 100755");
     }
+    let mut launchers = artifact
+        .files
+        .iter()
+        .filter(|file| file.role == RuntimeRole::Launcher);
+    let launcher = launchers.next().ok_or("no launcher row")?;
+    if launchers.next().is_some() {
+        return Err("more than one launcher row");
+    }
+    if launcher.executable {
+        return Err("the launcher row is not mode 100644");
+    }
     let binary_sha256 = sha256(engine.bytes);
     let engine_digest = hb(ENGINE_DOMAIN, engine.bytes);
     let tree_path = engine.path.clone();

@@ -16,7 +16,8 @@ use amiss_wire::manifest::RuntimeRole;
 /// mislabeled binary cannot enter the manifest.
 ///
 /// `amiss-manifest --tree DIR --version V --owner O --repository R
-///  --commit OID --lock PATH [--lock PATH]... --artifact PATH [...]`
+///  --commit OID --launcher PATH --lock PATH [--lock PATH]...
+///  --artifact PATH [...]`
 #[expect(clippy::print_stderr, reason = "the build tool's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
@@ -41,7 +42,7 @@ struct Args {
     commit: String,
     locks: Vec<String>,
     artifacts: Vec<String>,
-    launcher: Option<String>,
+    launcher: String,
 }
 
 fn run(args: &Args) -> Result<(), String> {
@@ -50,11 +51,7 @@ fn run(args: &Args) -> Result<(), String> {
         .iter()
         .map(|path| read_at(&args.tree, path).map(|bytes| (path.clone(), bytes)))
         .collect::<Result<_, _>>()?;
-    let launcher_bytes = args
-        .launcher
-        .as_ref()
-        .map(|path| read_at(&args.tree, path).map(|bytes| (path.clone(), bytes)))
-        .transpose()?;
+    let launcher_bytes = read_at(&args.tree, &args.launcher)?;
     let artifact_bytes: Vec<(String, Vec<u8>)> = args
         .artifacts
         .iter()
@@ -65,20 +62,20 @@ fn run(args: &Args) -> Result<(), String> {
     for (path, bytes) in &artifact_bytes {
         let platform = executable_platform(bytes)
             .ok_or_else(|| format!("{path}: the executable header names no supported platform"))?;
-        let mut files = vec![StagedFile {
-            path: path.clone(),
-            role: RuntimeRole::Executable,
-            executable: true,
-            bytes,
-        }];
-        if let Some((launcher_path, launcher)) = &launcher_bytes {
-            files.push(StagedFile {
-                path: launcher_path.clone(),
+        let files = vec![
+            StagedFile {
+                path: path.clone(),
+                role: RuntimeRole::Executable,
+                executable: true,
+                bytes,
+            },
+            StagedFile {
+                path: args.launcher.clone(),
                 role: RuntimeRole::Launcher,
                 executable: false,
-                bytes: launcher,
-            });
-        }
+                bytes: &launcher_bytes,
+            },
+        ];
         staged.push(StagedArtifact {
             platform,
             artifact_name: format!("amiss-{}", platform.as_str()),
@@ -100,15 +97,13 @@ fn run(args: &Args) -> Result<(), String> {
     let (manifest, digest) = build_manifest(&build, &mut staged).map_err(str::to_owned)?;
     std::fs::write(args.tree.join("release-manifest.json"), &manifest)
         .map_err(|defect| format!("release-manifest.json: {defect}"))?;
-    if let Some((launcher_path, _bytes)) = &launcher_bytes {
-        let metadata = action_metadata(
-            "Amiss",
-            "Documentation assurance for pull requests.",
-            launcher_path,
-        );
-        std::fs::write(args.tree.join("action.yml"), metadata)
-            .map_err(|defect| format!("action.yml: {defect}"))?;
-    }
+    let metadata = action_metadata(
+        "Amiss",
+        "Documentation assurance for pull requests.",
+        &args.launcher,
+    );
+    std::fs::write(args.tree.join("action.yml"), metadata)
+        .map_err(|defect| format!("action.yml: {defect}"))?;
     print_digest(digest.to_string().as_str());
     Ok(())
 }
@@ -157,6 +152,6 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         commit: commit?,
         locks,
         artifacts,
-        launcher,
+        launcher: launcher?,
     })
 }
