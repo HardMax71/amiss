@@ -7,7 +7,7 @@ use amiss_wire::json::Value;
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{IntentKind, ResolutionCode};
 
-use crate::discovery::SnapshotDiscovery;
+use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::classify;
 use crate::resources::ScanResources;
 use crate::{Error, lfs};
@@ -726,6 +726,49 @@ fn self_target(
     Ok((intent, row))
 }
 
+/// A resolved directory. A tree target has no content to read: it participates
+/// in structural resolution only, so it carries no digest and no availability,
+/// which is what lets an index answer for one without a tree identity.
+fn tree_row(path: &str) -> Resolution {
+    Resolution {
+        code: ResolutionCode::ExactPath,
+        path: Some(path.to_owned()),
+        entry_kind: Some(EntryKind::Tree),
+        git_mode: Some(GitMode::Tree),
+        raw_digest: None,
+        projection_digest: None,
+        content_availability: ContentAvailability::NotApplicable,
+    }
+}
+
+/// A resolved regular file, with its content read and digested under the caps.
+fn blob_row(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    path: &str,
+    mode: GitMode,
+    oid: &Oid,
+) -> Result<Resolution, Error> {
+    let content = read_target(repo, git, scan, cache, path, mode, oid)?;
+    let (raw, projection, availability) = match content {
+        Content::Ordinary { raw, projection } => {
+            (Some(raw), Some(projection), ContentAvailability::Available)
+        }
+        Content::Pointer { raw } => (Some(raw), None, ContentAvailability::LfsPointerOnly),
+    };
+    Ok(Resolution {
+        code: ResolutionCode::ExactPath,
+        path: Some(path.to_owned()),
+        entry_kind: Some(EntryKind::Blob),
+        git_mode: Some(mode),
+        raw_digest: raw,
+        projection_digest: projection,
+        content_availability: availability,
+    })
+}
+
 /// Steps four through ten: exact lookup, special entries, kind compatibility,
 /// content availability, query semantics, fragment semantics, and only then
 /// `resolved/exact-path`. Compatible entry fields survive the query and
@@ -746,11 +789,6 @@ fn lookup(
     fragment: Option<&str>,
     github_tree: bool,
 ) -> Result<Resolution, Error> {
-    let Some((mode, oid)) = snapshot.entries.get(path) else {
-        let mut row = null_row(ResolutionCode::PathNotFound);
-        row.path = Some(path.to_owned());
-        return Ok(row);
-    };
     let special = |code: ResolutionCode, entry_kind: EntryKind, mode: GitMode| Resolution {
         code,
         path: Some(path.to_owned()),
@@ -760,57 +798,39 @@ fn lookup(
         projection_digest: None,
         content_availability: ContentAvailability::NotRead,
     };
-    match mode {
-        GitMode::Symlink => {
+    let (mode, entry) = match snapshot.locate(path) {
+        None => {
+            let mut row = null_row(ResolutionCode::PathNotFound);
+            row.path = Some(path.to_owned());
+            return Ok(row);
+        }
+        Some(Located::Entry(GitMode::Symlink, _)) => {
             return Ok(special(
                 ResolutionCode::SymlinkEntry,
                 EntryKind::Symlink,
-                *mode,
+                GitMode::Symlink,
             ));
         }
-        GitMode::Gitlink => {
+        Some(Located::Entry(GitMode::Gitlink, _)) => {
             return Ok(special(
                 ResolutionCode::GitlinkEntry,
                 EntryKind::Gitlink,
-                *mode,
+                GitMode::Gitlink,
             ));
         }
-        GitMode::Tree | GitMode::RegularFile | GitMode::ExecutableFile => {}
-    }
+        Some(Located::ImpliedTree | Located::Entry(GitMode::Tree, _)) => {
+            (GitMode::Tree, tree_row(path))
+        }
+        Some(Located::Entry(mode @ (GitMode::RegularFile | GitMode::ExecutableFile), oid)) => {
+            (mode, blob_row(repo, git, scan, cache, path, mode, oid)?)
+        }
+    };
 
-    let is_tree = *mode == GitMode::Tree;
+    let is_tree = mode == GitMode::Tree;
     let compatible = match target_kind {
         TargetKind::Blob => !is_tree,
         TargetKind::Tree => is_tree,
         TargetKind::Either => true,
-    };
-    let entry = if is_tree {
-        Resolution {
-            code: ResolutionCode::ExactPath,
-            path: Some(path.to_owned()),
-            entry_kind: Some(EntryKind::Tree),
-            git_mode: Some(*mode),
-            raw_digest: None,
-            projection_digest: None,
-            content_availability: ContentAvailability::NotApplicable,
-        }
-    } else {
-        let content = read_target(repo, git, scan, cache, path, *mode, oid)?;
-        let (raw, projection, availability) = match content {
-            Content::Ordinary { raw, projection } => {
-                (Some(raw), Some(projection), ContentAvailability::Available)
-            }
-            Content::Pointer { raw } => (Some(raw), None, ContentAvailability::LfsPointerOnly),
-        };
-        Resolution {
-            code: ResolutionCode::ExactPath,
-            path: Some(path.to_owned()),
-            entry_kind: Some(EntryKind::Blob),
-            git_mode: Some(*mode),
-            raw_digest: raw,
-            projection_digest: projection,
-            content_availability: availability,
-        }
     };
     if !compatible {
         return Ok(Resolution {

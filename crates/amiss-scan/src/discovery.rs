@@ -52,6 +52,21 @@ pub struct SnapshotDiscovery {
     pub entries: BTreeMap<String, (GitMode, Oid)>,
 }
 
+/// What a path names in a snapshot.
+///
+/// A commit tree carries a directory as an entry of its own, with a mode and a
+/// tree object behind it. A Git index carries only file paths, and a directory
+/// in it is exactly a path that some entry lives under. Both snapshots are
+/// asked the same structural question, so both must answer it the same way, or
+/// the same content resolves differently through `--candidate` than through
+/// `--index`. A tree target has no content to read, so the missing tree
+/// identity is never wanted.
+#[derive(Debug)]
+pub enum Located<'snapshot> {
+    Entry(GitMode, &'snapshot Oid),
+    ImpliedTree,
+}
+
 impl SnapshotDiscovery {
     /// Whether a path is a scanned structured document on this side, which is
     /// what accepting a query requires.
@@ -62,6 +77,21 @@ impl SnapshotDiscovery {
                 && record.classification != Classification::PlainAdvisory
                 && matches!(record.status, DocumentStatus::Scanned(_))
         })
+    }
+
+    /// What this snapshot holds at `path`: an entry of its own, or a directory
+    /// implied by the entries beneath it.
+    #[must_use]
+    pub fn locate(&self, path: &str) -> Option<Located<'_>> {
+        if let Some((mode, oid)) = self.entries.get(path) {
+            return Some(Located::Entry(*mode, oid));
+        }
+        let under = format!("{path}/");
+        self.entries
+            .range(under.clone()..)
+            .next()
+            .filter(|(key, _)| key.starts_with(&under))
+            .map(|_| Located::ImpliedTree)
     }
 }
 

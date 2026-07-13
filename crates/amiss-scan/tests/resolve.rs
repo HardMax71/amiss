@@ -7,7 +7,9 @@ use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{
     GithubContext, RAW_EVIDENCE_DOMAIN, TARGET_PROJECTION_DOMAIN, TargetCache,
 };
-use amiss_scan::{Error, ScanLimits, ScanResources, SnapshotDiscovery, discover, resolve};
+use amiss_scan::{
+    Error, ScanLimits, ScanResources, SnapshotDiscovery, discover, discover_index, resolve,
+};
 use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
@@ -588,4 +590,79 @@ fn ambiguous_trusted_splits_are_version_scope_with_null_fields() {
     assert_eq!(intent.kind, IntentKind::Unsupported);
     assert_eq!(row.code, ResolutionCode::UnsupportedVersionScope);
     assert_eq!(row.path, None);
+}
+
+/// The same content must resolve the same way whichever candidate mode names
+/// it. A commit tree carries a directory as an entry of its own; a Git index
+/// carries only file paths, and a directory in it is exactly a path that some
+/// entry lives under. An exact-entry lookup therefore saw directories in one
+/// snapshot and not the other, and `[dir](./sub/)` (a terminal slash, which the
+/// spec makes an authored directory hint, so `target_kind = tree`) resolved
+/// through `--candidate` and came back missing through `--index`, on identical
+/// bytes. The scanner found this in its own repository, on the `docs/spec/`
+/// link in machine-contracts.md.
+#[test]
+fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
+    let dir = fixture();
+    let hex = git(dir.path(), &["rev-parse", "HEAD^{tree}"])
+        .trim()
+        .to_owned();
+    let tree = Oid::new(ObjectFormat::Sha1, hex).unwrap();
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let includes = amiss_scan::Includes::default();
+
+    let from_tree = discover(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &tree,
+    )
+    .unwrap();
+    let bytes = repo.read_index_bytes(&mut git_resources).unwrap();
+    let index = amiss_git::parse_index_file(ObjectFormat::Sha1, &bytes).unwrap();
+    let from_index = discover_index(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &index,
+    )
+    .unwrap();
+
+    for reference in ["./sub/", "./sub", "./sub/keep.txt", "./nowhere/"] {
+        let mut cache = TargetCache::default();
+        let (tree_intent, tree_row) = resolve(
+            &repo,
+            &mut git_resources,
+            &mut scan_resources,
+            &mut cache,
+            &from_tree,
+            None,
+            "docs/guide.md",
+            false,
+            reference,
+        )
+        .unwrap();
+        let mut cache = TargetCache::default();
+        let (index_intent, index_row) = resolve(
+            &repo,
+            &mut git_resources,
+            &mut scan_resources,
+            &mut cache,
+            &from_index,
+            None,
+            "docs/guide.md",
+            false,
+            reference,
+        )
+        .unwrap();
+        assert_eq!(tree_intent, index_intent, "intent for {reference}");
+        assert_eq!(
+            tree_row, index_row,
+            "the index and the commit hold the same content, so {reference} resolves the same"
+        );
+    }
 }
