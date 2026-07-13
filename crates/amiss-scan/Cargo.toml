@@ -16,7 +16,7 @@ amiss-wire = { path = "../amiss-wire" }
 amiss-fixtures = { path = "../amiss-fixtures" }
 divan = "0.1.21"
 dhat = "0.3"
-jsonschema = "0.26"
+jsonschema = { version = "0.26", default-features = false, features = ["resolve-file"] }
 serde_json = "1"
 stats_alloc = "0.1.10"
 tempfile = "3"
