@@ -69,6 +69,21 @@ fn fixture() -> TempDir {
             "160000,0123456789012345678901234567890123456789,module",
         ],
     );
+    // Staged as exact bytes rather than written to disk, because a macOS worktree
+    // would hand back the decomposed spelling and the fixture would be testing the
+    // filesystem instead of the resolver.
+    let blob = git(root, &["rev-parse", ":docs/sub/keep.txt"])
+        .trim()
+        .to_owned();
+    git(
+        root,
+        &[
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            &format!("100644,{blob},docs/\u{e9}t\u{e9}.txt"),
+        ],
+    );
     git(root, &["commit", "-qm", "fixture"]);
     dir
 }
@@ -204,6 +219,14 @@ fn native_paths_decode_once_and_stay_contained() {
     assert_eq!(bed.code("./guide.md"), ResolutionCode::ExactPath);
     assert_eq!(bed.code("%2E%2E/README"), ResolutionCode::ExactPath);
     assert_eq!(bed.code("absent.md"), ResolutionCode::PathNotFound);
+
+    // `%25` decodes to a literal `%` and stops there. A second pass is what turns
+    // `%252E%252E/` into `../` and `%252F` into a separator, so the whole defence
+    // is that the pass never happens: each of these is a filename with per cent
+    // signs in it, and none of them is a path.
+    assert_eq!(bed.code("%252E%252E/README"), ResolutionCode::PathNotFound);
+    assert_eq!(bed.code("docs%252Fguide.md"), ResolutionCode::PathNotFound);
+    assert_eq!(bed.code("a%252Fb.md"), ResolutionCode::PathNotFound);
 }
 
 #[test]
@@ -665,4 +688,32 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
             "the index and the commit hold the same content, so {reference} resolves the same"
         );
     }
+}
+
+/// A Git tree names its entries in bytes, and the resolver compares them as bytes.
+/// It does not case-fold, and it does not normalize Unicode, so `Guide.md` is not
+/// `guide.md` and the precomposed spelling of an accent is not the decomposed one.
+/// Both temptations lead the same way: fold either, and a reference that points at
+/// nothing starts resolving against a file that merely looks like its target, which
+/// retires a real broken link into a silent pass. The risk is not theoretical. This
+/// suite runs on macOS, whose filesystem case-folds and hands back decomposed names,
+/// so a resolver that ever reached for the disk instead of the tree would go green
+/// there and stay red nowhere.
+#[test]
+fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
+    let mut bed = bed();
+
+    assert_eq!(bed.code("guide.md"), ResolutionCode::ExactPath);
+    assert_eq!(bed.code("Guide.md"), ResolutionCode::PathNotFound);
+    assert_eq!(bed.code("GUIDE.MD"), ResolutionCode::PathNotFound);
+    assert_eq!(bed.code("../README"), ResolutionCode::ExactPath);
+    assert_eq!(bed.code("../readme"), ResolutionCode::PathNotFound);
+
+    // U+00E9, the precomposed accent the tree actually carries.
+    assert_eq!(bed.code("\u{e9}t\u{e9}.txt"), ResolutionCode::ExactPath);
+    // The same two accents decomposed into e + U+0301: the same text, other bytes.
+    assert_eq!(
+        bed.code("e\u{301}te\u{301}.txt"),
+        ResolutionCode::PathNotFound
+    );
 }

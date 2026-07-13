@@ -277,3 +277,43 @@ fn an_opaque_only_mdx_document_reports_both_its_silence_and_its_opacity() {
         "and it says why it extracted nothing: {emitted:?}"
     );
 }
+
+/// Raw HTML is opaque, and a report that stays quiet about it is claiming coverage
+/// it does not have. A `<div>` can wrap anything, including references this scanner
+/// will never see, so the honest answer is a row saying there is a region it could
+/// not read into. The MDX half of that promise is tested above. The HTML half emits
+/// `opaque-html-region`, and nothing exercised it, which is exactly how a finding
+/// kind stops being emitted without anyone noticing.
+#[test]
+fn a_document_with_raw_html_reports_the_regions_it_cannot_see_into() {
+    let (built, payload) = scan(|root| {
+        fs::write(root.join("guide.md"), "# Guide\n").unwrap();
+        fs::write(
+            root.join("page.md"),
+            "# Page\n\n<div class=\"card\">\n\n[visible](guide.md)\n\n</div>\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+    });
+    complete(&built, &payload);
+
+    assert_eq!(
+        count(&payload, "documents", "opaque_html_documents"),
+        1,
+        "the document carrying raw HTML is counted once"
+    );
+    assert!(
+        count(&payload, "documents", "opaque_html_regions") > 0,
+        "the regions it could not see into are counted"
+    );
+    assert!(
+        count(&payload, "documents", "opaque_html_bytes") > 0,
+        "so are the bytes inside them"
+    );
+
+    let emitted = kinds(&payload);
+    assert!(
+        emitted.contains(&"opaque-html-region".to_owned()),
+        "the scan says out loud that it could not read the HTML: {emitted:?}"
+    );
+}

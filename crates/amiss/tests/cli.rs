@@ -714,3 +714,129 @@ fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
         "the bytes the binary printed are a schema-clean report"
     );
 }
+
+/// The README promises that a document Amiss cannot decode fails the run instead of
+/// vanishing from it, and that promise is the whole product: a checker that quietly
+/// skips what it cannot read reports a success it never earned. Every piece of this
+/// was tested at its own layer and the pieces were never joined, so nothing drove a
+/// repository holding an undecodable document through the command and looked at what
+/// came back. What comes back is nothing: the document is named in a retained error,
+/// the run is incomplete, and the exit is 2.
+#[test]
+fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(
+        root.join("docs/bad.md"),
+        b"# Bad \xff\xfe\n\n[x](../README.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "an unreadable document is not a passing observe run"
+    );
+    let payload = payload(&stdout);
+    assert_eq!(payload["result"]["complete"], false);
+    assert_eq!(payload["result"]["status"], "incomplete");
+    let errors = payload["errors"].as_array().unwrap();
+    let invalid = errors
+        .iter()
+        .find(|error| error["code"] == "DOCUMENT_INVALID")
+        .expect("the document it could not decode is disclosed");
+    assert_eq!(
+        invalid["path"], "docs/bad.md",
+        "the error names the document, not just the failure"
+    );
+}
+
+/// Reformatting a file a document points at changes the target's bytes and nothing
+/// else. Amiss has no opinion about whether the prose is now wrong, and it must not
+/// grow one: the raw digest moved, the block that references it did not, and that is
+/// the entire claim. So the impact is advisory. It stays a warning under enforce,
+/// where a broken reference in the same run would exit 1, and it is attributed to
+/// nobody. Getting this wrong in the other direction is what makes a documentation
+/// checker unusable, because every whitespace commit would start failing builds.
+#[test]
+fn a_formatting_only_change_to_a_target_is_advisory_and_never_a_verdict() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(
+        root.join("README.md"),
+        "# R\n\nSee [the source](target.txt).\n",
+    )
+    .unwrap();
+    fs::write(root.join("target.txt"), "line one\nline two\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // Whitespace only: a blank line between the two, and not one word touched.
+    fs::write(root.join("target.txt"), "line one\n\nline two\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+
+    assert_eq!(code, 0, "reformatting a target does not fail a build");
+    let payload = payload(&stdout);
+    let findings = payload["findings"].as_array().unwrap();
+    let raw = findings
+        .iter()
+        .find(|finding| finding["kind"] == "dependency-changed-subject-unchanged")
+        .expect("the target moved under the document and the report says so");
+    assert_eq!(
+        raw["effective_disposition"], "warn",
+        "advisory under enforce, which is the strictest profile there is"
+    );
+    assert_eq!(
+        raw["attribution"], "not-applicable",
+        "it accuses nobody: the bytes moved, and that is all anyone knows"
+    );
+    assert_eq!(payload["summary"]["findings"]["fail"], 0);
+}

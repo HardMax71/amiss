@@ -193,3 +193,178 @@ fn an_untracked_file_cannot_satisfy_an_index_mode_reference() {
         "an untracked file is not a document either: {documents:?}"
     );
 }
+
+/// Runs a repository whose tree and index both carry one entry named `name`,
+/// alongside two documents the scanner can read.
+#[cfg(unix)]
+fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
+    use std::io::Write as _;
+
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // The name never crosses argv or the filesystem: it goes to git as raw bytes
+    // on stdin, which is the only way to stage one no operating system would keep.
+    let git_stdin = |args: &[&str], input: &[u8]| -> String {
+        let mut child = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", root.join("absent-global-config"))
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn git");
+        child
+            .stdin
+            .as_mut()
+            .expect("git stdin")
+            .write_all(input)
+            .expect("write git stdin");
+        let out = child.wait_with_output().expect("git output");
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).expect("git stdout utf-8")
+    };
+
+    let blob = git_stdin(&["hash-object", "-w", "--stdin"], b"# Hidden\n")
+        .trim()
+        .to_owned();
+    let mut spec = Vec::new();
+    spec.extend_from_slice(b"100644 ");
+    spec.extend_from_slice(blob.as_bytes());
+    spec.push(b'\t');
+    spec.extend_from_slice(name);
+    spec.push(0);
+    git_stdin(&["update-index", "--add", "--index-info"], &spec);
+
+    let tree = git(root, &["write-tree"]).trim().to_owned();
+    let candidate = git(
+        root,
+        &["commit-tree", &tree, "-p", &base, "-m", "candidate"],
+    )
+    .trim()
+    .to_owned();
+    let repo = root.to_str().unwrap().to_owned();
+    let (code, stdout) = if index_mode {
+        amiss(&[
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &base,
+            "--index",
+            "--profile",
+            "observe",
+            "--format",
+            "json",
+        ])
+    } else {
+        amiss(&[
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &base,
+            "--candidate",
+            &candidate,
+            "--profile",
+            "observe",
+            "--format",
+            "json",
+        ])
+    };
+    (code, payload(&stdout))
+}
+
+/// A repository can try to hide a document by giving it a name the scanner has no
+/// way to write down: bytes that are not UTF-8, or a path `RepoPath` refuses, such
+/// as one carrying a backslash. Dropping that entry quietly would be the worst bug
+/// this tool could have, because the report would come back complete and passing
+/// with a document simply absent from it, and the absence is the thing nobody can
+/// see. So there is no report at all: the path defect is a retained analysis error,
+/// the run is incomplete, and the exit is 2. The fixtures are Unix-only because
+/// they stage a name no Windows checkout would carry; the discovery code they
+/// exercise has no platform in it.
+#[cfg(unix)]
+#[test]
+fn a_document_the_scanner_cannot_name_is_refused_rather_than_dropped() {
+    for name in [
+        b"docs\\hidden.md".as_slice(),
+        b"docs/bad-\xff-name.md".as_slice(),
+    ] {
+        for index_mode in [false, true] {
+            let (code, payload) = hidden_entry(name, index_mode);
+            let where_from = if index_mode { "index" } else { "tree" };
+            assert_eq!(
+                code, 2,
+                "{where_from}: an unnameable document is not a pass"
+            );
+            assert_eq!(payload["result"]["complete"], false, "{where_from}");
+            assert_eq!(payload["result"]["status"], "incomplete", "{where_from}");
+            let codes: Vec<&str> = payload["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|error| error["code"].as_str().unwrap())
+                .collect();
+            assert!(
+                codes.contains(&"UNREPRESENTABLE_PATH"),
+                "{where_from}: the defect is disclosed, not swallowed: {codes:?}"
+            );
+            assert!(
+                payload["documents"].as_array().unwrap().is_empty(),
+                "{where_from}: an incomplete run publishes no document set to mistake for coverage"
+            );
+        }
+    }
+}
+
+/// The other way out of the path domain is length. `RepoPath` stops at 4,096 bytes,
+/// the snapshot charges a raw-path budget with the same ceiling, and Git will carry
+/// a name longer than either. The budget is charged first, so the answer is not a
+/// bare refusal but a crossing that names the resource and both numbers, and the run
+/// is still incomplete with nothing to mistake for a result.
+#[cfg(unix)]
+#[test]
+fn a_path_longer_than_the_domain_allows_is_a_charged_crossing_not_a_silent_skip() {
+    let long = format!("docs/{}.md", "x".repeat(5000));
+    let (code, payload) = hidden_entry(long.as_bytes(), false);
+
+    assert_eq!(code, 2, "an over-long path is not a passing run");
+    assert_eq!(payload["result"]["complete"], false);
+    let errors = payload["errors"].as_array().unwrap();
+    let crossing = errors
+        .iter()
+        .find(|error| error["code"] == "RESOURCE_LIMIT_EXCEEDED")
+        .expect("the crossing is disclosed");
+    assert_eq!(crossing["resource"], "raw-path-bytes");
+    assert_eq!(crossing["configured_limit"], 4096);
+    assert!(
+        crossing["observed_lower_bound"].as_u64().unwrap() > 4096,
+        "the crossing reports how far over it went"
+    );
+    assert!(
+        payload["documents"].as_array().unwrap().is_empty(),
+        "an incomplete run publishes no document set to mistake for coverage"
+    );
+}
