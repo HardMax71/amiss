@@ -4,16 +4,30 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lib]
+bench = false
+
 [dependencies]
 amiss-git = { path = "../amiss-git" }
 amiss-md = { path = "../amiss-md" }
 amiss-wire = { path = "../amiss-wire" }
 
 [dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+dhat = "0.3"
 jsonschema = "0.26"
 serde_json = "1"
 stats_alloc = "0.1.10"
 tempfile = "3"
+
+[[bench]]
+name = "adapters"
+harness = false
+
+[[bench]]
+name = "pipeline"
+harness = false
 
 [lints]
 workspace = true

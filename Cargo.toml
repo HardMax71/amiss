@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/amiss", "crates/amiss-git", "crates/amiss-md", "crates/amiss-scan", "crates/amiss-wire", "crates/amiss-wrapper"]
+members = ["crates/amiss", "crates/amiss-fixtures", "crates/amiss-git", "crates/amiss-md", "crates/amiss-scan", "crates/amiss-wire", "crates/amiss-wrapper"]
 exclude = ["fuzz"]
 
 [workspace.package]

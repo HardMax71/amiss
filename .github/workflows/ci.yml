@@ -36,6 +36,7 @@ jobs:
           restore-keys: gates-
       - run: prek run --all-files
       - run: prek run --all-files --hook-stage pre-push
+      - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
 
   fuzz-smoke:
     runs-on: ubuntu-latest
@@ -87,6 +88,7 @@ jobs:
           key: platform-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock') }}
           restore-keys: platform-${{ runner.os }}-
       - run: cargo nextest run --workspace --locked
+      - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
       - run: cargo test --locked --release
         working-directory: fuzz
 
