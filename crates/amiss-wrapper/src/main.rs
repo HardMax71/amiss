@@ -20,7 +20,8 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::canonical;
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, ErrorDetail, unavailable_evaluation_wire,
+    AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer,
+    unavailable_evaluation_envelope,
 };
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
@@ -34,6 +35,7 @@ use amiss_wire::requests::{
 /// and publishes it. Nothing on this lane is a required check.
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn main() -> ExitCode {
+    let mut reserve = FatalSerializer::new();
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
@@ -46,17 +48,17 @@ fn main() -> ExitCode {
     let Ok(parsed) = parse_args(&argv) else {
         let codes: BTreeSet<AnalysisErrorCode> =
             [AnalysisErrorCode::InvalidInvocation].into_iter().collect();
-        let Some(wire) = unavailable_evaluation_wire(&engine, &codes, None, None) else {
+        let Some(envelope) = unavailable_evaluation_envelope(&engine, &codes, None, None) else {
             eprintln!(
                 "amiss-wrapper: {}",
                 AnalysisErrorCode::ReportConstructionFailed.as_str()
             );
             return failure;
         };
-        emit_to(None, &wire);
+        emit_to(None, &reserve.wire_bytes(&envelope));
         return failure;
     };
-    run(&engine, &parsed)
+    run(&engine, &parsed, &mut reserve)
 }
 
 struct Args {
@@ -447,7 +449,7 @@ fn verify_exceptions(
 
 #[cfg(unix)]
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(engine: &EngineProvenance, args: &Args) -> ExitCode {
+fn run(engine: &EngineProvenance, args: &Args, reserve: &mut FatalSerializer) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
     let captured = capture_all(args);
     let requests = match parse_requests(&captured) {
@@ -458,7 +460,13 @@ fn run(engine: &EngineProvenance, args: &Args) -> ExitCode {
             } else {
                 codes
             };
-            return request_failure(engine, &codes, &captured.digests, args.output.as_deref());
+            return request_failure(
+                engine,
+                &codes,
+                &captured.digests,
+                args.output.as_deref(),
+                reserve,
+            );
         }
     };
 
@@ -479,7 +487,14 @@ fn run(engine: &EngineProvenance, args: &Args) -> ExitCode {
     let repo = match amiss_git::Repository::open(&args.repository, evaluation.object_format) {
         Ok(repo) => repo,
         Err(defect) => {
-            return repository_failure(engine, evaluation, &captured.digests, &defect, args);
+            return repository_failure(
+                engine,
+                evaluation,
+                &captured.digests,
+                &defect,
+                args,
+                reserve,
+            );
         }
     };
     let github = build_github(evaluation);
@@ -505,6 +520,7 @@ fn run(engine: &EngineProvenance, args: &Args) -> ExitCode {
         constraint: controls.constraint,
         requests: captured.digests,
         external_defect,
+        errors_retained: 64,
     };
     let built = match (&evaluation.mode, &evaluation.candidate_commit) {
         (RequestMode::CommitPair, Some(candidate)) => amiss_scan::pipeline::commit_pair(
@@ -530,7 +546,7 @@ fn run(engine: &EngineProvenance, args: &Args) -> ExitCode {
             return failure;
         }
     };
-    publish(engine, &requests, &built, args.output.as_deref())
+    publish(engine, &requests, &built, args.output.as_deref(), reserve)
 }
 
 /// The acceptance law runs before any byte is published; a violation is a
@@ -541,6 +557,7 @@ fn publish(
     requests: &Requests,
     built: &amiss_scan::Built,
     output: Option<&Path>,
+    reserve: &mut FatalSerializer,
 ) -> ExitCode {
     let expectations = amiss_wrapper::Expectations {
         engine_digest: engine.digest.to_string(),
@@ -556,20 +573,21 @@ fn publish(
             .as_ref()
             .map(|floor| floor.expected_digest.to_string()),
     };
-    if amiss_wrapper::accept(&built.wire, &expectations).is_err() {
+    let wire = reserve.wire_bytes(&built.envelope);
+    if amiss_wrapper::accept(&wire, &expectations).is_err() {
         eprintln!(
             "amiss-wrapper: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_str()
         );
         return ExitCode::from(ExitClass::Failure.code());
     }
-    emit_to(output, &built.wire);
+    emit_to(output, &wire);
     exit_class(built.exit_code)
 }
 
 #[cfg(not(unix))]
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(_engine: &EngineProvenance, _args: &Args) -> ExitCode {
+fn run(_engine: &EngineProvenance, _args: &Args, _reserve: &mut FatalSerializer) -> ExitCode {
     eprintln!(
         "amiss-wrapper: {}",
         AnalysisErrorCode::InternalError.as_str()
@@ -583,10 +601,11 @@ fn request_failure(
     codes: &BTreeSet<AnalysisErrorCode>,
     digests: &RequestDigests,
     output: Option<&Path>,
+    reserve: &mut FatalSerializer,
 ) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
-    let Some(wire) =
-        unavailable_evaluation_wire(engine, codes, digests.evaluation, digests.controls)
+    let Some(envelope) =
+        unavailable_evaluation_envelope(engine, codes, digests.evaluation, digests.controls)
     else {
         eprintln!(
             "amiss-wrapper: {}",
@@ -594,7 +613,7 @@ fn request_failure(
         );
         return failure;
     };
-    emit_to(output, &wire);
+    emit_to(output, &reserve.wire_bytes(&envelope));
     failure
 }
 
@@ -606,6 +625,7 @@ fn repository_failure(
     digests: &RequestDigests,
     defect: &amiss_git::Error,
     args: &Args,
+    reserve: &mut FatalSerializer,
 ) -> ExitCode {
     use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
     let code = match defect {
@@ -663,7 +683,7 @@ fn repository_failure(
             resource: None,
         }],
     );
-    emit_to(args.output.as_deref(), &built.wire);
+    emit_to(args.output.as_deref(), &reserve.wire_bytes(&built.envelope));
     exit_class(built.exit_code)
 }
 

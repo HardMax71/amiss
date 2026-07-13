@@ -163,6 +163,15 @@ fn effective_limits(
     )
 }
 
+/// The shell reissued with the floor-effective error ceiling, so every
+/// fatal projection built downstream honors it.
+fn effective_shell(shell: &SetupShell, limits: &ScanLimits) -> SetupShell {
+    SetupShell {
+        errors_retained: limits.errors_retained,
+        ..shell.clone()
+    }
+}
+
 fn controls_failure(
     setup_shell: &SetupShell,
     base: SnapshotIdentity,
@@ -487,6 +496,7 @@ pub fn commit_pair(
 ) -> Built {
     let (verified_floor, floor_mismatch) = floor_gate(setup_shell);
     let (scan_limits, git_limits) = effective_limits(verified_floor);
+    let setup_shell = &effective_shell(setup_shell, &scan_limits);
     let mut git_resources = GitResources::new(git_limits);
     let trees = pair_trees(
         repo,
@@ -568,6 +578,7 @@ pub fn commit_pair(
                 CandidateBlock::Commit(candidate.identity.clone()),
             );
             setup.policy = effects;
+            setup.policy.errors_retained = setup_shell.errors_retained;
             conclude(
                 &setup,
                 (&base.discovery, &base.side),
@@ -1034,6 +1045,11 @@ pub struct SetupShell {
     /// A wrapper-established external-control defect, settled against the
     /// resolved snapshot identities exactly like a binding mismatch.
     pub external_defect: Option<(&'static str, ErrorDetail)>,
+    /// The effective typed-analysis-errors-retained ceiling `E`: the
+    /// built-in 64 until a verified floor tightens it, at which point the
+    /// pipeline re-shells with the effective value so every fatal
+    /// projection honors it.
+    pub errors_retained: u64,
 }
 
 impl SetupShell {
@@ -1046,7 +1062,10 @@ impl SetupShell {
             default_branch_ref: self.default_branch_ref.clone(),
             base,
             candidate,
-            policy: crate::policy::Effects::default(),
+            policy: crate::policy::Effects {
+                errors_retained: self.errors_retained,
+                ..crate::policy::Effects::default()
+            },
             controls_unavailable: None,
             requests: self.requests,
         }
@@ -1254,6 +1273,8 @@ pub fn staged_index(
     base_oid: &Oid,
 ) -> Built {
     let (verified_floor, floor_mismatch) = floor_gate(setup_shell);
+    let (effective_scan, _effective_git) = effective_limits(verified_floor);
+    let setup_shell = &effective_shell(setup_shell, &effective_scan);
     let StagedOpen {
         mut git_resources,
         scan_limits,
@@ -1339,6 +1360,7 @@ pub fn staged_index(
     let candidate_block = index_candidate_block(repo, base_oid, &index, skip_worktree_paths);
     let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
     setup.policy = effects;
+    setup.policy.errors_retained = setup_shell.errors_retained;
     staged_finish(
         repo,
         &mut git_resources,

@@ -1,10 +1,11 @@
-use amiss_wire::controls::ContentAvailability;
+use amiss_wire::controls::{ContentAvailability, ResourceName};
 use amiss_wire::digest::{Digest, hj};
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::json::{Value, canonical, canonical_length};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::{
-    Disposition, EngineProvenance, ErrorDetail, FindingKind, FindingScope, IntentKind,
-    PAYLOAD_SCHEMA, ResolutionStatus, engine_block, error_row_value, sandbox_descriptor,
+    AnalysisErrorCode, Disposition, EngineProvenance, ErrorDetail, FindingKind, FindingScope,
+    IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ResolutionStatus, engine_block,
+    error_row_value, sandbox_descriptor,
 };
 
 use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
@@ -126,16 +127,26 @@ pub struct Setup {
     pub requests: RequestDigests,
 }
 
-/// A constructed complete report: the envelope value, its canonical wire
-/// bytes with the trailing newline, the payload digest, and the result the
-/// process must exit with.
+/// A constructed report: the envelope value, the payload digest, and the
+/// result the process must exit with. The wire is never materialized here;
+/// a binary streams the envelope through its reserved fatal serializer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Built {
     pub envelope: Value,
-    pub wire: Vec<u8>,
     pub payload_digest: Digest,
     pub status: &'static str,
     pub exit_code: i64,
+}
+
+impl Built {
+    /// The exact report wire, `JCS(envelope) || LF`, for callers that must
+    /// hold the bytes.
+    #[must_use]
+    pub fn wire(&self) -> Vec<u8> {
+        let mut wire = canonical(&self.envelope);
+        wire.push(b'\n');
+        wire
+    }
 }
 
 fn string(text: &str) -> Value {
@@ -1338,8 +1349,11 @@ pub fn construct(
         .map(|finding| finding_value(finding, setup.enforce, &comparison_rows, &document_rows))
         .collect();
 
-    let mut governed_errors = governed_error_rows(&governed);
-    governed_errors.extend(exception_errors.iter().map(error_row_value));
+    let error_details = logical_error_set(&governed, &exception_errors);
+    if error_details.len() > error_ceiling(setup) {
+        return construct_incomplete(setup, &error_details);
+    }
+    let governed_errors: Vec<Value> = error_details.iter().map(error_row_value).collect();
     let (complete, status, exit_code) = run_result(&findings, &governed_errors);
     let finding_count = u64::try_from(finding_rows.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, comparisons, &findings, finding_count);
@@ -1352,16 +1366,13 @@ pub fn construct(
         ("controls", controls_value(setup)),
         (
             "result",
-            object(vec![
-                ("complete", Value::Bool(complete)),
-                ("status", string(status)),
-                ("exit_code", Value::Integer(exit_code)),
-                ("finding_count", integer(finding_count)),
-                (
-                    "error_count",
-                    integer(u64::try_from(governed_errors.len()).unwrap_or(u64::MAX)),
-                ),
-            ]),
+            result_value(
+                complete,
+                status,
+                exit_code,
+                finding_count,
+                u64::try_from(governed_errors.len()).unwrap_or(u64::MAX),
+            ),
         ),
         (
             "summary",
@@ -1400,28 +1411,106 @@ pub fn construct(
         ("payload", payload),
         ("payload_digest", digest_value(payload_digest)),
     ]);
-    let mut wire = canonical(&envelope);
-    wire.push(b'\n');
-    Built {
-        envelope,
-        wire,
-        payload_digest,
-        status,
-        exit_code,
-    }
+    output_gate(
+        setup,
+        error_details,
+        Built {
+            envelope,
+            payload_digest,
+            status,
+            exit_code,
+        },
+    )
 }
 
-fn governed_error_rows(governed: &[crate::evaluate::GovernedSeed]) -> Vec<Value> {
+fn result_value(
+    complete: bool,
+    status: &str,
+    exit_code: i64,
+    finding_count: u64,
+    error_count: u64,
+) -> Value {
+    object(vec![
+        ("complete", Value::Bool(complete)),
+        ("status", string(status)),
+        ("exit_code", Value::Integer(exit_code)),
+        ("finding_count", integer(finding_count)),
+        ("error_count", integer(error_count)),
+    ])
+}
+
+/// The deduplicated logical error set in canonical key order.
+fn logical_error_set(
+    governed: &[crate::evaluate::GovernedSeed],
+    exceptions: &[ErrorDetail],
+) -> Vec<ErrorDetail> {
+    let mut details = governed_details(governed);
+    details.extend(exceptions.iter().cloned());
+    details.sort();
+    details.dedup();
+    details
+}
+
+/// The counting canonical-serialization pass: a non-error envelope whose
+/// wire would exceed the reservation becomes the output-limit fatal
+/// projection carrying the exact counted length.
+fn output_gate(setup: &Setup, details: Vec<ErrorDetail>, built: Built) -> Built {
+    let wire_length = canonical_length(&built.envelope).saturating_add(1);
+    if wire_length <= MACHINE_JSON_BYTES {
+        return built;
+    }
+    let mut details = details;
+    details.push(ErrorDetail {
+        code: AnalysisErrorCode::OutputLimitExceeded,
+        path: None,
+        resource: Some((
+            ResourceName::MachineJsonBytes,
+            MACHINE_JSON_BYTES,
+            wire_length,
+        )),
+    });
+    construct_incomplete(setup, &details)
+}
+
+fn governed_details(governed: &[crate::evaluate::GovernedSeed]) -> Vec<ErrorDetail> {
     governed
         .iter()
-        .map(|seed| {
-            error_row_value(&ErrorDetail {
-                code: amiss_wire::report::AnalysisErrorCode::UnsupportedCapability,
-                path: Some(seed.document.clone()),
-                resource: None,
-            })
+        .map(|seed| ErrorDetail {
+            code: AnalysisErrorCode::UnsupportedCapability,
+            path: Some(seed.document.clone()),
+            resource: None,
         })
         .collect()
+}
+
+/// The effective typed-analysis-errors-retained ceiling `E`, defended to the
+/// schema range even if a caller-supplied value strays.
+fn error_ceiling(setup: &Setup) -> usize {
+    usize::try_from(setup.policy.errors_retained.clamp(1, 64)).unwrap_or(64)
+}
+
+/// The logical error set law: full tuples deduplicated and sorted by the
+/// canonical error key. Retains only the lowest `E` keys; on overflow the
+/// first `E - 1` ordinary errors are followed by the `TOO_MANY_ERRORS`
+/// sentinel carrying configured limit `E` and observed lower bound `E + 1`.
+fn retained_details(details: &[ErrorDetail], ceiling: usize) -> Vec<ErrorDetail> {
+    let mut sorted: Vec<ErrorDetail> = details.to_vec();
+    sorted.sort();
+    sorted.dedup();
+    if sorted.len() > ceiling {
+        sorted.truncate(ceiling.saturating_sub(1));
+        let limit = u64::try_from(ceiling).unwrap_or(64);
+        sorted.push(ErrorDetail {
+            code: AnalysisErrorCode::TooManyErrors,
+            path: None,
+            resource: Some((
+                ResourceName::TypedAnalysisErrorsRetained,
+                limit,
+                limit.saturating_add(1),
+            )),
+        });
+    }
+    sorted
 }
 
 /// A complete run passes or fails by its effective dispositions; a run with
@@ -1502,13 +1591,8 @@ fn zero_counts() -> Counts {
 /// canonical order, and exit class two.
 #[must_use]
 pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
-    let mut sorted: Vec<&ErrorDetail> = details.iter().collect();
-    sorted.sort();
-    sorted.dedup();
-    let error_rows: Vec<Value> = sorted
-        .iter()
-        .map(|detail| error_row_value(detail))
-        .collect();
+    let retained = retained_details(details, error_ceiling(setup));
+    let error_rows: Vec<Value> = retained.iter().map(error_row_value).collect();
     let error_count = u64::try_from(error_rows.len()).unwrap_or(u64::MAX);
     let analysis_errors = error_count;
     let counts = zero_counts();
@@ -1567,11 +1651,8 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
         ("payload", payload),
         ("payload_digest", digest_value(payload_digest)),
     ]);
-    let mut wire = canonical(&envelope);
-    wire.push(b'\n');
     Built {
         envelope,
-        wire,
         payload_digest,
         status: "incomplete",
         exit_code: 2,

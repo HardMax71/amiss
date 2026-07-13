@@ -23,6 +23,7 @@ pub struct ScanLimits {
     pub repository_policy_entries: u64,
     pub debt_items: u64,
     pub waiver_items: u64,
+    pub errors_retained: u64,
 }
 
 impl ScanLimits {
@@ -44,6 +45,7 @@ impl ScanLimits {
         repository_policy_entries: 100_000,
         debt_items: 100_000,
         waiver_items: 100_000,
+        errors_retained: 64,
     };
 }
 

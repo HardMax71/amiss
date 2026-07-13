@@ -2,7 +2,7 @@ use core::fmt;
 
 use sha2::{Digest as _, Sha256};
 
-use crate::json::{Value, canonical};
+use crate::json::{Sink, Value, stream};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Digest([u8; 32]);
@@ -62,9 +62,17 @@ pub fn hb(domain: &str, bytes: &[u8]) -> Digest {
 
 #[must_use]
 pub fn hj(domain: &str, value: &Value) -> Digest {
-    let mut hasher = with_domain(domain);
-    hasher.update(canonical(value));
-    Digest(hasher.finalize().into())
+    let mut sink = HashSink(with_domain(domain));
+    stream(value, &mut sink);
+    Digest(sink.0.finalize().into())
+}
+
+struct HashSink(Sha256);
+
+impl Sink for HashSink {
+    fn write(&mut self, piece: &str) {
+        self.0.update(piece.as_bytes());
+    }
 }
 
 fn with_domain(domain: &str) -> Sha256 {

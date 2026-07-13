@@ -2,7 +2,8 @@ use amiss_scan::{ScanLimits, ScanResources};
 use amiss_wire::model::{Adapter, ObjectFormat};
 
 /// Strict JSON: parsing either rejects or yields a value whose canonical
-/// form reparses to the same value, and canonicalization is idempotent.
+/// form reparses to the same value, canonicalization is idempotent, and the
+/// streaming serializer with its counting pass agrees byte for byte.
 pub fn json(bytes: &[u8]) {
     let Ok(value) = amiss_wire::json::parse(bytes) else {
         return;
@@ -14,6 +15,18 @@ pub fn json(bytes: &[u8]) {
         amiss_wire::json::canonical(&reparsed),
         canonical,
         "canonicalization is idempotent"
+    );
+    let mut streamed = String::new();
+    amiss_wire::json::stream(&value, &mut streamed);
+    assert_eq!(
+        streamed.as_bytes(),
+        canonical.as_slice(),
+        "streaming equals materialization"
+    );
+    assert_eq!(
+        amiss_wire::json::canonical_length(&value),
+        u64::try_from(canonical.len()).unwrap_or(u64::MAX),
+        "the counting pass reports the exact length"
     );
 }
 

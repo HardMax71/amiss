@@ -87,6 +87,7 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
         constraint: None,
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
+        errors_retained: 64,
     }
 }
 
@@ -116,7 +117,7 @@ fn payload(
     candidate: &Oid,
 ) -> serde_json::Value {
     let built = commit_pair(repo, &engine(), None, setup, base, candidate);
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
     )

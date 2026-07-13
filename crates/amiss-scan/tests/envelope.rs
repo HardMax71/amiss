@@ -3,15 +3,21 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use std::alloc::System;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
 use amiss_wire::digest::{hb, hj};
-use amiss_wire::json::Value;
+use amiss_wire::json::{Value, canonical_length};
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, PAYLOAD_SCHEMA, unavailable_evaluation_wire,
+    AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, FatalSerializer, PAYLOAD_SCHEMA,
+    unavailable_evaluation_wire,
 };
+use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
+
+#[global_allocator]
+static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
 const WIRE_CAP: usize = 67_108_864;
 
@@ -298,5 +304,43 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
         wire.len() < paper_bound,
         "the actual serializer stays under the paper bound: {} < {paper_bound}",
         wire.len()
+    );
+
+    prove_streamed_emission(&maximal, &wire);
+}
+
+/// The scratch-bound half of the E0 golden: the streamed emission is
+/// byte-identical to the materialized wire, the counting pass reports the
+/// exact length, and one maximal emission allocates at most the fixed
+/// scratch beyond the reserve.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn prove_streamed_emission(maximal: &Value, wire: &[u8]) {
+    assert_eq!(
+        canonical_length(maximal).saturating_add(1),
+        u64::try_from(wire.len()).unwrap(),
+        "the counting canonical-serialization pass reports the exact wire length"
+    );
+
+    let mut reserve = FatalSerializer::new();
+    let mut streamed: Vec<u8> = Vec::with_capacity(wire.len());
+    let region = Region::new(GLOBAL);
+    let emitted = reserve.emit(maximal, &mut streamed).unwrap();
+    let stats = region.change();
+    assert_eq!(
+        emitted,
+        u64::try_from(wire.len()).unwrap(),
+        "the streamed emission reports the exact wire length"
+    );
+    assert_eq!(
+        streamed, wire,
+        "the streamed wire is byte-identical to the materialized wire"
+    );
+    let scratch = stats
+        .bytes_allocated
+        .saturating_add(usize::try_from(stats.bytes_reallocated).unwrap_or(0));
+    assert!(
+        scratch <= FATAL_SCRATCH_BYTES,
+        "one maximal emission allocates at most the fixed scratch: {scratch} bytes over {} allocations",
+        stats.allocations
     );
 }

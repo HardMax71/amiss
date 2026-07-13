@@ -1,16 +1,16 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
-use std::io::Write as _;
 use std::process::ExitCode;
 
 use amiss::invocation::{self, CandidateSelector, Code, Invocation, Outcome, OutputFormat};
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
-use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail};
+use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn main() -> ExitCode {
+    let mut reserve = FatalSerializer::new();
     let argv: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();
     let failure = ExitCode::from(ExitClass::Failure.code());
     match invocation::parse(&argv) {
@@ -28,14 +28,14 @@ fn main() -> ExitCode {
             };
             let codes: BTreeSet<AnalysisErrorCode> =
                 codes.iter().map(|code| analysis_code(*code)).collect();
-            let Some(wire) = report::invocation_failure_wire(&engine, &codes) else {
+            let Some(envelope) = report::invocation_failure_envelope(&engine, &codes) else {
                 eprintln!(
                     "amiss: {}",
                     AnalysisErrorCode::ReportConstructionFailed.as_str()
                 );
                 return failure;
             };
-            emit(&wire);
+            emit(&mut reserve, &envelope);
             failure
         }
         Outcome::Rejected {
@@ -47,13 +47,13 @@ fn main() -> ExitCode {
             }
             failure
         }
-        Outcome::Accepted(invocation) => run(&invocation),
+        Outcome::Accepted(invocation) => run(&invocation, &mut reserve),
     }
 }
 
 #[cfg(unix)]
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(invocation: &Invocation) -> ExitCode {
+fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     use amiss_scan::pipeline::{SetupShell, commit_pair};
     use amiss_scan::resolve::GithubContext;
 
@@ -87,6 +87,7 @@ fn run(invocation: &Invocation) -> ExitCode {
                     path: None,
                     resource: None,
                 }],
+                reserve,
             );
         }
     };
@@ -123,6 +124,7 @@ fn run(invocation: &Invocation) -> ExitCode {
         constraint: None,
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
+        errors_retained: 64,
     };
     let built = match &invocation.candidate {
         CandidateSelector::Commit(candidate_oid) => commit_pair(
@@ -142,7 +144,7 @@ fn run(invocation: &Invocation) -> ExitCode {
         ),
     };
     match invocation.format {
-        OutputFormat::Json => emit(&built.wire),
+        OutputFormat::Json => emit(reserve, &built.envelope),
         OutputFormat::Human => human(&built, invocation.explain_scope),
     }
     exit_class(built.exit_code)
@@ -150,13 +152,18 @@ fn run(invocation: &Invocation) -> ExitCode {
 
 #[cfg(not(unix))]
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(_invocation: &Invocation) -> ExitCode {
+fn run(_invocation: &Invocation, _reserve: &mut FatalSerializer) -> ExitCode {
     eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
     ExitCode::from(ExitClass::Failure.code())
 }
 
 #[cfg(unix)]
-fn fatal(invocation: &Invocation, engine: &EngineProvenance, details: &[ErrorDetail]) -> ExitCode {
+fn fatal(
+    invocation: &Invocation,
+    engine: &EngineProvenance,
+    details: &[ErrorDetail],
+    reserve: &mut FatalSerializer,
+) -> ExitCode {
     use amiss_scan::report::{Setup, SnapshotIdentity, construct_incomplete};
 
     let identity = |oid: &amiss_wire::model::Oid| SnapshotIdentity {
@@ -187,15 +194,15 @@ fn fatal(invocation: &Invocation, engine: &EngineProvenance, details: &[ErrorDet
     };
     let built = construct_incomplete(&setup, details);
     match invocation.format {
-        OutputFormat::Json => emit(&built.wire),
+        OutputFormat::Json => emit(reserve, &built.envelope),
         OutputFormat::Human => human(&built, invocation.explain_scope),
     }
     ExitCode::from(ExitClass::Failure.code())
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn emit(wire: &[u8]) {
-    if std::io::stdout().write_all(wire).is_err() {
+fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
+    if reserve.emit(envelope, &mut std::io::stdout()).is_err() {
         eprintln!(
             "amiss: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_str()

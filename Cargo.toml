@@ -57,3 +57,20 @@ allow_attributes_without_reason = "deny"
 [profile.release]
 overflow-checks = true
 panic = "unwind"
+
+# Debug builds keep debug assertions but optimize the library crates, so the
+# large-envelope goldens and parser-heavy tests run in seconds, not minutes.
+[profile.dev.package.amiss-wire]
+opt-level = 2
+
+[profile.dev.package.amiss-scan]
+opt-level = 2
+
+[profile.dev.package.amiss-md]
+opt-level = 2
+
+[profile.dev.package.markdown]
+opt-level = 2
+
+[profile.dev.package.sha2]
+opt-level = 2

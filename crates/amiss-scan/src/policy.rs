@@ -309,7 +309,7 @@ pub struct TimeContext {
 /// dispositions, the weakening and inventory-coverage control findings
 /// derived from the base and candidate semantic sets, and the verified
 /// external controls the wrapper supplied.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Effects {
     pub raised: Vec<(FindingKind, Disposition)>,
     pub floor_raised: Vec<(FindingKind, Disposition)>,
@@ -324,6 +324,27 @@ pub struct Effects {
         amiss_wire::controls::ExecutionConstraintDescriptor,
         &'static str,
     )>,
+    /// The effective typed-analysis-errors-retained ceiling `E`:
+    /// `min(64, verified floor limit)`, the built-in 64 without a floor.
+    pub errors_retained: u64,
+}
+
+impl Default for Effects {
+    fn default() -> Self {
+        Self {
+            raised: Vec::new(),
+            floor_raised: Vec::new(),
+            controls: Vec::new(),
+            base_digest: None,
+            candidate_digest: None,
+            floor: None,
+            debt: None,
+            waiver: None,
+            time: None,
+            constraint: None,
+            errors_retained: 64,
+        }
+    }
 }
 
 /// Compares the two sides and evaluates the inventory union against the
@@ -428,6 +449,7 @@ pub fn effects(
         waiver: None,
         time: None,
         constraint: None,
+        errors_retained: 64,
     }
 }
 
@@ -873,9 +895,9 @@ pub fn tightened_limits(
             ResourceName::RepositoryPolicyEntries => Some(&mut scan.repository_policy_entries),
             ResourceName::DebtItems => Some(&mut scan.debt_items),
             ResourceName::WaiverItems => Some(&mut scan.waiver_items),
+            ResourceName::TypedAnalysisErrorsRetained => Some(&mut scan.errors_retained),
             ResourceName::OrganizationPolicyEntries
             | ResourceName::CompleteFindings
-            | ResourceName::TypedAnalysisErrorsRetained
             | ResourceName::MachineJsonBytes
             | ResourceName::PrivateTemporaryStorageBytes
             | ResourceName::EvaluatorManagedMemoryBytes => None,

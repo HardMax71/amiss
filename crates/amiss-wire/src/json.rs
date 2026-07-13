@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt;
 
 pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 const MAX_DEPTH: usize = 512;
@@ -75,75 +76,186 @@ pub fn parse(bytes: &[u8]) -> Result<Value, Error> {
 #[must_use]
 pub fn canonical(value: &Value) -> Vec<u8> {
     let mut out = String::new();
-    write_value(&mut out, value);
+    stream(value, &mut out);
     out.into_bytes()
+}
+
+/// The exact byte length `canonical` would produce, without materializing
+/// it: the counting canonical-serialization pass.
+#[must_use]
+pub fn canonical_length(value: &Value) -> u64 {
+    let mut count = ByteCount(0);
+    stream(value, &mut count);
+    count.0
+}
+
+/// A canonicalization output: receives the serialization in pieces, in
+/// order. Concatenating every piece yields exactly the `canonical` bytes.
+pub trait Sink {
+    fn write(&mut self, piece: &str);
+}
+
+impl Sink for String {
+    fn write(&mut self, piece: &str) {
+        self.push_str(piece);
+    }
+}
+
+/// A counting sink: the total byte length of every piece written.
+pub struct ByteCount(pub u64);
+
+impl Sink for ByteCount {
+    fn write(&mut self, piece: &str) {
+        self.0 = self
+            .0
+            .saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
+    }
+}
+
+/// Streams the canonical serialization into the sink using its own
+/// transient scratch. For the fixed-scratch fatal lane use
+/// [`Scratch::stream`] with a reused scratch instead.
+pub fn stream<S: Sink + ?Sized>(value: &Value, sink: &mut S) {
+    let mut scratch = Scratch::new();
+    scratch.stream(value, sink);
+}
+
+/// The serializer's entire working memory: one member-order buffer per
+/// nesting level, reused across every sibling at that level, and one
+/// integer-format buffer. Streaming allocates nothing else, so a reserved
+/// `Scratch` makes serialization scratch a fixed space.
+pub struct Scratch {
+    order: Vec<Vec<usize>>,
+    number: String,
+}
+
+impl Scratch {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            order: Vec::new(),
+            number: String::with_capacity(24),
+        }
+    }
+
+    pub fn stream<S: Sink + ?Sized>(&mut self, value: &Value, sink: &mut S) {
+        self.write_value(value, sink, 0);
+    }
+
+    fn write_value<S: Sink + ?Sized>(&mut self, value: &Value, sink: &mut S, depth: usize) {
+        match value {
+            Value::Null => sink.write("null"),
+            Value::Bool(true) => sink.write("true"),
+            Value::Bool(false) => sink.write("false"),
+            Value::Integer(n) => {
+                self.number.clear();
+                let _infallible = fmt::Write::write_fmt(&mut self.number, format_args!("{n}"));
+                sink.write(&self.number);
+            }
+            Value::String(s) => write_string(sink, s),
+            Value::Array(items) => {
+                sink.write("[");
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        sink.write(",");
+                    }
+                    self.write_value(item, sink, depth.saturating_add(1));
+                }
+                sink.write("]");
+            }
+            Value::Object(members) => {
+                self.order_members(members, depth);
+                sink.write("{");
+                let mut position = 0_usize;
+                loop {
+                    let member = self
+                        .order
+                        .get(depth)
+                        .and_then(|level| level.get(position))
+                        .and_then(|&index| members.get(index));
+                    let Some((key, value)) = member else { break };
+                    if position > 0 {
+                        sink.write(",");
+                    }
+                    write_string(sink, key);
+                    sink.write(":");
+                    self.write_value(value, sink, depth.saturating_add(1));
+                    position = position.saturating_add(1);
+                }
+                sink.write("}");
+            }
+        }
+    }
+
+    fn order_members(&mut self, members: &[(String, Value)], depth: usize) {
+        while self.order.len() <= depth {
+            self.order.push(Vec::new());
+        }
+        let Some(level) = self.order.get_mut(depth) else {
+            return;
+        };
+        level.clear();
+        level.extend(0..members.len());
+        level.sort_by(|&a, &b| {
+            let left = members.get(a).map_or("", |(key, _)| key.as_str());
+            let right = members.get(b).map_or("", |(key, _)| key.as_str());
+            utf16_cmp(left, right)
+        });
+    }
+}
+
+impl Default for Scratch {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 fn utf16_cmp(a: &str, b: &str) -> Ordering {
     a.encode_utf16().cmp(b.encode_utf16())
 }
 
-fn write_value(out: &mut String, value: &Value) {
-    match value {
-        Value::Null => out.push_str("null"),
-        Value::Bool(true) => out.push_str("true"),
-        Value::Bool(false) => out.push_str("false"),
-        Value::Integer(n) => out.push_str(&n.to_string()),
-        Value::String(s) => write_string(out, s),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_value(out, item);
+fn write_string<S: Sink + ?Sized>(sink: &mut S, s: &str) {
+    sink.write("\"");
+    let mut plain = 0_usize;
+    for (index, c) in s.char_indices() {
+        let escape: Option<&str> = match c {
+            '"' => Some("\\\""),
+            '\\' => Some("\\\\"),
+            '\u{8}' => Some("\\b"),
+            '\t' => Some("\\t"),
+            '\n' => Some("\\n"),
+            '\u{c}' => Some("\\f"),
+            '\r' => Some("\\r"),
+            c if u32::from(c) < 0x20 => Some(control_escape(c)),
+            _ => None,
+        };
+        if let Some(text) = escape {
+            if let Some(run) = s.get(plain..index) {
+                sink.write(run);
             }
-            out.push(']');
-        }
-        Value::Object(members) => {
-            let mut sorted: Vec<&(String, Value)> = members.iter().collect();
-            sorted.sort_by(|a, b| utf16_cmp(&a.0, &b.0));
-            out.push('{');
-            for (i, member) in sorted.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_string(out, &member.0);
-                out.push(':');
-                write_value(out, &member.1);
-            }
-            out.push('}');
+            sink.write(text);
+            plain = index.saturating_add(c.len_utf8());
         }
     }
-}
-
-fn write_string(out: &mut String, s: &str) {
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\u{8}' => out.push_str("\\b"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\u{c}' => out.push_str("\\f"),
-            '\r' => out.push_str("\\r"),
-            c if u32::from(c) < 0x20 => control_escape(out, c),
-            c => out.push(c),
-        }
+    if let Some(run) = s.get(plain..) {
+        sink.write(run);
     }
-    out.push('"');
+    sink.write("\"");
 }
 
-fn control_escape(out: &mut String, c: char) {
-    let value = u32::from(c);
-    out.push_str("\\u00");
-    out.push(hex_digit(value.wrapping_shr(4)));
-    out.push(hex_digit(value & 0xF));
-}
-
-fn hex_digit(value: u32) -> char {
-    char::from_digit(value, 16).unwrap_or('0')
+/// The `\u00xx` form for the raw control characters without a short escape,
+/// as a static piece so streaming stays allocation-free.
+fn control_escape(c: char) -> &'static str {
+    const FORMS: [&str; 32] = [
+        "\\u0000", "\\u0001", "\\u0002", "\\u0003", "\\u0004", "\\u0005", "\\u0006", "\\u0007",
+        "\\b", "\\t", "\\n", "\\u000b", "\\f", "\\r", "\\u000e", "\\u000f", "\\u0010", "\\u0011",
+        "\\u0012", "\\u0013", "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019",
+        "\\u001a", "\\u001b", "\\u001c", "\\u001d", "\\u001e", "\\u001f",
+    ];
+    FORMS
+        .get(usize::try_from(u32::from(c)).unwrap_or(0))
+        .copied()
+        .unwrap_or("\\u0000")
 }
 
 struct Parser<'a> {

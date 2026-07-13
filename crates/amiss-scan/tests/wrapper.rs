@@ -130,6 +130,7 @@ fn shell(enforce: bool) -> SetupShell {
         constraint: None,
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
+        errors_retained: 64,
     }
 }
 
@@ -186,7 +187,7 @@ fn structural_evidence(fx: &Fixture, enforce: bool) -> (String, String, String, 
         &fx.base,
         &fx.candidate,
     );
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let finding = envelope["payload"]["findings"]
         .as_array()
         .unwrap()
@@ -298,7 +299,7 @@ fn waiver_input(doc: &str) -> WaiverInput {
 
 fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
     let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate);
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
     )
@@ -797,7 +798,7 @@ fn index_mode_rejects_tree_bound_exceptions() {
         "2026-08-01T00:00:00Z",
     )));
     let built = staged_index(&fx.repo, &engine(), None, &setup, &fx.base);
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let report = &envelope["payload"];
 
     assert_eq!(built.exit_code, 2);

@@ -1,10 +1,135 @@
 use std::collections::BTreeSet;
 
 use crate::digest::{Digest, hj};
-use crate::json::{Value, canonical};
+use crate::json::{Scratch, Sink, Value, canonical, canonical_length};
 use crate::model::Adapter;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner-v0";
+
+/// The exact `machine-json-bytes` reservation: the report wire, canonical
+/// envelope plus the trailing newline, never exceeds this.
+pub const MACHINE_JSON_BYTES: u64 = 67_108_864;
+
+/// The fatal serializer's fixed scratch allowance: the staging buffer it
+/// reserves up front plus every transient allocation one streaming emission
+/// may make. The E0 maximal golden proves emission stays inside it.
+pub const FATAL_SCRATCH_BYTES: usize = 65_536;
+
+/// The streaming fatal-envelope serializer and its fixed scratch space. A
+/// binary reserves one before evaluator allocation accounting begins, so a
+/// fatal projection is always emittable: emission streams `JCS(envelope)`
+/// and the trailing newline through the reserved staging buffer without
+/// materializing the wire.
+pub struct FatalSerializer {
+    staging: Vec<u8>,
+    scratch: Scratch,
+}
+
+impl FatalSerializer {
+    /// Reserves the staging buffer and serializer scratch.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            staging: Vec::with_capacity(FATAL_SCRATCH_BYTES),
+            scratch: Scratch::new(),
+        }
+    }
+
+    /// Streams the envelope's wire (`JCS(envelope) || LF`) into the writer
+    /// through the reserved scratch and returns the byte count.
+    ///
+    /// # Errors
+    ///
+    /// The first writer error; the wire is incomplete in that case and the
+    /// caller treats the emission as failed.
+    pub fn emit(&mut self, envelope: &Value, out: &mut dyn std::io::Write) -> std::io::Result<u64> {
+        self.staging.clear();
+        let mut sink = StagedSink {
+            staging: &mut self.staging,
+            out,
+            written: 0,
+            error: None,
+        };
+        self.scratch.stream(envelope, &mut sink);
+        sink.write("\n");
+        let written = sink.flush();
+        self.staging.clear();
+        written
+    }
+
+    /// The materialized wire for a caller that must inspect the bytes (the
+    /// wrapper's acceptance): one counting pass sizes the allocation
+    /// exactly, then one streaming pass fills it.
+    #[must_use]
+    pub fn wire_bytes(&mut self, envelope: &Value) -> Vec<u8> {
+        let exact = canonical_length(envelope).saturating_add(1);
+        let mut wire = Vec::with_capacity(usize::try_from(exact).unwrap_or(0));
+        if self.emit(envelope, &mut wire).is_err() {
+            wire.clear();
+        }
+        wire
+    }
+}
+
+impl Default for FatalSerializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+struct StagedSink<'a> {
+    staging: &'a mut Vec<u8>,
+    out: &'a mut dyn std::io::Write,
+    written: u64,
+    error: Option<std::io::Error>,
+}
+
+impl StagedSink<'_> {
+    fn drain(&mut self) {
+        if self.error.is_none() {
+            match self.out.write_all(self.staging) {
+                Ok(()) => {
+                    self.written = self
+                        .written
+                        .saturating_add(u64::try_from(self.staging.len()).unwrap_or(u64::MAX));
+                }
+                Err(defect) => self.error = Some(defect),
+            }
+        }
+        self.staging.clear();
+    }
+
+    fn flush(&mut self) -> std::io::Result<u64> {
+        self.drain();
+        match self.error.take() {
+            Some(defect) => Err(defect),
+            None => Ok(self.written),
+        }
+    }
+}
+
+impl Sink for StagedSink<'_> {
+    fn write(&mut self, piece: &str) {
+        if piece.len() >= FATAL_SCRATCH_BYTES {
+            self.drain();
+            if self.error.is_none() {
+                match self.out.write_all(piece.as_bytes()) {
+                    Ok(()) => {
+                        self.written = self
+                            .written
+                            .saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
+                    }
+                    Err(defect) => self.error = Some(defect),
+                }
+            }
+            return;
+        }
+        if self.staging.len().saturating_add(piece.len()) > FATAL_SCRATCH_BYTES {
+            self.drain();
+        }
+        self.staging.extend_from_slice(piece.as_bytes());
+    }
+}
 pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine/v1";
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v1";
 pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload/v1";
@@ -201,6 +326,16 @@ pub fn invocation_failure_wire(
     unavailable_evaluation_wire(engine, codes, None, None)
 }
 
+/// The envelope value behind [`invocation_failure_wire`], for emission
+/// through the reserved fatal serializer.
+#[must_use]
+pub fn invocation_failure_envelope(
+    engine: &EngineProvenance,
+    codes: &BTreeSet<AnalysisErrorCode>,
+) -> Option<Value> {
+    unavailable_evaluation_envelope(engine, codes, None, None)
+}
+
 /// The fatal unavailable-evaluation envelope for the request-wire lane: the
 /// same closed projection, carrying each request's diagnostic digest where
 /// its byte stream was completely captured.
@@ -214,6 +349,26 @@ pub fn unavailable_evaluation_wire(
     evaluation_request_digest: Option<Digest>,
     controls_request_digest: Option<Digest>,
 ) -> Option<Vec<u8>> {
+    let envelope = unavailable_evaluation_envelope(
+        engine,
+        codes,
+        evaluation_request_digest,
+        controls_request_digest,
+    )?;
+    let mut wire = canonical(&envelope);
+    wire.push(b'\n');
+    Some(wire)
+}
+
+/// The envelope value behind [`unavailable_evaluation_wire`], for emission
+/// through the reserved fatal serializer.
+#[must_use]
+pub fn unavailable_evaluation_envelope(
+    engine: &EngineProvenance,
+    codes: &BTreeSet<AnalysisErrorCode>,
+    evaluation_request_digest: Option<Digest>,
+    controls_request_digest: Option<Digest>,
+) -> Option<Value> {
     if codes.is_empty() {
         return None;
     }
@@ -288,14 +443,11 @@ pub fn unavailable_evaluation_wire(
     ]);
 
     let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
-    let envelope = object(vec![
+    Some(object(vec![
         ("schema", string(ENVELOPE_SCHEMA)),
         ("payload", payload),
         ("payload_digest", string(&payload_digest.to_string())),
-    ]);
-    let mut wire = canonical(&envelope);
-    wire.push(b'\n');
-    Some(wire)
+    ]))
 }
 
 /// One adapter's complete contract descriptor and its digest, which every
