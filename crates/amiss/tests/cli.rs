@@ -657,3 +657,60 @@ fn explain_scope_adds_the_deterministic_block() {
     assert!(explained.contains("scope: built-in documents"));
     assert!(explained.contains("scope: this run discovered"));
 }
+
+/// Four suites validate a report against the frozen schema, and every one of them
+/// builds that report in process. Nothing had ever read the bytes the binary
+/// prints, which is the only artifact a caller ever sees. Those bytes are exactly
+/// `JCS(envelope)` and one LF: canonical JSON puts the whole envelope on a single
+/// line, so the trailing newline is the only newline in the stream. The serializer
+/// is shared, so this passes the day it is written. What it buys is that it cannot
+/// quietly stop passing.
+#[test]
+fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
+    let (dir, base, candidate) = fixture();
+    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(
+        (code, stderr.as_str()),
+        (0, ""),
+        "a complete accepted projection leaves stderr empty"
+    );
+    let (last, rest) = stdout.split_last().expect("the report is not empty");
+    assert_eq!(*last, b'\n', "the report ends in an LF");
+    assert!(
+        !rest.contains(&b'\n'),
+        "the canonical envelope is one line, so its LF is the only one"
+    );
+
+    let schema_text = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
+    )
+    .unwrap()
+    .replace("assure/", "amiss/");
+    let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let defects: Vec<String> = validator
+        .iter_errors(&envelope)
+        .map(|error| format!("{}: {error}", error.instance_path))
+        .collect();
+    assert_eq!(
+        defects,
+        Vec::<String>::new(),
+        "the bytes the binary printed are a schema-clean report"
+    );
+}
