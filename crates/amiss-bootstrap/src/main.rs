@@ -1,16 +1,29 @@
 use std::env;
 use std::ffi::OsString;
+use std::io::{Read as _, Write as _};
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{ExitCode, Stdio};
+use std::time::Duration;
 
+use amiss_bootstrap::supervise::{
+    AcceptanceDefect, Defect, Expectations, Supervised, settle, supervise,
+};
 use amiss_bootstrap::{Refusal, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::report::MACHINE_JSON_BYTES;
 
-/// The trusted bootstrap: it validates the pinned action tree as data and
-/// only then execs the verified native engine. It never runs the action's
-/// declared Node launcher, never resolves a binary through `PATH`, and never
-/// downloads, installs, or discovers anything.
+/// The operational wall ceiling from the security contract: the trusted
+/// wrapper kills the whole evaluator after 120 seconds, and a killed evaluator
+/// yields no accepted result.
+const WATCHDOG_CEILING: Duration = Duration::from_mins(2);
+
+/// The trusted bootstrap, which is also the trusted wrapper the security
+/// contract names. It validates the pinned action tree as data, launches the
+/// verified engine with a cleared environment and fixed arguments, holds it to
+/// the wall ceiling, and publishes only an envelope it can accept. It never
+/// runs the action's declared Node launcher, never resolves a binary through
+/// `PATH`, and never downloads, installs, or discovers anything.
 ///
 /// `amiss-bootstrap exec --action-repository P --constraint F -- <engine args>`
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
@@ -52,7 +65,7 @@ fn main() -> ExitCode {
         }
     };
 
-    exec_engine(&parsed, &validated)
+    run_engine(&parsed, &validated)
 }
 
 const fn reason(refusal: Refusal) -> &'static str {
@@ -108,40 +121,139 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     })
 }
 
-/// Writes the verified engine bytes into a private directory and execs them
-/// with an empty environment. The bytes come from the validated tree, never
+/// What the wrapper asked the engine for, read back out of the fixed arguments
+/// it is about to pass. A wrapper can only hold an engine to an identity it
+/// knows it requested, and it can only accept a machine envelope it asked for.
+///
+/// The engine's own parser is the authoritative one. This reads the same
+/// grammar only far enough to state an expectation, and an invocation the
+/// engine will reject as invalid yields an unavailable evaluation, whose
+/// identities acceptance does not check.
+fn asked(engine: &[OsString]) -> Option<Expectations> {
+    let mut base: Option<String> = None;
+    let mut candidate: Option<String> = None;
+    let mut index = false;
+    let mut format: Option<String> = None;
+    let mut items = engine.iter();
+    while let Some(flag) = items.next() {
+        let mut value = || {
+            items
+                .next()
+                .and_then(|next| next.to_str())
+                .filter(|next| !next.starts_with("--"))
+                .map(str::to_owned)
+        };
+        match flag.to_str() {
+            Some("--index") => index = true,
+            Some("--base") => base = value(),
+            Some("--candidate") => candidate = value(),
+            Some("--format") => format = value(),
+            _ => {}
+        }
+    }
+    if format.as_deref() != Some("json") || candidate.is_some() == index {
+        return None;
+    }
+    Some(Expectations {
+        engine_digest: String::new(),
+        base_commit: base?,
+        candidate_commit: candidate,
+    })
+}
+
+/// Writes the verified engine bytes into a private directory, launches them
+/// with an empty environment, holds them to the wall ceiling, and republishes
+/// only an accepted envelope. The bytes come from the validated tree, never
 /// from a worktree file, a `PATH` lookup, or the action's launcher.
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
-fn exec_engine(args: &Args, validated: &amiss_bootstrap::Validated) -> ExitCode {
+fn run_engine(args: &Args, validated: &amiss_bootstrap::Validated) -> ExitCode {
     let failure = ExitCode::from(2);
+    let Some(mut expectations) = asked(&args.engine) else {
+        eprintln!("amiss-bootstrap: invalid-engine-invocation");
+        return failure;
+    };
+    expectations.engine_digest = validated.engine_digest.to_string();
+
     let Ok(private) = tempfile::TempDir::new() else {
         eprintln!("amiss-bootstrap: private-storage-unavailable");
         return failure;
     };
     let engine = private.path().join("engine");
-    if std::fs::write(&engine, &validated.binary).is_err() {
+    if std::fs::write(&engine, &validated.binary).is_err() || executable_bit(&engine).is_err() {
         eprintln!("amiss-bootstrap: private-storage-unavailable");
         return failure;
     }
-    if executable_bit(&engine).is_err() {
-        eprintln!("amiss-bootstrap: private-storage-unavailable");
-        return failure;
-    }
-    let mut command = std::process::Command::new(&engine);
-    command
+
+    let launched = std::process::Command::new(&engine)
         .args(&args.engine)
         .env_clear()
-        .env("TMPDIR", private.path())
-        .stdin(std::process::Stdio::null());
-    match command.status() {
-        Ok(status) => status
-            .code()
-            .and_then(|code| u8::try_from(code).ok())
-            .map_or(failure, ExitCode::from),
-        Err(_defect) => {
-            eprintln!("amiss-bootstrap: engine-launch-failed");
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn();
+    let Ok(mut child) = launched else {
+        eprintln!("amiss-bootstrap: engine-launch-failed");
+        return failure;
+    };
+
+    let Ok((outcome, wire)) = collect(&mut child) else {
+        eprintln!("amiss-bootstrap: engine-launch-failed");
+        return failure;
+    };
+    match settle(&outcome, &wire, &expectations) {
+        Ok(class) => publish(&wire, class),
+        Err(defect) => {
+            eprintln!("amiss-bootstrap: {}", refused(defect));
             failure
         }
+    }
+}
+
+/// Drains the engine's stdout while the watchdog runs. A supervisor that only
+/// polls would deadlock the moment the engine's report outgrew the pipe
+/// buffer: the engine would block writing, never exit, and be killed for a
+/// slowness that was the supervisor's own.
+fn collect(child: &mut std::process::Child) -> std::io::Result<(Supervised, Vec<u8>)> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("no engine stdout"))?;
+    let reader = std::thread::spawn(move || {
+        let mut wire = Vec::new();
+        let mut bounded = stdout.take(MACHINE_JSON_BYTES.saturating_add(1));
+        bounded.read_to_end(&mut wire).map(|_count| wire)
+    });
+    let outcome = supervise(child, WATCHDOG_CEILING)?;
+    let wire = reader
+        .join()
+        .map_err(|_panic| std::io::Error::other("engine reader failed"))??;
+    Ok((outcome, wire))
+}
+
+/// The accepted envelope is republished byte for byte, and the wrapper exits
+/// with the class the engine claimed and was held to.
+fn publish(wire: &[u8], class: i64) -> ExitCode {
+    let mut out = std::io::stdout().lock();
+    if out.write_all(wire).is_err() || out.flush().is_err() {
+        return ExitCode::from(2);
+    }
+    u8::try_from(class).map_or(ExitCode::from(2), ExitCode::from)
+}
+
+const fn refused(defect: Defect) -> &'static str {
+    match defect {
+        Defect::Killed => "evaluator-watchdog-kill",
+        Defect::Signalled => "evaluator-signalled",
+        Defect::Oversize => "report-over-wire-ceiling",
+        Defect::ExitMismatch => "evaluator-exit-mismatch",
+        Defect::Acceptance(AcceptanceDefect::Shape) => "report-shape",
+        Defect::Acceptance(AcceptanceDefect::Noncanonical) => "report-noncanonical",
+        Defect::Acceptance(AcceptanceDefect::PayloadDigest) => "report-payload-digest",
+        Defect::Acceptance(AcceptanceDefect::Engine) => "report-engine-mismatch",
+        Defect::Acceptance(AcceptanceDefect::BaseIdentity) => "report-base-mismatch",
+        Defect::Acceptance(AcceptanceDefect::CandidateIdentity) => "report-candidate-mismatch",
+        Defect::Acceptance(AcceptanceDefect::Completeness) => "report-completeness",
+        Defect::Acceptance(AcceptanceDefect::FindingCount) => "report-finding-count",
     }
 }
 

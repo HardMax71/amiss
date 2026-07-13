@@ -10,6 +10,9 @@ amiss-git = { path = "../amiss-git" }
 amiss-scan = { path = "../amiss-scan" }
 amiss-wire = { path = "../amiss-wire" }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
 [dev-dependencies]
 serde_json = "1"
 sha2.workspace = true

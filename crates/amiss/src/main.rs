@@ -8,8 +8,44 @@ use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
 
+/// The engine's memory ceiling, held as an address-space limit. It is the
+/// blocking sandbox descriptor's figure, applied here as well so that a
+/// repository which cannot be scanned under the required check cannot be
+/// scanned locally either, and the two runs stay the same run.
+#[cfg(unix)]
+const SANDBOX_MEMORY_BYTES: u64 = 1_073_741_824;
+
+/// Self-restriction, in safe Rust only: no child processes (the contract's
+/// zero repository-process budget), no core dumps (the address space holds
+/// repository bytes), and the sandbox's memory ceiling. Failures are
+/// tolerated, since a plain process is always self-asserted; the report says
+/// so, and the closed provider-verified mechanisms are the controller's to
+/// enforce. Network denial is structural: the engine has no network code and
+/// no network dependency.
+#[cfg(unix)]
+fn apply_sandbox() {
+    use rustix::process::{Resource, Rlimit, setrlimit};
+    let zero = Rlimit {
+        current: Some(0),
+        maximum: Some(0),
+    };
+    let _forks = setrlimit(Resource::Nproc, zero);
+    let _core = setrlimit(Resource::Core, zero);
+    let _memory = setrlimit(
+        Resource::As,
+        Rlimit {
+            current: Some(SANDBOX_MEMORY_BYTES),
+            maximum: Some(SANDBOX_MEMORY_BYTES),
+        },
+    );
+}
+
+#[cfg(not(unix))]
+const fn apply_sandbox() {}
+
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn main() -> ExitCode {
+    apply_sandbox();
     let mut reserve = FatalSerializer::new();
     let argv: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();
     let failure = ExitCode::from(ExitClass::Failure.code());

@@ -1,4 +1,5 @@
 pub mod build;
+pub mod supervise;
 
 use amiss_git::{GitResources, ObjectKind, Repository};
 use amiss_wire::action::{ActionMetadata, executable_platform, host_platform};
@@ -7,8 +8,12 @@ use amiss_wire::digest::{Digest, hb, sha256};
 use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole};
 use amiss_wire::model::{Oid, RepoPath};
 
+/// The engine names itself with this domain over its own bytes, and the
+/// bootstrap recomputes the same value over the binary it validated. One
+/// definition, so the two can never drift apart and silently stop matching.
+pub use amiss_wire::report::ENGINE_DOMAIN;
+
 pub const BOOTSTRAP_DOMAIN: &str = "amiss/scanner-action-bootstrap/v1";
-pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine/v1";
 pub const ACTION_METADATA_PATH: &str = "action.yml";
 
 /// The exact reason a validation refused, in the order the contract checks
