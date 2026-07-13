@@ -39,6 +39,21 @@ repos:
           awk '/Command::new|process::Command/{print FILENAME": the engine never shells out";e=1} END{exit e}'
         language: system
         files: ^crates/amiss(-scan|-git|-md|-wire)?/src/.*\.rs$
+      # A required check that filters itself out by path is a check a pull request
+      # can route around: touch only the excluded paths and the merge shows green
+      # for a gate that never ran. The other workflows are schedule and dispatch
+      # lanes, so this pins ci.yml alone.
+      - id: no-path-filters-on-ci
+        name: the required check cannot be routed around
+        entry: >-
+          awk '/^on:/{o=1;next} /^[^ #]/{o=0} o&&/^ +paths(-ignore)?:/{print FILENAME": a path filter lets a merge skip the required check";e=1} END{exit e}'
+        language: system
+        files: ^\.github/workflows/ci\.yml$
+      - id: zizmor
+        name: zizmor
+        entry: zizmor --offline
+        language: system
+        files: ^\.github/(workflows/[^/]+|actions/[^/]+/action)\.ya?ml$
       - id: typos
         name: typos
         entry: typos

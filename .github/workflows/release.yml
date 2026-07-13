@@ -71,7 +71,16 @@ jobs:
       # every platform row from the artifact's own header. The launcher is a
       # reviewed file in this repository, not a string this workflow prints,
       # because the manifest pins its bytes and someone has to have read them.
+      # The dispatch input and the repository identity reach the script through
+      # the environment rather than through ${{ }} expansion into its body: the
+      # version is free text typed at dispatch time, and text expanded into a
+      # run block is code.
       - shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
         run: |
           set -eu
           mkdir -p action-tree/dist
@@ -86,10 +95,10 @@ jobs:
           # shellcheck disable=SC2086
           digest="$(./target/release/amiss-manifest \
             --tree action-tree \
-            --version '${{ inputs.version }}' \
-            --owner "$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" \
-            --repository "$(basename '${{ github.repository }}')" \
-            --commit '${{ github.sha }}' \
+            --version "$VERSION" \
+            --owner "${OWNER,,}" \
+            --repository "$(basename "$REPOSITORY")" \
+            --commit "$COMMIT" \
             --lock Cargo.lock \
             --launcher dist/launcher.js \
             $args)"
