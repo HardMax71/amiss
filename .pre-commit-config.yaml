@@ -29,6 +29,16 @@ repos:
           awk '/#\[test\]|#\[cfg\(test\)\]/{print FILENAME": test code inside implementation";e=1} END{exit e}'
         language: system
         files: ^crates/[^/]+/src/.*\.rs$
+      # The README says the engine never runs anything and never shells out to
+      # git, and until now the only thing holding that up was everyone
+      # remembering. The bootstrap is the one crate that may spawn: launching the
+      # engine is its whole job, and it is deliberately outside this filter.
+      - id: no-subprocess-in-engine
+        name: the engine spawns nothing
+        entry: >-
+          awk '/Command::new|process::Command/{print FILENAME": the engine never shells out";e=1} END{exit e}'
+        language: system
+        files: ^crates/amiss(-scan|-git|-md|-wire)?/src/.*\.rs$
       - id: typos
         name: typos
         entry: typos

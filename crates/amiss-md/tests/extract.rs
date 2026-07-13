@@ -252,6 +252,50 @@ fn mdx_regions_swallow_their_children() {
     assert_eq!(got.opaque.html, Vec::new());
 }
 
+/// The two hostile-MDX rows of the attack matrix, in one document. It would
+/// write a file, spin forever, and open a socket, if anything ever evaluated it.
+/// Nothing does, and nothing can: there is no JavaScript in this process. The
+/// test is here anyway, because that is a claim about the future as much as the
+/// present, and the day someone reaches for a JS-backed parser to improve MDX
+/// fidelity, this is what has to stop them. The infinite loop is not decoration:
+/// a parser that evaluated the expression would never return, so the test
+/// finishing at all is the bounded-parse half of the proof.
+#[test]
+fn an_mdx_document_that_would_attack_if_evaluated_is_only_ever_read() {
+    let sentinel = std::env::temp_dir().join("amiss-mdx-evaluation-sentinel");
+    let _absent = std::fs::remove_file(&sentinel);
+
+    let mut source = String::from(
+        "import {writeFileSync} from \"node:fs\";\nexport const boom = writeFileSync(\"",
+    );
+    source.push_str(&sentinel.display().to_string());
+    source.push_str(
+        "\", \"the parser evaluated me\");\n\
+         \n\
+         {(() => { while (true) {} })()}\n\
+         \n\
+         <Evil src={fetch(\"http://127.0.0.1:1/exfiltrate\")}>[hidden](secret.md)</Evil>\n",
+    );
+
+    let got = extraction(Adapter::Mdx, &source);
+
+    assert!(
+        !sentinel.exists(),
+        "the import ran and wrote {}",
+        sentinel.display()
+    );
+    assert_eq!(
+        triples(&got),
+        Vec::new(),
+        "nothing inside an opaque region is a reference, and that includes the URL \
+         the JSX would have fetched and the link it wraps"
+    );
+    assert!(
+        !got.opaque.mdx.is_empty(),
+        "what it could not see into, it says it could not see into"
+    );
+}
+
 /// Exactly adjacent regions union into one maximal interval.
 #[test]
 fn adjacent_mdx_regions_union() {

@@ -317,6 +317,112 @@ fn a_ceiling_of_one_emits_only_the_sentinel() {
     assert_eq!(errors[0]["observed_lower_bound"], 2);
 }
 
+#[expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test fixture helper"
+)]
+fn schema_max_items(array: &str) -> u64 {
+    let text = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
+    )
+    .unwrap();
+    let schema: serde_json::Value = serde_json::from_str(&text).unwrap();
+    schema["$defs"]["ReportPayload"]["properties"][array]["maxItems"]
+        .as_u64()
+        .expect("the schema caps its union arrays")
+}
+
+/// The schema caps `findings` at 100,000 and nothing counts them at runtime. The
+/// documents and observations arrays are different: their caps are two snapshots
+/// of a charged resource limit, so they cannot be exceeded. Findings have no such
+/// limit behind them. What keeps the array inside its own schema is arithmetic:
+/// the wire cap refuses any envelope over 64 MiB, and a finding is heavy enough
+/// that a hundred thousand of them cannot fit beneath it, so the array meets the
+/// wire cap long before it meets the schema and the run exits 2 rather than
+/// publishing a report that violates the contract it ships with.
+///
+/// That margin is stated nowhere, so it is stated here. This does not prove a
+/// floor under every finding the engine could ever construct. It pins the
+/// leanest one it constructs today against the break-even, which is what a
+/// change would have to cross. Slim the finding shape past that line and this
+/// fails, and whoever did it owes the counter the schema has always implied.
+#[test]
+fn the_findings_ceiling_sits_behind_the_wire_cap() {
+    let ceiling = schema_max_items("findings");
+    let break_even = amiss_wire::report::MACHINE_JSON_BYTES / (ceiling + 1);
+
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[gone](nowhere.md)\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/leaving.md"), "# Leaving\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::remove_file(root.join("docs/leaving.md")).unwrap();
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "candidate"]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let base = Oid::new(
+        ObjectFormat::Sha1,
+        git(root, &["rev-parse", "HEAD~1"]).trim().to_owned(),
+    )
+    .unwrap();
+    let candidate = Oid::new(
+        ObjectFormat::Sha1,
+        git(root, &["rev-parse", "HEAD"]).trim().to_owned(),
+    )
+    .unwrap();
+    let shell = amiss_scan::pipeline::SetupShell {
+        engine: engine(),
+        enforce: false,
+        repository: None,
+        candidate_ref: None,
+        default_branch_ref: None,
+        floor: None,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+        external_defect: None,
+        errors_retained: 64,
+    };
+    let built =
+        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
+    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let findings = wire["payload"]["findings"].as_array().unwrap();
+
+    let kinds: Vec<&str> = findings
+        .iter()
+        .filter_map(|finding| finding["kind"].as_str())
+        .collect();
+    assert!(
+        kinds.contains(&"document-removed") && kinds.contains(&"explicit-target-missing"),
+        "the fixture carries more than one shape of finding: {kinds:?}"
+    );
+
+    let leanest = findings
+        .iter()
+        .map(|finding| serde_json::to_string(finding).unwrap().len())
+        .min()
+        .expect("the fixture produces findings");
+    assert!(
+        u64::try_from(leanest).unwrap() > break_even,
+        "a finding is {leanest} bytes and the break-even is {break_even}: \
+         {ceiling} of them would fit under the wire cap, so the schema's findings \
+         ceiling is reachable and needs a counter behind it"
+    );
+}
+
 #[test]
 fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
     let dir = TempDir::new().unwrap();
