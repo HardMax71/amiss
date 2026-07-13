@@ -128,6 +128,8 @@ fn shell(enforce: bool) -> SetupShell {
         waiver: None,
         time: None,
         constraint: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+        external_defect: None,
     }
 }
 
@@ -150,6 +152,7 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
         candidate: CandidateBlock::Commit(identity(&fx.candidate, &fx.candidate_tree)),
         policy: Effects::default(),
         controls_unavailable: None,
+        requests: amiss_scan::report::RequestDigests::default(),
     };
     let digest = candidate_identity_digest(&setup);
     let doc = format!(

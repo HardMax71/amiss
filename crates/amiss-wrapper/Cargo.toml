@@ -1,0 +1,23 @@
+[package]
+name = "amiss-wrapper"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+autotests = false
+
+[dependencies]
+amiss-git = { path = "../amiss-git" }
+amiss-scan = { path = "../amiss-scan" }
+amiss-wire = { path = "../amiss-wire" }
+
+[dev-dependencies]
+jsonschema = "0.26"
+serde_json = "1"
+tempfile = "3"
+
+[[test]]
+name = "wire"
+path = "tests/wire.rs"
+
+[lints]
+workspace = true

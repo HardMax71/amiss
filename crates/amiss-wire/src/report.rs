@@ -198,6 +198,22 @@ pub fn invocation_failure_wire(
     engine: &EngineProvenance,
     codes: &BTreeSet<AnalysisErrorCode>,
 ) -> Option<Vec<u8>> {
+    unavailable_evaluation_wire(engine, codes, None, None)
+}
+
+/// The fatal unavailable-evaluation envelope for the request-wire lane: the
+/// same closed projection, carrying each request's diagnostic digest where
+/// its byte stream was completely captured.
+///
+/// Returns `None` when no code is supplied or a code has no evaluation
+/// reason, exactly as the invocation form.
+#[must_use]
+pub fn unavailable_evaluation_wire(
+    engine: &EngineProvenance,
+    codes: &BTreeSet<AnalysisErrorCode>,
+    evaluation_request_digest: Option<Digest>,
+    controls_request_digest: Option<Digest>,
+) -> Option<Vec<u8>> {
     if codes.is_empty() {
         return None;
     }
@@ -234,7 +250,11 @@ pub fn invocation_failure_wire(
             "evaluation",
             object(vec![
                 ("status", string("unavailable")),
-                ("request_digest", Value::Null),
+                (
+                    "request_digest",
+                    evaluation_request_digest
+                        .map_or(Value::Null, |digest| string(&digest.to_string())),
+                ),
                 ("reasons", Value::Array(reasons)),
             ]),
         ),
@@ -242,7 +262,11 @@ pub fn invocation_failure_wire(
             "controls",
             object(vec![
                 ("status", string("unavailable")),
-                ("request_digest", Value::Null),
+                (
+                    "request_digest",
+                    controls_request_digest
+                        .map_or(Value::Null, |digest| string(&digest.to_string())),
+                ),
                 ("reasons", Value::Array(vec![string("not-parsed")])),
             ]),
         ),

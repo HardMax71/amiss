@@ -121,6 +121,8 @@ fn run(invocation: &Invocation) -> ExitCode {
         waiver: None,
         time: None,
         constraint: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+        external_defect: None,
     };
     let built = match &invocation.candidate {
         CandidateSelector::Commit(candidate_oid) => commit_pair(
@@ -181,6 +183,7 @@ fn fatal(invocation: &Invocation, engine: &EngineProvenance, details: &[ErrorDet
         candidate,
         policy: amiss_scan::policy::Effects::default(),
         controls_unavailable: None,
+        requests: amiss_scan::report::RequestDigests::default(),
     };
     let built = construct_incomplete(&setup, details);
     match invocation.format {

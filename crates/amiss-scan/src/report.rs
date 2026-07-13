@@ -99,6 +99,16 @@ pub struct IndexCandidate {
     pub skip_worktree_paths: u64,
 }
 
+/// The diagnostic request digests of the wrapper lane: present exactly for
+/// streams captured completely, and rendered only inside unavailable
+/// snapshot and controls values. The in-process CLI has none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RequestDigests {
+    pub evaluation: Option<Digest>,
+    pub snapshot: Option<Digest>,
+    pub controls: Option<Digest>,
+}
+
 /// The run identity a complete local report carries, plus the acquired
 /// policy effects and, for an invalid-policy run, the unavailable-controls
 /// reason.
@@ -113,6 +123,7 @@ pub struct Setup {
     pub candidate: CandidateBlock,
     pub policy: crate::policy::Effects,
     pub controls_unavailable: Option<&'static str>,
+    pub requests: RequestDigests,
 }
 
 /// A constructed complete report: the envelope value, its canonical wire
@@ -729,7 +740,7 @@ fn snapshot_value(snapshot: &SnapshotIdentity) -> Value {
     ])
 }
 
-fn candidate_value(candidate: &CandidateBlock) -> Value {
+fn candidate_value(candidate: &CandidateBlock, snapshot_request: Option<Digest>) -> Value {
     match candidate {
         CandidateBlock::Commit(identity) => snapshot_value(identity),
         CandidateBlock::Index(index) => object(vec![
@@ -747,7 +758,10 @@ fn candidate_value(candidate: &CandidateBlock) -> Value {
         ]),
         CandidateBlock::Unavailable(reasons) => object(vec![
             ("kind", string("unavailable")),
-            ("request_digest", Value::Null),
+            (
+                "request_digest",
+                snapshot_request.map_or(Value::Null, digest_value),
+            ),
             (
                 "reasons",
                 Value::Array(reasons.iter().map(|reason| string(reason)).collect()),
@@ -797,7 +811,10 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
             nullable(setup.default_branch_ref.as_deref()),
         ),
         ("base", snapshot_value(&setup.base)),
-        ("candidate", candidate_value(&setup.candidate)),
+        (
+            "candidate",
+            candidate_value(&setup.candidate, setup.requests.snapshot),
+        ),
         ("materialization", string(materialization)),
         ("skip_worktree_paths", integer(skip)),
         ("index_only_materialized_paths", integer(0)),
@@ -850,7 +867,10 @@ fn controls_value(setup: &Setup) -> Value {
     if let Some(reason) = setup.controls_unavailable {
         return object(vec![
             ("status", string("unavailable")),
-            ("request_digest", Value::Null),
+            (
+                "request_digest",
+                setup.requests.controls.map_or(Value::Null, digest_value),
+            ),
             ("reasons", Value::Array(vec![string(reason)])),
         ]);
     }

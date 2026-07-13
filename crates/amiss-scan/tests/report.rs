@@ -176,6 +176,7 @@ fn a_complete_report_validates_against_the_schema() {
         candidate: CandidateBlock::Commit(candidate_identity),
         policy: amiss_scan::Effects::default(),
         controls_unavailable: None,
+        requests: amiss_scan::report::RequestDigests::default(),
     };
     let built = construct(&setup, &base_discovery, &candidate_discovery, &comparisons);
 

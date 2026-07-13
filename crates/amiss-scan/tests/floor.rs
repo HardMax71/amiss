@@ -85,6 +85,8 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
         waiver: None,
         time: None,
         constraint: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+        external_defect: None,
     }
 }
 

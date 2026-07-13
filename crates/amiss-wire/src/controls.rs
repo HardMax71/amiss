@@ -75,7 +75,7 @@ pub enum Profile {
 }
 
 impl Profile {
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
+    pub(crate) fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "observe" => Ok(Self::Observe),
             "enforce" => Ok(Self::Enforce),
@@ -1180,7 +1180,7 @@ fn waiver_sort_key(item: &WaiverItem) -> (ObjectFormat, &str, Digest, &str) {
     )
 }
 
-fn root(bytes: &[u8]) -> Result<Value, Error> {
+pub(crate) fn root(bytes: &[u8]) -> Result<Value, Error> {
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
@@ -1309,7 +1309,7 @@ fn decode_nullable_digest(path: &str, value: Value) -> Result<Option<Digest>, Er
         .transpose()
 }
 
-fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
+pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
     let mut obj = Obj::new(path, value)?;
     de::const_str(&obj.field("host"), obj.take("host")?, "github.com")?;
     let owner = de::string(&obj.field("owner"), obj.take("owner")?)?;

@@ -5,6 +5,7 @@ pub mod human;
 pub mod json;
 pub mod model;
 pub mod report;
+pub mod requests;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitClass {

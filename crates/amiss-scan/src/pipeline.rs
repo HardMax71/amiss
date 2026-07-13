@@ -410,6 +410,15 @@ fn pair_trees(
             row,
         )));
     }
+    if let Some((reason, row)) = &setup_shell.external_defect {
+        return Err(Box::new(controls_failure(
+            setup_shell,
+            base_tree.1.clone(),
+            CandidateBlock::Commit(candidate_tree.1.clone()),
+            reason,
+            row.clone(),
+        )));
+    }
     Ok((base_tree, candidate_tree))
 }
 
@@ -1020,6 +1029,11 @@ pub struct SetupShell {
     pub waiver: Option<crate::policy::WaiverInput>,
     pub time: Option<crate::policy::TimeInput>,
     pub constraint: Option<crate::policy::ConstraintInput>,
+    /// The wrapper lane's diagnostic request digests; none for the CLI.
+    pub requests: crate::report::RequestDigests,
+    /// A wrapper-established external-control defect, settled against the
+    /// resolved snapshot identities exactly like a binding mismatch.
+    pub external_defect: Option<(&'static str, ErrorDetail)>,
 }
 
 impl SetupShell {
@@ -1034,6 +1048,7 @@ impl SetupShell {
             candidate,
             policy: crate::policy::Effects::default(),
             controls_unavailable: None,
+            requests: self.requests,
         }
     }
 }
@@ -1204,6 +1219,15 @@ fn staged_open(
             base_tree.1,
             CandidateBlock::Unavailable(vec!["not-evaluated"]),
             row,
+        )));
+    }
+    if let Some((reason, row)) = &setup_shell.external_defect {
+        return Err(Box::new(controls_failure(
+            setup_shell,
+            base_tree.1.clone(),
+            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+            reason,
+            row.clone(),
         )));
     }
     Ok(StagedOpen {
