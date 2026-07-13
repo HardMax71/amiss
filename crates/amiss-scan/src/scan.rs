@@ -1,3 +1,4 @@
+use amiss_md::extract::GovernedDefinition;
 use amiss_md::lines::{Line, scan};
 use amiss_md::{Occurrence, Opaque, Work, analyze};
 use amiss_wire::digest::{Digest, hb};
@@ -29,12 +30,24 @@ pub struct ScannedOccurrence {
     pub raw_destination_digest: Digest,
 }
 
+/// One reserved governed definition with its raw span, display positions,
+/// and the digest of its exact contributing source bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedSource {
+    pub span: (usize, usize),
+    pub display: SpanDisplay,
+    pub digest: Digest,
+}
+
+pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source/v1";
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Scanned {
     pub adapter: Adapter,
     pub work: Work,
     pub occurrences: Vec<ScannedOccurrence>,
     pub opaque: Opaque,
+    pub governed: Vec<GovernedSource>,
 }
 
 /// Scans one selected document body under the snapshot's budgets: admission
@@ -73,6 +86,7 @@ pub fn scan_bytes(
             work: analysis.work,
             occurrences: Vec::new(),
             opaque: Opaque::default(),
+            governed: Vec::new(),
         });
     };
 
@@ -105,11 +119,31 @@ pub fn scan_bytes(
         });
     }
 
+    let mut governed = Vec::with_capacity(extraction.governed.len());
+    for GovernedDefinition { span } in &extraction.governed {
+        document_references = document_references.saturating_add(1);
+        resources.charge_reference(0, document_references)?;
+        let bytes = source
+            .get(span.0..span.1)
+            .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
+        governed.push(GovernedSource {
+            span: *span,
+            display: SpanDisplay {
+                start_line: position(source, &lines, span.0).0,
+                start_column: position(source, &lines, span.0).1,
+                end_line: position(source, &lines, span.1).0,
+                end_column: position(source, &lines, span.1).1,
+            },
+            digest: hb(GOVERNED_SOURCE_DOMAIN, bytes),
+        });
+    }
+
     Ok(Scanned {
         adapter,
         work: analysis.work,
         occurrences,
         opaque: extraction.opaque,
+        governed,
     })
 }
 

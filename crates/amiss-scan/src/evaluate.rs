@@ -377,20 +377,125 @@ pub fn evaluate(
         comparisons,
         enforce,
         &crate::policy::Effects::default(),
+        &[],
     )
 }
 
+/// The reserved governed declaration boundary: control-scoped at the affected
+/// document under the one closed rule, with null base state, candidate
+/// `unsupported`, exact node multiplicity, and the sorted distinct source
+/// digests.
+fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
+    let scope = Value::Object(vec![
+        ("kind".to_owned(), Value::String("control".to_owned())),
+        (
+            "control_path".to_owned(),
+            Value::String(seed.document.clone()),
+        ),
+        (
+            "rule_id".to_owned(),
+            Value::String("unsupported/governed-claim".to_owned()),
+        ),
+    ]);
+    let (key_value, digest) = key_input(FindingKind::UnsupportedCapability, scope);
+    let sources: Vec<Value> = seed
+        .sources
+        .iter()
+        .map(|(source_digest, multiplicity)| {
+            Value::Object(vec![
+                (
+                    "multiplicity".to_owned(),
+                    Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
+                ),
+                (
+                    "source_digest".to_owned(),
+                    Value::String(source_digest.to_string()),
+                ),
+            ])
+        })
+        .collect();
+    let fact = Value::Object(vec![
+        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
+        (
+            "finding_kind".to_owned(),
+            Value::String(FindingKind::UnsupportedCapability.as_str().to_owned()),
+        ),
+        ("key_input".to_owned(), key_value.clone()),
+        (
+            "evidence".to_owned(),
+            Value::Object(vec![
+                ("kind".to_owned(), Value::String("control".to_owned())),
+                (
+                    "control_path".to_owned(),
+                    Value::String(seed.document.clone()),
+                ),
+                (
+                    "rule_id".to_owned(),
+                    Value::String("unsupported/governed-claim".to_owned()),
+                ),
+                ("base_control_state".to_owned(), Value::Null),
+                ("base_control_digest".to_owned(), Value::Null),
+                (
+                    "candidate_control_state".to_owned(),
+                    Value::Object(vec![
+                        ("sources".to_owned(), Value::Array(sources)),
+                        ("state".to_owned(), Value::String("unsupported".to_owned())),
+                    ]),
+                ),
+                ("candidate_control_digest".to_owned(), Value::Null),
+                ("exception".to_owned(), Value::Null),
+            ]),
+        ),
+    ]);
+    let fact_digest = hj(FACT_DOMAIN, &fact);
+    let configured = FindingKind::UnsupportedCapability.built_in_disposition(enforce);
+    Finding {
+        kind: FindingKind::UnsupportedCapability,
+        key_input: key_value,
+        finding_key: digest,
+        attribution: Attribution::NotApplicable,
+        base_fact: None,
+        candidate_fact: Some((fact, fact_digest)),
+        member_count: seed.member_count,
+        observation_ids: Vec::new(),
+        location: Location {
+            side: LocationSide::Candidate,
+            path: Some(seed.document.clone()),
+            span: seed.representative_span,
+        },
+        configured_disposition: configured,
+        effective_disposition: configured,
+        repository_step: None,
+    }
+}
+
+/// One candidate document's reserved governed definitions: the exact node
+/// count and the distinct source digests with their multiplicities, plus the
+/// least location as the representative.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedSeed {
+    pub document: String,
+    pub member_count: u64,
+    pub sources: Vec<(Digest, u64)>,
+    pub representative_span: Option<(usize, usize)>,
+}
+
 /// The full projection with the candidate policy applied: the raise-only
-/// repository step on structural candidate facts, and the weakening and
-/// coverage control findings the comparison produced.
+/// repository step on structural candidate facts, the weakening and coverage
+/// control findings, and one unsupported-capability finding per candidate
+/// document holding reserved governed definitions.
 #[must_use]
 pub fn evaluate_with_policy(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     enforce: bool,
     policy: &crate::policy::Effects,
+    governed: &[GovernedSeed],
 ) -> Vec<Finding> {
     let mut findings = ordinary(documents, comparisons, enforce);
+    for seed in governed {
+        findings.push(governed_finding(seed, enforce));
+    }
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
             continue;

@@ -346,3 +346,70 @@ fn corpus_extraction_invariants_hold() {
     std::panic::set_hook(previous);
     assert!(checked > 3000, "the sweep covered {checked} parses");
 }
+
+/// A definition is reserved exactly when its decoded label begins with
+/// lowercase `amiss:`; the decode covers escapes and entities but never
+/// case folding, and a reserved winner suppresses its consumers without
+/// creating another occurrence.
+#[test]
+fn reserved_definitions_surface_and_suppress() {
+    let source = "See [claim][amiss:claim-one] and [real][docs].\n\n\
+                  [amiss:claim-one]: ./subject.md \"claim\"\n\
+                  [docs]: ./real.md\n\
+                  [amiss&colon;entity]: ./other.md\n\
+                  [AMISS:upper]: ./case.md\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![(
+            SourceConstruct::FullReferenceLink,
+            "./real.md".to_owned(),
+            "./real.md".to_owned()
+        )],
+        "the reserved winner suppresses its consumer; the ordinary one stays"
+    );
+    assert_eq!(
+        got.governed.len(),
+        2,
+        "escape decoding counts, case folding does not"
+    );
+    let spans: Vec<&str> = got
+        .governed
+        .iter()
+        .filter_map(|definition| source.get(definition.span.0..definition.span.1))
+        .collect();
+    assert_eq!(
+        spans,
+        vec![
+            "[amiss:claim-one]: ./subject.md \"claim\"",
+            "[amiss&colon;entity]: ./other.md",
+        ],
+        "the span runs from the opening bracket through the title, excluding the ending"
+    );
+}
+
+/// Duplicate precedence: a losing reserved duplicate still contributes its
+/// governed occurrence but cannot suppress a consumer whose first winner is
+/// ordinary, and a later ordinary duplicate cannot unsuppress a reserved
+/// first winner.
+#[test]
+fn reserved_duplicates_follow_first_winner_precedence() {
+    let ordinary_first = extraction(
+        Adapter::Markdown,
+        "[a][x]\n\n[x]: ./first.md\n[amiss:x]: ./never.md\n",
+    );
+    assert_eq!(
+        ordinary_first.occurrences.len(),
+        1,
+        "the ordinary winner resolves"
+    );
+    assert_eq!(
+        ordinary_first.governed.len(),
+        1,
+        "the loser still contributes"
+    );
+
+    let reserved_first = extraction(Adapter::Markdown, "[a][amiss:x]\n\n[amiss:x]: ./wins.md\n");
+    assert_eq!(reserved_first.occurrences.len(), 0, "suppressed");
+    assert_eq!(reserved_first.governed.len(), 1);
+}

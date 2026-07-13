@@ -1075,8 +1075,14 @@ pub fn construct(
 ) -> Built {
     let paired = paired_documents(base, candidate);
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
-    let findings =
-        crate::evaluate::evaluate_with_policy(&inputs, comparisons, setup.enforce, &setup.policy);
+    let governed = governed_seeds(candidate);
+    let findings = crate::evaluate::evaluate_with_policy(
+        &inputs,
+        comparisons,
+        setup.enforce,
+        &setup.policy,
+        &governed,
+    );
 
     let document_rows: Vec<(String, Value)> = paired
         .iter()
@@ -1098,10 +1104,8 @@ pub fn construct(
         .map(|finding| finding_value(finding, setup.enforce, &comparison_rows, &document_rows))
         .collect();
 
-    let failing = findings
-        .iter()
-        .any(|finding| finding.effective_disposition == Disposition::Fail);
-    let (status, exit_code) = if failing { ("fail", 1) } else { ("pass", 0) };
+    let governed_errors = governed_error_rows(&governed);
+    let (complete, status, exit_code) = run_result(&findings, &governed_errors);
     let finding_count = u64::try_from(finding_rows.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, comparisons, &findings, finding_count);
 
@@ -1114,11 +1118,14 @@ pub fn construct(
         (
             "result",
             object(vec![
-                ("complete", Value::Bool(true)),
+                ("complete", Value::Bool(complete)),
                 ("status", string(status)),
                 ("exit_code", Value::Integer(exit_code)),
                 ("finding_count", integer(finding_count)),
-                ("error_count", integer(0)),
+                (
+                    "error_count",
+                    integer(u64::try_from(governed_errors.len()).unwrap_or(u64::MAX)),
+                ),
             ]),
         ),
         (
@@ -1147,7 +1154,7 @@ pub fn construct(
             ),
         ),
         ("findings", Value::Array(finding_rows)),
-        ("errors", Value::Array(Vec::new())),
+        ("errors", Value::Array(governed_errors)),
     ]);
     let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
     let envelope = object(vec![
@@ -1164,6 +1171,69 @@ pub fn construct(
         status,
         exit_code,
     }
+}
+
+fn governed_error_rows(governed: &[crate::evaluate::GovernedSeed]) -> Vec<Value> {
+    governed
+        .iter()
+        .map(|seed| {
+            error_row_value(&ErrorDetail {
+                code: amiss_wire::report::AnalysisErrorCode::UnsupportedCapability,
+                path: Some(seed.document.clone()),
+                resource: None,
+            })
+        })
+        .collect()
+}
+
+/// A complete run passes or fails by its effective dispositions; a run with
+/// reserved governed declarations is boundary-incomplete with full details
+/// and exit class two.
+fn run_result(findings: &[Finding], governed_errors: &[Value]) -> (bool, &'static str, i64) {
+    if !governed_errors.is_empty() {
+        return (false, "incomplete", 2);
+    }
+    let failing = findings
+        .iter()
+        .any(|finding| finding.effective_disposition == Disposition::Fail);
+    if failing {
+        (true, "fail", 1)
+    } else {
+        (true, "pass", 0)
+    }
+}
+
+/// One seed per candidate document holding reserved definitions: equal source
+/// digests grouped with exact multiplicity, member count as the total node
+/// count, and the least location as the representative.
+fn governed_seeds(candidate: &SnapshotDiscovery) -> Vec<crate::evaluate::GovernedSeed> {
+    let mut seeds = Vec::new();
+    for record in &candidate.documents {
+        let DocumentStatus::Scanned(scanned) = &record.status else {
+            continue;
+        };
+        if scanned.governed.is_empty() {
+            continue;
+        }
+        let mut sources: Vec<(Digest, u64)> = Vec::new();
+        for governed in &scanned.governed {
+            match sources
+                .iter_mut()
+                .find(|(digest, _)| *digest == governed.digest)
+            {
+                Some((_, multiplicity)) => *multiplicity = multiplicity.saturating_add(1),
+                None => sources.push((governed.digest, 1)),
+            }
+        }
+        sources.sort_by_key(|(digest, _)| *digest);
+        seeds.push(crate::evaluate::GovernedSeed {
+            document: record.path.clone(),
+            member_count: u64::try_from(scanned.governed.len()).unwrap_or(u64::MAX),
+            sources,
+            representative_span: scanned.governed.iter().map(|governed| governed.span).min(),
+        });
+    }
+    seeds
 }
 
 fn zero_counts() -> Counts {

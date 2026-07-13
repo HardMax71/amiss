@@ -418,3 +418,95 @@ fn an_invalid_policy_is_fatal_with_unavailable_controls() {
             || payload["errors"][1]["path"] == ".amiss/scanner-policy.json"
     );
 }
+
+#[test]
+fn reserved_directives_are_boundary_incomplete_with_full_details() {
+    let (dir, _base, candidate) = fixture();
+    let root = dir.path();
+    fs::write(
+        root.join("docs/governed.md"),
+        "A claim [here][amiss:claim v1] and [fine](guide.md).\n\n\
+         [amiss:claim v1]: ./subject.md \"claim\"\n\
+         [amiss:claim v1]: ./subject.md \"claim\"\n",
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "governed"]);
+    let governed = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &candidate,
+        "--candidate",
+        &governed,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 2, "governed syntax exits two under either profile");
+    let payload = payload(&stdout);
+    assert_eq!(payload["result"]["status"], "incomplete");
+    assert_eq!(payload["result"]["complete"], false);
+    assert!(
+        !payload["documents"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .is_empty(),
+        "boundary-incomplete keeps complete detail arrays"
+    );
+    assert_eq!(payload["errors"][0]["code"], "UNSUPPORTED_CAPABILITY");
+    assert_eq!(payload["errors"][0]["path"], "docs/governed.md");
+    assert_eq!(payload["errors"][0]["phase"], "policy");
+
+    let finding = payload["findings"]
+        .as_array()
+        .and_then(|findings| {
+            findings
+                .iter()
+                .find(|finding| finding["kind"] == "unsupported-capability")
+        })
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        finding["key_input"]["scope"]["rule_id"],
+        "unsupported/governed-claim"
+    );
+    assert_eq!(
+        finding["key_input"]["scope"]["control_path"],
+        "docs/governed.md"
+    );
+    assert_eq!(
+        finding["aggregation"]["member_count"], 2,
+        "two nodes, one duplicated source"
+    );
+    assert_eq!(finding["effective_disposition"], "fail");
+    let sources = &finding["candidate_fact"]["evidence"]["candidate_control_state"]["sources"];
+    assert_eq!(
+        sources.as_array().map(Vec::len),
+        Some(1),
+        "equal digests group"
+    );
+    assert_eq!(sources[0]["multiplicity"], 2);
+
+    let suppressed: Vec<&str> = payload["observations"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row["candidate"]["document"].as_str())
+                .filter(|document| *document == "docs/governed.md")
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        suppressed.len(),
+        1,
+        "only the ordinary link is an observation; the governed consumer is suppressed"
+    );
+}

@@ -61,6 +61,7 @@ pub struct Opaque {
 pub struct Extraction {
     pub occurrences: Vec<Occurrence>,
     pub opaque: Opaque,
+    pub governed: Vec<GovernedDefinition>,
 }
 
 /// Everything one parse yields: the work charge, and the extraction for a
@@ -105,7 +106,20 @@ struct Definition {
     identifier: String,
     url: String,
     raw: String,
+    reserved: bool,
 }
+
+/// One reserved governed definition: its complete node span, from the opening
+/// bracket through the exclusive end of the destination and title syntax.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedDefinition {
+    pub span: (usize, usize),
+}
+
+/// A definition is reserved exactly when its decoded label scalars, before
+/// `CommonMark` whitespace and case normalization, begin with lowercase ASCII
+/// `amiss:`.
+pub const RESERVED_LABEL_PREFIX: &str = "amiss:";
 
 fn extract_tree(
     tree: &Node,
@@ -114,9 +128,10 @@ fn extract_tree(
     raw: &[u8],
     frontmatter_bytes: usize,
 ) -> Result<Extraction, Fault> {
+    let (resolved, governed_spans) = definitions(tree, suffix)?;
     let mut sweep = Sweep {
         suffix,
-        definitions: definitions(tree, suffix)?,
+        definitions: resolved,
         root_span: span_of(tree)?,
         occurrences: Vec::new(),
         mdx: Vec::new(),
@@ -165,6 +180,12 @@ fn extract_tree(
             mdx: opaque.mdx.iter().map(|span| translate(*span)).collect(),
             html: opaque.html.iter().map(|span| translate(*span)).collect(),
         },
+        governed: governed_spans
+            .into_iter()
+            .map(|span| GovernedDefinition {
+                span: translate(span),
+            })
+            .collect(),
     })
 }
 
@@ -218,14 +239,18 @@ impl Sweep<'_> {
             Node::LinkReference(reference) => {
                 let construct = reference_link(reference.reference_kind);
                 let winning = winning(&self.definitions, &reference.identifier)?;
-                let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                self.push(construct, raw, url, span_of(node)?, path, *owners);
+                if !winning.reserved {
+                    let (raw, url) = (winning.raw.clone(), winning.url.clone());
+                    self.push(construct, raw, url, span_of(node)?, path, *owners);
+                }
             }
             Node::ImageReference(reference) => {
                 let construct = reference_image(reference.reference_kind);
                 let winning = winning(&self.definitions, &reference.identifier)?;
-                let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                self.push(construct, raw, url, span_of(node)?, path, *owners);
+                if !winning.reserved {
+                    let (raw, url) = (winning.raw.clone(), winning.url.clone());
+                    self.push(construct, raw, url, span_of(node)?, path, *owners);
+                }
             }
             Node::Root(_)
             | Node::Blockquote(_)
@@ -442,18 +467,25 @@ fn run_length(bytes: &[u8], at: usize, limit: usize) -> usize {
 
 /// Collects reference definitions in document order; the first with a matching
 /// normalized identifier wins.
-fn definitions(tree: &Node, suffix: &str) -> Result<Vec<Definition>, Fault> {
+type ResolvedDefinitions = (Vec<Definition>, Vec<(usize, usize)>);
+
+fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> {
     let mut out = Vec::new();
     let mut stack = vec![tree];
     while let Some(node) = stack.pop() {
         if let Node::Definition(definition) = node {
             let span = span_of(node)?;
+            let label = definition
+                .label
+                .as_deref()
+                .unwrap_or(definition.identifier.as_str());
             out.push((
                 span,
                 Definition {
                     identifier: definition.identifier.clone(),
                     url: definition.url.clone(),
                     raw: definition_destination(suffix, span)?,
+                    reserved: label.starts_with(RESERVED_LABEL_PREFIX),
                 },
             ));
         }
@@ -462,7 +494,15 @@ fn definitions(tree: &Node, suffix: &str) -> Result<Vec<Definition>, Fault> {
         }
     }
     out.sort_by_key(|(span, _)| *span);
-    Ok(out.into_iter().map(|(_, definition)| definition).collect())
+    let governed = out
+        .iter()
+        .filter(|(_, definition)| definition.reserved)
+        .map(|(span, _)| *span)
+        .collect();
+    Ok((
+        out.into_iter().map(|(_, definition)| definition).collect(),
+        governed,
+    ))
 }
 
 fn winning<'a>(definitions: &'a [Definition], identifier: &str) -> Result<&'a Definition, Fault> {
