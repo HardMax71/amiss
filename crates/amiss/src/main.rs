@@ -115,8 +115,12 @@ fn run(invocation: &Invocation) -> ExitCode {
             .as_ref()
             .map(|identity| identity.default_branch_ref.as_str().to_owned()),
         // The frozen invocation grammar has no control-supply surface; the
-        // required wrapper feeds the floor when its interop RFC lands.
+        // required wrapper feeds these when its interop RFC lands.
         floor: None,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
     };
     let built = match &invocation.candidate {
         CandidateSelector::Commit(candidate_oid) => commit_pair(

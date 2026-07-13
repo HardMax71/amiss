@@ -21,6 +21,8 @@ pub struct ScanLimits {
     pub aggregate_selected_control_bytes_per_snapshot: u64,
     pub control_input_bytes: u64,
     pub repository_policy_entries: u64,
+    pub debt_items: u64,
+    pub waiver_items: u64,
 }
 
 impl ScanLimits {
@@ -40,6 +42,8 @@ impl ScanLimits {
         aggregate_selected_control_bytes_per_snapshot: 67_108_864,
         control_input_bytes: 16_777_216,
         repository_policy_entries: 100_000,
+        debt_items: 100_000,
+        waiver_items: 100_000,
     };
 }
 

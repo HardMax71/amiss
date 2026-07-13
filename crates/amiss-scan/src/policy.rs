@@ -274,9 +274,41 @@ fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
         .collect()
 }
 
+/// The verified debt snapshot as evaluation context: provenance plus the
+/// items the finding projection matches by key and fact digest.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebtContext {
+    pub digest: Digest,
+    pub trust_source: &'static str,
+    pub adoption_tree: amiss_wire::model::TreeIdentity,
+    pub items: Vec<amiss_wire::controls::DebtItem>,
+}
+
+/// The verified waiver bundle as evaluation context: provenance, every item
+/// for inventory, the current candidate tree that selects items, and the
+/// floor's issuer and kind allow-lists selected-item semantics consult.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WaiverContext {
+    pub digest: Digest,
+    pub trust_source: &'static str,
+    pub candidate_tree: amiss_wire::model::TreeIdentity,
+    pub items: Vec<amiss_wire::controls::WaiverItem>,
+    pub authorized_issuers: Vec<amiss_wire::model::OwnerId>,
+    pub waivable_kinds: Vec<amiss_wire::controls::EligibleFindingKind>,
+}
+
+/// The verified trusted-time statement: the report's evaluation instant is
+/// exactly its `evaluation_instant`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimeContext {
+    pub statement: amiss_wire::controls::TrustedTimeStatement,
+    pub digest: Digest,
+}
+
 /// The complete policy effects on one run: the candidate's raise-only
-/// dispositions, and the weakening and inventory-coverage control findings
-/// derived from the base and candidate semantic sets.
+/// dispositions, the weakening and inventory-coverage control findings
+/// derived from the base and candidate semantic sets, and the verified
+/// external controls the wrapper supplied.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Effects {
     pub raised: Vec<(FindingKind, Disposition)>,
@@ -285,6 +317,13 @@ pub struct Effects {
     pub base_digest: Option<Digest>,
     pub candidate_digest: Option<Digest>,
     pub floor: Option<(Digest, &'static str)>,
+    pub debt: Option<DebtContext>,
+    pub waiver: Option<WaiverContext>,
+    pub time: Option<TimeContext>,
+    pub constraint: Option<(
+        amiss_wire::controls::ExecutionConstraintDescriptor,
+        &'static str,
+    )>,
 }
 
 /// Compares the two sides and evaluates the inventory union against the
@@ -385,6 +424,10 @@ pub fn effects(
         base_digest: base.digest,
         candidate_digest: candidate.digest,
         floor: None,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
     }
 }
 
@@ -457,6 +500,181 @@ pub fn verify_floor(
         return Err(mismatch);
     }
     Ok(())
+}
+
+/// A verified debt snapshot as the wrapper supplies it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebtInput {
+    pub snapshot: amiss_wire::controls::DebtSnapshot,
+    pub trust_source: TrustSource,
+}
+
+/// A verified waiver bundle as the wrapper supplies it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WaiverInput {
+    pub bundle: amiss_wire::controls::WaiverBundle,
+    pub trust_source: TrustSource,
+}
+
+/// The trusted-time statement plus the wrapper's provider-authenticated run
+/// context the statement must identify.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimeInput {
+    pub statement: amiss_wire::controls::TrustedTimeStatement,
+    pub provider_run_id: String,
+    pub provider_run_attempt: u64,
+}
+
+/// A verified execution constraint as the wrapper supplies it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConstraintInput {
+    pub descriptor: amiss_wire::controls::ExecutionConstraintDescriptor,
+    pub trust_source: TrustSource,
+}
+
+const fn binding_mismatch_row() -> ErrorDetail {
+    ErrorDetail {
+        code: AnalysisErrorCode::ControlBindingMismatch,
+        path: None,
+        resource: None,
+    }
+}
+
+fn identity_matches(
+    control: &amiss_wire::model::RepositoryIdentity,
+    control_ref: &amiss_wire::model::BranchRef,
+    repository: Option<(&str, &str)>,
+    candidate_ref: Option<&str>,
+) -> bool {
+    let Some((owner, name)) = repository else {
+        return false;
+    };
+    control.owner == owner && control.name == name && candidate_ref == Some(control_ref.as_str())
+}
+
+/// The statement's evaluation bindings: repository, ref, candidate identity,
+/// and the provider run the wrapper authenticated. Shape and TTL were
+/// established at parse.
+///
+/// # Errors
+///
+/// One `TRUSTED_TIME_INVALID` detail.
+pub fn verify_time(
+    input: &TimeInput,
+    repository: Option<(&str, &str)>,
+    candidate_ref: Option<&str>,
+    candidate_identity: &Digest,
+) -> Result<(), ErrorDetail> {
+    let statement = &input.statement;
+    let bound = identity_matches(
+        &statement.repository,
+        &statement.ref_name,
+        repository,
+        candidate_ref,
+    ) && statement.candidate_identity_digest == *candidate_identity
+        && statement.provider_run_id == input.provider_run_id
+        && statement.provider_run_attempt == input.provider_run_attempt;
+    if bound {
+        Ok(())
+    } else {
+        Err(ErrorDetail {
+            code: AnalysisErrorCode::TrustedTimeInvalid,
+            path: None,
+            resource: None,
+        })
+    }
+}
+
+/// The snapshot-level debt binding: repository, ref, the verified floor's
+/// digest, every owner on the floor's allow-list, causal time bounds against
+/// the trusted instant, and the effective item ceiling.
+///
+/// # Errors
+///
+/// One `CONTROL_BINDING_MISMATCH` detail, or the `debt-items` crossing.
+pub fn verify_debt(
+    input: &DebtInput,
+    repository: Option<(&str, &str)>,
+    candidate_ref: Option<&str>,
+    floor: Option<&FloorInput>,
+    instant: &amiss_wire::model::UtcInstant,
+    item_limit: u64,
+) -> Result<(), ErrorDetail> {
+    let snapshot = &input.snapshot;
+    if u64::try_from(snapshot.items.len()).unwrap_or(u64::MAX) > item_limit {
+        return Err(ErrorDetail {
+            code: AnalysisErrorCode::ResourceLimitExceeded,
+            path: None,
+            resource: Some((
+                ResourceName::DebtItems,
+                item_limit,
+                item_limit.saturating_add(1),
+            )),
+        });
+    }
+    let Some(floor) = floor else {
+        return Err(binding_mismatch_row());
+    };
+    let bound = identity_matches(
+        &snapshot.repository,
+        &snapshot.ref_name,
+        repository,
+        candidate_ref,
+    ) && snapshot.organization_floor_digest == floor.floor.digest
+        && snapshot.created_at <= *instant
+        && snapshot.items.iter().all(|item| {
+            item.created_at <= *instant && floor.floor.authorized_debt_owners.contains(&item.owner)
+        });
+    if bound {
+        Ok(())
+    } else {
+        Err(binding_mismatch_row())
+    }
+}
+
+/// The bundle-level waiver binding: repository, ref, the verified floor's
+/// digest, bundle creation not after the trusted instant, and the effective
+/// item ceiling. Issuer, kind, owner distinction, activity, and body
+/// agreement are selected-item semantics, not binding.
+///
+/// # Errors
+///
+/// One `CONTROL_BINDING_MISMATCH` detail, or the `waiver-items` crossing.
+pub fn verify_waiver(
+    input: &WaiverInput,
+    repository: Option<(&str, &str)>,
+    candidate_ref: Option<&str>,
+    floor: Option<&FloorInput>,
+    instant: &amiss_wire::model::UtcInstant,
+    item_limit: u64,
+) -> Result<(), ErrorDetail> {
+    let bundle = &input.bundle;
+    if u64::try_from(bundle.items.len()).unwrap_or(u64::MAX) > item_limit {
+        return Err(ErrorDetail {
+            code: AnalysisErrorCode::ResourceLimitExceeded,
+            path: None,
+            resource: Some((
+                ResourceName::WaiverItems,
+                item_limit,
+                item_limit.saturating_add(1),
+            )),
+        });
+    }
+    let Some(floor) = floor else {
+        return Err(binding_mismatch_row());
+    };
+    let bound = identity_matches(
+        &bundle.repository,
+        &bundle.ref_name,
+        repository,
+        candidate_ref,
+    ) && bundle.organization_floor_digest == floor.floor.digest
+        && bundle.created_at <= *instant;
+    if bound {
+        Ok(())
+    } else {
+        Err(binding_mismatch_row())
+    }
 }
 
 /// One protected control path's state on one side: absent, present with its
@@ -653,9 +871,9 @@ pub fn tightened_limits(
             ResourceName::RawPathBytes => Some(&mut git.raw_path_bytes),
             ResourceName::ControlInputBytes => Some(&mut scan.control_input_bytes),
             ResourceName::RepositoryPolicyEntries => Some(&mut scan.repository_policy_entries),
-            ResourceName::DebtItems
-            | ResourceName::WaiverItems
-            | ResourceName::OrganizationPolicyEntries
+            ResourceName::DebtItems => Some(&mut scan.debt_items),
+            ResourceName::WaiverItems => Some(&mut scan.waiver_items),
+            ResourceName::OrganizationPolicyEntries
             | ResourceName::CompleteFindings
             | ResourceName::TypedAnalysisErrorsRetained
             | ResourceName::MachineJsonBytes

@@ -81,6 +81,10 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
     }
 }
 

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
-use amiss_wire::report::{Disposition, FindingKind, ResolutionCode, ResolutionStatus};
+use amiss_wire::report::{Disposition, ErrorDetail, FindingKind, ResolutionCode, ResolutionStatus};
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
 use crate::observe;
@@ -97,6 +97,24 @@ pub struct Finding {
     pub configured_disposition: Disposition,
     pub effective_disposition: Disposition,
     pub steps: Vec<PolicyStep>,
+    pub debt: Option<DebtApplied>,
+    pub waiver: Option<WaiverApplied>,
+}
+
+/// A valid active debt item applied to this finding, retained as adoption
+/// provenance even when its residual equals the incoming disposition.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebtApplied {
+    pub item: amiss_wire::controls::DebtItem,
+    pub snapshot_digest: Digest,
+    pub adoption_tree: amiss_wire::model::TreeIdentity,
+}
+
+/// A valid selected waiver applied to this finding: exactly `fail -> warn`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WaiverApplied {
+    pub item: amiss_wire::controls::WaiverItem,
+    pub bundle_digest: Digest,
 }
 
 fn key_digest(input: &Value) -> Digest {
@@ -349,6 +367,8 @@ fn simple(
         location,
         configured_disposition: configured,
         effective_disposition: configured,
+        debt: None,
+        waiver: None,
         steps: vec![built_in_step(kind, enforce)],
     }
 }
@@ -395,13 +415,14 @@ pub fn evaluate(
     comparisons: &[Comparison],
     enforce: bool,
 ) -> Vec<Finding> {
-    evaluate_with_policy(
+    let (findings, _no_exceptions) = evaluate_with_policy(
         documents,
         comparisons,
         enforce,
         &crate::policy::Effects::default(),
         &[],
-    )
+    );
+    findings
 }
 
 /// The reserved governed declaration boundary: control-scoped at the affected
@@ -488,6 +509,8 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
         },
         configured_disposition: configured,
         effective_disposition: configured,
+        debt: None,
+        waiver: None,
         steps: vec![built_in_step(FindingKind::UnsupportedCapability, enforce)],
     }
 }
@@ -504,9 +527,11 @@ pub struct GovernedSeed {
 }
 
 /// The full projection with the candidate policy applied: the raise-only
-/// repository step on structural candidate facts, the weakening and coverage
+/// repository and floor steps on structural candidate facts, exact debt and
+/// waiver application with their defect findings, the weakening and coverage
 /// control findings, and one unsupported-capability finding per candidate
-/// document holding reserved governed definitions.
+/// document holding reserved governed definitions. The returned rows are the
+/// exception-overlap errors; any row makes the run incomplete.
 #[must_use]
 pub fn evaluate_with_policy(
     documents: &[DocumentInput],
@@ -514,7 +539,7 @@ pub fn evaluate_with_policy(
     enforce: bool,
     policy: &crate::policy::Effects,
     governed: &[GovernedSeed],
-) -> Vec<Finding> {
+) -> (Vec<Finding>, Vec<ErrorDetail>) {
     let mut findings = ordinary(documents, comparisons, enforce);
     for seed in governed {
         findings.push(governed_finding(seed, enforce));
@@ -531,11 +556,364 @@ pub fn evaluate_with_policy(
             .map_or(finding.configured_disposition, |step| step.after);
         finding.effective_disposition = finding.configured_disposition;
     }
+    let (exception_findings, errors) = apply_exceptions(&mut findings, policy, enforce);
+    findings.extend(exception_findings);
     for seed in &policy.controls {
         findings.push(control_finding(seed, policy, enforce));
     }
     findings.sort_by_key(|finding| finding.finding_key);
+    (findings, errors)
+}
+
+fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
+    Value::Object(vec![
+        (
+            "object_format".to_owned(),
+            Value::String(
+                match tree.object_format {
+                    amiss_wire::model::ObjectFormat::Sha1 => "sha1",
+                    amiss_wire::model::ObjectFormat::Sha256 => "sha256",
+                }
+                .to_owned(),
+            ),
+        ),
+        ("tree_oid".to_owned(), Value::String(tree.tree_oid.clone())),
+    ])
+}
+
+fn debt_diagnostic(
+    item: &amiss_wire::controls::DebtItem,
+    context: &crate::policy::DebtContext,
+    current_fact_digest: Digest,
+) -> Value {
+    Value::Object(vec![
+        ("kind".to_owned(), Value::String("debt".to_owned())),
+        (
+            "debt_id".to_owned(),
+            Value::String(item.debt_id.as_str().to_owned()),
+        ),
+        (
+            "debt_snapshot_digest".to_owned(),
+            Value::String(context.digest.to_string()),
+        ),
+        (
+            "adoption_tree".to_owned(),
+            tree_value(&context.adoption_tree),
+        ),
+        (
+            "accepted_fact_digest".to_owned(),
+            Value::String(item.accepted_fact_digest.to_string()),
+        ),
+        (
+            "current_fact_digest".to_owned(),
+            Value::String(current_fact_digest.to_string()),
+        ),
+        (
+            "owner".to_owned(),
+            Value::String(item.owner.as_str().to_owned()),
+        ),
+        ("reason".to_owned(), Value::String(item.reason.clone())),
+        (
+            "created_at".to_owned(),
+            Value::String(item.created_at.as_str().to_owned()),
+        ),
+        (
+            "expires_at".to_owned(),
+            Value::String(item.expires_at.as_str().to_owned()),
+        ),
+    ])
+}
+
+fn waiver_diagnostic(
+    item: &amiss_wire::controls::WaiverItem,
+    bundle_digest: Digest,
+    current_fact_digest: Option<Digest>,
+) -> Value {
+    Value::Object(vec![
+        ("kind".to_owned(), Value::String("waiver".to_owned())),
+        (
+            "waiver_id".to_owned(),
+            Value::String(item.waiver_id.as_str().to_owned()),
+        ),
+        (
+            "waiver_bundle_digest".to_owned(),
+            Value::String(bundle_digest.to_string()),
+        ),
+        (
+            "candidate_tree".to_owned(),
+            tree_value(&item.candidate_tree),
+        ),
+        (
+            "finding_key".to_owned(),
+            Value::String(item.finding_key.to_string()),
+        ),
+        (
+            "authorized_fact_digest".to_owned(),
+            Value::String(item.authorized_fact_digest.to_string()),
+        ),
+        (
+            "current_fact_digest".to_owned(),
+            current_fact_digest.map_or(Value::Null, |digest| Value::String(digest.to_string())),
+        ),
+        (
+            "owner".to_owned(),
+            Value::String(item.owner.as_str().to_owned()),
+        ),
+        (
+            "issuer".to_owned(),
+            Value::String(item.issuer.as_str().to_owned()),
+        ),
+        ("reason".to_owned(), Value::String(item.reason.clone())),
+        (
+            "created_at".to_owned(),
+            Value::String(item.created_at.as_str().to_owned()),
+        ),
+        (
+            "not_before".to_owned(),
+            Value::String(item.not_before.as_str().to_owned()),
+        ),
+        (
+            "expires_at".to_owned(),
+            Value::String(item.expires_at.as_str().to_owned()),
+        ),
+        (
+            "residual_disposition".to_owned(),
+            Value::String("warn".to_owned()),
+        ),
+    ])
+}
+
+/// The candidate finding an exception item may target: the exact key with a
+/// candidate fact, which excludes resolved projections and every scope an
+/// exception cannot touch.
+fn exception_target(findings: &[Finding], key: Digest) -> Option<usize> {
     findings
+        .iter()
+        .position(|finding| finding.finding_key == key && finding.candidate_fact.is_some())
+}
+
+fn candidate_digest_of(finding: &Finding) -> Option<Digest> {
+    finding.candidate_fact.as_ref().map(|(_, digest)| *digest)
+}
+
+/// Steps four and five with their defect findings: exact active debt, one
+/// exact selected waiver, the closed defect rows in construction order, and
+/// the overlap law that applies neither when both are valid.
+fn apply_exceptions(
+    findings: &mut [Finding],
+    policy: &crate::policy::Effects,
+    enforce: bool,
+) -> (Vec<Finding>, Vec<ErrorDetail>) {
+    let mut extra: Vec<Finding> = Vec::new();
+    let Some(instant) = policy
+        .time
+        .as_ref()
+        .map(|time| time.statement.evaluation_instant.clone())
+    else {
+        return (extra, Vec::new());
+    };
+    let debt_valid = debt_pass(findings, policy, enforce, &instant, &mut extra);
+    let waiver_valid = waiver_pass(findings, policy, enforce, &instant, &mut extra);
+    let overlap = apply_valid_exceptions(findings, policy, &debt_valid, &waiver_valid);
+    let errors = if overlap {
+        vec![ErrorDetail {
+            code: amiss_wire::report::AnalysisErrorCode::ExceptionOverlap,
+            path: None,
+            resource: None,
+        }]
+    } else {
+        Vec::new()
+    };
+    (extra, errors)
+}
+
+/// The debt item pass: expiry before fact inequality, both defect rows able
+/// to coexist, and a finding absent from the snapshot receiving no
+/// treatment.
+fn debt_pass(
+    findings: &[Finding],
+    policy: &crate::policy::Effects,
+    enforce: bool,
+    instant: &amiss_wire::model::UtcInstant,
+    extra: &mut Vec<Finding>,
+) -> BTreeMap<Digest, usize> {
+    let mut debt_valid: BTreeMap<Digest, usize> = BTreeMap::new();
+    let Some(context) = &policy.debt else {
+        return debt_valid;
+    };
+    for (index, item) in context.items.iter().enumerate() {
+        let Some(target) = exception_target(findings, item.finding_key) else {
+            continue;
+        };
+        let Some(current) = findings.get(target).and_then(candidate_digest_of) else {
+            continue;
+        };
+        let expired = *instant >= item.expires_at;
+        let equal = current == item.accepted_fact_digest;
+        if expired {
+            extra.push(control_row(
+                FindingKind::DebtExpired,
+                format!("debt/{}/expired", item.debt_id.as_str()),
+                None,
+                (None, Some(context.digest)),
+                debt_diagnostic(item, context, current),
+                enforce,
+            ));
+        }
+        if !equal {
+            extra.push(control_row(
+                FindingKind::DebtWorsened,
+                format!("debt/{}/fact", item.debt_id.as_str()),
+                None,
+                (None, Some(context.digest)),
+                debt_diagnostic(item, context, current),
+                enforce,
+            ));
+        }
+        if !expired && equal {
+            debt_valid.insert(item.finding_key, index);
+        }
+    }
+    debt_valid
+}
+
+/// The selected-waiver pass: the closed defect rows in construction order,
+/// with the finding-bound rows applicable only when the key names a current
+/// candidate finding.
+fn waiver_pass(
+    findings: &[Finding],
+    policy: &crate::policy::Effects,
+    enforce: bool,
+    instant: &amiss_wire::model::UtcInstant,
+    extra: &mut Vec<Finding>,
+) -> BTreeMap<Digest, usize> {
+    let mut waiver_valid: BTreeMap<Digest, usize> = BTreeMap::new();
+    let Some(context) = &policy.waiver else {
+        return waiver_valid;
+    };
+    for (index, item) in context.items.iter().enumerate() {
+        if item.candidate_tree != context.candidate_tree {
+            continue;
+        }
+        let target = exception_target(findings, item.finding_key);
+        let current = target.and_then(|found| findings.get(found).and_then(candidate_digest_of));
+        let mut defects: Vec<&'static str> = Vec::new();
+        if *instant < item.not_before {
+            defects.push("not-yet");
+        }
+        if *instant >= item.expires_at {
+            defects.push("expired");
+        }
+        if !context.authorized_issuers.contains(&item.issuer) {
+            defects.push("issuer");
+        }
+        if !context.waivable_kinds.contains(&item.finding_kind) {
+            defects.push("kind");
+        }
+        if item.owner == item.issuer {
+            defects.push("same-owner");
+        }
+        if let Some(found) = target {
+            if findings
+                .get(found)
+                .is_some_and(|finding| finding.kind.as_str() != item.finding_kind.as_str())
+            {
+                defects.push("key");
+            }
+            if current != Some(item.authorized_fact_digest) {
+                defects.push("fact");
+            }
+        }
+        for suffix in &defects {
+            extra.push(control_row(
+                FindingKind::WaiverInvalid,
+                format!("waiver/{}/{suffix}", item.waiver_id.as_str()),
+                None,
+                (None, Some(context.digest)),
+                waiver_diagnostic(item, context.digest, current),
+                enforce,
+            ));
+        }
+        if defects.is_empty() && target.is_some() {
+            waiver_valid.insert(item.finding_key, index);
+        }
+    }
+    waiver_valid
+}
+
+/// The application and overlap law: a finding matched by both valid items
+/// applies neither and fails control evaluation; a valid debt step is
+/// retained even as a no-op; a waiver step is exactly `fail -> warn`.
+fn apply_valid_exceptions(
+    findings: &mut [Finding],
+    policy: &crate::policy::Effects,
+    debt_valid: &BTreeMap<Digest, usize>,
+    waiver_valid: &BTreeMap<Digest, usize>,
+) -> bool {
+    let mut overlap = false;
+    for finding in findings.iter_mut() {
+        let debt_item = debt_valid.get(&finding.finding_key).copied();
+        let waiver_item = waiver_valid.get(&finding.finding_key).copied();
+        match (debt_item, waiver_item) {
+            (Some(_), Some(_)) => {
+                overlap = true;
+            }
+            (Some(index), None) => {
+                let (Some(context), Some(item)) = (
+                    policy.debt.as_ref(),
+                    policy.debt.as_ref().and_then(|debt| debt.items.get(index)),
+                ) else {
+                    continue;
+                };
+                let current = finding
+                    .steps
+                    .last()
+                    .map_or(finding.configured_disposition, |step| step.after);
+                finding.steps.push(PolicyStep {
+                    source: "debt-snapshot",
+                    rule_id: format!("debt/{}", item.debt_id.as_str()),
+                    before: current,
+                    after: Disposition::Warn,
+                });
+                finding.effective_disposition = Disposition::Warn;
+                finding.debt = Some(DebtApplied {
+                    item: item.clone(),
+                    snapshot_digest: context.digest,
+                    adoption_tree: context.adoption_tree.clone(),
+                });
+            }
+            (None, Some(index)) => {
+                let (Some(context), Some(item)) = (
+                    policy.waiver.as_ref(),
+                    policy
+                        .waiver
+                        .as_ref()
+                        .and_then(|waiver| waiver.items.get(index)),
+                ) else {
+                    continue;
+                };
+                let current = finding
+                    .steps
+                    .last()
+                    .map_or(finding.configured_disposition, |step| step.after);
+                if current == Disposition::Fail {
+                    finding.steps.push(PolicyStep {
+                        source: "waiver-bundle",
+                        rule_id: format!("waiver/{}", item.waiver_id.as_str()),
+                        before: Disposition::Fail,
+                        after: Disposition::Warn,
+                    });
+                    finding.effective_disposition = Disposition::Warn;
+                    finding.waiver = Some(WaiverApplied {
+                        item: item.clone(),
+                        bundle_digest: context.digest,
+                    });
+                }
+            }
+            (None, None) => {}
+        }
+    }
+    overlap
 }
 
 /// Steps two and three: a matching rule applies only when strictly raising,
@@ -568,15 +946,36 @@ fn control_finding(
     policy: &crate::policy::Effects,
     enforce: bool,
 ) -> Finding {
+    control_row(
+        seed.kind,
+        seed.rule_id.clone(),
+        seed.control_path.clone(),
+        (policy.base_digest, policy.candidate_digest),
+        Value::Null,
+        enforce,
+    )
+}
+
+/// One control-scoped finding under an exact rule: the fact embeds the
+/// governing control's digests and, for exception defects, the complete
+/// typed diagnostic.
+fn control_row(
+    kind: FindingKind,
+    rule_id: String,
+    control_path: Option<String>,
+    control_digests: (Option<Digest>, Option<Digest>),
+    exception: Value,
+    enforce: bool,
+) -> Finding {
     let scope = Value::Object(vec![
         ("kind".to_owned(), Value::String("control".to_owned())),
         (
             "control_path".to_owned(),
-            seed.control_path.clone().map_or(Value::Null, Value::String),
+            control_path.clone().map_or(Value::Null, Value::String),
         ),
-        ("rule_id".to_owned(), Value::String(seed.rule_id.clone())),
+        ("rule_id".to_owned(), Value::String(rule_id.clone())),
     ]);
-    let (key_value, digest) = key_input(seed.kind, scope);
+    let (key_value, digest) = key_input(kind, scope);
     let nullable_digest = |value: Option<Digest>| {
         value.map_or(Value::Null, |digest| Value::String(digest.to_string()))
     };
@@ -584,7 +983,7 @@ fn control_finding(
         ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
         (
             "finding_kind".to_owned(),
-            Value::String(seed.kind.as_str().to_owned()),
+            Value::String(kind.as_str().to_owned()),
         ),
         ("key_input".to_owned(), key_value.clone()),
         (
@@ -593,27 +992,27 @@ fn control_finding(
                 ("kind".to_owned(), Value::String("control".to_owned())),
                 (
                     "control_path".to_owned(),
-                    seed.control_path.clone().map_or(Value::Null, Value::String),
+                    control_path.clone().map_or(Value::Null, Value::String),
                 ),
-                ("rule_id".to_owned(), Value::String(seed.rule_id.clone())),
+                ("rule_id".to_owned(), Value::String(rule_id)),
                 ("base_control_state".to_owned(), Value::Null),
                 (
                     "base_control_digest".to_owned(),
-                    nullable_digest(policy.base_digest),
+                    nullable_digest(control_digests.0),
                 ),
                 ("candidate_control_state".to_owned(), Value::Null),
                 (
                     "candidate_control_digest".to_owned(),
-                    nullable_digest(policy.candidate_digest),
+                    nullable_digest(control_digests.1),
                 ),
-                ("exception".to_owned(), Value::Null),
+                ("exception".to_owned(), exception),
             ]),
         ),
     ]);
     let fact_digest = hj(FACT_DOMAIN, &fact);
-    let configured = seed.kind.built_in_disposition(enforce);
+    let configured = kind.built_in_disposition(enforce);
     Finding {
-        kind: seed.kind,
+        kind,
         key_input: key_value,
         finding_key: digest,
         attribution: Attribution::NotApplicable,
@@ -623,12 +1022,14 @@ fn control_finding(
         observation_ids: Vec::new(),
         location: Location {
             side: LocationSide::Control,
-            path: seed.control_path.clone(),
+            path: control_path,
             span: None,
         },
         configured_disposition: configured,
         effective_disposition: configured,
-        steps: vec![built_in_step(seed.kind, enforce)],
+        debt: None,
+        waiver: None,
+        steps: vec![built_in_step(kind, enforce)],
     }
 }
 
@@ -753,6 +1154,28 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
     }
 }
 
+/// The adoption-reproduction projection: every structural key among the
+/// observations, with its occurrence count and the fact digest computed at
+/// that count. Exactly one occurrence with the accepted fact digest is the
+/// reproduction requirement.
+#[must_use]
+pub fn structural_facts(observations: &[Observation]) -> BTreeMap<Digest, (u64, Digest)> {
+    let mut groups: BTreeMap<Digest, KeyGroup<'_>> = BTreeMap::new();
+    for observation in observations {
+        collect_structural(&mut groups, observation, false);
+    }
+    groups
+        .into_iter()
+        .filter_map(|(digest, group)| {
+            let first = group.candidate.first()?;
+            let multiplicity = u64::try_from(group.candidate.len()).unwrap_or(u64::MAX);
+            let (key_value, _same) = key_input(group.kind, group.scope.clone());
+            let (_fact, fact_digest) = reference_fact(group.kind, &key_value, first, multiplicity);
+            Some((digest, (multiplicity, fact_digest)))
+        })
+        .collect()
+}
+
 struct KeyGroup<'a> {
     kind: FindingKind,
     scope: Value,
@@ -873,6 +1296,8 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
             location,
             configured_disposition: configured,
             effective_disposition: configured,
+            debt: None,
+            waiver: None,
             steps: if attribution == Attribution::Resolved {
                 vec![PolicyStep {
                     source: "resolved-projection",

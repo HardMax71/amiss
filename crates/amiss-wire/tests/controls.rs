@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
-    DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, FloorDefect, OrganizationFloor, ScannerPolicy,
-    WaiverBundle,
+    DebtSnapshot, ExecutionConstraintDescriptor, FACT_DOMAIN, FINDING_KEY_DOMAIN, FloorDefect,
+    OrganizationFloor, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -529,6 +529,97 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     let doc = waiver_bundle(&[bad_residual]);
     assert_eq!(
         WaiverBundle::parse(doc.as_bytes()).unwrap_err().kind,
+        ErrorKind::InvalidValue
+    );
+}
+
+const TIME_STATEMENT: &str = r#"{
+  "schema": "amiss/scanner-trusted-time-statement/v1",
+  "controller": "github-actions-required-workflow-clock-v1",
+  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "ref": "refs/heads/main",
+  "candidate_identity_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "provider_run_id": "987654321",
+  "provider_run_attempt": 2,
+  "evaluation_instant": "2026-07-12T10:00:00Z",
+  "valid_until": "2026-07-12T10:10:00Z"
+}"#;
+
+#[test]
+fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
+    let statement = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
+    assert_eq!(statement.provider_run_id, "987654321");
+    assert_eq!(statement.provider_run_attempt, 2);
+    assert_eq!(
+        statement.evaluation_instant.as_str(),
+        "2026-07-12T10:00:00Z"
+    );
+    assert_eq!(
+        statement.valid_until.epoch_seconds() - statement.evaluation_instant.epoch_seconds(),
+        600
+    );
+
+    let too_long = TIME_STATEMENT.replace("10:10:00Z", "10:10:01Z");
+    assert_eq!(
+        TrustedTimeStatement::parse(too_long.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+    let not_after = TIME_STATEMENT.replace("10:10:00Z", "10:00:00Z");
+    assert_eq!(
+        TrustedTimeStatement::parse(not_after.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+    let zero_run = TIME_STATEMENT.replace("987654321", "0987");
+    assert_eq!(
+        TrustedTimeStatement::parse(zero_run.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+}
+
+const CONSTRAINT: &str = r#"{
+  "schema": "amiss/scanner-execution-constraint/v1",
+  "action_repository": { "host": "github.com", "owner": "acme", "name": "amiss-action" },
+  "action_object_format": "sha1",
+  "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "manifest_path": "release/manifest.json",
+  "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "selected_platform": "linux-x86_64",
+  "required_status_name": "amiss / documentation assurance",
+  "bootstrap_contract": "amiss-action-bootstrap-v1",
+  "bootstrap_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+}"#;
+
+#[test]
+fn parses_an_execution_constraint_descriptor() {
+    let descriptor = ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).unwrap();
+    assert_eq!(descriptor.selected_platform.as_str(), "linux-x86_64");
+    assert_eq!(
+        descriptor.required_status_name,
+        "amiss / documentation assurance"
+    );
+
+    let trailing_space = CONSTRAINT.replace("assurance\"", "assurance \"");
+    assert_eq!(
+        ExecutionConstraintDescriptor::parse(trailing_space.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+    let short_oid = CONSTRAINT.replace(
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    );
+    assert_eq!(
+        ExecutionConstraintDescriptor::parse(short_oid.as_bytes())
+            .unwrap_err()
+            .kind,
         ErrorKind::InvalidValue
     );
 }

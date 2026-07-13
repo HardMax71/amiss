@@ -578,8 +578,74 @@ fn finding_value(
             string(finding.effective_disposition.as_str()),
         ),
         ("policy_trace", Value::Array(trace)),
-        ("debt", Value::Null),
-        ("waiver", Value::Null),
+        (
+            "debt",
+            finding
+                .debt
+                .as_ref()
+                .map_or(Value::Null, debt_application_value),
+        ),
+        (
+            "waiver",
+            finding
+                .waiver
+                .as_ref()
+                .map_or(Value::Null, waiver_application_value),
+        ),
+    ])
+}
+
+fn tree_identity_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
+    object(vec![
+        (
+            "object_format",
+            string(match tree.object_format {
+                amiss_wire::model::ObjectFormat::Sha1 => "sha1",
+                amiss_wire::model::ObjectFormat::Sha256 => "sha256",
+            }),
+        ),
+        ("tree_oid", string(&tree.tree_oid)),
+    ])
+}
+
+fn debt_application_value(applied: &crate::evaluate::DebtApplied) -> Value {
+    object(vec![
+        ("debt_id", string(applied.item.debt_id.as_str())),
+        (
+            "debt_snapshot_digest",
+            digest_value(applied.snapshot_digest),
+        ),
+        ("adoption_tree", tree_identity_value(&applied.adoption_tree)),
+        (
+            "accepted_fact_digest",
+            digest_value(applied.item.accepted_fact_digest),
+        ),
+        ("owner", string(applied.item.owner.as_str())),
+        ("reason", string(&applied.item.reason)),
+        ("created_at", string(applied.item.created_at.as_str())),
+        ("expires_at", string(applied.item.expires_at.as_str())),
+    ])
+}
+
+fn waiver_application_value(applied: &crate::evaluate::WaiverApplied) -> Value {
+    object(vec![
+        ("waiver_id", string(applied.item.waiver_id.as_str())),
+        ("waiver_bundle_digest", digest_value(applied.bundle_digest)),
+        (
+            "candidate_tree",
+            tree_identity_value(&applied.item.candidate_tree),
+        ),
+        (
+            "authorized_fact_digest",
+            digest_value(applied.item.authorized_fact_digest),
+        ),
+        ("owner", string(applied.item.owner.as_str())),
+        ("issuer", string(applied.item.issuer.as_str())),
+        ("reason", string(&applied.item.reason)),
+        ("created_at", string(applied.item.created_at.as_str())),
+        ("not_before", string(applied.item.not_before.as_str())),
+        ("expires_at", string(applied.item.expires_at.as_str())),
+        ("residual_disposition", string("warn")),
     ])
 }
 
@@ -690,7 +756,9 @@ fn candidate_value(candidate: &CandidateBlock) -> Value {
     }
 }
 
-fn evaluation_value(setup: &Setup) -> Value {
+/// The evaluation's identity rows: everything of the resolved evaluation
+/// value that precedes time, in the candidate-identity preimage order.
+fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
     let (mode, event_kind, finality, materialization) = match &setup.candidate {
         CandidateBlock::Commit(_) => (
             "commit-pair",
@@ -706,7 +774,7 @@ fn evaluation_value(setup: &Setup) -> Value {
         CandidateBlock::Index(index) => index.skip_worktree_paths,
         CandidateBlock::Commit(_) | CandidateBlock::Unavailable(_) => 0,
     };
-    object(vec![
+    vec![
         ("mode", string(mode)),
         ("event_kind", string(event_kind)),
         ("finality", string(finality)),
@@ -733,9 +801,49 @@ fn evaluation_value(setup: &Setup) -> Value {
         ("materialization", string(materialization)),
         ("skip_worktree_paths", integer(skip)),
         ("index_only_materialized_paths", integer(0)),
-        ("evaluation_instant", Value::Null),
-        ("trusted_time", Value::Bool(false)),
-    ])
+    ]
+}
+
+pub const CANDIDATE_IDENTITY_DOMAIN: &str = "amiss/scanner-candidate-identity/v1";
+
+/// The candidate-identity digest a trusted-time statement must carry: `HJ`
+/// over the resolved evaluation's identity projection before time is added.
+#[must_use]
+pub fn candidate_identity_digest(setup: &Setup) -> Digest {
+    let mut rows = vec![("schema", string(CANDIDATE_IDENTITY_DOMAIN))];
+    rows.extend(identity_rows(setup));
+    hj(CANDIDATE_IDENTITY_DOMAIN, &object(rows))
+}
+
+fn evaluation_value(setup: &Setup) -> Value {
+    let mut rows = identity_rows(setup);
+    rows.push((
+        "evaluation_instant",
+        setup.policy.time.as_ref().map_or(Value::Null, |time| {
+            string(time.statement.evaluation_instant.as_str())
+        }),
+    ));
+    rows.push(("trusted_time", Value::Bool(setup.policy.time.is_some())));
+    object(rows)
+}
+
+fn verified_provenance(control: Option<(Digest, &'static str)>) -> Value {
+    control.map_or_else(
+        || {
+            object(vec![
+                ("status", string("none")),
+                ("digest", Value::Null),
+                ("trust_source", string("none")),
+            ])
+        },
+        |(digest, trust)| {
+            object(vec![
+                ("status", string("verified")),
+                ("digest", digest_value(digest)),
+                ("trust_source", string(trust)),
+            ])
+        },
+    )
 }
 
 fn controls_value(setup: &Setup) -> Value {
@@ -746,13 +854,6 @@ fn controls_value(setup: &Setup) -> Value {
             ("reasons", Value::Array(vec![string(reason)])),
         ]);
     }
-    let none_provenance = || {
-        object(vec![
-            ("status", string("none")),
-            ("digest", Value::Null),
-            ("trust_source", string("none")),
-        ])
-    };
     let (descriptor, descriptor_digest) = sandbox_descriptor();
     object(vec![
         (
@@ -772,22 +873,41 @@ fn controls_value(setup: &Setup) -> Value {
         ),
         (
             "organization_floor",
-            setup
-                .policy
-                .floor
-                .map_or_else(none_provenance, |(digest, trust)| {
-                    object(vec![
-                        ("status", string("verified")),
-                        ("digest", digest_value(digest)),
-                        ("trust_source", string(trust)),
-                    ])
-                }),
+            verified_provenance(setup.policy.floor),
         ),
-        ("debt_snapshot", none_provenance()),
-        ("waiver_bundle", none_provenance()),
+        (
+            "debt_snapshot",
+            verified_provenance(
+                setup
+                    .policy
+                    .debt
+                    .as_ref()
+                    .map(|debt| (debt.digest, debt.trust_source)),
+            ),
+        ),
+        (
+            "waiver_bundle",
+            verified_provenance(
+                setup
+                    .policy
+                    .waiver
+                    .as_ref()
+                    .map(|waiver| (waiver.digest, waiver.trust_source)),
+            ),
+        ),
         (
             "execution_constraint",
-            object(vec![("status", string("none"))]),
+            setup.policy.constraint.as_ref().map_or_else(
+                || object(vec![("status", string("none"))]),
+                |(descriptor, trust)| {
+                    object(vec![
+                        ("status", string("verified")),
+                        ("descriptor", constraint_descriptor_value(descriptor)),
+                        ("descriptor_digest", digest_value(descriptor.digest)),
+                        ("trust_source", string(trust)),
+                    ])
+                },
+            ),
         ),
         (
             "sandbox",
@@ -801,8 +921,100 @@ fn controls_value(setup: &Setup) -> Value {
         ),
         (
             "trusted_time_source",
-            object(vec![("status", string("none"))]),
+            setup.policy.time.as_ref().map_or_else(
+                || object(vec![("status", string("none"))]),
+                |time| {
+                    object(vec![
+                        ("status", string("verified")),
+                        ("statement", time_statement_value(&time.statement)),
+                        ("statement_digest", digest_value(time.digest)),
+                        ("trust_source", string("external-required-workflow")),
+                    ])
+                },
+            ),
         ),
+    ])
+}
+
+fn constraint_descriptor_value(
+    descriptor: &amiss_wire::controls::ExecutionConstraintDescriptor,
+) -> Value {
+    object(vec![
+        ("schema", string("amiss/scanner-execution-constraint/v1")),
+        (
+            "action_repository",
+            object(vec![
+                ("host", string("github.com")),
+                ("owner", string(&descriptor.action_repository.owner)),
+                ("name", string(&descriptor.action_repository.name)),
+            ]),
+        ),
+        (
+            "action_object_format",
+            string(match descriptor.action_object_format {
+                amiss_wire::model::ObjectFormat::Sha1 => "sha1",
+                amiss_wire::model::ObjectFormat::Sha256 => "sha256",
+            }),
+        ),
+        (
+            "action_commit_oid",
+            string(descriptor.action_commit_oid.as_str()),
+        ),
+        (
+            "action_tree_oid",
+            string(descriptor.action_tree_oid.as_str()),
+        ),
+        ("manifest_path", string(descriptor.manifest_path.as_str())),
+        (
+            "release_manifest_digest",
+            digest_value(descriptor.release_manifest_digest),
+        ),
+        (
+            "selected_platform",
+            string(descriptor.selected_platform.as_str()),
+        ),
+        (
+            "required_status_name",
+            string(&descriptor.required_status_name),
+        ),
+        ("bootstrap_contract", string("amiss-action-bootstrap-v1")),
+        (
+            "bootstrap_digest",
+            digest_value(descriptor.bootstrap_digest),
+        ),
+    ])
+}
+
+fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) -> Value {
+    object(vec![
+        ("schema", string("amiss/scanner-trusted-time-statement/v1")),
+        (
+            "controller",
+            string("github-actions-required-workflow-clock-v1"),
+        ),
+        (
+            "repository",
+            object(vec![
+                ("host", string("github.com")),
+                ("owner", string(&statement.repository.owner)),
+                ("name", string(&statement.repository.name)),
+            ]),
+        ),
+        ("ref", string(statement.ref_name.as_str())),
+        (
+            "candidate_identity_digest",
+            digest_value(statement.candidate_identity_digest),
+        ),
+        ("provider_run_id", string(&statement.provider_run_id)),
+        (
+            "provider_run_attempt",
+            integer(statement.provider_run_attempt),
+        ),
+        (
+            "evaluation_instant",
+            string(statement.evaluation_instant.as_str()),
+        ),
+        ("valid_until", string(statement.valid_until.as_str())),
     ])
 }
 
@@ -1031,8 +1243,30 @@ fn summary_counts(
             "not_applicable",
             integer(attribution_count(Attribution::NotApplicable)),
         ),
-        ("debt_tolerated", integer(0)),
-        ("waived", integer(0)),
+        (
+            "debt_tolerated",
+            integer(
+                u64::try_from(
+                    findings
+                        .iter()
+                        .filter(|finding| finding.debt.is_some())
+                        .count(),
+                )
+                .unwrap_or(u64::MAX),
+            ),
+        ),
+        (
+            "waived",
+            integer(
+                u64::try_from(
+                    findings
+                        .iter()
+                        .filter(|finding| finding.waiver.is_some())
+                        .count(),
+                )
+                .unwrap_or(u64::MAX),
+            ),
+        ),
         ("analysis_errors", integer(0)),
         ("unsupported_capabilities", integer(0)),
     ]);
@@ -1056,7 +1290,7 @@ pub fn construct(
     let paired = paired_documents(base, candidate);
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
     let governed = governed_seeds(candidate);
-    let findings = crate::evaluate::evaluate_with_policy(
+    let (findings, exception_errors) = crate::evaluate::evaluate_with_policy(
         &inputs,
         comparisons,
         setup.enforce,
@@ -1084,7 +1318,8 @@ pub fn construct(
         .map(|finding| finding_value(finding, setup.enforce, &comparison_rows, &document_rows))
         .collect();
 
-    let governed_errors = governed_error_rows(&governed);
+    let mut governed_errors = governed_error_rows(&governed);
+    governed_errors.extend(exception_errors.iter().map(error_row_value));
     let (complete, status, exit_code) = run_result(&findings, &governed_errors);
     let finding_count = u64::try_from(finding_rows.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, comparisons, &findings, finding_count);

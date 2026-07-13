@@ -91,6 +91,36 @@ pub fn discover(
     includes: &Includes,
     root_tree: &Oid,
 ) -> Result<SnapshotDiscovery, Error> {
+    discover_walk(repo, git, scan, includes, root_tree, None)
+}
+
+/// Discovery restricted to an exact document set: the full tree walk, entry
+/// budget, and path rules apply, but only scoped documents are acquired and
+/// parsed. Debt adoption reproduction evaluates exactly its distinct debt
+/// documents this way.
+///
+/// # Errors
+///
+/// Exactly as `discover`.
+pub(crate) fn discover_scoped(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    includes: &Includes,
+    root_tree: &Oid,
+    scope: &std::collections::BTreeSet<String>,
+) -> Result<SnapshotDiscovery, Error> {
+    discover_walk(repo, git, scan, includes, root_tree, Some(scope))
+}
+
+fn discover_walk(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    includes: &Includes,
+    root_tree: &Oid,
+    scope: Option<&std::collections::BTreeSet<String>>,
+) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = SnapshotDiscovery {
         documents: Vec::new(),
         outside_document_set: 0,
@@ -173,6 +203,9 @@ pub fn discover(
                 continue;
             }
         };
+        if scope.is_some_and(|documents| !documents.contains(&path)) {
+            continue;
+        }
         let (status, byte_count, raw_digest) =
             side_status(repo, git, scan, includes, classification, &path, &entry)?;
         discovery.documents.push(DocumentRecord {

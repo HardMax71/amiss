@@ -1,4 +1,5 @@
 #[cfg(unix)]
+pub mod adoption;
 pub mod correlate;
 #[cfg(unix)]
 pub mod discovery;

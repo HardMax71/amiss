@@ -126,6 +126,29 @@ impl UtcInstant {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Whole seconds since 1970-01-01T00:00:00Z, computed from the already
+    /// validated calendar fields with the days-from-civil identity.
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "every field is bounded by the validated 20-byte format, so all terms stay far inside i64"
+    )]
+    #[must_use]
+    pub fn epoch_seconds(&self) -> i64 {
+        let bytes = self.0.as_bytes();
+        let part = |start: usize, len: usize| i64::from(field(bytes, start, len).unwrap_or(0));
+        let year = part(0, 4);
+        let month = part(5, 2);
+        let day = part(8, 2);
+        let shifted_year = if month <= 2 { year - 1 } else { year };
+        let era = shifted_year.div_euclid(400);
+        let year_of_era = shifted_year - era * 400;
+        let month_index = if month > 2 { month - 3 } else { month + 9 };
+        let day_of_year = (153 * month_index + 2) / 5 + day - 1;
+        let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+        let days = era * 146_097 + day_of_era - 719_468;
+        days * 86_400 + part(11, 2) * 3_600 + part(14, 2) * 60 + part(17, 2)
+    }
 }
 
 fn field(bytes: &[u8], start: usize, len: usize) -> Option<u32> {
