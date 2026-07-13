@@ -10,7 +10,7 @@ fn root() -> PathBuf {
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn input(name: &str, pin: &str) -> Vec<u8> {
-    let bytes = fs::read(root().join("corpus/inputs").join(name)).unwrap();
+    let bytes = fs::read(root().join("corpus/third_party").join(name)).unwrap();
     let mut hex = String::from("sha256:");
     for byte in Sha256::digest(&bytes) {
         hex.push(char::from_digit(u32::from(byte >> 4), 16).unwrap());
@@ -91,7 +91,7 @@ pub(crate) fn harvest() -> (Vec<Case>, Vec<(&'static str, usize)>) {
 /// for it, per name, in sorted order.
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 pub(crate) fn github_pairs() -> Vec<(String, String, String)> {
-    let dir = root().join("corpus/inputs/gfm-footnote-fixtures");
+    let dir = root().join("corpus/third_party/gfm-footnote-fixtures");
     let mut files: Vec<(String, String)> = fs::read_dir(&dir)
         .unwrap()
         .map(|entry| {

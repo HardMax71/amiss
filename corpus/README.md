@@ -22,16 +22,23 @@ Every input is upstream bytes, pinned by SHA-256 in `crates/amiss-md/src/corpus.
 this directory is touched by the formatting hooks, because a fixer that appended a newline would
 silently break a pin.
 
+The directory is named `third_party/` because that is what these files are, and because
+`third_party` is one of the seven tree names the scanner always excludes. Amiss therefore never
+reads its own fixtures as documents. That matters more than it looks: the footnote fixtures carry
+broken links deliberately, a reference that goes nowhere being exactly the input a parser has to
+handle. Under any other name, running Amiss on this repository under `--profile enforce` fails on
+ten of those links, and the tool cannot pass its own strictest gate.
+
 | File | Source | Cases |
 | --- | --- | --- |
-| `inputs/commonmark-0.31.2.spec.json` | spec.commonmark.org | 652 |
-| `inputs/gfm-0.29.spec.txt` | github/cmark-gfm `test/spec.txt` | 672 |
-| `inputs/micromark-mdx-jsx-3.0.2.test.js` | micromark-extension-mdx-jsx, commit `ad0a49c` | 141 |
-| `inputs/micromark-mdx-expression-3.0.1.test.js` | micromark-extension-mdx-expression, commit `2891b75` | 85 |
-| `inputs/micromark-mdxjs-esm-3.0.0.test.js` | micromark-extension-mdxjs-esm, commit `7cc9131` | 31 |
-| `inputs/micromark-gfm-footnote-2.1.0.test.js` | micromark-extension-gfm-footnote, commit `df527f5` | 18 |
-| `inputs/micromark-gfm-strikethrough-2.1.0.test.js` | micromark-extension-gfm-strikethrough, commit `a3a75cc` | 11 |
-| `inputs/gfm-footnote-fixtures/` | the same suite's documents and github.com's HTML for them | 29 |
+| `third_party/commonmark-0.31.2.spec.json` | spec.commonmark.org | 652 |
+| `third_party/gfm-0.29.spec.txt` | github/cmark-gfm `test/spec.txt` | 672 |
+| `third_party/micromark-mdx-jsx-3.0.2.test.js` | micromark-extension-mdx-jsx, commit `ad0a49c` | 141 |
+| `third_party/micromark-mdx-expression-3.0.1.test.js` | micromark-extension-mdx-expression, commit `2891b75` | 85 |
+| `third_party/micromark-mdxjs-esm-3.0.0.test.js` | micromark-extension-mdxjs-esm, commit `7cc9131` | 31 |
+| `third_party/micromark-gfm-footnote-2.1.0.test.js` | micromark-extension-gfm-footnote, commit `df527f5` | 18 |
+| `third_party/micromark-gfm-strikethrough-2.1.0.test.js` | micromark-extension-gfm-strikethrough, commit `a3a75cc` | 11 |
+| `third_party/gfm-footnote-fixtures/` | the same suite's documents and github.com's HTML for them | 29 |
 
 The five JavaScript suites are the grammars' own fixtures, so the harness reads each
 `micromark(...)` call out of them: the first argument is the source, an enclosing `assert.throws`
