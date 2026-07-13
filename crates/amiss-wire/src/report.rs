@@ -214,15 +214,14 @@ pub fn invocation_failure_wire(
     let error_rows: Vec<Value> = errors
         .iter()
         .map(|(code, phase)| {
-            object(vec![
-                ("phase", string(phase)),
-                ("code", string(code.as_str())),
-                ("path", Value::Null),
-                ("path_bytes_hex", Value::Null),
-                ("resource", Value::Null),
-                ("configured_limit", Value::Null),
-                ("observed_lower_bound", Value::Null),
-            ])
+            error_row(
+                &ErrorDetail {
+                    code: *code,
+                    path: None,
+                    resource: None,
+                },
+                phase,
+            )
         })
         .collect();
     let error_count = i64::try_from(error_rows.len()).ok()?;
@@ -784,4 +783,52 @@ impl FindingKind {
             | Self::WaiverInvalid => "absolute",
         }
     }
+}
+
+/// One typed analysis error's reportable detail: the code, the exact path
+/// where the partition names one, and the crossing triple for a resource
+/// error.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ErrorDetail {
+    pub code: AnalysisErrorCode,
+    pub path: Option<String>,
+    pub resource: Option<(crate::controls::ResourceName, u64, u64)>,
+}
+
+impl ErrorDetail {
+    #[must_use]
+    pub fn phase(&self) -> &'static str {
+        self.resource.map_or_else(
+            || self.code.fixed_phase().unwrap_or("internal"),
+            |(name, _limit, _observed)| name.phase(),
+        )
+    }
+}
+
+/// One wire error row with its partition phase.
+#[must_use]
+pub fn error_row_value(detail: &ErrorDetail) -> Value {
+    error_row(detail, detail.phase())
+}
+
+fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
+    let (resource, limit, observed) = detail.resource.map_or(
+        (Value::Null, Value::Null, Value::Null),
+        |(name, limit, observed)| {
+            (
+                string(name.as_str()),
+                Value::Integer(i64::try_from(limit).unwrap_or(i64::MAX)),
+                Value::Integer(i64::try_from(observed).unwrap_or(i64::MAX)),
+            )
+        },
+    );
+    object(vec![
+        ("phase", string(phase)),
+        ("code", string(detail.code.as_str())),
+        ("path", detail.path.as_deref().map_or(Value::Null, string)),
+        ("path_bytes_hex", Value::Null),
+        ("resource", resource),
+        ("configured_limit", limit),
+        ("observed_lower_bound", observed),
+    ])
 }

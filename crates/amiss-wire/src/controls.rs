@@ -141,6 +141,23 @@ pub enum SourceConstruct {
 }
 
 impl SourceConstruct {
+    /// Whether the consuming syntax node is an image form, which fixes the
+    /// authored target kind.
+    #[must_use]
+    pub const fn is_image(self) -> bool {
+        match self {
+            Self::InlineImage
+            | Self::FullReferenceImage
+            | Self::CollapsedReferenceImage
+            | Self::ShortcutReferenceImage => true,
+            Self::InlineLink
+            | Self::FullReferenceLink
+            | Self::CollapsedReferenceLink
+            | Self::ShortcutReferenceLink
+            | Self::Autolink => false,
+        }
+    }
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -337,6 +354,48 @@ pub enum ResourceName {
 }
 
 impl ResourceName {
+    /// The phase a resource crossing reports, from the closed partition.
+    #[must_use]
+    pub const fn phase(self) -> &'static str {
+        match self {
+            Self::ControlInputBytes
+            | Self::RepositoryPolicyEntries
+            | Self::DebtItems
+            | Self::WaiverItems
+            | Self::OrganizationPolicyEntries => "configuration",
+            Self::GitObjectBytes
+            | Self::GitCompressedObjectBytes
+            | Self::AggregateGitCompressedObjectBytesPerEvaluation
+            | Self::GitPackDirectoryEntries
+            | Self::GitPackFiles
+            | Self::GitPackIndexBytes
+            | Self::AggregateGitPackIndexBytes
+            | Self::GitDeltaDepth
+            | Self::GitIndexBytes
+            | Self::GitTreeEntriesPerSnapshot
+            | Self::RawPathBytes => "git",
+            Self::DocumentsPerSnapshot
+            | Self::DocumentBlobBytes
+            | Self::AggregateDocumentBytesPerSnapshot
+            | Self::SelectedControlBlobBytes
+            | Self::AggregateSelectedControlBytesPerSnapshot => "discovery",
+            Self::RawLinkDestinationBytes
+            | Self::ParserNesting
+            | Self::ParserNodesPerDocument
+            | Self::ParserNodesPerSnapshot
+            | Self::ReferencesPerDocument
+            | Self::ReferencesPerSnapshot => "parse",
+            Self::ReferencedTargetBlobBytes | Self::AggregateReferencedTargetBytesPerSnapshot => {
+                "resolution"
+            }
+            Self::CompleteFindings => "policy",
+            Self::MachineJsonBytes => "output",
+            Self::TypedAnalysisErrorsRetained
+            | Self::PrivateTemporaryStorageBytes
+            | Self::EvaluatorManagedMemoryBytes => "internal",
+        }
+    }
+
     const ALL: [(&'static str, Self); 34] = [
         ("git-object-bytes", Self::GitObjectBytes),
         (

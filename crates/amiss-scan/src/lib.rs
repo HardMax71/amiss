@@ -9,6 +9,8 @@ pub mod lfs;
 #[cfg(unix)]
 pub mod observe;
 #[cfg(unix)]
+pub mod pipeline;
+#[cfg(unix)]
 pub mod report;
 #[cfg(unix)]
 pub mod resolve;
@@ -27,7 +29,9 @@ pub use document::{Classification, classify, excluded_by_built_in};
 #[cfg(unix)]
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
 #[cfg(unix)]
-pub use report::{Built, Setup, SnapshotIdentity, construct};
+pub use pipeline::{SetupShell, commit_pair};
+#[cfg(unix)]
+pub use report::{Built, Setup, SnapshotIdentity, construct, construct_incomplete};
 #[cfg(unix)]
 pub use resolve::{GithubContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};

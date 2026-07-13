@@ -3,8 +3,8 @@ use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::{
-    Disposition, EngineProvenance, FindingKind, FindingScope, IntentKind, PAYLOAD_SCHEMA,
-    ResolutionStatus, engine_block, sandbox_descriptor,
+    Disposition, EngineProvenance, ErrorDetail, FindingKind, FindingScope, IntentKind,
+    PAYLOAD_SCHEMA, ResolutionStatus, engine_block, error_row_value, sandbox_descriptor,
 };
 
 use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
@@ -996,5 +996,109 @@ pub fn construct(
         payload_digest,
         status,
         exit_code,
+    }
+}
+
+fn zero_counts() -> Counts {
+    Counts {
+        documents: document_counts(&[], &[], 0),
+        references: reference_counts(&[]),
+        findings: object(vec![
+            ("total", integer(0)),
+            ("record", integer(0)),
+            ("warn", integer(0)),
+            ("fail", integer(0)),
+            ("introduced", integer(0)),
+            ("pre_existing", integer(0)),
+            ("resolved", integer(0)),
+            ("unknown", integer(0)),
+            ("not_applicable", integer(0)),
+            ("debt_tolerated", integer(0)),
+            ("waived", integer(0)),
+            ("analysis_errors", integer(0)),
+            ("unsupported_capabilities", integer(0)),
+        ]),
+    }
+}
+
+/// The fatal-incomplete report for a run whose evaluation identity resolved
+/// but whose analysis raised typed errors: resolved evaluation and controls,
+/// cleared detail arrays, zeroed inexact summary, every error row retained in
+/// canonical order, and exit class two.
+#[must_use]
+pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
+    let mut sorted: Vec<&ErrorDetail> = details.iter().collect();
+    sorted.sort();
+    sorted.dedup();
+    let error_rows: Vec<Value> = sorted
+        .iter()
+        .map(|detail| error_row_value(detail))
+        .collect();
+    let error_count = u64::try_from(error_rows.len()).unwrap_or(u64::MAX);
+    let analysis_errors = error_count;
+    let counts = zero_counts();
+    let findings_with_errors = match counts.findings {
+        Value::Object(mut members) => {
+            for (key, value) in &mut members {
+                if key == "analysis_errors" {
+                    *value = integer(analysis_errors);
+                }
+            }
+            Value::Object(members)
+        }
+        other @ (Value::Null
+        | Value::Bool(_)
+        | Value::Integer(_)
+        | Value::String(_)
+        | Value::Array(_)) => other,
+    };
+
+    let payload = object(vec![
+        ("schema", string(PAYLOAD_SCHEMA)),
+        ("compatibility", string("experimental")),
+        ("engine", engine_block(&setup.engine)),
+        ("evaluation", evaluation_value(setup)),
+        ("controls", controls_value(setup)),
+        (
+            "result",
+            object(vec![
+                ("complete", Value::Bool(false)),
+                ("status", string("incomplete")),
+                ("exit_code", Value::Integer(2)),
+                ("finding_count", integer(0)),
+                ("error_count", integer(error_count)),
+            ]),
+        ),
+        (
+            "summary",
+            object(vec![
+                ("counts_complete", Value::Bool(false)),
+                ("documents", counts.documents),
+                ("references", counts.references),
+                ("findings", findings_with_errors),
+                ("human_details_truncated", integer(0)),
+                ("governed_claims", integer(0)),
+                ("unattested_claims", integer(0)),
+            ]),
+        ),
+        ("documents", Value::Array(Vec::new())),
+        ("observations", Value::Array(Vec::new())),
+        ("findings", Value::Array(Vec::new())),
+        ("errors", Value::Array(error_rows)),
+    ]);
+    let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
+    let envelope = object(vec![
+        ("schema", string(ENVELOPE_SCHEMA)),
+        ("payload", payload),
+        ("payload_digest", digest_value(payload_digest)),
+    ]);
+    let mut wire = canonical(&envelope);
+    wire.push(b'\n');
+    Built {
+        envelope,
+        wire,
+        payload_digest,
+        status: "incomplete",
+        exit_code: 2,
     }
 }
