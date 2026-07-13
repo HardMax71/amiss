@@ -372,11 +372,18 @@ fn a_raised_disposition_fails_a_passing_observe_run() {
         .cloned()
         .unwrap_or_default();
     assert_eq!(missing["effective_disposition"], "fail");
-    assert_eq!(missing["configured_disposition"], "warn");
+    assert_eq!(
+        missing["configured_disposition"], "fail",
+        "configured is the value after the repository and floor steps"
+    );
+    assert_eq!(missing["policy_trace"][0]["before"], "record");
+    assert_eq!(missing["policy_trace"][0]["after"], "warn");
     assert_eq!(
         missing["policy_trace"][1]["rule_id"], "repository/explicit-target-missing",
         "the repository step follows the built-in step"
     );
+    assert_eq!(missing["policy_trace"][1]["before"], "warn");
+    assert_eq!(missing["policy_trace"][1]["after"], "fail");
 }
 
 #[test]

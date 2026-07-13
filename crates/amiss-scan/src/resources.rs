@@ -19,6 +19,8 @@ pub struct ScanLimits {
     pub aggregate_referenced_target_bytes_per_snapshot: u64,
     pub selected_control_blob_bytes: u64,
     pub aggregate_selected_control_bytes_per_snapshot: u64,
+    pub control_input_bytes: u64,
+    pub repository_policy_entries: u64,
 }
 
 impl ScanLimits {
@@ -36,6 +38,8 @@ impl ScanLimits {
         aggregate_referenced_target_bytes_per_snapshot: 536_870_912,
         selected_control_blob_bytes: 16_777_216,
         aggregate_selected_control_bytes_per_snapshot: 67_108_864,
+        control_input_bytes: 16_777_216,
+        repository_policy_entries: 100_000,
     };
 }
 

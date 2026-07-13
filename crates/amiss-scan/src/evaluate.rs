@@ -62,6 +62,17 @@ pub enum LocationSide {
     Control,
 }
 
+/// One policy-trace step. Adjacent steps chain exactly: each `before` equals
+/// the preceding `after`, the built-in step always starts from `record`, and
+/// steps appear only when applicable.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PolicyStep {
+    pub source: &'static str,
+    pub rule_id: String,
+    pub before: Disposition,
+    pub after: Disposition,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Location {
     pub side: LocationSide,
@@ -85,7 +96,7 @@ pub struct Finding {
     pub location: Location,
     pub configured_disposition: Disposition,
     pub effective_disposition: Disposition,
-    pub repository_step: Option<Disposition>,
+    pub steps: Vec<PolicyStep>,
 }
 
 fn key_digest(input: &Value) -> Digest {
@@ -338,7 +349,19 @@ fn simple(
         location,
         configured_disposition: configured,
         effective_disposition: configured,
-        repository_step: None,
+        steps: vec![built_in_step(kind, enforce)],
+    }
+}
+
+/// Step one: built-in always starts from `record` and applies the defaults
+/// table for the selected profile.
+fn built_in_step(kind: FindingKind, enforce: bool) -> PolicyStep {
+    let profile = if enforce { "enforce" } else { "observe" };
+    PolicyStep {
+        source: "built-in",
+        rule_id: format!("scanner-policy-defaults-v1/{}/{profile}", kind.as_str()),
+        before: Disposition::Record,
+        after: kind.built_in_disposition(enforce),
     }
 }
 
@@ -465,7 +488,7 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
         },
         configured_disposition: configured,
         effective_disposition: configured,
-        repository_step: None,
+        steps: vec![built_in_step(FindingKind::UnsupportedCapability, enforce)],
     }
 }
 
@@ -500,20 +523,44 @@ pub fn evaluate_with_policy(
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
             continue;
         }
-        let Some((_kind, raised)) = policy.raised.iter().find(|(kind, _)| *kind == finding.kind)
-        else {
-            continue;
-        };
-        if *raised > finding.effective_disposition {
-            finding.effective_disposition = *raised;
-            finding.repository_step = Some(*raised);
-        }
+        apply_raise(finding, &policy.raised, "repository-policy", "repository");
+        apply_raise(finding, &policy.floor_raised, "organization-floor", "floor");
+        finding.configured_disposition = finding
+            .steps
+            .last()
+            .map_or(finding.configured_disposition, |step| step.after);
+        finding.effective_disposition = finding.configured_disposition;
     }
     for seed in &policy.controls {
         findings.push(control_finding(seed, policy, enforce));
     }
     findings.sort_by_key(|finding| finding.finding_key);
     findings
+}
+
+/// Steps two and three: a matching rule applies only when strictly raising,
+/// and each step's before equals the preceding after.
+fn apply_raise(
+    finding: &mut Finding,
+    raised: &[(FindingKind, Disposition)],
+    source: &'static str,
+    prefix: &str,
+) {
+    let Some((_kind, target)) = raised.iter().find(|(kind, _)| *kind == finding.kind) else {
+        return;
+    };
+    let current = finding
+        .steps
+        .last()
+        .map_or(finding.configured_disposition, |step| step.after);
+    if *target > current {
+        finding.steps.push(PolicyStep {
+            source,
+            rule_id: format!("{prefix}/{}", finding.kind.as_str()),
+            before: current,
+            after: *target,
+        });
+    }
 }
 
 fn control_finding(
@@ -581,7 +628,7 @@ fn control_finding(
         },
         configured_disposition: configured,
         effective_disposition: configured,
-        repository_step: None,
+        steps: vec![built_in_step(seed.kind, enforce)],
     }
 }
 
@@ -826,7 +873,16 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
             location,
             configured_disposition: configured,
             effective_disposition: configured,
-            repository_step: None,
+            steps: if attribution == Attribution::Resolved {
+                vec![PolicyStep {
+                    source: "resolved-projection",
+                    rule_id: "resolved-projection-v1".to_owned(),
+                    before: Disposition::Record,
+                    after: Disposition::Record,
+                }]
+            } else {
+                vec![built_in_step(group.kind, enforce)]
+            },
         });
     }
 }

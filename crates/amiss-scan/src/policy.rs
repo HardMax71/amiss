@@ -133,9 +133,9 @@ fn locate(
 }
 
 /// Acquires one side's policy under the exact object-form law: an ordinary
-/// non-LFS regular blob with mode `100644`, read under the selected-control
-/// caps, strictly parsed. Every other present form is configuration-invalid
-/// at the policy path.
+/// non-LFS regular blob with mode `100644`, read under the configuration
+/// `control-input-bytes` cap, strictly parsed. Every other present form is
+/// configuration-invalid at the policy path.
 ///
 /// # Errors
 ///
@@ -177,8 +177,8 @@ pub fn acquire_entry(
         return Err(invalid(Vec::new()));
     }
     let cap = ValueCap {
-        resource: ResourceName::SelectedControlBlobBytes,
-        limit: scan.limits().selected_control_blob_bytes,
+        resource: ResourceName::ControlInputBytes,
+        limit: scan.limits().control_input_bytes,
     };
     let object = repo
         .read_expected_capped(git, oid, ObjectKind::Blob, cap)
@@ -203,32 +203,36 @@ pub fn acquire_entry(
                 }
             }]
         })?;
-    scan.charge_control_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))
-        .map_err(|defect| {
-            vec![ErrorDetail {
-                code: defect.code(),
-                path: None,
-                resource: match defect {
-                    Error::ResourceLimit {
-                        resource,
-                        configured_limit,
-                        observed_lower_bound,
-                    } => Some((resource, configured_limit, observed_lower_bound)),
-                    Error::Parse(_)
-                    | Error::Git(_)
-                    | Error::UnrepresentablePath
-                    | Error::Internal => None,
-                },
-            }]
-        })?;
     if lfs::is_pointer(&object.body) {
         return Err(invalid(Vec::new()));
     }
     match ScannerPolicy::parse(&object.body) {
-        Ok(policy) => Ok(PolicySide {
-            digest: Some(policy.digest),
-            policy: Some(policy),
-        }),
+        Ok(policy) => {
+            let entries = [
+                policy.document_includes.len(),
+                policy.protected_inventory.len(),
+                policy.finding_dispositions.len(),
+            ]
+            .iter()
+            .map(|&len| u64::try_from(len).unwrap_or(u64::MAX))
+            .fold(0_u64, u64::saturating_add);
+            let limit = scan.limits().repository_policy_entries;
+            if entries > limit {
+                return Err(vec![ErrorDetail {
+                    code: AnalysisErrorCode::ResourceLimitExceeded,
+                    path: Some(SCANNER_POLICY_PATH.to_owned()),
+                    resource: Some((
+                        ResourceName::RepositoryPolicyEntries,
+                        limit,
+                        limit.saturating_add(1),
+                    )),
+                }]);
+            }
+            Ok(PolicySide {
+                digest: Some(policy.digest),
+                policy: Some(policy),
+            })
+        }
         Err(defect) => Err(invalid(vec![specific_code(&defect.kind)])),
     }
 }
@@ -276,9 +280,11 @@ fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Effects {
     pub raised: Vec<(FindingKind, Disposition)>,
+    pub floor_raised: Vec<(FindingKind, Disposition)>,
     pub controls: Vec<ControlSeed>,
     pub base_digest: Option<Digest>,
     pub candidate_digest: Option<Digest>,
+    pub floor: Option<(Digest, &'static str)>,
 }
 
 /// Compares the two sides and evaluates the inventory union against the
@@ -374,9 +380,11 @@ pub fn effects(
 
     Effects {
         raised: candidate_raised,
+        floor_raised: Vec::new(),
         controls,
         base_digest: base.digest,
         candidate_digest: candidate.digest,
+        floor: None,
     }
 }
 
@@ -387,4 +395,276 @@ pub enum InventoryState {
     Unsupported,
     Missing,
     Outside,
+}
+
+/// A verified organization floor as the wrapper supplies it: the parsed
+/// value plus the external trust source that authorized it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FloorInput {
+    pub floor: amiss_wire::controls::OrganizationFloor,
+    pub trust_source: TrustSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrustSource {
+    ExternalRequiredWorkflow,
+    OrganizationRuleset,
+}
+
+impl TrustSource {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExternalRequiredWorkflow => "external-required-workflow",
+            Self::OrganizationRuleset => "organization-ruleset",
+        }
+    }
+}
+
+/// The floor's binding: its repository and full ref must equal the run's,
+/// and the selected profile must be at least the floor minimum under
+/// `observe < enforce`. Any violation is a control-binding mismatch.
+///
+/// # Errors
+///
+/// One `CONTROL_BINDING_MISMATCH` detail.
+pub fn verify_floor(
+    input: &FloorInput,
+    repository: Option<(&str, &str)>,
+    candidate_ref: Option<&str>,
+    enforce: bool,
+) -> Result<(), ErrorDetail> {
+    let mismatch = ErrorDetail {
+        code: AnalysisErrorCode::ControlBindingMismatch,
+        path: None,
+        resource: None,
+    };
+    let Some((owner, name)) = repository else {
+        return Err(mismatch);
+    };
+    let floor = &input.floor;
+    if floor.repository.owner != owner || floor.repository.name != name {
+        return Err(mismatch);
+    }
+    if candidate_ref != Some(floor.ref_name.as_str()) {
+        return Err(mismatch);
+    }
+    let minimum_enforce = matches!(
+        floor.minimum_profile,
+        amiss_wire::controls::Profile::Enforce
+    );
+    if minimum_enforce && !enforce {
+        return Err(mismatch);
+    }
+    Ok(())
+}
+
+/// One protected control path's state on one side: absent, present with its
+/// exact protected-control-evidence digest, or unsupported because the entry
+/// is a tree, symlink, gitlink, or recognized LFS pointer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProtectedState {
+    Absent,
+    Unsupported,
+    Present(Digest),
+}
+
+pub const PROTECTED_CONTROL_EVIDENCE_DOMAIN: &str = "amiss/scanner-protected-control-evidence/v1";
+
+/// Reads one protected control path's state from a snapshot: the evidence
+/// digest binds path, mode, and raw digest; the blob is size-checked under
+/// the selected-control resources and never parsed or executed.
+///
+/// # Errors
+///
+/// Snapshot-level acquisition defects and control byte crossings.
+pub fn protected_state(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    entries: &std::collections::BTreeMap<String, (GitMode, Oid)>,
+    path: &str,
+) -> Result<ProtectedState, Error> {
+    let Some((mode, oid)) = entries.get(path) else {
+        return Ok(ProtectedState::Absent);
+    };
+    match mode {
+        GitMode::Tree | GitMode::Gitlink | GitMode::Symlink => {
+            return Ok(ProtectedState::Unsupported);
+        }
+        GitMode::RegularFile | GitMode::ExecutableFile => {}
+    }
+    let cap = ValueCap {
+        resource: ResourceName::SelectedControlBlobBytes,
+        limit: scan.limits().selected_control_blob_bytes,
+    };
+    let object = repo
+        .read_expected_capped(git, oid, ObjectKind::Blob, cap)
+        .map_err(Error::from)?;
+    scan.charge_control_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
+    if lfs::is_pointer(&object.body) {
+        return Ok(ProtectedState::Unsupported);
+    }
+    let raw = amiss_wire::digest::hb(crate::resolve::RAW_EVIDENCE_DOMAIN, &object.body);
+    let descriptor = amiss_wire::json::Value::Object(vec![
+        (
+            "git_mode".to_owned(),
+            amiss_wire::json::Value::String(mode.as_str().to_owned()),
+        ),
+        (
+            "path".to_owned(),
+            amiss_wire::json::Value::String(path.to_owned()),
+        ),
+        (
+            "raw_digest".to_owned(),
+            amiss_wire::json::Value::String(raw.to_string()),
+        ),
+    ]);
+    Ok(ProtectedState::Present(amiss_wire::digest::hj(
+        PROTECTED_CONTROL_EVIDENCE_DOMAIN,
+        &descriptor,
+    )))
+}
+
+/// The floor inventory obligation over the candidate: every protected
+/// inventory path that is not a scanned candidate document emits its exact
+/// floor coverage rule.
+#[must_use]
+pub fn floor_inventory(
+    input: &FloorInput,
+    candidate_documents: &dyn Fn(&str) -> InventoryState,
+) -> Vec<ControlSeed> {
+    let mut controls = Vec::new();
+    for path in &input.floor.protected_inventory {
+        let rule = match candidate_documents(path.as_str()) {
+            InventoryState::Scanned => continue,
+            InventoryState::Missing => "coverage/floor-inventory-missing",
+            InventoryState::Unsupported => "coverage/floor-inventory-unsupported",
+            InventoryState::Outside => "coverage/floor-inventory-outside",
+        };
+        controls.push(ControlSeed {
+            kind: FindingKind::CoverageReduced,
+            rule_id: rule.to_owned(),
+            control_path: Some(path.as_str().to_owned()),
+        });
+    }
+    controls
+}
+
+/// The protected control paths compared across sides: emit when base and
+/// candidate state or source differs, or whenever the candidate state is not
+/// present; the same present descriptor on both sides emits nothing.
+#[must_use]
+pub fn floor_protected(
+    input: &FloorInput,
+    protected: &dyn Fn(&str) -> (ProtectedState, ProtectedState),
+) -> Vec<ControlSeed> {
+    let mut controls = Vec::new();
+    for path in &input.floor.protected_control_paths {
+        let (base, candidate) = protected(path.as_str());
+        let unchanged = matches!(
+            (base, candidate),
+            (ProtectedState::Present(left), ProtectedState::Present(right)) if left == right
+        );
+        if !unchanged {
+            controls.push(ControlSeed {
+                kind: FindingKind::ControlPlaneChanged,
+                rule_id: "control/protected-path".to_owned(),
+                control_path: Some(path.as_str().to_owned()),
+            });
+        }
+    }
+    controls
+}
+
+/// The floor's raise-only disposition rows, applied after the repository
+/// steps in the policy trace.
+#[must_use]
+pub fn floor_raises(input: &FloorInput) -> Vec<(FindingKind, Disposition)> {
+    input
+        .floor
+        .minimum_dispositions
+        .iter()
+        .map(|row| {
+            let kind = match row.finding_kind {
+                amiss_wire::controls::PromotableFindingKind::ExplicitTargetMissing => {
+                    FindingKind::ExplicitTargetMissing
+                }
+                amiss_wire::controls::PromotableFindingKind::ExplicitTargetTypeMismatch => {
+                    FindingKind::ExplicitTargetTypeMismatch
+                }
+                amiss_wire::controls::PromotableFindingKind::InvalidReference => {
+                    FindingKind::InvalidReference
+                }
+            };
+            let disposition = match row.disposition {
+                PolicyDisposition::Warn => Disposition::Warn,
+                PolicyDisposition::Fail => Disposition::Fail,
+            };
+            (kind, disposition)
+        })
+        .collect()
+}
+
+/// A floor may only tighten built-in limits, never raise them; unmapped
+/// resources belong to layers the local scanner does not own.
+#[must_use]
+pub fn tightened_limits(
+    scan: crate::resources::ScanLimits,
+    git: amiss_git::GitLimits,
+    floor: &amiss_wire::controls::OrganizationFloor,
+) -> (crate::resources::ScanLimits, amiss_git::GitLimits) {
+    let mut scan = scan;
+    let mut git = git;
+    for row in &floor.resource_limits {
+        let maximum = u64::try_from(row.maximum).unwrap_or(u64::MAX);
+        let slot: Option<&mut u64> = match row.resource {
+            ResourceName::DocumentsPerSnapshot => Some(&mut scan.documents_per_snapshot),
+            ResourceName::DocumentBlobBytes => Some(&mut scan.document_blob_bytes),
+            ResourceName::AggregateDocumentBytesPerSnapshot => {
+                Some(&mut scan.aggregate_document_bytes_per_snapshot)
+            }
+            ResourceName::RawLinkDestinationBytes => Some(&mut scan.raw_link_destination_bytes),
+            ResourceName::ParserNesting => Some(&mut scan.parser_nesting),
+            ResourceName::ParserNodesPerDocument => Some(&mut scan.parser_nodes_per_document),
+            ResourceName::ParserNodesPerSnapshot => Some(&mut scan.parser_nodes_per_snapshot),
+            ResourceName::ReferencesPerDocument => Some(&mut scan.references_per_document),
+            ResourceName::ReferencesPerSnapshot => Some(&mut scan.references_per_snapshot),
+            ResourceName::ReferencedTargetBlobBytes => Some(&mut scan.referenced_target_blob_bytes),
+            ResourceName::AggregateReferencedTargetBytesPerSnapshot => {
+                Some(&mut scan.aggregate_referenced_target_bytes_per_snapshot)
+            }
+            ResourceName::SelectedControlBlobBytes => Some(&mut scan.selected_control_blob_bytes),
+            ResourceName::AggregateSelectedControlBytesPerSnapshot => {
+                Some(&mut scan.aggregate_selected_control_bytes_per_snapshot)
+            }
+            ResourceName::GitObjectBytes => Some(&mut git.inflated_object_bytes),
+            ResourceName::GitCompressedObjectBytes => Some(&mut git.compressed_stream_bytes),
+            ResourceName::AggregateGitCompressedObjectBytesPerEvaluation => {
+                Some(&mut git.aggregate_compressed_bytes)
+            }
+            ResourceName::GitPackDirectoryEntries => Some(&mut git.pack_directory_entries),
+            ResourceName::GitPackFiles => Some(&mut git.pack_files),
+            ResourceName::GitPackIndexBytes => Some(&mut git.pack_index_bytes),
+            ResourceName::AggregateGitPackIndexBytes => Some(&mut git.aggregate_pack_index_bytes),
+            ResourceName::GitDeltaDepth => Some(&mut git.delta_depth),
+            ResourceName::GitIndexBytes => Some(&mut git.index_bytes),
+            ResourceName::GitTreeEntriesPerSnapshot => Some(&mut git.tree_entries_per_snapshot),
+            ResourceName::RawPathBytes => Some(&mut git.raw_path_bytes),
+            ResourceName::ControlInputBytes => Some(&mut scan.control_input_bytes),
+            ResourceName::RepositoryPolicyEntries => Some(&mut scan.repository_policy_entries),
+            ResourceName::DebtItems
+            | ResourceName::WaiverItems
+            | ResourceName::OrganizationPolicyEntries
+            | ResourceName::CompleteFindings
+            | ResourceName::TypedAnalysisErrorsRetained
+            | ResourceName::MachineJsonBytes
+            | ResourceName::PrivateTemporaryStorageBytes
+            | ResourceName::EvaluatorManagedMemoryBytes => None,
+        };
+        if let Some(limit) = slot {
+            *limit = (*limit).min(maximum);
+        }
+    }
+    (scan, git)
 }

@@ -583,52 +583,20 @@ fn finding_value(
     ])
 }
 
-/// The policy trace: the one built-in step, or the one resolved-projection
-/// step for a base-only resolved reference.
-fn trace_value(finding: &Finding, enforce: bool) -> Vec<Value> {
-    if finding.attribution == Attribution::Resolved {
-        return vec![object(vec![
-            ("source", string("resolved-projection")),
-            ("rule_id", string("resolved-projection-v1")),
-            ("before", string("record")),
-            ("after", string("record")),
-        ])];
-    }
-    let profile = if enforce { "enforce" } else { "observe" };
-    let mut steps = vec![object(vec![
-        ("source", string("built-in")),
-        (
-            "rule_id",
-            string(&format!(
-                "scanner-policy-defaults-v1/{}/{profile}",
-                finding.kind.as_str()
-            )),
-        ),
-        ("before", string(finding.configured_disposition.as_str())),
-        (
-            "after",
-            string(
-                finding
-                    .repository_step
-                    .map_or(finding.effective_disposition, |_raised| {
-                        finding.configured_disposition
-                    })
-                    .as_str(),
-            ),
-        ),
-    ])];
-    if let Some(raised) = finding.repository_step {
-        steps.push(object(vec![
-            ("source", string("repository-policy")),
-            (
-                "rule_id",
-                string(&format!("repository/{}", finding.kind.as_str())),
-            ),
-            ("before", string(finding.configured_disposition.as_str())),
-            ("after", string(raised.as_str())),
-        ]));
-    }
-    steps
+/// The policy trace renders the finding's exact step chain.
+fn trace_value(finding: &Finding, _enforce: bool) -> Vec<Value> {
+    finding
+        .steps
+        .iter()
+        .map(|step| {
+            object(vec![
+                ("source", string(step.source)),
+                ("rule_id", string(&step.rule_id)),
+                ("before", string(step.before.as_str())),
+                ("after", string(step.after.as_str())),
+            ])
+        })
+        .collect()
 }
 
 fn location_span_value(finding: &Finding) -> Value {
@@ -802,7 +770,19 @@ fn controls_value(setup: &Setup) -> Value {
                 .candidate_digest
                 .map_or(Value::Null, digest_value),
         ),
-        ("organization_floor", none_provenance()),
+        (
+            "organization_floor",
+            setup
+                .policy
+                .floor
+                .map_or_else(none_provenance, |(digest, trust)| {
+                    object(vec![
+                        ("status", string("verified")),
+                        ("digest", digest_value(digest)),
+                        ("trust_source", string(trust)),
+                    ])
+                }),
+        ),
         ("debt_snapshot", none_provenance()),
         ("waiver_bundle", none_provenance()),
         (

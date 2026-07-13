@@ -1,5 +1,6 @@
 use amiss_wire::controls::{
-    DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, OrganizationFloor, ScannerPolicy, WaiverBundle,
+    DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, FloorDefect, OrganizationFloor, ScannerPolicy,
+    WaiverBundle,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -220,22 +221,26 @@ fn rejects_policy_shape_defects() {
     }
 }
 
+#[expect(clippy::panic, reason = "test helper narrowing the defect family")]
+fn floor_schema_kind(defect: FloorDefect) -> ErrorKind {
+    match defect {
+        FloorDefect::Schema(error) => error.kind,
+        FloorDefect::Entries { .. } => panic!("expected a schema defect, got an entries crossing"),
+    }
+}
+
 #[test]
 fn rejects_floor_bound_defects() {
     let doc = String::from_utf8(FLOOR.to_vec()).unwrap();
     let wrong_ceiling = doc.replace("67108864", "67108863");
     assert_eq!(
-        OrganizationFloor::parse(wrong_ceiling.as_bytes())
-            .unwrap_err()
-            .kind,
+        floor_schema_kind(OrganizationFloor::parse(wrong_ceiling.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
     );
 
     let wrong_errors = doc.replace("\"maximum\": 64", "\"maximum\": 65");
     assert_eq!(
-        OrganizationFloor::parse(wrong_errors.as_bytes())
-            .unwrap_err()
-            .kind,
+        floor_schema_kind(OrganizationFloor::parse(wrong_errors.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
     );
 
@@ -244,10 +249,70 @@ fn rejects_floor_bound_defects() {
         "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 67108864 }",
     );
     assert_eq!(
-        OrganizationFloor::parse(unsorted_limits.as_bytes())
-            .unwrap_err()
-            .kind,
+        floor_schema_kind(OrganizationFloor::parse(unsorted_limits.as_bytes()).unwrap_err()),
         ErrorKind::UnsortedSet
+    );
+}
+
+#[test]
+fn rejects_floors_over_the_combined_entry_limit() {
+    let paths = |count: usize, prefix: &str| {
+        let items: Vec<String> = (0..count)
+            .map(|index| format!("\"{prefix}/{index:07}.md\""))
+            .collect();
+        items.join(",")
+    };
+    let doc = format!(
+        r#"{{
+  "schema": "amiss/organization-floor/v1",
+  "floor_id": "acme/too-big",
+  "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [{inventory}],
+  "protected_control_paths": [{controls}],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": []
+}}"#,
+        inventory = paths(60_000, "docs/a"),
+        controls = paths(45_000, "ops/b"),
+    );
+    assert_eq!(
+        OrganizationFloor::parse(doc.as_bytes()).unwrap_err(),
+        FloorDefect::Entries {
+            configured_limit: 100_000,
+            observed_lower_bound: 100_001,
+        }
+    );
+}
+
+#[test]
+fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
+    let doc = br#"{
+  "schema": "amiss/organization-floor/v1",
+  "floor_id": "acme/self-inconsistent",
+  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": ["docs/a.md", "docs/b.md", "docs/c.md"],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": [
+    { "resource": "organization-policy-entries", "maximum": 3 }
+  ]
+}"#;
+    assert_eq!(
+        OrganizationFloor::parse(doc).unwrap_err(),
+        FloorDefect::Entries {
+            configured_limit: 3,
+            observed_lower_bound: 4,
+        }
     );
 }
 

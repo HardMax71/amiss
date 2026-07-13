@@ -964,7 +964,9 @@ floor is self-inconsistent and exits `2`.
 
 `repository-policy-entries` is the sum of `document_includes`, `protected_inventory`, and
 `finding_dispositions`, checked independently for base and candidate before retaining more than the
-effective limit. Array-local schema maxima do not permit their sum to exceed it.
+effective limit. The built-in limit is 100,000 combined entries, the same combined bound the
+organization floor uses; a verified floor may only tighten it. Array-local schema maxima do not
+permit their sum to exceed the effective limit.
 
 The sandbox mount cap remains 64 MiB. A tighter floor
 `private-temporary-storage-bytes` value is the evaluator's usage allowance inside that mount;

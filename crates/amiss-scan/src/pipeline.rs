@@ -22,6 +22,9 @@ struct Evaluated {
     side: Side,
 }
 
+/// One resolved snapshot root: its tree OID plus the full identity block.
+type ResolvedTree = (Oid, SnapshotIdentity);
+
 const fn format_str(object_format: ObjectFormat) -> &'static str {
     match object_format {
         ObjectFormat::Sha1 => "sha1",
@@ -117,6 +120,127 @@ fn side_observations(
     ))
 }
 
+/// Verifies a supplied floor's binding against the run identity. A floor
+/// that fails its binding has no effect of any kind: the returned reference
+/// is present only for a verified floor.
+fn floor_gate(
+    setup_shell: &SetupShell,
+) -> (Option<&crate::policy::FloorInput>, Option<ErrorDetail>) {
+    let mismatch = setup_shell.floor.as_ref().and_then(|floor| {
+        crate::policy::verify_floor(
+            floor,
+            setup_shell
+                .repository
+                .as_ref()
+                .map(|(owner, name)| (owner.as_str(), name.as_str())),
+            setup_shell.candidate_ref.as_deref(),
+            setup_shell.enforce,
+        )
+        .err()
+    });
+    let verified = if mismatch.is_none() {
+        setup_shell.floor.as_ref()
+    } else {
+        None
+    };
+    (verified, mismatch)
+}
+
+/// The engine-fixed ceilings, tightened by a verified floor. A run without a
+/// verified floor uses the built-in contract values unchanged.
+fn effective_limits(
+    floor: Option<&crate::policy::FloorInput>,
+) -> (ScanLimits, amiss_git::GitLimits) {
+    floor.map_or(
+        (ScanLimits::CONTRACT, amiss_git::GitLimits::CONTRACT),
+        |input| {
+            crate::policy::tightened_limits(
+                ScanLimits::CONTRACT,
+                amiss_git::GitLimits::CONTRACT,
+                &input.floor,
+            )
+        },
+    )
+}
+
+fn binding_mismatch(
+    setup_shell: &SetupShell,
+    base: SnapshotIdentity,
+    candidate: CandidateBlock,
+    row: ErrorDetail,
+) -> Built {
+    let mut setup = setup_shell.with(base, candidate);
+    setup.controls_unavailable = Some("control-binding-mismatch");
+    construct_incomplete(&setup, &[row])
+}
+
+/// The shared conclusion of a two-sided run: incomplete on any accumulated
+/// failure, otherwise correlation and full construction.
+fn conclude(
+    setup: &Setup,
+    base: (&SnapshotDiscovery, &Side),
+    candidate: (&SnapshotDiscovery, &Side),
+    failures: &[ErrorDetail],
+) -> Built {
+    if !failures.is_empty() {
+        return construct_incomplete(setup, failures);
+    }
+    match correlate(base.1, candidate.1) {
+        Ok(comparisons) => construct(setup, base.0, candidate.0, &comparisons),
+        Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
+    }
+}
+
+/// The fallback identity projection when a snapshot cannot be established:
+/// each supplied commit OID stands in for both identity fields.
+fn oid_fallback(
+    repo: &Repository,
+    setup_shell: &SetupShell,
+    base_oid: &Oid,
+    candidate_oid: &Oid,
+) -> Setup {
+    let placeholder = |oid: &Oid| SnapshotIdentity {
+        object_format: format_str(repo.object_format()),
+        commit_oid: oid.as_str().to_owned(),
+        tree_oid: oid.as_str().to_owned(),
+    };
+    setup_shell.with(
+        placeholder(base_oid),
+        CandidateBlock::Commit(placeholder(candidate_oid)),
+    )
+}
+
+/// Resolves both commit trees, then settles a pending floor binding
+/// mismatch against the real snapshot identities.
+fn pair_trees(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    setup_shell: &SetupShell,
+    floor_mismatch: Option<ErrorDetail>,
+    base_oid: &Oid,
+    candidate_oid: &Oid,
+) -> Result<(ResolvedTree, ResolvedTree), Box<Built>> {
+    let trees = resolve_tree(repo, git_resources, base_oid).and_then(|base_tree| {
+        resolve_tree(repo, git_resources, candidate_oid)
+            .map(|candidate_tree| (base_tree, candidate_tree))
+    });
+    let (base_tree, candidate_tree) = trees.map_err(|defect_detail| {
+        Box::new(construct_incomplete(
+            &oid_fallback(repo, setup_shell, base_oid, candidate_oid),
+            &[defect_detail],
+        ))
+    })?;
+    if let Some(row) = floor_mismatch {
+        return Err(Box::new(binding_mismatch(
+            setup_shell,
+            base_tree.1,
+            CandidateBlock::Commit(candidate_tree.1),
+            row,
+        )));
+    }
+    Ok((base_tree, candidate_tree))
+}
+
 /// The complete commit-pair run: both sides, correlation, and construction.
 /// Any accumulated typed error makes the run incomplete with every safely
 /// established row retained; the report is emitted either way.
@@ -129,51 +253,41 @@ pub fn commit_pair(
     base_oid: &Oid,
     candidate_oid: &Oid,
 ) -> Built {
-    let mut git_resources = GitResources::new(amiss_git::GitLimits::CONTRACT);
-    let placeholder = |oid: &Oid| SnapshotIdentity {
-        object_format: format_str(repo.object_format()),
-        commit_oid: oid.as_str().to_owned(),
-        tree_oid: oid.as_str().to_owned(),
-    };
-    let fallback_setup = |shell: &SetupShell| {
-        shell.with(
-            placeholder(base_oid),
-            CandidateBlock::Commit(placeholder(candidate_oid)),
-        )
-    };
-
-    let trees = resolve_tree(repo, &mut git_resources, base_oid).and_then(|base_tree| {
-        resolve_tree(repo, &mut git_resources, candidate_oid)
-            .map(|candidate_tree| (base_tree, candidate_tree))
-    });
-    let (base_tree, candidate_tree) = match trees {
-        Ok(pair) => pair,
-        Err(defect_detail) => {
-            return construct_incomplete(&fallback_setup(setup_shell), &[defect_detail]);
-        }
-    };
-
-    let mut control_resources = ScanResources::new(ScanLimits::CONTRACT);
-    let policies = acquire_policies(
+    let (verified_floor, floor_mismatch) = floor_gate(setup_shell);
+    let (scan_limits, git_limits) = effective_limits(verified_floor);
+    let mut git_resources = GitResources::new(git_limits);
+    let trees = pair_trees(
         repo,
         &mut git_resources,
-        &mut control_resources,
-        &base_tree.0,
-        &candidate_tree.0,
+        setup_shell,
+        floor_mismatch,
+        base_oid,
+        candidate_oid,
+    );
+    let (base_tree, candidate_tree) = match trees {
+        Ok(pair) => pair,
+        Err(built) => return *built,
+    };
+
+    let mut base_scan = ScanResources::new(scan_limits);
+    let mut candidate_scan = ScanResources::new(scan_limits);
+    let policies = pair_policies(
+        repo,
+        &mut git_resources,
+        setup_shell,
+        (&base_tree, &mut base_scan),
+        (&candidate_tree, &mut candidate_scan),
     );
     let (base_policy, candidate_policy) = match policies {
         Ok(pair) => pair,
-        Err(details) => {
-            let mut setup = fallback_setup(setup_shell);
-            setup.controls_unavailable = Some("invalid-repository-policy");
-            return construct_incomplete(&setup, &details);
-        }
+        Err(built) => return *built,
     };
     let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
 
     let base = evaluate_tree(
         repo,
         &mut git_resources,
+        &mut base_scan,
         engine,
         github,
         &includes,
@@ -182,6 +296,7 @@ pub fn commit_pair(
     let candidate = evaluate_tree(
         repo,
         &mut git_resources,
+        &mut candidate_scan,
         engine,
         github,
         &includes,
@@ -189,36 +304,205 @@ pub fn commit_pair(
     );
     match (base, candidate) {
         (Ok((base, base_failures)), Ok((candidate, candidate_failures))) => {
-            let effects = crate::policy::effects(
+            let mut failures = base_failures;
+            failures.extend(candidate_failures);
+            let effects = pair_effects(
+                repo,
+                &mut git_resources,
+                verified_floor,
                 &base_policy,
                 &candidate_policy,
-                &inventory_lookup(&candidate.discovery),
+                (&base.discovery, &mut base_scan),
+                (&candidate.discovery, &mut candidate_scan),
+                &mut failures,
             );
             let mut setup = setup_shell.with(
                 base.identity.clone(),
                 CandidateBlock::Commit(candidate.identity.clone()),
             );
             setup.policy = effects;
-            let mut failures = base_failures;
-            failures.extend(candidate_failures);
-            if !failures.is_empty() {
-                return construct_incomplete(&setup, &failures);
-            }
-            match correlate(&base.side, &candidate.side) {
-                Ok(comparisons) => {
-                    construct(&setup, &base.discovery, &candidate.discovery, &comparisons)
-                }
-                Err(defect) => construct_incomplete(&setup, &[detail(&defect, None)]),
-            }
+            conclude(
+                &setup,
+                (&base.discovery, &base.side),
+                (&candidate.discovery, &candidate.side),
+                &failures,
+            )
         }
-        (Err(defect), Ok(_)) | (Ok(_), Err(defect)) => {
-            construct_incomplete(&fallback_setup(setup_shell), &[defect])
-        }
+        (Err(defect), Ok(_)) | (Ok(_), Err(defect)) => construct_incomplete(
+            &oid_fallback(repo, setup_shell, base_oid, candidate_oid),
+            &[defect],
+        ),
         (Err(base_defect), Err(candidate_defect)) => construct_incomplete(
-            &fallback_setup(setup_shell),
+            &oid_fallback(repo, setup_shell, base_oid, candidate_oid),
             &[base_defect, candidate_defect],
         ),
     }
+}
+
+/// Acquires both repository policies, each side on its own per-snapshot
+/// ledger, producing the fatal projection on any defect.
+fn pair_policies(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    setup_shell: &SetupShell,
+    base: (&(Oid, SnapshotIdentity), &mut ScanResources),
+    candidate: (&(Oid, SnapshotIdentity), &mut ScanResources),
+) -> Result<(crate::policy::PolicySide, crate::policy::PolicySide), Box<Built>> {
+    let (base_tree, base_scan) = base;
+    let (candidate_tree, candidate_scan) = candidate;
+    let fallback = |details: &[ErrorDetail]| {
+        let mut setup = setup_shell.with(
+            base_tree.1.clone(),
+            CandidateBlock::Commit(candidate_tree.1.clone()),
+        );
+        setup.controls_unavailable = Some(policy_unavailable_reason(details));
+        Box::new(construct_incomplete(&setup, details))
+    };
+    let base_policy = crate::policy::acquire(repo, git_resources, base_scan, &base_tree.0)
+        .map_err(|details| fallback(&details))?;
+    let candidate_policy =
+        crate::policy::acquire(repo, git_resources, candidate_scan, &candidate_tree.0)
+            .map_err(|details| fallback(&details))?;
+    Ok((base_policy, candidate_policy))
+}
+
+/// `invalid-repository-policy` requires its `CONFIGURATION_INVALID` anchor;
+/// any other acquisition failure leaves the controls merely not parsed.
+fn policy_unavailable_reason(details: &[ErrorDetail]) -> &'static str {
+    if details
+        .iter()
+        .any(|row| row.code == amiss_wire::report::AnalysisErrorCode::ConfigurationInvalid)
+    {
+        "invalid-repository-policy"
+    } else {
+        "not-parsed"
+    }
+}
+
+fn control_read_detail(defect: &Error, path: &str) -> ErrorDetail {
+    match defect {
+        Error::ResourceLimit {
+            resource,
+            configured_limit,
+            observed_lower_bound,
+        } => ErrorDetail {
+            code: defect.code(),
+            path: (*resource == amiss_wire::controls::ResourceName::SelectedControlBlobBytes)
+                .then(|| path.to_owned()),
+            resource: Some((*resource, *configured_limit, *observed_lower_bound)),
+        },
+        Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => {
+            ErrorDetail {
+                code: defect.code(),
+                path: None,
+                resource: None,
+            }
+        }
+    }
+}
+
+/// The complete policy layer for a two-sided run: repository comparison
+/// effects, then the verified floor applied over them. A floor defect row
+/// joins the accumulated failures.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the two-sided control context is the contract's"
+)]
+fn pair_effects(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    verified_floor: Option<&crate::policy::FloorInput>,
+    base_policy: &crate::policy::PolicySide,
+    candidate_policy: &crate::policy::PolicySide,
+    base: (&SnapshotDiscovery, &mut ScanResources),
+    candidate: (&SnapshotDiscovery, &mut ScanResources),
+    failures: &mut Vec<ErrorDetail>,
+) -> crate::policy::Effects {
+    let mut effects = crate::policy::effects(
+        base_policy,
+        candidate_policy,
+        &inventory_lookup(candidate.0),
+    );
+    if let Some(row) = apply_floor(
+        repo,
+        git_resources,
+        verified_floor,
+        base,
+        candidate,
+        &mut effects,
+        failures.is_empty(),
+    ) {
+        failures.push(row);
+    }
+    effects
+}
+
+/// Applies a verified floor to the run: the verified provenance and
+/// raise-only dispositions always, floor inventory coverage from the
+/// already-acquired candidate discovery, and protected control paths
+/// compared across both sides only while no earlier stage has failed. The
+/// first protected-path acquisition defect stops that comparison.
+fn apply_floor(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    floor: Option<&crate::policy::FloorInput>,
+    base: (&SnapshotDiscovery, &mut ScanResources),
+    candidate: (&SnapshotDiscovery, &mut ScanResources),
+    effects: &mut crate::policy::Effects,
+    acquire: bool,
+) -> Option<ErrorDetail> {
+    let floor = floor?;
+    effects.floor = Some((floor.floor.digest, floor.trust_source.as_str()));
+    effects.floor_raised = crate::policy::floor_raises(floor);
+    effects.controls.extend(crate::policy::floor_inventory(
+        floor,
+        &inventory_lookup(candidate.0),
+    ));
+    if !acquire {
+        return None;
+    }
+    let (base_discovery, base_scan) = base;
+    let (candidate_discovery, candidate_scan) = candidate;
+    let mut states: Vec<(
+        &str,
+        (crate::policy::ProtectedState, crate::policy::ProtectedState),
+    )> = Vec::new();
+    for path in &floor.floor.protected_control_paths {
+        let read = crate::policy::protected_state(
+            repo,
+            git_resources,
+            base_scan,
+            &base_discovery.entries,
+            path.as_str(),
+        )
+        .and_then(|base_state| {
+            crate::policy::protected_state(
+                repo,
+                git_resources,
+                candidate_scan,
+                &candidate_discovery.entries,
+                path.as_str(),
+            )
+            .map(|candidate_state| (base_state, candidate_state))
+        });
+        match read {
+            Ok(pair) => states.push((path.as_str(), pair)),
+            Err(defect) => return Some(control_read_detail(&defect, path.as_str())),
+        }
+    }
+    let lookup = |path: &str| {
+        states.iter().find(|(known, _)| *known == path).map_or(
+            (
+                crate::policy::ProtectedState::Absent,
+                crate::policy::ProtectedState::Absent,
+            ),
+            |(_, pair)| *pair,
+        )
+    };
+    effects
+        .controls
+        .extend(crate::policy::floor_protected(floor, &lookup));
+    None
 }
 
 /// The candidate state of one inventory path under the obligation test.
@@ -233,9 +517,10 @@ fn inventory_lookup(
         {
             return match record.status {
                 DocumentStatus::Scanned(_) => crate::policy::InventoryState::Scanned,
-                DocumentStatus::ExcludedBuiltIn
-                | DocumentStatus::Unsupported(_)
-                | DocumentStatus::Failed(_) => crate::policy::InventoryState::Unsupported,
+                DocumentStatus::ExcludedBuiltIn => crate::policy::InventoryState::Outside,
+                DocumentStatus::Unsupported(_) | DocumentStatus::Failed(_) => {
+                    crate::policy::InventoryState::Unsupported
+                }
             };
         }
         if discovery.entries.contains_key(path) {
@@ -245,46 +530,74 @@ fn inventory_lookup(
     }
 }
 
+/// The staged candidate's discovery and observations plus every accumulated
+/// failure row, or the fatal projection when the index side cannot be
+/// discovered at all.
 #[expect(
     clippy::too_many_arguments,
     reason = "the staged pipeline context is the contract's"
 )]
-fn staged_result(
+fn staged_candidate(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    candidate_scan: &mut ScanResources,
+    engine: &EngineProvenance,
+    github: Option<&GithubContext>,
+    setup_shell: &SetupShell,
+    base_identity: &SnapshotIdentity,
+    includes: &crate::policy::Includes,
+    index: &amiss_git::LogicalIndex,
+    base_failures: Vec<ErrorDetail>,
+) -> Result<(SnapshotDiscovery, Option<Side>, Vec<ErrorDetail>), Box<Built>> {
+    let discovery =
+        crate::discovery::discover_index(repo, git_resources, candidate_scan, includes, index)
+            .map_err(|defect| {
+                Box::new(candidate_unavailable(
+                    setup_shell,
+                    base_identity.clone(),
+                    &defect,
+                ))
+            })?;
+    let (side, failures) = staged_sides(
+        repo,
+        git_resources,
+        candidate_scan,
+        engine,
+        github,
+        &discovery,
+        base_failures,
+    );
+    Ok((discovery, side, failures))
+}
+
+/// The staged candidate's observations plus every accumulated failure row;
+/// a side that cannot be built at all is `None` with its defect appended.
+fn staged_sides(
     repo: &Repository,
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
     github: Option<&GithubContext>,
-    setup: &Setup,
-    base_evaluated: &Evaluated,
-    base_failures: Vec<ErrorDetail>,
     candidate_discovery: &SnapshotDiscovery,
-) -> Built {
-    let candidate = side_observations(
+    base_failures: Vec<ErrorDetail>,
+) -> (Option<Side>, Vec<ErrorDetail>) {
+    let mut failures = base_failures;
+    match side_observations(
         repo,
         git_resources,
         scan_resources,
         engine,
         github,
         candidate_discovery,
-    );
-    let (candidate_side, candidate_failures) = match candidate {
-        Ok(result) => result,
-        Err(defect_detail) => return construct_incomplete(setup, &[defect_detail]),
-    };
-    let mut failures = base_failures;
-    failures.extend(candidate_failures);
-    if !failures.is_empty() {
-        return construct_incomplete(setup, &failures);
-    }
-    match correlate(&base_evaluated.side, &candidate_side) {
-        Ok(comparisons) => construct(
-            setup,
-            &base_evaluated.discovery,
-            candidate_discovery,
-            &comparisons,
-        ),
-        Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
+    ) {
+        Ok((side, candidate_failures)) => {
+            failures.extend(candidate_failures);
+            (Some(side), failures)
+        }
+        Err(defect_detail) => {
+            failures.push(defect_detail);
+            (None, failures)
+        }
     }
 }
 
@@ -326,6 +639,7 @@ fn pinned_index(
 fn staged_base(
     repo: &Repository,
     git_resources: &mut GitResources,
+    scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
     github: Option<&GithubContext>,
     includes: &crate::policy::Includes,
@@ -333,20 +647,33 @@ fn staged_base(
     base_placeholder: SnapshotIdentity,
     base_tree: (Oid, SnapshotIdentity),
 ) -> Result<(Evaluated, Vec<ErrorDetail>), Box<Built>> {
-    evaluate_tree(repo, git_resources, engine, github, includes, base_tree).map_err(
-        |defect_detail| {
-            let setup = setup_shell.with(
-                base_placeholder,
-                CandidateBlock::Unavailable(vec!["not-evaluated"]),
-            );
-            Box::new(construct_incomplete(&setup, &[defect_detail]))
-        },
+    evaluate_tree(
+        repo,
+        git_resources,
+        scan_resources,
+        engine,
+        github,
+        includes,
+        base_tree,
     )
+    .map_err(|defect_detail| {
+        let setup = setup_shell.with(
+            base_placeholder,
+            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+        );
+        Box::new(construct_incomplete(&setup, &[defect_detail]))
+    })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
 fn staged_policy(
     repo: &Repository,
     git_resources: &mut GitResources,
+    base_scan: &mut ScanResources,
+    candidate_scan: &mut ScanResources,
     setup_shell: &SetupShell,
     base_placeholder: &SnapshotIdentity,
     base_tree: &Oid,
@@ -359,16 +686,15 @@ fn staged_policy(
     ),
     Box<Built>,
 > {
-    let mut control_resources = ScanResources::new(ScanLimits::CONTRACT);
     let bail = |details: &[ErrorDetail]| {
         let mut setup = setup_shell.with(
             base_placeholder.clone(),
             CandidateBlock::Unavailable(vec!["not-evaluated"]),
         );
-        setup.controls_unavailable = Some("invalid-repository-policy");
+        setup.controls_unavailable = Some(policy_unavailable_reason(details));
         Box::new(construct_incomplete(&setup, details))
     };
-    let base = crate::policy::acquire(repo, git_resources, &mut control_resources, base_tree)
+    let base = crate::policy::acquire(repo, git_resources, base_scan, base_tree)
         .map_err(|details| bail(&details))?;
     let staged = index
         .entries
@@ -379,7 +705,7 @@ fn staged_policy(
         Some(entry) => crate::policy::acquire_entry(
             repo,
             git_resources,
-            &mut control_resources,
+            candidate_scan,
             entry.mode,
             &entry.oid,
         )
@@ -409,40 +735,22 @@ fn resolve_tree(
     ))
 }
 
-fn acquire_policies(
-    repo: &Repository,
-    git_resources: &mut GitResources,
-    control_resources: &mut ScanResources,
-    base_tree: &Oid,
-    candidate_tree: &Oid,
-) -> Result<(crate::policy::PolicySide, crate::policy::PolicySide), Vec<ErrorDetail>> {
-    let base = crate::policy::acquire(repo, git_resources, control_resources, base_tree)?;
-    let candidate = crate::policy::acquire(repo, git_resources, control_resources, candidate_tree)?;
-    Ok((base, candidate))
-}
-
 fn evaluate_tree(
     repo: &Repository,
     git_resources: &mut GitResources,
+    scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
     github: Option<&GithubContext>,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
     let (tree_oid, identity) = tree;
-    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
-    let discovery = discover(
-        repo,
-        git_resources,
-        &mut scan_resources,
-        includes,
-        &tree_oid,
-    )
-    .map_err(|defect| detail(&defect, None))?;
+    let discovery = discover(repo, git_resources, scan_resources, includes, &tree_oid)
+        .map_err(|defect| detail(&defect, None))?;
     let (side, failures) = side_observations(
         repo,
         git_resources,
-        &mut scan_resources,
+        scan_resources,
         engine,
         github,
         &discovery,
@@ -465,6 +773,7 @@ pub struct SetupShell {
     pub repository: Option<(String, String)>,
     pub candidate_ref: Option<String>,
     pub default_branch_ref: Option<String>,
+    pub floor: Option<crate::policy::FloorInput>,
 }
 
 impl SetupShell {
@@ -511,6 +820,43 @@ fn index_candidate_block(
     ))
 }
 
+fn staged_tree(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    setup_shell: &SetupShell,
+    base_placeholder: &SnapshotIdentity,
+    base_oid: &Oid,
+) -> Result<(Oid, SnapshotIdentity), Box<Built>> {
+    resolve_tree(repo, git_resources, base_oid).map_err(|defect_detail| {
+        let setup = setup_shell.with(
+            base_placeholder.clone(),
+            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+        );
+        Box::new(construct_incomplete(&setup, &[defect_detail]))
+    })
+}
+
+/// One pinned-snapshot recheck: the index is reread after the scan and any
+/// change replaces the result with the snapshot-changed projection.
+fn recheck_index(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    setup_shell: &SetupShell,
+    base_identity: SnapshotIdentity,
+    initial: &[u8],
+    built: Built,
+) -> Built {
+    if let Err(defect) = repo.verify_index_unchanged(git_resources, initial) {
+        let defect = Error::from(defect);
+        let changed_setup = setup_shell.with(
+            base_identity,
+            CandidateBlock::Unavailable(vec![unavailable_reason(&defect)]),
+        );
+        return construct_incomplete(&changed_setup, &[detail(&defect, None)]);
+    }
+    built
+}
+
 const fn unavailable_reason(defect: &Error) -> &'static str {
     match defect {
         Error::Git(crate::GitDefect::RepositoryUnavailable) => "repository-unavailable",
@@ -539,7 +885,9 @@ pub fn staged_index(
     setup_shell: &SetupShell,
     base_oid: &Oid,
 ) -> Built {
-    let mut git_resources = GitResources::new(amiss_git::GitLimits::CONTRACT);
+    let (verified_floor, floor_mismatch) = floor_gate(setup_shell);
+    let (scan_limits, git_limits) = effective_limits(verified_floor);
+    let mut git_resources = GitResources::new(git_limits);
     let base_placeholder = SnapshotIdentity {
         object_format: format_str(repo.object_format()),
         commit_oid: base_oid.as_str().to_owned(),
@@ -553,19 +901,31 @@ pub fn staged_index(
         }
     };
 
-    let base_tree = match resolve_tree(repo, &mut git_resources, base_oid) {
+    let base_tree = match staged_tree(
+        repo,
+        &mut git_resources,
+        setup_shell,
+        &base_placeholder,
+        base_oid,
+    ) {
         Ok(tree) => tree,
-        Err(defect_detail) => {
-            let setup = setup_shell.with(
-                base_placeholder,
-                CandidateBlock::Unavailable(vec!["not-evaluated"]),
-            );
-            return construct_incomplete(&setup, &[defect_detail]);
-        }
+        Err(built) => return *built,
     };
+    if let Some(row) = floor_mismatch {
+        return binding_mismatch(
+            setup_shell,
+            base_tree.1,
+            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+            row,
+        );
+    }
+    let mut base_scan = ScanResources::new(scan_limits);
+    let mut candidate_scan = ScanResources::new(scan_limits);
     let (base_policy, candidate_policy, includes) = match staged_policy(
         repo,
         &mut git_resources,
+        &mut base_scan,
+        &mut candidate_scan,
         setup_shell,
         &base_placeholder,
         &base_tree.0,
@@ -577,6 +937,7 @@ pub fn staged_index(
     let (base_evaluated, base_failures) = match staged_base(
         repo,
         &mut git_resources,
+        &mut base_scan,
         engine,
         github,
         &includes,
@@ -588,46 +949,78 @@ pub fn staged_index(
         Err(built) => return *built,
     };
 
-    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
-    let candidate_discovery = match crate::discovery::discover_index(
+    let staged = staged_candidate(
         repo,
         &mut git_resources,
-        &mut scan_resources,
-        &includes,
-        &index,
-    ) {
-        Ok(discovery) => discovery,
-        Err(defect) => {
-            return candidate_unavailable(setup_shell, base_evaluated.identity, &defect);
-        }
-    };
-    let candidate_block = index_candidate_block(repo, base_oid, &index, skip_worktree_paths);
-    let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
-    setup.policy = crate::policy::effects(
-        &base_policy,
-        &candidate_policy,
-        &inventory_lookup(&candidate_discovery),
-    );
-
-    let built = staged_result(
-        repo,
-        &mut git_resources,
-        &mut scan_resources,
+        &mut candidate_scan,
         engine,
         github,
+        setup_shell,
+        &base_evaluated.identity,
+        &includes,
+        &index,
+        base_failures,
+    );
+    let (candidate_discovery, candidate_side, mut failures) = match staged {
+        Ok(parts) => parts,
+        Err(built) => return *built,
+    };
+    let effects = pair_effects(
+        repo,
+        &mut git_resources,
+        verified_floor,
+        &base_policy,
+        &candidate_policy,
+        (&base_evaluated.discovery, &mut base_scan),
+        (&candidate_discovery, &mut candidate_scan),
+        &mut failures,
+    );
+    let candidate_block = index_candidate_block(repo, base_oid, &index, skip_worktree_paths);
+    let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
+    setup.policy = effects;
+    staged_finish(
+        repo,
+        &mut git_resources,
+        setup_shell,
         &setup,
         &base_evaluated,
-        base_failures,
-        &candidate_discovery,
-    );
+        (&candidate_discovery, candidate_side.as_ref()),
+        &failures,
+        &initial,
+    )
+}
 
-    if let Err(defect) = repo.verify_index_unchanged(&mut git_resources, &initial) {
-        let defect = Error::from(defect);
-        let changed_setup = setup_shell.with(
-            base_evaluated.identity,
-            CandidateBlock::Unavailable(vec![unavailable_reason(&defect)]),
-        );
-        return construct_incomplete(&changed_setup, &[detail(&defect, None)]);
-    }
-    built
+/// The staged conclusion plus the pinned-index recheck: a complete run
+/// correlates and constructs; anything else is the incomplete projection.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
+fn staged_finish(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    setup_shell: &SetupShell,
+    setup: &Setup,
+    base_evaluated: &Evaluated,
+    candidate: (&SnapshotDiscovery, Option<&Side>),
+    failures: &[ErrorDetail],
+    initial: &[u8],
+) -> Built {
+    let built = match (candidate.1, failures) {
+        (Some(side), []) => conclude(
+            setup,
+            (&base_evaluated.discovery, &base_evaluated.side),
+            (candidate.0, side),
+            &[],
+        ),
+        _ => construct_incomplete(setup, failures),
+    };
+    recheck_index(
+        repo,
+        git_resources,
+        setup_shell,
+        base_evaluated.identity.clone(),
+        initial,
+        built,
+    )
 }
