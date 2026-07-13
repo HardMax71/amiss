@@ -80,6 +80,7 @@ fn main() -> ExitCode {
         } => {
             for code in &codes {
                 eprintln!("amiss: {}", code.as_str());
+                eprintln!("  {}", code.contract());
             }
             failure
         }

@@ -25,6 +25,32 @@ impl Code {
             Self::UnsupportedProviderHost => "UNSUPPORTED_PROVIDER_HOST",
         }
     }
+
+    /// The contract the code enforced, in one line, for the human projection
+    /// only. The report envelope carries the code and no prose, on purpose, and
+    /// human output is a non-wire projection whose wording is free to say more.
+    /// The command has no `--help`, so a refusal is the only place the closed
+    /// grammar can explain itself to the person who just tripped over it.
+    #[must_use]
+    pub const fn contract(self) -> &'static str {
+        match self {
+            Self::InvalidEvent => {
+                "--repository owner and name are canonical ASCII lowercase, and --ref and \
+                 --default-branch-ref are full refs such as refs/heads/main. GitHub reports the \
+                 owner with its original capitals, so a workflow passing ${{ github.repository }} \
+                 has to lowercase it first."
+            }
+            Self::InvalidInvocation => {
+                "every option is spelled exactly, appears at most once, and carries a value. \
+                 --base and --candidate are distinct full lowercase object IDs, never refs and \
+                 never abbreviations."
+            }
+            Self::InvalidProfile => "--profile is observe or enforce.",
+            Self::UnsupportedProviderHost => {
+                "--repository names github.com, which is the only provider host v0 evaluates."
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

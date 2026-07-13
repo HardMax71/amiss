@@ -1,0 +1,282 @@
+#![expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "integration harness over asserted fixture shapes"
+)]
+
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+
+use amiss_git::Repository;
+use amiss_scan::pipeline::{SetupShell, commit_pair};
+use amiss_scan::report::RequestDigests;
+use amiss_scan::resolve::GithubContext;
+use amiss_wire::digest::hb;
+use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::report::EngineProvenance;
+use tempfile::TempDir;
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
+        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
+        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+        .output()
+        .expect("run git");
+    assert!(
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("git output utf-8")
+}
+
+fn engine() -> EngineProvenance {
+    EngineProvenance {
+        version: "0.0.0-test".to_owned(),
+        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+    }
+}
+
+/// The repository the dossier scanned, on the branch it scanned it on. The
+/// identity is lowercase because that is the only identity a valid invocation
+/// can carry: the engine requires the canonical spelling and refuses any other.
+/// The URLs in the documents below keep the capitals GitHub actually shows, and
+/// the resolver folds the owner and name on the URL side alone, for comparison,
+/// leaving the original bytes in the raw destination digest. The recorded scan
+/// ran with the URL ref and the evaluated ref both `main`, and a same-repository
+/// GitHub URL resolves against the tree in hand only when they agree.
+fn spec_to_rest() -> GithubContext {
+    GithubContext {
+        owner: "hardmax71".to_owned(),
+        repository: "spec_to_rest".to_owned(),
+        candidate_ref: "refs/heads/main".to_owned(),
+        default_ref: "refs/heads/main".to_owned(),
+    }
+}
+
+fn shell(enforce: bool) -> SetupShell {
+    SetupShell {
+        engine: engine(),
+        enforce,
+        repository: Some(("hardmax71".to_owned(), "spec_to_rest".to_owned())),
+        candidate_ref: Some("refs/heads/main".to_owned()),
+        default_branch_ref: Some("refs/heads/main".to_owned()),
+        floor: None,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
+        requests: RequestDigests::default(),
+        external_defect: None,
+        errors_retained: 64,
+    }
+}
+
+const BROKEN_GENERATOR: &str =
+    "modules/convention/src/main/scala/specrest/convention/dafny/Generator.scala";
+const BROKEN_NAMING: &str = "modules/convention/src/main/scala/specrest/convention/Naming.scala";
+
+fn write(root: &Path, path: &str, body: &str) {
+    let full = root.join(path);
+    if let Some(parent) = full.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(full, body).unwrap();
+}
+
+/// The recorded surface, rebuilt: the two documents whose same-repository GitHub
+/// links the replay found broken, two documents whose links it found resolved,
+/// and the targets that decide which is which. The link text is the `context`
+/// field of the recorded occurrence, not a paraphrase of it, so the parser sees
+/// what the parser saw.
+struct Recorded {
+    _dir: TempDir,
+    root: std::path::PathBuf,
+    base: Oid,
+    candidate: Oid,
+}
+
+fn recorded() -> Recorded {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().to_owned();
+    git(&root, &["init", "-q"]);
+
+    write(&root, "modules/cli/Main.scala", "object Main\n");
+    write(
+        &root,
+        "proofs/isabelle/SpecRest/core/IR.thy",
+        "theory IR\nend\n",
+    );
+    write(
+        &root,
+        "docs/content/docs/cli.mdx",
+        "# CLI\n\nThe command line lives in \
+         [`modules/cli`](https://github.com/HardMax71/spec_to_rest/tree/main/modules/cli).\n",
+    );
+    write(
+        &root,
+        "docs/content/docs/design/architecture.mdx",
+        "# Architecture\n\nThe IR is specified in \
+         [`proofs/isabelle/SpecRest/core/IR.thy`](https://github.com/HardMax71/spec_to_rest/blob/main/proofs/isabelle/SpecRest/core/IR.thy).\n",
+    );
+    write(
+        &root,
+        "docs/content/docs/design/convention-engine.mdx",
+        "# Convention engine\n\nNaming is decided in \
+         [`Naming.scala`](https://github.com/HardMax71/spec_to_rest/blob/main/modules/convention/src/main/scala/specrest/convention/Naming.scala), \
+         and the Dafny side is generated by \
+         [`Generator.scala`](https://github.com/HardMax71/spec_to_rest/blob/main/modules/convention/src/main/scala/specrest/convention/dafny/Generator.scala);\n",
+    );
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "-qm", "base"]);
+
+    fs::write(root.join("modules/cli/Main.scala"), "object Main { }\n").unwrap();
+    git(&root, &["add", "."]);
+    git(&root, &["commit", "-qm", "candidate"]);
+
+    let base = Oid::new(
+        ObjectFormat::Sha1,
+        git(&root, &["rev-parse", "HEAD~1"]).trim().to_owned(),
+    )
+    .unwrap();
+    let candidate = Oid::new(
+        ObjectFormat::Sha1,
+        git(&root, &["rev-parse", "HEAD"]).trim().to_owned(),
+    )
+    .unwrap();
+    Recorded {
+        _dir: dir,
+        root,
+        base,
+        candidate,
+    }
+}
+
+fn payload(fixture: &Recorded, enforce: bool) -> (i64, serde_json::Value) {
+    let repo = Repository::open(&fixture.root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        Some(&spec_to_rest()),
+        &shell(enforce),
+        &fixture.base,
+        &fixture.candidate,
+    );
+    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    (built.exit_code, wire["payload"].clone())
+}
+
+/// The two broken same-repository GitHub links the history replay recorded in
+/// preimpl-experiments.md, and the resolved links beside them, are the only
+/// evidence this project has that the structural lane finds real breakage in a
+/// real tree rather than in a fixture written to be found. E0 item 12 asks for
+/// them by name. The dossier's claim is exact and so is this: the class has
+/// exactly two broken references, both of them same-repository GitHub links,
+/// both in `convention-engine.mdx`.
+#[test]
+fn the_recorded_broken_links_are_the_only_two_the_scanner_finds() {
+    let fixture = recorded();
+    let (exit, payload) = payload(&fixture, false);
+
+    let missing: Vec<(&str, &str)> = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["kind"] == "explicit-target-missing")
+        .map(|finding| {
+            (
+                finding["location"]["path"].as_str().unwrap(),
+                finding["candidate_fact"]["evidence"]["resolution"]["path"]
+                    .as_str()
+                    .unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        missing.len(),
+        2,
+        "the recorded tree has exactly two broken references in this class: {:?}",
+        payload["findings"]
+    );
+    for (document, _target) in &missing {
+        assert_eq!(
+            *document, "docs/content/docs/design/convention-engine.mdx",
+            "both of them are in the document the replay named"
+        );
+    }
+    let mut found: Vec<&str> = missing.iter().map(|(_doc, target)| *target).collect();
+    found.sort_unstable();
+    let mut expected = vec![BROKEN_GENERATOR, BROKEN_NAMING];
+    expected.sort_unstable();
+    assert_eq!(found, expected, "the two paths the replay recorded");
+
+    assert_eq!(exit, 0, "observe reports and does not block");
+}
+
+/// Every one of the four recorded links is a same-repository GitHub reference:
+/// the scanner followed the whole trust chain, decided the URL names this
+/// repository at the ref being evaluated, and turned it into a repository path.
+/// Two of them resolve, one of those to a directory, and the classification is
+/// the same for all four. A reference that fell out of the trusted class would
+/// be reported as foreign and would quietly stop being checked at all.
+#[test]
+fn the_recorded_resolved_links_stay_in_the_trusted_class_and_resolve() {
+    let fixture = recorded();
+    let (_exit, payload) = payload(&fixture, false);
+
+    let observations = payload["observations"].as_array().unwrap();
+    let github: Vec<&serde_json::Value> = observations
+        .iter()
+        .filter(|row| row["candidate"]["intent"]["kind"] == "same-repository-github")
+        .collect();
+    assert_eq!(
+        github.len(),
+        4,
+        "four recorded same-repository GitHub links"
+    );
+
+    let resolved: Vec<&str> = github
+        .iter()
+        .filter(|row| row["candidate"]["resolution"]["code"] == "exact-path")
+        .map(|row| {
+            row["candidate"]["intent"]["repository_path"]
+                .as_str()
+                .unwrap()
+        })
+        .collect();
+    let mut resolved = resolved;
+    resolved.sort_unstable();
+    assert_eq!(
+        resolved,
+        vec!["modules/cli", "proofs/isabelle/SpecRest/core/IR.thy"],
+        "the resolved pair, one of them a directory"
+    );
+}
+
+/// Under enforce the same tree fails, because a reference that does not resolve
+/// is a structural failure and the profile is the only thing that changed. This
+/// is the run a repository would put behind a required check after cleaning up,
+/// and on the recorded tree it would have blocked on exactly the two links the
+/// replay found.
+#[test]
+fn the_recorded_breakage_blocks_under_enforce() {
+    let fixture = recorded();
+    let (exit, payload) = payload(&fixture, true);
+    assert_eq!(exit, 1, "a complete run with a blocking finding");
+    assert_eq!(payload["result"]["status"], "fail");
+    assert_eq!(
+        payload["summary"]["findings"]["fail"], 2,
+        "the two broken links, and nothing else"
+    );
+}

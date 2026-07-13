@@ -100,6 +100,14 @@ amiss check --repo <path> --object-format <sha1|sha256>
 exact trees you name and resolves nothing on your behalf. Use `--index` in place of `--candidate` to
 evaluate the staged index against a base commit.
 
+The optional `--repository` triple is what turns a `https://github.com/<owner>/<name>/blob/...` URL
+in your prose into a path Amiss will actually check. Without it those links are foreign URLs and go
+unchecked, which the report says out loud. The owner and the name must be given in lowercase, and
+GitHub reports them with their original capitals, so a workflow passing `${{ github.repository }}`
+has to lowercase it first. Amiss will not do it for you: the identity you pass is a claim it cannot
+authenticate, the report has no field to record what you originally typed, and quietly rewriting an
+unverifiable claim is not something a checker gets to do. It refuses instead, and says why.
+
 `observe` warns on everything and is where a rollout starts. `enforce` turns an unresolved reference
 into a failure, and is meant for a required check after the existing breakage is cleaned up. Exit 0
 is a complete run with nothing blocking, exit 1 is a complete run with at least one blocking finding,

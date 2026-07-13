@@ -68,6 +68,45 @@ fn payload(stdout: &[u8]) -> serde_json::Value {
     envelope.get("payload").cloned().unwrap()
 }
 
+/// `${{ github.repository }}` is `Owner/Name`, capitals and all, and the engine
+/// requires the canonical lowercase identity. It will not fold the value itself:
+/// the CLI's repository is a claim it cannot authenticate, the report has no
+/// field to record what was actually typed, and the wrapper that folds an
+/// authenticated identity is the layer allowed to do that. What the engine owes
+/// instead is a refusal that can be acted on, because there is no `--help` and a
+/// bare error code is not documentation.
+#[test]
+fn a_noncanonical_repository_owner_is_refused_in_terms_the_caller_can_act_on() {
+    let (dir, base, candidate) = fixture();
+    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--repository",
+        "github.com/HardMax71/amiss",
+        "--ref",
+        "refs/heads/main",
+        "--default-branch-ref",
+        "refs/heads/main",
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 2, "an event it cannot trust is never a result");
+    assert!(stdout.is_empty(), "a refusal is not a report");
+    assert!(stderr.contains("INVALID_EVENT"), "{stderr}");
+    assert!(
+        stderr.contains("lowercase"),
+        "the refusal names the contract it enforced: {stderr}"
+    );
+}
+
 #[test]
 fn a_clean_observe_run_passes_with_a_complete_report() {
     let (dir, base, candidate) = fixture();
