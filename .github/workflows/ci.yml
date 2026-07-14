@@ -128,15 +128,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - id: nextest
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
         with:
-          path: ~/.cargo-tools
-          key: tools-${{ runner.os }}-nextest0.9.140
-      - if: steps.nextest.outputs.cache-hit != 'true'
-        run: cargo install --locked --root ~/.cargo-tools cargo-nextest@0.9.140
-      - shell: bash
-        run: echo "$HOME/.cargo-tools/bin" >> "$GITHUB_PATH"
+          tool: cargo-nextest@0.9.140
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
