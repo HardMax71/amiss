@@ -15,6 +15,9 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    allow:
+      - dependency-name: libfuzzer-sys
+      - dependency-name: arbitrary
     groups:
       fuzz-cargo:
         patterns: ["*"]
