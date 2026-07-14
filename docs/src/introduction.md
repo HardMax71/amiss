@@ -44,3 +44,6 @@ Each promise below is enforced by a test in the suite:
   run.
 - Every internal limit is a published number. Hitting one produces a typed error naming the
   limit and the observed value, never a hang or a silent cutoff.
+
+For squeezing the last milliseconds out of large repositories, see the
+[performance tuning guide](tuning.md).
