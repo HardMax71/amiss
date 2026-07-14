@@ -8,3 +8,8 @@ allow-print-in-tests = true
 disallowed-types = [
   { path = "std::any::Any", reason = "type erasure defeats the closed ADT model" },
 ]
+
+disallowed-methods = [
+  { path = "std::ffi::OsStr::to_string_lossy", reason = "a mangled name is worse than a refused one; handle the None from to_str" },
+  { path = "std::path::Path::to_string_lossy", reason = "a mangled path is worse than a refused one; handle the None from to_str" },
+]

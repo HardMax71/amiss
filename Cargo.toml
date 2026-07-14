@@ -36,6 +36,8 @@ string_slice = "deny"
 arithmetic_side_effects = "warn"
 # type discipline: no erasure, no lossy casts, no wildcard arms on closed enums
 disallowed_types = "deny"
+disallowed_methods = "deny"
+as_conversions = "deny"
 cast_possible_truncation = "deny"
 cast_possible_wrap = "deny"
 cast_sign_loss = "deny"
