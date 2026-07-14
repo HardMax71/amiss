@@ -24,6 +24,7 @@ pub struct ScanLimits {
     pub debt_items: u64,
     pub waiver_items: u64,
     pub errors_retained: u64,
+    pub complete_findings: u64,
 }
 
 impl ScanLimits {
@@ -46,6 +47,7 @@ impl ScanLimits {
         debt_items: 100_000,
         waiver_items: 100_000,
         errors_retained: 64,
+        complete_findings: 100_000,
     };
 }
 

@@ -1319,15 +1319,14 @@ pub fn construct(
     comparisons: &[Comparison],
 ) -> Built {
     let paired = paired_documents(base, candidate);
-    let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
-    let governed = governed_seeds(candidate);
-    let (findings, exception_errors) = crate::evaluate::evaluate_with_policy(
-        &inputs,
-        comparisons,
-        setup.enforce,
-        &setup.policy,
-        &governed,
-    );
+    let (governed, findings, exception_errors) =
+        evaluate_paired(setup, &paired, candidate, comparisons);
+
+    if let Some(crossing) = findings_ceiling_crossing(setup, &findings) {
+        let mut details = logical_error_set(&governed, &exception_errors);
+        details.push(crossing);
+        return construct_incomplete(setup, &details);
+    }
 
     let document_rows: Vec<(String, Value)> = paired
         .iter()
@@ -1485,6 +1484,48 @@ fn governed_details(governed: &[crate::evaluate::GovernedSeed]) -> Vec<ErrorDeta
 
 /// The effective typed-analysis-errors-retained ceiling `E`, defended to the
 /// schema range even if a caller-supplied value strays.
+/// The evaluation step of construction: the paired documents projected to
+/// evaluator inputs, the governed seeds, and the complete findings with their
+/// exception errors.
+fn evaluate_paired(
+    setup: &Setup,
+    paired: &[PairedDocument<'_>],
+    candidate: &SnapshotDiscovery,
+    comparisons: &[Comparison],
+) -> (
+    Vec<crate::evaluate::GovernedSeed>,
+    Vec<Finding>,
+    Vec<ErrorDetail>,
+) {
+    let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
+    let governed = governed_seeds(candidate);
+    let (findings, exception_errors) = crate::evaluate::evaluate_with_policy(
+        &inputs,
+        comparisons,
+        setup.enforce,
+        &setup.policy,
+        &governed,
+    );
+    (governed, findings, exception_errors)
+}
+
+/// The complete-findings ceiling, charged against the exact array the report
+/// would ship, control rows included, after every exception has been applied.
+/// Past it there is no report: a run that produced more findings than the
+/// contract admits is incomplete, not truncated.
+fn findings_ceiling_crossing(setup: &Setup, findings: &[Finding]) -> Option<ErrorDetail> {
+    let finding_total = u64::try_from(findings.len()).unwrap_or(u64::MAX);
+    (finding_total > setup.policy.complete_findings).then_some(ErrorDetail {
+        code: AnalysisErrorCode::ResourceLimitExceeded,
+        path: None,
+        resource: Some((
+            ResourceName::CompleteFindings,
+            setup.policy.complete_findings,
+            finding_total,
+        )),
+    })
+}
+
 fn error_ceiling(setup: &Setup) -> usize {
     usize::try_from(setup.policy.errors_retained.clamp(1, 64)).unwrap_or(64)
 }

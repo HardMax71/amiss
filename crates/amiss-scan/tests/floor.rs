@@ -401,3 +401,69 @@ fn a_verified_floor_tightens_the_policy_entry_budget() {
     assert_eq!(crossing["configured_limit"], 2);
     assert_eq!(crossing["observed_lower_bound"], 3);
 }
+
+/// The complete-findings ceiling is the one array bound in the report with no
+/// resource counter behind it until now: documents and observations snapshot
+/// charged limits, and findings relied on arithmetic, every finding being too
+/// heavy for 100,000 of them to fit under the 64 MiB wire cap. Arithmetic is a
+/// property of today's finding shape, not a law, so the ceiling is now charged
+/// against the exact array the report would ship, after control rows and
+/// exceptions. A verified floor may tighten it like any other ceiling, which is
+/// also what makes it testable without a hundred thousand findings: the run
+/// calibrates itself, counting the findings the fixture produces unconstrained,
+/// then setting the ceiling one below that and requiring the crossing to name
+/// the resource, the limit, and the exact total, with no findings array left to
+/// mistake for a truncated pass.
+#[test]
+fn a_verified_floor_tightens_the_complete_findings_ceiling() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("a.md"), "see [gone](missing.md)\n").unwrap();
+    fs::write(root.join("b.md"), "b\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::write(root.join("a.md"), "see [gone](missing.md) still\n").unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let unconstrained = payload(
+        &shell(Some(floor_input(EMPTY_ARRAYS))),
+        &repo,
+        &base,
+        &candidate,
+    );
+    let produced = unconstrained["result"]["finding_count"].as_u64().unwrap();
+    assert!(
+        produced >= 2,
+        "the fixture produces findings to count: {produced}"
+    );
+
+    let ceiling = produced - 1;
+    let extra = EMPTY_ARRAYS.replace(
+        "\"resource_limits\": []",
+        &format!(
+            "\"resource_limits\": [ {{ \"resource\": \"complete-findings\", \"maximum\": {ceiling} }} ]"
+        ),
+    );
+    let report = payload(&shell(Some(floor_input(&extra))), &repo, &base, &candidate);
+
+    assert_eq!(
+        report["exit_code"], 2,
+        "past the ceiling there is no result"
+    );
+    assert_eq!(report["result"]["status"], "incomplete");
+    assert_eq!(report["result"]["complete"], false);
+    let crossing = report["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["resource"] == "complete-findings")
+        .expect("the crossing names its resource");
+    assert_eq!(crossing["code"], "RESOURCE_LIMIT_EXCEEDED");
+    assert_eq!(crossing["configured_limit"], ceiling);
+    assert_eq!(crossing["observed_lower_bound"], produced);
+    assert!(
+        report["findings"].as_array().unwrap().is_empty(),
+        "an incomplete run publishes no findings to mistake for a truncated pass"
+    );
+}

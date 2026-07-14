@@ -327,6 +327,9 @@ pub struct Effects {
     /// The effective typed-analysis-errors-retained ceiling `E`:
     /// `min(64, verified floor limit)`, the built-in 64 without a floor.
     pub errors_retained: u64,
+    /// The effective complete-findings ceiling: the built-in 100,000, which a
+    /// verified floor may only tighten.
+    pub complete_findings: u64,
 }
 
 impl Default for Effects {
@@ -343,6 +346,7 @@ impl Default for Effects {
             time: None,
             constraint: None,
             errors_retained: 64,
+            complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
         }
     }
 }
@@ -450,6 +454,7 @@ pub fn effects(
         time: None,
         constraint: None,
         errors_retained: 64,
+        complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
     }
 }
 
@@ -896,8 +901,8 @@ pub fn tightened_limits(
             ResourceName::DebtItems => Some(&mut scan.debt_items),
             ResourceName::WaiverItems => Some(&mut scan.waiver_items),
             ResourceName::TypedAnalysisErrorsRetained => Some(&mut scan.errors_retained),
+            ResourceName::CompleteFindings => Some(&mut scan.complete_findings),
             ResourceName::OrganizationPolicyEntries
-            | ResourceName::CompleteFindings
             | ResourceName::MachineJsonBytes
             | ResourceName::PrivateTemporaryStorageBytes
             | ResourceName::EvaluatorManagedMemoryBytes => None,

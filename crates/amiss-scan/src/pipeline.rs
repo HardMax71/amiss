@@ -579,6 +579,7 @@ pub fn commit_pair(
             );
             setup.policy = effects;
             setup.policy.errors_retained = setup_shell.errors_retained;
+            setup.policy.complete_findings = scan_limits.complete_findings;
             conclude(
                 &setup,
                 (&base.discovery, &base.side),
@@ -1361,6 +1362,7 @@ pub fn staged_index(
     let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
     setup.policy = effects;
     setup.policy.errors_retained = setup_shell.errors_retained;
+    setup.policy.complete_findings = scan_limits.complete_findings;
     staged_finish(
         repo,
         &mut git_resources,

@@ -334,20 +334,18 @@ fn schema_max_items(array: &str) -> u64 {
         .expect("the schema caps its union arrays")
 }
 
-/// The schema caps `findings` at 100,000 and nothing counts them at runtime. The
-/// documents and observations arrays are different: their caps are two snapshots
-/// of a charged resource limit, so they cannot be exceeded. Findings have no such
-/// limit behind them. What keeps the array inside its own schema is arithmetic:
-/// the wire cap refuses any envelope over 64 MiB, and a finding is heavy enough
-/// that a hundred thousand of them cannot fit beneath it, so the array meets the
-/// wire cap long before it meets the schema and the run exits 2 rather than
-/// publishing a report that violates the contract it ships with.
+/// The schema caps `findings` at 100,000 and a charged ceiling now counts them
+/// at runtime, tested where the floor tightens it. This pins the other half of
+/// the story: at contract values that counter never fires, because the wire cap
+/// refuses any envelope over 64 MiB and a finding is heavy enough that a hundred
+/// thousand of them cannot fit beneath it, so a findings flood meets the wire
+/// cap first and the run exits 2 either way.
 ///
 /// That margin is stated nowhere, so it is stated here. This does not prove a
 /// floor under every finding the engine could ever construct. It pins the
-/// leanest one it constructs today against the break-even, which is what a
-/// change would have to cross. Slim the finding shape past that line and this
-/// fails, and whoever did it owes the counter the schema has always implied.
+/// leanest one it constructs today against the break-even. Slim the finding
+/// shape past that line and this fails, which is the signal that the counter
+/// has stopped being a backstop and become the ceiling that actually fires.
 #[test]
 fn the_findings_ceiling_sits_behind_the_wire_cap() {
     let ceiling = schema_max_items("findings");
@@ -418,8 +416,8 @@ fn the_findings_ceiling_sits_behind_the_wire_cap() {
     assert!(
         u64::try_from(leanest).unwrap() > break_even,
         "a finding is {leanest} bytes and the break-even is {break_even}: \
-         {ceiling} of them would fit under the wire cap, so the schema's findings \
-         ceiling is reachable and needs a counter behind it"
+         {ceiling} of them now fit under the wire cap, so the complete-findings \
+         counter is no longer a backstop and this margin note is out of date"
     );
 }
 
