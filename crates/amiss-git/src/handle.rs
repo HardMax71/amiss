@@ -79,6 +79,10 @@ pub(crate) fn open_file(parent: &File, name: &str) -> io::Result<File> {
 /// itself. Enumeration yields candidate names only; every one of them is
 /// still opened through [`open_file`], so a name that no longer resolves to
 /// an ordinary entry below this handle is refused rather than followed.
+/// A name that does not decode as UTF-8 is skipped on the same terms:
+/// everything a store directory legitimately holds has an ASCII name, so
+/// the refusal cannot cost a real candidate, and no open is attempted on
+/// the entry.
 ///
 /// # Errors
 ///
@@ -87,10 +91,10 @@ pub(crate) fn names(dir: &mut File) -> io::Result<Vec<String>> {
     let mut out = Vec::new();
     for entry in fs_at::read_dir(dir)? {
         let entry = entry?;
-        if let Some(name) = entry.name().to_str()
-            && name != "."
-            && name != ".."
-        {
+        let Some(name) = entry.name().to_str() else {
+            continue;
+        };
+        if name != "." && name != ".." {
             out.push(name.to_owned());
         }
     }
