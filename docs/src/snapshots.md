@@ -21,6 +21,20 @@ from the object being absent, and that difference is deliberate: someone who can
 link must not be able to make the scanner read files outside the repository, and must
 equally not be able to disguise the attempt as a missing object.
 
+What a refusal looks like in the report's `errors` array, here for a base commit the
+store does not hold:
+
+```json
+{
+  "code": "GIT_OBJECT_MISSING",
+  "phase": "git"
+}
+```
+
+The row also carries `path`, `resource`, `configured_limit`, and `observed_lower_bound`
+fields, null wherever they do not apply, so every refusal has the same shape and a consumer
+never parses two formats.
+
 Neither snapshot is trusted more than the other. A base commit missing from a shallow clone
 is a refusal, not an empty tree, because treating an absent base as empty would make every
 document look newly added and flood the report with false `introduced` findings. Comparing
