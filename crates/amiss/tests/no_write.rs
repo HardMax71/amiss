@@ -4,29 +4,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use sha2::{Digest as _, Sha256};
-use tempfile::TempDir;
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
-        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
-        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-        .output()
-        .expect("run git");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output utf-8")
+    amiss_fixtures::git(dir, args).unwrap()
 }
 
 /// One filesystem entry's complete identity: bytes for files, targets for
@@ -92,40 +73,32 @@ fn amiss(args: &[&str]) -> (i32, String) {
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn fixture(with_governed: bool) -> (TempDir, String, String) {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
-    fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(
-        root.join("docs/guide.md"),
-        "# Guide\n\n[home](../README) and [gone](missing.md)\n",
-    )
-    .unwrap();
-    fs::create_dir_all(root.join(".amiss")).unwrap();
-    fs::write(
-        root.join(".amiss/scanner-policy.json"),
-        r#"{"schema":"amiss/scanner-policy/v1","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
-    )
-    .unwrap();
+fn fixture(with_governed: bool) -> amiss_fixtures::CommitPair {
+    let mut base = vec![
+        ("README", "See [the guide](docs/guide.md).\n"),
+        (
+            "docs/guide.md",
+            "# Guide\n\n[home](../README) and [gone](missing.md)\n",
+        ),
+        (
+            ".amiss/scanner-policy.json",
+            r#"{"schema":"amiss/scanner-policy/v1","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
+        ),
+    ];
     if with_governed {
-        fs::write(
-            root.join("docs/governed.md"),
+        base.push((
+            "docs/governed.md",
             "A [claim][amiss:c].\n\n[amiss:c]: ./x.md\n",
-        )
-        .unwrap();
+        ));
     }
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "base"]);
-    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    fs::write(root.join("docs/extra.mdx"), "hello {1 + 1}\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "candidate"]);
-    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    fs::write(root.join("docs/staged.md"), "# Staged\n\n[up](guide.md)\n").unwrap();
-    git(root, &["add", "docs/staged.md"]);
-    (dir, base, candidate)
+    let fx = amiss_fixtures::commit_pair(&base, &[("docs/extra.mdx", "hello {1 + 1}\n")]).unwrap();
+    fs::write(
+        fx.root().join("docs/staged.md"),
+        "# Staged\n\n[up](guide.md)\n",
+    )
+    .unwrap();
+    git(fx.root(), &["add", "docs/staged.md"]);
+    fx
 }
 
 /// Every command leaves repository status, index, refs, and bytes unchanged:
@@ -133,22 +106,21 @@ fn fixture(with_governed: bool) -> (TempDir, String, String) {
 /// byte-identical after each invocation, and nothing new appears.
 #[test]
 fn every_command_leaves_the_repository_byte_identical() {
-    let (dir, base, candidate) = fixture(true);
-    let root = dir.path();
-    let repo = root.to_str().unwrap_or_default().to_owned();
+    let fx = fixture(true);
+    let root = fx.root();
     let before = snapshot(root);
 
     let runs: Vec<Vec<&str>> = vec![
         vec![
             "check",
             "--repo",
-            &repo,
+            &fx.repo,
             "--object-format",
             "sha1",
             "--base",
-            &base,
+            &fx.base,
             "--candidate",
-            &candidate,
+            &fx.candidate,
             "--profile",
             "observe",
             "--format",
@@ -157,24 +129,24 @@ fn every_command_leaves_the_repository_byte_identical() {
         vec![
             "check",
             "--repo",
-            &repo,
+            &fx.repo,
             "--object-format",
             "sha1",
             "--base",
-            &base,
+            &fx.base,
             "--candidate",
-            &candidate,
+            &fx.candidate,
             "--profile",
             "enforce",
         ],
         vec![
             "check",
             "--repo",
-            &repo,
+            &fx.repo,
             "--object-format",
             "sha1",
             "--base",
-            &base,
+            &fx.base,
             "--index",
             "--profile",
             "observe",
@@ -184,18 +156,18 @@ fn every_command_leaves_the_repository_byte_identical() {
         vec![
             "check",
             "--repo",
-            &repo,
+            &fx.repo,
             "--object-format",
             "sha1",
             "--base",
-            &base,
+            &fx.base,
             "--candidate",
-            &candidate,
+            &fx.candidate,
             "--profile",
             "observe",
             "--explain-scope",
         ],
-        vec!["check", "--repo", &repo, "--not-a-flag"],
+        vec!["check", "--repo", &fx.repo, "--not-a-flag"],
     ];
     for args in runs {
         let (code, _stdout) = amiss(&args);
@@ -244,21 +216,20 @@ fn set_writable(root: &Path, writable: bool) {
 #[cfg(unix)]
 #[test]
 fn a_read_only_repository_scans_completely() {
-    let (dir, base, candidate) = fixture(false);
-    let root = dir.path();
-    let repo = root.to_str().unwrap_or_default().to_owned();
+    let fx = fixture(false);
+    let root = fx.root();
     set_writable(root, false);
 
     let (pair, pair_out) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--profile",
         "observe",
         "--format",
@@ -267,11 +238,11 @@ fn a_read_only_repository_scans_completely() {
     let (index, index_out) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--index",
         "--profile",
         "observe",

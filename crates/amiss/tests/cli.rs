@@ -4,49 +4,24 @@ use std::process::Command;
 
 use tempfile::TempDir;
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
-        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
-        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-        .output()
-        .expect("run git");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output utf-8")
+    amiss_fixtures::git(dir, args).unwrap()
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn fixture() -> (TempDir, String, String) {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
-    fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(root.join("docs/guide.md"), "# Guide\n\n[home](../README)\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "base"]);
-    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    fs::write(
-        root.join("docs/guide.md"),
-        "# Guide\n\n[home](../README) and [gone](missing.md)\n",
+fn fixture() -> amiss_fixtures::CommitPair {
+    amiss_fixtures::commit_pair(
+        &[
+            ("README", "See [the guide](docs/guide.md).\n"),
+            ("docs/guide.md", "# Guide\n\n[home](../README)\n"),
+        ],
+        &[(
+            "docs/guide.md",
+            "# Guide\n\n[home](../README) and [gone](missing.md)\n",
+        )],
     )
-    .unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "candidate"]);
-    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    (dir, base, candidate)
+    .unwrap()
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
@@ -77,18 +52,17 @@ fn payload(stdout: &[u8]) -> serde_json::Value {
 /// bare error code is not documentation.
 #[test]
 fn a_noncanonical_repository_owner_is_refused_in_terms_the_caller_can_act_on() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let (code, stdout, stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--repository",
         "github.com/HardMax71/amiss",
         "--ref",
@@ -109,18 +83,17 @@ fn a_noncanonical_repository_owner_is_refused_in_terms_the_caller_can_act_on() {
 
 #[test]
 fn a_clean_observe_run_passes_with_a_complete_report() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let (code, stdout, stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--profile",
         "observe",
         "--format",
@@ -139,18 +112,17 @@ fn a_clean_observe_run_passes_with_a_complete_report() {
 
 #[test]
 fn enforce_fails_on_a_missing_target() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--profile",
         "enforce",
         "--format",
@@ -201,8 +173,8 @@ fn an_unreadable_repository_is_a_fatal_incomplete_envelope() {
 
 #[test]
 fn index_mode_scans_the_staged_snapshot() {
-    let (dir, _base, candidate) = fixture();
-    let root = dir.path();
+    let fx = fixture();
+    let root = fx.root();
     fs::write(root.join("docs/staged.md"), "# Staged\n\n[up](guide.md)\n").unwrap_or_default();
     git(root, &["add", "docs/staged.md"]);
     fs::write(
@@ -210,16 +182,14 @@ fn index_mode_scans_the_staged_snapshot() {
         "worktree drift with [broken](nowhere.md)\n",
     )
     .unwrap_or_default();
-
-    let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, stdout, stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &candidate,
+        &fx.candidate,
         "--index",
         "--profile",
         "observe",
@@ -252,18 +222,17 @@ fn index_mode_scans_the_staged_snapshot() {
 
 #[test]
 fn human_output_projects_the_same_result() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--profile",
         "observe",
     ]);
@@ -283,8 +252,8 @@ fn human_output_projects_the_same_result() {
 
 #[test]
 fn repository_policy_includes_raises_and_weakening() {
-    let (dir, _base, _candidate) = fixture();
-    let root = dir.path();
+    let fx = fixture();
+    let root = fx.root();
 
     let strong_policy = r#"{"schema":"amiss/scanner-policy/v1","document_includes":[{"kind":"tree","path":"specs"}],"protected_inventory":["docs/guide.md"],"finding_dispositions":[{"finding_kind":"explicit-target-missing","disposition":"fail"}]}"#;
     fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
@@ -303,12 +272,10 @@ fn repository_policy_includes_raises_and_weakening() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "weakened"]);
     let weakened = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
@@ -369,8 +336,8 @@ fn repository_policy_includes_raises_and_weakening() {
 
 #[test]
 fn a_raised_disposition_fails_a_passing_observe_run() {
-    let (dir, _base, candidate) = fixture();
-    let root = dir.path();
+    let fx = fixture();
+    let root = fx.root();
     fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
     fs::write(
         root.join(".amiss/scanner-policy.json"),
@@ -380,16 +347,14 @@ fn a_raised_disposition_fails_a_passing_observe_run() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "raise"]);
     let raised = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &candidate,
+        &fx.candidate,
         "--candidate",
         &raised,
         "--profile",
@@ -425,8 +390,8 @@ fn a_raised_disposition_fails_a_passing_observe_run() {
 
 #[test]
 fn an_invalid_policy_is_fatal_with_unavailable_controls() {
-    let (dir, _base, _candidate) = fixture();
-    let root = dir.path();
+    let fx = fixture();
+    let root = fx.root();
     fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
     fs::write(root.join(".amiss/scanner-policy.json"), "{not json").unwrap_or_default();
     git(root, &["add", "."]);
@@ -436,12 +401,10 @@ fn an_invalid_policy_is_fatal_with_unavailable_controls() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "later"]);
     let later = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
@@ -473,8 +436,8 @@ fn an_invalid_policy_is_fatal_with_unavailable_controls() {
 
 #[test]
 fn reserved_directives_are_boundary_incomplete_with_full_details() {
-    let (dir, _base, candidate) = fixture();
-    let root = dir.path();
+    let fx = fixture();
+    let root = fx.root();
     fs::write(
         root.join("docs/governed.md"),
         "A claim [here][amiss:claim v1] and [fine](guide.md).\n\n\
@@ -485,16 +448,14 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "governed"]);
     let governed = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &candidate,
+        &fx.candidate,
         "--candidate",
         &governed,
         "--profile",
@@ -565,8 +526,8 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
 
 #[test]
 fn human_details_truncate_at_two_hundred() {
-    let (dir, _base, candidate) = fixture();
-    let root = dir.path();
+    let fx = fixture();
+    let root = fx.root();
     let mut links = Vec::new();
     for index in 0..201 {
         links.push(format!("[l{index}](absent-{index}.md)"));
@@ -576,16 +537,14 @@ fn human_details_truncate_at_two_hundred() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "many"]);
     let many = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &candidate,
+        &fx.candidate,
         "--candidate",
         &many,
         "--profile",
@@ -606,11 +565,11 @@ fn human_details_truncate_at_two_hundred() {
     let (_code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &candidate,
+        &fx.candidate,
         "--candidate",
         &many,
         "--profile",
@@ -630,19 +589,18 @@ fn human_details_truncate_at_two_hundred() {
 
 #[test]
 fn explain_scope_adds_the_deterministic_block() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let run = |extra: &[&str]| {
         let mut args = vec![
             "check",
             "--repo",
-            &repo,
+            &fx.repo,
             "--object-format",
             "sha1",
             "--base",
-            &base,
+            &fx.base,
             "--candidate",
-            &candidate,
+            &fx.candidate,
             "--profile",
             "observe",
         ];
@@ -667,18 +625,17 @@ fn explain_scope_adds_the_deterministic_block() {
 /// quietly stop passing.
 #[test]
 fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let (code, stdout, stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--profile",
         "observe",
         "--format",
@@ -743,7 +700,7 @@ fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
-    let repo = root.to_str().unwrap_or_default().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
@@ -806,7 +763,7 @@ fn a_formatting_only_change_to_a_target_is_advisory_and_never_a_verdict() {
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
-    let repo = root.to_str().unwrap_or_default().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
@@ -871,7 +828,7 @@ fn a_sha256_repository_yields_the_same_facts_as_sha1() {
         git(root, &["commit", "-qm", "candidate"]);
         let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
-        let repo = root.to_str().unwrap_or_default().to_owned();
+        let repo = amiss_fixtures::path_arg(root);
         let (code, stdout, stderr) = amiss(&[
             "check",
             "--repo",
@@ -951,18 +908,17 @@ fn a_sha256_repository_yields_the_same_facts_as_sha1() {
 /// granted, and every consumer downstream of the report would inherit the lie.
 #[test]
 fn unsupplied_controls_report_none_and_claim_no_trust() {
-    let (dir, base, candidate) = fixture();
-    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let fx = fixture();
     let (code, stdout, _stderr) = amiss(&[
         "check",
         "--repo",
-        &repo,
+        &fx.repo,
         "--object-format",
         "sha1",
         "--base",
-        &base,
+        &fx.base,
         "--candidate",
-        &candidate,
+        &fx.candidate,
         "--profile",
         "observe",
         "--format",
@@ -1018,7 +974,7 @@ fn a_skip_worktree_document_is_read_from_the_index_and_disclosed() {
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     git(root, &["update-index", "--skip-worktree", "docs/guide.md"]);
 
-    let repo = root.to_str().unwrap_or_default().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout, stderr) = amiss(&[
         "check",
         "--repo",
@@ -1093,7 +1049,7 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
     .unwrap();
     let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "hostile").unwrap();
 
-    let repo = root.to_str().unwrap_or_default().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, human, _stderr) = amiss(&[
         "check",
         "--repo",

@@ -1,33 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use amiss_git::{Error, GitLimits, GitResources, ObjectKind, Repository, parse_commit, parse_tree};
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
-        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
-        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-        .output()
-        .expect("run git");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output utf-8")
+    amiss_fixtures::git(dir, args).unwrap()
 }
 
 fn file_v(version: usize) -> String {
@@ -74,12 +55,11 @@ fn pack_paths(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn deltified_oid(dir: &Path) -> Option<String> {
     let idx = pack_paths(dir)
         .into_iter()
         .find(|path| path.extension().is_some_and(|e| e == "idx"))?;
-    let listing = git(dir, &["verify-pack", "-v", idx.to_str().unwrap()]);
+    let listing = git(dir, &["verify-pack", "-v", &amiss_fixtures::path_arg(&idx)]);
     for line in listing.lines() {
         let fields: Vec<&str> = line.split_whitespace().collect();
         if fields.len() >= 7 && matches!(fields.get(1), Some(&"blob")) {
