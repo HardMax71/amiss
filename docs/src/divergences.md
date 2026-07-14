@@ -19,14 +19,14 @@ whose object is missing from the store refuses and names the document, instead o
 about content it cannot see.
 
 The parser pin records its known differences instead of hiding them. Measured against the
-pinned grammar bundle and against github.com's own rendering, exactly one difference
+pinned grammar bundle and against GitHub's own rendering, exactly one difference
 affects link extraction: `[link[^1]](#)`, a footnote call inside a link label, which the
 pinned Rust parser does not turn into a link. A reference written that way goes unseen.
 That is under-reporting, the safer direction to fail, and it is written down in the corpus
 notes rather than waiting to be discovered. Two upstream test documents make the parser
 panic; the engine catches both as `PARSER_PANIC`, and both live in the corpus as regression
 tests. The GFM spec text says `ftp://` should autolink where the pinned bundle and
-github.com disagree; the bundle wins, and the corpus records why.
+GitHub's renderer disagree; the bundle wins, and the corpus records why.
 
 One more, for flavor: the object store re-hashes everything with SHA-1 collision detection,
 and the suite proves that the public SHAttered and Shambles collision files cannot even be

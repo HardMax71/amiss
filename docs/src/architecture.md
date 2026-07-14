@@ -1,6 +1,6 @@
 # Architecture
 
-Six crates, and trust flows in one direction.
+Six shipped crates, and trust flows in one direction; a seventh exists only for tests.
 
 ```dot process
 digraph amiss {

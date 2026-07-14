@@ -21,6 +21,7 @@ The scanning ceilings:
 | bytes per referenced target | 16 MiB |
 | referenced target bytes per snapshot | 512 MiB |
 | findings per complete run | 100,000 |
+| serialized report bytes | 64 MiB |
 | analysis errors kept | 64 |
 
 And the Git-reading ceilings:

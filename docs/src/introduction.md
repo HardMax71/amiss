@@ -40,6 +40,7 @@ Each promise below is enforced by a test in the suite:
   or anywhere along an object's path is refused, and the refusal is never confused with a
   missing file.
 - It never touches the network. The engine's dependencies contain no networking library.
-- The same input gives the same bytes, on Linux, macOS, and Windows.
+- The same repository, commits, and engine binary give the same report bytes, run after
+  run.
 - Every internal limit is a published number. Hitting one produces a typed error naming the
   limit and the observed value, never a hang or a silent cutoff.
