@@ -6,6 +6,7 @@ use amiss_wire::report::{Disposition, ErrorDetail, FindingKind, ResolutionCode, 
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
 use crate::observe;
+use crate::scan::SpanDisplay;
 
 pub const FINDING_KEY_SCHEMA: &str = "amiss/scanner-finding-key-input/v1";
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key/v1";
@@ -78,6 +79,7 @@ pub struct Location {
     pub side: LocationSide,
     pub path: Option<String>,
     pub span: Option<(usize, usize)>,
+    pub display: Option<SpanDisplay>,
 }
 
 /// One constructed finding: its key, its facts where the reference scope
@@ -341,6 +343,7 @@ fn observation_location(observation: &Observation, side: LocationSide) -> Locati
         side,
         path: Some(observation.document.clone()),
         span: Some(observation.span),
+        display: Some(observation.display),
     }
 }
 
@@ -506,6 +509,7 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
             side: LocationSide::Candidate,
             path: Some(seed.document.clone()),
             span: seed.representative_span,
+            display: seed.representative_display,
         },
         configured_disposition: configured,
         effective_disposition: configured,
@@ -524,6 +528,7 @@ pub struct GovernedSeed {
     pub member_count: u64,
     pub sources: Vec<(Digest, u64)>,
     pub representative_span: Option<(usize, usize)>,
+    pub representative_display: Option<SpanDisplay>,
 }
 
 /// The full projection with the candidate policy applied: the raise-only
@@ -1024,6 +1029,7 @@ fn control_row(
             side: LocationSide::Control,
             path: control_path,
             span: None,
+            display: None,
         },
         configured_disposition: configured,
         effective_disposition: configured,
@@ -1089,6 +1095,7 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
                 side: LocationSide::Base,
                 path: Some(path.to_owned()),
                 span: None,
+                display: None,
             },
             enforce,
         ));
@@ -1098,6 +1105,7 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
         side: LocationSide::Candidate,
         path: Some(path.to_owned()),
         span: None,
+        display: None,
     };
     match document.candidate {
         None | Some(DocumentSide::ExcludedBuiltIn) => {}
@@ -1275,6 +1283,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
                 side,
                 path: None,
                 span: None,
+                display: None,
             },
             |observation| observation_location(observation, side),
         );

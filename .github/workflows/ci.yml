@@ -86,10 +86,15 @@ jobs:
           # print every one of them and still never show the one that blocked.
           if [ "${status}" -ne 0 ] && [ -s amiss-report.json ]; then
             jq -r '.payload.errors[]
-                   | "error  \(.code)  phase \(.phase)  \(.path // "-")"' amiss-report.json
+                   | "error  \(.code)  phase \(.phase)  \(.path // "-" | @json)"' amiss-report.json
             jq -r '.payload.findings[]
                    | select(.effective_disposition == "fail")
-                   | "fail   \(.kind)  \(.location.path)  bytes \(.location.span.start_byte)-\(.location.span.end_byte)"' amiss-report.json
+                   | "fail   \(.kind)  \(.location.path | @json)"
+                     + (.location.span
+                        | if . == null then ""
+                          else " line \(.start_line):\(.start_column)"
+                               + (if .end_line != .start_line then " to \(.end_line):\(.end_column)" else "" end)
+                          end)' amiss-report.json
           fi
           exit "${status}"
       - if: always()
