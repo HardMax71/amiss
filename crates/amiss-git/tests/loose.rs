@@ -7,7 +7,7 @@ use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{ObjectFormat, Oid};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use sha2::Digest as _;
+use sha1_checked::Digest as _;
 use tempfile::TempDir;
 
 fn sha1_hex(preimage: &[u8]) -> String {

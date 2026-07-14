@@ -310,7 +310,7 @@ fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
     let validator = jsonschema::validator_for(&schema_json).unwrap();
     let defects: Vec<String> = validator
         .iter_errors(&envelope)
-        .map(|error| format!("{}: {error}", error.instance_path))
+        .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
     assert_eq!(defects, Vec::<String>::new(), "schema-clean report");
     let mut value = envelope["payload"].clone();

@@ -3,6 +3,7 @@ use std::io::Read as _;
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{ObjectFormat, Oid};
 use flate2::bufread::ZlibDecoder;
+use sha1_checked::Digest as _;
 use sha2::Digest as _;
 
 use crate::Error;
