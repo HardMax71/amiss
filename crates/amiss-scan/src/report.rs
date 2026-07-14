@@ -689,6 +689,15 @@ fn trace_value(finding: &Finding, _enforce: bool) -> Vec<Value> {
 
 fn location_span_value(finding: &Finding) -> Value {
     finding.location.span.map_or(Value::Null, |span| {
+        let display = finding
+            .location
+            .display
+            .unwrap_or(crate::scan::SpanDisplay {
+                start_line: 1,
+                start_column: 1,
+                end_line: 1,
+                end_column: 1,
+            });
         object(vec![
             (
                 "start_byte",
@@ -698,10 +707,10 @@ fn location_span_value(finding: &Finding) -> Value {
                 "end_byte",
                 integer(u64::try_from(span.1).unwrap_or(u64::MAX)),
             ),
-            ("start_line", integer(1)),
-            ("start_column", integer(1)),
-            ("end_line", integer(1)),
-            ("end_column", integer(1)),
+            ("start_line", integer(display.start_line)),
+            ("start_column", integer(display.start_column)),
+            ("end_line", integer(display.end_line)),
+            ("end_column", integer(display.end_column)),
         ])
     })
 }
@@ -1594,11 +1603,13 @@ fn governed_seeds(candidate: &SnapshotDiscovery) -> Vec<crate::evaluate::Governe
             }
         }
         sources.sort_by_key(|(digest, _)| *digest);
+        let representative = scanned.governed.iter().min_by_key(|governed| governed.span);
         seeds.push(crate::evaluate::GovernedSeed {
             document: record.path.clone(),
             member_count: u64::try_from(scanned.governed.len()).unwrap_or(u64::MAX),
             sources,
-            representative_span: scanned.governed.iter().map(|governed| governed.span).min(),
+            representative_span: representative.map(|governed| governed.span),
+            representative_display: representative.map(|governed| governed.display),
         });
     }
     seeds

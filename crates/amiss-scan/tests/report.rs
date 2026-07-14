@@ -507,3 +507,64 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         "the fatal projection discards the detail arrays"
     );
 }
+
+/// The location span's line and column fields are the observation's real
+/// display positions, not placeholders: a reader of the report can open the
+/// file at the row the finding names.
+#[test]
+fn a_finding_location_carries_the_real_display_positions() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README) and [gone](missing.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(root, &["commit", "-qm", "candidate", "--allow-empty"]);
+    let candidate_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let (base_identity, base_discovery, base_side) =
+        snapshot(&repo, &mut git_resources, &base_commit);
+    let (candidate_identity, candidate_discovery, candidate_side) =
+        snapshot(&repo, &mut git_resources, &candidate_commit);
+    let comparisons = correlate(&base_side, &candidate_side).unwrap();
+    let setup = Setup {
+        engine: engine(),
+        enforce: false,
+        repository: None,
+        candidate_ref: None,
+        default_branch_ref: None,
+        base: base_identity,
+        candidate: CandidateBlock::Commit(candidate_identity),
+        policy: amiss_scan::Effects::default(),
+        controls_unavailable: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+    };
+    let built = construct(&setup, &base_discovery, &candidate_discovery, &comparisons);
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let span = envelope["payload"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["kind"] == "explicit-target-missing")
+        .expect("the missing target is a finding")["location"]["span"]
+        .clone();
+    assert_eq!(span["start_line"], 3);
+    assert_eq!(
+        span["start_column"], 23,
+        "one-based scalars, [gone] after the prose"
+    );
+    assert_eq!(span["end_line"], 3);
+    assert_eq!(
+        span["end_column"], 41,
+        "end exclusive, past the closing parenthesis"
+    );
+}
