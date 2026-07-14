@@ -85,6 +85,7 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "sha1-checked",
+ "tempfile",
 ]
 
 [[package]]

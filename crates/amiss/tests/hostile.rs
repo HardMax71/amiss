@@ -12,25 +12,7 @@ use std::process::Command;
 use tempfile::TempDir;
 
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
-        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
-        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-        .output()
-        .expect("run git");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output utf-8")
+    amiss_fixtures::git(dir, args).unwrap()
 }
 
 fn amiss(args: &[&str]) -> (i32, Vec<u8>) {
@@ -90,7 +72,7 @@ fn a_policy_that_names_a_command_or_a_plugin_is_refused_and_nothing_runs() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "candidate"]);
 
-    let repo = root.to_str().unwrap().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout) = amiss(&[
         "check",
         "--repo",
@@ -161,7 +143,7 @@ fn an_untracked_file_cannot_satisfy_an_index_mode_reference() {
         "the target is on disk, and only on disk"
     );
 
-    let repo = root.to_str().unwrap().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout) = amiss(&[
         "check",
         "--repo",
@@ -250,7 +232,7 @@ fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
         let tree = amiss_fixtures::tree_object(root, &root_entries).unwrap();
         amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap()
     };
-    let repo = root.to_str().unwrap().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout) = if index_mode {
         amiss(&[
             "check",
@@ -372,7 +354,7 @@ fn a_base_the_store_does_not_hold_is_a_refusal_not_a_guess() {
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let ghost = "a".repeat(40);
 
-    let repo = root.to_str().unwrap().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     let (code, stdout) = amiss(&[
         "check",
         "--repo",
@@ -438,7 +420,7 @@ fn a_tracked_blob_the_store_does_not_hold_refuses_and_names_the_document() {
     let (dir_part, file_part) = blob.split_at(2);
     fs::remove_file(root.join(".git/objects").join(dir_part).join(file_part)).unwrap();
 
-    let repo = root.to_str().unwrap().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
     for index_mode in [false, true] {
         let mode = if index_mode { "index" } else { "commit" };
         let args: Vec<&str> = if index_mode {

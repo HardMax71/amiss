@@ -342,6 +342,82 @@ fn oid_bytes(oid: &str) -> std::io::Result<Vec<u8>> {
         .collect()
 }
 
+/// A two-commit repository under a temporary root, addressed the way the
+/// command line wants it. The root lives exactly as long as the value does.
+pub struct CommitPair {
+    dir: tempfile::TempDir,
+    pub repo: String,
+    pub base: String,
+    pub candidate: String,
+}
+
+impl CommitPair {
+    /// The repository root, for tests that stage more on top.
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        self.dir.path()
+    }
+}
+
+/// Builds the base commit from `base` files, then the candidate commit from
+/// `candidate` files written over them. Parent directories appear as needed,
+/// and either commit may leave the tree unchanged.
+///
+/// # Errors
+///
+/// Any git or filesystem failure, as plain I/O errors.
+pub fn commit_pair(
+    base: &[(&str, &str)],
+    candidate: &[(&str, &str)],
+) -> std::io::Result<CommitPair> {
+    let dir = tempfile::TempDir::new()?;
+    let root = dir.path();
+    git(root, &["init", "-q"])?;
+    for (path, body) in base {
+        write_file(root, path, body)?;
+    }
+    git(root, &["add", "."])?;
+    git(root, &["commit", "-q", "--allow-empty", "-m", "base"])?;
+    let base = git(root, &["rev-parse", "HEAD"])?.trim().to_owned();
+    for (path, body) in candidate {
+        write_file(root, path, body)?;
+    }
+    git(root, &["add", "."])?;
+    git(root, &["commit", "-q", "--allow-empty", "-m", "candidate"])?;
+    let candidate = git(root, &["rev-parse", "HEAD"])?.trim().to_owned();
+    let repo = path_arg(root);
+    Ok(CommitPair {
+        dir,
+        repo,
+        base,
+        candidate,
+    })
+}
+
+fn write_file(root: &Path, path: &str, body: &str) -> std::io::Result<()> {
+    let file = root.join(path);
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(file, body)
+}
+
+/// A filesystem path as the UTF-8 string a command line carries.
+///
+/// # Panics
+///
+/// When the path is not UTF-8. Fixture trees choose their own names, so a
+/// path this cannot render is the calling test's own defect, surfaced here
+/// rather than three asserts later as a mangled argument.
+#[must_use]
+#[expect(
+    clippy::expect_used,
+    reason = "fixture paths are chosen by the tests themselves"
+)]
+pub fn path_arg(path: &Path) -> String {
+    path.to_str().expect("fixture paths are utf-8").to_owned()
+}
+
 /// One quiet, hermetic git invocation with pinned identity and dates. The
 /// global config names a path that does not exist, which every platform reads
 /// as an empty file, where `/dev/null` would not resolve on Windows. Skipping

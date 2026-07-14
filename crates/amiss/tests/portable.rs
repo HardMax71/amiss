@@ -20,7 +20,7 @@ fn amiss(args: &[&str]) -> (i32, Vec<u8>) {
 #[test]
 fn an_ineligible_root_is_the_unavailable_projection_on_every_platform() {
     let dir = tempfile::TempDir::new().unwrap();
-    let repo = dir.path().to_str().unwrap().to_owned();
+    let repo = amiss_fixtures::path_arg(dir.path());
     let (code, stdout) = amiss(&[
         "check",
         "--repo",

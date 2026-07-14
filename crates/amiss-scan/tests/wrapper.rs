@@ -7,7 +7,6 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use amiss_git::Repository;
 use amiss_scan::pipeline::staged_index;
@@ -28,25 +27,7 @@ use tempfile::TempDir;
 const INSTANT: &str = "2026-07-12T10:00:00Z";
 
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
-        .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
-        .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-        .output()
-        .expect("run git");
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("git output utf-8")
+    amiss_fixtures::git(dir, args).unwrap()
 }
 
 fn engine() -> EngineProvenance {
