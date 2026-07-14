@@ -31,8 +31,8 @@ store does not hold:
 }
 ```
 
-The row also carries `path`, `resource`, `configured_limit`, and `observed_lower_bound`
-fields, null wherever they do not apply, so every refusal has the same shape and a consumer
+The row also carries `path`, `path_bytes_hex`, `resource`, `configured_limit`, and
+`observed_lower_bound` fields, null wherever they do not apply, so every refusal has the same shape and a consumer
 never parses two formats.
 
 Neither snapshot is trusted more than the other. A base commit missing from a shallow clone
