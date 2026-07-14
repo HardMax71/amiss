@@ -205,7 +205,7 @@ fn a_complete_report_validates_against_the_schema() {
     let envelope_json: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let defects: Vec<String> = validator
         .iter_errors(&envelope_json)
-        .map(|error| format!("{}: {error}", error.instance_path))
+        .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
     assert_eq!(defects, Vec::<String>::new(), "schema-clean report");
 

@@ -203,7 +203,7 @@ fn assert_schema_valid(wire: &[u8]) {
     let envelope_json: serde_json::Value = serde_json::from_slice(wire).unwrap();
     let defects: Vec<String> = validator
         .iter_errors(&envelope_json)
-        .map(|error| format!("{}: {error}", error.instance_path))
+        .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
     assert_eq!(
         defects,

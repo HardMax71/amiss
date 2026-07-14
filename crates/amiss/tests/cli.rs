@@ -706,7 +706,7 @@ fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
     let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
     let defects: Vec<String> = validator
         .iter_errors(&envelope)
-        .map(|error| format!("{}: {error}", error.instance_path))
+        .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
     assert_eq!(
         defects,
