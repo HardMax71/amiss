@@ -1,52 +1,52 @@
 # Limits and refusals
 
-Every ceiling is a number in the contract, and crossing one is a typed error carrying the
-resource name, the configured limit, and the observed lower bound. Nothing hangs, nothing
-truncates silently, and an incomplete analysis is always exit 2 with the crossing retained in
-the report's errors.
+Every internal ceiling is a published number, and crossing one produces a typed error
+carrying the resource name, the configured limit, and the value that crossed it. Nothing
+hangs and nothing is quietly cut short; a run that could not finish its analysis always
+exits 2 with the crossing recorded in the report's errors.
 
-The scan-side contract:
+The scanning ceilings:
 
 | resource | limit |
 | --- | --- |
 | documents per snapshot | 100,000 |
-| document blob bytes | 4 MiB |
-| aggregate document bytes per snapshot | 512 MiB |
-| raw link destination bytes | 16 KiB |
-| parser nesting | 256 |
+| bytes per document | 4 MiB |
+| document bytes per snapshot | 512 MiB |
+| bytes per link destination | 16 KiB |
+| parser nesting depth | 256 |
 | parser nodes per document | 250,000 |
 | parser nodes per snapshot | 5,000,000 |
 | references per document | 4,096 |
 | references per snapshot | 1,000,000 |
-| referenced target blob bytes | 16 MiB |
-| aggregate referenced target bytes | 512 MiB |
-| complete findings | 100,000 |
-| retained errors | 64 |
+| bytes per referenced target | 16 MiB |
+| referenced target bytes per snapshot | 512 MiB |
+| findings per complete run | 100,000 |
+| analysis errors kept | 64 |
 
-And the object-store side:
+And the Git-reading ceilings:
 
 | resource | limit |
 | --- | --- |
-| inflated object bytes | 128 MiB |
-| compressed stream bytes | 256 MiB |
-| aggregate compressed bytes | 2 GiB |
+| bytes per inflated object | 128 MiB |
+| bytes per compressed stream | 256 MiB |
+| compressed bytes per snapshot | 2 GiB |
 | pack files | 4,096 |
-| pack index bytes | 512 MiB |
-| aggregate pack index bytes | 1 GiB |
-| delta depth | 128 |
+| bytes per pack index | 512 MiB |
+| pack index bytes total | 1 GiB |
+| delta chain depth | 128 |
 | index file bytes | 256 MiB |
 | tree entries per snapshot | 1,000,000 |
-| raw path bytes | 4,096 |
+| bytes per path | 4,096 |
 
-Count resources observe exactly one past the limit and stop. Per-value byte resources observe
-the declared value. An aggregate observes the prior charged total plus the first crossing
-member, and a member rejected by its own per-value limit is never charged to the aggregate,
-so the numbers in a crossing are always reconstructible.
+The charging rules keep every reported number reconstructible. Counters stop exactly one
+past the limit. Per-item byte limits report the declared size of the item. A snapshot-wide
+total reports the running total plus the first item that crossed it, and an item already
+rejected by its own per-item limit is never added to the total.
 
-Refusals follow one rule: when the input cannot be trusted, there is no result to trust
-either. A base object the store does not hold, a tracked blob missing from the store, an
-index with an unmerged entry, a document whose bytes do not decode, a path the report format
-cannot represent, a JSON control input with a duplicate key: each is a named error code in
-the report (`GIT_OBJECT_MISSING`, `DOCUMENT_INVALID`, `UNREPRESENTABLE_PATH`, and the rest of
-the closed set), and each ends the run at exit 2. The alternative in every case is a report
-that looks complete and is not.
+Refusals follow one rule: when the input cannot be trusted, no output is produced to trust
+either. A base commit the store does not hold, a tracked file whose object is missing, an
+index with an unresolved merge conflict, a document whose bytes will not decode, a path the
+report cannot represent, a control file with a duplicated JSON key: each has a named error
+code (`GIT_OBJECT_MISSING`, `DOCUMENT_INVALID`, `UNREPRESENTABLE_PATH`, and the rest of a
+closed list), and each ends the run at exit 2. The alternative in every one of these cases
+is a report that looks complete and is not.

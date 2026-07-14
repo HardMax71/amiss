@@ -1,42 +1,45 @@
 # Introduction
 
-Amiss checks documentation against the tree it describes. It reads the documents in a
-repository, follows the references they make into that same repository, and reports when a
-reference stops resolving, or when the file behind it changed while the prose around it did
-not. It reads structure, not meaning: it will not tell you whether a sentence is true, and it
-does not guess.
+Amiss checks that your documentation and your code still agree. It reads the documents in a
+repository, finds every link and path they mention, and follows each one into the same
+repository. When a link points at a file that is gone, it reports that. When the file is
+still there but its content changed while the paragraph describing it did not, it reports
+that too. It never reads meaning: it cannot tell you whether a sentence is true, and it does
+not try.
 
-Four questions, and nothing else:
+A run compares two exact states of the repository: the base (usually where your branch
+started) and the candidate (usually the commit being reviewed). Amiss answers four questions
+about them, and nothing else:
 
-1. Does a same-repository reference in a document resolve in the exact tree being evaluated?
-2. Did the bytes or the Git mode of a referenced file change between the base and the candidate?
-3. Did the source block holding that reference change with it, stay byte-identical, disappear,
-   or become impossible to correlate without guessing?
-4. What document and reference surface was discovered, excluded, opaque, unsupported, or
-   unlinked?
+1. Does every link or path in a document still point at something in the candidate tree?
+2. Did the content or file mode of a referenced file change between base and candidate?
+3. Did the paragraph holding the reference change too, stay exactly the same, disappear, or
+   become impossible to match up without guessing?
+4. What did the scan actually see: which documents it read, skipped, could not parse, or
+   found unreachable?
 
-The fourth carries as much weight as the first three. A checker that quietly skips what it
-cannot parse is worse than no checker at all, because it reports a success it never earned.
-Every document Amiss cannot read, every reference it cannot follow, and every region it cannot
-see into is a row in the report, and a document it cannot decode fails the run instead of
-vanishing from it.
+The fourth question matters as much as the first three. A checker that silently skips what
+it cannot handle is worse than no checker, because its green result claims more than it
+checked. So everything Amiss cannot read or follow becomes a visible row in the report, and
+a document it cannot decode at all fails the run rather than dropping out of it.
 
-There is no baseline, no state directory, no ledger, and no lockfile. Amiss remembers nothing
-between runs, so there is nothing to migrate and nothing to drift. It accepts no claims,
-waivers, or annotations from the repository it is scanning, because a check whose subject can
-switch it off is not a check. Where that stance came from, and what it replaced, is the story
-in [Provenance](provenance.md).
+Amiss keeps no state. There is no baseline file, no cache, no database, and nothing committed
+to your repository. Run it twice on the same commits and you get byte-identical reports. It
+also accepts no instructions from the repository it scans that would weaken the check, no
+ignore comments, no severity overrides, because a check the checked code can switch off is
+not a check. How the project arrived at that stance is told in [Provenance](provenance.md).
 
-Each guarantee below is a test in the suite, not a promise:
+Each promise below is enforced by a test in the suite:
 
-- It never writes to the repository. The suite snapshots the whole tree before and after every
-  command and compares, and it runs the scanner against a tree it has no permission to write.
-- It never runs anything from the repository, and it never shells out to `git`. It reads
-  objects, packs, and the index itself.
-- Every read goes through a directory handle that is never followed. A symlink, junction, or
-  reparse point at the root, at `.git`, at `objects`, or anywhere in an object's path is
-  refused, not followed, and never mistaken for an absent object.
-- It never touches the network, and the engine's dependency closure contains no network crate.
-- The same repository and the same commits produce the same bytes, on every platform.
-- Every limit is a number in the contract. Crossing one is a typed error carrying both the
-  limit and what was observed, never a hang, a crash, or a silent truncation.
+- It never writes to your repository. The tests snapshot the whole tree before and after
+  every command and compare, and they also run it against a tree it has no permission to
+  write.
+- It never runs your code and never calls the `git` command. It reads Git's files directly:
+  objects, packs, and the index.
+- It never follows symlinks while reading. A link placed at the repository root, at `.git`,
+  or anywhere along an object's path is refused, and the refusal is never confused with a
+  missing file.
+- It never touches the network. The engine's dependencies contain no networking library.
+- The same input gives the same bytes, on Linux, macOS, and Windows.
+- Every internal limit is a published number. Hitting one produces a typed error naming the
+  limit and the observed value, never a hang or a silent cutoff.

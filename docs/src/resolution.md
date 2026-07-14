@@ -1,36 +1,37 @@
 # Resolution
 
-Extraction reads each scanned document with a parser pinned to the CommonMark and GFM
-conformance corpora, plus the MDX grammar for `.mdx`. What comes out is occurrences: inline
-links and images, reference-style forms, and autolinks, each carrying two destination
-representations. The raw destination is the exact source-token byte slice; the semantic
-destination is the value after the construct's own decoding. `[a](&amp;b)` records both
-`&amp;b` and `&b`, pinning the spelling and the meaning separately.
+Parsing turns each document into a list of occurrences: inline links and images, reference
+style links, and autolinks. Each occurrence keeps two spellings of its destination. The raw
+one is the exact bytes from the source. The semantic one is what those bytes mean after the
+format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
+either the spelling or the meaning is visible later.
 
-Regions the parser cannot see into are declared, not skipped. Raw HTML blocks and MDX
-expressions become opaque intervals, reported as `opaque-html-region` and
-`opaque-mdx-region` findings, so a link hidden inside JSX is a stated blind spot rather than
-an invisible one.
+What the parser cannot see into is declared instead of skipped. Raw HTML blocks and MDX
+expressions become opaque regions, reported with their size and place as
+`opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
+stated blind spot rather than an invisible one.
 
-A destination then resolves against the snapshot, and only three families of destination are
-in scope. A relative path resolves against the document's own directory, contained within the
-repository root: an escape like `../../etc/passwd` is an invalid reference, not a filesystem
-probe. A repository-rooted path resolves from the root. And when the invocation supplies the
-`--repository` triple, a GitHub blob or tree URL naming that same repository and a branch the
-scan can vouch for is translated into the path it names; every other URL is
-`external-out-of-scope`, counted and left alone.
+Each destination then resolves against the tree, and only three shapes are in scope. A
+relative path resolves from the document's own directory and must stay inside the
+repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A
+repository-rooted path resolves from the root. And when the invocation provides the
+`--repository` triple, a GitHub blob or tree URL that names this same repository and a
+branch the scan can vouch for is converted to the path it points at. Every other URL is
+`external-out-of-scope`: counted, reported, left alone.
 
-Resolution is exact. A trailing slash is an authored directory hint, so `sub/` must be a
-tree, and `guide.md/` is a type mismatch even though `guide.md` exists. Percent-encoding
-decodes exactly once, and `%252F` therefore stays a literal `%2F` in the name rather than
-becoming a second slash. A query string or fragment is carried as a digest in the report but
-plays no part in resolution, because the tree has no queries and no anchors. Anchors, heading
-slugs, site routes, code symbols, and version-scoped references are all explicit
-`unsupported-reference-semantics` boundaries: real checkers for those exist at other layers,
-and a guess here would convert honest ignorance into false confidence.
+Resolution is exact, and the small rules matter. A trailing slash means the author promised
+a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even though
+`guide.md` exists. Percent-encoding is decoded exactly once, so `%252F` stays as the
+literal three characters `%2F` in the name instead of turning into a second slash. Query
+strings and fragments are recorded as digests but ignored for resolution, because a tree
+has no queries and no anchors. Heading anchors, site routes, code symbols, and
+version-pinned references are all reported as `unsupported-reference-semantics`: real
+checks for those belong to tools that have the right information, and a guess here would
+turn honest ignorance into a false pass.
 
-Each resolved target is read from the object store and hashed, so the evaluation knows the
-exact bytes and Git mode on both sides of the comparison. A symlink or gitlink target is
-`unsupported-target-kind`: following it would leave the byte-addressed world the guarantees
-live in. An [LFS](https://git-lfs.com) pointer file is recognized and its declared object
-digest carried, so a pointer swap is a change even though the pointer text barely moves.
+Each resolved target is read from the object store and hashed, so the comparison knows the
+exact bytes and file mode on both sides. A symlink or submodule target is
+`unsupported-target-kind`, because following one leaves the world of exact bytes where the
+guarantees live. A [Git LFS](https://git-lfs.com) pointer file is recognized and its
+declared content digest is carried, so swapping the large file behind a pointer counts as
+a change even though the pointer text barely moves.

@@ -1,35 +1,34 @@
 # Edge cases and divergences
 
-The suite's edge cases are where the contract earns its wording. A sample of the ones that
-shaped it:
+The edge cases in the suite are where the contract's exact wording gets earned. A sample:
 
-Paths are bytes, so `été.txt` stages and resolves without normalization, and a path that is
-case-distinct from another is a different path even on a filesystem that would fold them. A
-directory reference resolves the same through a commit and through the index, which sounds
-obvious until an index-only lookup sees no directory entries and has to prove containment
-from sorted path prefixes. A reference to `guide.md/` fails as a type mismatch while
-`guide.md` resolves beside it. `%252F` in a link decodes once and stays contained instead of
-becoming a path separator on the second decode.
+Paths are bytes, so `été.txt` resolves without any Unicode normalization, and two names
+that differ only in case are two different files even on a filesystem that would merge
+them. A directory link resolves the same way through a commit and through the staged
+index, which sounds obvious until you know the index stores no directory entries at all
+and containment has to be proved from sorted path prefixes. `guide.md/` with a trailing
+slash fails as a type mismatch while `guide.md` resolves right next to it. `%252F` in a
+link decodes once, to the literal text `%2F`, and never becomes a second path separator.
 
-Hostile inputs get the same treatment as honest ones, just with more suspicion. A document
-path carrying ANSI escapes, a bell, and a forged workflow command renders inert in the human
-output and round-trips exactly in the JSON. A tree entry named with bytes no operating
-system would accept is an `UNREPRESENTABLE_PATH` refusal rather than a dropped document. A
-5,000-byte path is a charged crossing of the raw-path contract, reported with both numbers. A
-tracked blob whose object is missing from the store refuses and names the document instead of
-guessing at its content.
+Hostile input gets the same rules with more suspicion. A document path carrying ANSI color
+codes, a terminal bell, and a forged CI command prints harmlessly in the human output and
+survives byte-for-byte in the JSON. A tree entry named with bytes no operating system
+would accept is an `UNREPRESENTABLE_PATH` refusal, not a silently dropped document. A
+five-thousand-byte path is a reported limit crossing carrying both numbers. A tracked file
+whose object is missing from the store refuses and names the document, instead of guessing
+about content it cannot see.
 
-The parser pin records its divergences instead of hiding them. Against the pinned grammar
-bundle and github.com's own rendering, the conformance manifest holds exactly one
-extraction-relevant difference: `[link[^1]](#)`, a footnote call inside a link label, which
-the pinned Rust parser does not form into a link. A reference written that way would go
-unseen, which is under-reporting, the safer direction to fail in, and it is disclosed in the
-corpus notes rather than discovered later. Two upstream fixture documents panic the parser;
-the contract's `PARSER_PANIC` classification catches both, and both live in the corpus as
-regression seeds. GFM's spec text autolinks `ftp://` where the pinned bundle and github.com
-do not; the bundle wins, and the corpus records why.
+The parser pin records its known differences instead of hiding them. Measured against the
+pinned grammar bundle and against github.com's own rendering, exactly one difference
+affects link extraction: `[link[^1]](#)`, a footnote call inside a link label, which the
+pinned Rust parser does not turn into a link. A reference written that way goes unseen.
+That is under-reporting, the safer direction to fail, and it is written down in the corpus
+notes rather than waiting to be discovered. Two upstream test documents make the parser
+panic; the engine catches both as `PARSER_PANIC`, and both live in the corpus as regression
+tests. The GFM spec text says `ftp://` should autolink where the pinned bundle and
+github.com disagree; the bundle wins, and the corpus records why.
 
-The SHA-1 collision detector rounds out the family: the store rehashes every object with
-collision detection, and the public SHAttered and Shambles vectors cannot even be framed as
-git objects without breaking the property the detector checks, which the suite proves by
-construction rather than by assumption.
+One more, for flavor: the object store re-hashes everything with SHA-1 collision detection,
+and the suite proves that the public SHAttered and Shambles collision files cannot even be
+framed as Git objects without breaking the very property the detector checks. Reachable in
+code, unconstructible in practice, and tested as such.

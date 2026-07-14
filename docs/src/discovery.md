@@ -1,34 +1,34 @@
 # Discovery
 
-Discovery decides which files in the snapshot are documents, and it is deliberately
-conservative. Markdown and MDX files are documents, classified `structured-markdown` and
-`structured-mdx`. A small closed set of well-known extensionless names, `llms.txt` among
-them, is classified `plain-advisory` and scanned with a zero-lexer profile that extracts
-nothing but reports the document's existence and opacity honestly. Everything else is a
-potential reference target, not a document.
+Discovery decides which files count as documents, and it is deliberately narrow. Markdown
+and MDX files are documents, classified `structured-markdown` and `structured-mdx`. A small
+fixed list of well-known extensionless names, `llms.txt` among them, is classified
+`plain-advisory` and scanned by a profile that extracts nothing but honestly reports that
+the file exists and was not parsed. Every other file is a possible link target, not a
+document.
 
-Seven tree names are always excluded, matched on any path component:
+Seven directory names are always skipped, wherever they appear in a path:
 
 ```text
 node_modules  vendor  third_party  dist  build  .next  target
 ```
 
-The set is closed and not configurable downward, and the scanner prints it under
-`--explain-scope`. Exclusion is honest in both directions: excluded documents appear in the
-report's denominators as excluded, and this repository keeps its own vendored parser corpus
-under `corpus/third_party/` precisely so that fixtures full of deliberately broken links are
-never scanned as prose.
+The list is fixed and cannot be narrowed by configuration. Skipping is visible in both
+directions: skipped documents still show up in the report's counts, as excluded. This
+repository relies on the rule itself: its vendored parser test corpus lives under
+`corpus/third_party/` exactly so that fixture files full of deliberately broken links are
+never read as prose.
 
-Every denominator is reported. Discovered, scanned, unsupported, excluded, unlinked: the
-counts are in the report summary, and each unlinked document (one that nothing references and
-that references nothing) is also a `record`-level finding, because a page nobody can reach is
-a fact worth knowing even when it blocks nothing.
+Every count is reported: discovered, scanned, unsupported, excluded, unlinked. A document
+that nothing links to and that links to nothing is also reported as an `unlinked-document`
+finding, because a page nobody can reach is worth knowing about even though it blocks
+nothing.
 
-Paths are bytes. The resolver neither folds case nor normalizes Unicode, because the tree is
-byte-addressed and a checker that guesses at equivalences will eventually claim two different
-files are the same file. A path the scanner cannot even write down (bytes that are not UTF-8,
-or a name `RepoPath` refuses, such as one carrying a backslash) is not quietly dropped: the
-run is incomplete, the defect is a retained analysis error naming `UNREPRESENTABLE_PATH`, and
-the exit is 2. Dropping that entry silently would be the worst bug this tool could have,
-because the report would come back complete and passing with a document simply absent from
-it, and the absence is the one thing nobody can see.
+Paths are treated as bytes. Amiss does not fold case and does not normalize Unicode,
+because Git addresses files by exact bytes, and a checker that guesses two names are
+equivalent will eventually insist that two different files are the same file. A path the
+report format cannot even write down, bytes that are not valid UTF-8, or a name containing
+a backslash, is not quietly dropped. The run stops as incomplete, the error is recorded as
+`UNREPRESENTABLE_PATH`, and the exit is 2. Dropping such an entry silently would be the
+worst bug this tool could have: the report would come back green with a document missing
+from it, and a missing row is the one defect no reader can notice.
