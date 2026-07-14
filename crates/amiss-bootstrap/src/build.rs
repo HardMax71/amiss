@@ -1,5 +1,5 @@
 use amiss_wire::controls::ConstraintPlatform;
-use amiss_wire::digest::{Digest, hb, hj, sha256};
+use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, hj, sha256};
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::manifest::{
     DEPENDENCY_LOCK_DOMAIN, DEPENDENCY_LOCK_SCHEMA, ENVIRONMENT_CONTRACT, MANIFEST_DOMAIN,
@@ -54,7 +54,7 @@ pub fn build_manifest(
     let mut locks: Vec<(String, Digest)> = build
         .locks
         .iter()
-        .map(|(path, bytes)| (path.clone(), hb("amiss/raw-evidence/v1", bytes)))
+        .map(|(path, bytes)| (path.clone(), hb(RAW_EVIDENCE_DOMAIN, bytes)))
         .collect();
     locks.sort_by(|a, b| a.0.cmp(&b.0));
     let lock_value = object(vec![

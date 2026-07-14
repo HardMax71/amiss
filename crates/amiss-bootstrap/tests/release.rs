@@ -507,3 +507,42 @@ fn a_constraint_whose_commit_or_tree_does_not_match_refuses_on_the_action_tree()
         "the constraint pins a commit the action repository does not hold"
     );
 }
+
+/// The manifest records every build lockfile by path and raw-byte digest, and
+/// its parse binds that set to the set digest, so the recorded numbers cannot
+/// disagree with each other. What nothing checked until now is the tree: the
+/// shipped Cargo.lock could carry any bytes at all, and validation would echo
+/// the manifest's story about it. The lockfile is not executed, but it is the
+/// one file that says which dependencies built the engine, so a release whose
+/// lock bytes drifted from their recorded digest refuses instead of validating.
+#[test]
+fn a_tampered_lockfile_refuses_on_its_recorded_digest() {
+    let release = release(|root| {
+        fs::write(
+            root.join("Cargo.lock"),
+            b"# a different lock\nversion = 4\n",
+        )
+        .unwrap();
+    });
+    assert_eq!(
+        attempt(&release, BOOTSTRAP).err(),
+        Some(Refusal::DependencyLock),
+        "the tree's lock bytes do not recompute to the manifest's digest"
+    );
+}
+
+/// The absent twin: a release tree that dropped the lockfile entirely. The
+/// path comes from the manifest, the resolution walks the pinned tree, and an
+/// entry that is not there is the same refusal as any other path the closure
+/// names and the tree cannot produce.
+#[test]
+fn a_release_missing_its_lockfile_refuses_on_the_path() {
+    let release = release(|root| {
+        fs::remove_file(root.join("Cargo.lock")).unwrap();
+    });
+    assert_eq!(
+        attempt(&release, BOOTSTRAP).err(),
+        Some(Refusal::PathNotRegularBlob),
+        "a lockfile the manifest records and the tree lacks is not a lockfile"
+    );
+}

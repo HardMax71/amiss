@@ -4,7 +4,7 @@ pub mod supervise;
 use amiss_git::{GitResources, ObjectKind, Repository};
 use amiss_wire::action::{ActionMetadata, executable_platform, host_platform};
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor, GitMode};
-use amiss_wire::digest::{Digest, hb, sha256};
+use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
 use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole};
 use amiss_wire::model::{Oid, RepoPath};
 
@@ -32,6 +32,9 @@ pub enum Refusal {
     ManifestUnreadable,
     /// The manifest's semantic digest differs from the constraint.
     ManifestDigest,
+    /// A shipped lockfile's bytes do not recompute to the manifest's
+    /// recorded member digest.
+    DependencyLock,
     /// No artifact matches the selected platform and name.
     ArtifactSelection,
     /// A runtime file's checksum or mode differs from its manifest row.
@@ -58,9 +61,10 @@ pub struct Validated {
 
 /// The trusted bootstrap's validation, in the contract's order: choose from
 /// the closed platform table, resolve the reported commit to its reported
-/// tree, resolve the metadata, manifest, artifact, and every runtime path as
-/// regular non-symlink blobs in that tree, require the parsed manifest to
-/// carry the constrained digest, verify every mode and checksum, verify the
+/// tree, resolve the metadata, manifest, artifact, every lockfile, and every
+/// runtime path as regular non-symlink blobs in that tree, require the parsed
+/// manifest to carry the constrained digest, require every recorded lockfile
+/// to recompute from the tree's bytes, verify every mode and checksum, verify the
 /// selected binary's plain SHA-256 and domain-separated engine digest, and
 /// require the executable's own header to name the same platform. Nothing is
 /// downloaded, installed, discovered, or resolved through `PATH`.
@@ -102,6 +106,21 @@ pub fn validate(
         ReleaseManifest::parse(&manifest_bytes).map_err(|_defect| Refusal::ManifestUnreadable)?;
     if manifest.digest != constraint.release_manifest_digest {
         return Err(Refusal::ManifestDigest);
+    }
+
+    // The manifest's lock set is parse-bound to its own set digest, so what is
+    // left to prove is that the tree really carries those bytes: each recorded
+    // lockfile re-resolved as a regular blob and re-hashed under the same
+    // domain the release builder used. Without this, the one file that says
+    // which dependencies built the engine is the one file nothing checks.
+    for (lock_path, lock_digest) in &manifest.dependency_lock.files {
+        let (lock_bytes, lock_mode) = blob(action, resources, &tree, lock_path)?;
+        if lock_mode != GitMode::RegularFile {
+            return Err(Refusal::PathNotRegularBlob);
+        }
+        if hb(RAW_EVIDENCE_DOMAIN, &lock_bytes) != *lock_digest {
+            return Err(Refusal::DependencyLock);
+        }
     }
 
     let artifact = manifest

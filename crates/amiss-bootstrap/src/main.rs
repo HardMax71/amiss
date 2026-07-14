@@ -76,6 +76,7 @@ const fn reason(refusal: Refusal) -> &'static str {
         Refusal::PathNotRegularBlob => "path-not-regular-blob",
         Refusal::ManifestUnreadable => "manifest-unreadable",
         Refusal::ManifestDigest => "manifest-digest-mismatch",
+        Refusal::DependencyLock => "dependency-lock-mismatch",
         Refusal::ArtifactSelection => "artifact-selection-failed",
         Refusal::RuntimeClosure => "runtime-closure-mismatch",
         Refusal::EngineDigest => "engine-digest-mismatch",

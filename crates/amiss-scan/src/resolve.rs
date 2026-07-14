@@ -12,7 +12,7 @@ use crate::document::classify;
 use crate::resources::ScanResources;
 use crate::{Error, lfs};
 
-pub const RAW_EVIDENCE_DOMAIN: &str = "amiss/raw-evidence/v1";
+pub use amiss_wire::digest::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection/v1";
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
