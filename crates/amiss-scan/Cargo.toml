@@ -2,15 +2,17 @@
 name = "amiss-scan"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Discovery, reference resolution, correlation, evaluation, and policy for Amiss"
+license.workspace = true
+repository.workspace = true
 
 [lib]
 bench = false
 
 [dependencies]
-amiss-git = { path = "../amiss-git" }
-amiss-md = { path = "../amiss-md" }
-amiss-wire = { path = "../amiss-wire" }
+amiss-git = { path = "../amiss-git", version = "0.1.0" }
+amiss-md = { path = "../amiss-md", version = "0.1.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.1.0" }
 
 [dev-dependencies]
 amiss-fixtures = { path = "../amiss-fixtures" }

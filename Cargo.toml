@@ -4,9 +4,10 @@ members = ["crates/amiss", "crates/amiss-bootstrap", "crates/amiss-fixtures", "c
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
-publish = false
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/HardMax71/amiss"
 
 [workspace.dependencies]
 sha2 = "0.10"

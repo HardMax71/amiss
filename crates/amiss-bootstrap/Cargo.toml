@@ -2,11 +2,13 @@
 name = "amiss-bootstrap"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+description = "Trusted CI wrapper that validates and launches a verified Amiss engine"
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-amiss-git = { path = "../amiss-git" }
-amiss-wire = { path = "../amiss-wire" }
+amiss-git = { path = "../amiss-git", version = "0.1.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.1.0" }
 tempfile = "3"
 
 [dev-dependencies]

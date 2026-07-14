@@ -2,6 +2,9 @@
 name = "amiss-fixtures"
 version.workspace = true
 edition.workspace = true
+description = "Shared test fixtures for the Amiss workspace"
+license.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]

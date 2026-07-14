@@ -1,0 +1,21 @@
+[workspace]
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+[[package]]
+name = "amiss"
+changelog_update = true
+changelog_path = "CHANGELOG.md"
+changelog_include = ["amiss-git", "amiss-scan", "amiss-md", "amiss-wire", "amiss-bootstrap", "amiss-fixtures"]
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+git_release_enable = true
+git_release_name = "v{{ version }}"
+
+[changelog]
+commit_parsers = [
+  { message = "^chore: release", skip = true },
+  { message = "^Merge pull request", skip = true },
+  { message = ".*", group = "Changes" },
+]
