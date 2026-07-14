@@ -840,3 +840,157 @@ fn a_formatting_only_change_to_a_target_is_advisory_and_never_a_verdict() {
     );
     assert_eq!(payload["summary"]["findings"]["fail"], 0);
 }
+
+/// SHA-1 and SHA-256 repositories holding the same files must yield the same
+/// facts. The object names differ, and that is all that may differ: every raw
+/// content digest, every count, every finding, and every resolution is derived
+/// from the bytes, not from how Git happens to address them. So this runs the
+/// same content through both formats and compares. The whole summary must be
+/// equal, the findings must land on the same kinds at the same paths, and each
+/// document's content digest must agree while its object id visibly does not,
+/// which is also the proof that the sha256 pipeline ran for real.
+#[test]
+fn a_sha256_repository_yields_the_same_facts_as_sha1() {
+    let mut runs: Vec<serde_json::Value> = Vec::new();
+    for format in ["sha1", "sha256"] {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q", &format!("--object-format={format}")]);
+        fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("docs/guide.md"), "# Guide\n\n[home](../README)\n").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "base"]);
+        let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        fs::write(
+            root.join("docs/guide.md"),
+            "# Guide\n\n[home](../README) and [gone](missing.md)\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "candidate"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+        let repo = root.to_str().unwrap_or_default().to_owned();
+        let (code, stdout, stderr) = amiss(&[
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            format,
+            "--base",
+            &base,
+            "--candidate",
+            &candidate,
+            "--profile",
+            "observe",
+            "--format",
+            "json",
+        ]);
+        assert_eq!((code, stderr.as_str()), (0, ""), "{format}");
+        runs.push(payload(&stdout));
+    }
+
+    let (sha1, sha256) = (&runs[0], &runs[1]);
+    assert_eq!(
+        sha1["summary"], sha256["summary"],
+        "every count is content-derived, so the summaries are one object"
+    );
+
+    let facts = |payload: &serde_json::Value| -> Vec<(String, String, String)> {
+        payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|finding| {
+                (
+                    finding["kind"].as_str().unwrap().to_owned(),
+                    finding["effective_disposition"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    finding["location"]["path"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(facts(sha1), facts(sha256));
+
+    for row in sha1["documents"].as_array().unwrap() {
+        let path = row["path"].as_str().unwrap();
+        let twin = sha256["documents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|other| other["path"] == path)
+            .unwrap();
+        for side in ["base", "candidate"] {
+            let (a, b) = (&row[side], &twin[side]);
+            if a.is_null() {
+                assert!(b.is_null(), "{path} {side}");
+                continue;
+            }
+            assert_eq!(
+                a["raw_digest"], b["raw_digest"],
+                "{path} {side}: the content digest does not care how Git names the blob"
+            );
+            let (oid_a, oid_b) = (
+                a["entry_oid"].as_str().unwrap(),
+                b["entry_oid"].as_str().unwrap(),
+            );
+            assert_eq!((oid_a.len(), oid_b.len()), (40, 64), "{path} {side}");
+        }
+    }
+}
+
+/// V0 supplies no external controls, and the report must say so in the exact
+/// vocabulary reserved for that: `none`, with no trust source and no digest.
+/// The row this pins is not the absence, it is the labeling. A report that
+/// described an unsupplied floor as anything but none, or dressed the local
+/// process up as a verified sandbox, would be lending itself trust nobody
+/// granted, and every consumer downstream of the report would inherit the lie.
+#[test]
+fn unsupplied_controls_report_none_and_claim_no_trust() {
+    let (dir, base, candidate) = fixture();
+    let repo = dir.path().to_str().unwrap_or_default().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let payload = payload(&stdout);
+    assert_eq!(
+        payload["result"]["complete"], true,
+        "none is a complete answer"
+    );
+
+    let controls = &payload["controls"];
+    for control in ["organization_floor", "debt_snapshot", "waiver_bundle"] {
+        assert_eq!(controls[control]["status"], "none", "{control}");
+        assert_eq!(controls[control]["trust_source"], "none", "{control}");
+        assert!(controls[control]["digest"].is_null(), "{control}");
+    }
+    assert_eq!(controls["execution_constraint"]["status"], "none");
+    assert_eq!(controls["trusted_time_source"]["status"], "none");
+    assert!(controls["base_repository_policy_digest"].is_null());
+    assert!(controls["candidate_repository_policy_digest"].is_null());
+
+    let sandbox = &controls["sandbox"];
+    assert_eq!(sandbox["assurance"], "self-asserted");
+    assert_eq!(sandbox["enforcement_source"], "local-process");
+    assert!(
+        sandbox["verification"].is_null(),
+        "a local process does not get to claim it was verified"
+    );
+}

@@ -368,3 +368,148 @@ fn a_path_longer_than_the_domain_allows_is_a_charged_crossing_not_a_silent_skip(
         "an incomplete run publishes no document set to mistake for coverage"
     );
 }
+
+/// A shallow clone hands the scanner a base OID whose object was never fetched.
+/// The tempting failure is to treat an absent base as an empty one and report
+/// every finding as introduced, which turns the cheapest checkout misconfiguration
+/// into a wall of false accusations, or worse, to skip the comparison and pass.
+/// The store not holding the object is not a judgment the scanner can make
+/// anything of: the run refuses, names the defect, and publishes nothing.
+#[test]
+fn a_base_the_store_does_not_hold_is_a_refusal_not_a_guess() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "only"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let ghost = "a".repeat(40);
+
+    let repo = root.to_str().unwrap().to_owned();
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &ghost,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+
+    assert_eq!(code, 2, "an absent base is untrustworthy, not empty");
+    let payload = payload(&stdout);
+    assert_eq!(payload["result"]["complete"], false);
+    assert_eq!(payload["result"]["status"], "incomplete");
+    let codes: Vec<&str> = payload["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|error| error["code"].as_str().unwrap())
+        .collect();
+    assert!(
+        codes.contains(&"GIT_OBJECT_MISSING"),
+        "the refusal names the absent object: {codes:?}"
+    );
+    assert!(
+        payload["documents"].as_array().unwrap().is_empty(),
+        "no document set to mistake for a comparison that never ran"
+    );
+}
+
+/// The partial-clone twin: the commits and trees are all present and one tracked
+/// blob is not, which is exactly what a promisor remote leaves behind. Git would
+/// fetch it on demand; this scanner has no network on purpose, so the only honest
+/// move is the same refusal, and in commit mode it names the document whose bytes
+/// it could not have. The object store is arranged by hand here, staging the blob
+/// and then deleting the loose object, because no porcelain command will build a
+/// tree it cannot read.
+#[test]
+fn a_tracked_blob_the_store_does_not_hold_refuses_and_names_the_document() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("docs/promised.md"), "# Promised\n").unwrap();
+    git(root, &["add", "docs/promised.md"]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let blob = git(root, &["rev-parse", "HEAD:docs/promised.md"])
+        .trim()
+        .to_owned();
+    let (dir_part, file_part) = blob.split_at(2);
+    fs::remove_file(root.join(".git/objects").join(dir_part).join(file_part)).unwrap();
+
+    let repo = root.to_str().unwrap().to_owned();
+    for index_mode in [false, true] {
+        let mode = if index_mode { "index" } else { "commit" };
+        let args: Vec<&str> = if index_mode {
+            vec![
+                "check",
+                "--repo",
+                &repo,
+                "--object-format",
+                "sha1",
+                "--base",
+                &base,
+                "--index",
+                "--profile",
+                "enforce",
+                "--format",
+                "json",
+            ]
+        } else {
+            vec![
+                "check",
+                "--repo",
+                &repo,
+                "--object-format",
+                "sha1",
+                "--base",
+                &base,
+                "--candidate",
+                &candidate,
+                "--profile",
+                "enforce",
+                "--format",
+                "json",
+            ]
+        };
+        let (code, stdout) = amiss(&args);
+        assert_eq!(code, 2, "{mode}: a blob it cannot read is not a pass");
+        let payload = payload(&stdout);
+        assert_eq!(payload["result"]["complete"], false, "{mode}");
+        let missing: Vec<(&str, Option<&str>)> = payload["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|error| error["code"] == "GIT_OBJECT_MISSING")
+            .map(|error| ("GIT_OBJECT_MISSING", error["path"].as_str()))
+            .collect();
+        assert!(!missing.is_empty(), "{mode}: the absence is disclosed");
+        if !index_mode {
+            assert!(
+                missing
+                    .iter()
+                    .any(|(_, path)| *path == Some("docs/promised.md")),
+                "commit mode names the document the store cannot produce: {missing:?}"
+            );
+        }
+        assert!(
+            payload["documents"].as_array().unwrap().is_empty(),
+            "{mode}: an incomplete run publishes no document set"
+        );
+    }
+}
