@@ -994,3 +994,215 @@ fn unsupplied_controls_report_none_and_claim_no_trust() {
         "a local process does not get to claim it was verified"
     );
 }
+
+/// Writes `body` to the object store as a blob and returns its OID.
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn git_object(dir: &Path, body: &[u8]) -> String {
+    use std::io::Write as _;
+    let mut child = Command::new("git")
+        .args(["hash-object", "-w", "--stdin"])
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn git");
+    child
+        .stdin
+        .as_mut()
+        .expect("git stdin")
+        .write_all(body)
+        .expect("write blob body");
+    let out = child.wait_with_output().expect("git output");
+    assert!(
+        out.status.success(),
+        "hash-object: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout)
+        .expect("git output utf-8")
+        .trim()
+        .to_owned()
+}
+
+/// Stages one index entry whose path is exactly `path_bytes`, which may hold
+/// bytes no shell or checkout would preserve, by feeding git raw index-info on
+/// stdin.
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn stage_raw_path(dir: &Path, blob: &str, path_bytes: &[u8]) {
+    use std::io::Write as _;
+    let mut spec = format!("100644 {blob}\t").into_bytes();
+    spec.extend_from_slice(path_bytes);
+    spec.push(0);
+    let mut child = Command::new("git")
+        .args(["update-index", "--add", "--index-info"])
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn git");
+    child
+        .stdin
+        .as_mut()
+        .expect("git stdin")
+        .write_all(&spec)
+        .expect("write index-info");
+    let out = child.wait_with_output().expect("git output");
+    assert!(
+        out.status.success(),
+        "index-info: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// A skip-worktree entry is still part of the staged snapshot; the bit only tells
+/// the working tree not to bother materializing it. So in index mode its blob is
+/// read from the index exactly like any other, its references resolve, and the
+/// report both discloses the count of such entries and records that the candidate
+/// was materialized from the index rather than from a commit. A scanner that read
+/// the worktree instead would see nothing there and silently drop the document.
+#[test]
+fn a_skip_worktree_document_is_read_from_the_index_and_disclosed() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    git(root, &["update-index", "--skip-worktree", "docs/guide.md"]);
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let payload = payload(&stdout);
+    assert_eq!(payload["evaluation"]["materialization"], "index");
+    assert_eq!(
+        payload["evaluation"]["skip_worktree_paths"], 1,
+        "the one skip-worktree entry is counted"
+    );
+    assert_eq!(
+        payload["summary"]["references"]["missing"], 0,
+        "its reference resolves, so its bytes were read from the index"
+    );
+    let guide = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["path"] == "docs/guide.md")
+        .expect("the skip-worktree document is in the set");
+    assert_eq!(
+        guide["candidate"]["content_availability"], "available",
+        "the blob was materialized from the index, not skipped"
+    );
+}
+
+/// A repository path is untrusted bytes, and the human projection is a place those
+/// bytes could become terminal control sequences, a forged workflow command, or a
+/// second log line. The `human-atom-v1` law says every scalar outside printable
+/// ASCII becomes a `\uXXXX` escape, so an ESC, a carriage return, and a bell in a
+/// document's own path all leave the renderer inert. The escaping law has unit
+/// tests; this drives a genuinely hostile path all the way through the binary and
+/// reads the bytes it actually printed, because a law is only worth what the
+/// product does with it.
+#[test]
+fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // ESC, an ANSI colour run, a forged GitHub Actions command, a bell, and a
+    // carriage return, all valid UTF-8 and all valid in a RepoPath.
+    let hostile = "docs/\u{1b}[31m::error::forged\u{7}\u{d}.md";
+    let blob = git_object(root, b"# X\n\n[b](nowhere.md)\n");
+    stage_raw_path(root, &blob, hostile.as_bytes());
+    let tree = git(root, &["write-tree"]).trim().to_owned();
+    let candidate = git(root, &["commit-tree", &tree, "-p", &base, "-m", "hostile"])
+        .trim()
+        .to_owned();
+
+    let repo = root.to_str().unwrap_or_default().to_owned();
+    let (code, human, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "human",
+    ]);
+    assert_eq!(code, 0, "a hostile path is still an ordinary document");
+    for raw in [0x1b_u8, 0x0d, 0x07] {
+        assert!(
+            !human.contains(&raw),
+            "raw control byte {raw:#04x} reached the human output"
+        );
+    }
+    let human_text = String::from_utf8(human).expect("human output is utf-8");
+    assert!(
+        human_text.contains("\\u001b") && human_text.contains("\\u000d"),
+        "the control bytes are present, but only as escapes"
+    );
+
+    let (code, json, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let payload = payload(&json);
+    let paths: Vec<&str> = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["path"].as_str())
+        .collect();
+    assert!(
+        paths.contains(&hostile),
+        "json carries the exact bytes as a string, losing nothing: {paths:?}"
+    );
+}

@@ -332,3 +332,101 @@ fn a_repack_under_a_live_reader_never_loses_a_present_object() {
         "presence agrees with the read"
     );
 }
+
+/// Builds a repository with two separate pack files by packing twice, once per
+/// commit, and returns it with the byte size one index occupies.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn two_pack_repo() -> (TempDir, u64) {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("a.md"), "content a ".repeat(300)).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "a"]);
+    git(root, &["repack", "-dq"]);
+    fs::write(root.join("b.md"), "content b ".repeat(300)).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "b"]);
+    git(root, &["repack", "-dq"]);
+    let indices: Vec<u64> = pack_paths(root)
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "idx"))
+        .map(|path| fs::metadata(&path).unwrap().len())
+        .collect();
+    assert_eq!(indices.len(), 2, "the repository has two packs");
+    let one_index = indices.into_iter().next().unwrap();
+    (dir, one_index)
+}
+
+/// One pack index is allowed to be large. The sum of them is not, because a
+/// repository can carry many packs and index bytes are the memory the scanner
+/// spends before it reads a single object. The per-index cap and the aggregate
+/// cap are different limits, and this pins the aggregate: two indices that each
+/// clear the per-index ceiling still cross the running total, and the crossing
+/// names the aggregate resource rather than the per-index one.
+#[test]
+fn the_running_total_of_pack_index_bytes_is_bounded_across_packs() {
+    let (dir, one_index) = two_pack_repo();
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits {
+        pack_index_bytes: one_index.saturating_mul(2),
+        aggregate_pack_index_bytes: one_index.saturating_add(one_index / 2),
+        ..GitLimits::CONTRACT
+    });
+
+    let absent = Oid::new(ObjectFormat::Sha1, "d".repeat(40)).unwrap();
+    let Err(Error::ResourceLimit {
+        resource,
+        configured_limit,
+        observed_lower_bound,
+    }) = repo.read_object(&mut resources, &absent)
+    else {
+        panic!("two indices past the aggregate ceiling must cross it");
+    };
+    assert_eq!(resource, ResourceName::AggregateGitPackIndexBytes);
+    assert_eq!(configured_limit, one_index.saturating_add(one_index / 2));
+    assert!(
+        observed_lower_bound > configured_limit,
+        "the crossing reports the running total that overran"
+    );
+}
+
+/// The pack-directory entry cap counts what is on disk, not what survives
+/// filtering. An attacker who floods `objects/pack` with files that are not
+/// packs at all still makes the scanner enumerate every one of them, so the
+/// bound has to be charged before the junk is discarded. A sibling test proves
+/// junk names are ignored for lookup; this proves they are counted for the cap,
+/// which is the difference between a bound that holds and one a directory of
+/// noise walks straight through.
+#[test]
+fn junk_pack_directory_entries_are_counted_before_they_are_discarded() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    let pack_dir = root.join(".git/objects/pack");
+    fs::create_dir_all(&pack_dir).unwrap();
+    for name in ["noise-1.tmp", "noise-2.tmp", "noise-3.tmp", "not-a-pack"] {
+        fs::write(pack_dir.join(name), b"junk").unwrap();
+    }
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits {
+        pack_directory_entries: 2,
+        ..GitLimits::CONTRACT
+    });
+    let absent = Oid::new(ObjectFormat::Sha1, "e".repeat(40)).unwrap();
+    let Err(Error::ResourceLimit {
+        resource,
+        configured_limit,
+        observed_lower_bound,
+    }) = repo.read_object(&mut resources, &absent)
+    else {
+        panic!("four junk entries past a cap of two must cross it");
+    };
+    assert_eq!(resource, ResourceName::GitPackDirectoryEntries);
+    assert_eq!(configured_limit, 2);
+    assert!(
+        observed_lower_bound > 2,
+        "the junk was counted, not silently dropped before the tally"
+    );
+}

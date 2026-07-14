@@ -475,3 +475,35 @@ fn an_engine_whose_header_names_another_platform_refuses() {
         "the target comes from the executable header, not the manifest label"
     );
 }
+
+/// The execution constraint the required workflow protects pins the exact action
+/// commit and the exact tree that commit must carry. The bootstrap resolves the
+/// commit and refuses unless its tree is the pinned one, which is what stops a
+/// verified workflow from being pointed at a commit whose tree was swapped under
+/// it. Two ways to miss: a constraint whose tree OID is not the commit's real
+/// tree, and a constraint whose commit OID names no object at all. Both are one
+/// refusal, `ActionTree`, because both mean the pinned action is not the action
+/// on disk.
+#[test]
+fn a_constraint_whose_commit_or_tree_does_not_match_refuses_on_the_action_tree() {
+    let mut with_wrong_tree = release(|_root| {});
+    assert_ne!(
+        with_wrong_tree.tree,
+        "b".repeat(40),
+        "the bogus tree is not the real one"
+    );
+    with_wrong_tree.tree = "b".repeat(40);
+    assert_eq!(
+        attempt(&with_wrong_tree, BOOTSTRAP).err(),
+        Some(Refusal::ActionTree),
+        "the commit is real, but its tree is not the one the constraint pinned"
+    );
+
+    let mut with_absent_commit = release(|_root| {});
+    with_absent_commit.commit = "c".repeat(40);
+    assert_eq!(
+        attempt(&with_absent_commit, BOOTSTRAP).err(),
+        Some(Refusal::ActionTree),
+        "the constraint pins a commit the action repository does not hold"
+    );
+}
