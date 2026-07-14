@@ -20,7 +20,7 @@ use amiss_wire::report::PAYLOAD_SCHEMA;
 fn dossier_example(name: &str) -> Vec<u8> {
     fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/spec/examples")
+            .join("../../spec/examples")
             .join(name),
     )
     .unwrap()

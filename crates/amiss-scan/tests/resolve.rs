@@ -622,8 +622,8 @@ fn ambiguous_trusted_splits_are_version_scope_with_null_fields() {
 /// snapshot and not the other, and `[dir](./sub/)` (a terminal slash, which the
 /// spec makes an authored directory hint, so `target_kind = tree`) resolved
 /// through `--candidate` and came back missing through `--index`, on identical
-/// bytes. The scanner found this in its own repository, on the `docs/spec/`
-/// link in machine-contracts.md.
+/// bytes. The scanner found this in its own repository, on a directory link one
+/// of its specification documents carried with the terminal slash.
 #[test]
 fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
     let dir = fixture();

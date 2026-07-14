@@ -192,7 +192,7 @@ fn maximal_error(index: usize) -> Value {
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn assert_schema_valid(wire: &[u8]) {
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
     )
     .unwrap()
     .replace("assure/", "amiss/")

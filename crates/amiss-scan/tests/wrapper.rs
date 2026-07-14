@@ -300,7 +300,7 @@ fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
     let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate);
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
     )
     .unwrap()
     .replace("assure/", "amiss/")

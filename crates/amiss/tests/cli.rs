@@ -697,7 +697,7 @@ fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
     )
     .unwrap()
     .replace("assure/", "amiss/");

@@ -9,7 +9,7 @@ use amiss_wire::json::{Value, parse};
 fn the_pinned_vectors_decide_recognition() {
     let bytes = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/spec/examples/lfs-pointer-v1-vectors.json"),
+            .join("../../spec/examples/lfs-pointer-v1-vectors.json"),
     )
     .unwrap();
     let Value::Object(root) = parse(&bytes).unwrap() else {

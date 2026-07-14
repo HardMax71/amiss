@@ -21,7 +21,7 @@ use amiss_wire::requests::{
 fn dossier_request(name: &str) -> Vec<u8> {
     let raw = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/spec/examples")
+            .join("../../spec/examples")
             .join(name),
     )
     .expect("the dossier ships this example");
