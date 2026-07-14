@@ -13,8 +13,8 @@ with it; Amiss never touches the network and only ever speaks about one reposito
 files at two exact commits. It is not a style linter either: it has no opinion on headings,
 tone, or wording, and no rule engine to hold one.
 
-It is not a documentation-coupling system with memory. Tools in that family, Fiberplane's
-drift, Swimm, and the ledger design this project itself rejected, record what they blessed
+It is not a documentation-coupling system with memory. Tools in that family, [Fiberplane's
+drift](https://github.com/fiberplane/drift), [Swimm](https://swimm.io), and the ledger design this project itself rejected, record what they blessed
 and react when reality drifts from the record. The rejected design is described in
 [Provenance](provenance.md). The shipped scanner remembers nothing, which removes the
 migration, merge-conflict, and trust-on-edit failure modes wholesale, at the price of
@@ -53,7 +53,8 @@ on plausible wrong text. The honest relationship is composition: a deterministic
 queue is a good prompt feed for such an agent, and Amiss is deliberately the deterministic
 half.
 
-Executable-docs systems (doctest and its relatives) prove more than Amiss does about the
+Executable-docs systems ([doctest](https://docs.python.org/3/library/doctest.html) and its
+relatives) prove more than Amiss does about the
 lines they execute, and nothing about any other line. Regeneration pipelines eliminate drift
 on derivable content and say nothing about hand prose; user zero's stale-generator story in
 [The evidence base](evidence.md) shows regeneration passing forever on wrong output.

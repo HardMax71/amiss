@@ -33,7 +33,7 @@ The kinds, with what each one means:
 | `unlinked-document` | a document nothing links to and that links to nothing |
 | `external-out-of-scope` | a URL to somewhere Amiss does not check, counted and left alone |
 | `opaque-html-region` | raw HTML the parser cannot see into, size and place reported |
-| `opaque-mdx-region` | the same for MDX expressions and JSX |
+| `opaque-mdx-region` | the same for [MDX](https://mdxjs.com) expressions and JSX |
 | `unsupported-reference-semantics` | anchors, site routes, symbols: real checks that belong to other tools |
 | `unsupported-document-format` | a document class Amiss knows it cannot parse |
 | `unsupported-target-kind` | the target is a symlink or a submodule, which Amiss will not follow |

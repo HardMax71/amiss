@@ -1,6 +1,6 @@
 # Invocation
 
-Install from crates.io, or build from source:
+Install from [crates.io](https://crates.io), or build from source:
 
 ```sh
 cargo install amiss

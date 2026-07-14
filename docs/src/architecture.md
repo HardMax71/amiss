@@ -5,7 +5,7 @@ Six shipped crates, and trust flows in one direction; a seventh exists only for 
 ```dot process
 digraph amiss {
   rankdir = BT;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  node [shape = box, fontname = "Helvetica, Arial, sans-serif", fontsize = 11];
   edge [arrowsize = 0.7];
   wire  [label = "amiss-wire\ncanonical JSON, digests,\nschemas, machine contracts"];
   git   [label = "amiss-git\nobject store, packs, index,\nno-follow handles"];
@@ -33,8 +33,9 @@ report format, and every machine contract. Nothing in it knows what a repository
 deltas, and the index, each under a parser that rejects malformed input and a published
 resource ceiling. It repairs nothing.
 
-`amiss-md` holds the document parsers, pinned against the official CommonMark and GFM test
-suites plus the MDX grammar's own tests. The pin is a checked-in manifest recording node
+`amiss-md` holds the document parsers, pinned against the official [CommonMark](https://commonmark.org) and
+[GFM](https://github.github.com/gfm/) test
+suites plus the [MDX](https://mdxjs.com) grammar's own tests. The pin is a checked-in manifest recording node
 counts, extraction results, and byte positions for every test case. A parser change that
 moves any of those moves the manifest, and review sees the diff.
 
@@ -54,7 +55,7 @@ Inside a run, the stages form a line:
 ```dot process
 digraph pipeline {
   rankdir = LR;
-  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  node [shape = box, fontname = "Helvetica, Arial, sans-serif", fontsize = 11];
   edge [arrowsize = 0.7];
   snap  [label = "snapshots\nbase + candidate"];
   disc  [label = "discovery"];

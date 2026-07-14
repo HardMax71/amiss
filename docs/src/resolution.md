@@ -6,7 +6,7 @@ one is the exact bytes from the source. The semantic one is what those bytes mea
 format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
 either the spelling or the meaning is visible later.
 
-What the parser cannot see into is declared instead of skipped. Raw HTML blocks and MDX
+What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)
 expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
 stated blind spot rather than an invisible one.

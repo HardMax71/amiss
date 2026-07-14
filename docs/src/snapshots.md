@@ -6,7 +6,7 @@ There is no working-directory mode, no branch-name resolution, and no fetching. 
 object is not in the local object store, the run refuses; see
 [Limits and refusals](limits.md).
 
-Amiss reads Git's storage itself instead of asking the `git` command. Loose objects,
+Amiss reads [Git](https://git-scm.com)'s storage itself instead of asking the `git` command. Loose objects,
 packfiles, deltas, and the index file are parsed by the engine, and the parsers reject
 instead of repairing. A tree with entries out of order, an index whose checksum does not
 match, a delta chain deeper than the published limit: each one is a typed refusal, never a
