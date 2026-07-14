@@ -19,6 +19,16 @@ repository relies on the rule itself: its vendored parser test corpus lives unde
 `corpus/third_party/` exactly so that fixture files full of deliberately broken links are
 never read as prose.
 
+Five paths through the classifier:
+
+```text
+docs/guide.md               structured-markdown   scanned
+site/page.mdx               structured-mdx        scanned
+llms.txt                    plain-advisory        scanned, nothing extracted
+vendor/lib/README.md        excluded              the vendor component is in the closed set
+src/parser.rs               not a document        a reference target only
+```
+
 Every count is reported: discovered, scanned, unsupported, excluded, unlinked. A document
 that nothing links to and that links to nothing is also reported as an `unlinked-document`
 finding, because a page nobody can reach is worth knowing about even though it blocks

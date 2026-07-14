@@ -44,6 +44,21 @@ past the limit. Per-item byte limits report the declared size of the item. A sna
 total reports the running total plus the first item that crossed it, and an item already
 rejected by its own per-item limit is never added to the total.
 
+A crossing, as the report records it:
+
+```json
+{
+  "code": "RESOURCE_LIMIT_EXCEEDED",
+  "phase": "git",
+  "resource": "raw-path-bytes",
+  "configured_limit": 4096,
+  "observed_lower_bound": 5008
+}
+```
+
+Both numbers travel with the error, so the reader knows how far past the ceiling the input
+went without rerunning anything.
+
 Refusals follow one rule: when the input cannot be trusted, no output is produced to trust
 either. A base commit the store does not hold, a tracked file whose object is missing, an
 index with an unresolved merge conflict, a document whose bytes will not decode, a path the

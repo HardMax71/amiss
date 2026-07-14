@@ -23,6 +23,42 @@ set its final disposition, and the digests of the facts underneath it. The `key_
 that produced the finding's identity is included, so an external system can recompute any
 finding's identity from the report alone.
 
+The envelope, down to its top-level keys:
+
+```json
+{
+  "schema": "amiss/scanner-report-envelope/v1",
+  "compatibility": "experimental",
+  "engine_digest": "sha256:…",
+  "payload_digest": "sha256:…",
+  "payload": {
+    "evaluation": {},
+    "result": { "status": "fail", "complete": true, "exit_code": 1 },
+    "summary": {},
+    "documents": [],
+    "findings": [],
+    "errors": []
+  }
+}
+```
+
+And one finding row from a real failing run, abridged to its skeleton:
+
+```json
+{
+  "kind": "explicit-target-missing",
+  "attribution": "introduced",
+  "effective_disposition": "fail",
+  "location": {
+    "path": "docs/src/introduction.md",
+    "side": "candidate",
+    "span": { "start_line": 49, "start_column": 1, "end_line": 49, "end_column": 38,
+              "start_byte": 2912, "end_byte": 2949 }
+  },
+  "finding_key": "sha256:56a75485757d90b5959298c05f6b0531139b016533db320905ee532e5dd42512"
+}
+```
+
 Findings are sorted by finding key, a domain-separated hash of kind plus scope. The human
 format prints the same facts in the same order, replaces every byte outside printable
 ASCII with a `\uXXXX` escape so a hostile filename cannot inject terminal control codes or

@@ -19,6 +19,43 @@ repository-rooted path resolves from the root. And when the invocation provides 
 branch the scan can vouch for is converted to the path it points at. Every other URL is
 `external-out-of-scope`: counted, reported, left alone.
 
+One document, every destination shape:
+
+```markdown
+[guide](guide.md)                     resolves beside this document
+[root](/docs/guide.md)                resolves from the repository root
+[escape](../../etc/passwd)            invalid-reference: it leaves the repository
+[dir](sub/)                           the author promised a directory
+[gh](https://github.com/o/r/blob/main/src/lib.rs)   a path, when the triple names o/r
+[web](https://example.com/manual)     external-out-of-scope: counted, left alone
+[anchor](guide.md#setup)              the path resolves; the fragment is recorded, not checked
+```
+
+The same decision, drawn:
+
+```dot process
+digraph resolve {
+  rankdir = LR;
+  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  edge [fontname = "Latin Modern, Georgia, serif", fontsize = 10, arrowsize = 0.7];
+  dest  [label = "destination"];
+  rel   [label = "relative or
+rooted path"];
+  gh    [label = "GitHub URL,
+same repository"];
+  other [label = "any other URL"];
+  tree  [label = "resolve against
+the tree"];
+  ext   [label = "external-out-of-scope"];
+  hit   [label = "target bytes
+and mode read"];
+  miss  [label = "explicit-target-missing"];
+  dest -> rel; dest -> gh [label = "with the triple"]; dest -> other;
+  rel -> tree; gh -> tree; other -> ext;
+  tree -> hit [label = "found"]; tree -> miss [label = "absent"];
+}
+```
+
 Resolution is exact, and the small rules matter. A trailing slash means the author promised
 a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even though
 `guide.md` exists. Percent-encoding is decoded exactly once, so `%252F` stays as the
