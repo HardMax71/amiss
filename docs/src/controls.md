@@ -1,34 +1,33 @@
 # Controls and policy
 
-Two layers may shape an evaluation, and they have opposite trust stories.
+Two kinds of configuration can shape a run, and they carry opposite amounts of trust.
 
-The repository policy is the one input read from the tree under evaluation, and it is
-correspondingly powerless. `.amiss/scanner-policy.json` may add document include roots, name a
-protected inventory of paths whose removal is always a finding, and raise finding
-dispositions. Raise only: a disposition may go from `record` to `warn` to `fail` and never
-downward, so the policy can make the check stricter for its own repository and cannot weaken
-it. An unknown field is an invalid configuration and an incomplete run, which is what stops
-the policy from becoming a plugin system by accretion.
+The repository policy is the one input read from the scanned tree itself, and it is
+correspondingly weak. `.amiss/scanner-policy.json` can add directories to scan, list
+protected paths whose removal is always a finding, and raise how severely a finding kind is
+treated. Raise only: `record` can become `warn` or `fail`, and nothing can go the other
+way. So a repository can make its own check stricter and can never loosen it. An unknown
+field makes the whole file invalid and the run incomplete, which is what keeps the policy
+from growing into a plugin system one field at a time.
 
-External controls arrive from outside the repository, because anything the repository could
-write, the pull request author could rewrite. The contract defines five: an organization
-floor that may tighten resource ceilings and dispositions across repositories, an adoption
-debt snapshot, a waiver bundle, trusted time, and an execution constraint. Each is
-identity-bound to the exact evaluation it authorizes: the floor, debt, and waiver documents
-name the repository and tree they were issued for, and a control presented against a
-different tree is a `CONTROL_BINDING_MISMATCH` refusal, not a shrug. Waivers are the only
-sanctioned way to pass with a known failure, they expire, and every application is a visible
-policy step in the finding it touched.
+External controls come from outside the repository, because anything stored inside it could
+be rewritten by the very pull request under review. The contract defines five: an
+organization floor (tightens ceilings and dispositions across many repositories), an
+adoption debt snapshot (a recorded list of known failures being worked off), a waiver
+bundle (time-limited permission to pass despite a named failure), trusted time, and an
+execution constraint. Each one is tied to the exact repository and tree it was issued for.
+Presenting a control against a different tree is a `CONTROL_BINDING_MISMATCH` refusal, not
+a shrug. Waivers are the only sanctioned way to pass with a known failure, they expire, and
+every waiver that touches a finding appears as a visible step in that finding's history.
 
-In the shipped v0 command line, all five external controls are `none`. The report says so in
-so many words, and claims no trust it does not have: `provider_verified` is false, the
-control block records the absence of each input, and nothing in the local lane pretends
-otherwise. The lane that delivers verified controls, a provider-signed request wire, is
-specified but deliberately unbuilt; the report format already carries the fields so that its
-arrival is not a breaking change. Until it lands, the honest reading of a local report is:
-these findings, under this policy, with no external authority consulted.
+In the shipped v0 command line, all five external controls are `none`, and the report says
+so plainly: `provider_verified` is false, and each control's absence is recorded. The
+delivery lane for verified controls, a provider-signed request format, is specified but not
+built. The report already has the fields so that adding the lane later breaks nothing. Until
+then, the honest reading of any local report is: these findings, under this policy, with no
+outside authority consulted.
 
 The control-plane finding family closes the loop from the other side. When a candidate
-weakens its own policy file, shrinks coverage, or touches the control configuration, the
-comparison itself raises `policy-weakened`, `coverage-reduced`, or `control-plane-changed`,
-so the act of loosening the rules is a finding under the rules being loosened.
+weakens its own policy file, shrinks what gets scanned, or edits the control configuration,
+the comparison itself raises `policy-weakened`, `coverage-reduced`, or
+`control-plane-changed`. Loosening the rules is reported under the rules being loosened.

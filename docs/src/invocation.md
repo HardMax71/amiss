@@ -2,13 +2,13 @@
 
 Install from crates.io, or build from source:
 
-```text
+```sh
 cargo install amiss
 ```
 
-The command line is closed. Every option below is the whole grammar, each may appear at most
-once, order does not matter, and anything else is an invalid invocation. There is no `--help`,
-which is why the grammar is written out here.
+The command line is closed: the grammar below is everything, each option appears at most
+once, order does not matter, and anything else is rejected as an invalid invocation. There
+is no `--help`, which is why the grammar is written out here.
 
 ```text
 amiss check --repo <path> --object-format <sha1|sha256>
@@ -20,27 +20,27 @@ amiss check --repo <path> --object-format <sha1|sha256>
             [--explain-scope] [--format <human|json>]
 ```
 
-`--base` and `--candidate` take full object IDs, never refs or abbreviations: Amiss evaluates
-the exact trees you name and resolves nothing on your behalf. Use `--index` in place of
-`--candidate` to evaluate the staged index against a base commit; a
-[skip-worktree](https://git-scm.com/docs/git-update-index) entry is still part of that
-snapshot, read from the index like any other.
+`--base` and `--candidate` take full commit IDs, never branch names or short forms. Amiss
+evaluates exactly the trees you name and resolves nothing for you. Use `--index` instead of
+`--candidate` to check what is currently staged against a base commit. An entry marked
+[skip-worktree](https://git-scm.com/docs/git-update-index) is still part of the staged
+state and is read from the index like everything else.
 
-The optional `--repository` triple is what turns a
-`https://github.com/<owner>/<name>/blob/...` URL in your prose into a path Amiss will actually
-check. Without it those links are foreign URLs and go unchecked, which the report says out
-loud. The owner and the name must be given in lowercase, and GitHub reports them with their
-original capitals, so a workflow passing `github.repository` has to lowercase it first. Amiss
-will not do that for you: the identity you pass is a claim it cannot authenticate, the report
-has no field to record what you originally typed, and quietly rewriting an unverifiable claim
-is not something a checker gets to do. It refuses instead, and says why.
+The optional `--repository` triple tells Amiss which GitHub repository this tree is, which
+turns links like `https://github.com/<owner>/<name>/blob/main/src/lib.rs` in your prose into
+paths it can actually check. Without the triple, such links are treated as foreign URLs and
+skipped, and the report says so. The owner and name must be lowercase. GitHub reports them
+with whatever capitals the owner registered, so a workflow passing `github.repository` has
+to lowercase the value first. Amiss will not do that for you: the identity you pass is a
+claim it cannot verify, and a checker that silently rewrites an unverifiable claim has
+started making things up. It refuses instead, and the refusal says why.
 
-`--explain-scope` prints the discovery scope rules and exits. `--format json` emits the
-canonical report described in [The report](report.md); `human` prints a projection of the same
-facts, capped at the first two hundred findings in canonical order.
+`--explain-scope` prints the scanning scope rules and exits. `--format json` emits the exact
+report described in [The report](report.md); `human` prints the same facts readably, capped
+at the first two hundred findings.
 
-Exit codes are classes, not details. Exit 0 is a complete run with nothing blocking. Exit 1 is
-a complete run with at least one blocking finding. Exit 2 is anything that stopped Amiss from
-producing a result it trusts: an unreadable repository, an invalid invocation, a resource
-ceiling crossed, a document it could not decode. The report distinguishes the details; the exit
-code only ever promises which of the three worlds you are in.
+Exit codes are three classes, not detail. Exit 0: the run completed and nothing blocks. Exit
+1: the run completed and at least one finding blocks. Exit 2: something prevented a
+trustworthy result, an unreadable repository, a bad invocation, a crossed limit, an
+undecodable document. Details live in the report; the exit code only tells you which of the
+three worlds you are in.
