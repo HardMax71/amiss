@@ -45,10 +45,11 @@ it trusts.
 
 ## Status
 
-Experimental, and the reports say so in a `compatibility` field. Nothing is published to any
-registry, no release has shipped, and the license is undecided. The local command is the whole
-product today; the research and the normative specifications behind it are not in this tree
-yet.
+Experimental, and the reports say so in a `compatibility` field. The license is FSL-1.1-ALv2:
+free to use, including commercially, but not to turn into a competing product, and each release
+becomes Apache-2.0 two years on. Releases are cut by a bot: merging its release PR publishes
+the crates, the tag, and the GitHub release. The local command is the whole product today; the
+research and the normative specifications behind it are not in this tree yet.
 
 ## Development
 
