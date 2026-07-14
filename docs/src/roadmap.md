@@ -28,3 +28,31 @@ trustworthy costume.
 Performance work follows measurement. The published ceilings bound the worst case, a
 benchmark job watches the common case, and the known slow corners in the pinned upstream
 grammars are documented in the corpus notes rather than papered over.
+
+## The specified future, in claim kinds
+
+The project record specifies a ladder of claim kinds beyond the v0 scanner, each named after
+the question it answers and each grounded in an observed failure from
+[the evidence base](evidence.md). Deterministic kinds: a snippet claim (displayed code equals
+the selected source), a value claim (a number or name in prose equals a value extracted from
+code, for the hand-written counts that were wrong everywhere), an inventory claim (a
+documented set equals an extracted set, two-sided, because the audited page that listed only
+correct files still failed by omission), a tree claim, a graph claim, and a transcript claim
+(a recorded command run, fingerprinting the binary that produced it, because transcripts
+against a stale binary stayed green). Two review kinds sit above them: a narrative claim,
+free prose attested against fingerprinted evidence, and an external claim, prose that depends
+on the world outside the repository and re-checks on a schedule, the one place wall-clock
+time is a sanctioned input.
+
+Extraction wider than explicit links is specified and deliberately deferred, because the
+noise classes are documented: prose that tells the reader to create a file matches every
+existing-directory heuristic forever, gitignored build artifacts look like broken references,
+and a bare filename that binds uniquely today becomes ambiguous the day a same-named file
+appears. Each of those has a worked answer in the record, and none of the answers is free, so
+none of them ships until the simple layer has earned its keep.
+
+The enforcement model for all of it is tiered by proof strength, a lesson from the
+failure-mode study: hard blocks only for what is deterministically wrong, required human
+acknowledgment for impact, advisory discovery for everything heuristic, and no bulk
+acceptance gesture anywhere, because the audit's cheapest-bypass finding applies to any gate
+this project ever ships.

@@ -28,3 +28,35 @@ looks exactly like a real one until it burns you.
 
 And it accepts no configuration that would let a repository weaken its own check. No
 suppression comments, no severity downgrades, no hooks. The absence is the point.
+
+## Against the alternatives
+
+The project record compares the design against every neighboring school, and says where each
+one wins.
+
+Swimm wins wherever docs are authored inside its platform: its auto-sync genuinely repairs a
+renamed token without a human. Amiss never edits prose, because the best published
+comment-updating system reached 16.7% exact match, and a tool that is wrong five times out of
+six does not get write access. Swimm sees only documents written in its format; Amiss reads
+the repository as it already is.
+
+Fiberplane's drift is the closest mechanism, and for a solo developer with twenty hand-placed
+anchors it is the right amount of tool: an authored `@path#Symbol` anchor is never a false
+positive. It checks only what someone annotated, though, and unannotated pages are its silent
+majority. Amiss starts from zero authoring and reports the whole surface, including the pages
+nobody thought to anchor.
+
+The AI-rewrite agents win the pitch, because "we update your docs" sounds better than "we
+tell you what moved". They lose everything that makes a gate: no coverage guarantee for the
+page the model never visited, nondeterministic output, and a tired reviewer as the only check
+on plausible wrong text. The honest relationship is composition: a deterministic finding
+queue is a good prompt feed for such an agent, and Amiss is deliberately the deterministic
+half.
+
+Executable-docs systems (doctest and its relatives) prove more than Amiss does about the
+lines they execute, and nothing about any other line. Regeneration pipelines eliminate drift
+on derivable content and say nothing about hand prose; user zero's stale-generator story in
+[The evidence base](evidence.md) shows regeneration passing forever on wrong output.
+Freshness dates are universal and free and gate on the calendar rather than on change. Each
+of these is a fine layer. None of them answers the question Amiss answers, and Amiss does not
+answer theirs.
