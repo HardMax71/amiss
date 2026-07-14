@@ -33,6 +33,10 @@ jobs:
             platform: windows-x86_64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -47,6 +51,9 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-latest" ]; then suffix=".exe"; fi
           cp "target/${{ matrix.target }}/release/amiss$suffix" "staged/amiss-${{ matrix.platform }}$suffix"
           cp "target/${{ matrix.target }}/release/amiss-bootstrap$suffix" "staged/bootstrap-${{ matrix.platform }}$suffix"
+      - uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: staged/*
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: engine-${{ matrix.platform }}
