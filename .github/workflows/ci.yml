@@ -114,7 +114,7 @@ jobs:
             fuzz/target
           key: fuzz-smoke-${{ hashFiles('rust-toolchain.toml', 'fuzz/Cargo.lock') }}
           restore-keys: fuzz-smoke-
-      - run: cargo update --workspace --offline && cargo test --locked --release
+      - run: cargo update --workspace && cargo test --locked --release
         working-directory: fuzz
 
   platform-tests:
@@ -143,7 +143,7 @@ jobs:
           restore-keys: platform-${{ runner.os }}-
       - run: cargo nextest run --workspace --locked
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
-      - run: cargo update --workspace --offline && cargo test --locked --release
+      - run: cargo update --workspace && cargo test --locked --release
         working-directory: fuzz
 
   coverage:
