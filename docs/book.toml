@@ -8,6 +8,6 @@ src = "src"
 command = "mdbook-graphviz"
 
 [output.html]
-additional-css = ["latex.css"]
+additional-css = ["docs.css"]
 default-theme = "light"
 git-repository-url = "https://github.com/HardMax71/amiss"
