@@ -1,0 +1,82 @@
+@font-face {
+  font-family: "Latin Modern";
+  src: url("fonts/LM-regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Latin Modern";
+  src: url("fonts/LM-italic.woff2") format("woff2");
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Latin Modern";
+  src: url("fonts/LM-bold.woff2") format("woff2");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Latin Modern";
+  src: url("fonts/LM-bold-italic.woff2") format("woff2");
+  font-weight: bold;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  --content-max-width: 46rem;
+}
+
+.content main {
+  font-family: "Latin Modern", Georgia, serif;
+  font-size: 1.06rem;
+  line-height: 1.55;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.content h1, .content h2, .content h3, .content h4 {
+  font-family: "Latin Modern", Georgia, serif;
+  font-weight: bold;
+  text-align: left;
+}
+
+.content h1 { font-size: 1.9rem; }
+.content h2 { font-size: 1.4rem; margin-top: 2.2rem; }
+.content h3 { font-size: 1.15rem; font-style: italic; font-weight: normal; }
+
+.content a { text-decoration: none; }
+.content a:hover { text-decoration: underline; }
+
+.content code {
+  font-size: 0.86em;
+  hyphens: none;
+}
+
+.content pre {
+  text-align: left;
+  hyphens: none;
+}
+
+.content table {
+  margin: 1.2rem auto;
+  border-collapse: collapse;
+}
+.content table td, .content table th {
+  border: none;
+  border-bottom: 1px solid var(--table-border-color);
+  padding: 0.35rem 0.9rem;
+}
+.content table thead th {
+  border-bottom: 2px solid currentColor;
+  background: none;
+}
+.content table tbody tr:nth-child(2n) { background: none; }
+
+.content svg { max-width: 100%; height: auto; display: block; margin: 1.4rem auto; }
+
+.chapter { font-family: "Latin Modern", Georgia, serif; }

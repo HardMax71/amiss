@@ -1,0 +1,13 @@
+[book]
+title = "Amiss"
+authors = ["Max Azatian"]
+language = "en"
+src = "src"
+
+[preprocessor.graphviz]
+command = "mdbook-graphviz"
+
+[output.html]
+additional-css = ["latex.css"]
+default-theme = "light"
+git-repository-url = "https://github.com/HardMax71/amiss"
