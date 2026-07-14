@@ -53,6 +53,7 @@ dependencies = [
 name = "amiss"
 version = "0.0.0"
 dependencies = [
+ "amiss-fixtures",
  "amiss-git",
  "amiss-scan",
  "amiss-wire",
@@ -75,6 +76,10 @@ dependencies = [
 [[package]]
 name = "amiss-fixtures"
 version = "0.0.0"
+dependencies = [
+ "flate2",
+ "sha1-checked",
+]
 
 [[package]]
 name = "amiss-git"

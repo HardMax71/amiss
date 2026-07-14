@@ -995,71 +995,6 @@ fn unsupplied_controls_report_none_and_claim_no_trust() {
     );
 }
 
-/// Writes `body` to the object store as a blob and returns its OID.
-#[expect(clippy::expect_used, reason = "test fixture helper")]
-fn git_object(dir: &Path, body: &[u8]) -> String {
-    use std::io::Write as _;
-    let mut child = Command::new("git")
-        .args(["hash-object", "-w", "--stdin"])
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("spawn git");
-    child
-        .stdin
-        .as_mut()
-        .expect("git stdin")
-        .write_all(body)
-        .expect("write blob body");
-    let out = child.wait_with_output().expect("git output");
-    assert!(
-        out.status.success(),
-        "hash-object: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8(out.stdout)
-        .expect("git output utf-8")
-        .trim()
-        .to_owned()
-}
-
-/// Stages one index entry whose path is exactly `path_bytes`, which may hold
-/// bytes no shell or checkout would preserve, by feeding git raw index-info on
-/// stdin.
-#[expect(clippy::expect_used, reason = "test fixture helper")]
-fn stage_raw_path(dir: &Path, blob: &str, path_bytes: &[u8]) {
-    use std::io::Write as _;
-    let mut spec = format!("100644 {blob}\t").into_bytes();
-    spec.extend_from_slice(path_bytes);
-    spec.push(0);
-    let mut child = Command::new("git")
-        .args(["update-index", "--add", "--index-info"])
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("spawn git");
-    child
-        .stdin
-        .as_mut()
-        .expect("git stdin")
-        .write_all(&spec)
-        .expect("write index-info");
-    let out = child.wait_with_output().expect("git output");
-    assert!(
-        out.status.success(),
-        "index-info: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
 /// A skip-worktree entry is still part of the staged snapshot; the bit only tells
 /// the working tree not to bother materializing it. So in index mode its blob is
 /// read from the index exactly like any other, its references resolve, and the
@@ -1140,14 +1075,26 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
     // ESC, an ANSI colour run, a forged GitHub Actions command, a bell, and a
-    // carriage return, all valid UTF-8 and all valid in a RepoPath.
+    // carriage return, all valid UTF-8 and all valid in a RepoPath. The
+    // candidate objects are written straight into the store: git for Windows
+    // refuses to stage a path holding a colon or a control byte, and the same
+    // fixture must exist on every platform.
     let hostile = "docs/\u{1b}[31m::error::forged\u{7}\u{d}.md";
-    let blob = git_object(root, b"# X\n\n[b](nowhere.md)\n");
-    stage_raw_path(root, &blob, hostile.as_bytes());
-    let tree = git(root, &["write-tree"]).trim().to_owned();
-    let candidate = git(root, &["commit-tree", &tree, "-p", &base, "-m", "hostile"])
+    let name = hostile.as_bytes().strip_prefix(b"docs/").unwrap();
+    let blob = amiss_fixtures::loose_object(root, "blob", b"# X\n\n[b](nowhere.md)\n").unwrap();
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
         .trim()
         .to_owned();
+    let docs = amiss_fixtures::tree_object(root, &[("100644", name, blob.as_str())]).unwrap();
+    let tree = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("40000", b"docs".as_slice(), docs.as_str()),
+        ],
+    )
+    .unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "hostile").unwrap();
 
     let repo = root.to_str().unwrap_or_default().to_owned();
     let (code, human, _stderr) = amiss(&[

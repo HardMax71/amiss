@@ -194,12 +194,12 @@ fn an_untracked_file_cannot_satisfy_an_index_mode_reference() {
     );
 }
 
-/// Runs a repository whose tree and index both carry one entry named `name`,
-/// alongside two documents the scanner can read.
-#[cfg(unix)]
+/// Runs a repository whose tree or index carries one entry named `name`,
+/// alongside two documents the scanner can read. The name never crosses argv,
+/// the filesystem, or a git port's opinion of what a path may hold: the entry
+/// is written straight into the store or the index bytes, so the same fixture
+/// exists on every platform, including the ones whose git would refuse it.
 fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
-    use std::io::Write as _;
-
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -213,53 +213,44 @@ fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "base"]);
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    // The name never crosses argv or the filesystem: it goes to git as raw bytes
-    // on stdin, which is the only way to stage one no operating system would keep.
-    let git_stdin = |args: &[&str], input: &[u8]| -> String {
-        let mut child = Command::new("git")
-            .args(args)
-            .current_dir(root)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", root.join("absent-global-config"))
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .expect("spawn git");
-        child
-            .stdin
-            .as_mut()
-            .expect("git stdin")
-            .write_all(input)
-            .expect("write git stdin");
-        let out = child.wait_with_output().expect("git output");
-        assert!(
-            out.status.success(),
-            "git {args:?} failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        String::from_utf8(out.stdout).expect("git stdout utf-8")
-    };
-
-    let blob = git_stdin(&["hash-object", "-w", "--stdin"], b"# Hidden\n")
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
         .trim()
         .to_owned();
-    let mut spec = Vec::new();
-    spec.extend_from_slice(b"100644 ");
-    spec.extend_from_slice(blob.as_bytes());
-    spec.push(b'\t');
-    spec.extend_from_slice(name);
-    spec.push(0);
-    git_stdin(&["update-index", "--add", "--index-info"], &spec);
+    let guide = git(root, &["rev-parse", "HEAD:docs/guide.md"])
+        .trim()
+        .to_owned();
+    let blob = amiss_fixtures::loose_object(root, "blob", b"# Hidden\n").unwrap();
 
-    let tree = git(root, &["write-tree"]).trim().to_owned();
-    let candidate = git(
-        root,
-        &["commit-tree", &tree, "-p", &base, "-m", "candidate"],
-    )
-    .trim()
-    .to_owned();
+    let candidate = if index_mode {
+        amiss_fixtures::index_file(
+            root,
+            &[
+                (b"README.md".as_slice(), readme.as_str()),
+                (b"docs/guide.md".as_slice(), guide.as_str()),
+                (name, blob.as_str()),
+            ],
+        )
+        .unwrap();
+        String::new()
+    } else {
+        let docs_entries: Vec<(&str, &[u8], &str)> = match name.strip_prefix(b"docs/") {
+            Some(inner) => vec![
+                ("100644", b"guide.md".as_slice(), guide.as_str()),
+                ("100644", inner, blob.as_str()),
+            ],
+            None => vec![("100644", b"guide.md".as_slice(), guide.as_str())],
+        };
+        let docs = amiss_fixtures::tree_object(root, &docs_entries).unwrap();
+        let mut root_entries: Vec<(&str, &[u8], &str)> = vec![
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("40000", b"docs".as_slice(), docs.as_str()),
+        ];
+        if !name.contains(&b'/') {
+            root_entries.push(("100644", name, blob.as_str()));
+        }
+        let tree = amiss_fixtures::tree_object(root, &root_entries).unwrap();
+        amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap()
+    };
     let repo = root.to_str().unwrap().to_owned();
     let (code, stdout) = if index_mode {
         amiss(&[
@@ -302,10 +293,7 @@ fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
 /// this tool could have, because the report would come back complete and passing
 /// with a document simply absent from it, and the absence is the thing nobody can
 /// see. So there is no report at all: the path defect is a retained analysis error,
-/// the run is incomplete, and the exit is 2. The fixtures are Unix-only because
-/// they stage a name no Windows checkout would carry; the discovery code they
-/// exercise has no platform in it.
-#[cfg(unix)]
+/// the run is incomplete, and the exit is 2.
 #[test]
 fn a_document_the_scanner_cannot_name_is_refused_rather_than_dropped() {
     for name in [
@@ -344,7 +332,6 @@ fn a_document_the_scanner_cannot_name_is_refused_rather_than_dropped() {
 /// a name longer than either. The budget is charged first, so the answer is not a
 /// bare refusal but a crossing that names the resource and both numbers, and the run
 /// is still incomplete with nothing to mistake for a result.
-#[cfg(unix)]
 #[test]
 fn a_path_longer_than_the_domain_allows_is_a_charged_crossing_not_a_silent_skip() {
     let long = format!("docs/{}.md", "x".repeat(5000));

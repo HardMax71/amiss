@@ -2,6 +2,8 @@ use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+use sha1_checked::Digest as _;
+
 /// The adversarial 4 MiB document behind the parser-eligibility law: the
 /// densest legal stress on the reference grammars while staying valid under
 /// every contract ceiling. Unpaired emphasis delimiters exercise the
@@ -188,6 +190,160 @@ pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
     } else {
         Err(std::io::Error::other("mklink /J failed"))
     }
+}
+
+/// Writes one loose object of `kind` framing `body` into the store at
+/// `root/.git` and returns its full hex object ID. The bytes go straight to
+/// disk, which is what lets a fixture carry a name or a path no operating
+/// system or git port would accept from a command line: git for Windows
+/// refuses to stage a path holding a colon or a control byte, and a fixture
+/// routed through it quietly degenerates into a tree that no longer tests
+/// anything. The scanner reads the store, so the store is where hostile
+/// bytes are planted, identically on every platform.
+///
+/// # Errors
+///
+/// Any filesystem failure, as plain I/O errors.
+pub fn loose_object(root: &Path, kind: &str, body: &[u8]) -> std::io::Result<String> {
+    let mut framed = Vec::with_capacity(body.len().saturating_add(32));
+    framed.extend_from_slice(kind.as_bytes());
+    framed.push(b' ');
+    framed.extend_from_slice(body.len().to_string().as_bytes());
+    framed.push(0);
+    framed.extend_from_slice(body);
+    let oid = hex(&sha1(&framed));
+    let (fan, rest) = oid.split_at(2);
+    let bucket = root.join(".git").join("objects").join(fan);
+    std::fs::create_dir_all(&bucket)?;
+    let file = bucket.join(rest);
+    // The store is content-addressed and git writes loose objects read-only,
+    // so an object that already exists is this object, and stays untouched.
+    if !file.exists() {
+        let mut encoder =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&framed)?;
+        std::fs::write(file, encoder.finish()?)?;
+    }
+    Ok(oid)
+}
+
+/// Writes a tree object holding exactly `entries`, each a git mode literal
+/// such as `100644` or `40000`, raw name bytes, and the hex object ID the
+/// name resolves to. Entries are sorted here the way the tree grammar
+/// demands, a directory comparing as its name with `/` appended, so callers
+/// list them in any order.
+///
+/// # Errors
+///
+/// Any filesystem failure or malformed object ID, as plain I/O errors.
+pub fn tree_object(root: &Path, entries: &[(&str, &[u8], &str)]) -> std::io::Result<String> {
+    let mut rows = entries.to_vec();
+    rows.sort_by_key(|(mode, name, _oid)| {
+        let mut key = name.to_vec();
+        if *mode == "40000" {
+            key.push(b'/');
+        }
+        key
+    });
+    let mut body = Vec::new();
+    for (mode, name, oid) in rows {
+        body.extend_from_slice(mode.as_bytes());
+        body.push(b' ');
+        body.extend_from_slice(name);
+        body.push(0);
+        body.extend_from_slice(&oid_bytes(oid)?);
+    }
+    loose_object(root, "tree", &body)
+}
+
+/// Writes a commit object over `tree` with `parents`, under the identity and
+/// date the `git` helper pins, so directly written history is as
+/// deterministic as the spawned kind.
+///
+/// # Errors
+///
+/// Any filesystem failure, as plain I/O errors.
+pub fn commit_object(
+    root: &Path,
+    tree: &str,
+    parents: &[&str],
+    message: &str,
+) -> std::io::Result<String> {
+    let mut body = format!("tree {tree}\n");
+    for parent in parents {
+        let _infallible = std::fmt::Write::write_fmt(&mut body, format_args!("parent {parent}\n"));
+    }
+    body.push_str("author t <t@example.invalid> 1767225600 +0000\n");
+    body.push_str("committer t <t@example.invalid> 1767225600 +0000\n\n");
+    body.push_str(message);
+    body.push('\n');
+    loose_object(root, "commit", body.as_bytes())
+}
+
+/// Overwrites `root/.git/index` with a version-two index holding exactly
+/// `entries` as stage-zero regular files, each a raw path and the hex blob
+/// ID it names. Paths sort by their bytes, a path longer than the format's
+/// twelve length bits stores the `0xFFF` sentinel, and every stat field is
+/// zero, which doubles as proof the scanner never trusts one.
+///
+/// # Errors
+///
+/// Any filesystem failure or malformed object ID, as plain I/O errors.
+pub fn index_file(root: &Path, entries: &[(&[u8], &str)]) -> std::io::Result<()> {
+    let mut rows = entries.to_vec();
+    rows.sort_by_key(|(path, _oid)| path.to_vec());
+    let mut content = Vec::new();
+    content.extend_from_slice(b"DIRC");
+    content.extend_from_slice(&2_u32.to_be_bytes());
+    let count = u32::try_from(rows.len()).map_err(std::io::Error::other)?;
+    content.extend_from_slice(&count.to_be_bytes());
+    for (path, oid) in rows {
+        let start = content.len();
+        content.extend_from_slice(&[0_u8; 24]);
+        content.extend_from_slice(&0o100_644_u32.to_be_bytes());
+        content.extend_from_slice(&[0_u8; 12]);
+        content.extend_from_slice(&oid_bytes(oid)?);
+        let name_bits = u16::try_from(path.len().min(0xFFF)).unwrap_or(0xFFF);
+        content.extend_from_slice(&name_bits.to_be_bytes());
+        content.extend_from_slice(path);
+        let unpadded = content.len().saturating_sub(start);
+        let pad = 8_usize.saturating_sub(unpadded.checked_rem(8).unwrap_or(0));
+        content.resize(content.len().saturating_add(pad), 0);
+    }
+    let checksum = sha1(&content);
+    content.extend_from_slice(&checksum);
+    std::fs::write(root.join(".git").join("index"), content)
+}
+
+fn sha1(data: &[u8]) -> Vec<u8> {
+    let mut hasher = sha1_checked::Sha1::builder()
+        .detect_collision(false)
+        .build();
+    hasher.update(data);
+    hasher.try_finalize().hash().to_vec()
+}
+
+fn hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
+    }
+    out
+}
+
+fn oid_bytes(oid: &str) -> std::io::Result<Vec<u8>> {
+    if oid.len() != 40 {
+        return Err(std::io::Error::other("object IDs here are full sha1 hex"));
+    }
+    oid.as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|text| u8::from_str_radix(text, 16).ok())
+                .ok_or_else(|| std::io::Error::other("object IDs here are full sha1 hex"))
+        })
+        .collect()
 }
 
 /// One quiet, hermetic git invocation with pinned identity and dates. The

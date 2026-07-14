@@ -5,6 +5,8 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+flate2 = "1"
+sha1-checked = "0.10"
 
 [lints]
 workspace = true
