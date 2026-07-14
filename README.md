@@ -6,58 +6,28 @@ reference stops resolving, or when the file behind it changed while the prose ar
 not. It reads structure, not meaning: it will not tell you whether a sentence is true, and it
 does not guess.
 
-A reference that does not resolve is a structural failure, and under `enforce` it fails the
-run. A file changing under a document never rises above a warning, whatever the profile: it is
-a signal, not a verdict. Amiss keeps no state between runs, so there is nothing to migrate and
-nothing to drift, and it accepts no claims or waivers from the repository it scans, because a
-check whose subject can switch it off is not a check.
+It keeps no state, executes nothing, never touches the network, never writes, and emits
+byte-identical reports for identical inputs on every platform. A reference that does not
+resolve fails the run under `enforce`; a file changing under an unchanged paragraph is always
+a signal for a human, never a machine verdict.
 
-## Build and run
+```sh
+cargo install amiss
 
-Nothing is published yet, so build it:
-
-```
-cargo build --release -p amiss
-```
-
-The command line is closed. Every option is listed here, each may appear at most once, order
-does not matter, and there is no `--help`.
-
-```
-amiss check --repo <path> --object-format <sha1|sha256>
-            --base <full-oid> (--candidate <full-oid> | --index)
-            [--repository github.com/<owner>/<name>
-             --ref refs/heads/<name>
-             --default-branch-ref refs/heads/<name>]
-            --profile <observe|enforce>
-            [--explain-scope] [--format <human|json>]
+amiss check --repo . --object-format sha1 \
+    --base "$(git rev-parse HEAD~1)" --candidate "$(git rev-parse HEAD)" \
+    --profile observe
 ```
 
-`--base` and `--candidate` take full object IDs, never refs or abbreviations. Use `--index` in
-place of `--candidate` to evaluate the staged index against a base commit. The optional
-`--repository` triple turns a GitHub blob URL in your prose into a path Amiss will check;
-without it those links are foreign URLs and go unchecked, which the report says out loud.
+Exit 0 means a complete run with nothing blocking, 1 a complete run with a blocking finding,
+and 2 anything that prevented a result worth trusting.
 
-`observe` warns on everything and is where a rollout starts. `enforce` turns an unresolved
-reference into a failure. Exit 0 is a complete run with nothing blocking, exit 1 is a complete
-run with a blocking finding, and exit 2 is anything that stopped Amiss from producing a result
-it trusts.
+The [documentation](https://hardmax71.github.io/amiss/) has the rest: the full command
+grammar, the evaluation semantics, the report contract, resource ceilings, the security
+model, and how this repository scans itself with its own scanner in CI.
 
-## Status
+Licensed [FSL-1.1-ALv2](LICENSE.md): free to use, including commercially, not to turn into a
+competing product, and each release becomes Apache-2.0 two years on.
 
-Experimental, and the reports say so in a `compatibility` field. The license is FSL-1.1-ALv2:
-free to use, including commercially, but not to turn into a competing product, and each release
-becomes Apache-2.0 two years on. Releases are cut by a bot: merging its release PR publishes
-the crates, the tag, and the GitHub release. The local command is the whole product today; the
-research and the normative specifications behind it are not in this tree yet.
-
-## Development
-
-The toolchain is pinned in `rust-toolchain.toml`, and `unsafe` is forbidden in every crate.
-Hooks run through prek: formatting and the cheap checks on commit, then Clippy with warnings
-denied, the test suite, `cargo deny`, and `cargo shear` on push.
-
-```
-cargo nextest run --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-```
+Development runs through pinned hooks: `cargo nextest run --workspace` and
+`cargo clippy --workspace --all-targets -- -D warnings` are the local gate.
