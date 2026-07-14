@@ -178,10 +178,16 @@ pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
 
 #[cfg(windows)]
 pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
+    // cmd reads a forward slash as a switch, so the paths hand it backslashes
+    let flip = |path: &Path| {
+        path.to_str()
+            .map(|text| text.replace('/', "\\"))
+            .ok_or_else(|| std::io::Error::other("junction paths are utf-8 here"))
+    };
+    let link = flip(link)?;
+    let target = flip(target)?;
     let status = Command::new("cmd")
-        .args(["/C", "mklink", "/J"])
-        .arg(link)
-        .arg(target)
+        .args(["/C", "mklink", "/J", link.as_str(), target.as_str()])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .status()?;
