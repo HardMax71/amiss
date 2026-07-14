@@ -34,7 +34,7 @@ Each promise below is enforced by a test in the suite:
 - It never writes to your repository. The tests snapshot the whole tree before and after
   every command and compare, and they also run it against a tree it has no permission to
   write.
-- It never runs your code and never calls the `git` command. It reads Git's files directly:
+- It never runs your code and never calls the `git` command. It reads [Git](https://git-scm.com)'s files directly:
   objects, packs, and the index.
 - It never follows symlinks while reading. A link placed at the repository root, at `.git`,
   or anywhere along an object's path is refused, and the refusal is never confused with a
@@ -44,3 +44,7 @@ Each promise below is enforced by a test in the suite:
   run.
 - Every internal limit is a published number. Hitting one produces a typed error naming the
   limit and the observed value, never a hang or a silent cutoff.
+
+The rest of this book walks those promises in the order a run does: what counts as input,
+what gets scanned, how references resolve, what the report says, and where the boundaries
+sit. Start with [Invocation](invocation.md) if you just want to run it.

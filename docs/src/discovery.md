@@ -1,7 +1,7 @@
 # Discovery
 
 Discovery decides which files count as documents, and it is deliberately narrow. Markdown
-and MDX files are documents, classified `structured-markdown` and `structured-mdx`. A small
+and [MDX](https://mdxjs.com) files are documents, classified `structured-markdown` and `structured-mdx`. A small
 fixed list of well-known extensionless names, `llms.txt` among them, is classified
 `plain-advisory` and scanned by a profile that extracts nothing but honestly reports that
 the file exists and was not parsed. Every other file is a possible link target, not a

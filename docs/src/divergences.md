@@ -25,7 +25,7 @@ pinned Rust parser does not turn into a link. A reference written that way goes 
 That is under-reporting, the safer direction to fail, and it is written down in the corpus
 notes rather than waiting to be discovered. Two upstream test documents make the parser
 panic; the engine catches both as `PARSER_PANIC`, and both live in the corpus as regression
-tests. The GFM spec text says `ftp://` should autolink where the pinned bundle and
+tests. The [GFM](https://github.github.com/gfm/) spec text says `ftp://` should autolink where the pinned bundle and
 GitHub's renderer disagree; the bundle wins, and the corpus records why.
 
 One more, for flavor: the object store re-hashes everything with SHA-1 collision detection,

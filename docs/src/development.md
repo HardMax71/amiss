@@ -2,7 +2,7 @@
 
 The toolchain version is pinned in `rust-toolchain.toml`, `unsafe` is forbidden in every
 crate, and the lint table denies panics, lossy casts, wildcard matches, and undocumented
-errors. Hooks run through prek: formatting and the cheap checks on commit, then Clippy with
+errors. Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
 warnings denied, the full test suite, `cargo deny`, and `cargo shear` on push. CI runs the
 same two hook stages, so passing locally and passing remotely are the same thing unless the
 hook table itself has a bug.
@@ -16,8 +16,8 @@ Tests answer to a house rule called the teeth check: a test earns its place by f
 the code it guards is deliberately broken, and that mutation is performed before the test
 is trusted. A weekly mutation-testing job keeps the measured version of that claim honest.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
-counts, extraction results, and byte positions for every case from the upstream CommonMark,
-GFM, and MDX suites; `corpus/README.md` documents every known difference. Each parser that
+counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
+[GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; `corpus/README.md` documents every known difference. Each parser that
 takes untrusted bytes also has a fuzz target under `fuzz/`, with committed regression
 inputs and a nightly coverage-guided run.
 
@@ -28,6 +28,6 @@ the pull request that broke it fails.
 Releases are automated. A bot keeps a release pull request current with the version bump
 and changelog; merging it publishes the crates, the version tag, and the GitHub release.
 Security checks are layered in CI as well: dependency update PRs with a cooldown, a weekly
-advisory re-check against a fresh database, CodeQL over both the Rust and the workflows,
-Scorecard, secret scanning with push protection, and build provenance attestations on
+advisory re-check against a fresh database, [CodeQL](https://codeql.github.com) over both the Rust and the workflows,
+[Scorecard](https://scorecard.dev), secret scanning with push protection, and build provenance attestations on
 release binaries.
