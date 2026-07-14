@@ -26,7 +26,7 @@ evaluates exactly the trees you name and resolves nothing for you. Use `--index`
 [skip-worktree](https://git-scm.com/docs/git-update-index) is still part of the staged
 state and is read from the index like everything else.
 
-The optional `--repository` triple tells Amiss which GitHub repository this tree is, which
+The optional `--repository` triple tells Amiss which GitHub repository this tree belongs to, which
 turns links like `https://github.com/<owner>/<name>/blob/main/src/lib.rs` in your prose into
 paths it can actually check. Without the triple, such links are treated as foreign URLs and
 skipped, and the report says so. The owner and name must be lowercase. GitHub reports them
