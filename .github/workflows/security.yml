@@ -1,0 +1,41 @@
+name: security
+
+on:
+  schedule:
+    - cron: "40 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
+        with:
+          tool: cargo-deny@0.20.2
+      - run: cargo deny check advisories sources
+      - run: cargo deny check advisories sources
+        working-directory: fuzz
+
+  workflow-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
+        with:
+          tool: zizmor@1.26.1
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --min-severity low .github/
