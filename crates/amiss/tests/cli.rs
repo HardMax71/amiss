@@ -1075,10 +1075,7 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
     // ESC, an ANSI colour run, a forged GitHub Actions command, a bell, and a
-    // carriage return, all valid UTF-8 and all valid in a RepoPath. The
-    // candidate objects are written straight into the store: git for Windows
-    // refuses to stage a path holding a colon or a control byte, and the same
-    // fixture must exist on every platform.
+    // carriage return, all valid UTF-8 and all valid in a RepoPath.
     let hostile = "docs/\u{1b}[31m::error::forged\u{7}\u{d}.md";
     let name = hostile.as_bytes().strip_prefix(b"docs/").unwrap();
     let blob = amiss_fixtures::loose_object(root, "blob", b"# X\n\n[b](nowhere.md)\n").unwrap();

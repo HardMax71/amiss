@@ -64,6 +64,8 @@ fn a_policy_that_names_a_command_or_a_plugin_is_refused_and_nothing_runs() {
     fs::create_dir_all(root.join(".amiss")).unwrap();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(root.join("docs/guide.md"), "# Guide\n\n[self](guide.md)\n").unwrap();
+    // a Windows temp path carries backslashes, which JSON must see escaped
+    let command = format!("touch {}", sentinel.display()).replace('\\', "\\\\");
     fs::write(
         root.join(".amiss/scanner-policy.json"),
         format!(
@@ -72,10 +74,9 @@ fn a_policy_that_names_a_command_or_a_plugin_is_refused_and_nothing_runs() {
   "document_includes": [],
   "protected_inventory": [],
   "finding_dispositions": [],
-  "command": "touch {}",
+  "command": "{command}",
   "plugin": "./evil.so"
-}}"#,
-            sentinel.display()
+}}"#
         ),
     )
     .unwrap();
@@ -195,10 +196,8 @@ fn an_untracked_file_cannot_satisfy_an_index_mode_reference() {
 }
 
 /// Runs a repository whose tree or index carries one entry named `name`,
-/// alongside two documents the scanner can read. The name never crosses argv,
-/// the filesystem, or a git port's opinion of what a path may hold: the entry
-/// is written straight into the store or the index bytes, so the same fixture
-/// exists on every platform, including the ones whose git would refuse it.
+/// alongside two documents the scanner can read. The entry is written straight
+/// into the store or index bytes, past any git port's opinion of the name.
 fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
     let dir = TempDir::new().unwrap();
     let root = dir.path();

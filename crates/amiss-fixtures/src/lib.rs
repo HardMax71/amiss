@@ -193,13 +193,9 @@ pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
 }
 
 /// Writes one loose object of `kind` framing `body` into the store at
-/// `root/.git` and returns its full hex object ID. The bytes go straight to
-/// disk, which is what lets a fixture carry a name or a path no operating
-/// system or git port would accept from a command line: git for Windows
-/// refuses to stage a path holding a colon or a control byte, and a fixture
-/// routed through it quietly degenerates into a tree that no longer tests
-/// anything. The scanner reads the store, so the store is where hostile
-/// bytes are planted, identically on every platform.
+/// `root/.git` and returns its full hex object ID. Bypassing git is the
+/// point: a hostile fixture staged through a git port gets vetoed or mangled
+/// on some platforms, and these bytes must be identical on all of them.
 ///
 /// # Errors
 ///
@@ -216,8 +212,7 @@ pub fn loose_object(root: &Path, kind: &str, body: &[u8]) -> std::io::Result<Str
     let bucket = root.join(".git").join("objects").join(fan);
     std::fs::create_dir_all(&bucket)?;
     let file = bucket.join(rest);
-    // The store is content-addressed and git writes loose objects read-only,
-    // so an object that already exists is this object, and stays untouched.
+    // an existing object is this object, and git leaves them read-only
     if !file.exists() {
         let mut encoder =
             flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
@@ -227,11 +222,9 @@ pub fn loose_object(root: &Path, kind: &str, body: &[u8]) -> std::io::Result<Str
     Ok(oid)
 }
 
-/// Writes a tree object holding exactly `entries`, each a git mode literal
-/// such as `100644` or `40000`, raw name bytes, and the hex object ID the
-/// name resolves to. Entries are sorted here the way the tree grammar
-/// demands, a directory comparing as its name with `/` appended, so callers
-/// list them in any order.
+/// Writes a tree object of `(mode literal, raw name, hex oid)` entries,
+/// sorted here the way the grammar demands (a directory compares as its
+/// name with `/` appended), so callers list them in any order.
 ///
 /// # Errors
 ///
@@ -256,9 +249,8 @@ pub fn tree_object(root: &Path, entries: &[(&str, &[u8], &str)]) -> std::io::Res
     loose_object(root, "tree", &body)
 }
 
-/// Writes a commit object over `tree` with `parents`, under the identity and
-/// date the `git` helper pins, so directly written history is as
-/// deterministic as the spawned kind.
+/// Writes a commit object over `tree` with `parents`, under the same pinned
+/// identity and date as the `git` helper.
 ///
 /// # Errors
 ///
@@ -280,11 +272,9 @@ pub fn commit_object(
     loose_object(root, "commit", body.as_bytes())
 }
 
-/// Overwrites `root/.git/index` with a version-two index holding exactly
-/// `entries` as stage-zero regular files, each a raw path and the hex blob
-/// ID it names. Paths sort by their bytes, a path longer than the format's
-/// twelve length bits stores the `0xFFF` sentinel, and every stat field is
-/// zero, which doubles as proof the scanner never trusts one.
+/// Overwrites `root/.git/index` with a version-two index of stage-zero
+/// regular files, each a raw path and hex blob ID. Stat fields stay zero,
+/// which doubles as proof the scanner never trusts one.
 ///
 /// # Errors
 ///

@@ -63,6 +63,7 @@ repos:
         entry: cargo fmt --
         language: system
         types: [rust]
+        require_serial: true # parallel batches race rustup's toolchain auto-install
       - id: clippy
         name: cargo clippy
         entry: cargo clippy --workspace --all-targets --locked -- -D warnings
