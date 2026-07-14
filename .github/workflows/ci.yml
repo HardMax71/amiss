@@ -92,8 +92,7 @@ jobs:
                    | "fail   \(.kind)  \(.location.path | @json)"
                      + (.location.span
                         | if . == null then ""
-                          else " line \(.start_line):\(.start_column)"
-                               + (if .end_line != .start_line then " to \(.end_line):\(.end_column)" else "" end)
+                          else " line \(.start_line):\(.start_column)-\(.end_line):\(.end_column)"
                           end)' amiss-report.json
           fi
           exit "${status}"
