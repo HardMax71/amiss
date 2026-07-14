@@ -1,0 +1,28 @@
+{
+  "schema": "assure/scanner-candidate-identity/v1",
+  "mode": "index",
+  "event_kind": "local-index",
+  "finality": "local-nonfinal",
+  "repository": null,
+  "ref": null,
+  "default_branch_ref": null,
+  "base": {
+    "kind": "git-commit",
+    "object_format": "sha1",
+    "commit_oid": "1111111111111111111111111111111111111111",
+    "tree_oid": "2222222222222222222222222222222222222222"
+  },
+  "candidate": {
+    "kind": "index",
+    "snapshot_schema": "assure/scanner-snapshot/v1",
+    "identity_scope": "complete-logical-index",
+    "base_object_format": "sha1",
+    "base_commit_oid": "1111111111111111111111111111111111111111",
+    "index_projection_digest": "sha256:744ba61a0f30ee6ecbc6b3e93323428ef523034a0636f9eb6c6215c3504c40bd",
+    "entry_count": 2,
+    "snapshot_digest": "sha256:762011b6032198b5ef43ce268c985d69e0e45e17da679bcb424a68298b13ebba"
+  },
+  "materialization": "index",
+  "skip_worktree_paths": 1,
+  "index_only_materialized_paths": 0
+}

@@ -1,0 +1,78 @@
+[package]
+name = "amiss-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+amiss-git = { path = "../crates/amiss-git" }
+amiss-scan = { path = "../crates/amiss-scan" }
+amiss-wire = { path = "../crates/amiss-wire" }
+libfuzzer-sys = { version = "0.4", optional = true }
+
+[features]
+harness = ["dep:libfuzzer-sys"]
+
+[[bin]]
+name = "json"
+path = "fuzz_targets/json.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[[bin]]
+name = "controls"
+path = "fuzz_targets/controls.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[[bin]]
+name = "requests"
+path = "fuzz_targets/requests.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[[bin]]
+name = "git_index"
+path = "fuzz_targets/git_index.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[[bin]]
+name = "git_objects"
+path = "fuzz_targets/git_objects.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[[bin]]
+name = "human"
+path = "fuzz_targets/human.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
+
+[profile.release]
+debug = 1

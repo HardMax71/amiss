@@ -1,0 +1,53 @@
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Workspace crates are publish = false; the product license is decided at
+# release time, so only external dependencies are license-checked for now.
+private = { ignore = true }
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Versionless path dependencies between workspace crates are not wildcards.
+allow-wildcard-paths = true
+# The scanner never opens a socket, and the README invites you to check the
+# dependency closure yourself. An invitation is not an enforcement: one
+# `cargo add` with default features pulls an HTTP stack back in, and every other
+# hook still passes. Trimming jsonschema's default features already dropped
+# reqwest, hyper, tokio, and tower from the lockfile once. These are the crates
+# that would carry the network back, and this list is what keeps them out.
+deny = [
+  { crate = "reqwest", reason = "the engine has no HTTP client" },
+  { crate = "hyper", reason = "the engine has no HTTP stack" },
+  { crate = "h2", reason = "the engine has no HTTP stack" },
+  { crate = "tower", reason = "the engine has no service stack" },
+  { crate = "tokio", reason = "the engine has no async runtime and no sockets" },
+  { crate = "async-std", reason = "the engine has no async runtime" },
+  { crate = "mio", reason = "the engine polls no sockets" },
+  { crate = "socket2", reason = "the engine opens no sockets" },
+  { crate = "ureq", reason = "the engine has no HTTP client" },
+  { crate = "curl", reason = "the engine has no HTTP client" },
+  { crate = "native-tls", reason = "nothing to secure, because nothing connects" },
+  { crate = "rustls", reason = "nothing to secure, because nothing connects" },
+  { crate = "openssl", reason = "nothing to secure, because nothing connects" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,16 @@
+[package]
+name = "amiss-bootstrap"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+amiss-git = { path = "../amiss-git" }
+amiss-wire = { path = "../amiss-wire" }
+tempfile = "3"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

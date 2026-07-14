@@ -1,0 +1,23 @@
+[package]
+name = "amiss"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+amiss-git = { path = "../amiss-git" }
+amiss-scan = { path = "../amiss-scan" }
+amiss-wire = { path = "../amiss-wire" }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
+[dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
+jsonschema = { version = "0.26", default-features = false, features = ["resolve-file"] }
+serde_json = "1"
+sha2.workspace = true
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+{
+  "schema": "amiss/scanner-execution-constraint/v1",
+  "action_repository": { "host": "github.com", "owner": "acme", "name": "amiss-action" },
+  "action_object_format": "sha1",
+  "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "manifest_path": "release/manifest.json",
+  "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "selected_platform": "linux-x86_64",
+  "required_status_name": "amiss / documentation assurance",
+  "bootstrap_contract": "amiss-action-bootstrap-v1",
+  "bootstrap_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+}

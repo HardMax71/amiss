@@ -1,0 +1,110 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Reviewed release label, for example 0.1.0-experimental
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            platform: linux-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            platform: macos-aarch64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            platform: macos-x86_64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p amiss -p amiss-bootstrap
+      - shell: bash
+        run: |
+          set -eu
+          mkdir -p staged
+          suffix=""
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then suffix=".exe"; fi
+          cp "target/${{ matrix.target }}/release/amiss$suffix" "staged/amiss-${{ matrix.platform }}$suffix"
+          cp "target/${{ matrix.target }}/release/amiss-bootstrap$suffix" "staged/bootstrap-${{ matrix.platform }}$suffix"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: engine-${{ matrix.platform }}
+          path: staged/
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: engine-*
+          merge-multiple: true
+          path: engines
+      - run: cargo build --release --locked -p amiss-bootstrap --bin amiss-manifest
+      # The action tree is data: the canonical action.yml, the strict manifest,
+      # the launcher, and the platform binaries. The manifest builder derives
+      # every platform row from the artifact's own header. The launcher is a
+      # reviewed file in this repository, not a string this workflow prints,
+      # because the manifest pins its bytes and someone has to have read them.
+      # The dispatch input and the repository identity reach the script through
+      # the environment rather than through ${{ }} expansion into its body: the
+      # version is free text typed at dispatch time, and text expanded into a
+      # run block is code.
+      - shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -eu
+          mkdir -p action-tree/dist
+          cp Cargo.lock action-tree/Cargo.lock
+          install -m 0644 action/launcher.js action-tree/dist/launcher.js
+          args=""
+          for binary in engines/amiss-*; do
+            name="$(basename "$binary")"
+            install -m 0755 "$binary" "action-tree/dist/$name"
+            args="$args --artifact dist/$name"
+          done
+          # shellcheck disable=SC2086
+          digest="$(./target/release/amiss-manifest \
+            --tree action-tree \
+            --version "$VERSION" \
+            --owner "${OWNER,,}" \
+            --repository "$(basename "$REPOSITORY")" \
+            --commit "$COMMIT" \
+            --lock Cargo.lock \
+            --launcher dist/launcher.js \
+            $args)"
+          printf 'release_manifest_digest=%s\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$digest" > action-tree/release-manifest.digest
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: action-tree
+          path: action-tree/

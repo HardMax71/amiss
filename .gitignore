@@ -1,0 +1,6 @@
+/target
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/coverage/
+/amiss-report.json # where the self-scan job, and anyone rerunning it by hand, drops the report

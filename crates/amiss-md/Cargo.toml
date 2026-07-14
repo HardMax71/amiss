@@ -1,0 +1,40 @@
+[package]
+name = "amiss-md"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+autotests = false
+
+[dependencies]
+amiss-wire = { path = "../amiss-wire" }
+markdown = "1"
+
+[dev-dependencies]
+sha2.workspace = true
+
+[[test]]
+name = "accounting"
+path = "tests/accounting.rs"
+
+[[test]]
+name = "conformance"
+path = "tests/conformance.rs"
+
+[[test]]
+name = "corpus"
+path = "tests/corpus.rs"
+
+[[test]]
+name = "extract"
+path = "tests/extract.rs"
+
+[[test]]
+name = "frontmatter"
+path = "tests/frontmatter.rs"
+
+[[test]]
+name = "mdx"
+path = "tests/mdx.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,6 @@
+{
+  "schema": "assure/scanner-policy/v1",
+  "document_includes": [],
+  "protected_inventory": [],
+  "finding_dispositions": []
+}

@@ -1,0 +1,21 @@
+[package]
+name = "amiss-wire"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+bench = false
+
+[dependencies]
+sha2.workspace = true
+
+[dev-dependencies]
+divan = "0.1.21"
+
+[[bench]]
+name = "wire"
+harness = false
+
+[lints]
+workspace = true

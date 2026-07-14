@@ -1,0 +1,321 @@
+{
+  "schema": "assure/reference-constructor-vectors/v1",
+  "contract": "reference-constructor-v1",
+  "cases": [
+    {
+      "id": "RI-001-native-link-kind",
+      "operation": "target-kind",
+      "construct": "markdown-inline-link",
+      "github_form": null,
+      "expected": "either"
+    },
+    {
+      "id": "RI-002-native-image-kind",
+      "operation": "target-kind",
+      "construct": "markdown-inline-image",
+      "github_form": null,
+      "expected": "blob"
+    },
+    {
+      "id": "RI-003-github-blob-kind",
+      "operation": "target-kind",
+      "construct": "markdown-autolink",
+      "github_form": "blob",
+      "expected": "blob"
+    },
+    {
+      "id": "RI-004-github-tree-kind",
+      "operation": "target-kind",
+      "construct": "markdown-inline-link",
+      "github_form": "tree",
+      "expected": "tree"
+    },
+    {
+      "id": "RI-005-line-single",
+      "operation": "github-line-fragment",
+      "value": "L1",
+      "expected": true
+    },
+    {
+      "id": "RI-006-line-range",
+      "operation": "github-line-fragment",
+      "value": "L10-L20",
+      "expected": true
+    },
+    {
+      "id": "RI-007-line-zero",
+      "operation": "github-line-fragment",
+      "value": "L0",
+      "expected": false
+    },
+    {
+      "id": "RI-008-line-leading-zero",
+      "operation": "github-line-fragment",
+      "value": "L01",
+      "expected": false
+    },
+    {
+      "id": "RI-009-line-reversed",
+      "operation": "github-line-fragment",
+      "value": "L20-L10",
+      "expected": false
+    },
+    {
+      "id": "RI-010-line-too-large",
+      "operation": "github-line-fragment",
+      "value": "L9007199254740992",
+      "expected": false
+    },
+    {
+      "id": "RI-011-line-lowercase",
+      "operation": "github-line-fragment",
+      "value": "l10",
+      "expected": false
+    },
+    {
+      "id": "RI-012-unicode-ref",
+      "operation": "github-ref-split",
+      "encoded_suffix": "rel%C3%A9ase/v1/src/a.scala",
+      "candidate_ref": "refs/heads/reléase/v1",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "src/a.scala"
+      }
+    },
+    {
+      "id": "RI-013-percent-once",
+      "operation": "github-ref-split",
+      "encoded_suffix": "feature%25name/docs/a.md",
+      "candidate_ref": "refs/heads/feature%name",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "RI-014-encoded-slash-ref",
+      "operation": "github-ref-split",
+      "encoded_suffix": "feature%2Fone/docs/a.md",
+      "candidate_ref": "refs/heads/feature/one",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-015-only-default-ref",
+      "operation": "github-ref-split",
+      "encoded_suffix": "main/docs/a.md",
+      "candidate_ref": "refs/heads/feature",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "RI-016-two-trusted-splits",
+      "operation": "github-ref-split",
+      "encoded_suffix": "release/v1/docs/a.md",
+      "candidate_ref": "refs/heads/release",
+      "default_ref": "refs/heads/release/v1",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-017-empty-native-destination",
+      "operation": "empty-native-destination",
+      "source_document": "docs/a.md",
+      "expected": "docs/a.md"
+    },
+    {
+      "id": "RI-018-uppercase-external-scheme",
+      "operation": "external-scheme",
+      "value": "HTTPS",
+      "expected": "https"
+    },
+    {
+      "id": "RI-019-network-path",
+      "operation": "network-path",
+      "value": "//example.com/a",
+      "expected": "network-path-unsupported"
+    },
+    {
+      "id": "RI-020-commonmark-uri-autolink",
+      "operation": "semantic-autolink",
+      "form": "commonmark-uri",
+      "token": "https://example.com/a?b#c",
+      "expected": "https://example.com/a?b#c"
+    },
+    {
+      "id": "RI-021-commonmark-email-autolink",
+      "operation": "semantic-autolink",
+      "form": "commonmark-email",
+      "token": "foo@example.com",
+      "expected": "mailto:foo@example.com"
+    },
+    {
+      "id": "RI-022-gfm-protocol-autolink",
+      "operation": "semantic-autolink",
+      "form": "gfm-protocol",
+      "token": "https://example.com/a",
+      "expected": "https://example.com/a"
+    },
+    {
+      "id": "RI-023-gfm-www-autolink",
+      "operation": "semantic-autolink",
+      "form": "gfm-www",
+      "token": "www.example.com/a",
+      "expected": "http://www.example.com/a"
+    },
+    {
+      "id": "RI-024-gfm-email-autolink",
+      "operation": "semantic-autolink",
+      "form": "gfm-email",
+      "token": "foo.bar@example.com",
+      "expected": "mailto:foo.bar@example.com"
+    },
+    {
+      "id": "RI-025-multiple-question-components",
+      "operation": "uri-components",
+      "value": "a?x?y#z?u",
+      "expected": {
+        "path": "a",
+        "query": "x?y",
+        "fragment": "z?u"
+      }
+    },
+    {
+      "id": "RI-026-question-inside-fragment",
+      "operation": "uri-components",
+      "value": "a#z?u",
+      "expected": {
+        "path": "a",
+        "query": null,
+        "fragment": "z?u"
+      }
+    },
+    {
+      "id": "RI-027-mixed-case-github-identity",
+      "operation": "github-identity",
+      "host": "github.com",
+      "url_owner": "HardMax71",
+      "url_repository": "spec_to_rest",
+      "identity_owner": "hardmax71",
+      "identity_repository": "spec_to_rest",
+      "expected": true
+    },
+    {
+      "id": "RI-028-encoded-github-identity",
+      "operation": "github-identity",
+      "host": "github.com",
+      "url_owner": "Hard%4Dax71",
+      "url_repository": "spec_to_rest",
+      "identity_owner": "hardmax71",
+      "identity_repository": "spec_to_rest",
+      "expected": false
+    },
+    {
+      "id": "RI-029-current-ref-without-path",
+      "operation": "github-ref-split",
+      "encoded_suffix": "main",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-030-document-query-and-fragment",
+      "operation": "resolution-boundary",
+      "target_class": "document",
+      "query_present": true,
+      "fragment_present": true,
+      "github_line_fragment": false,
+      "expected": "unsupported-fragment-semantics"
+    },
+    {
+      "id": "RI-031-code-query-and-fragment",
+      "operation": "resolution-boundary",
+      "target_class": "code",
+      "query_present": true,
+      "fragment_present": true,
+      "github_line_fragment": false,
+      "expected": "unsupported-query-semantics"
+    },
+    {
+      "id": "RI-032-github-line-is-boundary",
+      "operation": "resolution-boundary",
+      "target_class": "code",
+      "query_present": false,
+      "fragment_present": true,
+      "github_line_fragment": true,
+      "expected": "code-fragment-unevaluated"
+    },
+    {
+      "id": "RI-033-uppercase-github-host-is-foreign",
+      "operation": "github-identity",
+      "host": "GitHub.com",
+      "url_owner": "HardMax71",
+      "url_repository": "spec_to_rest",
+      "identity_owner": "hardmax71",
+      "identity_repository": "spec_to_rest",
+      "expected": false
+    },
+    {
+      "id": "RI-034-default-only-invalid-path",
+      "operation": "github-ref-split",
+      "encoded_suffix": "main/../secrets",
+      "candidate_ref": "refs/heads/feature",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-035-native-link-directory-hint",
+      "operation": "target-kind",
+      "construct": "markdown-inline-link",
+      "github_form": null,
+      "trailing_slash": true,
+      "expected": "tree"
+    },
+    {
+      "id": "RI-036-native-image-terminal-slash-invalid",
+      "operation": "native-trailing-slash",
+      "construct": "markdown-inline-image",
+      "expected": "invalid-reference"
+    },
+    {
+      "id": "RI-037-github-tree-terminal-slash",
+      "operation": "github-ref-split",
+      "github_form": "tree",
+      "encoded_suffix": "main/docs/",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs"
+      }
+    },
+    {
+      "id": "RI-038-github-blob-terminal-slash-invalid",
+      "operation": "github-ref-split",
+      "github_form": "blob",
+      "encoded_suffix": "main/docs/file.md/",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    }
+  ]
+}

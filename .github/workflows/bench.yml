@@ -1,0 +1,48 @@
+name: bench
+
+on:
+  schedule:
+    - cron: "29 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: bench-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: bench-
+      - shell: bash
+        run: cargo bench --workspace --locked 2>&1 | tee benches.txt
+      - shell: bash
+        run: >-
+          cargo nextest run -p amiss-scan --test eligibility --release --locked
+          --no-capture 2>&1 | tee eligibility.txt
+      - shell: bash
+        run: >-
+          cargo nextest run -p amiss-scan --test measure --release --locked
+          --run-ignored ignored-only --no-capture 2>&1 | tee measurement.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: promotion-evidence
+          path: |
+            benches.txt
+            eligibility.txt
+            measurement.txt

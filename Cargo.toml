@@ -1,0 +1,76 @@
+[workspace]
+resolver = "3"
+members = ["crates/amiss", "crates/amiss-bootstrap", "crates/amiss-fixtures", "crates/amiss-git", "crates/amiss-md", "crates/amiss-scan", "crates/amiss-wire"]
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+sha2 = "0.10"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+# no-panic contract; clippy.toml exempts tests
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+arithmetic_side_effects = "warn"
+# type discipline: no erasure, no lossy casts, no wildcard arms on closed enums
+disallowed_types = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+wildcard_enum_match_arm = "deny"
+mem_forget = "deny"
+iter_over_hash_type = "warn"
+map_err_ignore = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+# output and exit are wire contract
+exit = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+dbg_macro = "deny"
+mod_module_files = "warn"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+[profile.release]
+overflow-checks = true
+panic = "unwind"
+
+# Debug builds keep debug assertions but optimize the library crates, so the
+# large-envelope goldens and parser-heavy tests run in seconds, not minutes.
+[profile.dev.package.amiss-wire]
+opt-level = 2
+
+[profile.dev.package.amiss-scan]
+opt-level = 2
+
+[profile.dev.package.amiss-md]
+opt-level = 2
+
+[profile.dev.package.markdown]
+opt-level = 2
+
+[profile.dev.package.sha2]
+opt-level = 2
