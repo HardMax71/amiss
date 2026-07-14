@@ -5,7 +5,7 @@ Six shipped crates, and trust flows in one direction; a seventh exists only for 
 ```dot process
 digraph amiss {
   rankdir = BT;
-  node [shape = box, fontname = "Helvetica, Arial, sans-serif", fontsize = 11];
+  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7];
   wire  [label = "amiss-wire\ncanonical JSON, digests,\nschemas, machine contracts"];
   git   [label = "amiss-git\nobject store, packs, index,\nno-follow handles"];
@@ -55,7 +55,7 @@ Inside a run, the stages form a line:
 ```dot process
 digraph pipeline {
   rankdir = LR;
-  node [shape = box, fontname = "Helvetica, Arial, sans-serif", fontsize = 11];
+  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7];
   snap  [label = "snapshots\nbase + candidate"];
   disc  [label = "discovery"];
