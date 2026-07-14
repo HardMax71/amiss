@@ -27,6 +27,7 @@
 - [Architecture](architecture.md)
 - [Edge cases and divergences](divergences.md)
 - [What Amiss is not](non-goals.md)
+- [The evidence base](evidence.md)
 - [Provenance](provenance.md)
 - [Development](development.md)
 - [Roadmap](roadmap.md)
