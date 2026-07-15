@@ -11,9 +11,7 @@ use std::time::Duration;
 use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, Supervised, accept, settle, supervise,
 };
-use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
-use amiss_wire::report::PAYLOAD_SCHEMA;
 
 /// The frozen dossier examples: the indented readable envelope and its exact
 /// one-line `JCS(envelope) || LF` canonicalization.
@@ -213,28 +211,20 @@ fn exited(code: i32) -> ExitStatus {
 }
 
 /// One envelope the acceptance law admits, with the expectations that admit
-/// it. The dossier golden's payload is kept whole and re-digested into this
-/// namespace, so the payload digest recomputes; the expectations are then read
-/// back out of the identities that payload actually carries.
+/// it. The third-contract golden is this engine's own output under this exact
+/// payload domain, so its recorded digest already recomputes here and the wire
+/// is admitted whole, no re-digest; the expectations are read back out of the
+/// identities that payload carries.
 fn accepted_report() -> (Vec<u8>, Expectations) {
-    let golden = dossier_example("scanner-report-v1.canonical.json");
-    let envelope = parse(&golden).unwrap();
-    let payload = member(&envelope, "payload").unwrap().clone();
-    let schema = member(&envelope, "schema").unwrap().clone();
-    let digest = hj(PAYLOAD_SCHEMA, &payload).to_string();
+    let wire = dossier_example("scanner-report-v3.canonical.json");
+    let envelope = parse(&wire).unwrap();
+    let payload = member(&envelope, "payload").unwrap();
 
-    let engine_digest = text(member(&payload, "engine").unwrap(), "engine_digest").unwrap();
-    let evaluation = member(&payload, "evaluation").unwrap();
+    let engine_digest = text(member(payload, "engine").unwrap(), "engine_digest").unwrap();
+    let evaluation = member(payload, "evaluation").unwrap();
     let base_commit = text(member(evaluation, "base").unwrap(), "commit_oid").unwrap();
     let candidate_commit = text(member(evaluation, "candidate").unwrap(), "commit_oid");
 
-    let rebuilt = Value::Object(vec![
-        ("payload".to_owned(), payload),
-        ("payload_digest".to_owned(), Value::String(digest)),
-        ("schema".to_owned(), schema),
-    ]);
-    let mut wire = canonical(&rebuilt);
-    wire.push(b'\n');
     (
         wire,
         Expectations {
@@ -291,8 +281,7 @@ fn the_second_contract_golden_is_the_canonicalization_of_its_indented_value() {
 /// second contract; the payload domain is the third contract's now, so the
 /// frozen example joins the v1 goldens as history whose digest no longer
 /// recomputes here. Every check before the digest still holds, and the
-/// engine-emitted v3 golden takes over the end-to-end clearance when it
-/// freezes.
+/// engine-emitted v3 golden has taken over the end-to-end clearance below.
 #[test]
 fn the_second_contract_golden_is_canonical_history_now() {
     let golden = dossier_example("scanner-report-v2.canonical.json");
@@ -306,5 +295,46 @@ fn the_second_contract_golden_is_canonical_history_now() {
         defect,
         AcceptanceDefect::PayloadDigest,
         "the frozen example's digest lives in the second contract's domain"
+    );
+}
+
+#[test]
+fn the_indented_third_contract_example_is_rejected_as_noncanonical() {
+    let indented = dossier_example("scanner-report-v3.json");
+    assert_eq!(
+        accept(&indented, &foreign_expectations()),
+        Err(AcceptanceDefect::Noncanonical),
+        "a readable parsed-value example is not a valid emitted byte fixture"
+    );
+}
+
+#[test]
+fn the_third_contract_golden_is_the_canonicalization_of_its_indented_value() {
+    let indented = dossier_example("scanner-report-v3.json");
+    let golden = dossier_example("scanner-report-v3.canonical.json");
+    let parsed = parse(&indented).unwrap();
+    let mut recanonicalized = canonical(&parsed);
+    recanonicalized.push(b'\n');
+    assert_eq!(
+        recanonicalized, golden,
+        "the smoke-checker equivalence holds under this serializer"
+    );
+}
+
+/// The end-to-end clearance the v1 and v2 goldens can no longer stand for: a
+/// forge-bearing report this engine emitted under the third contract, admitted
+/// whole. Its recorded payload digest recomputes here because the payload lives
+/// in the domain `accept` hashes against, and the run carries the fields that
+/// only exist in v3, a non-github host, a slash-joined owner, and a
+/// `same-repository-gitlab` intent, so the frozen bytes exercise the widening
+/// end to end. The expectations are the identities the payload names, so the
+/// engine and commit checks pass on the same evidence they authenticate.
+#[test]
+fn the_third_contract_golden_clears_the_acceptance_law_end_to_end() {
+    let (wire, expectations) = accepted_report();
+    assert_eq!(
+        accept(&wire, &expectations),
+        Ok(0),
+        "the engine-emitted v3 golden is admissible whole, digest included"
     );
 }
