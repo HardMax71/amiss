@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use amiss_git::{GitResources, Repository};
-use amiss_wire::model::Oid;
+use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
 use crate::pipeline::{detail, side_observations};
@@ -44,10 +44,10 @@ pub fn reproduce(
     let Some(tree) = Oid::new(repo.object_format(), context.adoption_tree.tree_oid.clone()) else {
         return Err(mismatch());
     };
-    let documents: BTreeSet<String> = context
+    let documents: BTreeSet<RepoPath> = context
         .items
         .iter()
-        .map(|item| item.key_input.scope.document.as_str().to_owned())
+        .map(|item| RepoPath::from(&item.key_input.scope.document))
         .collect();
 
     let mut scan = ScanResources::new(scan_limits);

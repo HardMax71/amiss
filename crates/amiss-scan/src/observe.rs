@@ -1,7 +1,7 @@
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 
 use crate::resolve::Intent;
@@ -61,7 +61,10 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
         ),
         (
             "repository_path".to_owned(),
-            nullable_string(intent.repository_path.as_deref()),
+            intent
+                .repository_path
+                .as_ref()
+                .map_or(Value::Null, RepoPath::to_value),
         ),
         (
             "target_kind".to_owned(),
@@ -122,7 +125,7 @@ pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
 pub fn observation_id(
     engine: &EngineProvenance,
     adapter: Adapter,
-    document: &str,
+    document: &RepoPath,
     construct: SourceConstruct,
     node_path: &[usize],
     projection_digest: Digest,
@@ -143,7 +146,7 @@ pub fn observation_id(
             "adapter_contract_digest".to_owned(),
             Value::String(contract_digest.to_string()),
         ),
-        ("document".to_owned(), Value::String(document.to_owned())),
+        ("document".to_owned(), document.to_value()),
         (
             "source_construct".to_owned(),
             Value::String(construct.as_str().to_owned()),
@@ -170,7 +173,7 @@ pub fn observation_id(
 pub fn occurrence_id(
     engine: &EngineProvenance,
     adapter: Adapter,
-    document: &str,
+    document: &RepoPath,
     scanned: &ScannedOccurrence,
     intent: &Intent,
 ) -> Digest {

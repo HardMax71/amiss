@@ -7,8 +7,13 @@ use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, ResolutionCode};
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn rp(path: &str) -> RepoPath {
+    RepoPath::new(path.to_owned()).unwrap()
+}
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -20,7 +25,7 @@ fn engine() -> EngineProvenance {
 fn repo_intent(path: &str) -> Intent {
     Intent {
         kind: IntentKind::RepositoryPath,
-        repository_path: Some(path.to_owned()),
+        repository_path: RepoPath::new(path.to_owned()),
         target_kind: Some(TargetKind::Either),
         external_scheme: None,
         query: None,
@@ -32,7 +37,7 @@ fn resolved(path: &str, body: &[u8]) -> Resolution {
     let raw = hb("amiss/raw-evidence/v1", body);
     Resolution {
         code: ResolutionCode::ExactPath,
-        path: Some(path.to_owned()),
+        path: RepoPath::new(path.to_owned()),
         entry_kind: Some(EntryKind::Blob),
         git_mode: Some(GitMode::RegularFile),
         raw_digest: Some(raw),
@@ -44,7 +49,7 @@ fn resolved(path: &str, body: &[u8]) -> Resolution {
 fn missing(path: &str) -> Resolution {
     Resolution {
         code: ResolutionCode::PathNotFound,
-        path: Some(path.to_owned()),
+        path: RepoPath::new(path.to_owned()),
         entry_kind: None,
         git_mode: None,
         raw_digest: None,
@@ -90,11 +95,11 @@ fn observation(spec: &Spec) -> Observation {
         id: occurrence_id(
             &engine(),
             Adapter::Markdown,
-            &spec.document,
+            &rp(&spec.document),
             &scanned,
             &spec.intent,
         ),
-        document: spec.document.clone(),
+        document: rp(&spec.document),
         span: (0, 1),
         display: scanned.display,
         block_kind: scanned.occurrence.block_kind,
@@ -357,13 +362,13 @@ fn an_exact_rename_pairs_only_unique_content() {
     let mut base_side = side(vec![observation(&base_spec)]);
     base_side
         .documents
-        .insert("old/name.md".to_owned(), (GitMode::RegularFile, digest));
-    base_side.documents.remove("new/name.md");
+        .insert(rp("old/name.md"), (GitMode::RegularFile, digest));
+    base_side.documents.remove(b"new/name.md".as_slice());
     let mut candidate_side = side(vec![observation(&candidate_spec)]);
     candidate_side
         .documents
-        .insert("new/name.md".to_owned(), (GitMode::RegularFile, digest));
-    candidate_side.documents.remove("old/name.md");
+        .insert(rp("new/name.md"), (GitMode::RegularFile, digest));
+    candidate_side.documents.remove(b"old/name.md".as_slice());
 
     let got = run(&base_side, &candidate_side);
     assert_eq!(got.len(), 1);
@@ -378,7 +383,7 @@ fn an_exact_rename_pairs_only_unique_content() {
     let mut duplicated = candidate_side.clone();
     duplicated
         .documents
-        .insert("another/copy.md".to_owned(), (GitMode::RegularFile, digest));
+        .insert(rp("another/copy.md"), (GitMode::RegularFile, digest));
     let got = run(&base_side, &duplicated);
     assert_eq!(got.len(), 2, "duplicate content forms no rename edge");
     assert!(got.iter().all(|row| row.outcome == Outcome::None));

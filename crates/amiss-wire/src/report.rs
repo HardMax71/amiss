@@ -969,7 +969,7 @@ impl FindingKind {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ErrorDetail {
     pub code: AnalysisErrorCode,
-    pub path: Option<String>,
+    pub path: Option<crate::model::RepoPath>,
     pub path_bytes: Option<Vec<u8>>,
     pub resource: Option<(crate::controls::ResourceName, u64, u64)>,
 }
@@ -1004,7 +1004,13 @@ fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
     object(vec![
         ("phase", string(phase)),
         ("code", string(detail.code.as_str())),
-        ("path", detail.path.as_deref().map_or(Value::Null, string)),
+        (
+            "path",
+            detail
+                .path
+                .as_ref()
+                .map_or(Value::Null, crate::model::RepoPath::to_value),
+        ),
         (
             "path_bytes_hex",
             detail.path_bytes.as_deref().map_or(Value::Null, |bytes| {

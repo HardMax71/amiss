@@ -7,7 +7,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
-use amiss_wire::model::Oid;
+use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, Disposition, ErrorDetail, FindingKind};
 
 use crate::resources::ScanResources;
@@ -25,8 +25,8 @@ pub struct PolicySide {
 /// overrides built-in exclusion.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Includes {
-    pub documents: BTreeSet<String>,
-    pub trees: BTreeSet<String>,
+    pub documents: BTreeSet<RepoPath>,
+    pub trees: BTreeSet<RepoPath>,
 }
 
 impl Includes {
@@ -38,7 +38,7 @@ impl Includes {
                 continue;
             };
             for include in &policy.document_includes {
-                let path = include.path.as_str().to_owned();
+                let path = RepoPath::from(&include.path);
                 match include.kind {
                     IncludeKind::Document => {
                         merged.documents.insert(path);
@@ -55,15 +55,17 @@ impl Includes {
     /// A document include matches exactly its path; a tree include matches the
     /// root itself and paths beginning `root + "/"`, bytewise.
     #[must_use]
-    pub fn matches(&self, path: &str) -> bool {
+    pub fn matches(&self, path: &RepoPath) -> bool {
         if self.documents.contains(path) {
             return true;
         }
+        let raw = path.as_bytes();
         self.trees.iter().any(|root| {
-            path == root
-                || (path.len() > root.len()
-                    && path.as_bytes().get(..root.len()) == Some(root.as_bytes())
-                    && path.as_bytes().get(root.len()) == Some(&b'/'))
+            let stem = root.as_bytes();
+            raw == stem
+                || (raw.len() > stem.len()
+                    && raw.get(..stem.len()) == Some(stem)
+                    && raw.get(stem.len()) == Some(&b'/'))
         })
     }
 }
@@ -85,7 +87,7 @@ fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {
 fn invalid(details: Vec<AnalysisErrorCode>) -> Vec<ErrorDetail> {
     let mut rows = vec![ErrorDetail {
         code: AnalysisErrorCode::ConfigurationInvalid,
-        path: Some(SCANNER_POLICY_PATH.to_owned()),
+        path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
         path_bytes: None,
         resource: None,
     }];
@@ -93,7 +95,7 @@ fn invalid(details: Vec<AnalysisErrorCode>) -> Vec<ErrorDetail> {
         if code != AnalysisErrorCode::ConfigurationInvalid {
             rows.push(ErrorDetail {
                 code,
-                path: Some(SCANNER_POLICY_PATH.to_owned()),
+                path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
                 path_bytes: None,
                 resource: None,
             });
@@ -194,14 +196,14 @@ pub fn acquire_entry(
                     observed_lower_bound,
                 } => ErrorDetail {
                     code: AnalysisErrorCode::ResourceLimitExceeded,
-                    path: Some(SCANNER_POLICY_PATH.to_owned()),
+                    path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
                     path_bytes: None,
                     resource: Some((resource, configured_limit, observed_lower_bound)),
                 },
                 Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => {
                     ErrorDetail {
                         code: defect.code(),
-                        path: Some(SCANNER_POLICY_PATH.to_owned()),
+                        path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
                         path_bytes: None,
                         resource: None,
                     }
@@ -225,7 +227,7 @@ pub fn acquire_entry(
             if entries > limit {
                 return Err(vec![ErrorDetail {
                     code: AnalysisErrorCode::ResourceLimitExceeded,
-                    path: Some(SCANNER_POLICY_PATH.to_owned()),
+                    path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
                     path_bytes: None,
                     resource: Some((
                         ResourceName::RepositoryPolicyEntries,
@@ -249,7 +251,7 @@ pub fn acquire_entry(
 pub struct ControlSeed {
     pub kind: FindingKind,
     pub rule_id: String,
-    pub control_path: Option<String>,
+    pub control_path: Option<RepoPath>,
 }
 
 fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
@@ -388,7 +390,7 @@ pub fn effects(
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
                 rule_id: rule.to_owned(),
-                control_path: Some(include.path.as_str().to_owned()),
+                control_path: Some(RepoPath::from(&include.path)),
             });
         }
     }
@@ -401,7 +403,7 @@ pub fn effects(
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
                 rule_id: "policy/inventory-removed".to_owned(),
-                control_path: Some(member.as_str().to_owned()),
+                control_path: Some(RepoPath::from(member)),
             });
         }
     }
@@ -416,7 +418,7 @@ pub fn effects(
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
                 rule_id: format!("policy/disposition/{}", kind.as_str()),
-                control_path: Some(SCANNER_POLICY_PATH.to_owned()),
+                control_path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
             });
         }
     }
@@ -444,7 +446,7 @@ pub fn effects(
         controls.push(ControlSeed {
             kind: FindingKind::CoverageReduced,
             rule_id: rule.to_owned(),
-            control_path: Some(path.to_owned()),
+            control_path: RepoPath::new(path.to_owned()),
         });
     }
 
@@ -738,10 +740,10 @@ pub fn protected_state(
     repo: &Repository,
     git: &mut GitResources,
     scan: &mut ScanResources,
-    entries: &std::collections::BTreeMap<String, (GitMode, Oid)>,
+    entries: &std::collections::BTreeMap<RepoPath, (GitMode, Oid)>,
     path: &str,
 ) -> Result<ProtectedState, Error> {
-    let Some((mode, oid)) = entries.get(path) else {
+    let Some((mode, oid)) = entries.get(path.as_bytes()) else {
         return Ok(ProtectedState::Absent);
     };
     match mode {
@@ -801,7 +803,7 @@ pub fn floor_inventory(
         controls.push(ControlSeed {
             kind: FindingKind::CoverageReduced,
             rule_id: rule.to_owned(),
-            control_path: Some(path.as_str().to_owned()),
+            control_path: Some(RepoPath::from(path)),
         });
     }
     controls
@@ -826,7 +828,7 @@ pub fn floor_protected(
             controls.push(ControlSeed {
                 kind: FindingKind::ControlPlaneChanged,
                 rule_id: "control/protected-path".to_owned(),
-                control_path: Some(path.as_str().to_owned()),
+                control_path: Some(RepoPath::from(path)),
             });
         }
     }

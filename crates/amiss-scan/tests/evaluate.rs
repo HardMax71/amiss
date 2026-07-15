@@ -10,7 +10,7 @@ use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, IntentKind, ResolutionCode};
 
 fn engine() -> EngineProvenance {
@@ -23,7 +23,7 @@ fn engine() -> EngineProvenance {
 fn repo_intent(path: &str) -> Intent {
     Intent {
         kind: IntentKind::RepositoryPath,
-        repository_path: Some(path.to_owned()),
+        repository_path: RepoPath::new(path.to_owned()),
         target_kind: Some(TargetKind::Either),
         external_scheme: None,
         query: None,
@@ -34,7 +34,7 @@ fn repo_intent(path: &str) -> Intent {
 fn resolution(code: ResolutionCode, path: Option<&str>) -> Resolution {
     Resolution {
         code,
-        path: path.map(str::to_owned),
+        path: path.and_then(|p| RepoPath::new(p.to_owned())),
         entry_kind: None,
         git_mode: None,
         raw_digest: None,
@@ -44,16 +44,17 @@ fn resolution(code: ResolutionCode, path: Option<&str>) -> Resolution {
 }
 
 struct Spec {
-    document: String,
+    document: RepoPath,
     node_path: Vec<usize>,
     block: String,
     intent: Intent,
     resolution: Resolution,
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn spec(document: &str, target: &str, code: ResolutionCode) -> Spec {
     Spec {
-        document: document.to_owned(),
+        document: RepoPath::new(document.to_owned()).unwrap(),
         node_path: vec![0, 0],
         block: format!("see [x]({target})"),
         intent: repo_intent(target),
@@ -132,17 +133,17 @@ fn only(findings: Vec<Finding>, kind: FindingKind) -> Finding {
 fn document_findings_follow_step_one() {
     let documents = vec![
         DocumentInput {
-            path: "gone.md".to_owned(),
+            path: RepoPath::new("gone.md".to_owned()).unwrap(),
             base: Some(DocumentSide::Unsupported),
             candidate: None,
         },
         DocumentInput {
-            path: "weird.bin.md".to_owned(),
+            path: RepoPath::new("weird.bin.md".to_owned()).unwrap(),
             base: None,
             candidate: Some(DocumentSide::Unsupported),
         },
         DocumentInput {
-            path: "page.mdx".to_owned(),
+            path: RepoPath::new("page.mdx".to_owned()).unwrap(),
             base: None,
             candidate: Some(DocumentSide::Scanned {
                 mdx_regions: 2,
@@ -151,7 +152,7 @@ fn document_findings_follow_step_one() {
             }),
         },
         DocumentInput {
-            path: "vendor.md".to_owned(),
+            path: RepoPath::new("vendor.md".to_owned()).unwrap(),
             base: None,
             candidate: Some(DocumentSide::ExcludedBuiltIn),
         },
@@ -166,7 +167,10 @@ fn document_findings_follow_step_one() {
 
     let removed = only(findings, FindingKind::DocumentRemoved);
     assert_eq!(removed.location.side, LocationSide::Base);
-    assert_eq!(removed.location.path.as_deref(), Some("gone.md"));
+    assert_eq!(
+        removed.location.path.as_ref().and_then(RepoPath::as_str),
+        Some("gone.md")
+    );
     assert_eq!(removed.location.span, None);
     assert_eq!(removed.configured_disposition, Disposition::Record);
 }

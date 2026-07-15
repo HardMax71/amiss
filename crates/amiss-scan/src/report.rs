@@ -1,7 +1,7 @@
 use amiss_wire::controls::{ContentAvailability, ResourceName};
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical, canonical_length};
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, EngineProvenance, ErrorDetail, FindingKind, FindingScope,
     IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ResolutionStatus, engine_block,
@@ -157,6 +157,10 @@ fn nullable(text: Option<&str>) -> Value {
     text.map_or(Value::Null, string)
 }
 
+fn nullable_path(path: Option<&RepoPath>) -> Value {
+    path.map_or(Value::Null, RepoPath::to_value)
+}
+
 fn integer(value: u64) -> Value {
     Value::Integer(i64::try_from(value).unwrap_or(i64::MAX))
 }
@@ -207,7 +211,7 @@ fn occurrence_value(engine: &EngineProvenance, observation: &Observation) -> Val
         ("observation_id", digest_value(id)),
         ("observation_id_input", input),
         ("adapter_id", string(observation.adapter.adapter_id())),
-        ("document", string(&observation.document)),
+        ("document", observation.document.to_value()),
         ("source_construct", string(observation.construct.as_str())),
         ("source_span", span_value(observation)),
         ("block_kind", string(observation.block_kind.as_str())),
@@ -436,7 +440,7 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
 }
 
 struct PairedDocument<'a> {
-    path: String,
+    path: RepoPath,
     classification: &'static str,
     base: Option<&'a DocumentRecord>,
     candidate: Option<&'a DocumentRecord>,
@@ -446,7 +450,7 @@ fn paired_documents<'a>(
     base: &'a SnapshotDiscovery,
     candidate: &'a SnapshotDiscovery,
 ) -> Vec<PairedDocument<'a>> {
-    let mut paths: Vec<&String> = base
+    let mut paths: Vec<&RepoPath> = base
         .documents
         .iter()
         .chain(candidate.documents.iter())
@@ -488,7 +492,7 @@ fn document_result_value(paired: &PairedDocument<'_>) -> Value {
         _ => "changed",
     };
     object(vec![
-        ("path", string(&paired.path)),
+        ("path", paired.path.to_value()),
         ("classification", string(paired.classification)),
         ("base", base),
         ("candidate", candidate),
@@ -519,7 +523,7 @@ fn finding_value(
     finding: &Finding,
     enforce: bool,
     comparison_rows: &[(Option<Digest>, Value)],
-    document_rows: &[(String, Value)],
+    document_rows: &[(RepoPath, Value)],
 ) -> Value {
     let scope = finding.kind.scope();
     let coverage = match scope {
@@ -577,7 +581,7 @@ fn finding_value(
                         LocationSide::Control => "control",
                     }),
                 ),
-                ("path", nullable(finding.location.path.as_deref())),
+                ("path", nullable_path(finding.location.path.as_ref())),
                 ("span", location_span),
             ]),
         ),
@@ -720,7 +724,7 @@ fn location_span_value(finding: &Finding) -> Value {
 fn nonreference_fact(
     finding: &Finding,
     comparison_rows: &[(Option<Digest>, Value)],
-    document_rows: &[(String, Value)],
+    document_rows: &[(RepoPath, Value)],
 ) -> Option<(Value, Digest)> {
     let evidence = match finding.kind.scope() {
         FindingScope::Reference | FindingScope::Control => return None,
@@ -733,7 +737,7 @@ fn nonreference_fact(
             object(vec![("kind", string("observation")), ("comparison", row)])
         }
         FindingScope::Document => {
-            let path = finding.location.path.as_deref()?;
+            let path = finding.location.path.as_ref()?;
             let row = document_rows
                 .iter()
                 .find(|(document, _)| document == path)
@@ -1337,7 +1341,7 @@ pub fn construct(
         return construct_incomplete(setup, &details);
     }
 
-    let document_rows: Vec<(String, Value)> = paired
+    let document_rows: Vec<(RepoPath, Value)> = paired
         .iter()
         .map(|pair| (pair.path.clone(), document_result_value(pair)))
         .collect();

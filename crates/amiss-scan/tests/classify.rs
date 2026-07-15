@@ -4,30 +4,30 @@ use amiss_wire::model::Adapter;
 #[test]
 fn suffixes_are_exact_and_lowercase() {
     assert_eq!(
-        classify("docs/guide.md"),
+        classify(b"docs/guide.md"),
         Some(Classification::StructuredMarkdown)
     );
     assert_eq!(
-        classify("a/b.markdown"),
+        classify(b"a/b.markdown"),
         Some(Classification::StructuredMarkdown)
     );
     assert_eq!(
-        classify("pages/home.mdx"),
+        classify(b"pages/home.mdx"),
         Some(Classification::StructuredMdx)
     );
     assert_eq!(
-        classify("CLAUDE.md"),
+        classify(b"CLAUDE.md"),
         Some(Classification::StructuredMarkdown)
     );
     assert_eq!(
-        classify("AGENTS.md"),
+        classify(b"AGENTS.md"),
         Some(Classification::StructuredMarkdown)
     );
-    assert_eq!(classify("a.MD"), None);
-    assert_eq!(classify("a.Markdown"), None);
-    assert_eq!(classify("b.MDX"), None);
-    assert_eq!(classify("notes.txt"), None);
-    assert_eq!(classify("page.html"), None);
+    assert_eq!(classify(b"a.MD"), None);
+    assert_eq!(classify(b"a.Markdown"), None);
+    assert_eq!(classify(b"b.MDX"), None);
+    assert_eq!(classify(b"notes.txt"), None);
+    assert_eq!(classify(b"page.html"), None);
 }
 
 #[test]
@@ -41,33 +41,33 @@ fn extensionless_basenames_are_markdown() {
         "CODE_OF_CONDUCT",
     ] {
         assert_eq!(
-            classify(name),
+            classify(name.as_bytes()),
             Some(Classification::ExtensionlessMarkdown),
             "{name}"
         );
         assert_eq!(
-            classify(&format!("docs/{name}")),
+            classify(format!("docs/{name}").as_bytes()),
             Some(Classification::ExtensionlessMarkdown),
             "nested {name}"
         );
     }
-    assert_eq!(classify("readme"), None);
-    assert_eq!(classify("README.txt"), None);
-    assert_eq!(classify("SUPPORTED"), None);
+    assert_eq!(classify(b"readme"), None);
+    assert_eq!(classify(b"README.txt"), None);
+    assert_eq!(classify(b"SUPPORTED"), None);
 }
 
 #[test]
 fn advisory_basenames_run_no_grammar() {
     assert_eq!(
-        classify(".cursorrules"),
+        classify(b".cursorrules"),
         Some(Classification::PlainAdvisory)
     );
     assert_eq!(
-        classify("docs/llms.txt"),
+        classify(b"docs/llms.txt"),
         Some(Classification::PlainAdvisory)
     );
-    assert_eq!(classify("LLMS.txt"), None);
-    assert_eq!(classify("a/b.cursorrules"), None);
+    assert_eq!(classify(b"LLMS.txt"), None);
+    assert_eq!(classify(b"a/b.cursorrules"), None);
     assert_eq!(
         Classification::PlainAdvisory.adapter(),
         Some(Adapter::PlainAdvisory)
@@ -108,15 +108,18 @@ fn excluded_trees_are_directory_components() {
         ".next",
         "target",
     ] {
-        assert!(excluded_by_built_in(&format!("{tree}/x.md")), "{tree}");
         assert!(
-            excluded_by_built_in(&format!("a/{tree}/b/x.md")),
+            excluded_by_built_in(format!("{tree}/x.md").as_bytes()),
+            "{tree}"
+        );
+        assert!(
+            excluded_by_built_in(format!("a/{tree}/b/x.md").as_bytes()),
             "nested {tree}"
         );
     }
-    assert!(!excluded_by_built_in("vendor.md"));
-    assert!(!excluded_by_built_in("a/my-target/x.md"));
-    assert!(!excluded_by_built_in("TARGET/x.md"));
-    assert!(!excluded_by_built_in("docs/guide.md"));
-    assert!(!excluded_by_built_in("targets/x.md"));
+    assert!(!excluded_by_built_in(b"vendor.md"));
+    assert!(!excluded_by_built_in(b"a/my-target/x.md"));
+    assert!(!excluded_by_built_in(b"TARGET/x.md"));
+    assert!(!excluded_by_built_in(b"docs/guide.md"));
+    assert!(!excluded_by_built_in(b"targets/x.md"));
 }
