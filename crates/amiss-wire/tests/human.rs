@@ -43,3 +43,19 @@ fn two_hundred_scalars_then_a_literal_ellipsis() {
         "the bound counts scalars"
     );
 }
+
+/// `human-atom-bytes-v1`: printable ASCII literal, every other byte the
+/// two-digit escape of its value, never an invented scalar, truncation at
+/// the same bound as text.
+#[test]
+fn byte_atoms_escape_every_nonprintable_byte_and_invent_nothing() {
+    use amiss_wire::human::atom_bytes;
+    assert_eq!(atom_bytes(b"docs/guide.md"), "\"docs/guide.md\"");
+    assert_eq!(atom_bytes(b"bad-\xff.md"), "\"bad-\\u00ff.md\"");
+    assert_eq!(atom_bytes(b"\x1b[31mred"), "\"\\u001b[31mred\"");
+    assert_eq!(atom_bytes(b"a\"b\\c"), "\"a\\\"b\\\\c\"");
+    let long = vec![0xfe_u8; 205];
+    let rendered = atom_bytes(&long);
+    assert!(rendered.ends_with("...\""));
+    assert_eq!(rendered.matches("\\u00fe").count(), 200);
+}

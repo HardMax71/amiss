@@ -268,92 +268,112 @@ fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
     (code, payload(&stdout))
 }
 
-/// A repository can try to hide a document by giving it a name the scanner has no
-/// way to write down: bytes that are not UTF-8, or a path `RepoPath` refuses, such
-/// as one carrying a backslash. Dropping that entry quietly would be the worst bug
-/// this tool could have, because the report would come back complete and passing
-/// with a document simply absent from it, and the absence is the thing nobody can
-/// see. So there is no report at all: the path defect is a retained analysis error,
-/// the run is incomplete, and the exit is 2.
+/// A name the byte grammar refuses, such as one carrying a backslash, still
+/// voids the run: dropping the entry quietly would be the worst bug this tool
+/// could have, because the report would come back complete and passing with a
+/// document simply absent from it. The defect is a retained analysis error
+/// with the exact bytes, the run is incomplete, and the exit is 2. Under the
+/// second contract this refusal is structural only; spelling is no longer a
+/// reason.
 #[test]
-fn a_document_the_scanner_cannot_name_is_refused_rather_than_dropped() {
-    for name in [
-        b"docs\\hidden.md".as_slice(),
-        b"docs/bad-\xff-name.md".as_slice(),
-    ] {
-        for index_mode in [false, true] {
-            let (code, payload) = hidden_entry(name, index_mode);
-            let where_from = if index_mode { "index" } else { "tree" };
+fn a_document_the_grammar_refuses_is_still_refused_rather_than_dropped() {
+    let name = b"docs\\hidden.md".as_slice();
+    for index_mode in [false, true] {
+        let (code, payload) = hidden_entry(name, index_mode);
+        let where_from = if index_mode { "index" } else { "tree" };
+        assert_eq!(
+            code, 2,
+            "{where_from}: an unnameable document is not a pass"
+        );
+        assert_eq!(payload["result"]["complete"], false, "{where_from}");
+        assert_eq!(payload["result"]["status"], "incomplete", "{where_from}");
+        let row = payload["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
+            .unwrap_or_else(|| panic!("{where_from}: the defect is disclosed, not swallowed"));
+        let hex: String = name.iter().fold(String::new(), |mut out, byte| {
+            let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
+            out
+        });
+        assert_eq!(
+            row["path"],
+            serde_json::Value::Null,
+            "{where_from}: a name the grammar refuses is not a path value"
+        );
+        assert_eq!(
+            row["path_bytes_hex"].as_str(),
+            Some(hex.as_str()),
+            "{where_from}: the refused bytes are disclosed exactly, not dropped"
+        );
+        assert!(
+            payload["documents"].as_array().unwrap().is_empty(),
+            "{where_from}: an incomplete run publishes no document set to mistake for coverage"
+        );
+        if index_mode {
+            let candidate = &payload["evaluation"]["candidate"];
             assert_eq!(
-                code, 2,
-                "{where_from}: an unnameable document is not a pass"
+                candidate["kind"], "unavailable",
+                "an index with a row the identity cannot spell has no identity"
             );
-            assert_eq!(payload["result"]["complete"], false, "{where_from}");
-            assert_eq!(payload["result"]["status"], "incomplete", "{where_from}");
-            let codes: Vec<&str> = payload["errors"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|error| error["code"].as_str().unwrap())
-                .collect();
-            assert!(
-                codes.contains(&"UNREPRESENTABLE_PATH"),
-                "{where_from}: the defect is disclosed, not swallowed: {codes:?}"
-            );
-            let row = payload["errors"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
-                .unwrap();
-            let hex: String = name.iter().fold(String::new(), |mut out, byte| {
-                let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
-                out
-            });
             assert_eq!(
-                row["path"],
+                candidate["snapshot_digest"],
                 serde_json::Value::Null,
-                "{where_from}: a name the report cannot hold as text is not a path value"
+                "no digest may claim complete-logical-index over a partial view"
             );
+        }
+    }
+}
+
+/// The second contract's inversion: a name that is raw bytes rather than text
+/// is a document, not a defect. The entry is scanned, the report carries its
+/// path as the `bytes_hex` object, the run completes, and nothing is hidden;
+/// re-adding a spelling gate anywhere in discovery fails this test.
+#[test]
+fn a_document_named_in_bytes_is_scanned_not_refused() {
+    let name = b"docs/bad-\xff-name.md".as_slice();
+    let hex = "646f63732f6261642dff2d6e616d652e6d64";
+    for index_mode in [false, true] {
+        let (code, payload) = hidden_entry(name, index_mode);
+        let where_from = if index_mode { "index" } else { "tree" };
+        assert_eq!(
+            code, 0,
+            "{where_from}: a byte-named document is not an error"
+        );
+        assert_eq!(payload["result"]["complete"], true, "{where_from}");
+        assert!(
+            payload["errors"].as_array().unwrap().is_empty(),
+            "{where_from}: nothing to disclose, nothing hidden"
+        );
+        let documents = payload["documents"].as_array().unwrap();
+        let row = documents
+            .iter()
+            .find(|row| row["path"]["bytes_hex"] == hex)
+            .unwrap_or_else(|| panic!("{where_from}: the byte-named document is published"));
+        assert_eq!(
+            row["classification"], "structured-markdown",
+            "{where_from}: bytes classify by the same suffix rows as text"
+        );
+        if index_mode {
+            let candidate = &payload["evaluation"]["candidate"];
+            assert_eq!(candidate["kind"], "index", "{where_from}");
             assert_eq!(
-                row["path_bytes_hex"].as_str(),
-                Some(hex.as_str()),
-                "{where_from}: the refused bytes are disclosed exactly, not dropped"
+                candidate["entry_count"], 3,
+                "{where_from}: the identity counts every row, the byte-named one included"
             );
             assert!(
-                payload["documents"].as_array().unwrap().is_empty(),
-                "{where_from}: an incomplete run publishes no document set to mistake for coverage"
+                candidate["snapshot_digest"].as_str().is_some(),
+                "{where_from}: the identity is complete and digestible"
             );
-            // the backslash name is UTF-8 and rides the projection; only a
-            // name the projection cannot spell at all voids the identity
-            if index_mode && str::from_utf8(name).is_err() {
-                let candidate = &payload["evaluation"]["candidate"];
-                assert_eq!(
-                    candidate["kind"], "unavailable",
-                    "an index with a row the identity cannot spell has no identity"
-                );
-                assert!(
-                    candidate["reasons"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|reason| reason == "unrepresentable-path"),
-                    "the refusal names its reason: {candidate}"
-                );
-                assert_eq!(
-                    candidate["snapshot_digest"],
-                    serde_json::Value::Null,
-                    "no digest may claim complete-logical-index over a partial view"
-                );
-            }
         }
     }
 }
 
 /// Distinct refused names are distinct disclosures. Before the bytes rode
-/// along, every non-UTF-8 name collapsed into one identical error row and the
+/// along, every refused name collapsed into one identical error row and the
 /// deduplicated set said "one problem" no matter how many entries were
-/// hidden.
+/// hidden. Under the second contract the refusals are structural.
 #[test]
 fn every_unnameable_entry_is_disclosed_separately() {
     let dir = TempDir::new().unwrap();
@@ -371,8 +391,8 @@ fn every_unnameable_entry_is_disclosed_separately() {
         root,
         &[
             ("100644", b"README.md".as_slice(), readme.as_str()),
-            ("100644", b"bad-\xfe.md".as_slice(), blob.as_str()),
-            ("100644", b"bad-\xff.md".as_slice(), blob.as_str()),
+            ("100644", b"bad\\one.md".as_slice(), blob.as_str()),
+            ("100644", b"bad\\two.md".as_slice(), blob.as_str()),
         ],
     )
     .unwrap();
@@ -404,7 +424,7 @@ fn every_unnameable_entry_is_disclosed_separately() {
         .collect();
     assert_eq!(
         disclosed,
-        vec!["6261642dfe2e6d64", "6261642dff2e6d64"],
+        vec!["6261645c6f6e652e6d64", "6261645c74776f2e6d64"],
         "two hidden entries are two rows, in byte order, each naming its bytes"
     );
 
@@ -412,8 +432,8 @@ fn every_unnameable_entry_is_disclosed_separately() {
         root,
         &[
             (b"README.md".as_slice(), readme.as_str()),
-            (b"bad-\xfe.md".as_slice(), blob.as_str()),
-            (b"bad-\xff.md".as_slice(), blob.as_str()),
+            (b"bad\\one.md".as_slice(), blob.as_str()),
+            (b"bad\\two.md".as_slice(), blob.as_str()),
         ],
     )
     .unwrap();
@@ -442,7 +462,7 @@ fn every_unnameable_entry_is_disclosed_separately() {
         .collect();
     assert_eq!(
         disclosed,
-        vec!["6261642dfe2e6d64", "6261642dff2e6d64"],
+        vec!["6261645c6f6e652e6d64", "6261645c74776f2e6d64"],
         "the staged gate discloses every unspellable row too, not just the first"
     );
 }
@@ -724,4 +744,282 @@ fn a_tracked_blob_the_store_does_not_hold_refuses_and_names_the_document() {
             "{mode}: an incomplete run publishes no document set"
         );
     }
+}
+
+/// A link may percent-escape bytes no text can hold, and under the second
+/// contract those bytes name a real target: `%FF` decodes to the byte and the
+/// reference resolves bytewise against the tree. The sibling that decodes to
+/// bytes nothing in the tree carries stays a missing target whose normalized
+/// intent names the bytes exactly.
+#[test]
+fn a_percent_escaped_byte_reference_resolves_against_the_byte_named_target() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let readme = amiss_fixtures::loose_object(
+        root,
+        "blob",
+        b"# R\n\n[found](docs/bad-%FF-name.md) and [gone](docs/bad-%FE-name.md)\n",
+    )
+    .unwrap();
+    let hidden = amiss_fixtures::loose_object(root, "blob", b"# Hidden\n").unwrap();
+    let docs = amiss_fixtures::tree_object(
+        root,
+        &[("100644", b"bad-\xff-name.md".as_slice(), hidden.as_str())],
+    )
+    .unwrap();
+    let tree = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("40000", b"docs".as_slice(), docs.as_str()),
+        ],
+    )
+    .unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap();
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let payload = payload(&stdout);
+    assert_eq!(payload["summary"]["references"]["extracted"], 2);
+    assert_eq!(
+        payload["summary"]["references"]["resolved"], 1,
+        "the byte-named target is found bytewise"
+    );
+    assert_eq!(payload["summary"]["references"]["missing"], 1);
+    let finding = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(
+        finding["key_input"]["scope"]["normalized_target_intent"]["path"]["bytes_hex"],
+        "646f63732f6261642dfe2d6e616d652e6d64",
+        "the missing target's identity names the bytes exactly"
+    );
+}
+
+/// A policy tree include covers byte-named documents under it: the include is
+/// text, the tree-prefix rule is bytewise, and a byte-named file with no
+/// native classification becomes policy-included rather than invisible.
+#[test]
+fn a_policy_tree_include_covers_byte_named_documents() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
+        .trim()
+        .to_owned();
+    let policy = amiss_fixtures::loose_object(
+        root,
+        "blob",
+        br#"{"schema":"amiss/scanner-policy/v1","document_includes":[{"kind":"tree","path":"specs"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap();
+    let hidden = amiss_fixtures::loose_object(root, "blob", b"included bytes\n").unwrap();
+    let amiss_dir = amiss_fixtures::tree_object(
+        root,
+        &[("100644", b"scanner-policy.json".as_slice(), policy.as_str())],
+    )
+    .unwrap();
+    let specs = amiss_fixtures::tree_object(
+        root,
+        &[("100644", b"design-\xff.rst".as_slice(), hidden.as_str())],
+    )
+    .unwrap();
+    let tree = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("40000", b".amiss".as_slice(), amiss_dir.as_str()),
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("40000", b"specs".as_slice(), specs.as_str()),
+        ],
+    )
+    .unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap();
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let payload = payload(&stdout);
+    let row = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["path"]["bytes_hex"] == "73706563732f64657369676e2dff2e727374")
+        .expect("the included byte-named document is published");
+    assert_eq!(row["classification"], "policy-included");
+}
+
+/// Two runs over a tree interleaving text and byte names produce the
+/// identical wire, and the documents array sorts by raw path bytes, so the
+/// 0xFF name lands after every ASCII name rather than clustering by form.
+#[test]
+fn byte_and_text_paths_interleave_deterministically_in_byte_order() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let blob = amiss_fixtures::loose_object(root, "blob", b"# D\n").unwrap();
+    let docs = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("100644", b"a.md".as_slice(), blob.as_str()),
+            ("100644", b"m-\xfe.md".as_slice(), blob.as_str()),
+            ("100644", b"z.md".as_slice(), blob.as_str()),
+            ("100644", b"\xff.md".as_slice(), blob.as_str()),
+        ],
+    )
+    .unwrap();
+    let tree =
+        amiss_fixtures::tree_object(root, &[("40000", b"docs".as_slice(), docs.as_str())]).unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap();
+    let repo = amiss_fixtures::path_arg(root);
+    let args = [
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ];
+    let (first_code, first) = amiss(&args);
+    let (second_code, second) = amiss(&args);
+    assert_eq!((first_code, second_code), (0, 0));
+    assert_eq!(first, second, "identical inputs, identical wire");
+    let payload = payload(&first);
+    let order: Vec<String> = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            row["path"].as_str().map_or_else(
+                || format!("hex:{}", row["path"]["bytes_hex"].as_str().unwrap()),
+                str::to_owned,
+            )
+        })
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            "README.md".to_owned(),
+            "docs/a.md".to_owned(),
+            "hex:646f63732f6d2dfe2e6d64".to_owned(),
+            "docs/z.md".to_owned(),
+            "hex:646f63732fff2e6d64".to_owned(),
+        ],
+        "raw byte order, not form-clustered"
+    );
+}
+
+/// The preimage-language law, enforced: a reference-scoped finding key
+/// embeds only content-derived values, and this exact digest was recorded
+/// from the engine before the flip to the second contract. An all-text
+/// repository must keep every such identity across the versions.
+#[test]
+fn a_text_repository_keeps_its_prior_finding_keys() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# R\n\n[g](docs/guide.md)\n").unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README.md) and [gone](missing.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    assert_eq!(
+        (base.as_str(), candidate.as_str()),
+        (
+            "989d8153fdf533e0e1eb55b971cafa4b81e4612c",
+            "a806e16842c7e4cb686c7f5b9977fb80226b49ca",
+        ),
+        "the pinned identity and dates make the fixture byte-reproducible"
+    );
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let payload = payload(&stdout);
+    let finding = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(
+        finding["finding_key"],
+        "sha256:7e1df2d99d47f73d61f21c5c26ea993b836569b408ae342196e1d43dfd14d4b8",
+        "recorded from the engine before the flip; the preimage language only widened"
+    );
 }

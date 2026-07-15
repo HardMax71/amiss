@@ -654,10 +654,9 @@ fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
     )
-    .unwrap()
-    .replace("assure/", "amiss/");
+    .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
     let validator = jsonschema::validator_for(&schema).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
