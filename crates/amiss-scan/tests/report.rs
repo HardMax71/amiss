@@ -246,6 +246,7 @@ fn missing_detail(path: &str) -> ErrorDetail {
     ErrorDetail {
         code: AnalysisErrorCode::GitObjectMissing,
         path: Some(path.to_owned()),
+        path_bytes: None,
         resource: None,
     }
 }

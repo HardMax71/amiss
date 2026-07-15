@@ -1471,6 +1471,7 @@ fn output_gate(setup: &Setup, details: Vec<ErrorDetail>, built: Built) -> Built 
     details.push(ErrorDetail {
         code: AnalysisErrorCode::OutputLimitExceeded,
         path: None,
+        path_bytes: None,
         resource: Some((
             ResourceName::MachineJsonBytes,
             MACHINE_JSON_BYTES,
@@ -1486,6 +1487,7 @@ fn governed_details(governed: &[crate::evaluate::GovernedSeed]) -> Vec<ErrorDeta
         .map(|seed| ErrorDetail {
             code: AnalysisErrorCode::UnsupportedCapability,
             path: Some(seed.document.clone()),
+            path_bytes: None,
             resource: None,
         })
         .collect()
@@ -1527,6 +1529,7 @@ fn findings_ceiling_crossing(setup: &Setup, findings: &[Finding]) -> Option<Erro
     (finding_total > setup.policy.complete_findings).then_some(ErrorDetail {
         code: AnalysisErrorCode::ResourceLimitExceeded,
         path: None,
+        path_bytes: None,
         resource: Some((
             ResourceName::CompleteFindings,
             setup.policy.complete_findings,
@@ -1553,6 +1556,7 @@ fn retained_details(details: &[ErrorDetail], ceiling: usize) -> Vec<ErrorDetail>
         sorted.push(ErrorDetail {
             code: AnalysisErrorCode::TooManyErrors,
             path: None,
+            path_bytes: None,
             resource: Some((
                 ResourceName::TypedAnalysisErrorsRetained,
                 limit,

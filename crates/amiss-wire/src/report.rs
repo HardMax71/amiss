@@ -389,6 +389,7 @@ pub fn unavailable_evaluation_envelope(
                 &ErrorDetail {
                     code: *code,
                     path: None,
+                    path_bytes: None,
                     resource: None,
                 },
                 phase,
@@ -962,12 +963,14 @@ impl FindingKind {
 }
 
 /// One typed analysis error's reportable detail: the code, the exact path
-/// where the partition names one, and the crossing triple for a resource
-/// error.
+/// where the partition names one, the raw bytes of a name the report cannot
+/// hold as text, and the crossing triple for a resource error. Field order
+/// is the canonical error key, so the derived ordering is the wire's.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ErrorDetail {
     pub code: AnalysisErrorCode,
     pub path: Option<String>,
+    pub path_bytes: Option<Vec<u8>>,
     pub resource: Option<(crate::controls::ResourceName, u64, u64)>,
 }
 
@@ -1002,9 +1005,23 @@ fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
         ("phase", string(phase)),
         ("code", string(detail.code.as_str())),
         ("path", detail.path.as_deref().map_or(Value::Null, string)),
-        ("path_bytes_hex", Value::Null),
+        (
+            "path_bytes_hex",
+            detail
+                .path_bytes
+                .as_deref()
+                .map_or(Value::Null, |bytes| Value::String(hex_lower(bytes))),
+        ),
         ("resource", resource),
         ("configured_limit", limit),
         ("observed_lower_bound", observed),
     ])
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
+    }
+    out
 }
