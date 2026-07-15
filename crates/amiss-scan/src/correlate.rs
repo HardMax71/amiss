@@ -148,14 +148,14 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent {
     let query = observe::query_digest(intent);
     let fragment = observe::fragment_digest(intent);
     match intent.kind {
-        IntentKind::RepositoryPath | IntentKind::SameRepositoryGithub => {
-            CorrelationIntent::Repository {
-                path: intent.repository_path.clone(),
-                target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
-                query,
-                fragment,
-            }
-        }
+        IntentKind::RepositoryPath
+        | IntentKind::SameRepositoryGithub
+        | IntentKind::SameRepositoryGitlab => CorrelationIntent::Repository {
+            path: intent.repository_path.clone(),
+            target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
+            query,
+            fragment,
+        },
         IntentKind::ExternalUrl => CorrelationIntent::External {
             raw: observation.raw_destination_digest,
             scheme: intent.external_scheme.clone().unwrap_or_default(),

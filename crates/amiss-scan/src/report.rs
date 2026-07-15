@@ -1204,7 +1204,10 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
         ),
         (
             "same_repository",
-            integer(bucket(IntentKind::SameRepositoryGithub)),
+            integer(
+                bucket(IntentKind::SameRepositoryGithub)
+                    .saturating_add(bucket(IntentKind::SameRepositoryGitlab)),
+            ),
         ),
         (
             "external_out_of_scope",

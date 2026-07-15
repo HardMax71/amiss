@@ -732,3 +732,59 @@ fn a_host_prefix_lookalike_authority_stays_external() {
     assert_eq!(row.code, ResolutionCode::ExternalUrl);
     assert_eq!(intent.kind, IntentKind::ExternalUrl);
 }
+
+fn gitlab_context() -> ForgeContext {
+    ForgeContext {
+        host: "gitlab.com".to_owned(),
+        dialect: ForgeDialect::Gitlab,
+        owner: "acme".to_owned(),
+        repository: "widgets".to_owned(),
+        candidate_ref: "refs/heads/feature/x".to_owned(),
+        default_ref: "refs/heads/main".to_owned(),
+        candidate_oid: None,
+    }
+}
+
+/// The gitlab dialect against a real tree: the canonical separator form
+/// resolves, an encoded owner segment is foreign, and a ref matching
+/// neither trusted ref is version-scoped out with its path disclosed.
+#[test]
+fn gitlab_recognition_resolves_against_the_tree() {
+    let mut bed = bed();
+    let context = gitlab_context();
+    let (intent, row) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(intent.kind, IntentKind::SameRepositoryGitlab);
+    assert_eq!(row.code, ResolutionCode::ExactPath);
+
+    let (_intent, encoded) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://gitlab.com/acm%65/widgets/-/blob/feature/x/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(encoded.code, ResolutionCode::ForeignRepository);
+
+    let (_intent, pinned) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://gitlab.com/acme/widgets/-/blob/0123456789012345678901234567890123456789/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(
+        pinned.code,
+        ResolutionCode::UnsupportedVersionScope,
+        "a commit-pinned link matches neither trusted ref, exactly as on github"
+    );
+    assert_eq!(pinned.path, None);
+}

@@ -155,7 +155,11 @@ fn classifies_profile_host_and_event_rows() {
         panic!("an identity on another forge is a claim, not a refusal");
     };
     assert_eq!(other_forge.identity.unwrap().repository.host, "gitlab.com");
-    assert_eq!(other_forge.forge, None, "no dialect table entry, no flag");
+    assert_eq!(
+        other_forge.forge,
+        Some(amiss_wire::model::ForgeDialect::Gitlab),
+        "the known-host table names the dialect"
+    );
 
     let uppercase_owner = with(
         &valid_pair(),

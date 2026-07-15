@@ -1,0 +1,528 @@
+#![expect(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "conformance harness over asserted vector shapes"
+)]
+
+use std::ffi::OsString;
+use std::fs;
+use std::path::Path;
+
+use amiss::invocation::{Outcome, parse};
+use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
+use amiss_scan::resolve::{ForgeContext, TargetCache};
+use amiss_scan::{
+    DocumentStatus, Intent, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover,
+    resolve,
+};
+use amiss_wire::controls::SourceConstruct;
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepoPath};
+use amiss_wire::report::{IntentKind, ResolutionCode, ResolutionStatus};
+use serde_json::Value;
+
+struct Bed {
+    _pair: amiss_fixtures::CommitPair,
+    repo: Repository,
+    git_resources: GitResources,
+    scan_resources: ScanResources,
+    cache: TargetCache,
+    discovery: SnapshotDiscovery,
+}
+
+impl Bed {
+    fn new() -> Self {
+        let pair = amiss_fixtures::commit_pair(
+            &[
+                ("README.md", "# R\n"),
+                ("docs/a.md", "# A\n"),
+                ("docs/file.md", "# F\n"),
+                ("src/a.scala", "object A\n"),
+                ("auto/uri.md", "<https://example.com/a?b#c>\n"),
+                ("auto/email.md", "<foo@example.com>\n"),
+                ("auto/protocol.md", "visit https://example.com/a now\n"),
+                ("auto/www.md", "visit www.example.com/a now\n"),
+                ("auto/gfm-email.md", "mail foo.bar@example.com now\n"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let repo = Repository::open(Path::new(&pair.repo), ObjectFormat::Sha1).unwrap();
+        let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+        let commit_oid = Oid::new(ObjectFormat::Sha1, pair.candidate.clone()).unwrap();
+        let commit_object = repo
+            .read_expected(&mut git_resources, &commit_oid, ObjectKind::Commit)
+            .unwrap();
+        let commit = parse_commit(ObjectFormat::Sha1, &commit_object.body).unwrap();
+        let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+        let discovery = discover(
+            &repo,
+            &mut git_resources,
+            &mut scan_resources,
+            &amiss_scan::Includes::default(),
+            &commit.tree,
+        )
+        .unwrap();
+        Self {
+            _pair: pair,
+            repo,
+            git_resources,
+            scan_resources,
+            cache: TargetCache::default(),
+            discovery,
+        }
+    }
+
+    fn run(
+        &mut self,
+        context: Option<&ForgeContext>,
+        source: &str,
+        is_image: bool,
+        destination: &str,
+    ) -> (Intent, Resolution) {
+        let document = RepoPath::new(source.to_owned()).unwrap();
+        resolve(
+            &self.repo,
+            &mut self.git_resources,
+            &mut self.scan_resources,
+            &mut self.cache,
+            &self.discovery,
+            context,
+            &document,
+            is_image,
+            destination,
+        )
+        .unwrap()
+    }
+
+    fn autolink_destination(&self, document: &str) -> String {
+        let path = RepoPath::new(document.to_owned()).unwrap();
+        let record = self
+            .discovery
+            .documents
+            .iter()
+            .find(|record| record.path == path)
+            .unwrap();
+        let DocumentStatus::Scanned(scanned) = &record.status else {
+            panic!("{document} is not a scanned document");
+        };
+        let occurrence = scanned
+            .occurrences
+            .iter()
+            .find(|occurrence| occurrence.occurrence.construct == SourceConstruct::Autolink)
+            .unwrap();
+        occurrence.occurrence.semantic_destination.clone()
+    }
+}
+
+fn context(
+    dialect: ForgeDialect,
+    host: &str,
+    owner: &str,
+    name: &str,
+    candidate_ref: &str,
+    default_ref: &str,
+) -> ForgeContext {
+    ForgeContext {
+        host: host.to_owned(),
+        dialect,
+        owner: owner.to_owned(),
+        repository: name.to_owned(),
+        candidate_ref: candidate_ref.to_owned(),
+        default_ref: default_ref.to_owned(),
+        candidate_oid: None,
+    }
+}
+
+fn text<'a>(case: &'a Value, key: &str) -> &'a str {
+    case.get(key).and_then(Value::as_str).unwrap()
+}
+
+fn dialect_of(case: &Value) -> ForgeDialect {
+    match text(case, "dialect") {
+        "github" => ForgeDialect::Github,
+        "gitlab" => ForgeDialect::Gitlab,
+        other => panic!("unknown dialect {other}"),
+    }
+}
+
+fn split_case(bed: &mut Bed, case: &Value, id: &str) {
+    let operation = text(case, "operation");
+    let form_key = if operation == "gitlab-ref-split" {
+        "gitlab_form"
+    } else {
+        "github_form"
+    };
+    let form = case.get(form_key).and_then(Value::as_str).unwrap_or("blob");
+    let (dialect, host, url) = if operation == "gitlab-ref-split" {
+        let url = format!(
+            "https://gitlab.com/acme/widgets/-/{form}/{}",
+            text(case, "encoded_suffix")
+        );
+        (ForgeDialect::Gitlab, "gitlab.com", url)
+    } else {
+        let url = format!(
+            "https://github.com/acme/widgets/{form}/{}",
+            text(case, "encoded_suffix")
+        );
+        (ForgeDialect::Github, "github.com", url)
+    };
+    let run_context = context(
+        dialect,
+        host,
+        "acme",
+        "widgets",
+        text(case, "candidate_ref"),
+        text(case, "default_ref"),
+    );
+    let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
+    let expected = case.get("expected").unwrap();
+    let expected_path = expected.get("path").and_then(Value::as_str);
+    let row_path = row
+        .path
+        .as_ref()
+        .and_then(|path| path.as_str().map(str::to_owned));
+    match text(expected, "status") {
+        "candidate" => {
+            assert_ne!(
+                row.code,
+                ResolutionCode::UnsupportedVersionScope,
+                "{id}: the candidate ref matched"
+            );
+            assert_eq!(row_path.as_deref(), expected_path, "{id}");
+            assert_eq!(
+                intent
+                    .repository_path
+                    .as_ref()
+                    .and_then(|path| path.as_str()),
+                expected_path,
+                "{id}"
+            );
+        }
+        "unsupported-version-scope" => {
+            assert_eq!(row.code, ResolutionCode::UnsupportedVersionScope, "{id}");
+            assert_eq!(row_path.as_deref(), expected_path, "{id}");
+        }
+        "invalid" => {
+            assert_eq!(row.code.status(), ResolutionStatus::Invalid, "{id}");
+            assert_eq!(row_path, None, "{id}");
+        }
+        other => panic!("{id}: unknown split status {other}"),
+    }
+}
+
+fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
+    let value = text(case, "value");
+    let (run_context, url) = if text(case, "operation") == "gitlab-line-fragment" {
+        (
+            context(
+                ForgeDialect::Gitlab,
+                "gitlab.com",
+                "acme",
+                "widgets",
+                "refs/heads/main",
+                "refs/heads/main",
+            ),
+            format!("https://gitlab.com/acme/widgets/-/blob/main/docs/a.md#{value}"),
+        )
+    } else {
+        (
+            context(
+                ForgeDialect::Github,
+                "github.com",
+                "acme",
+                "widgets",
+                "refs/heads/main",
+                "refs/heads/main",
+            ),
+            format!("https://github.com/acme/widgets/blob/main/docs/a.md#{value}"),
+        )
+    };
+    let (_intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
+    let expected = if case.get("expected").and_then(Value::as_bool).unwrap() {
+        ResolutionCode::CodeFragmentUnevaluated
+    } else {
+        ResolutionCode::UnsupportedFragmentSemantics
+    };
+    assert_eq!(
+        row.code, expected,
+        "{id}: a document target classifies the fragment"
+    );
+}
+
+fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
+    let operation = text(case, "operation");
+    if operation == "github-identity" {
+        let url = format!(
+            "https://{}/{}/{}/blob/main/docs/a.md",
+            text(case, "host"),
+            text(case, "url_owner"),
+            text(case, "url_repository")
+        );
+        let run_context = context(
+            ForgeDialect::Github,
+            "github.com",
+            text(case, "identity_owner"),
+            text(case, "identity_repository"),
+            "refs/heads/main",
+            "refs/heads/main",
+        );
+        let (intent, _row) = bed.run(Some(&run_context), "README.md", false, &url);
+        let expected = case.get("expected").and_then(Value::as_bool).unwrap();
+        assert_eq!(
+            intent.kind == IntentKind::SameRepositoryGithub,
+            expected,
+            "{id}"
+        );
+        return;
+    }
+    let dialect = dialect_of(case);
+    let run_context = context(
+        dialect,
+        text(case, "identity_host"),
+        text(case, "identity_owner"),
+        text(case, "identity_name"),
+        "refs/heads/main",
+        "refs/heads/main",
+    );
+    let (intent, row) = bed.run(Some(&run_context), "README.md", false, text(case, "url"));
+    match text(case, "expected") {
+        "same-repository" => assert!(
+            matches!(
+                intent.kind,
+                IntentKind::SameRepositoryGithub | IntentKind::SameRepositoryGitlab
+            ),
+            "{id}: got {:?}",
+            intent.kind
+        ),
+        "foreign" => assert_eq!(row.code, ResolutionCode::ForeignRepository, "{id}"),
+        "external" => {
+            assert_eq!(row.code, ResolutionCode::ExternalUrl, "{id}");
+            assert_eq!(intent.kind, IntentKind::ExternalUrl, "{id}");
+        }
+        other => panic!("{id}: unknown identity expectation {other}"),
+    }
+}
+
+fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
+    let run_context = context(
+        ForgeDialect::Gitlab,
+        "gitlab.com",
+        "acme",
+        "widgets",
+        "refs/heads/main",
+        "refs/heads/main",
+    );
+    let url = format!("https://gitlab.com/{}", text(case, "suffix"));
+    let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
+    match text(case, "expected") {
+        "foreign" => assert_eq!(row.code, ResolutionCode::ForeignRepository, "{id}"),
+        expected => assert_eq!(
+            intent
+                .target_kind
+                .map(amiss_wire::controls::TargetKind::as_str),
+            Some(expected),
+            "{id}"
+        ),
+    }
+}
+
+fn target_kind_case(bed: &mut Bed, case: &Value, id: &str) {
+    let is_image = text(case, "construct").contains("image");
+    let destination = match case.get("github_form").and_then(Value::as_str) {
+        Some("tree") => "https://github.com/acme/widgets/tree/main/docs".to_owned(),
+        Some(_) => "https://github.com/acme/widgets/blob/main/docs/a.md".to_owned(),
+        None => {
+            let trailing = case
+                .get("trailing_slash")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if trailing {
+                "docs/".to_owned()
+            } else {
+                "docs/a.md".to_owned()
+            }
+        }
+    };
+    let run_context = context(
+        ForgeDialect::Github,
+        "github.com",
+        "acme",
+        "widgets",
+        "refs/heads/main",
+        "refs/heads/main",
+    );
+    let (intent, _row) = bed.run(Some(&run_context), "README.md", is_image, &destination);
+    assert_eq!(
+        intent
+            .target_kind
+            .map(amiss_wire::controls::TargetKind::as_str),
+        Some(text(case, "expected")),
+        "{id}"
+    );
+}
+
+fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
+    let target = match text(case, "target_class") {
+        "document" => "docs/a.md",
+        "code" => "src/a.scala",
+        other => panic!("{id}: unknown target class {other}"),
+    };
+    let mut destination = target.to_owned();
+    if case.get("query_present").and_then(Value::as_bool).unwrap() {
+        destination.push_str("?x");
+    }
+    if case
+        .get("fragment_present")
+        .and_then(Value::as_bool)
+        .unwrap()
+    {
+        let line = case
+            .get("github_line_fragment")
+            .and_then(Value::as_bool)
+            .unwrap();
+        destination.push_str(if line { "#L10" } else { "#sec" });
+    }
+    let (_intent, row) = bed.run(None, "README.md", false, &destination);
+    assert_eq!(row.code.as_str(), text(case, "expected"), "{id}");
+}
+
+fn dialect_default_case(case: &Value, id: &str) {
+    let host = text(case, "host");
+    let mut tokens: Vec<String> = [
+        "check",
+        "--repo",
+        ".",
+        "--object-format",
+        "sha1",
+        "--base",
+        &"a".repeat(40),
+        "--candidate",
+        &"b".repeat(40),
+        "--profile",
+        "observe",
+        "--repository",
+        &format!("{host}/acme/repo"),
+        "--ref",
+        "refs/heads/main",
+        "--default-branch-ref",
+        "refs/heads/main",
+    ]
+    .iter()
+    .map(|token| (*token).to_owned())
+    .collect();
+    if let Some(flag) = case.get("flag").and_then(Value::as_str) {
+        tokens.push("--forge".to_owned());
+        tokens.push(flag.to_owned());
+    }
+    let argv: Vec<OsString> = tokens.iter().map(OsString::from).collect();
+    let Outcome::Accepted(invocation) = parse(&argv) else {
+        panic!("{id}: expected acceptance");
+    };
+    assert_eq!(
+        invocation.forge.map(ForgeDialect::as_str),
+        case.get("expected").and_then(Value::as_str),
+        "{id}"
+    );
+}
+
+fn dispatch(bed: &mut Bed, case: &Value) {
+    let id = text(case, "id");
+    match text(case, "operation") {
+        "target-kind" => target_kind_case(bed, case, id),
+        "github-line-fragment" | "gitlab-line-fragment" => line_fragment_case(bed, case, id),
+        "github-ref-split" | "gitlab-ref-split" => split_case(bed, case, id),
+        "github-identity" | "forge-identity" => identity_case(bed, case, id),
+        "forge-form" => forge_form_case(bed, case, id),
+        "forge-dialect-default" => dialect_default_case(case, id),
+        "resolution-boundary" => boundary_case(bed, case, id),
+        "empty-native-destination" => {
+            let source = text(case, "source_document");
+            let (_intent, row) = bed.run(None, source, false, "");
+            assert_eq!(
+                row.path.as_ref().and_then(|path| path.as_str()),
+                Some(text(case, "expected")),
+                "{id}"
+            );
+        }
+        "external-scheme" => {
+            let destination = format!("{}://example.com/a", text(case, "value"));
+            let (intent, _row) = bed.run(None, "README.md", false, &destination);
+            assert_eq!(
+                intent.external_scheme.as_deref(),
+                Some(text(case, "expected")),
+                "{id}"
+            );
+        }
+        "network-path" => {
+            let (_intent, row) = bed.run(None, "README.md", false, text(case, "value"));
+            assert_eq!(row.code.as_str(), text(case, "expected"), "{id}");
+        }
+        "semantic-autolink" => {
+            let document = match text(case, "form") {
+                "commonmark-uri" => "auto/uri.md",
+                "commonmark-email" => "auto/email.md",
+                "gfm-protocol" => "auto/protocol.md",
+                "gfm-www" => "auto/www.md",
+                "gfm-email" => "auto/gfm-email.md",
+                other => panic!("{id}: unknown autolink form {other}"),
+            };
+            assert_eq!(
+                bed.autolink_destination(document),
+                text(case, "expected"),
+                "{id}"
+            );
+        }
+        "uri-components" => {
+            let (intent, _row) = bed.run(None, "README.md", false, text(case, "value"));
+            let expected = case.get("expected").unwrap();
+            assert_eq!(
+                intent
+                    .repository_path
+                    .as_ref()
+                    .and_then(|path| path.as_str()),
+                expected.get("path").and_then(Value::as_str),
+                "{id}"
+            );
+            assert_eq!(
+                intent.query.as_deref(),
+                expected.get("query").and_then(Value::as_str),
+                "{id}"
+            );
+            assert_eq!(
+                intent.fragment.as_deref(),
+                expected.get("fragment").and_then(Value::as_str),
+                "{id}"
+            );
+        }
+        "native-trailing-slash" => {
+            let is_image = text(case, "construct").contains("image");
+            let (_intent, row) = bed.run(None, "README.md", is_image, "docs/");
+            assert_eq!(row.code.as_str(), text(case, "expected"), "{id}");
+        }
+        other => panic!("unknown operation {other}: the harness must learn the contract"),
+    }
+}
+
+/// Every case in the reference-constructor vectors, driven through the
+/// public resolver and invocation surfaces. An operation the harness does
+/// not know is a panic, so a vector added for a future dialect cannot be
+/// silently skipped.
+#[test]
+fn the_reference_constructor_vectors_hold() {
+    let raw = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../spec/examples/reference-constructor-v2-vectors.json"),
+    )
+    .unwrap();
+    let vectors: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        vectors.get("schema").and_then(Value::as_str),
+        Some("amiss/reference-constructor-vectors/v2")
+    );
+    let cases = vectors.get("cases").and_then(Value::as_array).unwrap();
+    assert!(cases.len() >= 55, "the vector set only grows");
+    let mut bed = Bed::new();
+    for case in cases {
+        dispatch(&mut bed, case);
+    }
+}

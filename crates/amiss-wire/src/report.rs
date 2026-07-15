@@ -680,6 +680,7 @@ impl ResolutionCode {
 pub enum IntentKind {
     RepositoryPath,
     SameRepositoryGithub,
+    SameRepositoryGitlab,
     ExternalUrl,
     SiteRoute,
     Unsupported,
@@ -691,6 +692,7 @@ impl IntentKind {
         match self {
             Self::RepositoryPath => "repository-path",
             Self::SameRepositoryGithub => "same-repository-github",
+            Self::SameRepositoryGitlab => "same-repository-gitlab",
             Self::ExternalUrl => "external-url",
             Self::SiteRoute => "site-route",
             Self::Unsupported => "unsupported",

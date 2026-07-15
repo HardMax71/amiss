@@ -47,6 +47,7 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
         IntentKind::ExternalUrl => intent.external_scheme.as_deref(),
         IntentKind::RepositoryPath
         | IntentKind::SameRepositoryGithub
+        | IntentKind::SameRepositoryGitlab
         | IntentKind::SiteRoute
         | IntentKind::Unsupported => None,
     };
