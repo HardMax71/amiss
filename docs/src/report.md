@@ -78,4 +78,10 @@ validator. The schema is the compatibility contract: fields appear, move, or cha
 meaning only with a version bump, and the move from v1 to v2 is exactly one such change,
 the path union above. Every digest computed under a v1 preimage comes out identical under
 v2, because a text path serializes to the same bytes in both and the object form was not
-producible before, so the identities in old reports stay valid rather than orphaned.
+producible before, so the identities in old reports stay valid rather than orphaned. The
+move to v3 repeats the law for the identity: the host opens from a github.com constant to
+any declared spelling, the owner to slash-joined group paths, the evaluation names the
+recognition dialect in a nullable `forge` field, and the reference summary counts one
+`same_repository` total because a run has exactly one dialect. No v2 writer could emit any
+of that, so every inner digest keeps its meaning and its bytes; only the envelope and
+payload constants moved.

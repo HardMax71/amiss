@@ -13,9 +13,10 @@ is no `--help`, which is why the grammar is written out here.
 ```text
 amiss check --repo <path> --object-format <sha1|sha256>
             --base <full-oid> (--candidate <full-oid> | --index)
-            [--repository github.com/<owner>/<name>
+            [--repository <host>/<owner>/<name>
              --ref refs/heads/<name>
-             --default-branch-ref refs/heads/<name>]
+             --default-branch-ref refs/heads/<name>
+             [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce>
             [--explain-scope] [--format <human|json>]
 ```
@@ -26,14 +27,26 @@ evaluates exactly the trees you name and resolves nothing for you. Use `--index`
 [skip-worktree](https://git-scm.com/docs/git-update-index) is still part of the staged
 state and is read from the index like everything else.
 
-The optional `--repository` triple tells Amiss which GitHub repository this tree belongs to, which
+The optional `--repository` triple tells Amiss which repository this tree belongs to, which
 turns links like `https://github.com/<owner>/<name>/blob/main/src/lib.rs` in your prose into
 paths it can actually check. Without the triple, such links are treated as foreign URLs and
-skipped, and the report says so. The owner and name must be lowercase. GitHub reports them
-with whatever capitals the owner registered, so a workflow passing `github.repository` has
-to lowercase the value first. Amiss will not do that for you: the identity you pass is a
-claim it cannot verify, and a checker that silently rewrites an unverifiable claim has
-started making things up. It refuses instead, and the refusal says why.
+skipped, and the report says so. The host is any spelling without a slash: Amiss never
+resolves it, and it is matched byte for byte against the URLs in your documents, so pass
+the lowercase form your links actually use. The owner is one or more slash-joined
+segments, nested only for GitLab group paths, and owner and name must be lowercase. Forges
+report them with whatever capitals the owner registered, so a workflow passing
+`github.repository` has to lowercase the value first. Amiss will not do that for you: the
+identity you pass is a claim it cannot verify, and a checker that silently rewrites an
+unverifiable claim has started making things up. It refuses instead, and the refusal says
+why.
+
+`--forge` names the URL dialect the resolver applies: `github` for GitHub and GitHub
+Enterprise, `gitlab` for GitLab's separator form, `gitea` for Gitea, Forgejo, and
+Codeberg. Without the flag, github.com, gitlab.com, and codeberg.org select their own
+dialects and any other host selects none, in which case absolute links to that host stay
+foreign and the report's `evaluation.forge` is null. An explicit flag always beats the
+table, which is how a self-hosted instance gets its grammar. The github and gitea dialects
+refuse a nested owner they could never match.
 
 `--explain-scope` prints the scanning scope rules and exits. `--format json` emits the exact
 report described in [The report](report.md); `human` prints the same facts readably, capped

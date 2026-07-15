@@ -15,9 +15,23 @@ Each destination then resolves against the tree, and only three shapes are in sc
 relative path resolves from the document's own directory and must stay inside the
 repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A
 repository-rooted path resolves from the root. And when the invocation provides the
-`--repository` triple, a GitHub blob or tree URL that names this same repository and a
-branch the scan can vouch for is converted to the path it points at. Every other URL is
-`external-out-of-scope`: counted, reported, left alone.
+`--repository` triple and a dialect, a URL on the declared host that names this same
+repository in the dialect's own spelling and a ref the scan can vouch for is converted to
+the path it points at. Every other URL is `external-out-of-scope`: counted, reported,
+left alone.
+
+Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
+The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
+GitHub Enterprise host the identity declares. The gitlab dialect reads the canonical
+separator form `group[/subgroup]/name/-/blob-or-tree/ref/path`, nested groups compared
+whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selectors:
+`src/branch/` splits like the others, `src/commit/` resolves exactly when its full
+lowercase object id is the candidate commit and is out of version scope otherwise, and
+`src/tag/` is always out of version scope because no tag is a trusted ref. Line anchors
+follow the forge: `#L10-L20` is a line reference on github and gitea, `#L10-20` on
+gitlab, and each spelling is nothing on the other's forge. A recognized reference's
+intent kind names the dialect that read it, not the host, so an Enterprise repository's
+links carry the same kind GitHub's do.
 
 One document, every destination shape:
 
@@ -26,7 +40,7 @@ One document, every destination shape:
 [root](/docs/guide.md)                resolves from the repository root
 [escape](../../etc/passwd)            invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
-[gh](https://github.com/o/r/blob/main/src/lib.rs)   a path, when the triple names o/r
+[gh](https://github.com/o/r/blob/main/src/lib.rs)   a path, when the triple names o/r on github.com
 [web](https://example.com/manual)     external-out-of-scope: counted, left alone
 [anchor](guide.md#setup)              the path resolves; the fragment is recorded, not checked
 ```
@@ -41,7 +55,7 @@ digraph resolve {
   dest  [label = "destination"];
   rel   [label = "relative or
 rooted path"];
-  gh    [label = "GitHub URL,
+  gh    [label = "forge URL,
 same repository"];
   other [label = "any other URL"];
   tree  [label = "resolve against

@@ -10,7 +10,10 @@ unbuilt; the report already carries its fields as `none`. When those formats rev
 also pick up the report's second-contract path union, closing the gap where a finding on
 a byte-named document is reportable but not yet waivable. When it lands, organization
 floors, adoption debt, waivers, trusted time, and execution constraints become usable in
-required checks, each tied to the exact tree it authorizes. The `amiss-bootstrap` wrapper
+required checks, each tied to the exact tree it authorizes. The same revision is where
+controls learn hosts other than github.com: the scanner already evaluates any declared
+forge identity, but a control document can bind to one only when its format can spell it
+and a trust anchor exists there. The `amiss-bootstrap` wrapper
 and the release manifest chain, which validate a pinned action tree and launch a verified
 engine, ship in the repository now and wait on that same lane.
 
