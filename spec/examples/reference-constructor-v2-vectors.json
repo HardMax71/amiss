@@ -1,6 +1,6 @@
 {
-  "schema": "assure/reference-constructor-vectors/v1",
-  "contract": "reference-constructor-v1",
+  "schema": "amiss/reference-constructor-vectors/v2",
+  "contract": "reference-constructor-v2",
   "cases": [
     {
       "id": "RI-001-native-link-kind",
@@ -76,7 +76,7 @@
       "id": "RI-012-unicode-ref",
       "operation": "github-ref-split",
       "encoded_suffix": "rel%C3%A9ase/v1/src/a.scala",
-      "candidate_ref": "refs/heads/reléase/v1",
+      "candidate_ref": "refs/heads/rel\u00e9ase/v1",
       "default_ref": "refs/heads/main",
       "expected": {
         "status": "candidate",
@@ -316,6 +316,151 @@
         "status": "invalid",
         "path": null
       }
+    },
+    {
+      "id": "FD-001-github-default",
+      "operation": "forge-dialect-default",
+      "host": "github.com",
+      "flag": null,
+      "expected": "github"
+    },
+    {
+      "id": "FD-002-gitlab-default",
+      "operation": "forge-dialect-default",
+      "host": "gitlab.com",
+      "flag": null,
+      "expected": "gitlab"
+    },
+    {
+      "id": "FD-003-unknown-host-null",
+      "operation": "forge-dialect-default",
+      "host": "git.example.internal",
+      "flag": null,
+      "expected": null
+    },
+    {
+      "id": "FD-004-ghes-flagged",
+      "operation": "forge-dialect-default",
+      "host": "ghes.corp.example",
+      "flag": "github",
+      "expected": "github"
+    },
+    {
+      "id": "FD-005-self-hosted-gitlab-flagged",
+      "operation": "forge-dialect-default",
+      "host": "git.example.internal",
+      "flag": "gitlab",
+      "expected": "gitlab"
+    },
+    {
+      "id": "GH-101-ghes-identity",
+      "operation": "forge-identity",
+      "dialect": "github",
+      "url": "https://ghes.example/Team/Repo/blob/main/docs/a.md",
+      "identity_host": "ghes.example",
+      "identity_owner": "team",
+      "identity_name": "repo",
+      "expected": "same-repository"
+    },
+    {
+      "id": "GH-102-dotcom-external-under-ghes",
+      "operation": "forge-identity",
+      "dialect": "github",
+      "url": "https://github.com/team/repo/blob/main/docs/a.md",
+      "identity_host": "ghes.example",
+      "identity_owner": "team",
+      "identity_name": "repo",
+      "expected": "external"
+    },
+    {
+      "id": "GL-001-ref-split-candidate",
+      "operation": "gitlab-ref-split",
+      "encoded_suffix": "main/docs/a.md",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GL-002-legacy-form-foreign",
+      "operation": "forge-form",
+      "suffix": "acme/widgets/blob/main/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "GL-003-nested-group-identity",
+      "operation": "forge-identity",
+      "dialect": "gitlab",
+      "url": "https://gitlab.com/Acme/Platform/widgets/-/blob/main/docs/a.md",
+      "identity_host": "gitlab.com",
+      "identity_owner": "acme/platform",
+      "identity_name": "widgets",
+      "expected": "same-repository"
+    },
+    {
+      "id": "GL-004-raw-form-foreign",
+      "operation": "forge-form",
+      "suffix": "acme/widgets/-/raw/main/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "GL-005-tree-terminal-slash",
+      "operation": "gitlab-ref-split",
+      "gitlab_form": "tree",
+      "encoded_suffix": "main/docs/",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs"
+      }
+    },
+    {
+      "id": "GL-006-slashed-ref-candidate",
+      "operation": "gitlab-ref-split",
+      "encoded_suffix": "release/v1/docs/a.md",
+      "candidate_ref": "refs/heads/release/v1",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GL-007-line-range-bare",
+      "operation": "gitlab-line-fragment",
+      "value": "L10-20",
+      "expected": true
+    },
+    {
+      "id": "GL-008-line-range-github-style-rejected",
+      "operation": "gitlab-line-fragment",
+      "value": "L10-L20",
+      "expected": false
+    },
+    {
+      "id": "GL-009-early-separator-foreign",
+      "operation": "forge-form",
+      "suffix": "acme/-/blob/main/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "GL-010-bare-range-rejected-by-github",
+      "operation": "github-line-fragment",
+      "value": "L10-20",
+      "expected": false
+    },
+    {
+      "id": "GL-011-wrong-subgroup-foreign",
+      "operation": "forge-identity",
+      "dialect": "gitlab",
+      "url": "https://gitlab.com/acme/other/widgets/-/blob/main/docs/a.md",
+      "identity_host": "gitlab.com",
+      "identity_owner": "acme/platform",
+      "identity_name": "widgets",
+      "expected": "foreign"
     }
   ]
 }

@@ -338,9 +338,19 @@ fn absolute(
     }
     let recognition_host = context.map_or("github.com", |identity| identity.host.as_str());
     if let Some(suffix) = same_repo_suffix(path_part, recognition_host) {
-        return github(
-            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
-        );
+        return match context {
+            None => github(
+                repo, git, scan, cache, snapshot, context, suffix, query, fragment,
+            ),
+            Some(identity) => match identity.dialect {
+                ForgeDialect::Github => github(
+                    repo, git, scan, cache, snapshot, context, suffix, query, fragment,
+                ),
+                ForgeDialect::Gitlab => gitlab(
+                    repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
+                ),
+            },
+        };
     }
     Ok((
         Intent {
@@ -422,6 +432,22 @@ fn authority_valid(authority: &str) -> bool {
     !authority.contains(['[', ']'])
 }
 
+/// A recognized URL that is not this repository: a valid external HTTPS
+/// destination whose repository is someone else's.
+fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Resolution) {
+    (
+        Intent {
+            kind: IntentKind::ExternalUrl,
+            repository_path: None,
+            target_kind: None,
+            external_scheme: Some("https".to_owned()),
+            query,
+            fragment,
+        },
+        null_row(ResolutionCode::ForeignRepository),
+    )
+}
+
 /// Foreign unless proven trusted: exact accepted `blob`/`tree` forms, literal
 /// ASCII owner and repository folded only `A`-`Z`, each later segment decoded
 /// exactly once, the trusted refs matched by whole segments, and the
@@ -441,19 +467,7 @@ fn github(
     query: Option<String>,
     fragment: Option<String>,
 ) -> Result<(Intent, Resolution), Error> {
-    let foreign = |query: Option<String>, fragment: Option<String>| {
-        (
-            Intent {
-                kind: IntentKind::ExternalUrl,
-                repository_path: None,
-                target_kind: None,
-                external_scheme: Some("https".to_owned()),
-                query,
-                fragment,
-            },
-            null_row(ResolutionCode::ForeignRepository),
-        )
-    };
+    let foreign = foreign_row;
     let Some(identity) = context else {
         return Ok(foreign(query, fragment));
     };
@@ -513,6 +527,96 @@ fn github(
         query.as_deref(),
         fragment.as_deref(),
         Some(identity.dialect),
+    )?;
+    Ok((intent, row))
+}
+
+/// GitLab's canonical form: every segment before the reserved `-` separator
+/// names the project (nested group segments, then the name), the form
+/// follows the separator, and the ref/path tail splits exactly like
+/// GitHub's. No owner segment or name may be a bare `-`, so the first `-`
+/// at index two or later is the separator or the URL is nobody's; anything
+/// without one, including the legacy pre-separator form and `/-/raw/`, is
+/// foreign.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the resolver context is the contract's"
+)]
+fn gitlab(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    identity: &ForgeContext,
+    suffix: &str,
+    query: Option<String>,
+    fragment: Option<String>,
+) -> Result<(Intent, Resolution), Error> {
+    let segments: Vec<&str> = suffix.split('/').collect();
+    let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
+    let Some(separator) = segments.iter().position(|segment| *segment == "-") else {
+        return Ok(foreign_row(query, fragment));
+    };
+    if separator < 2 {
+        return Ok(foreign_row(query, fragment));
+    }
+    let name_at = separator.saturating_sub(1);
+    let owner_segments = segments.get(..name_at).unwrap_or_default();
+    let identity_segments: Vec<&str> = identity.owner.split('/').collect();
+    let owner_matches = owner_segments.len() == identity_segments.len()
+        && owner_segments
+            .iter()
+            .zip(&identity_segments)
+            .all(|(url, own)| literal_ascii(url) && url.to_ascii_lowercase() == **own);
+    let project = segments.get(name_at).copied().unwrap_or_default();
+    if !owner_matches
+        || !literal_ascii(project)
+        || project.to_ascii_lowercase() != identity.repository
+    {
+        return Ok(foreign_row(query, fragment));
+    }
+    let target_kind = match segments.get(separator.saturating_add(1)) {
+        Some(&"blob") => TargetKind::Blob,
+        Some(&"tree") => TargetKind::Tree,
+        Some(_) | None => return Ok(foreign_row(query, fragment)),
+    };
+
+    let tail = segments
+        .get(separator.saturating_add(2)..)
+        .unwrap_or_default();
+    let (matched_candidate, joined) =
+        match trusted_split(identity, target_kind == TargetKind::Tree, tail) {
+            Ok(split) => split,
+            Err(code) => {
+                return Ok((unsupported_intent(query, fragment), null_row(code)));
+            }
+        };
+
+    let intent = Intent {
+        kind: IntentKind::SameRepositoryGitlab,
+        repository_path: Some(joined.clone()),
+        target_kind: Some(target_kind),
+        external_scheme: None,
+        query: query.clone(),
+        fragment: fragment.clone(),
+    };
+    if !matched_candidate {
+        let mut row = null_row(ResolutionCode::UnsupportedVersionScope);
+        row.path = Some(joined);
+        return Ok((intent, row));
+    }
+    let row = lookup(
+        repo,
+        git,
+        scan,
+        cache,
+        snapshot,
+        &joined,
+        target_kind,
+        query.as_deref(),
+        fragment.as_deref(),
+        Some(ForgeDialect::Gitlab),
     )?;
     Ok((intent, row))
 }
@@ -912,6 +1016,7 @@ fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> bool {
     };
     let range = match forge {
         None | Some(ForgeDialect::Github) => rest.split_once("-L"),
+        Some(ForgeDialect::Gitlab) => rest.split_once('-'),
     };
     match range {
         None => number(rest).is_some(),

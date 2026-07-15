@@ -396,6 +396,7 @@ fn identity_byte(byte: u8) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ForgeDialect {
     Github,
+    Gitlab,
 }
 
 impl ForgeDialect {
@@ -403,6 +404,7 @@ impl ForgeDialect {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Github => "github",
+            Self::Gitlab => "gitlab",
         }
     }
 
@@ -411,6 +413,7 @@ impl ForgeDialect {
     pub fn default_for_host(host: &str) -> Option<Self> {
         match host {
             "github.com" => Some(Self::Github),
+            "gitlab.com" => Some(Self::Gitlab),
             _ => None,
         }
     }

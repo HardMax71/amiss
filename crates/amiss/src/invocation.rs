@@ -44,8 +44,8 @@ impl Code {
             Self::InvalidInvocation => {
                 "every option is spelled exactly, appears at most once, and carries a value. \
                  --base and --candidate are distinct full lowercase object IDs, never refs and \
-                 never abbreviations. --forge is github, names a dialect the engine knows, and \
-                 accompanies the --repository triple."
+                 never abbreviations. --forge is github or gitlab, names a dialect the engine \
+                 knows, and accompanies the --repository triple."
             }
             Self::InvalidProfile => "--profile is observe or enforce.",
         }
@@ -345,6 +345,7 @@ fn classify_forge(
     let declared = match (gathered.forge.present(), gathered.forge.unique_value()) {
         (false, _) => None,
         (true, Some("github")) => Some(ForgeDialect::Github),
+        (true, Some("gitlab")) => Some(ForgeDialect::Gitlab),
         (true, Some(_) | None) => {
             codes.insert(Code::InvalidInvocation);
             return None;
