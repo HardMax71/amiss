@@ -48,6 +48,7 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
         IntentKind::RepositoryPath
         | IntentKind::SameRepositoryGithub
         | IntentKind::SameRepositoryGitlab
+        | IntentKind::SameRepositoryGitea
         | IntentKind::SiteRoute
         | IntentKind::Unsupported => None,
     };

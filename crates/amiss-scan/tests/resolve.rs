@@ -788,3 +788,96 @@ fn gitlab_recognition_resolves_against_the_tree() {
     );
     assert_eq!(pinned.path, None);
 }
+
+fn gitea_context() -> ForgeContext {
+    ForgeContext {
+        host: "codeberg.org".to_owned(),
+        dialect: ForgeDialect::Gitea,
+        owner: "acme".to_owned(),
+        repository: "widgets".to_owned(),
+        candidate_ref: "refs/heads/feature/x".to_owned(),
+        default_ref: "refs/heads/main".to_owned(),
+        candidate_oid: Some("6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned()),
+    }
+}
+
+/// The gitea family against a real tree: the typed branch form resolves
+/// with an either target, the commit form is pinned to the exact candidate
+/// OID, a tag spelled like the candidate branch stays version-scoped out,
+/// and the untyped legacy form is foreign.
+#[test]
+fn gitea_recognition_resolves_against_the_tree() {
+    let mut bed = bed();
+    let context = gitea_context();
+    let (intent, row) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(intent.kind, IntentKind::SameRepositoryGitea);
+    assert_eq!(intent.target_kind, Some(TargetKind::Either));
+    assert_eq!(row.code, ResolutionCode::ExactPath);
+
+    let (_intent, pinned) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://codeberg.org/acme/widgets/src/commit/6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(
+        pinned.code,
+        ResolutionCode::ExactPath,
+        "the candidate commit's own OID resolves in the candidate"
+    );
+
+    let (_intent, tag) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://codeberg.org/acme/widgets/src/tag/feature/x/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(
+        tag.code,
+        ResolutionCode::UnsupportedVersionScope,
+        "a tag spelled like the candidate branch is still no trusted ref"
+    );
+    assert_eq!(tag.path, None);
+
+    let (_intent, untyped) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://codeberg.org/acme/widgets/src/feature/x/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(untyped.code, ResolutionCode::ForeignRepository);
+
+    let (_intent, index_mode) = bed
+        .run(
+            Some(&ForgeContext {
+                candidate_oid: None,
+                ..gitea_context()
+            }),
+            "docs/guide.md",
+            false,
+            "https://codeberg.org/acme/widgets/src/commit/6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(
+        index_mode.code,
+        ResolutionCode::UnsupportedVersionScope,
+        "with no candidate commit no OID can match, path disclosed"
+    );
+    assert_eq!(
+        index_mode.path.as_ref().and_then(|path| path.as_str()),
+        Some("docs/guide.md")
+    );
+}

@@ -349,6 +349,9 @@ fn absolute(
                 ForgeDialect::Gitlab => gitlab(
                     repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
                 ),
+                ForgeDialect::Gitea => gitea(
+                    repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
+                ),
             },
         };
     }
@@ -621,6 +624,117 @@ fn gitlab(
     Ok((intent, row))
 }
 
+/// The gitea family's typed forms, shared by Gitea, Forgejo, and Codeberg:
+/// `owner/name/src/branch/<branch...>/<path...>` splits through the trusted
+/// refs, `src/commit/<oid>/<path...>` resolves exactly when the full
+/// lowercase OID is the candidate commit and is version-scoped out
+/// otherwise, and `src/tag/...` is always version-scoped out because no tag
+/// is trusted. The form has no blob or tree axis, so the target kind is
+/// `either`, or `tree` under a directory-hint slash. The untyped legacy
+/// `src/<ref>/` form and every other selector are foreign: only the spellings
+/// the forge's own browser emits are pinned.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the resolver context is the contract's"
+)]
+fn gitea(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    identity: &ForgeContext,
+    suffix: &str,
+    query: Option<String>,
+    fragment: Option<String>,
+) -> Result<(Intent, Resolution), Error> {
+    let segments: Vec<&str> = suffix.split('/').collect();
+    let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
+    let (Some(owner), Some(project), Some(&"src"), Some(selector)) = (
+        segments.first(),
+        segments.get(1),
+        segments.get(2),
+        segments.get(3),
+    ) else {
+        return Ok(foreign_row(query, fragment));
+    };
+    if !literal_ascii(owner)
+        || !literal_ascii(project)
+        || owner.to_ascii_lowercase() != identity.owner
+        || project.to_ascii_lowercase() != identity.repository
+    {
+        return Ok(foreign_row(query, fragment));
+    }
+    let raw_tail = segments.get(5..).unwrap_or_default();
+    let directory_hint = raw_tail.len() > 1 && raw_tail.last() == Some(&"");
+    let target_kind = if directory_hint {
+        TargetKind::Tree
+    } else {
+        TargetKind::Either
+    };
+    let split = match *selector {
+        "branch" => {
+            let branch_tail = segments.get(4..).unwrap_or_default();
+            trusted_split(identity, directory_hint, branch_tail)
+        }
+        "commit" => {
+            let pinned = segments.get(4).copied().unwrap_or_default();
+            if !oid_shaped(pinned) {
+                return Ok(foreign_row(query, fragment));
+            }
+            match decoded_tail(directory_hint, raw_tail) {
+                Ok(decoded) => contained_path(&decoded)
+                    .map(|path| (identity.candidate_oid.as_deref() == Some(pinned), path)),
+                Err(code) => Err(code),
+            }
+        }
+        "tag" => Err(ResolutionCode::UnsupportedVersionScope),
+        _ => return Ok(foreign_row(query, fragment)),
+    };
+    let (matched_candidate, joined) = match split {
+        Ok(split) => split,
+        Err(code) => {
+            return Ok((unsupported_intent(query, fragment), null_row(code)));
+        }
+    };
+
+    let intent = Intent {
+        kind: IntentKind::SameRepositoryGitea,
+        repository_path: Some(joined.clone()),
+        target_kind: Some(target_kind),
+        external_scheme: None,
+        query: query.clone(),
+        fragment: fragment.clone(),
+    };
+    if !matched_candidate {
+        let mut row = null_row(ResolutionCode::UnsupportedVersionScope);
+        row.path = Some(joined);
+        return Ok((intent, row));
+    }
+    let row = lookup(
+        repo,
+        git,
+        scan,
+        cache,
+        snapshot,
+        &joined,
+        target_kind,
+        query.as_deref(),
+        fragment.as_deref(),
+        Some(ForgeDialect::Gitea),
+    )?;
+    Ok((intent, row))
+}
+
+/// A full lowercase object id in either frozen format; anything else after
+/// `src/commit/` is not a spelling the forge emits.
+fn oid_shaped(segment: &str) -> bool {
+    matches!(segment.len(), 40 | 64)
+        && segment
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 /// Decodes the suffix after the form segment, removes a lone terminal empty
 /// segment where the dialect's form tolerates one, matches the two trusted
 /// refs by whole segments, and validates the remaining path before deciding
@@ -630,17 +744,7 @@ fn trusted_split(
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
 ) -> Result<(bool, RepoPath), ResolutionCode> {
-    let mut tail: Vec<&str> = raw_tail.to_vec();
-    if tolerate_terminal_slash && tail.len() > 1 && tail.last() == Some(&"") {
-        tail.pop();
-    }
-    let mut decoded: Vec<Vec<u8>> = Vec::new();
-    for segment in &tail {
-        if segment.is_empty() {
-            return Err(ResolutionCode::InvalidReference);
-        }
-        decoded.push(decode_segment(segment).map_err(defect_code)?);
-    }
+    let decoded = decoded_tail(tolerate_terminal_slash, raw_tail)?;
 
     let candidate = ref_segments(&identity.candidate_ref);
     let default = ref_segments(&identity.default_ref);
@@ -658,6 +762,32 @@ fn trusted_split(
         (None, Some(after)) => (false, after),
         (None, None) => return Err(ResolutionCode::UnsupportedVersionScope),
     };
+    Ok((matched_candidate, contained_path(&remaining)?))
+}
+
+/// One decode per segment, empties refused, a lone terminal empty segment
+/// dropped where the dialect's form tolerates a directory-hint slash.
+fn decoded_tail(
+    tolerate_terminal_slash: bool,
+    raw_tail: &[&str],
+) -> Result<Vec<Vec<u8>>, ResolutionCode> {
+    let mut tail: Vec<&str> = raw_tail.to_vec();
+    if tolerate_terminal_slash && tail.len() > 1 && tail.last() == Some(&"") {
+        tail.pop();
+    }
+    let mut decoded: Vec<Vec<u8>> = Vec::new();
+    for segment in &tail {
+        if segment.is_empty() {
+            return Err(ResolutionCode::InvalidReference);
+        }
+        decoded.push(decode_segment(segment).map_err(defect_code)?);
+    }
+    Ok(decoded)
+}
+
+/// The remaining segments as a contained repository path: nonempty, no dot
+/// segments, and inside the frozen byte grammar.
+fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, ResolutionCode> {
     if remaining.is_empty() {
         return Err(ResolutionCode::InvalidReference);
     }
@@ -667,10 +797,7 @@ fn trusted_split(
     {
         return Err(ResolutionCode::PathTraversal);
     }
-    match RepoPath::from_bytes(remaining.join(&b'/')) {
-        Some(admitted) => Ok((matched_candidate, admitted)),
-        None => Err(ResolutionCode::InvalidReference),
-    }
+    RepoPath::from_bytes(remaining.join(&b'/')).ok_or(ResolutionCode::InvalidReference)
 }
 
 fn ref_segments(full_ref: &str) -> Vec<Vec<u8>> {
@@ -1015,7 +1142,7 @@ fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> bool {
         return false;
     };
     let range = match forge {
-        None | Some(ForgeDialect::Github) => rest.split_once("-L"),
+        None | Some(ForgeDialect::Github | ForgeDialect::Gitea) => rest.split_once("-L"),
         Some(ForgeDialect::Gitlab) => rest.split_once('-'),
     };
     match range {

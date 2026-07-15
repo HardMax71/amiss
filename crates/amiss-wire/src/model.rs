@@ -397,6 +397,7 @@ fn identity_byte(byte: u8) -> bool {
 pub enum ForgeDialect {
     Github,
     Gitlab,
+    Gitea,
 }
 
 impl ForgeDialect {
@@ -405,6 +406,7 @@ impl ForgeDialect {
         match self {
             Self::Github => "github",
             Self::Gitlab => "gitlab",
+            Self::Gitea => "gitea",
         }
     }
 
@@ -414,6 +416,7 @@ impl ForgeDialect {
         match host {
             "github.com" => Some(Self::Github),
             "gitlab.com" => Some(Self::Gitlab),
+            "codeberg.org" => Some(Self::Gitea),
             _ => None,
         }
     }

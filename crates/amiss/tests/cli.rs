@@ -1240,3 +1240,67 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
     );
     assert_eq!(references["missing"], 0);
 }
+
+/// Codeberg end to end with no flag at all: the known-host table names the
+/// gitea dialect, the typed branch form resolves, a tag link is
+/// version-scoped out, and the bytes are clean under the third contract.
+#[test]
+fn a_codeberg_identity_defaults_to_the_gitea_dialect_end_to_end() {
+    let fx = amiss_fixtures::commit_pair(
+        &[("docs/guide.md", "# Guide\n")],
+        &[(
+            "docs/guide.md",
+            "# Guide\n\n[self](https://codeberg.org/acme/widget/src/branch/main/docs/guide.md) \
+             and [pinned](https://codeberg.org/acme/widget/src/tag/v1.0/docs/guide.md)\n",
+        )],
+    )
+    .unwrap();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+        "--repository",
+        "codeberg.org/acme/widget",
+        "--ref",
+        "refs/heads/main",
+        "--default-branch-ref",
+        "refs/heads/main",
+        "--format",
+        "json",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+
+    let schema_text = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+    )
+    .unwrap();
+    let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let defects: Vec<String> = validator
+        .iter_errors(&envelope)
+        .map(|error| format!("{}: {error}", error.instance_path()))
+        .collect();
+    assert_eq!(defects, Vec::<String>::new(), "schema-clean under v3");
+
+    let payload = payload(&stdout);
+    assert_eq!(payload["evaluation"]["forge"], "gitea");
+    let references = &payload["summary"]["references"];
+    assert_eq!(
+        references["same_repository"], 1,
+        "the branch form is this repository; the tag form never earns the intent"
+    );
+    assert_eq!(references["resolved"], 1);
+    assert_eq!(
+        references["unsupported"], 1,
+        "the tag link is an unsupported intent, version-scoped out"
+    );
+}
