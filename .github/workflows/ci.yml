@@ -165,14 +165,14 @@ jobs:
           restore-keys: coverage-
       - run: rustup component add llvm-tools-preview
       - run: cargo llvm-cov nextest --workspace --locked --lcov --output-path lcov.info
-      - run: cargo llvm-cov report
+      - run: cargo llvm-cov report | tee coverage-summary.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-lcov
           path: lcov.info
       # The README's coverage rectangle reads a shields endpoint served from
-      # the unprotected badges branch, the same in-repo pattern the action
-      # refs use, so no third party ever sees the number before we do.
+      # the unprotected badges branch; the number is the line percent the
+      # report above already printed, taken from the TOTAL row verbatim.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
@@ -180,10 +180,10 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
-          percent="$(cargo llvm-cov report --json --summary-only \
-            | jq -r '.data[0].totals.lines.percent | . * 10 | round / 10')"
+          percent="$(awk '/^TOTAL/ { print $(NF-3) }' coverage-summary.txt)"
+          case "$percent" in *%) ;; *) echo "no line percent in the report table"; exit 1 ;; esac
           mkdir badge
-          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"475569"}\n' \
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s","color":"475569"}\n' \
             "$percent" > badge/coverage.json
           cd badge
           git init -q
