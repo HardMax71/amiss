@@ -2,7 +2,7 @@ pub mod build;
 pub mod supervise;
 
 use amiss_git::{GitResources, ObjectKind, Repository};
-use amiss_wire::action::{ActionMetadata, executable_platform, host_platform};
+use amiss_wire::action::{executable_platform, host_platform};
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor, GitMode};
 use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
 use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole};
@@ -24,7 +24,7 @@ pub enum Refusal {
     UnsupportedPlatform,
     /// The action repository, commit, or tree does not resolve as reported.
     ActionTree,
-    /// The root `action.yml` is not the restricted metadata shape.
+    /// The root action definition is not pinned by the runtime closure.
     ActionMetadata,
     /// A required path is absent, a symlink, a gitlink, or the wrong mode.
     PathNotRegularBlob,
@@ -56,7 +56,6 @@ pub struct Validated {
     pub platform: ConstraintPlatform,
     pub engine_digest: Digest,
     pub binary: Vec<u8>,
-    pub metadata: ActionMetadata,
 }
 
 /// The trusted bootstrap's validation, in the contract's order: choose from
@@ -87,15 +86,6 @@ pub fn validate(
     }
 
     let tree = action_tree(action, resources, constraint)?;
-
-    let metadata_path =
-        RepoPathText::new(ACTION_METADATA_PATH.to_owned()).ok_or(Refusal::ActionMetadata)?;
-    let (metadata_bytes, metadata_mode) = blob(action, resources, &tree, &metadata_path)?;
-    if metadata_mode != GitMode::RegularFile {
-        return Err(Refusal::PathNotRegularBlob);
-    }
-    let metadata =
-        ActionMetadata::parse(&metadata_bytes).map_err(|_defect| Refusal::ActionMetadata)?;
 
     let (manifest_bytes, manifest_mode) =
         blob(action, resources, &tree, &constraint.manifest_path)?;
@@ -155,7 +145,13 @@ pub fn validate(
     if executable_platform(&binary) != Some(platform) {
         return Err(Refusal::PlatformBinding);
     }
-    if artifact.launcher().ok_or(Refusal::RuntimeClosure)?.path != metadata.main {
+    let _launcher = artifact.launcher().ok_or(Refusal::RuntimeClosure)?;
+    // the one runnable file at the tree root must be a pinned closure row,
+    // or the action a workflow executes is the one file nothing checks
+    let action_pinned = artifact.runtime_files.iter().any(|file| {
+        file.role == RuntimeRole::RuntimeData && file.path.as_str() == ACTION_METADATA_PATH
+    });
+    if !action_pinned {
         return Err(Refusal::ActionMetadata);
     }
 
@@ -165,7 +161,6 @@ pub fn validate(
         platform,
         engine_digest,
         binary,
-        metadata,
     })
 }
 

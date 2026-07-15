@@ -3,20 +3,19 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use amiss_bootstrap::build::{
-    StagedArtifact, StagedBuild, StagedFile, action_metadata, build_manifest,
-};
+use amiss_bootstrap::build::{StagedArtifact, StagedBuild, StagedFile, build_manifest};
 use amiss_wire::action::executable_platform;
 use amiss_wire::manifest::RuntimeRole;
 
-/// The release-side manifest builder: it reads the staged action tree, hashes
-/// the exact bytes, and writes the strict manifest blob plus the canonical
-/// `action.yml`. The build pipeline runs this; the bootstrap verifies its
-/// output. Every platform row comes from the artifact's own header, so a
+/// The release-side manifest builder: it reads the staged action tree,
+/// hashes the exact bytes, and writes the strict manifest blob. The reviewed
+/// action definition and launcher are pinned into every platform's runtime
+/// closure, so the bootstrap validates their bytes like any other runtime
+/// file. Every platform row comes from the artifact's own header, so a
 /// mislabeled binary cannot enter the manifest.
 ///
 /// `amiss-manifest --tree DIR --version V --owner O --repository R
-///  --commit OID --launcher PATH --lock PATH [--lock PATH]...
+///  --commit OID --action PATH --launcher PATH --lock PATH [--lock PATH]...
 ///  --artifact PATH [...]`
 #[expect(clippy::print_stderr, reason = "the build tool's diagnostic channel")]
 fn main() -> ExitCode {
@@ -43,6 +42,7 @@ struct Args {
     locks: Vec<String>,
     artifacts: Vec<String>,
     launcher: String,
+    action: String,
 }
 
 fn run(args: &Args) -> Result<(), String> {
@@ -52,6 +52,7 @@ fn run(args: &Args) -> Result<(), String> {
         .map(|path| read_at(&args.tree, path).map(|bytes| (path.clone(), bytes)))
         .collect::<Result<_, _>>()?;
     let launcher_bytes = read_at(&args.tree, &args.launcher)?;
+    let action_bytes = read_at(&args.tree, &args.action)?;
     let artifact_bytes: Vec<(String, Vec<u8>)> = args
         .artifacts
         .iter()
@@ -75,6 +76,12 @@ fn run(args: &Args) -> Result<(), String> {
                 executable: false,
                 bytes: &launcher_bytes,
             },
+            StagedFile {
+                path: args.action.clone(),
+                role: RuntimeRole::RuntimeData,
+                executable: false,
+                bytes: &action_bytes,
+            },
         ];
         staged.push(StagedArtifact {
             platform,
@@ -97,13 +104,6 @@ fn run(args: &Args) -> Result<(), String> {
     let (manifest, digest) = build_manifest(&build, &mut staged).map_err(str::to_owned)?;
     std::fs::write(args.tree.join("release-manifest.json"), &manifest)
         .map_err(|defect| format!("release-manifest.json: {defect}"))?;
-    let metadata = action_metadata(
-        "Amiss",
-        "Documentation assurance for pull requests.",
-        &args.launcher,
-    );
-    std::fs::write(args.tree.join("action.yml"), metadata)
-        .map_err(|defect| format!("action.yml: {defect}"))?;
     print_digest(digest.to_string().as_str());
     Ok(())
 }
@@ -124,6 +124,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     let mut repository: Option<String> = None;
     let mut commit: Option<String> = None;
     let mut launcher: Option<String> = None;
+    let mut action: Option<String> = None;
     let mut locks: Vec<String> = Vec::new();
     let mut artifacts: Vec<String> = Vec::new();
     let mut items = argv.iter();
@@ -136,6 +137,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
             "--repository" => repository = Some(value),
             "--commit" => commit = Some(value),
             "--launcher" => launcher = Some(value),
+            "--action" => action = Some(value),
             "--lock" => locks.push(value),
             "--artifact" => artifacts.push(value),
             _ => return None,
@@ -153,5 +155,6 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         locks,
         artifacts,
         launcher: launcher?,
+        action: action?,
     })
 }
