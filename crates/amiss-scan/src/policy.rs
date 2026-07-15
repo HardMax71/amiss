@@ -426,13 +426,13 @@ pub fn effects(
         base_policy
             .protected_inventory
             .iter()
-            .map(amiss_wire::model::RepoPath::as_str),
+            .map(amiss_wire::model::RepoPathText::as_str),
     );
     inventory.extend(
         candidate_policy
             .protected_inventory
             .iter()
-            .map(amiss_wire::model::RepoPath::as_str),
+            .map(amiss_wire::model::RepoPathText::as_str),
     );
     for path in inventory {
         let rule = match candidate_documents(path) {

@@ -4,7 +4,7 @@ use crate::controls::{ConstraintPlatform, GitMode, root};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::Value;
-use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
+use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 pub const MANIFEST_SCHEMA: &str = "amiss/scanner-release-manifest/v1";
 pub const DEPENDENCY_LOCK_SCHEMA: &str = "amiss/scanner-dependency-lock-input/v1";
@@ -17,7 +17,7 @@ pub const ENVIRONMENT_CONTRACT: &str = "scanner-process-env-v1";
 /// pinned action tree with its exact mode and plain SHA-256.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeFile {
-    pub path: RepoPath,
+    pub path: RepoPathText,
     pub role: RuntimeRole,
     pub git_mode: GitMode,
     pub file_sha256: Digest,
@@ -58,7 +58,7 @@ impl RuntimeRole {
 pub struct ReleaseArtifact {
     pub platform: ConstraintPlatform,
     pub artifact_name: ArtifactId,
-    pub tree_path: RepoPath,
+    pub tree_path: RepoPathText,
     pub binary_sha256: Digest,
     pub engine_digest: Digest,
     pub runtime_files: Vec<RuntimeFile>,
@@ -76,7 +76,7 @@ pub struct BuildSource {
 /// Every build lockfile by canonical path and raw-evidence digest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DependencyLockInput {
-    pub files: Vec<(RepoPath, Digest)>,
+    pub files: Vec<(RepoPathText, Digest)>,
 }
 
 /// The strict release manifest: the reviewed release label, its build
@@ -266,7 +266,7 @@ fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
     if rows.is_empty() || rows.len() > 32 {
         return fail(&files_path, ErrorKind::LimitExceeded);
     }
-    let mut files: Vec<(RepoPath, Digest)> = Vec::with_capacity(rows.len());
+    let mut files: Vec<(RepoPathText, Digest)> = Vec::with_capacity(rows.len());
     for (index, row) in rows.into_iter().enumerate() {
         let row_path = format!("{files_path}[{index}]");
         let mut file = Obj::new(&row_path, row)?;
@@ -379,8 +379,9 @@ fn decode_digest(path: &str, value: Value) -> Result<Digest, Error> {
     Digest::from_wire(&raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
-fn decode_repo_path(path: &str, value: Value) -> Result<RepoPath, Error> {
-    RepoPath::new(de::string(path, value)?).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {
+    RepoPathText::new(de::string(path, value)?)
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 fn decode_artifact_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
