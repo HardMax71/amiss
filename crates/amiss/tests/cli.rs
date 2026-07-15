@@ -654,7 +654,7 @@ fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -1104,4 +1104,72 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
         paths.contains(&hostile),
         "json carries the exact bytes as a string, losing nothing: {paths:?}"
     );
+}
+
+/// A self-hosted GitHub-dialect forge, end to end: the declared host opens
+/// recognition for its own URLs, github.com URLs in the same run are a
+/// different site, the dialect and host land in the evaluation, and the
+/// bytes are clean under the third contract's schema.
+#[test]
+fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
+    let fx = amiss_fixtures::commit_pair(
+        &[("docs/guide.md", "# Guide\n")],
+        &[(
+            "docs/guide.md",
+            "# Guide\n\n[self](https://ghes.example/acme/widget/blob/main/docs/guide.md) \
+             and [dotcom](https://github.com/acme/widget/blob/main/docs/guide.md)\n",
+        )],
+    )
+    .unwrap();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+        "--repository",
+        "ghes.example/acme/widget",
+        "--ref",
+        "refs/heads/main",
+        "--default-branch-ref",
+        "refs/heads/main",
+        "--forge",
+        "github",
+        "--format",
+        "json",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+
+    let schema_text = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+    )
+    .unwrap();
+    let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let defects: Vec<String> = validator
+        .iter_errors(&envelope)
+        .map(|error| format!("{}: {error}", error.instance_path()))
+        .collect();
+    assert_eq!(defects, Vec::<String>::new(), "schema-clean under v3");
+
+    let payload = payload(&stdout);
+    assert_eq!(payload["evaluation"]["forge"], "github");
+    assert_eq!(payload["evaluation"]["repository"]["host"], "ghes.example");
+    let references = &payload["summary"]["references"];
+    assert_eq!(
+        references["same_repository"], 1,
+        "the declared host's URL is this repository"
+    );
+    assert_eq!(
+        references["external_out_of_scope"], 1,
+        "github.com is a foreign site when the identity lives elsewhere"
+    );
+    assert_eq!(references["resolved"], 1);
 }

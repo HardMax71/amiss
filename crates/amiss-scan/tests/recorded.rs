@@ -56,6 +56,7 @@ fn shell(enforce: bool) -> SetupShell {
             owner: "hardmax71".to_owned(),
             name: "spec_to_rest".to_owned(),
         }),
+        forge: Some(ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: Some("refs/heads/main".to_owned()),
         floor: None,

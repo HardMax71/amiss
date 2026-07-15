@@ -143,18 +143,21 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         }
     };
 
-    let forge = invocation.identity.as_ref().map(|identity| ForgeContext {
-        host: identity.repository.host.clone(),
-        dialect: amiss_wire::model::ForgeDialect::Github,
-        owner: identity.repository.owner.clone(),
-        repository: identity.repository.name.clone(),
-        candidate_ref: identity.ref_name.as_str().to_owned(),
-        default_ref: identity.default_branch_ref.as_str().to_owned(),
-        candidate_oid: match &invocation.candidate {
-            CandidateSelector::Commit(oid) => Some(oid.as_str().to_owned()),
-            CandidateSelector::Index => None,
-        },
-    });
+    let forge = match (&invocation.identity, invocation.forge) {
+        (Some(identity), Some(dialect)) => Some(ForgeContext {
+            host: identity.repository.host.clone(),
+            dialect,
+            owner: identity.repository.owner.clone(),
+            repository: identity.repository.name.clone(),
+            candidate_ref: identity.ref_name.as_str().to_owned(),
+            default_ref: identity.default_branch_ref.as_str().to_owned(),
+            candidate_oid: match &invocation.candidate {
+                CandidateSelector::Commit(oid) => Some(oid.as_str().to_owned()),
+                CandidateSelector::Index => None,
+            },
+        }),
+        (None | Some(_), None) | (None, Some(_)) => None,
+    };
     let shell = SetupShell {
         engine,
         enforce: matches!(invocation.profile, amiss_wire::controls::Profile::Enforce),
@@ -162,6 +165,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             .identity
             .as_ref()
             .map(|identity| identity.repository.clone()),
+        forge: invocation.forge,
         candidate_ref: invocation
             .identity
             .as_ref()
@@ -231,6 +235,7 @@ fn fatal(
         engine: engine.clone(),
         enforce: matches!(invocation.profile, amiss_wire::controls::Profile::Enforce),
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         base: identity(&invocation.base),
@@ -408,10 +413,10 @@ fn totals(payload: &View) {
     );
     let references = summary.view("references");
     println!(
-        "references: extracted {} local {} github {} external {} unsupported {} missing {}",
+        "references: extracted {} local {} same-repo {} external {} unsupported {} missing {}",
         references.number("extracted"),
         references.number("explicit_local"),
-        references.number("same_repository_github"),
+        references.number("same_repository"),
         references.number("external_out_of_scope"),
         references.number("unsupported"),
         references.number("missing"),
@@ -464,6 +469,5 @@ fn analysis_code(code: Code) -> AnalysisErrorCode {
         Code::InvalidEvent => AnalysisErrorCode::InvalidEvent,
         Code::InvalidInvocation => AnalysisErrorCode::InvalidInvocation,
         Code::InvalidProfile => AnalysisErrorCode::InvalidProfile,
-        Code::UnsupportedProviderHost => AnalysisErrorCode::UnsupportedProviderHost,
     }
 }

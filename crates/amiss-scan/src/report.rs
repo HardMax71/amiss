@@ -15,7 +15,7 @@ use crate::evaluate::{
 };
 use crate::{Impact, observe};
 
-pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v2";
+pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v3";
 pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection/v1";
 pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot/v1";
 
@@ -118,6 +118,7 @@ pub struct Setup {
     pub engine: EngineProvenance,
     pub enforce: bool,
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
+    pub forge: Option<amiss_wire::model::ForgeDialect>,
     pub candidate_ref: Option<String>,
     pub default_branch_ref: Option<String>,
     pub base: SnapshotIdentity,
@@ -862,6 +863,12 @@ fn evaluation_value(setup: &Setup) -> Value {
         }),
     ));
     rows.push(("trusted_time", Value::Bool(setup.policy.time.is_some())));
+    rows.push((
+        "forge",
+        setup
+            .forge
+            .map_or(Value::Null, |dialect| string(dialect.as_str())),
+    ));
     object(rows)
 }
 
@@ -1196,7 +1203,7 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             integer(bucket(IntentKind::RepositoryPath)),
         ),
         (
-            "same_repository_github",
+            "same_repository",
             integer(bucket(IntentKind::SameRepositoryGithub)),
         ),
         (

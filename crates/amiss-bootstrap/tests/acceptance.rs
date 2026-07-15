@@ -287,27 +287,24 @@ fn the_second_contract_golden_is_the_canonicalization_of_its_indented_value() {
     );
 }
 
-/// The first goldens this acceptance gate can admit whole: the v1 examples
-/// are frozen in the research namespace, so their payload digests never
-/// recompute here, while the v2 golden was emitted by this engine under this
-/// namespace and clears every check, digest included.
+/// The v2 golden cleared this gate end to end while the engine spoke the
+/// second contract; the payload domain is the third contract's now, so the
+/// frozen example joins the v1 goldens as history whose digest no longer
+/// recomputes here. Every check before the digest still holds, and the
+/// engine-emitted v3 golden takes over the end-to-end clearance when it
+/// freezes.
 #[test]
-fn the_second_contract_golden_clears_acceptance_end_to_end() {
+fn the_second_contract_golden_is_canonical_history_now() {
     let golden = dossier_example("scanner-report-v2.canonical.json");
-    let envelope = parse(&golden).unwrap();
-    let payload = member(&envelope, "payload").unwrap();
-    let engine_digest = text(member(payload, "engine").unwrap(), "engine_digest").unwrap();
-    let evaluation = member(payload, "evaluation").unwrap();
-    let base_commit = text(member(evaluation, "base").unwrap(), "commit_oid").unwrap();
-    let candidate_commit = text(member(evaluation, "candidate").unwrap(), "commit_oid");
-    let expectations = Expectations {
-        engine_digest,
-        base_commit,
-        candidate_commit,
-    };
+    let defect = accept(&golden, &foreign_expectations()).unwrap_err();
+    assert_ne!(
+        defect,
+        AcceptanceDefect::Noncanonical,
+        "the exact one-line golden is canonical"
+    );
     assert_eq!(
-        accept(&golden, &expectations),
-        Ok(0),
-        "an engine-emitted golden satisfies its own acceptance law"
+        defect,
+        AcceptanceDefect::PayloadDigest,
+        "the frozen example's digest lives in the second contract's domain"
     );
 }

@@ -192,7 +192,7 @@ fn maximal_error(index: usize) -> Value {
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn assert_schema_valid(wire: &[u8]) {
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -217,7 +217,6 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     };
     let codes: BTreeSet<AnalysisErrorCode> = [
         AnalysisErrorCode::InvalidInvocation,
-        AnalysisErrorCode::UnsupportedProviderHost,
         AnalysisErrorCode::InvalidEvent,
         AnalysisErrorCode::InvalidProfile,
         AnalysisErrorCode::RequestUnreadable,
@@ -349,7 +348,7 @@ fn prove_streamed_emission(maximal: &Value, wire: &[u8]) {
 #[test]
 fn the_schema_path_union_accepts_and_refuses_at_pair_alignment() {
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();

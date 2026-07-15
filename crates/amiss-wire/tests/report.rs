@@ -45,7 +45,7 @@ fn engine() -> EngineProvenance {
 fn builds_the_fatal_incomplete_envelope() {
     let codes: BTreeSet<AnalysisErrorCode> = BTreeSet::from([
         AnalysisErrorCode::InvalidProfile,
-        AnalysisErrorCode::UnsupportedProviderHost,
+        AnalysisErrorCode::InvalidEvent,
     ]);
     let wire = invocation_failure_wire(&engine(), &codes).unwrap();
     assert_eq!(wire.last(), Some(&b'\n'));
@@ -67,7 +67,7 @@ fn builds_the_fatal_incomplete_envelope() {
     assert_eq!(member(evaluation, "request_digest"), &Value::Null);
     assert_eq!(
         strings(member(evaluation, "reasons")),
-        vec!["unsupported-provider", "invalid-profile"],
+        vec!["invalid-event", "invalid-profile"],
         "reasons use enum declaration order"
     );
     assert_eq!(
@@ -84,7 +84,7 @@ fn builds_the_fatal_incomplete_envelope() {
         .collect();
     assert_eq!(
         codes,
-        vec!["INVALID_PROFILE", "UNSUPPORTED_PROVIDER_HOST"],
+        vec!["INVALID_EVENT", "INVALID_PROFILE"],
         "error rows sort by code bytes"
     );
     for row in errors {
@@ -137,9 +137,9 @@ fn builds_the_fatal_incomplete_envelope() {
 fn orders_reasons_and_errors_independently() {
     let codes: BTreeSet<AnalysisErrorCode> = BTreeSet::from([
         AnalysisErrorCode::InvalidInvocation,
-        AnalysisErrorCode::UnsupportedProviderHost,
         AnalysisErrorCode::InvalidEvent,
         AnalysisErrorCode::InvalidProfile,
+        AnalysisErrorCode::RequestUnreadable,
     ]);
     let wire = invocation_failure_wire(&engine(), &codes).unwrap();
     let envelope = parse(&wire).unwrap();
@@ -148,9 +148,9 @@ fn orders_reasons_and_errors_independently() {
         strings(member(member(payload, "evaluation"), "reasons")),
         vec![
             "invalid-invocation",
-            "unsupported-provider",
             "invalid-event",
-            "invalid-profile"
+            "invalid-profile",
+            "request-unreadable"
         ]
     );
     let Value::Array(errors) = member(payload, "errors") else {
@@ -166,7 +166,7 @@ fn orders_reasons_and_errors_independently() {
             "INVALID_EVENT",
             "INVALID_INVOCATION",
             "INVALID_PROFILE",
-            "UNSUPPORTED_PROVIDER_HOST"
+            "REQUEST_UNREADABLE"
         ]
     );
 }
