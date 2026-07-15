@@ -2753,7 +2753,7 @@
           "const": "control"
         },
         "control_path": {
-          "$ref": "#/$defs/NullableRepoPathText"
+          "$ref": "#/$defs/NullableRepoPath"
         },
         "rule_id": {
           "type": "string",
@@ -3046,7 +3046,7 @@
           "const": "control"
         },
         "control_path": {
-          "$ref": "#/$defs/NullableRepoPathText"
+          "$ref": "#/$defs/NullableRepoPath"
         },
         "rule_id": {
           "type": "string",
