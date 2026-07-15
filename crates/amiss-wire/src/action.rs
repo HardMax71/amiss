@@ -1,18 +1,18 @@
 use crate::controls::{ConstraintPlatform, root};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::json::canonical;
-use crate::model::RepoPath;
+use crate::model::RepoPathText;
 
 /// The root `action.yml`: JCS JSON plus LF, using JSON's YAML-compatible
 /// subset rather than a general YAML parser. Exactly `name`, `description`,
-/// and `runs`; `runs` is exactly `{"main": <RepoPath>, "using": "node20"}`.
+/// and `runs`; `runs` is exactly `{"main": <RepoPathText>, "using": "node20"}`.
 /// Anchors, aliases, tags, merge keys, `pre`, `post`, composite steps,
 /// containers, and any other field are unrepresentable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActionMetadata {
     pub name: String,
     pub description: String,
-    pub main: RepoPath,
+    pub main: RepoPathText,
 }
 
 impl ActionMetadata {
@@ -38,7 +38,7 @@ impl ActionMetadata {
         let runs_path = obj.field("runs");
         let mut runs = Obj::new(&runs_path, obj.take("runs")?)?;
         let main_path = runs.field("main");
-        let main = RepoPath::new(de::string(&main_path, runs.take("main")?)?)
+        let main = RepoPathText::new(de::string(&main_path, runs.take("main")?)?)
             .ok_or_else(|| Error::new(&main_path, ErrorKind::InvalidValue))?;
         de::const_str(&runs.field("using"), runs.take("using")?, "node20")?;
         runs.finish()?;

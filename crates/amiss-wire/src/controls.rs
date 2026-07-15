@@ -5,8 +5,8 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::{self, Value};
 use crate::model::{
-    ArtifactId, BranchRef, ObjectFormat, Oid, OwnerId, RepoPath, RepositoryIdentity, TreeIdentity,
-    UtcInstant,
+    ArtifactId, BranchRef, ObjectFormat, Oid, OwnerId, RepoPathText, RepositoryIdentity,
+    TreeIdentity, UtcInstant,
 };
 
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
@@ -503,7 +503,7 @@ impl ResourceName {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentInclude {
-    pub path: RepoPath,
+    pub path: RepoPathText,
     pub kind: IncludeKind,
 }
 
@@ -517,7 +517,7 @@ pub struct FindingDisposition {
 pub struct ScannerPolicy {
     pub digest: Digest,
     pub document_includes: Vec<DocumentInclude>,
-    pub protected_inventory: Vec<RepoPath>,
+    pub protected_inventory: Vec<RepoPathText>,
     pub finding_dispositions: Vec<FindingDisposition>,
 }
 
@@ -585,8 +585,8 @@ pub struct OrganizationFloor {
     pub ref_name: BranchRef,
     pub minimum_profile: Profile,
     pub minimum_dispositions: Vec<FindingDisposition>,
-    pub protected_inventory: Vec<RepoPath>,
-    pub protected_control_paths: Vec<RepoPath>,
+    pub protected_inventory: Vec<RepoPathText>,
+    pub protected_control_paths: Vec<RepoPathText>,
     pub waivable_finding_kinds: Vec<EligibleFindingKind>,
     pub authorized_debt_owners: Vec<OwnerId>,
     pub authorized_waiver_issuers: Vec<OwnerId>,
@@ -857,7 +857,7 @@ pub struct ExecutionConstraintDescriptor {
     pub action_object_format: ObjectFormat,
     pub action_commit_oid: Oid,
     pub action_tree_oid: Oid,
-    pub manifest_path: RepoPath,
+    pub manifest_path: RepoPathText,
     pub release_manifest_digest: Digest,
     pub selected_platform: ConstraintPlatform,
     pub required_status_name: String,
@@ -966,7 +966,7 @@ impl ExecutionConstraintDescriptor {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TargetIntent {
-    pub path: RepoPath,
+    pub path: RepoPathText,
     pub target_kind: TargetKind,
     pub query_digest: Option<Digest>,
     pub fragment_digest: Option<Digest>,
@@ -974,7 +974,7 @@ pub struct TargetIntent {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FindingScope {
-    pub document: RepoPath,
+    pub document: RepoPathText,
     pub source_construct: SourceConstruct,
     pub normalized_target_intent: TargetIntent,
     pub source_projection_digest: Digest,
@@ -989,7 +989,7 @@ pub struct FindingKeyInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Resolution {
     pub kind: ResolutionKind,
-    pub path: Option<RepoPath>,
+    pub path: Option<RepoPathText>,
     pub entry_kind: Option<EntryKind>,
     pub git_mode: Option<GitMode>,
     pub raw_digest: Option<Digest>,
@@ -1270,11 +1270,11 @@ fn decode_resource_limit(path: &str, value: Value) -> Result<ResourceLimit, Erro
     }
 }
 
-fn decode_path_set(path: &str, value: Value) -> Result<Vec<RepoPath>, Error> {
+fn decode_path_set(path: &str, value: Value) -> Result<Vec<RepoPathText>, Error> {
     decode_path_items(path, de::array(path, value)?)
 }
 
-fn decode_path_items(path: &str, raw: Vec<Value>) -> Result<Vec<RepoPath>, Error> {
+fn decode_path_items(path: &str, raw: Vec<Value>) -> Result<Vec<RepoPathText>, Error> {
     let paths = decode_items(path, raw, 100_000, decode_repo_path)?;
     sorted_set(path, &paths, |a, b| a.as_str().cmp(b.as_str()))?;
     Ok(paths)
@@ -1286,8 +1286,9 @@ fn decode_owner_items(path: &str, raw: Vec<Value>) -> Result<Vec<OwnerId>, Error
     Ok(owners)
 }
 
-fn decode_repo_path(path: &str, value: Value) -> Result<RepoPath, Error> {
-    RepoPath::new(de::string(path, value)?).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {
+    RepoPathText::new(de::string(path, value)?)
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 fn decode_artifact_id(path: &str, value: Value) -> Result<ArtifactId, Error> {

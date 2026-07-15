@@ -6,7 +6,7 @@ use amiss_wire::action::{ActionMetadata, executable_platform, host_platform};
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor, GitMode};
 use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
 use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole};
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::{Oid, RepoPathText};
 
 /// The engine names itself with this domain over its own bytes, and the
 /// bootstrap recomputes the same value over the binary it validated. One
@@ -89,7 +89,7 @@ pub fn validate(
     let tree = action_tree(action, resources, constraint)?;
 
     let metadata_path =
-        RepoPath::new(ACTION_METADATA_PATH.to_owned()).ok_or(Refusal::ActionMetadata)?;
+        RepoPathText::new(ACTION_METADATA_PATH.to_owned()).ok_or(Refusal::ActionMetadata)?;
     let (metadata_bytes, metadata_mode) = blob(action, resources, &tree, &metadata_path)?;
     if metadata_mode != GitMode::RegularFile {
         return Err(Refusal::PathNotRegularBlob);
@@ -198,7 +198,7 @@ fn blob(
     action: &Repository,
     resources: &mut GitResources,
     tree: &Oid,
-    path: &RepoPath,
+    path: &RepoPathText,
 ) -> Result<(Vec<u8>, GitMode), Refusal> {
     let mut current = tree.clone();
     let mut segments = path.as_str().split('/').peekable();

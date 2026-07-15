@@ -1007,21 +1007,12 @@ fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
         ("path", detail.path.as_deref().map_or(Value::Null, string)),
         (
             "path_bytes_hex",
-            detail
-                .path_bytes
-                .as_deref()
-                .map_or(Value::Null, |bytes| Value::String(hex_lower(bytes))),
+            detail.path_bytes.as_deref().map_or(Value::Null, |bytes| {
+                Value::String(crate::model::hex_lower(bytes))
+            }),
         ),
         ("resource", resource),
         ("configured_limit", limit),
         ("observed_lower_bound", observed),
     ])
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
-    for byte in bytes {
-        let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
-    }
-    out
 }
