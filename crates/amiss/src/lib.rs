@@ -1,1 +1,16 @@
+#![doc = "The `amiss` command line: it checks documentation against the repository"]
+#![doc = "tree it describes and emits the deterministic report the contract in"]
+#![doc = "[`spec/`](https://github.com/HardMax71/amiss/tree/main/spec) fixes."]
+#![doc = ""]
+#![doc = "This crate is the binary. The command grammar, evaluation semantics,"]
+#![doc = "report contract, resource ceilings, and security model are documented at"]
+#![doc = "<https://hardmax71.github.io/amiss/>, and the engine's APIs live in the"]
+#![doc = "library crates: [`amiss-wire`](https://docs.rs/amiss-wire),"]
+#![doc = "[`amiss-scan`](https://docs.rs/amiss-scan), [`amiss-git`](https://docs.rs/amiss-git),"]
+#![doc = "[`amiss-md`](https://docs.rs/amiss-md), and"]
+#![doc = "[`amiss-bootstrap`](https://docs.rs/amiss-bootstrap). The one module"]
+#![doc = "exported here is the argv parser, public so the integration tests can"]
+#![doc = "drive the closed invocation grammar directly; it is deliberately the"]
+#![doc = "whole library surface."]
+
 pub mod invocation;
