@@ -61,8 +61,9 @@ went without rerunning anything.
 
 Refusals follow one rule: when the input cannot be trusted, no output is produced to trust
 either. A base commit the store does not hold, a tracked file whose object is missing, an
-index with an unresolved merge conflict, a document whose bytes will not decode, a path the
-report cannot represent, a control file with a duplicated JSON key: each has a named error
-code (`GIT_OBJECT_MISSING`, `DOCUMENT_INVALID`, `UNREPRESENTABLE_PATH`, and the rest of a
-closed list), and each ends the run at exit 2. The alternative in every one of these cases
-is a report that looks complete and is not.
+index with an unresolved merge conflict, a document whose bytes will not decode, a name
+outside the path grammar, a control file with a duplicated JSON key: each has a named
+error code (`GIT_OBJECT_MISSING`, `DOCUMENT_INVALID`, `UNREPRESENTABLE_PATH`, and the rest
+of a closed list), and each ends the run at exit 2. A name that is merely not UTF-8 is
+not on that list: it is an ordinary document whose path the report writes as hex. The
+alternative in every one of these cases is a report that looks complete and is not.

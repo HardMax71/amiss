@@ -28,9 +28,12 @@ answer to them.
 Output is part of the surface too. Repository paths end up in terminals and CI logs, so
 the human format escapes every byte outside printable ASCII. An ANSI escape sequence, a
 carriage return, or a forged `::error::` workflow command embedded in a filename reaches
-the log only as harmless `\uXXXX` text. The JSON report keeps the exact original bytes as
-a JSON string, because the log needs safety and the report needs fidelity, and those are
-different channels with different rules.
+the log only as harmless `\uXXXX` text, and a path that is raw bytes rather than text
+renders each such byte as the two-digit escape of its value, never inventing a character
+the bytes never encoded. The JSON report keeps fidelity its own way: a UTF-8 path is the
+exact original string, and a non-UTF-8 path is a `bytes_hex` object naming every byte,
+because the log needs safety and the report needs fidelity, and those are different
+channels with different rules.
 
 The CI trust chain points the same direction. The GitHub Action tree that will eventually
 ship is validated as plain data by a separately installed wrapper, `amiss-bootstrap`,

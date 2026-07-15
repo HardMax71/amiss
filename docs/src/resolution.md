@@ -59,12 +59,17 @@ and mode read"];
 Resolution is exact, and the small rules matter. A trailing slash means the author promised
 a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even though
 `guide.md` exists. Percent-encoding is decoded exactly once, so `%252F` stays as the
-literal three characters `%2F` in the name instead of turning into a second slash. Query
-strings and fragments are recorded as digests but ignored for resolution, because a tree
-has no queries and no anchors. Heading anchors, site routes, code symbols, and
-version-pinned references are all reported as `unsupported-reference-semantics`: real
-checks for those belong to tools that have the right information, and a guess here would
-turn honest ignorance into a false pass.
+literal three characters `%2F` in the name instead of turning into a second slash. A
+percent escape may decode to bytes that are not text at all, and those bytes are simply
+the path: `bad-%FF-name.md` resolves against the tree entry carrying that exact byte,
+because Git names files in bytes and so does the resolver. Query strings and fragments are
+recorded as digests but ignored for resolution, because a tree has no queries and no
+anchors. One narrow divergence is deliberate: a fragment whose escapes decode outside
+UTF-8 is dropped rather than digested, since carrying it would change the recorded
+identity of every existing observation for no resolution gain. Heading anchors, site
+routes, code symbols, and version-pinned references are all reported as
+`unsupported-reference-semantics`: real checks for those belong to tools that have the
+right information, and a guess here would turn honest ignorance into a false pass.
 
 Each resolved target is read from the object store and hashed, so the comparison knows the
 exact bytes and file mode on both sides. A symlink or submodule target is

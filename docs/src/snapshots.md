@@ -32,8 +32,10 @@ store does not hold:
 ```
 
 The row also carries `path`, `path_bytes_hex`, `resource`, `configured_limit`, and
-`observed_lower_bound` fields, null wherever they do not apply, so every refusal has the same shape and a consumer
-never parses two formats.
+`observed_lower_bound` fields, null wherever they do not apply, so every refusal has the
+same shape and a consumer never parses two formats. When the refused thing is a name the
+path grammar rejects, `path_bytes_hex` holds its exact bytes as lowercase hex, so the
+report never swallows what it refused.
 
 Neither snapshot is trusted more than the other. A base commit missing from a shallow clone
 is a refusal, not an empty tree, because treating an absent base as empty would make every

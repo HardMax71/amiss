@@ -17,7 +17,11 @@ another.
 Inside the payload: which trees were compared and how; the result block with `status`,
 `complete`, and `exit_code`; the summary counts; a `documents` array with one row per
 discovered document, its classification, and whether its content was available; the
-`findings` array; and the `errors` array of analysis errors the run kept. Every finding
+`findings` array; and the `errors` array of analysis errors the run kept. A repository
+path in any of these is a plain string when its bytes are valid UTF-8, and otherwise an
+object of the form `{"bytes_hex": "…"}` naming the raw bytes as lowercase hex; a writer
+never uses the object form for bytes that decode as text, so one path has exactly one
+spelling and every derived digest stays whole. Every finding
 carries its kind, its location with byte offsets, its attribution, the policy steps that
 set its final disposition, and the digests of the facts underneath it. The `key_input`
 that produced the finding's identity is included, so an external system can recompute any
@@ -27,7 +31,7 @@ The envelope, down to its top-level keys:
 
 ```json
 {
-  "schema": "amiss/scanner-report-envelope/v1",
+  "schema": "amiss/scanner-report-envelope/v2",
   "compatibility": "experimental",
   "engine_digest": "sha256:…",
   "payload_digest": "sha256:…",
@@ -71,4 +75,7 @@ The schema for all of this ships in the repository under
 [`spec/`](https://github.com/HardMax71/amiss/tree/main/spec), with canonical example
 files. The test suite validates the emitted bytes against that schema using an independent
 validator. The schema is the compatibility contract: fields appear, move, or change
-meaning only with a version bump.
+meaning only with a version bump, and the move from v1 to v2 is exactly one such change,
+the path union above. Every digest computed under a v1 preimage comes out identical under
+v2, because a text path serializes to the same bytes in both and the object form was not
+producible before, so the identities in old reports stay valid rather than orphaned.
