@@ -23,7 +23,7 @@ left alone.
 Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
 The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
 GitHub Enterprise host the identity declares. The gitlab dialect reads the canonical
-separator form `group[/subgroup]/name/-/blob-or-tree/ref/path`, nested groups compared
+separator form `group[/subgroup...]/name/-/blob-or-tree/ref/path`, nested groups compared
 whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selectors:
 `src/branch/` splits like the others, `src/commit/` resolves exactly when its full
 lowercase object id is the candidate commit and is out of version scope otherwise, and
