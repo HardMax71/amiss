@@ -170,20 +170,6 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
 /// `description`, and `runs`. The declared launcher is manifest-listed and
 /// exists for experimental convenience; the required path never executes it.
 #[must_use]
-pub fn action_metadata(name: &str, description: &str, main: &str) -> Vec<u8> {
-    let metadata = object(vec![
-        ("name", string(name)),
-        ("description", string(description)),
-        (
-            "runs",
-            object(vec![("main", string(main)), ("using", string("node20"))]),
-        ),
-    ]);
-    let mut bytes = canonical(&metadata);
-    bytes.push(b'\n');
-    bytes
-}
-
 fn string(text: &str) -> Value {
     Value::String(text.to_owned())
 }

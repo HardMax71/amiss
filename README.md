@@ -19,6 +19,16 @@ amiss check --repo . --object-format sha1 \
     --profile observe
 ```
 
+In CI the same engine ships as an action that derives both commits from the event and
+annotates findings on the pull request:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 2
+- uses: HardMax71/amiss@v1
+```
+
 Exit 0 means a complete run with nothing blocking, 1 a complete run with a blocking finding,
 and 2 anything that prevented a result worth trusting.
 

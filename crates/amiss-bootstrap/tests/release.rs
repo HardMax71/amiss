@@ -8,9 +8,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use amiss_bootstrap::build::{
-    StagedArtifact, StagedBuild, StagedFile, action_metadata, build_manifest,
-};
+use amiss_bootstrap::build::{StagedArtifact, StagedBuild, StagedFile, build_manifest};
 use amiss_bootstrap::{Refusal, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::action::host_platform;
@@ -92,6 +90,10 @@ fn engine_bytes(platform: ConstraintPlatform) -> Vec<u8> {
 /// the closure a release publishes, byte for byte.
 const LAUNCHER: &[u8] = include_bytes!("../../../action/launcher.js");
 
+/// The reviewed action definition, pinned the same way: the closure the
+/// bootstrap validates is the closure a release publishes, byte for byte.
+const ACTION: &[u8] = include_bytes!("../../../action/action.yml");
+
 struct Release {
     dir: TempDir,
     commit: String,
@@ -115,12 +117,6 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_str());
 
-    let metadata = action_metadata(
-        "Amiss",
-        "Documentation assurance for pull requests.",
-        "dist/launcher.js",
-    );
-
     let mut artifacts = vec![StagedArtifact {
         platform,
         artifact_name: format!("amiss-{}", platform.as_str()),
@@ -137,6 +133,12 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
                 executable: false,
                 bytes: &launcher,
             },
+            StagedFile {
+                path: "action.yml".to_owned(),
+                role: RuntimeRole::RuntimeData,
+                executable: false,
+                bytes: ACTION,
+            },
         ],
     }];
     let build = StagedBuild {
@@ -151,7 +153,7 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
     let engine_digest = hb(amiss_bootstrap::ENGINE_DOMAIN, &binary);
 
     fs::create_dir_all(root.join("dist")).unwrap();
-    fs::write(root.join("action.yml"), &metadata).unwrap();
+    fs::write(root.join("action.yml"), ACTION).unwrap();
     fs::write(root.join("release-manifest.json"), &manifest_bytes).unwrap();
     fs::write(root.join("dist/launcher.js"), &launcher).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();
@@ -244,8 +246,13 @@ fn the_pinned_release_validates_end_to_end() {
     assert_eq!(validated.platform, release.platform);
     assert_eq!(validated.engine_digest, release.engine_digest);
     assert_eq!(validated.manifest.engine_version, "0.1.0-experimental");
-    assert_eq!(validated.artifact.runtime_files.len(), 2);
-    assert_eq!(validated.metadata.main.as_str(), "dist/launcher.js");
+    assert_eq!(validated.artifact.runtime_files.len(), 3);
+    assert!(
+        validated.artifact.runtime_files.iter().any(|file| {
+            file.role == RuntimeRole::RuntimeData && file.path.as_str() == "action.yml"
+        }),
+        "the runnable action definition is a pinned closure row"
+    );
     assert_eq!(
         validated.manifest.dependency_lock.files.len(),
         1,
@@ -350,6 +357,64 @@ fn is_launcher_row(value: &Value) -> bool {
     })
 }
 
+fn strip_action_rows(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            items.retain(|item| !is_action_row(item));
+            for item in items.iter_mut() {
+                strip_action_rows(item);
+            }
+        }
+        Value::Object(members) => {
+            for (_key, member) in members.iter_mut() {
+                strip_action_rows(member);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
+    }
+}
+
+fn is_action_row(value: &Value) -> bool {
+    let Value::Object(members) = value else {
+        return false;
+    };
+    members.iter().any(|(key, member)| {
+        key == "role" && matches!(member, Value::String(role) if role == "runtime-data")
+    })
+}
+
+/// The action definition is what a `uses:` workflow actually executes, so a
+/// manifest whose closure fails to pin it must refuse even when its digest
+/// is self-consistent: otherwise the one runnable file at the tree root is
+/// the one file nothing checks.
+#[test]
+fn a_manifest_that_omits_the_action_row_is_refused() {
+    let mut restripped: Option<Digest> = None;
+    let mut release = release(|root| {
+        let path = root.join("release-manifest.json");
+        let bytes = fs::read(&path).unwrap();
+        let mut value =
+            amiss_wire::json::parse(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
+                .expect("the manifest parses");
+        strip_action_rows(&mut value);
+        restripped = Some(amiss_wire::digest::hj(
+            amiss_wire::manifest::MANIFEST_DOMAIN,
+            &value,
+        ));
+        let mut out = canonical(&value);
+        out.push(b'\n');
+        fs::write(&path, out).unwrap();
+    });
+    release.manifest_digest = restripped.expect("the stripped manifest was digested");
+
+    let outcome = attempt(&release, BOOTSTRAP);
+    assert_eq!(
+        outcome.err(),
+        Some(Refusal::ActionMetadata),
+        "an unpinned action definition is a refusal, not a runnable file"
+    );
+}
+
 /// `runs.main` is the one file a `uses:` consumer executes, and pinning its
 /// bytes is the whole reason the runtime closure exists. A manifest may not
 /// stay silent about it: the row is required, exactly one, and mode `100644`.
@@ -435,6 +500,12 @@ fn an_engine_whose_header_names_another_platform_refuses() {
                 executable: false,
                 bytes: &launcher,
             },
+            StagedFile {
+                path: "action.yml".to_owned(),
+                role: RuntimeRole::RuntimeData,
+                executable: false,
+                bytes: ACTION,
+            },
         ],
     }];
     let build = StagedBuild {
@@ -447,11 +518,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     };
     let (manifest_bytes, manifest_digest) = build_manifest(&build, &mut artifacts).unwrap();
     fs::create_dir_all(root.join("dist")).unwrap();
-    fs::write(
-        root.join("action.yml"),
-        action_metadata("Amiss", "Documentation assurance.", "dist/launcher.js"),
-    )
-    .unwrap();
+    fs::write(root.join("action.yml"), ACTION).unwrap();
     fs::write(root.join("release-manifest.json"), &manifest_bytes).unwrap();
     fs::write(root.join("dist/launcher.js"), &launcher).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();

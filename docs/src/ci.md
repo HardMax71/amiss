@@ -1,7 +1,26 @@
 # Running it in CI
 
-Amiss runs on its own repository under `--profile enforce`, and the job is four commands.
-This shape is lifted from this repository's workflow:
+The short form is the published action, which carries the engine inside the pinned
+tree, derives both commits from the triggering event, and turns findings into file
+annotations on the pull request:
+
+```yaml
+- uses: actions/checkout@<pinned-sha>
+  with:
+    fetch-depth: 2
+- uses: HardMax71/amiss@v1
+```
+
+`v1` is the moving major; `action/vX.Y.Z` tags are immutable exact pins, and pinning
+the full commit id works as everywhere. The action verifies the selected binary against
+the release manifest shipped in the same tree before running it, fails the job on exit
+classes 1 and 2 under the default `enforce` profile, and exposes `exit-class` and
+`report` outputs for anything downstream. Its inputs (`profile`, `base`, `candidate`,
+`repo`, `object-format`, `annotations`) exist for the cases the defaults do not cover.
+
+The long form is the engine invoked directly, which is how Amiss runs on its own
+repository under `--profile enforce`, and the job is four commands. This shape is
+lifted from this repository's workflow:
 
 ```yaml
 - uses: actions/checkout@<pinned-sha>
