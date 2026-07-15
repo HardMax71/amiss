@@ -724,6 +724,7 @@ fn apply_exceptions(
         vec![ErrorDetail {
             code: amiss_wire::report::AnalysisErrorCode::ExceptionOverlap,
             path: None,
+            path_bytes: None,
             resource: None,
         }]
     } else {

@@ -121,6 +121,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
                 &[ErrorDetail {
                     code,
                     path: None,
+                    path_bytes: None,
                     resource: None,
                 }],
                 reserve,

@@ -300,12 +300,113 @@ fn a_document_the_scanner_cannot_name_is_refused_rather_than_dropped() {
                 codes.contains(&"UNREPRESENTABLE_PATH"),
                 "{where_from}: the defect is disclosed, not swallowed: {codes:?}"
             );
+            let row = payload["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
+                .unwrap();
+            let hex: String = name.iter().fold(String::new(), |mut out, byte| {
+                let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
+                out
+            });
+            assert_eq!(
+                row["path"],
+                serde_json::Value::Null,
+                "{where_from}: a name the report cannot hold as text is not a path value"
+            );
+            assert_eq!(
+                row["path_bytes_hex"].as_str(),
+                Some(hex.as_str()),
+                "{where_from}: the refused bytes are disclosed exactly, not dropped"
+            );
             assert!(
                 payload["documents"].as_array().unwrap().is_empty(),
                 "{where_from}: an incomplete run publishes no document set to mistake for coverage"
             );
+            // the backslash name is UTF-8 and rides the projection; only a
+            // name the projection cannot spell at all voids the identity
+            if index_mode && str::from_utf8(name).is_err() {
+                let candidate = &payload["evaluation"]["candidate"];
+                assert_eq!(
+                    candidate["kind"], "unavailable",
+                    "an index with a row the identity cannot spell has no identity"
+                );
+                assert!(
+                    candidate["reasons"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|reason| reason == "unrepresentable-path"),
+                    "the refusal names its reason: {candidate}"
+                );
+                assert_eq!(
+                    candidate["snapshot_digest"],
+                    serde_json::Value::Null,
+                    "no digest may claim complete-logical-index over a partial view"
+                );
+            }
         }
     }
+}
+
+/// Distinct refused names are distinct disclosures. Before the bytes rode
+/// along, every non-UTF-8 name collapsed into one identical error row and the
+/// deduplicated set said "one problem" no matter how many entries were
+/// hidden.
+#[test]
+fn every_unnameable_entry_is_disclosed_separately() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
+        .trim()
+        .to_owned();
+    let blob = amiss_fixtures::loose_object(root, "blob", b"# Hidden\n").unwrap();
+    let tree = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("100644", b"bad-\xfe.md".as_slice(), blob.as_str()),
+            ("100644", b"bad-\xff.md".as_slice(), blob.as_str()),
+        ],
+    )
+    .unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap();
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 2);
+    let payload = payload(&stdout);
+    let disclosed: Vec<&str> = payload["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["code"] == "UNREPRESENTABLE_PATH")
+        .map(|row| row["path_bytes_hex"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        disclosed,
+        vec!["6261642dfe2e6d64", "6261642dff2e6d64"],
+        "two hidden entries are two rows, in byte order, each naming its bytes"
+    );
 }
 
 /// The other way out of the path domain is length. `RepoPath` stops at 4,096 bytes,

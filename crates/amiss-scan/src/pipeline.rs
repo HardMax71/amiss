@@ -1,6 +1,6 @@
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{ObjectFormat, Oid};
-use amiss_wire::report::{EngineProvenance, ErrorDetail};
+use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
 use crate::Error;
 use crate::correlate::{Observation, Side, correlate};
@@ -44,6 +44,7 @@ pub(crate) fn detail(error: &Error, path: Option<&str>) -> ErrorDetail {
     ErrorDetail {
         code: error.code(),
         path: path.map(str::to_owned),
+        path_bytes: None,
         resource,
     }
 }
@@ -62,7 +63,10 @@ pub(crate) fn side_observations(
     let mut failures: Vec<ErrorDetail> = discovery
         .path_defects
         .iter()
-        .map(|defect| detail(defect, None))
+        .map(|defect| ErrorDetail {
+            path_bytes: defect.raw.clone(),
+            ..detail(&defect.error, None)
+        })
         .collect();
     let mut cache = TargetCache::default();
     let mut observations: Vec<Observation> = Vec::new();
@@ -223,8 +227,9 @@ impl ExternalVerified {
 
 const fn time_invalid_row() -> ErrorDetail {
     ErrorDetail {
-        code: amiss_wire::report::AnalysisErrorCode::TrustedTimeInvalid,
+        code: AnalysisErrorCode::TrustedTimeInvalid,
         path: None,
+        path_bytes: None,
         resource: None,
     }
 }
@@ -268,8 +273,9 @@ fn external_gate(
             return Err((
                 "control-binding-mismatch",
                 ErrorDetail {
-                    code: amiss_wire::report::AnalysisErrorCode::ControlBindingMismatch,
+                    code: AnalysisErrorCode::ControlBindingMismatch,
                     path: None,
+                    path_bytes: None,
                     resource: None,
                 },
             ));
@@ -630,7 +636,7 @@ fn pair_policies(
 fn policy_unavailable_reason(details: &[ErrorDetail]) -> &'static str {
     if details
         .iter()
-        .any(|row| row.code == amiss_wire::report::AnalysisErrorCode::ConfigurationInvalid)
+        .any(|row| row.code == AnalysisErrorCode::ConfigurationInvalid)
     {
         "invalid-repository-policy"
     } else {
@@ -648,12 +654,14 @@ fn control_read_detail(defect: &Error, path: &str) -> ErrorDetail {
             code: defect.code(),
             path: (*resource == amiss_wire::controls::ResourceName::SelectedControlBlobBytes)
                 .then(|| path.to_owned()),
+            path_bytes: None,
             resource: Some((*resource, *configured_limit, *observed_lower_bound)),
         },
         Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => {
             ErrorDetail {
                 code: defect.code(),
                 path: None,
+                path_bytes: None,
                 resource: None,
             }
         }
@@ -1073,32 +1081,54 @@ impl SetupShell {
     }
 }
 
+/// The synthetic candidate identity claims `complete-logical-index`, so a
+/// row this block cannot spell is a refusal of the whole identity, never a
+/// silent omission behind a digest that says nothing is missing.
 fn index_candidate_block(
     repo: &Repository,
     base_oid: &Oid,
     index: &amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
-) -> CandidateBlock {
-    let entries: Vec<(String, amiss_wire::controls::GitMode, String, bool)> = index
-        .entries
-        .iter()
-        .filter_map(|entry| {
-            str::from_utf8(&entry.path).ok().map(|path| {
-                (
-                    path.to_owned(),
-                    entry.mode,
-                    entry.oid.as_str().to_owned(),
-                    entry.skip_worktree,
-                )
-            })
-        })
-        .collect();
-    CandidateBlock::Index(synthetic_candidate(
+) -> Result<CandidateBlock, ErrorDetail> {
+    let mut entries: Vec<(String, amiss_wire::controls::GitMode, String, bool)> =
+        Vec::with_capacity(index.entries.len());
+    for entry in &index.entries {
+        let Ok(path) = str::from_utf8(&entry.path) else {
+            return Err(ErrorDetail {
+                code: AnalysisErrorCode::UnrepresentablePath,
+                path: None,
+                path_bytes: Some(entry.path.clone()),
+                resource: None,
+            });
+        };
+        entries.push((
+            path.to_owned(),
+            entry.mode,
+            entry.oid.as_str().to_owned(),
+            entry.skip_worktree,
+        ));
+    }
+    Ok(CandidateBlock::Index(synthetic_candidate(
         format_str(repo.object_format()),
         base_oid.as_str(),
         &entries,
         skip_worktree_paths,
-    ))
+    )))
+}
+
+/// The staged run's candidate identity, or its refusal folded into the
+/// failure set, which keeps the run from concluding complete.
+fn resolved_candidate_block(
+    repo: &Repository,
+    base_oid: &Oid,
+    index: &amiss_git::LogicalIndex,
+    skip_worktree_paths: u64,
+    failures: &mut Vec<ErrorDetail>,
+) -> CandidateBlock {
+    index_candidate_block(repo, base_oid, index, skip_worktree_paths).unwrap_or_else(|row| {
+        failures.push(row);
+        CandidateBlock::Unavailable(vec!["unrepresentable-path"])
+    })
 }
 
 /// The staged external-control stage: trusted time verifies against the
@@ -1118,10 +1148,17 @@ fn staged_gate(
     index: &amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
 ) -> Result<ExternalVerified, Box<Built>> {
-    let provisional = setup_shell.with(
-        base_tree.1.clone(),
-        index_candidate_block(repo, base_oid, index, skip_worktree_paths),
-    );
+    let candidate_block = match index_candidate_block(repo, base_oid, index, skip_worktree_paths) {
+        Ok(block) => block,
+        Err(row) => {
+            let setup = setup_shell.with(
+                base_tree.1.clone(),
+                CandidateBlock::Unavailable(vec!["unrepresentable-path"]),
+            );
+            return Err(Box::new(construct_incomplete(&setup, &[row])));
+        }
+    };
+    let provisional = setup_shell.with(base_tree.1.clone(), candidate_block);
     external_gate(setup_shell, verified_floor, scan_limits, &provisional, None).map_err(
         |(reason, row)| {
             Box::new(controls_failure(
@@ -1358,7 +1395,8 @@ pub fn staged_index(
         (&candidate_discovery, &mut candidate_scan),
         &mut failures,
     );
-    let candidate_block = index_candidate_block(repo, base_oid, &index, skip_worktree_paths);
+    let candidate_block =
+        resolved_candidate_block(repo, base_oid, &index, skip_worktree_paths, &mut failures);
     let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
     setup.policy = effects;
     setup.policy.errors_retained = setup_shell.errors_retained;

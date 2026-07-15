@@ -13,6 +13,7 @@ const fn mismatch() -> ErrorDetail {
     ErrorDetail {
         code: AnalysisErrorCode::ControlBindingMismatch,
         path: None,
+        path_bytes: None,
         resource: None,
     }
 }

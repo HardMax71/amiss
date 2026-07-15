@@ -86,6 +86,7 @@ fn invalid(details: Vec<AnalysisErrorCode>) -> Vec<ErrorDetail> {
     let mut rows = vec![ErrorDetail {
         code: AnalysisErrorCode::ConfigurationInvalid,
         path: Some(SCANNER_POLICY_PATH.to_owned()),
+        path_bytes: None,
         resource: None,
     }];
     for code in details {
@@ -93,6 +94,7 @@ fn invalid(details: Vec<AnalysisErrorCode>) -> Vec<ErrorDetail> {
             rows.push(ErrorDetail {
                 code,
                 path: Some(SCANNER_POLICY_PATH.to_owned()),
+                path_bytes: None,
                 resource: None,
             });
         }
@@ -151,6 +153,7 @@ pub fn acquire(
         vec![ErrorDetail {
             code: defect.code(),
             path: None,
+            path_bytes: None,
             resource: None,
         }]
     })?;
@@ -192,12 +195,14 @@ pub fn acquire_entry(
                 } => ErrorDetail {
                     code: AnalysisErrorCode::ResourceLimitExceeded,
                     path: Some(SCANNER_POLICY_PATH.to_owned()),
+                    path_bytes: None,
                     resource: Some((resource, configured_limit, observed_lower_bound)),
                 },
                 Error::Parse(_) | Error::Git(_) | Error::UnrepresentablePath | Error::Internal => {
                     ErrorDetail {
                         code: defect.code(),
                         path: Some(SCANNER_POLICY_PATH.to_owned()),
+                        path_bytes: None,
                         resource: None,
                     }
                 }
@@ -221,6 +226,7 @@ pub fn acquire_entry(
                 return Err(vec![ErrorDetail {
                     code: AnalysisErrorCode::ResourceLimitExceeded,
                     path: Some(SCANNER_POLICY_PATH.to_owned()),
+                    path_bytes: None,
                     resource: Some((
                         ResourceName::RepositoryPolicyEntries,
                         limit,
@@ -507,6 +513,7 @@ pub fn verify_floor(
     let mismatch = ErrorDetail {
         code: AnalysisErrorCode::ControlBindingMismatch,
         path: None,
+        path_bytes: None,
         resource: None,
     };
     let Some((owner, name)) = repository else {
@@ -563,6 +570,7 @@ const fn binding_mismatch_row() -> ErrorDetail {
     ErrorDetail {
         code: AnalysisErrorCode::ControlBindingMismatch,
         path: None,
+        path_bytes: None,
         resource: None,
     }
 }
@@ -607,6 +615,7 @@ pub fn verify_time(
         Err(ErrorDetail {
             code: AnalysisErrorCode::TrustedTimeInvalid,
             path: None,
+            path_bytes: None,
             resource: None,
         })
     }
@@ -632,6 +641,7 @@ pub fn verify_debt(
         return Err(ErrorDetail {
             code: AnalysisErrorCode::ResourceLimitExceeded,
             path: None,
+            path_bytes: None,
             resource: Some((
                 ResourceName::DebtItems,
                 item_limit,
@@ -680,6 +690,7 @@ pub fn verify_waiver(
         return Err(ErrorDetail {
             code: AnalysisErrorCode::ResourceLimitExceeded,
             path: None,
+            path_bytes: None,
             resource: Some((
                 ResourceName::WaiverItems,
                 item_limit,

@@ -39,6 +39,16 @@ pub struct DocumentRecord {
     pub raw_digest: Option<amiss_wire::digest::Digest>,
 }
 
+/// One refused path: the defect, and the raw bytes of the name that tripped
+/// it, when the frozen hex field can hold them. An over-length name records
+/// no bytes, because its crossing row already carries both figures and the
+/// field caps at the path ceiling.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PathDefect {
+    pub error: Error,
+    pub raw: Option<Vec<u8>>,
+}
+
 /// One side's complete discovery: every classified path in repository byte
 /// order with its outcome, the count of non-tree entries outside the document
 /// set, the entries walked, and the path-level defects that never became a
@@ -48,7 +58,7 @@ pub struct SnapshotDiscovery {
     pub documents: Vec<DocumentRecord>,
     pub outside_document_set: u64,
     pub tree_entries: u64,
-    pub path_defects: Vec<Error>,
+    pub path_defects: Vec<PathDefect>,
     pub entries: BTreeMap<String, (GitMode, Oid)>,
 }
 
@@ -100,6 +110,52 @@ struct Frame {
     prefix: String,
     entries: Vec<TreeEntry>,
     next: usize,
+}
+
+/// Vets one raw entry name under `prefix` and returns the admitted path, or
+/// records why there is none. A refused name carries its full joined bytes,
+/// except past the length ceiling, where the crossing row already states
+/// both figures and the bytes outgrow the report's frozen hex field.
+fn admitted_path(
+    defects: &mut Vec<PathDefect>,
+    path_limit: u64,
+    prefix: &str,
+    name: &[u8],
+) -> Option<String> {
+    let Ok(text) = str::from_utf8(name) else {
+        // ancestors are always UTF-8: a refused directory is never descended
+        let mut raw = prefix.as_bytes().to_vec();
+        if !raw.is_empty() {
+            raw.push(b'/');
+        }
+        raw.extend_from_slice(name);
+        defects.push(PathDefect {
+            error: Error::UnrepresentablePath,
+            raw: Some(raw),
+        });
+        return None;
+    };
+    let path = if prefix.is_empty() {
+        text.to_owned()
+    } else {
+        format!("{prefix}/{text}")
+    };
+    let path_bytes = u64::try_from(path.len()).unwrap_or(u64::MAX);
+    if path_bytes > path_limit {
+        defects.push(PathDefect {
+            error: crossing(ResourceName::RawPathBytes, path_limit, path_bytes),
+            raw: None,
+        });
+        return None;
+    }
+    if RepoPath::new(path.clone()).is_none() {
+        defects.push(PathDefect {
+            error: Error::UnrepresentablePath,
+            raw: Some(path.into_bytes()),
+        });
+        return None;
+    }
+    Some(path)
 }
 
 /// Walks one snapshot tree completely: iterative, expanding a shared subtree
@@ -184,29 +240,14 @@ fn discover_walk(
             ));
         }
 
-        let Ok(name) = str::from_utf8(&entry.name) else {
-            discovery.path_defects.push(Error::UnrepresentablePath);
+        let Some(path) = admitted_path(
+            &mut discovery.path_defects,
+            git.limits().raw_path_bytes,
+            &prefix,
+            &entry.name,
+        ) else {
             continue;
         };
-        let path = if prefix.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{prefix}/{name}")
-        };
-        let path_limit = git.limits().raw_path_bytes;
-        let path_bytes = u64::try_from(path.len()).unwrap_or(u64::MAX);
-        if path_bytes > path_limit {
-            discovery.path_defects.push(crossing(
-                ResourceName::RawPathBytes,
-                path_limit,
-                path_bytes,
-            ));
-            continue;
-        }
-        if RepoPath::new(path.clone()).is_none() {
-            discovery.path_defects.push(Error::UnrepresentablePath);
-            continue;
-        }
 
         discovery
             .entries
@@ -284,24 +325,15 @@ pub fn discover_index(
                 entry_limit.saturating_add(1),
             ));
         }
-        let Ok(path) = str::from_utf8(&entry.path) else {
-            discovery.path_defects.push(Error::UnrepresentablePath);
+        let Some(path) = admitted_path(
+            &mut discovery.path_defects,
+            git.limits().raw_path_bytes,
+            "",
+            &entry.path,
+        ) else {
             continue;
         };
-        let path_limit = git.limits().raw_path_bytes;
-        let path_bytes = u64::try_from(path.len()).unwrap_or(u64::MAX);
-        if path_bytes > path_limit {
-            discovery.path_defects.push(crossing(
-                ResourceName::RawPathBytes,
-                path_limit,
-                path_bytes,
-            ));
-            continue;
-        }
-        if RepoPath::new(path.to_owned()).is_none() {
-            discovery.path_defects.push(Error::UnrepresentablePath);
-            continue;
-        }
+        let path = path.as_str();
         if entry.mode != GitMode::Gitlink && !repo.has_object(git, &entry.oid)? {
             return Err(Error::Git(GitDefect::ObjectMissing));
         }
