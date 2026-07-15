@@ -93,7 +93,7 @@ jobs:
         run: |
           set -eu
           echo "exit class ${EXIT_CLASS}"
-          jq -e '.schema == "amiss/scanner-report-envelope/v2"' "$REPORT" > /dev/null
+          jq -e '.schema == "amiss/scanner-report-envelope/v3"' "$REPORT" > /dev/null
           jq -e '.payload.documents | length > 0' "$REPORT" > /dev/null
 
   fuzz-smoke:

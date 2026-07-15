@@ -66,6 +66,7 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
         engine: engine(),
         enforce: false,
         repository: Some(identity("acme", "docs")),
+        forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor,
@@ -107,7 +108,7 @@ fn payload(
     let built = commit_pair(repo, &engine(), None, setup, base, candidate);
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -452,5 +453,39 @@ fn a_verified_floor_tightens_the_complete_findings_ceiling() {
     assert!(
         report["findings"].as_array().unwrap().is_empty(),
         "an incomplete run publishes no findings to mistake for a truncated pass"
+    );
+}
+
+/// The binding compares the whole identity now: a floor spelling github.com
+/// never binds to a run whose declared identity lives on another host, even
+/// when owner, name, and ref all agree.
+#[test]
+fn a_floor_for_another_host_fails_its_binding() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "base\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::write(root.join("README.md"), "candidate\n").unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let mut setup = shell(Some(floor_input(EMPTY_ARRAYS)));
+    setup.repository = Some(RepositoryIdentity {
+        host: "ghes.example".to_owned(),
+        owner: "acme".to_owned(),
+        name: "docs".to_owned(),
+    });
+    setup.forge = Some(amiss_wire::model::ForgeDialect::Github);
+    let report = payload(&setup, &repo, &base, &candidate);
+
+    assert_eq!(report["controls"]["status"], "unavailable");
+    assert_eq!(
+        report["controls"]["reasons"],
+        serde_json::json!(["control-binding-mismatch"])
+    );
+    assert_eq!(
+        report["evaluation"]["repository"]["host"], "ghes.example",
+        "the run keeps its own identity claim while the foreign floor fails"
     );
 }

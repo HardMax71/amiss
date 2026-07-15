@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 pub const MALFORMED_OUTPUT_LINE: &str = "amiss: invalid invocation\n";
 
@@ -12,7 +12,6 @@ pub enum Code {
     InvalidEvent,
     InvalidInvocation,
     InvalidProfile,
-    UnsupportedProviderHost,
 }
 
 impl Code {
@@ -22,7 +21,6 @@ impl Code {
             Self::InvalidEvent => "INVALID_EVENT",
             Self::InvalidInvocation => "INVALID_INVOCATION",
             Self::InvalidProfile => "INVALID_PROFILE",
-            Self::UnsupportedProviderHost => "UNSUPPORTED_PROVIDER_HOST",
         }
     }
 
@@ -35,20 +33,21 @@ impl Code {
     pub const fn contract(self) -> &'static str {
         match self {
             Self::InvalidEvent => {
-                "--repository owner and name are canonical ASCII lowercase, and --ref and \
-                 --default-branch-ref are full refs such as refs/heads/main. GitHub reports the \
-                 owner with its original capitals, so a workflow passing ${{ github.repository }} \
-                 has to lowercase it first."
+                "--repository is host/owner/name: the host is any spelling without a slash, \
+                 matched byte for byte wherever it appears, so give the lowercase form your \
+                 links use; owner segments and the name are canonical ASCII lowercase, and \
+                 owners nest as group/subgroup on GitLab only. --ref and --default-branch-ref \
+                 are full refs such as refs/heads/main. Forges report the owner with its \
+                 original capitals, so a workflow passing ${{ github.repository }} has to \
+                 lowercase it first."
             }
             Self::InvalidInvocation => {
                 "every option is spelled exactly, appears at most once, and carries a value. \
                  --base and --candidate are distinct full lowercase object IDs, never refs and \
-                 never abbreviations."
+                 never abbreviations. --forge is github, names a dialect the engine knows, and \
+                 accompanies the --repository triple."
             }
             Self::InvalidProfile => "--profile is observe or enforce.",
-            Self::UnsupportedProviderHost => {
-                "--repository names github.com, which is the only provider host v0 evaluates."
-            }
         }
     }
 }
@@ -79,6 +78,7 @@ pub struct Invocation {
     pub base: Oid,
     pub candidate: CandidateSelector,
     pub identity: Option<ProviderIdentity>,
+    pub forge: Option<ForgeDialect>,
     pub profile: Profile,
     pub explain_scope: bool,
     pub format: OutputFormat,
@@ -136,6 +136,7 @@ struct Gathered {
     repository: Slot,
     ref_name: Slot,
     default_branch_ref: Slot,
+    forge: Slot,
     profile: Slot,
     format: Slot,
     index: usize,
@@ -185,6 +186,7 @@ fn gather(argv: &[OsString]) -> Gathered {
             | "--repository"
             | "--ref"
             | "--default-branch-ref"
+            | "--forge"
             | "--profile"
             | "--format" => {
                 let value = match tokens.peek() {
@@ -212,6 +214,7 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> &'a mut Slot {
         "--repository" => &mut gathered.repository,
         "--ref" => &mut gathered.ref_name,
         "--default-branch-ref" => &mut gathered.default_branch_ref,
+        "--forge" => &mut gathered.forge,
         "--profile" => &mut gathered.profile,
         _ => &mut gathered.format,
     }
@@ -243,6 +246,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
             &gathered.repository,
             &gathered.ref_name,
             &gathered.default_branch_ref,
+            &gathered.forge,
             &gathered.profile,
         ]
         .iter()
@@ -301,6 +305,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
     };
 
     let identity = classify_identity(&mut codes, gathered);
+    let forge = classify_forge(&mut codes, gathered, &identity);
 
     if !codes.is_empty() {
         return Err(codes);
@@ -317,12 +322,51 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
                 base,
                 candidate,
                 identity,
+                forge,
                 profile,
                 explain_scope: gathered.explain_scope == 1,
                 format,
             })
         }
         _ => Err(BTreeSet::from([Code::InvalidInvocation])),
+    }
+}
+
+/// The dialect law: an explicit `--forge` names a grammar the engine knows
+/// and accompanies the identity triple; without the flag the known-host
+/// table decides, and an unknown host means no dialect at all. The github
+/// dialect cannot match a nested owner, so that pairing is refused rather
+/// than left deterministically dead.
+fn classify_forge(
+    codes: &mut BTreeSet<Code>,
+    gathered: &Gathered,
+    identity: &Result<Option<ProviderIdentity>, ()>,
+) -> Option<ForgeDialect> {
+    let declared = match (gathered.forge.present(), gathered.forge.unique_value()) {
+        (false, _) => None,
+        (true, Some("github")) => Some(ForgeDialect::Github),
+        (true, Some(_) | None) => {
+            codes.insert(Code::InvalidInvocation);
+            return None;
+        }
+    };
+    match identity {
+        Ok(Some(identity)) => {
+            let dialect =
+                declared.or_else(|| ForgeDialect::default_for_host(&identity.repository.host));
+            if dialect == Some(ForgeDialect::Github) && identity.repository.owner.contains('/') {
+                codes.insert(Code::InvalidEvent);
+                return None;
+            }
+            dialect
+        }
+        Ok(None) => {
+            if gathered.forge.present() {
+                codes.insert(Code::InvalidInvocation);
+            }
+            None
+        }
+        Err(()) => None,
     }
 }
 
@@ -364,29 +408,19 @@ fn classify_identity(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Identit
         return Err(());
     };
 
-    let mut components = repository.split('/');
-    let (host, owner, name) = match (
-        components.next(),
-        components.next(),
-        components.next(),
-        components.next(),
-    ) {
-        (Some(host), Some(owner), Some(name), None)
-            if !host.is_empty() && !owner.is_empty() && !name.is_empty() =>
-        {
-            (host, owner, name)
-        }
-        _ => {
-            codes.insert(Code::InvalidInvocation);
-            return Err(());
-        }
-    };
-    if host != "github.com" {
-        codes.insert(Code::UnsupportedProviderHost);
+    let parts: Vec<&str> = repository.split('/').collect();
+    if parts.len() < 3 {
+        codes.insert(Code::InvalidInvocation);
         return Err(());
     }
+    let host = parts.first().copied().unwrap_or_default();
+    let name = parts.last().copied().unwrap_or_default();
+    let owner = parts
+        .get(1..parts.len().saturating_sub(1))
+        .unwrap_or_default()
+        .join("/");
 
-    let identity = RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned());
+    let identity = RepositoryIdentity::new(host.to_owned(), owner, name.to_owned());
     let ref_name = BranchRef::new(ref_value.to_owned());
     let default_branch_ref = BranchRef::new(default_value.to_owned());
     if let (Some(repository), Some(ref_name), Some(default_branch_ref)) =

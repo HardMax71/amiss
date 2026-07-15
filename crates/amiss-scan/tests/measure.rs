@@ -30,6 +30,7 @@ fn representative_repository_latency_and_memory() {
         },
         enforce: false,
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         floor: None,

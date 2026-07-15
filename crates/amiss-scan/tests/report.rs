@@ -151,6 +151,7 @@ fn a_complete_report_validates_against_the_schema() {
         engine: engine(),
         enforce: false,
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         base: base_identity,
@@ -176,7 +177,7 @@ fn a_complete_report_validates_against_the_schema() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -227,6 +228,7 @@ fn bare_setup(errors_retained: u64) -> Setup {
         engine: engine(),
         enforce: false,
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         base: identity.clone(),
@@ -305,7 +307,7 @@ fn a_ceiling_of_one_emits_only_the_sentinel() {
 )]
 fn schema_max_items(array: &str) -> u64 {
     let text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -363,6 +365,7 @@ fn the_findings_ceiling_sits_behind_the_wire_cap() {
         engine: engine(),
         enforce: false,
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         floor: None,
@@ -458,6 +461,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         engine: engine(),
         enforce: false,
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         base: base_identity,
@@ -524,6 +528,7 @@ fn a_finding_location_carries_the_real_display_positions() {
         engine: engine(),
         enforce: false,
         repository: None,
+        forge: None,
         candidate_ref: None,
         default_branch_ref: None,
         base: base_identity,
@@ -570,6 +575,7 @@ fn the_candidate_identity_digest_survives_the_identity_threading() {
             "acme".to_owned(),
             "widget".to_owned(),
         ),
+        forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: Some("refs/heads/main".to_owned()),
         base: side('a', 'b'),
@@ -611,6 +617,7 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
             "acme".to_owned(),
             "widget".to_owned(),
         ),
+        forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: Some("refs/heads/main".to_owned()),
         floor: None,

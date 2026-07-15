@@ -105,6 +105,7 @@ fn shell(enforce: bool) -> SetupShell {
             owner: "acme".to_owned(),
             name: "docs".to_owned(),
         }),
+        forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor: Some(floor_input()),
@@ -135,6 +136,7 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
             owner: "acme".to_owned(),
             name: "docs".to_owned(),
         }),
+        forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         base: identity(&fx.base, &fx.base_tree),
@@ -289,7 +291,7 @@ fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
     let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate);
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();

@@ -151,10 +151,11 @@ fn classifies_profile_host_and_event_rows() {
             "refs/heads/main",
         ],
     );
-    assert_eq!(
-        rejected_codes(parse_tokens(&gitlab)),
-        vec![Code::UnsupportedProviderHost]
-    );
+    let Outcome::Accepted(other_forge) = parse_tokens(&gitlab) else {
+        panic!("an identity on another forge is a claim, not a refusal");
+    };
+    assert_eq!(other_forge.identity.unwrap().repository.host, "gitlab.com");
+    assert_eq!(other_forge.forge, None, "no dialect table entry, no flag");
 
     let uppercase_owner = with(
         &valid_pair(),
@@ -224,11 +225,7 @@ fn emits_every_applicable_row_together() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&tokens)),
-        vec![
-            Code::InvalidInvocation,
-            Code::InvalidProfile,
-            Code::UnsupportedProviderHost
-        ]
+        vec![Code::InvalidInvocation, Code::InvalidProfile]
     );
 }
 
@@ -347,4 +344,92 @@ fn replace_value(base: &[String], from: &str, to: &str) -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// The dialect grammar: an explicit flag names a known dialect and rides the
+/// identity triple; the known-host table fills the default; the github
+/// dialect refuses a nested owner it could never match.
+#[test]
+fn classifies_the_forge_dialect_grammar() {
+    let identity = |host_triple: &str| {
+        with(
+            &valid_pair(),
+            &[
+                "--repository",
+                host_triple,
+                "--ref",
+                "refs/heads/main",
+                "--default-branch-ref",
+                "refs/heads/main",
+            ],
+        )
+    };
+
+    let Outcome::Accepted(defaulted) = parse_tokens(&identity("github.com/acme/repo")) else {
+        panic!("expected acceptance");
+    };
+    assert_eq!(
+        defaulted.forge,
+        Some(amiss_wire::model::ForgeDialect::Github),
+        "the known-host table fills the dialect"
+    );
+
+    let explicit = with(
+        &identity("ghes.corp.example/acme/repo"),
+        &["--forge", "github"],
+    );
+    let Outcome::Accepted(ghes) = parse_tokens(&explicit) else {
+        panic!("expected acceptance");
+    };
+    assert_eq!(ghes.forge, Some(amiss_wire::model::ForgeDialect::Github));
+    assert_eq!(ghes.identity.unwrap().repository.host, "ghes.corp.example");
+
+    let nested = parse_tokens(&identity("gitlab.example/group/subgroup/repo"));
+    let Outcome::Accepted(nested) = nested else {
+        panic!("expected acceptance");
+    };
+    assert_eq!(nested.identity.unwrap().repository.owner, "group/subgroup");
+    assert_eq!(nested.forge, None);
+
+    assert_eq!(
+        rejected_codes(parse_tokens(&identity("github.com/group/subgroup/repo"))),
+        vec![Code::InvalidEvent],
+        "the github dialect cannot match a nested owner"
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(
+            &identity("ghes.corp.example/group/sub/repo"),
+            &["--forge", "github"],
+        ))),
+        vec![Code::InvalidEvent],
+        "the explicit github dialect refuses a nested owner too"
+    );
+
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(&valid_pair(), &["--forge", "github"]))),
+        vec![Code::InvalidInvocation],
+        "a dialect without an identity triple is orphaned"
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(
+            &identity("github.com/acme/repo"),
+            &["--forge", "sourcehut"],
+        ))),
+        vec![Code::InvalidInvocation],
+        "an unknown dialect is a grammar violation"
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(
+            &identity("github.com/acme/repo"),
+            &["--forge", "github", "--forge", "github"],
+        ))),
+        vec![Code::InvalidInvocation]
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(
+            &identity("github.com/acme/repo"),
+            &["--forge"],
+        ))),
+        vec![Code::InvalidInvocation]
+    );
 }

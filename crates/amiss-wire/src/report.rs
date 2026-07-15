@@ -131,8 +131,8 @@ impl Sink for StagedSink<'_> {
     }
 }
 pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine/v1";
-pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v2";
-pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload/v2";
+pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v3";
+pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload/v3";
 pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract/v1";
 pub const BUILT_IN_POLICY_VERSION: &str = "scanner-policy-defaults-v1";
 
@@ -140,7 +140,6 @@ pub const BUILT_IN_POLICY_VERSION: &str = "scanner-policy-defaults-v1";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AnalysisErrorCode {
     InvalidInvocation,
-    UnsupportedProviderHost,
     InvalidEvent,
     InvalidProfile,
     RequestUnreadable,
@@ -183,7 +182,6 @@ impl AnalysisErrorCode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::InvalidInvocation => "INVALID_INVOCATION",
-            Self::UnsupportedProviderHost => "UNSUPPORTED_PROVIDER_HOST",
             Self::InvalidEvent => "INVALID_EVENT",
             Self::InvalidProfile => "INVALID_PROFILE",
             Self::RequestUnreadable => "REQUEST_UNREADABLE",
@@ -228,7 +226,6 @@ impl AnalysisErrorCode {
     pub const fn fixed_phase(self) -> Option<&'static str> {
         match self {
             Self::InvalidInvocation
-            | Self::UnsupportedProviderHost
             | Self::InvalidEvent
             | Self::InvalidProfile
             | Self::RequestUnreadable => Some("invocation"),
@@ -267,7 +264,6 @@ impl AnalysisErrorCode {
     const fn evaluation_reason(self) -> Option<&'static str> {
         match self {
             Self::InvalidInvocation => Some("invalid-invocation"),
-            Self::UnsupportedProviderHost => Some("unsupported-provider"),
             Self::InvalidEvent => Some("invalid-event"),
             Self::InvalidProfile => Some("invalid-profile"),
             Self::RequestUnreadable => Some("request-unreadable"),
@@ -518,7 +514,7 @@ fn zero_summary() -> Value {
     let references = [
         "extracted",
         "explicit_local",
-        "same_repository_github",
+        "same_repository",
         "external_out_of_scope",
         "unsupported",
         "resolved",
