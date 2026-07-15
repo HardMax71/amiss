@@ -25,7 +25,7 @@ pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
 pub use pipeline::{SetupShell, commit_pair};
 pub use policy::{Effects, Includes, PolicySide};
 pub use report::{Built, Setup, SnapshotIdentity, construct, construct_incomplete};
-pub use resolve::{GithubContext, Intent, Resolution, TargetCache, resolve};
+pub use resolve::{ForgeContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};
 pub use scan::{Scanned, ScannedOccurrence, SpanDisplay, scan_bytes, scan_document};
 

@@ -4,7 +4,7 @@ use std::path::Path;
 use amiss_fixtures::stage_symlink;
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{
-    GithubContext, RAW_EVIDENCE_DOMAIN, TARGET_PROJECTION_DOMAIN, TargetCache,
+    ForgeContext, RAW_EVIDENCE_DOMAIN, TARGET_PROJECTION_DOMAIN, TargetCache,
 };
 use amiss_scan::{
     Error, ScanLimits, ScanResources, SnapshotDiscovery, discover, discover_index, resolve,
@@ -12,6 +12,7 @@ use amiss_scan::{
 use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
+use amiss_wire::model::ForgeDialect;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{IntentKind, ResolutionCode};
 use tempfile::TempDir;
@@ -110,19 +111,22 @@ fn bed() -> Bed {
     bed_with(ScanLimits::CONTRACT)
 }
 
-fn github_context() -> GithubContext {
-    GithubContext {
+fn github_context() -> ForgeContext {
+    ForgeContext {
+        host: "github.com".to_owned(),
+        dialect: ForgeDialect::Github,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
+        candidate_oid: None,
     }
 }
 
 impl Bed {
     fn run(
         &mut self,
-        context: Option<&GithubContext>,
+        context: Option<&ForgeContext>,
         document: &str,
         is_image: bool,
         destination: &str,
@@ -585,11 +589,14 @@ fn github_without_trust_is_foreign() {
 #[test]
 fn ambiguous_trusted_splits_are_version_scope_with_null_fields() {
     let mut bed = bed();
-    let context = GithubContext {
+    let context = ForgeContext {
+        host: "github.com".to_owned(),
+        dialect: ForgeDialect::Github,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/a".to_owned(),
         default_ref: "refs/heads/a/b".to_owned(),
+        candidate_oid: None,
     };
     let (intent, row) = bed
         .run(
@@ -705,4 +712,23 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
         bed.code("e\u{301}te\u{301}.txt"),
         ResolutionCode::PathNotFound
     );
+}
+
+/// The recognition opening requires the exact path separator after the
+/// declared host: a host-prefixed lookalike authority is a different site,
+/// external rather than a foreign form of this one.
+#[test]
+fn a_host_prefix_lookalike_authority_stays_external() {
+    let mut bed = bed();
+    let context = github_context();
+    let (intent, row) = bed
+        .run(
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://github.com.evil.example/acme/widgets/blob/feature/x/docs/guide.md",
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(row.code, ResolutionCode::ExternalUrl);
+    assert_eq!(intent.kind, IntentKind::ExternalUrl);
 }

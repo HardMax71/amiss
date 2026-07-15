@@ -10,9 +10,9 @@ use std::path::Path;
 use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
-use amiss_scan::resolve::GithubContext;
+use amiss_scan::resolve::ForgeContext;
 use amiss_wire::digest::hb;
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use tempfile::TempDir;
 
@@ -35,12 +35,15 @@ fn engine() -> EngineProvenance {
 /// leaving the original bytes in the raw destination digest. The recorded scan
 /// ran with the URL ref and the evaluated ref both `main`, and a same-repository
 /// GitHub URL resolves against the tree in hand only when they agree.
-fn spec_to_rest() -> GithubContext {
-    GithubContext {
+fn spec_to_rest() -> ForgeContext {
+    ForgeContext {
+        host: "github.com".to_owned(),
+        dialect: ForgeDialect::Github,
         owner: "hardmax71".to_owned(),
         repository: "spec_to_rest".to_owned(),
         candidate_ref: "refs/heads/main".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
+        candidate_oid: None,
     }
 }
 
@@ -48,7 +51,11 @@ fn shell(enforce: bool) -> SetupShell {
     SetupShell {
         engine: engine(),
         enforce,
-        repository: Some(("hardmax71".to_owned(), "spec_to_rest".to_owned())),
+        repository: Some(RepositoryIdentity {
+            host: "github.com".to_owned(),
+            owner: "hardmax71".to_owned(),
+            name: "spec_to_rest".to_owned(),
+        }),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: Some("refs/heads/main".to_owned()),
         floor: None,

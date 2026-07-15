@@ -117,7 +117,7 @@ pub struct RequestDigests {
 pub struct Setup {
     pub engine: EngineProvenance,
     pub enforce: bool,
-    pub repository: Option<(String, String)>,
+    pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub candidate_ref: Option<String>,
     pub default_branch_ref: Option<String>,
     pub base: SnapshotIdentity,
@@ -818,16 +818,13 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
         ("finality", string(finality)),
         (
             "repository",
-            setup
-                .repository
-                .as_ref()
-                .map_or(Value::Null, |(owner, name)| {
-                    object(vec![
-                        ("host", string("github.com")),
-                        ("owner", string(owner)),
-                        ("name", string(name)),
-                    ])
-                }),
+            setup.repository.as_ref().map_or(Value::Null, |identity| {
+                object(vec![
+                    ("host", string(&identity.host)),
+                    ("owner", string(&identity.owner)),
+                    ("name", string(&identity.name)),
+                ])
+            }),
         ),
         ("ref", nullable(setup.candidate_ref.as_deref())),
         (
@@ -988,7 +985,7 @@ fn constraint_descriptor_value(
         (
             "action_repository",
             object(vec![
-                ("host", string("github.com")),
+                ("host", string(&descriptor.action_repository.host)),
                 ("owner", string(&descriptor.action_repository.owner)),
                 ("name", string(&descriptor.action_repository.name)),
             ]),
@@ -1039,7 +1036,7 @@ fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) 
         (
             "repository",
             object(vec![
-                ("host", string("github.com")),
+                ("host", string(&statement.repository.host)),
                 ("owner", string(&statement.repository.owner)),
                 ("name", string(&statement.repository.name)),
             ]),

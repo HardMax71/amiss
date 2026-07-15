@@ -1327,7 +1327,7 @@ pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryId
     let owner = de::string(&obj.field("owner"), obj.take("owner")?)?;
     let name = de::string(&obj.field("name"), obj.take("name")?)?;
     obj.finish()?;
-    RepositoryIdentity::new(owner, name).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+    RepositoryIdentity::github(owner, name).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {

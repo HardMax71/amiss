@@ -100,7 +100,11 @@ fn shell(enforce: bool) -> SetupShell {
     SetupShell {
         engine: engine(),
         enforce,
-        repository: Some(("acme".to_owned(), "docs".to_owned())),
+        repository: Some(amiss_wire::model::RepositoryIdentity {
+            host: "github.com".to_owned(),
+            owner: "acme".to_owned(),
+            name: "docs".to_owned(),
+        }),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor: Some(floor_input()),
@@ -126,7 +130,11 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
     let setup = Setup {
         engine: engine(),
         enforce,
-        repository: Some(("acme".to_owned(), "docs".to_owned())),
+        repository: Some(amiss_wire::model::RepositoryIdentity {
+            host: "github.com".to_owned(),
+            owner: "acme".to_owned(),
+            name: "docs".to_owned(),
+        }),
         candidate_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         base: identity(&fx.base, &fx.base_tree),

@@ -157,3 +157,47 @@ fn domain_separation_changes_the_digest() {
     assert_ne!(hb("amiss/a/v1", b"x"), hb("amiss/b/v1", b"x"));
     assert_ne!(hb("amiss/a/v1", b"x"), hb("amiss/a/v1", b"y"));
 }
+
+/// The identity grammar after the host opened: a host is any nonempty
+/// slash-free claim up to the cap, an owner is one or more slash-joined
+/// segments, and the github constructor keeps the strict single-segment
+/// form the v1 control documents can spell.
+#[test]
+fn the_open_identity_grammar_admits_claims_and_keeps_structure() {
+    use amiss_wire::model::{ForgeDialect, RepositoryIdentity};
+    let new = |host: &str, owner: &str, name: &str| {
+        RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned())
+    };
+    assert!(new("github.com", "acme", "widget").is_some());
+    assert!(new("GitHub.com:8080", "acme", "widget").is_some());
+    assert!(new("192.168.0.1", "acme", "widget").is_some());
+    assert!(new(&"a".repeat(255), "acme", "widget").is_some());
+    assert!(new("", "acme", "widget").is_none());
+    assert!(new("git/hub.com", "acme", "widget").is_none());
+    assert!(new(&"a".repeat(256), "acme", "widget").is_none());
+
+    assert!(new("gitlab.com", "group/subgroup", "widget").is_some());
+    assert!(new("gitlab.com", "group//sub", "widget").is_none());
+    assert!(new("gitlab.com", "/group", "widget").is_none());
+    assert!(new("gitlab.com", "group/", "widget").is_none());
+    assert!(new("gitlab.com", "Group", "widget").is_none());
+    assert!(new("gitlab.com", "group/-", "widget").is_none());
+    let deep = ["a"; 128].join("/");
+    assert_eq!(deep.len(), 255);
+    assert!(new("gitlab.com", &deep, "widget").is_some());
+    assert!(new("gitlab.com", &format!("{deep}/a"), "widget").is_none());
+
+    let github = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned());
+    assert_eq!(
+        github.as_ref().map(|identity| identity.host.as_str()),
+        Some("github.com")
+    );
+    assert!(RepositoryIdentity::github("group/sub".to_owned(), "widget".to_owned()).is_none());
+
+    assert_eq!(
+        ForgeDialect::default_for_host("github.com"),
+        Some(ForgeDialect::Github)
+    );
+    assert_eq!(ForgeDialect::default_for_host("ghes.corp.example"), None);
+    assert_eq!(ForgeDialect::Github.as_str(), "github");
+}

@@ -386,7 +386,7 @@ fn classify_identity(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Identit
         return Err(());
     }
 
-    let identity = RepositoryIdentity::new(owner.to_owned(), name.to_owned());
+    let identity = RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned());
     let ref_name = BranchRef::new(ref_value.to_owned());
     let default_branch_ref = BranchRef::new(default_value.to_owned());
     if let (Some(repository), Some(ref_name), Some(default_branch_ref)) =

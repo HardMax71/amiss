@@ -552,3 +552,83 @@ fn a_finding_location_carries_the_real_display_positions() {
         "end exclusive, past the closing parenthesis"
     );
 }
+
+/// Recorded before the identity type learned a host field, asserted after:
+/// the candidate-identity preimage keeps its v1 domain and its repository
+/// row keeps spelling github.com, so the threading may not move a byte.
+#[test]
+fn the_candidate_identity_digest_survives_the_identity_threading() {
+    let side = |commit: char, tree: char| SnapshotIdentity {
+        object_format: "sha1",
+        commit_oid: commit.to_string().repeat(40),
+        tree_oid: tree.to_string().repeat(40),
+    };
+    let setup = Setup {
+        engine: engine(),
+        enforce: false,
+        repository: amiss_wire::model::RepositoryIdentity::github(
+            "acme".to_owned(),
+            "widget".to_owned(),
+        ),
+        candidate_ref: Some("refs/heads/main".to_owned()),
+        default_branch_ref: Some("refs/heads/main".to_owned()),
+        base: side('a', 'b'),
+        candidate: CandidateBlock::Commit(side('c', 'd')),
+        policy: amiss_scan::policy::Effects::default(),
+        controls_unavailable: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+    };
+    assert_eq!(
+        amiss_scan::report::candidate_identity_digest(&setup).to_string(),
+        "sha256:36550c2f9ea498dcebd88a786e707fbc02bc907d98c256a670815ffb0ba88cce"
+    );
+}
+
+/// The evaluation echoes the declared identity's host instead of a literal:
+/// a run claiming a self-hosted forge says so in its own report. The wire
+/// here is deliberately not schema-validated; v2 cannot spell this host and
+/// the third contract is not wired in yet.
+#[test]
+fn the_evaluation_echoes_a_self_hosted_forge_host() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "one\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("README.md"), "two\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let shell = amiss_scan::pipeline::SetupShell {
+        engine: engine(),
+        enforce: false,
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            "ghes.example".to_owned(),
+            "acme".to_owned(),
+            "widget".to_owned(),
+        ),
+        candidate_ref: Some("refs/heads/main".to_owned()),
+        default_branch_ref: Some("refs/heads/main".to_owned()),
+        floor: None,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
+        requests: amiss_scan::report::RequestDigests::default(),
+        external_defect: None,
+        errors_retained: 64,
+    };
+    let base = Oid::new(ObjectFormat::Sha1, base_commit).unwrap();
+    let candidate = Oid::new(ObjectFormat::Sha1, candidate_commit).unwrap();
+    let built =
+        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
+    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let repository = &wire["payload"]["evaluation"]["repository"];
+    assert_eq!(repository["host"], "ghes.example");
+    assert_eq!(repository["owner"], "acme");
+    assert_eq!(repository["name"], "widget");
+}

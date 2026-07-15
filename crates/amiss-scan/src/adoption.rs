@@ -6,7 +6,7 @@ use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
 use crate::pipeline::{detail, side_observations};
 use crate::policy::DebtContext;
-use crate::resolve::GithubContext;
+use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
 
 const fn mismatch() -> ErrorDetail {
@@ -34,7 +34,7 @@ pub fn reproduce(
     repo: &Repository,
     git: &mut GitResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     scan_limits: ScanLimits,
     context: &DebtContext,
 ) -> Result<(), ErrorDetail> {
