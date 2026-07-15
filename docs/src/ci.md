@@ -18,6 +18,10 @@ the release manifest shipped in the same tree before running it, fails the job o
 classes 1 and 2 under the default `enforce` profile, and exposes `exit-class` and
 `report` outputs for anything downstream. Its inputs (`profile`, `base`, `candidate`,
 `repo`, `object-format`, `annotations`) exist for the cases the defaults do not cover.
+The identity host comes from the event's server URL, so on GitHub Enterprise Server
+the report claims the instance's own host and recognizes that host's blob and tree
+links, with the github dialect declared explicitly; nothing about the action assumes
+github.com.
 
 The long form is the engine invoked directly, which is how Amiss runs on its own
 repository under `--profile enforce`, and the job is four commands. This shape is
