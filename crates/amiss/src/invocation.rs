@@ -44,8 +44,8 @@ impl Code {
             Self::InvalidInvocation => {
                 "every option is spelled exactly, appears at most once, and carries a value. \
                  --base and --candidate are distinct full lowercase object IDs, never refs and \
-                 never abbreviations. --forge is github or gitlab, names a dialect the engine \
-                 knows, and accompanies the --repository triple."
+                 never abbreviations. --forge is github, gitlab, or gitea, names a dialect the \
+                 engine knows, and accompanies the --repository triple."
             }
             Self::InvalidProfile => "--profile is observe or enforce.",
         }
@@ -346,6 +346,7 @@ fn classify_forge(
         (false, _) => None,
         (true, Some("github")) => Some(ForgeDialect::Github),
         (true, Some("gitlab")) => Some(ForgeDialect::Gitlab),
+        (true, Some("gitea")) => Some(ForgeDialect::Gitea),
         (true, Some(_) | None) => {
             codes.insert(Code::InvalidInvocation);
             return None;
@@ -355,7 +356,9 @@ fn classify_forge(
         Ok(Some(identity)) => {
             let dialect =
                 declared.or_else(|| ForgeDialect::default_for_host(&identity.repository.host));
-            if dialect == Some(ForgeDialect::Github) && identity.repository.owner.contains('/') {
+            if matches!(dialect, Some(ForgeDialect::Github | ForgeDialect::Gitea))
+                && identity.repository.owner.contains('/')
+            {
                 codes.insert(Code::InvalidEvent);
                 return None;
             }

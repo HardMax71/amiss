@@ -400,6 +400,22 @@ fn classifies_the_forge_dialect_grammar() {
         vec![Code::InvalidEvent],
         "the github dialect cannot match a nested owner"
     );
+    let Outcome::Accepted(codeberg) = parse_tokens(&identity("codeberg.org/acme/repo")) else {
+        panic!("expected acceptance");
+    };
+    assert_eq!(
+        codeberg.forge,
+        Some(amiss_wire::model::ForgeDialect::Gitea),
+        "codeberg defaults to the gitea dialect"
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(
+            &identity("git.example.internal/group/sub/repo"),
+            &["--forge", "gitea"],
+        ))),
+        vec![Code::InvalidEvent],
+        "the gitea dialect cannot match a nested owner either"
+    );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
             &identity("ghes.corp.example/group/sub/repo"),

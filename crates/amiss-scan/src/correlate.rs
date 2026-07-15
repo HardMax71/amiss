@@ -150,7 +150,8 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent {
     match intent.kind {
         IntentKind::RepositoryPath
         | IntentKind::SameRepositoryGithub
-        | IntentKind::SameRepositoryGitlab => CorrelationIntent::Repository {
+        | IntentKind::SameRepositoryGitlab
+        | IntentKind::SameRepositoryGitea => CorrelationIntent::Repository {
             path: intent.repository_path.clone(),
             target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
             query,

@@ -1206,7 +1206,8 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             "same_repository",
             integer(
                 bucket(IntentKind::SameRepositoryGithub)
-                    .saturating_add(bucket(IntentKind::SameRepositoryGitlab)),
+                    .saturating_add(bucket(IntentKind::SameRepositoryGitlab))
+                    .saturating_add(bucket(IntentKind::SameRepositoryGitea)),
             ),
         ),
         (

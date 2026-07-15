@@ -141,6 +141,7 @@ fn dialect_of(case: &Value) -> ForgeDialect {
     match text(case, "dialect") {
         "github" => ForgeDialect::Github,
         "gitlab" => ForgeDialect::Gitlab,
+        "gitea" => ForgeDialect::Gitea,
         other => panic!("unknown dialect {other}"),
     }
 }
@@ -153,27 +154,48 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
         "github_form"
     };
     let form = case.get(form_key).and_then(Value::as_str).unwrap_or("blob");
-    let (dialect, host, url) = if operation == "gitlab-ref-split" {
-        let url = format!(
-            "https://gitlab.com/acme/widgets/-/{form}/{}",
-            text(case, "encoded_suffix")
-        );
-        (ForgeDialect::Gitlab, "gitlab.com", url)
-    } else {
-        let url = format!(
-            "https://github.com/acme/widgets/{form}/{}",
-            text(case, "encoded_suffix")
-        );
-        (ForgeDialect::Github, "github.com", url)
+    let suffix = text(case, "encoded_suffix");
+    let (dialect, host, url) = match operation {
+        "gitlab-ref-split" => (
+            ForgeDialect::Gitlab,
+            "gitlab.com",
+            format!("https://gitlab.com/acme/widgets/-/{form}/{suffix}"),
+        ),
+        "gitea-branch-split" => (
+            ForgeDialect::Gitea,
+            "codeberg.org",
+            format!("https://codeberg.org/acme/widgets/src/branch/{suffix}"),
+        ),
+        "gitea-commit-split" => (
+            ForgeDialect::Gitea,
+            "codeberg.org",
+            format!(
+                "https://codeberg.org/acme/widgets/src/commit/{}/{suffix}",
+                text(case, "oid_segment")
+            ),
+        ),
+        _ => (
+            ForgeDialect::Github,
+            "github.com",
+            format!("https://github.com/acme/widgets/{form}/{suffix}"),
+        ),
     };
-    let run_context = context(
+    let mut run_context = context(
         dialect,
         host,
         "acme",
         "widgets",
-        text(case, "candidate_ref"),
-        text(case, "default_ref"),
+        case.get("candidate_ref")
+            .and_then(Value::as_str)
+            .unwrap_or("refs/heads/main"),
+        case.get("default_ref")
+            .and_then(Value::as_str)
+            .unwrap_or("refs/heads/main"),
     );
+    run_context.candidate_oid = case
+        .get("candidate_oid")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     let expected = case.get("expected").unwrap();
     let expected_path = expected.get("path").and_then(Value::as_str);
@@ -223,6 +245,18 @@ fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
                 "refs/heads/main",
             ),
             format!("https://gitlab.com/acme/widgets/-/blob/main/docs/a.md#{value}"),
+        )
+    } else if text(case, "operation") == "gitea-line-fragment" {
+        (
+            context(
+                ForgeDialect::Gitea,
+                "codeberg.org",
+                "acme",
+                "widgets",
+                "refs/heads/main",
+                "refs/heads/main",
+            ),
+            format!("https://codeberg.org/acme/widgets/src/branch/main/docs/a.md#{value}"),
         )
     } else {
         (
@@ -289,7 +323,9 @@ fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
         "same-repository" => assert!(
             matches!(
                 intent.kind,
-                IntentKind::SameRepositoryGithub | IntentKind::SameRepositoryGitlab
+                IntentKind::SameRepositoryGithub
+                    | IntentKind::SameRepositoryGitlab
+                    | IntentKind::SameRepositoryGitea
             ),
             "{id}: got {:?}",
             intent.kind
@@ -304,18 +340,28 @@ fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
 }
 
 fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
-    let run_context = context(
-        ForgeDialect::Gitlab,
-        "gitlab.com",
+    let dialect = dialect_of(case);
+    let host = match dialect {
+        ForgeDialect::Github => "github.com",
+        ForgeDialect::Gitlab => "gitlab.com",
+        ForgeDialect::Gitea => "codeberg.org",
+    };
+    let mut run_context = context(
+        dialect,
+        host,
         "acme",
         "widgets",
         "refs/heads/main",
         "refs/heads/main",
     );
-    let url = format!("https://gitlab.com/{}", text(case, "suffix"));
+    run_context.candidate_oid = Some("6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned());
+    let url = format!("https://{host}/{}", text(case, "suffix"));
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     match text(case, "expected") {
         "foreign" => assert_eq!(row.code, ResolutionCode::ForeignRepository, "{id}"),
+        "unsupported-version-scope" => {
+            assert_eq!(row.code, ResolutionCode::UnsupportedVersionScope, "{id}");
+        }
         expected => assert_eq!(
             intent
                 .target_kind
@@ -429,8 +475,12 @@ fn dispatch(bed: &mut Bed, case: &Value) {
     let id = text(case, "id");
     match text(case, "operation") {
         "target-kind" => target_kind_case(bed, case, id),
-        "github-line-fragment" | "gitlab-line-fragment" => line_fragment_case(bed, case, id),
-        "github-ref-split" | "gitlab-ref-split" => split_case(bed, case, id),
+        "github-line-fragment" | "gitlab-line-fragment" | "gitea-line-fragment" => {
+            line_fragment_case(bed, case, id);
+        }
+        "github-ref-split" | "gitlab-ref-split" | "gitea-branch-split" | "gitea-commit-split" => {
+            split_case(bed, case, id);
+        }
         "github-identity" | "forge-identity" => identity_case(bed, case, id),
         "forge-form" => forge_form_case(bed, case, id),
         "forge-dialect-default" => dialect_default_case(case, id),
