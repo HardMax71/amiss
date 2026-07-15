@@ -113,41 +113,40 @@ struct Frame {
 }
 
 /// Vets one raw entry name under `prefix` and returns the admitted path, or
-/// records why there is none. A refused name carries its full joined bytes,
-/// except past the length ceiling, where the crossing row already states
-/// both figures and the bytes outgrow the report's frozen hex field.
+/// records why there is none. Length is charged on the raw bytes before any
+/// question of spelling, so a refused name's disclosed bytes always fit the
+/// report's frozen hex field, whose cap is the path ceiling itself; past the
+/// ceiling the crossing row states both figures and carries no bytes.
 fn admitted_path(
     defects: &mut Vec<PathDefect>,
     path_limit: u64,
     prefix: &str,
     name: &[u8],
 ) -> Option<String> {
-    let Ok(text) = str::from_utf8(name) else {
-        // ancestors are always UTF-8: a refused directory is never descended
-        let mut raw = prefix.as_bytes().to_vec();
-        if !raw.is_empty() {
-            raw.push(b'/');
-        }
-        raw.extend_from_slice(name);
+    // ancestors are always UTF-8: a refused directory is never descended
+    let mut raw = prefix.as_bytes().to_vec();
+    if !raw.is_empty() {
+        raw.push(b'/');
+    }
+    raw.extend_from_slice(name);
+    let raw_bytes = u64::try_from(raw.len()).unwrap_or(u64::MAX);
+    if raw_bytes > path_limit {
         defects.push(PathDefect {
-            error: Error::UnrepresentablePath,
-            raw: Some(raw),
-        });
-        return None;
-    };
-    let path = if prefix.is_empty() {
-        text.to_owned()
-    } else {
-        format!("{prefix}/{text}")
-    };
-    let path_bytes = u64::try_from(path.len()).unwrap_or(u64::MAX);
-    if path_bytes > path_limit {
-        defects.push(PathDefect {
-            error: crossing(ResourceName::RawPathBytes, path_limit, path_bytes),
+            error: crossing(ResourceName::RawPathBytes, path_limit, raw_bytes),
             raw: None,
         });
         return None;
     }
+    let path = match String::from_utf8(raw) {
+        Ok(path) => path,
+        Err(invalid) => {
+            defects.push(PathDefect {
+                error: Error::UnrepresentablePath,
+                raw: Some(invalid.into_bytes()),
+            });
+            return None;
+        }
+    };
     if RepoPath::new(path.clone()).is_none() {
         defects.push(PathDefect {
             error: Error::UnrepresentablePath,

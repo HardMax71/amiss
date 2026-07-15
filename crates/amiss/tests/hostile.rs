@@ -407,6 +407,149 @@ fn every_unnameable_entry_is_disclosed_separately() {
         vec!["6261642dfe2e6d64", "6261642dff2e6d64"],
         "two hidden entries are two rows, in byte order, each naming its bytes"
     );
+
+    amiss_fixtures::index_file(
+        root,
+        &[
+            (b"README.md".as_slice(), readme.as_str()),
+            (b"bad-\xfe.md".as_slice(), blob.as_str()),
+            (b"bad-\xff.md".as_slice(), blob.as_str()),
+        ],
+    )
+    .unwrap();
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 2);
+    let staged = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap()["payload"].clone();
+    let disclosed: Vec<&str> = staged["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["code"] == "UNREPRESENTABLE_PATH")
+        .map(|row| row["path_bytes_hex"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        disclosed,
+        vec!["6261642dfe2e6d64", "6261642dff2e6d64"],
+        "the staged gate discloses every unspellable row too, not just the first"
+    );
+}
+
+/// A name can be both unspellable and past the length ceiling. The ceiling
+/// is charged first, on the raw bytes, and the crossing row carries no hex:
+/// the field's frozen cap is the path ceiling itself, so bytes past it can
+/// never be disclosed without breaking the report's own schema.
+#[test]
+fn an_over_length_unspellable_name_is_a_crossing_with_no_bytes() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
+        .trim()
+        .to_owned();
+    let blob = amiss_fixtures::loose_object(root, "blob", b"# Hidden\n").unwrap();
+    let long_name = [b"bad-".as_slice(), &[0xff_u8; 5000], b".md"].concat();
+    let tree = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("100644", &long_name, blob.as_str()),
+        ],
+    )
+    .unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "candidate").unwrap();
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 2);
+    let payload = payload(&stdout);
+    let row = payload["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["code"] == "RESOURCE_LIMIT_EXCEEDED")
+        .unwrap();
+    assert_eq!(row["resource"], "raw-path-bytes");
+    assert_eq!(row["configured_limit"], 4096);
+    assert_eq!(row["observed_lower_bound"], 5007);
+    assert_eq!(
+        row["path_bytes_hex"],
+        serde_json::Value::Null,
+        "bytes past the ceiling are stated by figure, never by hex the schema forbids"
+    );
+    assert!(
+        !payload["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["code"] == "UNREPRESENTABLE_PATH"),
+        "the ceiling is charged first; the spelling question is never reached"
+    );
+
+    amiss_fixtures::index_file(
+        root,
+        &[
+            (b"README.md".as_slice(), readme.as_str()),
+            (&long_name, blob.as_str()),
+        ],
+    )
+    .unwrap();
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 2);
+    let staged = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap()["payload"].clone();
+    let row = staged["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
+        .unwrap();
+    assert_eq!(
+        row["path_bytes_hex"],
+        serde_json::Value::Null,
+        "the identity gate answers the spelling question, and omits hex past the field's cap"
+    );
 }
 
 /// The other way out of the path domain is length. `RepoPath` stops at 4,096 bytes,

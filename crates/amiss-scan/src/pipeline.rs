@@ -1083,23 +1083,29 @@ impl SetupShell {
 
 /// The synthetic candidate identity claims `complete-logical-index`, so a
 /// row this block cannot spell is a refusal of the whole identity, never a
-/// silent omission behind a digest that says nothing is missing.
+/// silent omission behind a digest that says nothing is missing. Every such
+/// row is disclosed, each with its bytes when they fit the report's frozen
+/// hex field.
 fn index_candidate_block(
     repo: &Repository,
     base_oid: &Oid,
     index: &amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
-) -> Result<CandidateBlock, ErrorDetail> {
+) -> Result<CandidateBlock, Vec<ErrorDetail>> {
+    let disclosure_cap = amiss_git::GitLimits::CONTRACT.raw_path_bytes;
     let mut entries: Vec<(String, amiss_wire::controls::GitMode, String, bool)> =
         Vec::with_capacity(index.entries.len());
+    let mut failures = Vec::new();
     for entry in &index.entries {
         let Ok(path) = str::from_utf8(&entry.path) else {
-            return Err(ErrorDetail {
+            let fits = u64::try_from(entry.path.len()).unwrap_or(u64::MAX) <= disclosure_cap;
+            failures.push(ErrorDetail {
                 code: AnalysisErrorCode::UnrepresentablePath,
                 path: None,
-                path_bytes: Some(entry.path.clone()),
+                path_bytes: fits.then(|| entry.path.clone()),
                 resource: None,
             });
+            continue;
         };
         entries.push((
             path.to_owned(),
@@ -1107,6 +1113,9 @@ fn index_candidate_block(
             entry.oid.as_str().to_owned(),
             entry.skip_worktree,
         ));
+    }
+    if !failures.is_empty() {
+        return Err(failures);
     }
     Ok(CandidateBlock::Index(synthetic_candidate(
         format_str(repo.object_format()),
@@ -1116,7 +1125,7 @@ fn index_candidate_block(
     )))
 }
 
-/// The staged run's candidate identity, or its refusal folded into the
+/// The staged run's candidate identity, or its refusals folded into the
 /// failure set, which keeps the run from concluding complete.
 fn resolved_candidate_block(
     repo: &Repository,
@@ -1125,8 +1134,8 @@ fn resolved_candidate_block(
     skip_worktree_paths: u64,
     failures: &mut Vec<ErrorDetail>,
 ) -> CandidateBlock {
-    index_candidate_block(repo, base_oid, index, skip_worktree_paths).unwrap_or_else(|row| {
-        failures.push(row);
+    index_candidate_block(repo, base_oid, index, skip_worktree_paths).unwrap_or_else(|rows| {
+        failures.extend(rows);
         CandidateBlock::Unavailable(vec!["unrepresentable-path"])
     })
 }
@@ -1150,12 +1159,12 @@ fn staged_gate(
 ) -> Result<ExternalVerified, Box<Built>> {
     let candidate_block = match index_candidate_block(repo, base_oid, index, skip_worktree_paths) {
         Ok(block) => block,
-        Err(row) => {
+        Err(rows) => {
             let setup = setup_shell.with(
                 base_tree.1.clone(),
                 CandidateBlock::Unavailable(vec!["unrepresentable-path"]),
             );
-            return Err(Box::new(construct_incomplete(&setup, &[row])));
+            return Err(Box::new(construct_incomplete(&setup, &rows)));
         }
     };
     let provisional = setup_shell.with(base_tree.1.clone(), candidate_block);
