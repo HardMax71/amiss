@@ -263,3 +263,51 @@ fn text(value: &Value, key: &str) -> Option<String> {
         _ => None,
     }
 }
+
+#[test]
+fn the_indented_second_contract_example_is_rejected_as_noncanonical() {
+    let indented = dossier_example("scanner-report-v2.json");
+    assert_eq!(
+        accept(&indented, &foreign_expectations()),
+        Err(AcceptanceDefect::Noncanonical),
+        "a readable parsed-value example is not a valid emitted byte fixture"
+    );
+}
+
+#[test]
+fn the_second_contract_golden_is_the_canonicalization_of_its_indented_value() {
+    let indented = dossier_example("scanner-report-v2.json");
+    let golden = dossier_example("scanner-report-v2.canonical.json");
+    let parsed = parse(&indented).unwrap();
+    let mut recanonicalized = canonical(&parsed);
+    recanonicalized.push(b'\n');
+    assert_eq!(
+        recanonicalized, golden,
+        "the smoke-checker equivalence holds under this serializer"
+    );
+}
+
+/// The first goldens this acceptance gate can admit whole: the v1 examples
+/// are frozen in the research namespace, so their payload digests never
+/// recompute here, while the v2 golden was emitted by this engine under this
+/// namespace and clears every check, digest included.
+#[test]
+fn the_second_contract_golden_clears_acceptance_end_to_end() {
+    let golden = dossier_example("scanner-report-v2.canonical.json");
+    let envelope = parse(&golden).unwrap();
+    let payload = member(&envelope, "payload").unwrap();
+    let engine_digest = text(member(payload, "engine").unwrap(), "engine_digest").unwrap();
+    let evaluation = member(payload, "evaluation").unwrap();
+    let base_commit = text(member(evaluation, "base").unwrap(), "commit_oid").unwrap();
+    let candidate_commit = text(member(evaluation, "candidate").unwrap(), "commit_oid");
+    let expectations = Expectations {
+        engine_digest,
+        base_commit,
+        candidate_commit,
+    };
+    assert_eq!(
+        accept(&golden, &expectations),
+        Ok(0),
+        "an engine-emitted golden satisfies its own acceptance law"
+    );
+}
