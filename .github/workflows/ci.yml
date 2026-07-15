@@ -94,6 +94,7 @@ jobs:
           set -eu
           echo "exit class ${EXIT_CLASS}"
           jq -e '.schema == "amiss/scanner-report-envelope/v3"' "$REPORT" > /dev/null
+          jq -e '.payload.evaluation.forge == "github"' "$REPORT" > /dev/null
           jq -e '.payload.documents | length > 0' "$REPORT" > /dev/null
 
   fuzz-smoke:

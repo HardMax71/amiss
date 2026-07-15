@@ -98,6 +98,7 @@ runs:
         PUSH_BEFORE: ${{ github.event.before }}
         HEAD_SHA: ${{ github.sha }}
         REPOSITORY: ${{ github.repository }}
+        SERVER_URL: ${{ github.server_url }}
         BRANCH: ${{ github.head_ref || github.ref_name }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         REF_TYPE: ${{ github.ref_type }}
@@ -137,8 +138,9 @@ runs:
         } >> "$GITHUB_OUTPUT"
         if [ -n "$BRANCH" ] && [ -n "$DEFAULT_BRANCH" ] \
           && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
+          host="${SERVER_URL#https://}"
           {
-            printf 'identity=github.com/%s\n' "${REPOSITORY,,}"
+            printf 'identity=%s/%s\n' "${host,,}" "${REPOSITORY,,}"
             printf 'ref=refs/heads/%s\n' "$BRANCH"
             printf 'default-ref=refs/heads/%s\n' "$DEFAULT_BRANCH"
           } >> "$GITHUB_OUTPUT"
@@ -163,7 +165,8 @@ runs:
               --base "$BASE" --candidate "$CANDIDATE"
               --profile "$PROFILE" --format json)
         if [ -n "${IDENTITY:-}" ]; then
-          args+=(--repository "$IDENTITY" --ref "$REF" --default-branch-ref "$DEFAULT_REF")
+          args+=(--repository "$IDENTITY" --ref "$REF" --default-branch-ref "$DEFAULT_REF"
+                --forge github)
         fi
         status=0
         "$BINARY" "${args[@]}" > "$report" || status=$?
