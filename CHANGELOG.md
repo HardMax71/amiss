@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/HardMax71/amiss/compare/v0.3.0...v0.4.0) - 2026-07-15
+
+### Changes
+
+- Speak the gitea family's typed forms, commit pins included
+- Teach the resolver GitLab's spelling, and pin every dialect as data
+- Lift the host gate and speak the third contract
+- Carry the host in the identity, and compare identities whole
+- Count the intent kinds by pointing at the schema, not a numeral
+- Freeze the third contract's goldens from a forge-bearing run
+
 ## [0.3.0](https://github.com/HardMax71/amiss/compare/v0.2.0...v0.3.0) - 2026-07-15
 
 ### Changes
