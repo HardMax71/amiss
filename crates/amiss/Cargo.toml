@@ -3,6 +3,7 @@ name = "amiss"
 version.workspace = true
 edition.workspace = true
 description = "Checks documentation against the repository tree it describes"
+documentation = "https://hardmax71.github.io/amiss/"
 license.workspace = true
 repository.workspace = true
 
