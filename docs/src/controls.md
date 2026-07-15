@@ -19,6 +19,10 @@ execution constraint. Each one is tied to the exact repository and tree it was i
 Presenting a control against a different tree is a `CONTROL_BINDING_MISMATCH` refusal, not
 a shrug. Waivers are the only sanctioned way to pass with a known failure, they expire, and
 every waiver that touches a finding appears as a visible step in that finding's history.
+One asymmetry follows from the control formats' own versioning: the report can carry a
+finding on a document whose name is raw bytes, but the waiver and debt formats still spell
+paths as text, so such a finding is reportable yet cannot be waived or adopted until those
+formats revise.
 
 In the shipped v0 command line, all five external controls are `none`, and the report says
 so plainly: `provider_verified` is false, and each control's absence is recorded. The

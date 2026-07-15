@@ -12,11 +12,13 @@ link decodes once, to the literal text `%2F`, and never becomes a second path se
 
 Hostile input gets the same rules with more suspicion. A document path carrying ANSI color
 codes, a terminal bell, and a forged CI command prints harmlessly in the human output and
-survives byte-for-byte in the JSON. A tree entry named with bytes no operating system
-would accept is an `UNREPRESENTABLE_PATH` refusal, not a silently dropped document. A
-five-thousand-byte path is a reported limit crossing carrying both numbers. A tracked file
-whose object is missing from the store refuses and names the document, instead of guessing
-about content it cannot see.
+survives byte-for-byte in the JSON. A tree entry named with bytes that are not UTF-8 is a
+scanned document whose path travels as hex, not a refusal and not a silent drop, while a
+name the path grammar itself rejects, a backslash or a dot segment, is an
+`UNREPRESENTABLE_PATH` refusal that disclosed those exact bytes. A five-thousand-byte path
+is a reported limit crossing carrying both numbers. A tracked file whose object is missing
+from the store refuses and names the document, instead of guessing about content it
+cannot see.
 
 The parser pin records its known differences instead of hiding them. Measured against the
 pinned grammar bundle and against GitHub's own rendering, exactly one difference

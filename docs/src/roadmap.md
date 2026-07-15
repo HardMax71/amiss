@@ -6,7 +6,9 @@ roadmap's table of contents.
 The nearest lane is verified external controls. The request wire, a signed envelope
 carrying the evaluation request and the five controls described in
 [Controls and policy](controls.md), is specified in the project record and deliberately
-unbuilt; the report already carries its fields as `none`. When it lands, organization
+unbuilt; the report already carries its fields as `none`. When those formats revise, they
+also pick up the report's second-contract path union, closing the gap where a finding on
+a byte-named document is reportable but not yet waivable. When it lands, organization
 floors, adoption debt, waivers, trusted time, and execution constraints become usable in
 required checks, each tied to the exact tree it authorizes. The `amiss-bootstrap` wrapper
 and the release manifest chain, which validate a pinned action tree and launch a verified
