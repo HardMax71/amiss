@@ -230,7 +230,7 @@
     },
     "RepositoryIdentity": {
       "type": "object",
-      "description": "The declared forge identity. The host is a claim the engine never resolves: exact lowercase ASCII DNS labels, no scheme, userinfo, port, trailing dot, or IP literal (the final-label letter requirement excludes every IPv4 spelling; internationalized hosts appear only as their registered xn-- A-labels). The owner is one or more slash-joined segments; nested segments spell a GitLab group path, and the writer emits a slashed owner only when the evaluation forge is gitlab or null.",
+      "description": "The declared forge identity. The host is an opaque claim the engine never resolves, normalizes, or judges; anything except a slash, which would make the host/owner/name triple ambiguous. The caller owns canonical spelling: controls bind and links are recognized by exact bytes, so one host must have one spelling. The owner is one or more slash-joined segments; nested segments spell a GitLab group path, and the writer emits a slashed owner only when the evaluation forge is gitlab or null.",
       "additionalProperties": false,
       "required": [
         "host",
@@ -241,8 +241,8 @@
         "host": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 253,
-          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)*(?=[a-z0-9-]*[a-z])[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
         },
         "owner": {
           "type": "string",

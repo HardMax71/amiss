@@ -508,7 +508,7 @@ impl TrustSource {
 /// One `CONTROL_BINDING_MISMATCH` detail.
 pub fn verify_floor(
     input: &FloorInput,
-    repository: Option<(&str, &str)>,
+    repository: Option<&amiss_wire::model::RepositoryIdentity>,
     candidate_ref: Option<&str>,
     enforce: bool,
 ) -> Result<(), ErrorDetail> {
@@ -518,11 +518,11 @@ pub fn verify_floor(
         path_bytes: None,
         resource: None,
     };
-    let Some((owner, name)) = repository else {
+    let Some(identity) = repository else {
         return Err(mismatch);
     };
     let floor = &input.floor;
-    if floor.repository.owner != owner || floor.repository.name != name {
+    if floor.repository != *identity {
         return Err(mismatch);
     }
     if candidate_ref != Some(floor.ref_name.as_str()) {
@@ -580,13 +580,10 @@ const fn binding_mismatch_row() -> ErrorDetail {
 fn identity_matches(
     control: &amiss_wire::model::RepositoryIdentity,
     control_ref: &amiss_wire::model::BranchRef,
-    repository: Option<(&str, &str)>,
+    repository: Option<&amiss_wire::model::RepositoryIdentity>,
     candidate_ref: Option<&str>,
 ) -> bool {
-    let Some((owner, name)) = repository else {
-        return false;
-    };
-    control.owner == owner && control.name == name && candidate_ref == Some(control_ref.as_str())
+    repository == Some(control) && candidate_ref == Some(control_ref.as_str())
 }
 
 /// The statement's evaluation bindings: repository, ref, candidate identity,
@@ -598,7 +595,7 @@ fn identity_matches(
 /// One `TRUSTED_TIME_INVALID` detail.
 pub fn verify_time(
     input: &TimeInput,
-    repository: Option<(&str, &str)>,
+    repository: Option<&amiss_wire::model::RepositoryIdentity>,
     candidate_ref: Option<&str>,
     candidate_identity: &Digest,
 ) -> Result<(), ErrorDetail> {
@@ -632,7 +629,7 @@ pub fn verify_time(
 /// One `CONTROL_BINDING_MISMATCH` detail, or the `debt-items` crossing.
 pub fn verify_debt(
     input: &DebtInput,
-    repository: Option<(&str, &str)>,
+    repository: Option<&amiss_wire::model::RepositoryIdentity>,
     candidate_ref: Option<&str>,
     floor: Option<&FloorInput>,
     instant: &amiss_wire::model::UtcInstant,
@@ -681,7 +678,7 @@ pub fn verify_debt(
 /// One `CONTROL_BINDING_MISMATCH` detail, or the `waiver-items` crossing.
 pub fn verify_waiver(
     input: &WaiverInput,
-    repository: Option<(&str, &str)>,
+    repository: Option<&amiss_wire::model::RepositoryIdentity>,
     candidate_ref: Option<&str>,
     floor: Option<&FloorInput>,
     instant: &amiss_wire::model::UtcInstant,

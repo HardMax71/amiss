@@ -4,7 +4,7 @@ use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::{ForgeDialect, Oid, RepoPath};
 use amiss_wire::report::{IntentKind, ResolutionCode};
 
 use crate::discovery::{Located, SnapshotDiscovery};
@@ -43,15 +43,28 @@ pub struct Resolution {
     pub content_availability: ContentAvailability,
 }
 
-/// The trusted run context for same-repository GitHub recognition: lowercase
-/// owner and repository, and the two exact full branch refs. Without it every
-/// GitHub URL is foreign.
+/// The trusted run context for same-repository recognition: the declared
+/// host and dialect, lowercase owner and repository, the two exact full
+/// branch refs, and the candidate commit for OID-pinned dialect forms.
+/// Without it every forge URL is foreign.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GithubContext {
+pub struct ForgeContext {
+    pub host: String,
+    pub dialect: ForgeDialect,
     pub owner: String,
     pub repository: String,
     pub candidate_ref: String,
     pub default_ref: String,
+    pub candidate_oid: Option<String>,
+}
+
+/// The recognition opening: `https://`, the declared host byte-exact, then
+/// the path separator. Anything less exact is not this repository's forge.
+fn same_repo_suffix<'a>(path_part: &'a str, host: &str) -> Option<&'a str> {
+    path_part
+        .strip_prefix("https://")?
+        .strip_prefix(host)?
+        .strip_prefix('/')
 }
 
 /// Referenced targets are read once per distinct path; the aggregate budget
@@ -109,7 +122,7 @@ pub fn resolve(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    context: Option<&GithubContext>,
+    context: Option<&ForgeContext>,
     document_path: &RepoPath,
     is_image: bool,
     semantic: &str,
@@ -280,8 +293,9 @@ const fn hex_value(byte: u8) -> Option<u8> {
 
 /// Absolute URIs under `uri-reference-v1`: ASCII generic syntax, no
 /// normalization, two-hex-digit escapes, and for HTTP(S) a `//` plus nonempty
-/// authority. Only the emitted scheme is lowercased. Exact
-/// `https://github.com/` opens same-repository recognition; everything else
+/// authority. Only the emitted scheme is lowercased. The exact `https://`
+/// spelling of the declared host opens same-repository recognition, the
+/// github.com literal when no identity was declared; everything else
 /// syntactically valid is external.
 #[expect(
     clippy::too_many_arguments,
@@ -293,7 +307,7 @@ fn absolute(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    context: Option<&GithubContext>,
+    context: Option<&ForgeContext>,
     path_part: &str,
     scheme: &str,
     query: Option<String>,
@@ -322,7 +336,8 @@ fn absolute(
             return Ok(invalid(query, fragment));
         }
     }
-    if let Some(suffix) = path_part.strip_prefix("https://github.com/") {
+    let recognition_host = context.map_or("github.com", |identity| identity.host.as_str());
+    if let Some(suffix) = same_repo_suffix(path_part, recognition_host) {
         return github(
             repo, git, scan, cache, snapshot, context, suffix, query, fragment,
         );
@@ -421,7 +436,7 @@ fn github(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    context: Option<&GithubContext>,
+    context: Option<&ForgeContext>,
     suffix: &str,
     query: Option<String>,
     fragment: Option<String>,
@@ -462,13 +477,17 @@ fn github(
         _ => return Ok(foreign(query, fragment)),
     };
 
-    let (matched_candidate, joined) =
-        match trusted_split(identity, target_kind, segments.get(3..).unwrap_or_default()) {
-            Ok(split) => split,
-            Err(code) => {
-                return Ok((unsupported_intent(query, fragment), null_row(code)));
-            }
-        };
+    let tolerate_terminal_slash = target_kind == TargetKind::Tree;
+    let (matched_candidate, joined) = match trusted_split(
+        identity,
+        tolerate_terminal_slash,
+        segments.get(3..).unwrap_or_default(),
+    ) {
+        Ok(split) => split,
+        Err(code) => {
+            return Ok((unsupported_intent(query, fragment), null_row(code)));
+        }
+    };
 
     let intent = Intent {
         kind: IntentKind::SameRepositoryGithub,
@@ -493,21 +512,22 @@ fn github(
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
-        target_kind == TargetKind::Tree,
+        Some(identity.dialect),
     )?;
     Ok((intent, row))
 }
 
-/// Decodes the suffix after `blob`/`tree`, removes a lone terminal empty
-/// segment on a tree form, matches the two trusted refs by whole segments,
-/// and validates the remaining path before deciding candidate or default.
+/// Decodes the suffix after the form segment, removes a lone terminal empty
+/// segment where the dialect's form tolerates one, matches the two trusted
+/// refs by whole segments, and validates the remaining path before deciding
+/// candidate or default.
 fn trusted_split(
-    identity: &GithubContext,
-    target_kind: TargetKind,
+    identity: &ForgeContext,
+    tolerate_terminal_slash: bool,
     raw_tail: &[&str],
 ) -> Result<(bool, RepoPath), ResolutionCode> {
     let mut tail: Vec<&str> = raw_tail.to_vec();
-    if target_kind == TargetKind::Tree && tail.len() > 1 && tail.last() == Some(&"") {
+    if tolerate_terminal_slash && tail.len() > 1 && tail.last() == Some(&"") {
         tail.pop();
     }
     let mut decoded: Vec<Vec<u8>> = Vec::new();
@@ -680,7 +700,7 @@ fn native(
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
-        false,
+        None,
     )?;
     Ok((intent, row))
 }
@@ -725,7 +745,7 @@ fn self_target(
         self_kind,
         query,
         fragment,
-        false,
+        None,
     )?;
     Ok((intent, row))
 }
@@ -791,7 +811,7 @@ fn lookup(
     target_kind: TargetKind,
     query: Option<&str>,
     fragment: Option<&str>,
-    github_tree: bool,
+    forge: Option<ForgeDialect>,
 ) -> Result<Resolution, Error> {
     let special = |code: ResolutionCode, entry_kind: EntryKind, mode: GitMode| Resolution {
         code,
@@ -860,7 +880,7 @@ fn lookup(
         && !raw_fragment.is_empty()
     {
         let decoded = decode_fragment(raw_fragment).unwrap_or_default();
-        let code = if github_tree || line_fragment(&decoded) {
+        let code = if (forge.is_some() && is_tree) || line_fragment(forge, &decoded) {
             ResolutionCode::CodeFragmentUnevaluated
         } else if !is_tree && classify(path.as_bytes()).is_some() {
             ResolutionCode::UnsupportedFragmentSemantics
@@ -872,10 +892,11 @@ fn lookup(
     Ok(entry)
 }
 
-/// GitHub line-fragment syntax after one decode: `L<n>` or `L<n>-L<m>`, first
-/// digit nonzero, at most sixteen digits, each number within the safe range,
-/// and a range end at least its start.
-fn line_fragment(decoded: &str) -> bool {
+/// Line-fragment syntax after one decode, in the dialect's spelling:
+/// `L<n>` alone, or the range form the forge renders. First digit nonzero,
+/// at most sixteen digits, each number within the safe range, and a range
+/// end at least its start. Native references keep the GitHub grammar.
+fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> bool {
     fn number(text: &str) -> Option<u64> {
         let bytes = text.as_bytes();
         if bytes.is_empty() || bytes.len() > 16 || bytes.first() == Some(&b'0') {
@@ -889,7 +910,10 @@ fn line_fragment(decoded: &str) -> bool {
     let Some(rest) = decoded.strip_prefix('L') else {
         return false;
     };
-    match rest.split_once("-L") {
+    let range = match forge {
+        None | Some(ForgeDialect::Github) => rest.split_once("-L"),
+    };
+    match range {
         None => number(rest).is_some(),
         Some((start, end)) => match (number(start), number(end)) {
             (Some(from), Some(to)) => to >= from,

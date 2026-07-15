@@ -11,7 +11,7 @@ use crate::report::{
     synthetic_candidate,
 };
 use crate::resolve::resolve;
-use crate::resolve::{GithubContext, TargetCache};
+use crate::resolve::{ForgeContext, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 
 /// One side's full evaluation: discovery, then every scanned occurrence
@@ -57,7 +57,7 @@ pub(crate) fn side_observations(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     discovery: &SnapshotDiscovery,
 ) -> Result<(Side, Vec<ErrorDetail>), ErrorDetail> {
     let mut failures: Vec<ErrorDetail> = discovery
@@ -133,10 +133,7 @@ fn floor_gate(
     let mismatch = setup_shell.floor.as_ref().and_then(|floor| {
         crate::policy::verify_floor(
             floor,
-            setup_shell
-                .repository
-                .as_ref()
-                .map(|(owner, name)| (owner.as_str(), name.as_str())),
+            setup_shell.repository.as_ref(),
             setup_shell.candidate_ref.as_deref(),
             setup_shell.enforce,
         )
@@ -245,10 +242,7 @@ fn external_gate(
     provisional: &Setup,
     candidate_tree: Option<amiss_wire::model::TreeIdentity>,
 ) -> Result<ExternalVerified, (&'static str, ErrorDetail)> {
-    let repository = setup_shell
-        .repository
-        .as_ref()
-        .map(|(owner, name)| (owner.as_str(), name.as_str()));
+    let repository = setup_shell.repository.as_ref();
     let candidate_ref = setup_shell.candidate_ref.as_deref();
     let time = match &setup_shell.time {
         None => None,
@@ -447,7 +441,7 @@ fn commit_controls(
     repo: &Repository,
     git_resources: &mut GitResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     verified_floor: Option<&crate::policy::FloorInput>,
     scan_limits: ScanLimits,
@@ -495,7 +489,7 @@ fn commit_controls(
 pub fn commit_pair(
     repo: &Repository,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
     candidate_oid: &Oid,
@@ -812,7 +806,7 @@ fn staged_candidate(
     git_resources: &mut GitResources,
     candidate_scan: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_identity: &SnapshotIdentity,
     includes: &crate::policy::Includes,
@@ -847,7 +841,7 @@ fn staged_sides(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     candidate_discovery: &SnapshotDiscovery,
     base_failures: Vec<ErrorDetail>,
 ) -> (Option<Side>, Vec<ErrorDetail>) {
@@ -911,7 +905,7 @@ fn staged_base(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     includes: &crate::policy::Includes,
     setup_shell: &SetupShell,
     base_placeholder: SnapshotIdentity,
@@ -1010,7 +1004,7 @@ fn evaluate_tree(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
@@ -1042,7 +1036,7 @@ fn evaluate_tree(
 pub struct SetupShell {
     pub engine: EngineProvenance,
     pub enforce: bool,
-    pub repository: Option<(String, String)>,
+    pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub candidate_ref: Option<String>,
     pub default_branch_ref: Option<String>,
     pub floor: Option<crate::policy::FloorInput>,
@@ -1316,7 +1310,7 @@ fn staged_open(
 pub fn staged_index(
     repo: &Repository,
     engine: &EngineProvenance,
-    github: Option<&GithubContext>,
+    github: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
 ) -> Built {

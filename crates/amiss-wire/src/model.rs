@@ -327,32 +327,93 @@ impl BranchRef {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RepositoryIdentity {
+    pub host: String,
     pub owner: String,
     pub name: String,
 }
 
 impl RepositoryIdentity {
+    /// The open identity: any canonical forge host, an owner of one or more
+    /// slash-joined segments (nested segments spell a GitLab group path),
+    /// and a name.
     #[must_use]
-    pub fn new(owner: String, name: String) -> Option<Self> {
-        let owner_bytes = owner.as_bytes();
-        let owner_ok = (1..=100).contains(&owner_bytes.len())
-            && owner_bytes.iter().copied().all(identity_byte)
-            && owner_bytes.first().is_some_and(u8::is_ascii_alphanumeric)
-            && owner_bytes.last().is_some_and(u8::is_ascii_alphanumeric);
-        let name_ok = (1..=100).contains(&name.len())
-            && name.bytes().all(identity_byte)
-            && name != "."
-            && name != "..";
-        if owner_ok && name_ok {
-            Some(Self { owner, name })
+    pub fn new(host: String, owner: String, name: String) -> Option<Self> {
+        let owner_ok = (1..=255).contains(&owner.len())
+            && owner
+                .as_bytes()
+                .split(|&byte| byte == b'/')
+                .all(identity_segment);
+        if host_valid(&host) && owner_ok && name_valid(&name) {
+            Some(Self { host, owner, name })
+        } else {
+            None
+        }
+    }
+
+    /// The identity form the v1 control documents can spell: host fixed to
+    /// github.com, single-segment owner.
+    #[must_use]
+    pub fn github(owner: String, name: String) -> Option<Self> {
+        if identity_segment(owner.as_bytes()) && name_valid(&name) {
+            Some(Self {
+                host: "github.com".to_owned(),
+                owner,
+                name,
+            })
         } else {
             None
         }
     }
 }
 
+fn identity_segment(segment: &[u8]) -> bool {
+    (1..=100).contains(&segment.len())
+        && segment.iter().copied().all(identity_byte)
+        && segment.first().is_some_and(u8::is_ascii_alphanumeric)
+        && segment.last().is_some_and(u8::is_ascii_alphanumeric)
+}
+
+fn name_valid(name: &str) -> bool {
+    (1..=100).contains(&name.len())
+        && name.bytes().all(identity_byte)
+        && name != "."
+        && name != ".."
+}
+
+/// The host is an opaque claim the engine never resolves or normalizes;
+/// the caller owns its spelling. A slash would make the identity triple
+/// ambiguous, and the cap bounds it like every other wire string.
+fn host_valid(host: &str) -> bool {
+    (1..=255).contains(&host.len()) && !host.contains('/')
+}
+
 fn identity_byte(byte: u8) -> bool {
     byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+}
+
+/// The same-repository URL dialect a run applies: named in the report's
+/// evaluation and selecting the recognition grammar in the resolver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ForgeDialect {
+    Github,
+}
+
+impl ForgeDialect {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Github => "github",
+        }
+    }
+
+    /// The known-host default table; an explicit flag always wins over it.
+    #[must_use]
+    pub fn default_for_host(host: &str) -> Option<Self> {
+        match host {
+            "github.com" => Some(Self::Github),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

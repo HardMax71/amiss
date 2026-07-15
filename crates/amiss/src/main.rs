@@ -105,7 +105,7 @@ fn main() -> ExitCode {
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     use amiss_scan::pipeline::{SetupShell, commit_pair};
-    use amiss_scan::resolve::GithubContext;
+    use amiss_scan::resolve::ForgeContext;
 
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
@@ -143,21 +143,25 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         }
     };
 
-    let github = invocation.identity.as_ref().map(|identity| GithubContext {
+    let forge = invocation.identity.as_ref().map(|identity| ForgeContext {
+        host: identity.repository.host.clone(),
+        dialect: amiss_wire::model::ForgeDialect::Github,
         owner: identity.repository.owner.clone(),
         repository: identity.repository.name.clone(),
         candidate_ref: identity.ref_name.as_str().to_owned(),
         default_ref: identity.default_branch_ref.as_str().to_owned(),
+        candidate_oid: match &invocation.candidate {
+            CandidateSelector::Commit(oid) => Some(oid.as_str().to_owned()),
+            CandidateSelector::Index => None,
+        },
     });
     let shell = SetupShell {
         engine,
         enforce: matches!(invocation.profile, amiss_wire::controls::Profile::Enforce),
-        repository: invocation.identity.as_ref().map(|identity| {
-            (
-                identity.repository.owner.clone(),
-                identity.repository.name.clone(),
-            )
-        }),
+        repository: invocation
+            .identity
+            .as_ref()
+            .map(|identity| identity.repository.clone()),
         candidate_ref: invocation
             .identity
             .as_ref()
@@ -181,7 +185,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         CandidateSelector::Commit(candidate_oid) => commit_pair(
             &repo,
             &shell.engine,
-            github.as_ref(),
+            forge.as_ref(),
             &shell,
             &invocation.base,
             candidate_oid,
@@ -189,7 +193,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         CandidateSelector::Index => amiss_scan::pipeline::staged_index(
             &repo,
             &shell.engine,
-            github.as_ref(),
+            forge.as_ref(),
             &shell,
             &invocation.base,
         ),
