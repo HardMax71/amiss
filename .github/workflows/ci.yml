@@ -147,6 +147,8 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -168,3 +170,26 @@ jobs:
         with:
           name: coverage-lcov
           path: lcov.info
+      # The README's coverage rectangle reads a shields endpoint served from
+      # the unprotected badges branch, the same in-repo pattern the action
+      # refs use, so no third party ever sees the number before we do.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          percent="$(cargo llvm-cov report --json --summary-only \
+            | jq -r '.data[0].totals.lines.percent | . * 10 | round / 10')"
+          mkdir badge
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"475569"}\n' \
+            "$percent" > badge/coverage.json
+          cd badge
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.json
+          git commit -qm "coverage badge"
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git"
+          git push -q -f origin HEAD:refs/heads/badges
