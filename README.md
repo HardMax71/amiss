@@ -2,7 +2,6 @@
 
 <p align="center">
   <a href="https://crates.io/crates/amiss"><img alt="version" src="https://img.shields.io/crates/v/amiss?style=flat-square&label=version&labelColor=1e293b&color=475569"></a>
-  <a href="https://github.com/HardMax71/amiss/actions/workflows/ci.yml"><img alt="coverage" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FHardMax71%2Famiss%2Fbadges%2Fcoverage.json&style=flat-square&labelColor=1e293b"></a>
   <a href="LICENSE.md"><img alt="license" src="https://img.shields.io/badge/license-FSL--1.1--ALv2-475569?style=flat-square&labelColor=1e293b"></a>
 </p>
 
