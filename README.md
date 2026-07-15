@@ -20,13 +20,14 @@ amiss check --repo . --object-format sha1 \
 ```
 
 In CI the same engine ships as an action that derives both commits from the event and
-annotates findings on the pull request:
+annotates findings on the pull request; the moving major ref follows the engine's
+semver major, so it is `v0` for the 0.x series:
 
 ```yaml
 - uses: actions/checkout@v7
   with:
     fetch-depth: 2
-- uses: HardMax71/amiss@v1
+- uses: HardMax71/amiss@v0
 ```
 
 Exit 0 means a complete run with nothing blocking, 1 a complete run with a blocking finding,

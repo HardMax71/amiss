@@ -60,7 +60,7 @@ runs:
         esac
         manifest="${ACTION_PATH}/release-manifest.json"
         if [ ! -f "$manifest" ]; then
-          echo "::error title=amiss::this ref carries no release manifest; use a published action ref such as v1 or action/vX.Y.Z"
+          echo "::error title=amiss::this ref carries no release manifest; use a published action ref such as v0 or action/vX.Y.Z"
           exit 2
         fi
         row="$(jq -c --arg name "amiss-${platform}" \
@@ -72,7 +72,12 @@ runs:
         tree_path="$(jq -r '.tree_path' <<<"$row")"
         expected="$(jq -r '.binary_sha256' <<<"$row")"
         binary="${ACTION_PATH}/${tree_path}"
-        printf '%s  %s\n' "${expected#sha256:}" "$binary" | sha256sum -c - > /dev/null
+        # hosted macOS guarantees shasum, not sha256sum; linux and windows have both
+        if command -v sha256sum > /dev/null; then
+          printf '%s  %s\n' "${expected#sha256:}" "$binary" | sha256sum -c - > /dev/null
+        else
+          printf '%s  %s\n' "${expected#sha256:}" "$binary" | shasum -a 256 -c - > /dev/null
+        fi
         chmod +x "$binary"
         printf 'binary=%s\n' "$binary" >> "$GITHUB_OUTPUT"
 

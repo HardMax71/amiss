@@ -123,9 +123,10 @@ jobs:
           path: action-tree/
 
   # The assembled tree becomes the refs a workflow pins: the immutable
-  # action/vX.Y.Z tag for exact pins, and the moving v1 branch for the major.
-  # Only a version tag publishes; a dispatch run is a rehearsal that stops at
-  # the artifact.
+  # action/vX.Y.Z tag for exact pins, and the moving major branch, v0 for the
+  # 0.x series and v1 from 1.0.0 on, so one series can never rewrite
+  # another's ref. Only a version tag publishes; a dispatch run is a
+  # rehearsal that stops at the artifact.
   publish-action:
     if: github.ref_type == 'tag'
     needs: manifest
@@ -152,5 +153,6 @@ jobs:
           git add -A
           git commit -qm "amiss action tree for ${TAG}"
           git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git"
+          major="${TAG%%.*}"
           git push -q origin "HEAD:refs/tags/action/${TAG}"
-          git push -q -f origin "HEAD:refs/heads/v1"
+          git push -q -f origin "HEAD:refs/heads/${major}"
