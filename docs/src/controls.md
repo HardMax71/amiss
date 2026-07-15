@@ -15,9 +15,11 @@ be rewritten by the very pull request under review. The contract defines five: a
 organization floor (tightens ceilings and dispositions across many repositories), an
 adoption debt snapshot (a recorded list of known failures being worked off), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
-execution constraint. Each one is tied to the exact repository and tree it was issued for.
-Presenting a control against a different tree is a `CONTROL_BINDING_MISMATCH` refusal, not
-a shrug. Waivers are the only sanctioned way to pass with a known failure, they expire, and
+execution constraint. Each one is tied to the exact repository and tree it was issued for, host included: the
+v1 control formats can only spell github.com, so a control presented to a run whose
+declared identity names any other forge fails its binding the same way a wrong owner
+would. Presenting a control against a different tree is a `CONTROL_BINDING_MISMATCH`
+refusal, not a shrug. Waivers are the only sanctioned way to pass with a known failure, they expire, and
 every waiver that touches a finding appears as a visible step in that finding's history.
 One asymmetry follows from the control formats' own versioning: the report can carry a
 finding on a document whose name is raw bytes, but the waiver and debt formats still spell
