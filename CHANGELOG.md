@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/HardMax71/amiss/compare/v0.2.0...v0.3.0) - 2026-07-15
+
+### Changes
+
+- Point the CLI crate's front doors at the real documentation
+- Ship the engine as an action a workflow can pin
+
 ## [0.2.0](https://github.com/HardMax71/amiss/compare/v0.1.0...v0.2.0) - 2026-07-15
 
 ### Changes
