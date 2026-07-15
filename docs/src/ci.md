@@ -8,11 +8,12 @@ annotations on the pull request:
 - uses: actions/checkout@<pinned-sha>
   with:
     fetch-depth: 2
-- uses: HardMax71/amiss@v1
+- uses: HardMax71/amiss@v0
 ```
 
-`v1` is the moving major; `action/vX.Y.Z` tags are immutable exact pins, and pinning
-the full commit id works as everywhere. The action verifies the selected binary against
+The moving major ref follows the engine's semver major, `v0` for the 0.x series and
+`v1` from 1.0.0 on, so one series can never rewrite another's ref; `action/vX.Y.Z`
+tags are immutable exact pins, and pinning the full commit id works as everywhere. The action verifies the selected binary against
 the release manifest shipped in the same tree before running it, fails the job on exit
 classes 1 and 2 under the default `enforce` profile, and exposes `exit-class` and
 `report` outputs for anything downstream. Its inputs (`profile`, `base`, `candidate`,
