@@ -85,7 +85,11 @@ fn a_snapshot_discovers_every_class_in_path_order() {
                 DocumentStatus::Unsupported(UnsupportedKind::Format) => "unsupported-format",
                 DocumentStatus::Failed(_) => "failed",
             };
-            (record.path.clone(), record.classification.as_str(), status)
+            (
+                record.path.as_str().unwrap().to_owned(),
+                record.classification.as_str(),
+                status,
+            )
         })
         .collect();
     assert_eq!(
@@ -119,7 +123,7 @@ fn a_snapshot_discovers_every_class_in_path_order() {
     let readme = got
         .documents
         .iter()
-        .find(|record| record.path == "README")
+        .find(|record| record.path.as_bytes() == b"README")
         .unwrap();
     let DocumentStatus::Scanned(scanned) = &readme.status else {
         panic!("README scans")
@@ -136,7 +140,7 @@ fn a_snapshot_discovers_every_class_in_path_order() {
     let mdx = got
         .documents
         .iter()
-        .find(|record| record.path == "docs/page.mdx")
+        .find(|record| record.path.as_bytes() == b"docs/page.mdx")
         .unwrap();
     let DocumentStatus::Scanned(scanned) = &mdx.status else {
         panic!("the mdx page scans")
@@ -228,7 +232,7 @@ fn an_oversized_document_fails_alone() {
     let readme = got
         .documents
         .iter()
-        .find(|record| record.path == "README")
+        .find(|record| record.path.as_bytes() == b"README")
         .unwrap();
     assert_eq!(
         readme.status,
@@ -242,7 +246,7 @@ fn an_oversized_document_fails_alone() {
     assert!(
         got.documents
             .iter()
-            .any(|record| record.path == "docs/page.mdx"
+            .any(|record| record.path.as_bytes() == b"docs/page.mdx"
                 && matches!(record.status, DocumentStatus::Scanned(_))),
         "smaller documents after the oversized one still scan"
     );
@@ -267,7 +271,7 @@ fn a_shared_subtree_expands_at_every_path() {
     let paths: Vec<String> = got
         .documents
         .iter()
-        .map(|record| record.path.clone())
+        .map(|record| record.path.as_str().unwrap().to_owned())
         .collect();
     assert_eq!(
         paths,

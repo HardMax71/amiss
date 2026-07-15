@@ -1,5 +1,5 @@
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
 use crate::Error;
@@ -32,7 +32,7 @@ const fn format_str(object_format: ObjectFormat) -> &'static str {
     }
 }
 
-pub(crate) fn detail(error: &Error, path: Option<&str>) -> ErrorDetail {
+pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
     let resource = match error {
         Error::ResourceLimit {
             resource,
@@ -43,7 +43,7 @@ pub(crate) fn detail(error: &Error, path: Option<&str>) -> ErrorDetail {
     };
     ErrorDetail {
         code: error.code(),
-        path: path.map(str::to_owned),
+        path: path.cloned(),
         path_bytes: None,
         resource,
     }
@@ -653,7 +653,8 @@ fn control_read_detail(defect: &Error, path: &str) -> ErrorDetail {
         } => ErrorDetail {
             code: defect.code(),
             path: (*resource == amiss_wire::controls::ResourceName::SelectedControlBlobBytes)
-                .then(|| path.to_owned()),
+                .then(|| RepoPath::new(path.to_owned()))
+                .flatten(),
             path_bytes: None,
             resource: Some((*resource, *configured_limit, *observed_lower_bound)),
         },
@@ -782,7 +783,7 @@ fn inventory_lookup(
         if let Some(record) = discovery
             .documents
             .iter()
-            .find(|record| record.path == path)
+            .find(|record| record.path.as_bytes() == path.as_bytes())
         {
             return match record.status {
                 DocumentStatus::Scanned(_) => crate::policy::InventoryState::Scanned,
@@ -792,7 +793,7 @@ fn inventory_lookup(
                 }
             };
         }
-        if discovery.entries.contains_key(path) {
+        if discovery.entries.contains_key(path.as_bytes()) {
             return crate::policy::InventoryState::Outside;
         }
         crate::policy::InventoryState::Missing

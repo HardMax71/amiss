@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
+use amiss_wire::model::RepoPath;
 use amiss_wire::report::{Disposition, ErrorDetail, FindingKind, ResolutionCode, ResolutionStatus};
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
@@ -18,7 +19,7 @@ pub const FACT_DOMAIN: &str = "amiss/scanner-fact/v1";
 /// not findings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentInput {
-    pub path: String,
+    pub path: RepoPath,
     pub base: Option<DocumentSide>,
     pub candidate: Option<DocumentSide>,
 }
@@ -77,7 +78,7 @@ pub struct PolicyStep {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Location {
     pub side: LocationSide,
-    pub path: Option<String>,
+    pub path: Option<RepoPath>,
     pub span: Option<(usize, usize)>,
     pub display: Option<SpanDisplay>,
 }
@@ -119,6 +120,10 @@ pub struct WaiverApplied {
     pub bundle_digest: Digest,
 }
 
+fn nullable_path(path: Option<&RepoPath>) -> Value {
+    path.map_or(Value::Null, RepoPath::to_value)
+}
+
 fn key_digest(input: &Value) -> Digest {
     hj(FINDING_KEY_DOMAIN, input)
 }
@@ -139,10 +144,10 @@ fn key_input(kind: FindingKind, scope: Value) -> (Value, Digest) {
     (input, digest)
 }
 
-fn document_scope(path: &str) -> Value {
+fn document_scope(path: &RepoPath) -> Value {
     Value::Object(vec![
         ("kind".to_owned(), Value::String("document".to_owned())),
-        ("document".to_owned(), Value::String(path.to_owned())),
+        ("document".to_owned(), path.to_value()),
     ])
 }
 
@@ -161,10 +166,7 @@ fn reference_scope(observation: &Observation) -> Value {
     let intent = &observation.intent;
     Value::Object(vec![
         ("kind".to_owned(), Value::String("reference".to_owned())),
-        (
-            "document".to_owned(),
-            Value::String(observation.document.clone()),
-        ),
+        ("document".to_owned(), observation.document.to_value()),
         (
             "source_construct".to_owned(),
             Value::String(observation.construct.as_str().to_owned()),
@@ -178,7 +180,11 @@ fn reference_scope(observation: &Observation) -> Value {
                 ),
                 (
                     "path".to_owned(),
-                    Value::String(intent.repository_path.clone().unwrap_or_default()),
+                    // the empty-string fallback is the first contract's exact byte form
+                    intent
+                        .repository_path
+                        .as_ref()
+                        .map_or_else(|| Value::String(String::new()), RepoPath::to_value),
                 ),
                 (
                     "target_kind".to_owned(),
@@ -238,7 +244,7 @@ fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
             "code".to_owned(),
             Value::String(resolution.code.as_str().to_owned()),
         ),
-        ("path".to_owned(), nullable(resolution.path.clone())),
+        ("path".to_owned(), nullable_path(resolution.path.as_ref())),
         (
             "entry_kind".to_owned(),
             nullable(resolution.entry_kind.map(|kind| kind.as_str().to_owned())),
@@ -435,10 +441,7 @@ pub fn evaluate(
 fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
     let scope = Value::Object(vec![
         ("kind".to_owned(), Value::String("control".to_owned())),
-        (
-            "control_path".to_owned(),
-            Value::String(seed.document.clone()),
-        ),
+        ("control_path".to_owned(), seed.document.to_value()),
         (
             "rule_id".to_owned(),
             Value::String("unsupported/governed-claim".to_owned()),
@@ -472,10 +475,7 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
             "evidence".to_owned(),
             Value::Object(vec![
                 ("kind".to_owned(), Value::String("control".to_owned())),
-                (
-                    "control_path".to_owned(),
-                    Value::String(seed.document.clone()),
-                ),
+                ("control_path".to_owned(), seed.document.to_value()),
                 (
                     "rule_id".to_owned(),
                     Value::String("unsupported/governed-claim".to_owned()),
@@ -524,7 +524,7 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
 /// least location as the representative.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GovernedSeed {
-    pub document: String,
+    pub document: RepoPath,
     pub member_count: u64,
     pub sources: Vec<(Digest, u64)>,
     pub representative_span: Option<(usize, usize)>,
@@ -968,7 +968,7 @@ fn control_finding(
 fn control_row(
     kind: FindingKind,
     rule_id: String,
-    control_path: Option<String>,
+    control_path: Option<RepoPath>,
     control_digests: (Option<Digest>, Option<Digest>),
     exception: Value,
     enforce: bool,
@@ -977,7 +977,7 @@ fn control_row(
         ("kind".to_owned(), Value::String("control".to_owned())),
         (
             "control_path".to_owned(),
-            control_path.clone().map_or(Value::Null, Value::String),
+            nullable_path(control_path.as_ref()),
         ),
         ("rule_id".to_owned(), Value::String(rule_id.clone())),
     ]);
@@ -998,7 +998,7 @@ fn control_row(
                 ("kind".to_owned(), Value::String("control".to_owned())),
                 (
                     "control_path".to_owned(),
-                    control_path.clone().map_or(Value::Null, Value::String),
+                    nullable_path(control_path.as_ref()),
                 ),
                 ("rule_id".to_owned(), Value::String(rule_id)),
                 ("base_control_state".to_owned(), Value::Null),
@@ -1084,7 +1084,7 @@ fn ordinary(
 }
 
 fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec<Finding>) {
-    let path = document.path.as_str();
+    let path = &document.path;
     if document.base.is_some() && document.candidate.is_none() {
         findings.push(simple(
             FindingKind::DocumentRemoved,
@@ -1094,7 +1094,7 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
             Vec::new(),
             Location {
                 side: LocationSide::Base,
-                path: Some(path.to_owned()),
+                path: Some(path.clone()),
                 span: None,
                 display: None,
             },
@@ -1104,7 +1104,7 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
     }
     let candidate_location = || Location {
         side: LocationSide::Candidate,
-        path: Some(path.to_owned()),
+        path: Some(path.clone()),
         span: None,
         display: None,
     };

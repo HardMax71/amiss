@@ -245,7 +245,7 @@ fn bare_setup(errors_retained: u64) -> Setup {
 fn missing_detail(path: &str) -> ErrorDetail {
     ErrorDetail {
         code: AnalysisErrorCode::GitObjectMissing,
-        path: Some(path.to_owned()),
+        path: amiss_wire::model::RepoPath::new(path.to_owned()),
         path_bytes: None,
         resource: None,
     }
@@ -444,7 +444,11 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
             row.alternatives_candidate = (0..64_u32)
                 .map(|slot| {
                     let mut alternative = filler.clone();
-                    alternative.document = format!("{index:03}{slot:02}{}", "a".repeat(4_000));
+                    alternative.document = amiss_wire::model::RepoPath::new(format!(
+                        "{index:03}{slot:02}{}",
+                        "a".repeat(4_000)
+                    ))
+                    .unwrap();
                     alternative
                 })
                 .collect();

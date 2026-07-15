@@ -83,6 +83,23 @@ impl RepoPath {
     }
 }
 
+/// Text-form paths embed without revalidation: both types enforce the one
+/// byte grammar, and a `String` is UTF-8 by construction.
+impl From<&RepoPathText> for RepoPath {
+    fn from(text: &RepoPathText) -> Self {
+        Self(Repr::Text(text.as_str().to_owned()))
+    }
+}
+
+/// Map queries run on raw bytes, because a range boundary such as `path/`
+/// is not itself a valid path. Sound: ordering and equality are the byte
+/// forms already.
+impl std::borrow::Borrow<[u8]> for RepoPath {
+    fn borrow(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl PartialEq for RepoPath {
     fn eq(&self, other: &Self) -> bool {
         self.as_bytes() == other.as_bytes()

@@ -30,7 +30,7 @@ pub enum DocumentStatus {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentRecord {
-    pub path: String,
+    pub path: RepoPath,
     pub classification: Classification,
     pub status: DocumentStatus,
     pub oid: Oid,
@@ -59,7 +59,7 @@ pub struct SnapshotDiscovery {
     pub outside_document_set: u64,
     pub tree_entries: u64,
     pub path_defects: Vec<PathDefect>,
-    pub entries: BTreeMap<String, (GitMode, Oid)>,
+    pub entries: BTreeMap<RepoPath, (GitMode, Oid)>,
 }
 
 /// What a path names in a snapshot.
@@ -81,9 +81,9 @@ impl SnapshotDiscovery {
     /// Whether a path is a scanned structured document on this side, which is
     /// what accepting a query requires.
     #[must_use]
-    pub fn is_scanned_structured(&self, path: &str) -> bool {
+    pub fn is_scanned_structured(&self, path: &RepoPath) -> bool {
         self.documents.iter().any(|record| {
-            record.path == path
+            record.path == *path
                 && record.classification != Classification::PlainAdvisory
                 && matches!(record.status, DocumentStatus::Scanned(_))
         })
@@ -92,22 +92,26 @@ impl SnapshotDiscovery {
     /// What this snapshot holds at `path`: an entry of its own, or a directory
     /// implied by the entries beneath it.
     #[must_use]
-    pub fn locate(&self, path: &str) -> Option<Located<'_>> {
-        if let Some((mode, oid)) = self.entries.get(path) {
+    pub fn locate(&self, path: &RepoPath) -> Option<Located<'_>> {
+        if let Some((mode, oid)) = self.entries.get(path.as_bytes()) {
             return Some(Located::Entry(*mode, oid));
         }
-        let under = format!("{path}/");
+        let mut under = path.as_bytes().to_vec();
+        under.push(b'/');
         self.entries
-            .range(under.clone()..)
+            .range::<[u8], _>((
+                std::ops::Bound::Included(under.as_slice()),
+                std::ops::Bound::Unbounded,
+            ))
             .next()
-            .filter(|(key, _)| key.starts_with(&under))
+            .filter(|(key, _)| key.as_bytes().starts_with(&under))
             .map(|_| Located::ImpliedTree)
     }
 }
 
 struct Frame {
     oid: Oid,
-    prefix: String,
+    prefix: Vec<u8>,
     entries: Vec<TreeEntry>,
     next: usize,
 }
@@ -120,11 +124,10 @@ struct Frame {
 fn admitted_path(
     defects: &mut Vec<PathDefect>,
     path_limit: u64,
-    prefix: &str,
+    prefix: &[u8],
     name: &[u8],
-) -> Option<String> {
-    // ancestors are always UTF-8: a refused directory is never descended
-    let mut raw = prefix.as_bytes().to_vec();
+) -> Option<RepoPath> {
+    let mut raw = prefix.to_vec();
     if !raw.is_empty() {
         raw.push(b'/');
     }
@@ -137,6 +140,7 @@ fn admitted_path(
         });
         return None;
     }
+    // the spelling gate: the second contract's flip removes exactly this
     let path = match String::from_utf8(raw) {
         Ok(path) => path,
         Err(invalid) => {
@@ -147,14 +151,14 @@ fn admitted_path(
             return None;
         }
     };
-    if RepoPath::new(path.clone()).is_none() {
+    let admitted = RepoPath::new(path.clone());
+    if admitted.is_none() {
         defects.push(PathDefect {
             error: Error::UnrepresentablePath,
             raw: Some(path.into_bytes()),
         });
-        return None;
     }
-    Some(path)
+    admitted
 }
 
 /// Walks one snapshot tree completely: iterative, expanding a shared subtree
@@ -193,7 +197,7 @@ pub(crate) fn discover_scoped(
     scan: &mut ScanResources,
     includes: &Includes,
     root_tree: &Oid,
-    scope: &std::collections::BTreeSet<String>,
+    scope: &std::collections::BTreeSet<RepoPath>,
 ) -> Result<SnapshotDiscovery, Error> {
     discover_walk(repo, git, scan, includes, root_tree, Some(scope))
 }
@@ -204,7 +208,7 @@ fn discover_walk(
     scan: &mut ScanResources,
     includes: &Includes,
     root_tree: &Oid,
-    scope: Option<&std::collections::BTreeSet<String>>,
+    scope: Option<&std::collections::BTreeSet<RepoPath>>,
 ) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = SnapshotDiscovery {
         documents: Vec::new(),
@@ -216,7 +220,7 @@ fn discover_walk(
     let root = repo.read_expected(git, root_tree, ObjectKind::Tree)?;
     let mut frames = vec![Frame {
         oid: root_tree.clone(),
-        prefix: String::new(),
+        prefix: Vec::new(),
         entries: parse_tree(repo.object_format(), &root.body)?,
         next: 0,
     }];
@@ -258,14 +262,14 @@ fn discover_walk(
             let subtree = repo.read_expected(git, &entry.oid, ObjectKind::Tree)?;
             frames.push(Frame {
                 oid: entry.oid.clone(),
-                prefix: path,
+                prefix: path.as_bytes().to_vec(),
                 entries: parse_tree(repo.object_format(), &subtree.body)?,
                 next: 0,
             });
             continue;
         }
 
-        let classification = match classify(&path) {
+        let classification = match classify(path.as_bytes()) {
             Some(native) => native,
             None if includes.matches(&path) => Classification::PolicyIncluded,
             None => {
@@ -327,22 +331,21 @@ pub fn discover_index(
         let Some(path) = admitted_path(
             &mut discovery.path_defects,
             git.limits().raw_path_bytes,
-            "",
+            &[],
             &entry.path,
         ) else {
             continue;
         };
-        let path = path.as_str();
         if entry.mode != GitMode::Gitlink && !repo.has_object(git, &entry.oid)? {
             return Err(Error::Git(GitDefect::ObjectMissing));
         }
 
         discovery
             .entries
-            .insert(path.to_owned(), (entry.mode, entry.oid.clone()));
-        let classification = match classify(path) {
+            .insert(path.clone(), (entry.mode, entry.oid.clone()));
+        let classification = match classify(path.as_bytes()) {
             Some(native) => native,
-            None if includes.matches(path) => Classification::PolicyIncluded,
+            None if includes.matches(&path) => Classification::PolicyIncluded,
             None => {
                 discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
                 continue;
@@ -353,10 +356,17 @@ pub fn discover_index(
             name: entry.path.clone(),
             oid: entry.oid.clone(),
         };
-        let (status, byte_count, raw_digest) =
-            side_status(repo, git, scan, includes, classification, path, &tree_entry)?;
+        let (status, byte_count, raw_digest) = side_status(
+            repo,
+            git,
+            scan,
+            includes,
+            classification,
+            &path,
+            &tree_entry,
+        )?;
         discovery.documents.push(DocumentRecord {
-            path: path.to_owned(),
+            path,
             classification,
             status,
             oid: entry.oid.clone(),
@@ -378,10 +388,10 @@ fn side_status(
     scan: &mut ScanResources,
     includes: &Includes,
     classification: Classification,
-    path: &str,
+    path: &RepoPath,
     entry: &TreeEntry,
 ) -> Result<(DocumentStatus, u64, Option<amiss_wire::digest::Digest>), Error> {
-    if excluded_by_built_in(path) && !includes.matches(path) {
+    if excluded_by_built_in(path.as_bytes()) && !includes.matches(path) {
         return Ok((DocumentStatus::ExcludedBuiltIn, 0, None));
     }
     match entry.mode {

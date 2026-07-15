@@ -58,24 +58,21 @@ impl Classification {
 
 /// Classifies one repository path by the closed built-in rows: exact lowercase
 /// suffix, then exact extensionless basename, then exact advisory basename.
-/// Other case or suffixes are not silently treated as equivalent.
+/// Other case or suffixes are not silently treated as equivalent, and the
+/// rows read raw bytes, so a path text cannot hold still classifies.
 #[must_use]
-#[expect(
-    clippy::case_sensitive_file_extension_comparisons,
-    reason = "the discovery contract is byte-exact: other case is not equivalent"
-)]
-pub fn classify(path: &str) -> Option<Classification> {
-    if path.ends_with(".md") || path.ends_with(".markdown") {
+pub fn classify(path: &[u8]) -> Option<Classification> {
+    if path.ends_with(b".md") || path.ends_with(b".markdown") {
         return Some(Classification::StructuredMarkdown);
     }
-    if path.ends_with(".mdx") {
+    if path.ends_with(b".mdx") {
         return Some(Classification::StructuredMdx);
     }
-    let basename = path.rsplit('/').next().unwrap_or(path);
-    if EXTENSIONLESS.contains(&basename) {
+    let basename = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
+    if EXTENSIONLESS.iter().any(|name| name.as_bytes() == basename) {
         return Some(Classification::ExtensionlessMarkdown);
     }
-    if basename == ".cursorrules" || basename == "llms.txt" {
+    if basename == b".cursorrules" || basename == b"llms.txt" {
         return Some(Classification::PlainAdvisory);
     }
     None
@@ -85,11 +82,15 @@ pub fn classify(path: &str) -> Option<Classification> {
 /// discovered but excluded by built-in scope. The basename itself is not a
 /// tree component, and matching is byte-exact.
 #[must_use]
-pub fn excluded_by_built_in(path: &str) -> bool {
-    let Some((directories, _basename)) = path.rsplit_once('/') else {
+pub fn excluded_by_built_in(path: &[u8]) -> bool {
+    let Some(split) = path.iter().rposition(|byte| *byte == b'/') else {
         return false;
     };
-    directories
-        .split('/')
-        .any(|component| EXCLUDED_TREES.contains(&component))
+    path.get(..split).is_some_and(|directories| {
+        directories.split(|byte| *byte == b'/').any(|component| {
+            EXCLUDED_TREES
+                .iter()
+                .any(|tree| tree.as_bytes() == component)
+        })
+    })
 }

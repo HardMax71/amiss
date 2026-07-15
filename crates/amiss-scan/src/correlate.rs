@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::{ContentAvailability, GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::Digest;
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{IntentKind, ResolutionCode, ResolutionStatus};
 
 use crate::resolve::{Intent, Resolution};
@@ -13,7 +13,7 @@ use crate::{Error, observe};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Observation {
     pub id: Digest,
-    pub document: String,
+    pub document: RepoPath,
     pub span: (usize, usize),
     pub display: crate::scan::SpanDisplay,
     pub block_kind: amiss_md::extract::BlockKind,
@@ -31,7 +31,7 @@ pub struct Observation {
 #[derive(Clone, Debug, Default)]
 pub struct Side {
     pub observations: Vec<Observation>,
-    pub documents: BTreeMap<String, (GitMode, Digest)>,
+    pub documents: BTreeMap<RepoPath, (GitMode, Digest)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,7 +124,7 @@ pub struct Comparison {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CorrelationIntent {
     Repository {
-        path: String,
+        path: Option<RepoPath>,
         target_kind: TargetKind,
         query: Option<Digest>,
         fragment: Option<Digest>,
@@ -150,7 +150,7 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent {
     match intent.kind {
         IntentKind::RepositoryPath | IntentKind::SameRepositoryGithub => {
             CorrelationIntent::Repository {
-                path: intent.repository_path.clone().unwrap_or_default(),
+                path: intent.repository_path.clone(),
                 target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
                 query,
                 fragment,
@@ -175,22 +175,22 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent {
 /// an added candidate blob pair only when their mode and raw-evidence digest
 /// agree and that pair occurs exactly once on each side. Duplicate content
 /// creates no edge and is never tie-broken.
-fn rename_pairs(base: &Side, candidate: &Side) -> BTreeMap<String, String> {
-    let removed: Vec<(&String, &(GitMode, Digest))> = base
+fn rename_pairs(base: &Side, candidate: &Side) -> BTreeMap<RepoPath, RepoPath> {
+    let removed: Vec<(&RepoPath, &(GitMode, Digest))> = base
         .documents
         .iter()
         .filter(|(path, _)| !candidate.documents.contains_key(*path))
         .collect();
-    let added: Vec<(&String, &(GitMode, Digest))> = candidate
+    let added: Vec<(&RepoPath, &(GitMode, Digest))> = candidate
         .documents
         .iter()
         .filter(|(path, _)| !base.documents.contains_key(*path))
         .collect();
-    let mut removed_by_identity: BTreeMap<(GitMode, Digest), Vec<&String>> = BTreeMap::new();
+    let mut removed_by_identity: BTreeMap<(GitMode, Digest), Vec<&RepoPath>> = BTreeMap::new();
     for (path, identity) in removed {
         removed_by_identity.entry(*identity).or_default().push(path);
     }
-    let mut added_by_identity: BTreeMap<(GitMode, Digest), Vec<&String>> = BTreeMap::new();
+    let mut added_by_identity: BTreeMap<(GitMode, Digest), Vec<&RepoPath>> = BTreeMap::new();
     for (path, identity) in added {
         added_by_identity.entry(*identity).or_default().push(path);
     }
@@ -333,7 +333,11 @@ fn union(parent: &mut BTreeMap<Digest, Digest>, left: Digest, right: Digest) {
     parent.insert(high, low);
 }
 
-fn plausible(left: &Observation, right: &Observation, renames: &BTreeMap<String, String>) -> bool {
+fn plausible(
+    left: &Observation,
+    right: &Observation,
+    renames: &BTreeMap<RepoPath, RepoPath>,
+) -> bool {
     if left.adapter != right.adapter
         || left.construct != right.construct
         || correlation_intent(left) != correlation_intent(right)
@@ -350,7 +354,7 @@ fn plausible(left: &Observation, right: &Observation, renames: &BTreeMap<String,
 fn component_comparison(
     mut base_members: Vec<&Observation>,
     mut candidate_members: Vec<&Observation>,
-    renames: &BTreeMap<String, String>,
+    renames: &BTreeMap<RepoPath, RepoPath>,
 ) -> Comparison {
     base_members.sort_by_key(|observation| observation.id);
     base_members.dedup_by_key(|observation| observation.id);

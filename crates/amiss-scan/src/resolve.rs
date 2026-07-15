@@ -23,7 +23,7 @@ const MAX_SAFE: u64 = 9_007_199_254_740_991;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Intent {
     pub kind: IntentKind,
-    pub repository_path: Option<String>,
+    pub repository_path: Option<RepoPath>,
     pub target_kind: Option<TargetKind>,
     pub external_scheme: Option<String>,
     pub query: Option<String>,
@@ -35,7 +35,7 @@ pub struct Intent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Resolution {
     pub code: ResolutionCode,
-    pub path: Option<String>,
+    pub path: Option<RepoPath>,
     pub entry_kind: Option<EntryKind>,
     pub git_mode: Option<GitMode>,
     pub raw_digest: Option<Digest>,
@@ -58,7 +58,7 @@ pub struct GithubContext {
 /// charges on the first read only.
 #[derive(Debug, Default)]
 pub struct TargetCache {
-    read: BTreeMap<String, Content>,
+    read: BTreeMap<RepoPath, Content>,
 }
 
 #[derive(Clone, Debug)]
@@ -110,7 +110,7 @@ pub fn resolve(
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
     context: Option<&GithubContext>,
-    document_path: &str,
+    document_path: &RepoPath,
     is_image: bool,
     semantic: &str,
 ) -> Result<(Intent, Resolution), Error> {
@@ -505,7 +505,7 @@ fn trusted_split(
     identity: &GithubContext,
     target_kind: TargetKind,
     raw_tail: &[&str],
-) -> Result<(bool, String), ResolutionCode> {
+) -> Result<(bool, RepoPath), ResolutionCode> {
     let mut tail: Vec<&str> = raw_tail.to_vec();
     if target_kind == TargetKind::Tree && tail.len() > 1 && tail.last() == Some(&"") {
         tail.pop();
@@ -544,10 +544,10 @@ fn trusted_split(
         return Err(ResolutionCode::PathTraversal);
     }
     let joined = remaining.join("/");
-    if RepoPath::new(joined.clone()).is_none() {
-        return Err(ResolutionCode::InvalidReference);
+    match RepoPath::new(joined) {
+        Some(admitted) => Ok((matched_candidate, admitted)),
+        None => Err(ResolutionCode::InvalidReference),
     }
-    Ok((matched_candidate, joined))
 }
 
 fn ref_segments(full_ref: &str) -> Vec<String> {
@@ -581,7 +581,7 @@ fn native(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    document_path: &str,
+    document_path: &RepoPath,
     is_image: bool,
     path_part: &str,
     query: Option<String>,
@@ -631,8 +631,10 @@ fn native(
         TargetKind::Either
     };
 
+    // gates hold every document to text here; the flip reseeds on bytes
     let mut resolved: Vec<String> = document_path
-        .rsplit_once('/')
+        .as_str()
+        .and_then(|text| text.rsplit_once('/'))
         .map(|(parent, _basename)| parent.split('/').map(str::to_owned).collect())
         .unwrap_or_default();
     for segment in segments {
@@ -654,9 +656,9 @@ fn native(
         return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
     }
     let joined = resolved.join("/");
-    if RepoPath::new(joined.clone()).is_none() {
+    let Some(joined) = RepoPath::new(joined) else {
         return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
-    }
+    };
 
     let intent = Intent {
         kind: IntentKind::RepositoryPath,
@@ -693,7 +695,7 @@ fn self_target(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    document_path: &str,
+    document_path: &RepoPath,
     is_image: bool,
     query: Option<&str>,
     fragment: Option<&str>,
@@ -705,7 +707,7 @@ fn self_target(
     };
     let intent = Intent {
         kind: IntentKind::RepositoryPath,
-        repository_path: Some(document_path.to_owned()),
+        repository_path: Some(document_path.clone()),
         target_kind: Some(self_kind),
         external_scheme: None,
         query: query.map(str::to_owned),
@@ -729,10 +731,10 @@ fn self_target(
 /// A resolved directory. A tree target has no content to read: it participates
 /// in structural resolution only, so it carries no digest and no availability,
 /// which is what lets an index answer for one without a tree identity.
-fn tree_row(path: &str) -> Resolution {
+fn tree_row(path: &RepoPath) -> Resolution {
     Resolution {
         code: ResolutionCode::ExactPath,
-        path: Some(path.to_owned()),
+        path: Some(path.clone()),
         entry_kind: Some(EntryKind::Tree),
         git_mode: Some(GitMode::Tree),
         raw_digest: None,
@@ -747,7 +749,7 @@ fn blob_row(
     git: &mut GitResources,
     scan: &mut ScanResources,
     cache: &mut TargetCache,
-    path: &str,
+    path: &RepoPath,
     mode: GitMode,
     oid: &Oid,
 ) -> Result<Resolution, Error> {
@@ -760,7 +762,7 @@ fn blob_row(
     };
     Ok(Resolution {
         code: ResolutionCode::ExactPath,
-        path: Some(path.to_owned()),
+        path: Some(path.clone()),
         entry_kind: Some(EntryKind::Blob),
         git_mode: Some(mode),
         raw_digest: raw,
@@ -783,7 +785,7 @@ fn lookup(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    path: &str,
+    path: &RepoPath,
     target_kind: TargetKind,
     query: Option<&str>,
     fragment: Option<&str>,
@@ -791,7 +793,7 @@ fn lookup(
 ) -> Result<Resolution, Error> {
     let special = |code: ResolutionCode, entry_kind: EntryKind, mode: GitMode| Resolution {
         code,
-        path: Some(path.to_owned()),
+        path: Some(path.clone()),
         entry_kind: Some(entry_kind),
         git_mode: Some(mode),
         raw_digest: None,
@@ -801,7 +803,7 @@ fn lookup(
     let (mode, entry) = match snapshot.locate(path) {
         None => {
             let mut row = null_row(ResolutionCode::PathNotFound);
-            row.path = Some(path.to_owned());
+            row.path = Some(path.clone());
             return Ok(row);
         }
         Some(Located::Entry(GitMode::Symlink, _)) => {
@@ -841,7 +843,8 @@ fn lookup(
 
     if query.is_some() {
         let accepted = !is_tree
-            && classify(path).is_some_and(|class| class != crate::Classification::PlainAdvisory)
+            && classify(path.as_bytes())
+                .is_some_and(|class| class != crate::Classification::PlainAdvisory)
             && snapshot.is_scanned_structured(path);
         if !accepted {
             return Ok(Resolution {
@@ -857,7 +860,7 @@ fn lookup(
         let decoded = decode_fragment(raw_fragment).unwrap_or_default();
         let code = if github_tree || line_fragment(&decoded) {
             ResolutionCode::CodeFragmentUnevaluated
-        } else if !is_tree && classify(path).is_some() {
+        } else if !is_tree && classify(path.as_bytes()).is_some() {
             ResolutionCode::UnsupportedFragmentSemantics
         } else {
             ResolutionCode::CodeFragmentUnevaluated
@@ -901,7 +904,7 @@ fn read_target(
     git: &mut GitResources,
     scan: &mut ScanResources,
     cache: &mut TargetCache,
-    path: &str,
+    path: &RepoPath,
     mode: GitMode,
     oid: &Oid,
 ) -> Result<Content, Error> {
@@ -932,6 +935,6 @@ fn read_target(
         );
         Content::Ordinary { raw, projection }
     };
-    cache.read.insert(path.to_owned(), content.clone());
+    cache.read.insert(path.clone(), content.clone());
     Ok(content)
 }

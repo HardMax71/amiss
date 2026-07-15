@@ -12,7 +12,7 @@ use amiss_scan::{
 use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{IntentKind, ResolutionCode};
 use tempfile::TempDir;
 
@@ -127,6 +127,8 @@ impl Bed {
         is_image: bool,
         destination: &str,
     ) -> Result<(amiss_scan::Intent, amiss_scan::Resolution), Error> {
+        #[expect(clippy::unwrap_used, reason = "test fixture helper")]
+        let document = RepoPath::new(document.to_owned()).unwrap();
         resolve(
             &self.repo,
             &mut self.git_resources,
@@ -134,7 +136,7 @@ impl Bed {
             &mut self.cache,
             &self.snapshot,
             context,
-            document,
+            &document,
             is_image,
             destination,
         )
@@ -447,7 +449,10 @@ fn github_urls_need_the_whole_trusted_chain() {
         )
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.kind, IntentKind::SameRepositoryGithub);
-    assert_eq!(intent.repository_path.as_deref(), Some("docs/guide.md"));
+    assert_eq!(
+        intent.repository_path.as_ref().and_then(RepoPath::as_str),
+        Some("docs/guide.md")
+    );
     assert_eq!(intent.target_kind, Some(TargetKind::Blob));
     assert_eq!(row.code, ResolutionCode::ExactPath);
 
@@ -461,7 +466,10 @@ fn github_urls_need_the_whole_trusted_chain() {
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.kind, IntentKind::SameRepositoryGithub);
     assert_eq!(row.code, ResolutionCode::UnsupportedVersionScope);
-    assert_eq!(row.path.as_deref(), Some("docs/guide.md"));
+    assert_eq!(
+        row.path.as_ref().and_then(RepoPath::as_str),
+        Some("docs/guide.md")
+    );
     assert_eq!(
         row.entry_kind, None,
         "a default-only split is never looked up"
@@ -645,7 +653,7 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
             &mut cache,
             &from_tree,
             None,
-            "docs/guide.md",
+            &RepoPath::new("docs/guide.md".to_owned()).unwrap(),
             false,
             reference,
         )
@@ -658,7 +666,7 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
             &mut cache,
             &from_index,
             None,
-            "docs/guide.md",
+            &RepoPath::new("docs/guide.md".to_owned()).unwrap(),
             false,
             reference,
         )
