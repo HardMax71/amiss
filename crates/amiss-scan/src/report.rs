@@ -15,7 +15,7 @@ use crate::evaluate::{
 };
 use crate::{Impact, observe};
 
-pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v1";
+pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v2";
 pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection/v1";
 pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot/v1";
 
@@ -25,7 +25,7 @@ pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot/v1";
 pub fn synthetic_candidate(
     base_object_format: &'static str,
     base_commit_oid: &str,
-    entries: &[(String, amiss_wire::controls::GitMode, String, bool)],
+    entries: &[(RepoPath, amiss_wire::controls::GitMode, String, bool)],
     skip_worktree_paths: u64,
 ) -> IndexCandidate {
     let rows: Vec<Value> = entries
@@ -39,7 +39,7 @@ pub fn synthetic_candidate(
                 | amiss_wire::controls::GitMode::Tree => "blob",
             };
             object(vec![
-                ("path", string(path)),
+                ("path", path.to_value()),
                 ("entry_kind", string(entry_kind)),
                 ("git_mode", string(mode.as_str())),
                 ("object_format", string(base_object_format)),

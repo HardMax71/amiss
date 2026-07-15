@@ -176,11 +176,9 @@ fn a_complete_report_validates_against_the_schema() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
     )
-    .unwrap()
-    .replace("assure/", "amiss/")
-    .replace(".assure/", ".amiss/");
+    .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
     let validator = jsonschema::validator_for(&schema_json).unwrap();
     let envelope_json: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
@@ -307,7 +305,7 @@ fn a_ceiling_of_one_emits_only_the_sentinel() {
 )]
 fn schema_max_items(array: &str) -> u64 {
     let text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&text).unwrap();

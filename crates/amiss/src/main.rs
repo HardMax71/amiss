@@ -43,6 +43,20 @@ fn apply_sandbox() {
 #[cfg(not(unix))]
 const fn apply_sandbox() {}
 
+/// The wire's lowercase hex back to raw bytes; a malformed digit renders as
+/// zero rather than failing the human projection, which is not the wire.
+fn decode_hex(hex: &str) -> Vec<u8> {
+    hex.as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            std::str::from_utf8(pair)
+                .ok()
+                .and_then(|text| u8::from_str_radix(text, 16).ok())
+                .unwrap_or(0)
+        })
+        .collect()
+}
+
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn main() -> ExitCode {
     apply_sandbox();
@@ -287,14 +301,15 @@ impl View {
         use amiss_wire::json::Value;
         match self.field(name) {
             Some(Value::String(value)) => amiss_wire::human::atom(value),
-            Some(
-                Value::Null
-                | Value::Bool(_)
-                | Value::Integer(_)
-                | Value::Array(_)
-                | Value::Object(_),
-            )
-            | None => "-".to_owned(),
+            Some(Value::Object(members)) => match members.as_slice() {
+                [(key, Value::String(hex))] if key == "bytes_hex" => {
+                    amiss_wire::human::atom_bytes(&decode_hex(hex))
+                }
+                _ => "-".to_owned(),
+            },
+            Some(Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_)) | None => {
+                "-".to_owned()
+            }
         }
     }
 

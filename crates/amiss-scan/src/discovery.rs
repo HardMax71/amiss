@@ -116,9 +116,9 @@ struct Frame {
     next: usize,
 }
 
-/// Vets one raw entry name under `prefix` and returns the admitted path, or
-/// records why there is none. Length is charged on the raw bytes before any
-/// question of spelling, so a refused name's disclosed bytes always fit the
+/// Vets one raw entry name under `prefix` and returns the admitted path:
+/// text or bytes alike, refusing only the byte grammar. Length is charged on
+/// the raw bytes first, so a refused name's disclosed bytes always fit the
 /// report's frozen hex field, whose cap is the path ceiling itself; past the
 /// ceiling the crossing row states both figures and carries no bytes.
 fn admitted_path(
@@ -140,22 +140,11 @@ fn admitted_path(
         });
         return None;
     }
-    // the spelling gate: the second contract's flip removes exactly this
-    let path = match String::from_utf8(raw) {
-        Ok(path) => path,
-        Err(invalid) => {
-            defects.push(PathDefect {
-                error: Error::UnrepresentablePath,
-                raw: Some(invalid.into_bytes()),
-            });
-            return None;
-        }
-    };
-    let admitted = RepoPath::new(path.clone());
+    let admitted = RepoPath::from_bytes(raw.clone());
     if admitted.is_none() {
         defects.push(PathDefect {
             error: Error::UnrepresentablePath,
-            raw: Some(path.into_bytes()),
+            raw: Some(raw),
         });
     }
     admitted

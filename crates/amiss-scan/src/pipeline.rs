@@ -1094,11 +1094,11 @@ fn index_candidate_block(
     skip_worktree_paths: u64,
 ) -> Result<CandidateBlock, Vec<ErrorDetail>> {
     let disclosure_cap = amiss_git::GitLimits::CONTRACT.raw_path_bytes;
-    let mut entries: Vec<(String, amiss_wire::controls::GitMode, String, bool)> =
+    let mut entries: Vec<(RepoPath, amiss_wire::controls::GitMode, String, bool)> =
         Vec::with_capacity(index.entries.len());
     let mut failures = Vec::new();
     for entry in &index.entries {
-        let Ok(path) = str::from_utf8(&entry.path) else {
+        let Some(path) = RepoPath::from_bytes(entry.path.clone()) else {
             let fits = u64::try_from(entry.path.len()).unwrap_or(u64::MAX) <= disclosure_cap;
             failures.push(ErrorDetail {
                 code: AnalysisErrorCode::UnrepresentablePath,
@@ -1109,7 +1109,7 @@ fn index_candidate_block(
             continue;
         };
         entries.push((
-            path.to_owned(),
+            path,
             entry.mode,
             entry.oid.as_str().to_owned(),
             entry.skip_worktree,

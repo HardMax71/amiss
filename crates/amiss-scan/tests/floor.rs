@@ -99,11 +99,9 @@ fn payload(
     let built = commit_pair(repo, &engine(), None, setup, base, candidate);
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v1.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v2.schema.json"),
     )
-    .unwrap()
-    .replace("assure/", "amiss/")
-    .replace(".assure/", ".amiss/");
+    .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
     let validator = jsonschema::validator_for(&schema_json).unwrap();
     let defects: Vec<String> = validator

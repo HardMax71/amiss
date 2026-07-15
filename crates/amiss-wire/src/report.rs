@@ -131,8 +131,8 @@ impl Sink for StagedSink<'_> {
     }
 }
 pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine/v1";
-pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v1";
-pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload/v1";
+pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v2";
+pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload/v2";
 pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract/v1";
 pub const BUILT_IN_POLICY_VERSION: &str = "scanner-policy-defaults-v1";
 

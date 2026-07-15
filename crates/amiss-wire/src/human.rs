@@ -40,3 +40,40 @@ pub fn atom(text: &str) -> String {
     out.push('"');
     out
 }
+
+/// `human-atom-bytes-v1`: a repository-derived value that is raw bytes, not
+/// text, rendered under the same law as [`atom`]. At most the first two
+/// hundred bytes are kept with a literal `...` appended inside the quotes
+/// when any were omitted; printable ASCII stays literal with quote and
+/// backslash escaped, and every other byte becomes the lowercase `\u00xx`
+/// escape of its value, so no byte is ever active terminal syntax and no
+/// Unicode scalar is invented for bytes that never encoded one.
+#[must_use]
+pub fn atom_bytes(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().saturating_add(2));
+    out.push('"');
+    let mut omitted = false;
+    for (index, byte) in bytes.iter().enumerate() {
+        if index >= ATOM_SCALAR_BOUND {
+            omitted = true;
+            break;
+        }
+        match byte {
+            b'"' => out.push_str("\\\""),
+            b'\\' => out.push_str("\\\\"),
+            b' '..=b'~' => out.push(char::from(*byte)),
+            _ => {
+                out.push_str("\\u00");
+                for shift in [4_u32, 0] {
+                    let nibble = (u32::from(*byte) >> shift) & 0xf;
+                    out.push(char::from_digit(nibble, 16).unwrap_or('0'));
+                }
+            }
+        }
+    }
+    if omitted {
+        out.push_str("...");
+    }
+    out.push('"');
+    out
+}

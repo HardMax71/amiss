@@ -202,7 +202,6 @@ fn scheme_of(path_part: &str) -> Option<String> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DecodeDefect {
     Escape,
-    Utf8,
     Control,
     Slash,
     Backslash,
@@ -210,7 +209,7 @@ enum DecodeDefect {
 
 const fn defect_code(defect: DecodeDefect) -> ResolutionCode {
     match defect {
-        DecodeDefect::Escape | DecodeDefect::Utf8 => ResolutionCode::InvalidPercentEncoding,
+        DecodeDefect::Escape => ResolutionCode::InvalidPercentEncoding,
         DecodeDefect::Control => ResolutionCode::DecodedPathControl,
         DecodeDefect::Slash => ResolutionCode::EncodedSlash,
         DecodeDefect::Backslash => ResolutionCode::BackslashSeparator,
@@ -243,10 +242,11 @@ fn decode_bytes(text: &str) -> Result<Vec<u8>, DecodeDefect> {
     Ok(out)
 }
 
-/// Decodes one path segment. The input holds no raw separator, so a decoded
-/// slash could only create one; a decoded backslash, control, or NUL is a
-/// defect either way.
-fn decode_segment(segment: &str) -> Result<String, DecodeDefect> {
+/// Decodes one path segment to its raw bytes. The input holds no raw
+/// separator, so a decoded slash could only create one; a decoded backslash,
+/// control, or NUL is a defect either way. Bytes outside UTF-8 are ordinary
+/// path bytes.
+fn decode_segment(segment: &str) -> Result<Vec<u8>, DecodeDefect> {
     let out = decode_bytes(segment)?;
     for &byte in &out {
         match byte {
@@ -256,7 +256,7 @@ fn decode_segment(segment: &str) -> Result<String, DecodeDefect> {
             _ => {}
         }
     }
-    String::from_utf8(out).map_err(|_invalid| DecodeDefect::Utf8)
+    Ok(out)
 }
 
 /// Decodes a fragment: only invalid escapes, invalid UTF-8, and control bytes
@@ -510,7 +510,7 @@ fn trusted_split(
     if target_kind == TargetKind::Tree && tail.len() > 1 && tail.last() == Some(&"") {
         tail.pop();
     }
-    let mut decoded: Vec<String> = Vec::new();
+    let mut decoded: Vec<Vec<u8>> = Vec::new();
     for segment in &tail {
         if segment.is_empty() {
             return Err(ResolutionCode::InvalidReference);
@@ -539,27 +539,26 @@ fn trusted_split(
     }
     if remaining
         .iter()
-        .any(|segment| segment == "." || segment == "..")
+        .any(|segment| segment == b"." || segment == b"..")
     {
         return Err(ResolutionCode::PathTraversal);
     }
-    let joined = remaining.join("/");
-    match RepoPath::new(joined) {
+    match RepoPath::from_bytes(remaining.join(&b'/')) {
         Some(admitted) => Ok((matched_candidate, admitted)),
         None => Err(ResolutionCode::InvalidReference),
     }
 }
 
-fn ref_segments(full_ref: &str) -> Vec<String> {
+fn ref_segments(full_ref: &str) -> Vec<Vec<u8>> {
     full_ref
         .strip_prefix("refs/heads/")
         .unwrap_or(full_ref)
         .split('/')
-        .map(str::to_owned)
+        .map(|segment| segment.as_bytes().to_vec())
         .collect()
 }
 
-fn split_after(decoded: &[String], reference: &[String]) -> Option<Vec<String>> {
+fn split_after(decoded: &[Vec<u8>], reference: &[Vec<u8>]) -> Option<Vec<Vec<u8>>> {
     if decoded.len() < reference.len() {
         return None;
     }
@@ -631,20 +630,24 @@ fn native(
         TargetKind::Either
     };
 
-    // gates hold every document to text here; the flip reseeds on bytes
-    let mut resolved: Vec<String> = document_path
-        .as_str()
-        .and_then(|text| text.rsplit_once('/'))
-        .map(|(parent, _basename)| parent.split('/').map(str::to_owned).collect())
-        .unwrap_or_default();
+    let raw_document = document_path.as_bytes();
+    let mut resolved: Vec<Vec<u8>> = match raw_document.iter().rposition(|byte| *byte == b'/') {
+        Some(split) => raw_document
+            .get(..split)
+            .unwrap_or_default()
+            .split(|byte| *byte == b'/')
+            .map(<[u8]>::to_vec)
+            .collect(),
+        None => Vec::new(),
+    };
     for segment in segments {
         let decoded = match decode_segment(segment) {
-            Ok(text) => text,
+            Ok(bytes) => bytes,
             Err(defect) => return Ok(terminal(defect_code(defect), query, fragment)),
         };
-        match decoded.as_str() {
-            "." => {}
-            ".." => {
+        match decoded.as_slice() {
+            b"." => {}
+            b".." => {
                 if resolved.pop().is_none() {
                     return Ok(terminal(ResolutionCode::PathTraversal, query, fragment));
                 }
@@ -655,8 +658,7 @@ fn native(
     if resolved.is_empty() {
         return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
     }
-    let joined = resolved.join("/");
-    let Some(joined) = RepoPath::new(joined) else {
+    let Some(joined) = RepoPath::from_bytes(resolved.join(&b'/')) else {
         return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
     };
 
