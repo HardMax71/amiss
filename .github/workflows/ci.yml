@@ -147,8 +147,6 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -165,35 +163,8 @@ jobs:
           restore-keys: coverage-
       - run: rustup component add llvm-tools-preview
       - run: cargo llvm-cov nextest --workspace --locked --lcov --output-path lcov.info
-      - run: cargo llvm-cov report | tee coverage-summary.txt
+      - run: cargo llvm-cov report
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-lcov
           path: lcov.info
-      # The README's coverage rectangle reads a shields endpoint served from
-      # the unprotected badges branch; the number is the line percent the
-      # report above already printed, taken from the TOTAL row verbatim. The
-      # ref moves through the Git Data API, so the token stays in the
-      # environment and never touches a git config or a remote URL.
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -eu
-          percent="$(awk '/^TOTAL/ { print $(NF-3) }' coverage-summary.txt)"
-          case "$percent" in *%) ;; *) echo "no line percent in the report table"; exit 1 ;; esac
-          payload="$(printf '{"schemaVersion":1,"label":"coverage","message":"%s","color":"475569"}' "$percent")"
-          blob="$(jq -n --arg c "$payload" '{content: $c, encoding: "utf-8"}' \
-            | gh api "repos/${REPOSITORY}/git/blobs" --input - --jq .sha)"
-          tree="$(jq -n --arg s "$blob" \
-            '{tree: [{path: "coverage.json", mode: "100644", type: "blob", sha: $s}]}' \
-            | gh api "repos/${REPOSITORY}/git/trees" --input - --jq .sha)"
-          commit="$(jq -n --arg t "$tree" '{message: "coverage badge", tree: $t}' \
-            | gh api "repos/${REPOSITORY}/git/commits" --input - --jq .sha)"
-          if ! jq -n --arg s "$commit" '{sha: $s, force: true}' \
-            | gh api -X PATCH "repos/${REPOSITORY}/git/refs/heads/badges" --input - > /dev/null 2>&1; then
-            jq -n --arg s "$commit" '{ref: "refs/heads/badges", sha: $s}' \
-              | gh api "repos/${REPOSITORY}/git/refs" --input - > /dev/null
-          fi
