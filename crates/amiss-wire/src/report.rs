@@ -675,7 +675,8 @@ impl ResolutionCode {
     }
 }
 
-/// The five target-intent variants an occurrence can carry.
+/// The target-intent variants an occurrence can carry, in schema
+/// declaration order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IntentKind {
     RepositoryPath,
