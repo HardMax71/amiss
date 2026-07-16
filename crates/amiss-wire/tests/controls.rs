@@ -584,6 +584,57 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     );
 }
 
+#[test]
+fn provider_bound_v1_controls_stay_github_scoped() {
+    let floor = String::from_utf8(FLOOR.to_vec())
+        .unwrap()
+        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
+    assert_eq!(
+        floor_schema_kind(OrganizationFloor::parse(floor.as_bytes()).unwrap_err()),
+        ErrorKind::InvalidValue
+    );
+
+    let (key, fact) = computed_digests();
+    let item = debt_item(
+        "debt/readme",
+        &key,
+        &fact,
+        "2026-07-01T00:00:00Z",
+        "2026-08-01T00:00:00Z",
+    );
+    let debt = debt_snapshot("2026-07-02T00:00:00Z", &[item])
+        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
+    assert_eq!(
+        DebtSnapshot::parse(debt.as_bytes()).unwrap_err().kind,
+        ErrorKind::InvalidValue
+    );
+
+    let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
+    let waiver =
+        waiver_bundle(&[item]).replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
+    assert_eq!(
+        WaiverBundle::parse(waiver.as_bytes()).unwrap_err().kind,
+        ErrorKind::InvalidValue
+    );
+
+    let time = TIME_STATEMENT.replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
+    assert_eq!(
+        TrustedTimeStatement::parse(time.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+
+    let nested_owner =
+        TIME_STATEMENT.replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
+    assert_eq!(
+        TrustedTimeStatement::parse(nested_owner.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+}
+
 const CONSTRAINT: &str = r#"{
   "schema": "amiss/scanner-execution-constraint/v1",
   "action_repository": { "host": "github.com", "owner": "acme", "name": "amiss-action" },
@@ -605,6 +656,30 @@ fn parses_an_execution_constraint_descriptor() {
     assert_eq!(
         descriptor.required_status_name,
         "amiss / documentation assurance"
+    );
+
+    let open_repository = CONSTRAINT.replace(
+        "\"host\": \"github.com\", \"owner\": \"acme\"",
+        "\"host\": \"git.example.internal\", \"owner\": \"platform/security\"",
+    );
+    let descriptor = ExecutionConstraintDescriptor::parse(open_repository.as_bytes()).unwrap();
+    assert_eq!(descriptor.action_repository.host, "git.example.internal");
+    assert_eq!(descriptor.action_repository.owner, "platform/security");
+
+    let slash_host = CONSTRAINT.replace("github.com", "git.example/internal");
+    assert_eq!(
+        ExecutionConstraintDescriptor::parse(slash_host.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+    let malformed_owner =
+        CONSTRAINT.replace("\"owner\": \"acme\"", "\"owner\": \"platform//security\"");
+    assert_eq!(
+        ExecutionConstraintDescriptor::parse(malformed_owner.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
     );
 
     let trailing_space = CONSTRAINT.replace("assurance\"", "assurance \"");

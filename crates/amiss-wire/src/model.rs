@@ -350,8 +350,8 @@ impl RepositoryIdentity {
         }
     }
 
-    /// The identity form the v1 control documents can spell: host fixed to
-    /// github.com, single-segment owner.
+    /// The identity form the GitHub-bound v1 documents can spell: host fixed
+    /// to github.com, single-segment owner.
     #[must_use]
     pub fn github(owner: String, name: String) -> Option<Self> {
         if identity_segment(owner.as_bytes()) && name_valid(&name) {

@@ -230,7 +230,7 @@
     },
     "RepositoryIdentity": {
       "type": "object",
-      "description": "The declared forge identity. The host is an opaque claim the engine never resolves, normalizes, or judges; anything except a slash, which would make the host/owner/name triple ambiguous. The caller owns canonical spelling: controls bind and links are recognized by exact bytes, so one host must have one spelling. The owner is one or more slash-joined segments; nested segments spell a GitLab group path, and the writer emits a slashed owner only when the evaluation forge is gitlab or null.",
+      "description": "The declared forge identity. The host is an opaque claim the engine never resolves, normalizes, or judges; anything except a slash, which would make the host/owner/name triple ambiguous. The caller owns canonical spelling: controls bind and links are recognized by exact bytes, so one host must have one spelling. The owner is one or more slash-joined segments; nested segments spell a GitLab group path. Evaluation repositories emit a slashed owner only when their forge is gitlab or null; execution constraints may independently name any open action-repository identity.",
       "additionalProperties": false,
       "required": [
         "host",
@@ -260,7 +260,7 @@
     },
     "GithubRepositoryIdentity": {
       "type": "object",
-      "description": "The identity form the v1 control and provenance documents can spell: host fixed to github.com, single-segment owner. Slots keep this shape because their sibling constants (the github-action provenance kind, the GitHub Actions clock controller, the release-manifest chain) are GitHub-scoped until those formats revise.",
+      "description": "The GitHub-bound identity form: host fixed to github.com, single-segment owner. Release-manifest build sources, github-action provenance, and trusted-time statements keep this shape because their sibling constants are GitHub-scoped; execution constraints use the open identity.",
       "additionalProperties": false,
       "required": [
         "host",
@@ -1042,7 +1042,7 @@
           "const": "amiss/scanner-execution-constraint/v1"
         },
         "action_repository": {
-          "$ref": "#/$defs/GithubRepositoryIdentity"
+          "$ref": "#/$defs/RepositoryIdentity"
         },
         "action_object_format": {
           "enum": [
@@ -3974,5 +3974,5 @@
       }
     }
   },
-  "description": "Version three of the report contract: the repository identity host opens to any declared forge and the owner to slash-joined group paths, the evaluation names the same-repository dialect it applied, and GitLab and Gitea link forms join GitHub's. Control and provenance slots keep the github.com-const identity their v1 document formats can spell. Inner preimage schemas keep their v1 identifiers: every preimage a v2 writer could produce hashes identically under v3, and no v2 writer could emit a non-github host, a slashed owner, a forge row, or the new intent kinds."
+  "description": "Version three of the report contract: the repository identity host opens to any declared forge and the owner to slash-joined group paths, the evaluation names the same-repository dialect it applied, and GitLab and Gitea link forms join GitHub's. Execution constraints use that open identity, while release-manifest build sources, github-action provenance, and trusted-time statements keep the github.com-const identity their v1 formats can spell. Inner preimage schemas keep their v1 identifiers: every preimage a v2 writer could produce hashes identically under v3, and no v2 writer could emit a non-github host, a slashed owner, a forge row, or the new intent kinds."
 }
