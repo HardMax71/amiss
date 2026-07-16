@@ -1,5 +1,8 @@
 #![expect(clippy::panic, reason = "bench fixture setup fails loudly")]
 
+use std::collections::BTreeMap;
+
+use amiss_scan::evaluate::evaluate_with_policy;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity, construct};
 use amiss_scan::{Classification, DocumentRecord, DocumentStatus, Effects, SnapshotDiscovery};
@@ -8,6 +11,10 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use divan::{Bencher, black_box};
+
+#[path = "support/exceptions.rs"]
+mod exception_support;
+use exception_support::exception_fixture;
 
 fn main() {
     divan::main();
@@ -69,6 +76,17 @@ fn lookup_last_document(bencher: Bencher<'_, '_>, count: usize) {
     bencher.bench_local(|| black_box(&discovery).is_scanned_structured(black_box(&path)));
 }
 
+/// Exact matching of verified debt items to current candidate findings. The
+/// fixture is outside the timed region, so this guards the target lookup from
+/// regressing to a findings-by-items product.
+#[divan::bench(args = [100_usize, 1_000, 10_000], sample_count = 10)]
+fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
+    let (comparisons, policy) = exception_fixture(count);
+    bencher.bench_local(|| {
+        evaluate_with_policy(&[], black_box(&comparisons), true, black_box(&policy), &[])
+    });
+}
+
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-bench".to_owned(),
@@ -121,7 +139,7 @@ fn document_discovery(count: usize) -> SnapshotDiscovery {
         outside_document_set: 0,
         tree_entries: u64::try_from(count).unwrap_or(u64::MAX),
         path_defects: Vec::new(),
-        entries: std::collections::BTreeMap::new(),
+        entries: BTreeMap::new(),
     }
 }
 
