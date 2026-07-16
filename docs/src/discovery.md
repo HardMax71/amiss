@@ -21,7 +21,7 @@ repository relies on the rule itself: its vendored parser test corpus lives unde
 `corpus/third_party/` exactly so that fixture files full of deliberately broken links are
 never read as prose.
 
-Five paths through the classifier:
+Six paths through the classifier:
 
 ```text
 docs/guide.md               structured-markdown   scanned

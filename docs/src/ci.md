@@ -35,7 +35,7 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
   with:
     fetch-depth: 2
     persist-credentials: false
-- run: cargo install amiss
+- run: cargo install --locked --registry crates-io --version 0.4.0 amiss
 - env:
     REPOSITORY: ${{ github.repository }}
     BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -49,6 +49,10 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
       --default-branch-ref "refs/heads/${DEFAULT_BRANCH}" \
       --profile enforce --format json > amiss-report.json
 ```
+
+The direct form pins both the released crate and its packaged dependency graph. Cargo checks
+the downloaded crate archive against the SHA-256 checksum in the crates.io index, while
+`--locked` refuses to recompute the packaged lockfile.
 
 Three details carry weight. Both named commits must exist in the checkout. The Action derives
 pull-request base and merge-result commits, merge-group base and head commits, or push

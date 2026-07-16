@@ -43,11 +43,12 @@ and checked in CI.
 | `waiver-invalid` | `fail` | `fail` |
 <!-- amiss-doc-contract:profiles:end -->
 
-Two rules hold in both profiles. A supported explicit reference that does not resolve is the
-serious structural case: `explicit-target-missing` warns under observe and fails under
-enforce. A file changing under an unchanged paragraph is a warning in both profiles, because
-the change might be exactly what the paragraph already says. Amiss reports that the target
-moved and the prose did not; whether the prose is now wrong remains a human decision.
+Two notable cases clarify what changes between profiles and what does not. A supported
+explicit reference that does not resolve is the serious structural case:
+`explicit-target-missing` warns under observe and fails under enforce. A file changing under
+an unchanged paragraph is a warning in both profiles, because the change might be exactly
+what the paragraph already says. Amiss reports that the target moved and the prose did not;
+whether the prose is now wrong remains a human decision.
 
 The kinds, with what each one means:
 
