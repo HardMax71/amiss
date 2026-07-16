@@ -49,10 +49,10 @@ pub struct PathDefect {
     pub raw: Option<Vec<u8>>,
 }
 
-/// One side's complete discovery: every classified path in repository byte
-/// order with its outcome, the count of non-tree entries outside the document
-/// set, the entries walked, and the path-level defects that never became a
-/// document.
+/// One side's complete discovery: every classified path strictly increasing
+/// and unique in repository byte order with its outcome, the count of non-tree
+/// entries outside the document set, the entries walked, and the path-level
+/// defects that never became a document.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SnapshotDiscovery {
     pub documents: Vec<DocumentRecord>,
@@ -78,13 +78,22 @@ pub enum Located<'snapshot> {
 }
 
 impl SnapshotDiscovery {
+    /// The discovered document at one exact raw path. Tree and index
+    /// discovery both preserve the strict ordering documented on this type.
+    #[must_use]
+    pub(crate) fn document(&self, path: &[u8]) -> Option<&DocumentRecord> {
+        self.documents
+            .binary_search_by(|record| record.path.as_bytes().cmp(path))
+            .ok()
+            .and_then(|index| self.documents.get(index))
+    }
+
     /// Whether a path is a scanned structured document on this side, which is
     /// what accepting a query requires.
     #[must_use]
     pub fn is_scanned_structured(&self, path: &RepoPath) -> bool {
-        self.documents.iter().any(|record| {
-            record.path == *path
-                && record.classification != Classification::PlainAdvisory
+        self.document(path.as_bytes()).is_some_and(|record| {
+            record.classification != Classification::PlainAdvisory
                 && matches!(record.status, DocumentStatus::Scanned(_))
         })
     }

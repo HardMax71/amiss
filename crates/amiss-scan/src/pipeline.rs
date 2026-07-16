@@ -774,11 +774,7 @@ fn inventory_lookup(
     discovery: &SnapshotDiscovery,
 ) -> impl Fn(&str) -> crate::policy::InventoryState {
     move |path: &str| {
-        if let Some(record) = discovery
-            .documents
-            .iter()
-            .find(|record| record.path.as_bytes() == path.as_bytes())
-        {
+        if let Some(record) = discovery.document(path.as_bytes()) {
             return match record.status {
                 DocumentStatus::Scanned(_) => crate::policy::InventoryState::Scanned,
                 DocumentStatus::ExcludedBuiltIn => crate::policy::InventoryState::Outside,

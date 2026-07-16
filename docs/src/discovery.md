@@ -50,3 +50,11 @@ is recorded as `UNREPRESENTABLE_PATH` with the exact bytes in `path_bytes_hex`, 
 exit is 2. Dropping such an entry silently would be the worst bug this tool could have:
 the report would come back green with a document missing from it, and a missing row is
 the one defect no reader can notice.
+
+Both commit-tree and staged-index discovery emit document rows strictly increasing and unique
+by those raw path bytes. Exact document queries and policy-inventory checks therefore use
+binary search, while two-sided report construction merge-joins the ordered sides. The
+[`discovery` ordering test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/discovery.rs)
+pins the Git directory-boundary ordering against both snapshot modes, and the report test
+pins interleaved base and candidate rows. The `amiss-scan` `pipeline` benchmark tracks both
+late exact lookup and the same-document merge as the row count grows.

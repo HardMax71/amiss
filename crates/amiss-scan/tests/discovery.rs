@@ -3,7 +3,9 @@ use std::path::Path;
 
 use amiss_fixtures::stage_symlink;
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_scan::{DocumentStatus, Error, ScanLimits, ScanResources, UnsupportedKind, discover};
+use amiss_scan::{
+    DocumentStatus, Error, ScanLimits, ScanResources, UnsupportedKind, discover, discover_index,
+};
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
@@ -146,6 +148,67 @@ fn a_snapshot_discovers_every_class_in_path_order() {
         panic!("the mdx page scans")
     };
     assert_eq!(scanned.opaque.mdx.len(), 1, "the expression is opaque");
+}
+
+#[test]
+fn tree_and_index_discovery_preserve_strict_raw_path_order() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("a-.md"), "first\n").unwrap();
+    fs::create_dir_all(root.join("a")).unwrap();
+    fs::write(root.join("a/inside.md"), "middle\n").unwrap();
+    fs::write(root.join("a0.md"), "last\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "ordered"]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let includes = amiss_scan::Includes::default();
+    let from_tree = discover(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &head_tree(root),
+    )
+    .unwrap();
+    let index_bytes = repo.read_index_bytes(&mut git_resources).unwrap();
+    let index = amiss_git::parse_index_file(ObjectFormat::Sha1, &index_bytes).unwrap();
+    let from_index = discover_index(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &index,
+    )
+    .unwrap();
+
+    let paths = |discovery: &amiss_scan::SnapshotDiscovery| {
+        discovery
+            .documents
+            .iter()
+            .map(|record| record.path.as_bytes().to_vec())
+            .collect::<Vec<_>>()
+    };
+    let tree_paths = paths(&from_tree);
+    let index_paths = paths(&from_index);
+    assert_eq!(tree_paths, index_paths);
+    assert_eq!(
+        tree_paths,
+        [
+            b"a-.md".to_vec(),
+            b"a/inside.md".to_vec(),
+            b"a0.md".to_vec()
+        ]
+    );
+    assert!(
+        tree_paths
+            .windows(2)
+            .all(|pair| matches!(pair, [left, right] if left < right)),
+        "document paths are strictly increasing and therefore unique"
+    );
 }
 
 #[test]
