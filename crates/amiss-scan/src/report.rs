@@ -451,35 +451,69 @@ fn paired_documents<'a>(
     base: &'a SnapshotDiscovery,
     candidate: &'a SnapshotDiscovery,
 ) -> Vec<PairedDocument<'a>> {
-    let mut paths: Vec<&RepoPath> = base
-        .documents
-        .iter()
-        .chain(candidate.documents.iter())
-        .map(|record| &record.path)
-        .collect();
-    paths.sort();
-    paths.dedup();
-    paths
-        .into_iter()
-        .map(|path| {
-            let find = |side: &'a SnapshotDiscovery| {
-                side.documents.iter().find(|record| &record.path == path)
-            };
-            let base_record = find(base);
-            let candidate_record = find(candidate);
-            let classification = candidate_record
-                .or(base_record)
-                .map_or("structured-markdown", |record| {
-                    record.classification.as_str()
-                });
-            PairedDocument {
-                path: path.clone(),
-                classification,
-                base: base_record,
-                candidate: candidate_record,
+    let mut paired = Vec::with_capacity(
+        base.documents
+            .len()
+            .saturating_add(candidate.documents.len()),
+    );
+    let mut base_at = 0;
+    let mut candidate_at = 0;
+    while let (Some(base_record), Some(candidate_record)) = (
+        base.documents.get(base_at),
+        candidate.documents.get(candidate_at),
+    ) {
+        match base_record.path.cmp(&candidate_record.path) {
+            std::cmp::Ordering::Less => {
+                paired.push(paired_document(base_record, Some(base_record), None));
+                base_at = base_at.saturating_add(1);
             }
-        })
-        .collect()
+            std::cmp::Ordering::Equal => {
+                paired.push(paired_document(
+                    candidate_record,
+                    Some(base_record),
+                    Some(candidate_record),
+                ));
+                base_at = base_at.saturating_add(1);
+                candidate_at = candidate_at.saturating_add(1);
+            }
+            std::cmp::Ordering::Greater => {
+                paired.push(paired_document(
+                    candidate_record,
+                    None,
+                    Some(candidate_record),
+                ));
+                candidate_at = candidate_at.saturating_add(1);
+            }
+        }
+    }
+    if let Some(remaining) = base.documents.get(base_at..) {
+        paired.extend(
+            remaining
+                .iter()
+                .map(|record| paired_document(record, Some(record), None)),
+        );
+    }
+    if let Some(remaining) = candidate.documents.get(candidate_at..) {
+        paired.extend(
+            remaining
+                .iter()
+                .map(|record| paired_document(record, None, Some(record))),
+        );
+    }
+    paired
+}
+
+fn paired_document<'a>(
+    record: &DocumentRecord,
+    base: Option<&'a DocumentRecord>,
+    candidate: Option<&'a DocumentRecord>,
+) -> PairedDocument<'a> {
+    PairedDocument {
+        path: record.path.clone(),
+        classification: record.classification.as_str(),
+        base,
+        candidate,
+    }
 }
 
 fn document_result_value(paired: &PairedDocument<'_>) -> Value {

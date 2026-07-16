@@ -8,11 +8,14 @@ use amiss_scan::report::{
     CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
 };
 use amiss_scan::resolve::TargetCache;
-use amiss_scan::{DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery, discover, resolve};
-use amiss_wire::controls::SourceConstruct;
+use amiss_scan::{
+    Classification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery,
+    discover, resolve,
+};
+use amiss_wire::controls::{GitMode, SourceConstruct};
 use amiss_wire::digest::hb;
 use amiss_wire::json::parse;
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 use tempfile::TempDir;
 
@@ -242,10 +245,61 @@ fn bare_setup(errors_retained: u64) -> Setup {
     }
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
+    let oid = Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap();
+    SnapshotDiscovery {
+        documents: paths
+            .iter()
+            .map(|path| DocumentRecord {
+                path: RepoPath::new((*path).to_owned()).unwrap(),
+                classification: Classification::StructuredMarkdown,
+                status: DocumentStatus::ExcludedBuiltIn,
+                oid: oid.clone(),
+                mode: GitMode::RegularFile,
+                byte_count: 0,
+                raw_digest: None,
+            })
+            .collect(),
+        outside_document_set: 0,
+        tree_entries: u64::try_from(paths.len()).unwrap_or(u64::MAX),
+        path_defects: Vec::new(),
+        entries: std::collections::BTreeMap::new(),
+    }
+}
+
+#[test]
+fn document_rows_merge_both_sides_in_strict_raw_path_order() {
+    let base = excluded_discovery(&["a-.md", "a/base.md", "a0.md"]);
+    let candidate = excluded_discovery(&["a/candidate.md", "a0.md", "a1.md"]);
+    let built = construct(&bare_setup(64), &base, &candidate, &[]);
+    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let rows = wire["payload"]["documents"].as_array().unwrap();
+    let actual: Vec<(String, String)> = rows
+        .iter()
+        .map(|row| {
+            (
+                row["path"].as_str().unwrap().to_owned(),
+                row["change"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        [
+            ("a-.md".to_owned(), "removed".to_owned()),
+            ("a/base.md".to_owned(), "removed".to_owned()),
+            ("a/candidate.md".to_owned(), "added".to_owned()),
+            ("a0.md".to_owned(), "unchanged".to_owned()),
+            ("a1.md".to_owned(), "added".to_owned()),
+        ]
+    );
+}
+
 fn missing_detail(path: &str) -> ErrorDetail {
     ErrorDetail {
         code: AnalysisErrorCode::GitObjectMissing,
-        path: amiss_wire::model::RepoPath::new(path.to_owned()),
+        path: RepoPath::new(path.to_owned()),
         path_bytes: None,
         resource: None,
     }
@@ -445,11 +499,8 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
             row.alternatives_candidate = (0..64_u32)
                 .map(|slot| {
                     let mut alternative = filler.clone();
-                    alternative.document = amiss_wire::model::RepoPath::new(format!(
-                        "{index:03}{slot:02}{}",
-                        "a".repeat(4_000)
-                    ))
-                    .unwrap();
+                    alternative.document =
+                        RepoPath::new(format!("{index:03}{slot:02}{}", "a".repeat(4_000))).unwrap();
                     alternative
                 })
                 .collect();
