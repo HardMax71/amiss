@@ -63,7 +63,9 @@ jobs:
             exit 0
           fi
 
-          git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+          # release-plz rewrites its release-PR branch from the latest main;
+          # let only this runner's remote-tracking ref follow that rewrite.
+          git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
           git switch --force-create "$branch" "origin/$branch"
           cargo update --workspace --manifest-path fuzz/Cargo.toml
           cargo test --manifest-path fuzz/Cargo.toml --locked --release
