@@ -272,9 +272,8 @@ fn hidden_entry(name: &[u8], index_mode: bool) -> (i32, serde_json::Value) {
 /// voids the run: dropping the entry quietly would be the worst bug this tool
 /// could have, because the report would come back complete and passing with a
 /// document simply absent from it. The defect is a retained analysis error
-/// with the exact bytes, the run is incomplete, and the exit is 2. Under the
-/// second contract this refusal is structural only; spelling is no longer a
-/// reason.
+/// with the exact bytes, the run is incomplete, and the exit is 2. This
+/// refusal is structural only; spelling is not a reason.
 #[test]
 fn a_document_the_grammar_refuses_is_still_refused_rather_than_dropped() {
     let name = b"docs\\hidden.md".as_slice();
@@ -326,10 +325,10 @@ fn a_document_the_grammar_refuses_is_still_refused_rather_than_dropped() {
     }
 }
 
-/// The second contract's inversion: a name that is raw bytes rather than text
-/// is a document, not a defect. The entry is scanned, the report carries its
-/// path as the `bytes_hex` object, the run completes, and nothing is hidden;
-/// re-adding a spelling gate anywhere in discovery fails this test.
+/// A name that is raw bytes rather than text is a document, not a defect. The
+/// entry is scanned, the report carries its path as the `bytes_hex` object,
+/// the run completes, and nothing is hidden; re-adding a spelling gate
+/// anywhere in discovery fails this test.
 #[test]
 fn a_document_named_in_bytes_is_scanned_not_refused() {
     let name = b"docs/bad-\xff-name.md".as_slice();
@@ -373,7 +372,7 @@ fn a_document_named_in_bytes_is_scanned_not_refused() {
 /// Distinct refused names are distinct disclosures. Before the bytes rode
 /// along, every refused name collapsed into one identical error row and the
 /// deduplicated set said "one problem" no matter how many entries were
-/// hidden. Under the second contract the refusals are structural.
+/// hidden. Refusals remain structural.
 #[test]
 fn every_unnameable_entry_is_disclosed_separately() {
     let dir = TempDir::new().unwrap();

@@ -1203,7 +1203,7 @@
           ]
         },
         "forge": {
-          "description": "The same-repository URL dialect this run recognized, or null when none applied: no declared identity, or an unknown host without an explicit dialect. Under null every absolute self-link stays foreign and the same_repository counter stays zero. github and gitea appear only with a single-segment owner.",
+          "description": "The same-repository URL dialect this run recognized, or null when none applied: no declared identity, or an unknown host without an explicit dialect. Under null every absolute forge link remains external and the same_repository counter stays zero. github and gitea appear only with a single-segment owner.",
           "enum": [
             "github",
             "gitlab",

@@ -33,7 +33,7 @@ dialect, a link like
 `https://github.com/<owner>/<name>/blob/main/src/lib.rs` becomes a repository path only when
 `--ref` is `refs/heads/main`; a URL for the declared default branch while another candidate
 is under test is recognized but remains `unsupported-version-scope`. Without the identity
-group, forge links are treated as foreign URLs and skipped, and the report says so. The host
+group, forge links remain external URLs and are skipped, and the report says so. The host
 is any spelling without a slash: Amiss never resolves it, and it is matched byte for byte
 against the URLs in your documents, so pass the lowercase form your links actually use. The
 owner is one or more slash-joined segments, nested only for GitLab group paths, and owner and

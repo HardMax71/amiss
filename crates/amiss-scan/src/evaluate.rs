@@ -180,7 +180,6 @@ fn reference_scope(observation: &Observation) -> Value {
                 ),
                 (
                     "path".to_owned(),
-                    // the empty-string fallback is the first contract's exact byte form
                     intent
                         .repository_path
                         .as_ref()

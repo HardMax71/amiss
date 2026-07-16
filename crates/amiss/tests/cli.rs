@@ -1109,7 +1109,7 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
 /// A self-hosted GitHub-dialect forge, end to end: the declared host opens
 /// recognition for its own URLs, github.com URLs in the same run are a
 /// different site, the dialect and host land in the evaluation, and the
-/// bytes are clean under the third contract's schema.
+/// emitted bytes validate against the report schema.
 #[test]
 fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
     let fx = amiss_fixtures::commit_pair(
@@ -1160,7 +1160,7 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
     assert_eq!(
         defects,
         Vec::<String>::new(),
-        "schema-clean under the rolling contract"
+        "emitted bytes match the active report schema"
     );
 
     let payload = payload(&stdout);
@@ -1180,7 +1180,7 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
 
 /// A self-hosted GitLab with nested groups, end to end: the explicit dialect
 /// rides an unknown host, the separator form resolves, the owner echoes its
-/// group path, and the bytes are clean under the third contract's schema.
+/// group path, and the emitted bytes validate against the report schema.
 #[test]
 fn a_nested_group_gitlab_identity_works_end_to_end() {
     let fx = amiss_fixtures::commit_pair(
@@ -1231,7 +1231,7 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
     assert_eq!(
         defects,
         Vec::<String>::new(),
-        "schema-clean under the rolling contract"
+        "emitted bytes match the active report schema"
     );
 
     let payload = payload(&stdout);
@@ -1251,7 +1251,8 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
 
 /// Codeberg end to end with no flag at all: the known-host table names the
 /// gitea dialect, the typed branch form resolves, a tag link is
-/// version-scoped out, and the bytes are clean under the third contract.
+/// version-scoped out, and the emitted bytes validate against the report
+/// schema.
 #[test]
 fn a_codeberg_identity_defaults_to_the_gitea_dialect_end_to_end() {
     let fx = amiss_fixtures::commit_pair(
@@ -1300,7 +1301,7 @@ fn a_codeberg_identity_defaults_to_the_gitea_dialect_end_to_end() {
     assert_eq!(
         defects,
         Vec::<String>::new(),
-        "schema-clean under the rolling contract"
+        "emitted bytes match the active report schema"
     );
 
     let payload = payload(&stdout);
