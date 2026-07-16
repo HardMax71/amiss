@@ -22,26 +22,21 @@ pub(super) fn resolve(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    context: Option<&ForgeContext>,
+    context: &ForgeContext,
     suffix: &str,
     query: Option<String>,
     fragment: Option<String>,
 ) -> Result<(Intent, Resolution), Error> {
-    match context {
-        None => github(
+    match context.dialect {
+        ForgeDialect::Github => github(
             repo, git, scan, cache, snapshot, context, suffix, query, fragment,
         ),
-        Some(identity) => match identity.dialect {
-            ForgeDialect::Github => github(
-                repo, git, scan, cache, snapshot, context, suffix, query, fragment,
-            ),
-            ForgeDialect::Gitlab => gitlab(
-                repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
-            ),
-            ForgeDialect::Gitea => gitea(
-                repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
-            ),
-        },
+        ForgeDialect::Gitlab => gitlab(
+            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
+        ),
+        ForgeDialect::Gitea => gitea(
+            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
+        ),
     }
 }
 
@@ -75,15 +70,12 @@ fn github(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
-    context: Option<&ForgeContext>,
+    identity: &ForgeContext,
     suffix: &str,
     query: Option<String>,
     fragment: Option<String>,
 ) -> Result<(Intent, Resolution), Error> {
     let foreign = foreign_row;
-    let Some(identity) = context else {
-        return Ok(foreign(query, fragment));
-    };
     let segments: Vec<&str> = suffix.split('/').collect();
     let (Some(owner), Some(repository), Some(form)) =
         (segments.first(), segments.get(1), segments.get(2))

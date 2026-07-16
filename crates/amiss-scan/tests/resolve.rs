@@ -481,10 +481,10 @@ fn github_urls_need_the_whole_trusted_chain() {
 }
 
 #[test]
-fn github_without_trust_is_foreign() {
+fn github_with_a_different_trusted_identity_is_foreign() {
     let mut bed = bed();
     let context = github_context();
-    let (_i, foreign) = bed
+    let (intent, foreign) = bed
         .run(
             Some(&context),
             "docs/guide.md",
@@ -492,16 +492,8 @@ fn github_without_trust_is_foreign() {
             "https://github.com/other/widgets/blob/main/x",
         )
         .unwrap_or_else(|_d| panic!());
+    assert_eq!(intent.kind, IntentKind::ExternalUrl);
     assert_eq!(foreign.code, ResolutionCode::ForeignRepository);
-    let (_i, no_context) = bed
-        .run(
-            None,
-            "docs/guide.md",
-            false,
-            "https://github.com/acme/widgets/blob/feature/x/docs/guide.md",
-        )
-        .unwrap_or_else(|_d| panic!());
-    assert_eq!(no_context.code, ResolutionCode::ForeignRepository);
 
     assert_eq!(
         bed.run(
@@ -712,6 +704,25 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
         bed.code("e\u{301}te\u{301}.txt"),
         ResolutionCode::PathNotFound
     );
+}
+
+#[test]
+fn forge_urls_without_a_declared_context_are_external() {
+    let mut bed = bed();
+    let urls = [
+        "https://github.com/acme/widgets/blob/feature/x/docs/guide.md",
+        "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md",
+        "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/guide.md",
+    ];
+
+    for url in urls {
+        let (intent, row) = bed
+            .run(None, "docs/guide.md", false, url)
+            .unwrap_or_else(|_defect| panic!());
+        assert_eq!(intent.kind, IntentKind::ExternalUrl, "{url}");
+        assert_eq!(intent.external_scheme.as_deref(), Some("https"), "{url}");
+        assert_eq!(row.code, ResolutionCode::ExternalUrl, "{url}");
+    }
 }
 
 /// The recognition opening requires the exact path separator after the

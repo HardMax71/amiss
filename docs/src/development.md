@@ -31,6 +31,9 @@ the pull request that broke it fails.
 
 Releases are automated. A bot keeps a release pull request current with the version bump
 and changelog; merging it publishes the crates, the version tag, and the GitHub release.
+If a forge outage leaves that pull request stale, manually dispatching the
+[release automation](../../.github/workflows/release-plz.yml) on `main` refreshes its metadata
+without running the publishing job; crate publication remains restricted to pushes on `main`.
 Security checks are layered in CI as well: dependency update PRs with a cooldown, a weekly
 advisory re-check against a fresh database, [CodeQL](https://codeql.github.com) over both the Rust and the workflows,
 [Scorecard](https://scorecard.dev), secret scanning with push protection, and build provenance attestations on

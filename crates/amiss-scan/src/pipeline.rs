@@ -64,7 +64,7 @@ pub(crate) fn side_observations(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     discovery: &SnapshotDiscovery,
 ) -> Result<(Side, Vec<ErrorDetail>), ErrorDetail> {
     let mut failures: Vec<ErrorDetail> = discovery
@@ -98,7 +98,7 @@ pub(crate) fn side_observations(
                         scan_resources,
                         &mut cache,
                         discovery,
-                        github,
+                        forge,
                         &record.path,
                         occurrence.occurrence.construct.is_image(),
                         &occurrence.occurrence.semantic_destination,
@@ -293,7 +293,7 @@ fn commit_controls(
     repo: &Repository,
     git_resources: &mut GitResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     verified_floor: Option<&crate::policy::FloorInput>,
     scan_limits: ScanLimits,
@@ -328,7 +328,7 @@ fn commit_controls(
     )
     .map_err(|(reason, row)| failure(reason, row))?;
     if let Some(context) = external.debt() {
-        crate::adoption::reproduce(repo, git_resources, engine, github, scan_limits, context)
+        crate::adoption::reproduce(repo, git_resources, engine, forge, scan_limits, context)
             .map_err(|row| failure(external_reason(&row), row))?;
     }
     Ok(external)
@@ -341,7 +341,7 @@ fn commit_controls(
 pub fn commit_pair(
     repo: &Repository,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
     candidate_oid: &Oid,
@@ -366,7 +366,7 @@ pub fn commit_pair(
         repo,
         &mut git_resources,
         engine,
-        github,
+        forge,
         setup_shell,
         verified_floor,
         scan_limits,
@@ -397,7 +397,7 @@ pub fn commit_pair(
         &mut git_resources,
         &mut base_scan,
         engine,
-        github,
+        forge,
         &includes,
         base_tree,
     );
@@ -406,7 +406,7 @@ pub fn commit_pair(
         &mut git_resources,
         &mut candidate_scan,
         engine,
-        github,
+        forge,
         &includes,
         candidate_tree,
     );
@@ -654,7 +654,7 @@ fn staged_candidate(
     git_resources: &mut GitResources,
     candidate_scan: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_identity: &SnapshotIdentity,
     includes: &crate::policy::Includes,
@@ -675,7 +675,7 @@ fn staged_candidate(
         git_resources,
         candidate_scan,
         engine,
-        github,
+        forge,
         &discovery,
         base_failures,
     );
@@ -689,7 +689,7 @@ fn staged_sides(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     candidate_discovery: &SnapshotDiscovery,
     base_failures: Vec<ErrorDetail>,
 ) -> (Option<Side>, Vec<ErrorDetail>) {
@@ -699,7 +699,7 @@ fn staged_sides(
         git_resources,
         scan_resources,
         engine,
-        github,
+        forge,
         candidate_discovery,
     ) {
         Ok((side, candidate_failures)) => {
@@ -753,7 +753,7 @@ fn staged_base(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     includes: &crate::policy::Includes,
     setup_shell: &SetupShell,
     base_placeholder: SnapshotIdentity,
@@ -764,7 +764,7 @@ fn staged_base(
         git_resources,
         scan_resources,
         engine,
-        github,
+        forge,
         includes,
         base_tree,
     )
@@ -852,7 +852,7 @@ fn evaluate_tree(
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
@@ -864,7 +864,7 @@ fn evaluate_tree(
         git_resources,
         scan_resources,
         engine,
-        github,
+        forge,
         &discovery,
     )?;
     Ok((
@@ -1160,7 +1160,7 @@ fn staged_open(
 pub fn staged_index(
     repo: &Repository,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
 ) -> Built {
@@ -1212,7 +1212,7 @@ pub fn staged_index(
         &mut git_resources,
         &mut base_scan,
         engine,
-        github,
+        forge,
         &includes,
         setup_shell,
         base_placeholder,
@@ -1227,7 +1227,7 @@ pub fn staged_index(
         &mut git_resources,
         &mut candidate_scan,
         engine,
-        github,
+        forge,
         setup_shell,
         &base_evaluated.identity,
         &includes,

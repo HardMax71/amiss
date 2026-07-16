@@ -50,7 +50,7 @@ pub struct Resolution {
 /// The trusted run context for same-repository recognition: the declared
 /// host and dialect, lowercase owner and repository, the two exact full
 /// branch refs, and the candidate commit for OID-pinned dialect forms.
-/// Without it every forge URL is foreign.
+/// Without it every absolute forge URL remains an external URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForgeContext {
     pub host: String,
@@ -298,9 +298,9 @@ const fn hex_value(byte: u8) -> Option<u8> {
 /// Absolute URIs under `uri-reference`: ASCII generic syntax, no
 /// normalization, two-hex-digit escapes, and for HTTP(S) a `//` plus nonempty
 /// authority. Only the emitted scheme is lowercased. The exact `https://`
-/// spelling of the declared host opens same-repository recognition, the
-/// github.com literal when no identity was declared; everything else
-/// syntactically valid is external.
+/// spelling of the declared host opens same-repository recognition; without
+/// a declared forge context every syntactically valid absolute URI is
+/// external.
 #[expect(
     clippy::too_many_arguments,
     reason = "the resolver context is the contract's"
@@ -340,10 +340,11 @@ fn absolute(
             return Ok(invalid(query, fragment));
         }
     }
-    let recognition_host = context.map_or("github.com", |identity| identity.host.as_str());
-    if let Some(suffix) = same_repo_suffix(path_part, recognition_host) {
+    if let Some(identity) = context
+        && let Some(suffix) = same_repo_suffix(path_part, &identity.host)
+    {
         return forge::resolve(
-            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
+            repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
         );
     }
     Ok((

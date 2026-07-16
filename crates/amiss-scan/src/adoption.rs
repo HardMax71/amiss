@@ -34,7 +34,7 @@ pub fn reproduce(
     repo: &Repository,
     git: &mut GitResources,
     engine: &EngineProvenance,
-    github: Option<&ForgeContext>,
+    forge: Option<&ForgeContext>,
     scan_limits: ScanLimits,
     context: &DebtContext,
 ) -> Result<(), ErrorDetail> {
@@ -55,7 +55,7 @@ pub fn reproduce(
     let discovery =
         crate::discovery::discover_scoped(repo, git, &mut scan, &includes, &tree, &documents)
             .map_err(|defect| detail(&defect, None))?;
-    let (side, failures) = side_observations(repo, git, &mut scan, engine, github, &discovery)?;
+    let (side, failures) = side_observations(repo, git, &mut scan, engine, forge, &discovery)?;
     if let Some(first) = failures.into_iter().next() {
         return Err(first);
     }
