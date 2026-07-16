@@ -16,7 +16,7 @@ use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, IntentKind,
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+        digest: hb("amiss/scanner-engine", b"test engine"),
     }
 }
 
@@ -79,8 +79,8 @@ fn observation(from: &Spec) -> Observation {
             end_line: 1,
             end_column: 11,
         },
-        projection_digest: hb("amiss/scanner-source-projection/v1", from.block.as_bytes()),
-        raw_destination_digest: hb("amiss/scanner-raw-destination/v1", b"x"),
+        projection_digest: hb("amiss/scanner-source-projection", from.block.as_bytes()),
+        raw_destination_digest: hb("amiss/scanner-raw-destination", b"x"),
     };
     Observation {
         id: occurrence_id(
@@ -338,10 +338,10 @@ fn comparison_findings_follow_step_four() {
     let mut base_available = spec("d.md", "t.md", ResolutionCode::ExactPath);
     base_available.resolution.content_availability = ContentAvailability::Available;
     base_available.resolution.projection_digest =
-        Some(hb("amiss/scanner-target-projection/v1", b"before"));
+        Some(hb("amiss/scanner-target-projection", b"before"));
     let mut candidate_available = base_available_clone(&base_available);
     candidate_available.resolution.projection_digest =
-        Some(hb("amiss/scanner-target-projection/v1", b"after"));
+        Some(hb("amiss/scanner-target-projection", b"after"));
     let impact = evaluate(
         &[],
         &comparisons(

@@ -24,7 +24,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+        digest: hb("amiss/scanner-engine", b"test engine"),
     }
 }
 

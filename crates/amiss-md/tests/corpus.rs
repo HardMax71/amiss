@@ -17,7 +17,7 @@ fn root() -> PathBuf {
 /// manifest; this constant must then be updated by hand, so no golden can move
 /// without the move appearing in review.
 const CORPUS_DIGEST: &str =
-    "sha256:c3cc4ed42be075e14027bba572f20c0a9f3fc284aaeb0063b37c26c13906849c";
+    "sha256:912e32c2284d951479303a9e96f4790101a2f78a8e20fe3abdc8015fc7f5481b";
 
 /// The manifest is the gate: every case's raw source with its exact node count
 /// and depth under every published profile. It is regenerated here and must
@@ -44,7 +44,7 @@ fn manifest_reproduces() {
     let mut wire = canonical(&built);
     wire.push(b'\n');
     let digest = hb(corpus::SCHEMA, &wire).to_string();
-    let path = root().join("corpus/parser-profile-corpus-v1.json");
+    let path = root().join("corpus/parser-profile-corpus.json");
 
     if std::env::var_os("AMISS_CORPUS_BLESS").is_some() {
         fs::write(&path, &wire).unwrap();

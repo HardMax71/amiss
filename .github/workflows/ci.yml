@@ -63,6 +63,7 @@ jobs:
       - run: cargo build --locked --release -p amiss -p amiss-bootstrap
       - shell: bash
         env:
+          SERVER_URL: ${{ github.server_url }}
           OWNER: ${{ github.repository_owner }}
           REPOSITORY: ${{ github.repository }}
           COMMIT: ${{ github.sha }}
@@ -73,9 +74,12 @@ jobs:
           install -m 0644 action/launcher.js action-tree/dist/launcher.js
           install -m 0644 action/action.yml action-tree/action.yml
           install -m 0755 target/release/amiss action-tree/dist/amiss-linux-x86_64
+          HOST="${SERVER_URL#*://}"
+          HOST="${HOST%/}"
           ./target/release/amiss-manifest \
             --tree action-tree \
             --version 0.0.0-smoke \
+            --host "$HOST" \
             --owner "${OWNER,,}" \
             --repository "$(basename "$REPOSITORY")" \
             --commit "$COMMIT" \
@@ -93,7 +97,8 @@ jobs:
         run: |
           set -eu
           echo "exit class ${EXIT_CLASS}"
-          jq -e '.schema == "amiss/scanner-report-envelope/v3"' "$REPORT" > /dev/null
+          jq -e '.schema == "amiss/scanner-report-envelope"' "$REPORT" > /dev/null
+          jq -e '.payload.schema == "amiss/scanner-report-payload"' "$REPORT" > /dev/null
           jq -e '.payload.evaluation.forge == "github"' "$REPORT" > /dev/null
           jq -e '.payload.documents | length > 0' "$REPORT" > /dev/null
 

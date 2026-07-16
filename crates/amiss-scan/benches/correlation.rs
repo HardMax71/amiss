@@ -61,7 +61,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
     let token = format!("{side}/{index}");
     let target = repo_path(target.to_owned());
     Observation {
-        id: hb("amiss/bench-correlation-id/v1", token.as_bytes()),
+        id: hb("amiss/bench-correlation-id", token.as_bytes()),
         document: repo_path("docs/references.md".to_owned()),
         span: (0, 0),
         display: SpanDisplay {
@@ -82,8 +82,8 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
             query: None,
             fragment: None,
         },
-        raw_destination_digest: hb("amiss/scanner-raw-destination/v1", target.as_bytes()),
-        projection_digest: hb("amiss/scanner-source-projection/v1", b"reference"),
+        raw_destination_digest: hb("amiss/scanner-raw-destination", target.as_bytes()),
+        projection_digest: hb("amiss/scanner-source-projection", b"reference"),
         resolution: Resolution {
             code: ResolutionCode::PathNotFound,
             path: Some(target),

@@ -1,0 +1,29 @@
+{
+  "schema": "amiss/scanner-candidate-identity",
+  "mode": "index",
+  "event_kind": "local-index",
+  "finality": "local-nonfinal",
+  "repository": null,
+  "ref": null,
+  "default_branch_ref": null,
+  "base": {
+    "kind": "git-commit",
+    "object_format": "sha1",
+    "commit_oid": "1111111111111111111111111111111111111111",
+    "tree_oid": "2222222222222222222222222222222222222222"
+  },
+  "candidate": {
+    "kind": "index",
+    "snapshot_schema": "amiss/scanner-snapshot",
+    "identity_scope": "complete-logical-index",
+    "base_object_format": "sha1",
+    "base_commit_oid": "1111111111111111111111111111111111111111",
+    "index_projection_digest": "sha256:d6ca91112ae5d88bde3bbfc8a5e0a7061489d779ef9ef376066444516bd12965",
+    "entry_count": 2,
+    "snapshot_digest": "sha256:7e0c80cd082ee65db62266d69357af843f91d6e30ce5a0c7cb4186478a765066"
+  },
+  "materialization": "index",
+  "skip_worktree_paths": 1,
+  "index_only_materialized_paths": 0,
+  "forge": null
+}

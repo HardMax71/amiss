@@ -52,7 +52,7 @@ fn a_policy_that_names_a_command_or_a_plugin_is_refused_and_nothing_runs() {
         root.join(".amiss/scanner-policy.json"),
         format!(
             r#"{{
-  "schema": "amiss/scanner-policy/v1",
+  "schema": "amiss/scanner-policy",
   "document_includes": [],
   "protected_inventory": [],
   "finding_dispositions": [],
@@ -836,7 +836,7 @@ fn a_policy_tree_include_covers_byte_named_documents() {
     let policy = amiss_fixtures::loose_object(
         root,
         "blob",
-        br#"{"schema":"amiss/scanner-policy/v1","document_includes":[{"kind":"tree","path":"specs"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+        br#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"specs"}],"protected_inventory":[],"finding_dispositions":[]}"#,
     )
     .unwrap();
     let hidden = amiss_fixtures::loose_object(root, "blob", b"included bytes\n").unwrap();
@@ -958,12 +958,11 @@ fn byte_and_text_paths_interleave_deterministically_in_byte_order() {
     );
 }
 
-/// The preimage-language law, enforced: a reference-scoped finding key
-/// embeds only content-derived values, and this exact digest was recorded
-/// from the engine before the flip to the second contract. An all-text
-/// repository must keep every such identity across the versions.
+/// The rolling preimage law, enforced: a reference-scoped finding key embeds
+/// only content-derived values, and the same pinned repository always yields
+/// the same identity under the current unversioned domain.
 #[test]
-fn a_text_repository_keeps_its_prior_finding_keys() {
+fn a_text_repository_has_a_reproducible_finding_key() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -1019,7 +1018,7 @@ fn a_text_repository_keeps_its_prior_finding_keys() {
         .unwrap();
     assert_eq!(
         finding["finding_key"],
-        "sha256:7e1df2d99d47f73d61f21c5c26ea993b836569b408ae342196e1d43dfd14d4b8",
-        "recorded from the engine before the flip; the preimage language only widened"
+        "sha256:2bb58978450a0f6051e47e92a2b8ea777b9e8fc5cea5a6319bff3c2e691262b2",
+        "the pinned repository fixes the current rolling-contract identity"
     );
 }

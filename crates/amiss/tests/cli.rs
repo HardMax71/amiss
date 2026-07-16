@@ -255,7 +255,7 @@ fn repository_policy_includes_raises_and_weakening() {
     let fx = fixture();
     let root = fx.root();
 
-    let strong_policy = r#"{"schema":"amiss/scanner-policy/v1","document_includes":[{"kind":"tree","path":"specs"}],"protected_inventory":["docs/guide.md"],"finding_dispositions":[{"finding_kind":"explicit-target-missing","disposition":"fail"}]}"#;
+    let strong_policy = r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"specs"}],"protected_inventory":["docs/guide.md"],"finding_dispositions":[{"finding_kind":"explicit-target-missing","disposition":"fail"}]}"#;
     fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
     fs::create_dir_all(root.join("specs")).unwrap_or_default();
     fs::write(root.join(".amiss/scanner-policy.json"), strong_policy).unwrap_or_default();
@@ -266,7 +266,7 @@ fn repository_policy_includes_raises_and_weakening() {
 
     fs::write(
         root.join(".amiss/scanner-policy.json"),
-        r#"{"schema":"amiss/scanner-policy/v1","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
     )
     .unwrap_or_default();
     git(root, &["add", "."]);
@@ -341,7 +341,7 @@ fn a_raised_disposition_fails_a_passing_observe_run() {
     fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
     fs::write(
         root.join(".amiss/scanner-policy.json"),
-        r#"{"schema":"amiss/scanner-policy/v1","document_includes":[],"protected_inventory":[],"finding_dispositions":[{"finding_kind":"explicit-target-missing","disposition":"fail"}]}"#,
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[{"finding_kind":"explicit-target-missing","disposition":"fail"}]}"#,
     )
     .unwrap_or_default();
     git(root, &["add", "."]);
@@ -440,9 +440,9 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
     let root = fx.root();
     fs::write(
         root.join("docs/governed.md"),
-        "A claim [here][amiss:claim v1] and [fine](guide.md).\n\n\
-         [amiss:claim v1]: ./subject.md \"claim\"\n\
-         [amiss:claim v1]: ./subject.md \"claim\"\n",
+        "A claim [here][amiss:claim] and [fine](guide.md).\n\n\
+         [amiss:claim]: ./subject.md \"claim\"\n\
+         [amiss:claim]: ./subject.md \"claim\"\n",
     )
     .unwrap_or_default();
     git(root, &["add", "."]);
@@ -654,7 +654,7 @@ fn the_bytes_the_binary_prints_are_a_schema_clean_report() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -899,7 +899,7 @@ fn a_sha256_repository_yields_the_same_facts_as_sha1() {
     }
 }
 
-/// V0 supplies no external controls, and the report must say so in the exact
+/// When no external controls are supplied, the report must say so in the exact
 /// vocabulary reserved for that: `none`, with no trust source and no digest.
 /// The row this pins is not the absence, it is the labeling. A report that
 /// described an unsupplied floor as anything but none, or dressed the local
@@ -1013,7 +1013,7 @@ fn a_skip_worktree_document_is_read_from_the_index_and_disclosed() {
 
 /// A repository path is untrusted bytes, and the human projection is a place those
 /// bytes could become terminal control sequences, a forged workflow command, or a
-/// second log line. The `human-atom-v1` law says every scalar outside printable
+/// second log line. The `human-atom` law says every scalar outside printable
 /// ASCII becomes a `\uXXXX` escape, so an ESC, a carriage return, and a bell in a
 /// document's own path all leave the renderer inert. The escaping law has unit
 /// tests; this drives a genuinely hostile path all the way through the binary and
@@ -1147,7 +1147,7 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
     assert_eq!((code, stderr.as_str()), (0, ""));
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -1157,7 +1157,11 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
         .iter_errors(&envelope)
         .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
-    assert_eq!(defects, Vec::<String>::new(), "schema-clean under v3");
+    assert_eq!(
+        defects,
+        Vec::<String>::new(),
+        "schema-clean under the rolling contract"
+    );
 
     let payload = payload(&stdout);
     assert_eq!(payload["evaluation"]["forge"], "github");
@@ -1214,7 +1218,7 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
     assert_eq!((code, stderr.as_str()), (0, ""));
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -1224,7 +1228,11 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
         .iter_errors(&envelope)
         .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
-    assert_eq!(defects, Vec::<String>::new(), "schema-clean under v3");
+    assert_eq!(
+        defects,
+        Vec::<String>::new(),
+        "schema-clean under the rolling contract"
+    );
 
     let payload = payload(&stdout);
     assert_eq!(payload["evaluation"]["forge"], "gitlab");
@@ -1279,7 +1287,7 @@ fn a_codeberg_identity_defaults_to_the_gitea_dialect_end_to_end() {
     assert_eq!((code, stderr.as_str()), (0, ""));
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -1289,7 +1297,11 @@ fn a_codeberg_identity_defaults_to_the_gitea_dialect_end_to_end() {
         .iter_errors(&envelope)
         .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
-    assert_eq!(defects, Vec::<String>::new(), "schema-clean under v3");
+    assert_eq!(
+        defects,
+        Vec::<String>::new(),
+        "schema-clean under the rolling contract"
+    );
 
     let payload = payload(&stdout);
     assert_eq!(payload["evaluation"]["forge"], "gitea");

@@ -561,13 +561,17 @@ fn dispatch(bed: &mut Bed, case: &Value) {
 fn the_reference_constructor_vectors_hold() {
     let raw = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../spec/examples/reference-constructor-v2-vectors.json"),
+            .join("../../spec/examples/reference-constructor-vectors.json"),
     )
     .unwrap();
     let vectors: Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(
         vectors.get("schema").and_then(Value::as_str),
-        Some("amiss/reference-constructor-vectors/v2")
+        Some("amiss/reference-constructor-vectors")
+    );
+    assert_eq!(
+        vectors.get("contract").and_then(Value::as_str),
+        Some("reference-constructor")
     );
     let cases = vectors.get("cases").and_then(Value::as_array).unwrap();
     assert!(cases.len() >= 55, "the vector set only grows");

@@ -7,11 +7,11 @@ use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use crate::resolve::Intent;
 use crate::scan::ScannedOccurrence;
 
-pub const OBSERVATION_ID_DOMAIN: &str = "amiss/observation-id/v1";
-pub const OBSERVATION_ID_INPUT_SCHEMA: &str = "amiss/scanner-observation-id-input/v1";
-pub const STRUCTURAL_ADDRESS_SCHEMA: &str = "amiss/scanner-structural-address/v1";
-pub const LINK_QUERY_DOMAIN: &str = "amiss/scanner-link-query/v1";
-pub const LINK_FRAGMENT_DOMAIN: &str = "amiss/scanner-link-fragment/v1";
+pub const OBSERVATION_ID_DOMAIN: &str = "amiss/observation-id";
+pub const OBSERVATION_ID_INPUT_SCHEMA: &str = "amiss/scanner-observation-id-input";
+pub const STRUCTURAL_ADDRESS_SCHEMA: &str = "amiss/scanner-structural-address";
+pub const LINK_QUERY_DOMAIN: &str = "amiss/scanner-link-query";
+pub const LINK_FRAGMENT_DOMAIN: &str = "amiss/scanner-link-fragment";
 
 fn nullable_digest(digest: Option<Digest>) -> Value {
     digest.map_or(Value::Null, |value| Value::String(value.to_string()))
@@ -92,7 +92,8 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
 }
 
 /// The structural address: the child-index path to the syntax node itself,
-/// with the two reserved indices fixed at zero in v0.
+/// with the two reserved indices fixed at zero by the structural-address
+/// contract.
 #[must_use]
 pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
     Value::Object(vec![

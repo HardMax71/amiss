@@ -27,7 +27,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+        digest: hb("amiss/scanner-engine", b"test engine"),
     }
 }
 
@@ -180,7 +180,7 @@ fn a_complete_report_validates_against_the_schema() {
     );
 
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -361,7 +361,7 @@ fn a_ceiling_of_one_emits_only_the_sentinel() {
 )]
 fn schema_max_items(array: &str) -> u64 {
     let text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -609,11 +609,11 @@ fn a_finding_location_carries_the_real_display_positions() {
     );
 }
 
-/// Recorded before the identity type learned a host field, asserted after:
-/// the candidate-identity preimage keeps its v1 domain and its repository
-/// row keeps spelling github.com, so the threading may not move a byte.
+/// The rolling candidate identity binds the selected URL dialect as well as
+/// the repository and snapshots. The fixed digest catches accidental preimage
+/// drift; changing only the forge must also change the identity.
 #[test]
-fn the_candidate_identity_digest_survives_the_identity_threading() {
+fn the_candidate_identity_digest_binds_the_selected_forge() {
     let side = |commit: char, tree: char| SnapshotIdentity {
         object_format: "sha1",
         commit_oid: commit.to_string().repeat(40),
@@ -635,16 +635,22 @@ fn the_candidate_identity_digest_survives_the_identity_threading() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
+    let github = amiss_scan::report::candidate_identity_digest(&setup);
     assert_eq!(
-        amiss_scan::report::candidate_identity_digest(&setup).to_string(),
-        "sha256:36550c2f9ea498dcebd88a786e707fbc02bc907d98c256a670815ffb0ba88cce"
+        github.to_string(),
+        "sha256:08494792d296feb1198c922b78b6c6ed559f6d9f18588b0b040a06aeb2cd49ec"
+    );
+    let mut gitlab = setup;
+    gitlab.forge = Some(amiss_wire::model::ForgeDialect::Gitlab);
+    assert_ne!(
+        github,
+        amiss_scan::report::candidate_identity_digest(&gitlab),
+        "a trusted-time statement cannot be replayed under another URL dialect"
     );
 }
 
 /// The evaluation echoes the declared identity's host instead of a literal:
-/// a run claiming a self-hosted forge says so in its own report. The wire
-/// here is deliberately not schema-validated; v2 cannot spell this host and
-/// the third contract is not wired in yet.
+/// a run claiming a self-hosted forge says so in its own report.
 #[test]
 fn the_evaluation_echoes_a_self_hosted_forge_host() {
     let dir = TempDir::new().unwrap();

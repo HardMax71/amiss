@@ -81,7 +81,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         .map(|raw| RepoPathText::new((*raw).to_owned()).expect("valid inventory path"))
         .collect();
     let policy = ScannerPolicy {
-        digest: hb("amiss/raw-evidence/v1", b"policy fixture"),
+        digest: hb("amiss/raw-evidence", b"policy fixture"),
         document_includes,
         protected_inventory,
         finding_dispositions: Vec::new(),

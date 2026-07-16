@@ -32,7 +32,7 @@ fn synthetic_value() -> Value {
     Value::Object(vec![
         (
             "schema".to_owned(),
-            Value::String("bench/synthetic/v1".to_owned()),
+            Value::String("bench/synthetic".to_owned()),
         ),
         ("rows".to_owned(), Value::Array(rows)),
     ])
@@ -62,7 +62,7 @@ fn digest_value(bencher: Bencher<'_, '_>) {
     let length = canonical_length(&value);
     bencher
         .counter(BytesCount::new(length))
-        .bench_local(|| hj("amiss/scanner-report-payload/v1", black_box(&value)));
+        .bench_local(|| hj("amiss/scanner-report-payload", black_box(&value)));
 }
 
 #[divan::bench(sample_count = 20)]
@@ -78,5 +78,5 @@ fn digest_bytes(bencher: Bencher<'_, '_>) {
     let bytes = canonical(&synthetic_value());
     bencher
         .counter(BytesCount::of_slice(&bytes))
-        .bench_local(|| hb("amiss/raw-evidence/v1", black_box(&bytes)));
+        .bench_local(|| hb("amiss/raw-evidence", black_box(&bytes)));
 }

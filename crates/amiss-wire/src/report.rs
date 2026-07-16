@@ -4,7 +4,7 @@ use crate::digest::{Digest, hj};
 use crate::json::{Scratch, Sink, Value, canonical, canonical_length};
 use crate::model::Adapter;
 
-pub const ENGINE_CONTRACT: &str = "amiss/scanner-v0";
+pub const ENGINE_CONTRACT: &str = "amiss/scanner";
 
 /// The exact `machine-json-bytes` reservation: the report wire, canonical
 /// envelope plus the trailing newline, never exceeds this.
@@ -139,11 +139,11 @@ impl Sink for StagedSink<'_> {
         self.staging.extend_from_slice(piece.as_bytes());
     }
 }
-pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine/v1";
-pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v3";
-pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload/v3";
-pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract/v1";
-pub const BUILT_IN_POLICY_VERSION: &str = "scanner-policy-defaults-v1";
+pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine";
+pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
+pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload";
+pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract";
+pub const BUILT_IN_POLICY: &str = "scanner-policy-defaults";
 
 /// The closed analysis-error codes in schema declaration order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -497,7 +497,7 @@ pub fn engine_block(engine: &EngineProvenance) -> Value {
         ("engine_version", string(&engine.version)),
         ("engine_digest", string(&engine.digest.to_string())),
         ("action_provenance", object(vec![("kind", string("local"))])),
-        ("built_in_policy_version", string(BUILT_IN_POLICY_VERSION)),
+        ("built_in_policy", string(BUILT_IN_POLICY)),
         ("adapters", Value::Array(adapter_rows)),
     ])
 }
@@ -740,7 +740,7 @@ impl Disposition {
     }
 }
 
-/// The complete closed v0 finding taxonomy, in schema declaration order.
+/// The complete closed finding taxonomy, in schema declaration order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FindingKind {
     ExplicitTargetMissing,
@@ -861,7 +861,7 @@ impl FindingKind {
     }
 
     /// The first policy-step result for a candidate fact under
-    /// `scanner-policy-defaults-v1`, per profile.
+    /// `scanner-policy-defaults`, per profile.
     #[must_use]
     pub const fn built_in_disposition(self, enforce: bool) -> Disposition {
         match self {
@@ -900,7 +900,7 @@ impl FindingKind {
     }
 }
 
-pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile/v1";
+pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile";
 
 /// The zero-capability sandbox descriptor the engine asserts for itself, and
 /// its digest. A future wrapper verifies rather than asserts it.
@@ -908,7 +908,7 @@ pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile/v1";
 pub fn sandbox_descriptor() -> (Value, Digest) {
     let descriptor = object(vec![
         ("schema", string(SANDBOX_SCHEMA)),
-        ("profile", string("scanner-v0-zero-capability-v1")),
+        ("profile", string("scanner-zero-capability")),
         ("isolation", string("process")),
         ("network", string("denied")),
         ("child_processes", string("denied")),
@@ -917,7 +917,7 @@ pub fn sandbox_descriptor() -> (Value, Digest) {
         ("secrets", string("absent")),
         ("shared_cache", string("denied")),
         ("workspace", string("read-only")),
-        ("environment", string("scanner-process-env-v1")),
+        ("environment", string("scanner-process-env")),
         (
             "physical_memory",
             object(vec![(

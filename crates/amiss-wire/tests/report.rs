@@ -121,7 +121,7 @@ fn builds_the_fatal_incomplete_envelope() {
     let engine_block = member(payload, "engine");
     assert_eq!(
         member(engine_block, "engine_contract"),
-        &Value::String("amiss/scanner-v0".to_owned())
+        &Value::String("amiss/scanner".to_owned())
     );
     let Value::Array(adapters) = member(engine_block, "adapters") else {
         panic!("adapters is not an array");
@@ -130,7 +130,7 @@ fn builds_the_fatal_incomplete_envelope() {
         .iter()
         .map(|row| strings(&Value::Array(vec![member(row, "adapter_id").clone()])).remove(0))
         .collect();
-    assert_eq!(ids, vec!["markdown-v1", "mdx-v1", "plain-advisory-v1"]);
+    assert_eq!(ids, vec!["markdown", "mdx", "plain-advisory"]);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 This page contains future work, not release notes or a promise that every candidate will
 ship. The factual boundary of the current product is in [Project status](status.md), and
 completed changes move to the
-[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md) instead of being
+[changelog](../../CHANGELOG.md) instead of being
 repeated here.
 
 ## Now: validate and harden
@@ -37,12 +37,14 @@ semantics, and bootstrap supervision already exist; their exact maturity is reco
 trust boundary:
 
 - acquire and authenticate provider-created evaluation and control requests;
+- implement provider adapters that translate independently authenticated run context into
+  the forge-neutral request contract; the GitHub composite Action is currently only a
+  convenience adapter, and GitLab, Gitea-family, and other provider-authenticated adapters
+  are unsupported;
 - feed the authenticated request into the engine instead of constructing an all-absent
   control shell in the CLI;
 - include and invoke `amiss-bootstrap` in the protected required-check path;
 - define trust anchors, freshness, revocation, and replay behavior;
-- revise control formats so every reportable byte path and supported forge identity can be
-  bound without lossy text conversions; and
 - cover wrong identity, wrong tree, expiry, replay, missing output, timeout, and tampered
   runtime closure in end-to-end negative tests.
 

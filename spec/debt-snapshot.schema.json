@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:debt-snapshot",
+  "title": "Amiss external adoption-debt snapshot",
+  "description": "The rolling externally reviewed exact-fact debt set. It has no magnitude or maximum-measure field: a candidate fact is tolerated only by exact fact-digest equality; absence is resolution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "repository",
+    "ref",
+    "organization_floor_digest",
+    "adoption_tree",
+    "adoption_report_payload_digest",
+    "created_at",
+    "items"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/debt-snapshot"
+    },
+    "repository": {
+      "$ref": "#/$defs/RepositoryIdentity"
+    },
+    "ref": {
+      "$ref": "#/$defs/ExactBranchRef"
+    },
+    "organization_floor_digest": {
+      "$ref": "#/$defs/Digest"
+    },
+    "adoption_tree": {
+      "$ref": "#/$defs/TreeIdentity"
+    },
+    "adoption_report_payload_digest": {
+      "$ref": "#/$defs/Digest"
+    },
+    "created_at": {
+      "$ref": "#/$defs/UtcInstant"
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 100000,
+      "description": "Sort by debt_id UTF-8 bytes. Debt IDs and finding keys are each globally unique.",
+      "x-amiss-order": [
+        "debt_id"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/DebtItem"
+      }
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "OwnerId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^(team|service|user):[a-z0-9][a-z0-9._/-]*$"
+    },
+    "UtcInstant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    },
+    "RepoPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![\\s\\S]*//)(?![\\s\\S]*(?:^|/)(?:\\.{1,2})(?:/|$))(?![\\s\\S]*[\\\\\\u0000])[^/]+(?:/[^/]+)*$"
+    },
+    "RepositoryIdentity": {
+      "type": "object",
+      "description": "An opaque caller-canonical host, slash-joined owner segments, and repository name. Exact bytes are the identity; the engine does not resolve or normalize the host.",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "owner",
+        "name"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!\\.{1,2}$)[a-z0-9._-]{1,100}$",
+          "maxLength": 100
+        }
+      }
+    },
+    "ExactBranchRef": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 266,
+      "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+    },
+    "TreeIdentity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "object_format",
+            "tree_oid"
+          ],
+          "properties": {
+            "object_format": {
+              "const": "sha1"
+            },
+            "tree_oid": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "object_format",
+            "tree_oid"
+          ],
+          "properties": {
+            "object_format": {
+              "const": "sha256"
+            },
+            "tree_oid": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "DebtEligibleFindingKind": {
+      "enum": [
+        "explicit-target-missing",
+        "explicit-target-type-mismatch"
+      ]
+    },
+    "SourceConstruct": {
+      "enum": [
+        "markdown-inline-link",
+        "markdown-full-reference-link",
+        "markdown-collapsed-reference-link",
+        "markdown-shortcut-reference-link",
+        "markdown-autolink",
+        "markdown-inline-image",
+        "markdown-full-reference-image",
+        "markdown-collapsed-reference-image",
+        "markdown-shortcut-reference-image"
+      ]
+    },
+    "RepositoryTargetIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "target_kind",
+        "query_digest",
+        "fragment_digest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "repository-path"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "target_kind": {
+          "enum": [
+            "blob",
+            "tree",
+            "either"
+          ]
+        },
+        "query_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fragment_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "DebtOccurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source_projection_digest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "source-projection"
+        },
+        "source_projection_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "DebtFindingScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document",
+        "source_construct",
+        "normalized_target_intent",
+        "occurrence"
+      ],
+      "properties": {
+        "kind": {
+          "const": "reference"
+        },
+        "document": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "source_construct": {
+          "$ref": "#/$defs/SourceConstruct"
+        },
+        "normalized_target_intent": {
+          "$ref": "#/$defs/RepositoryTargetIntent"
+        },
+        "occurrence": {
+          "$ref": "#/$defs/DebtOccurrence"
+        }
+      }
+    },
+    "DebtFindingKeyInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "finding_kind",
+        "scope"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/scanner-finding-key-input"
+        },
+        "finding_kind": {
+          "$ref": "#/$defs/DebtEligibleFindingKind"
+        },
+        "scope": {
+          "$ref": "#/$defs/DebtFindingScope"
+        }
+      }
+    },
+    "StructuralResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "code",
+        "path",
+        "entry_kind",
+        "git_mode",
+        "raw_digest",
+        "projection_digest",
+        "content_availability"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "missing",
+            "type-mismatch"
+          ]
+        },
+        "code": {
+          "enum": [
+            "path-not-found",
+            "target-type-mismatch"
+          ]
+        },
+        "path": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RepoPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "blob",
+            "tree",
+            "symlink",
+            "gitlink",
+            null
+          ]
+        },
+        "git_mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "100644",
+            "100755",
+            "040000",
+            "120000",
+            "160000",
+            null
+          ]
+        },
+        "raw_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "projection_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "content_availability": {
+          "enum": [
+            "available",
+            "not-read",
+            "not-applicable",
+            "lfs-pointer-only"
+          ]
+        }
+      }
+    },
+    "StructuralFactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "resolution",
+        "occurrence_multiplicity"
+      ],
+      "properties": {
+        "kind": {
+          "const": "reference"
+        },
+        "resolution": {
+          "$ref": "#/$defs/StructuralResolution"
+        },
+        "occurrence_multiplicity": {
+          "const": 1
+        }
+      }
+    },
+    "StructuralFindingFactInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "finding_kind",
+        "key_input",
+        "evidence"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/scanner-fact"
+        },
+        "finding_kind": {
+          "$ref": "#/$defs/DebtEligibleFindingKind"
+        },
+        "key_input": {
+          "$ref": "#/$defs/DebtFindingKeyInput"
+        },
+        "evidence": {
+          "$ref": "#/$defs/StructuralFactEvidence"
+        }
+      }
+    },
+    "DebtItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "debt_id",
+        "finding_kind",
+        "key_input",
+        "finding_key",
+        "accepted_fact",
+        "accepted_fact_digest",
+        "owner",
+        "reason",
+        "created_at",
+        "expires_at"
+      ],
+      "properties": {
+        "debt_id": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "finding_kind": {
+          "$ref": "#/$defs/DebtEligibleFindingKind"
+        },
+        "key_input": {
+          "$ref": "#/$defs/DebtFindingKeyInput"
+        },
+        "finding_key": {
+          "$ref": "#/$defs/Digest"
+        },
+        "accepted_fact_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "accepted_fact": {
+          "$ref": "#/$defs/StructuralFindingFactInput"
+        },
+        "owner": {
+          "$ref": "#/$defs/OwnerId"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "\\S"
+        },
+        "created_at": {
+          "$ref": "#/$defs/UtcInstant"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/UtcInstant"
+        }
+      }
+    }
+  }
+}

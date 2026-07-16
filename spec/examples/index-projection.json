@@ -1,0 +1,21 @@
+{
+  "schema": "amiss/scanner-index-projection",
+  "entries": [
+    {
+      "path": "README.md",
+      "entry_kind": "blob",
+      "git_mode": "100644",
+      "object_format": "sha1",
+      "object_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "skip_worktree": false
+    },
+    {
+      "path": "vendor.bin",
+      "entry_kind": "blob",
+      "git_mode": "100644",
+      "object_format": "sha1",
+      "object_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "skip_worktree": true
+    }
+  ]
+}

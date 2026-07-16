@@ -8,11 +8,11 @@ use amiss_wire::digest::hj;
 use amiss_wire::json;
 use amiss_wire::model::{BranchRef, UtcInstant};
 
-const POLICY: &[u8] = include_bytes!("fixtures/scanner-policy-v1.json");
-const FLOOR: &[u8] = include_bytes!("fixtures/organization-floor-v1.json");
+const POLICY: &[u8] = include_bytes!("fixtures/scanner-policy.json");
+const FLOOR: &[u8] = include_bytes!("fixtures/organization-floor.json");
 
 const KEY_INPUT: &str = r#"{
-  "schema": "amiss/scanner-finding-key-input/v1",
+  "schema": "amiss/scanner-finding-key-input",
   "finding_kind": "explicit-target-missing",
   "scope": {
     "kind": "reference",
@@ -35,7 +35,7 @@ const KEY_INPUT: &str = r#"{
 fn fact_json() -> String {
     format!(
         r#"{{
-  "schema": "amiss/scanner-fact/v1",
+  "schema": "amiss/scanner-fact",
   "finding_kind": "explicit-target-missing",
   "key_input": {KEY_INPUT},
   "evidence": {{
@@ -94,7 +94,7 @@ fn debt_item(
 fn debt_snapshot(created_at: &str, items: &[String]) -> String {
     format!(
         r#"{{
-  "schema": "amiss/debt-snapshot/v1",
+  "schema": "amiss/debt-snapshot",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "spec-to-rest" }},
   "ref": "refs/heads/main",
   "organization_floor_digest": "sha256:464a7c6d84ab06c1fd0766b983b8027af18ada5dcefd1ba3252c0cc459430a48",
@@ -132,7 +132,7 @@ fn waiver_item(waiver_id: &str, finding_key: &str, fact_digest: &str, issuer: &s
 fn waiver_bundle(items: &[String]) -> String {
     format!(
         r#"{{
-  "schema": "amiss/waiver-bundle/v1",
+  "schema": "amiss/waiver-bundle",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "spec-to-rest" }},
   "ref": "refs/heads/main",
   "organization_floor_digest": "sha256:464a7c6d84ab06c1fd0766b983b8027af18ada5dcefd1ba3252c0cc459430a48",
@@ -163,7 +163,12 @@ fn parses_the_policy_fixture() {
 #[test]
 fn parses_the_floor_fixture() {
     let floor = OrganizationFloor::parse(FLOOR).unwrap();
-    assert_eq!(floor.floor_id.as_str(), "acme/scanner-floor-2026-07");
+    assert_eq!(floor.schema(), "amiss/organization-floor");
+    assert_eq!(
+        floor.digest,
+        hj("amiss/organization-floor", &json::parse(FLOOR).unwrap())
+    );
+    assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
     assert_eq!(floor.ref_name.as_str(), "refs/heads/main");
     assert_eq!(floor.resource_limits.len(), 2);
     assert_ne!(floor.digest, ScannerPolicy::parse(POLICY).unwrap().digest);
@@ -172,7 +177,7 @@ fn parses_the_floor_fixture() {
 #[test]
 fn rejects_policy_shape_defects() {
     let unknown = br#"{
-      "schema": "amiss/scanner-policy/v1",
+      "schema": "amiss/scanner-policy",
       "document_includes": [],
       "protected_inventory": [],
       "finding_dispositions": [],
@@ -184,7 +189,7 @@ fn rejects_policy_shape_defects() {
     );
 
     let wrong_schema = br#"{
-      "schema": "assure/scanner-policy/v1",
+      "schema": "assure/scanner-policy",
       "document_includes": [],
       "protected_inventory": [],
       "finding_dispositions": []
@@ -195,7 +200,7 @@ fn rejects_policy_shape_defects() {
     );
 
     let unsorted = br#"{
-      "schema": "amiss/scanner-policy/v1",
+      "schema": "amiss/scanner-policy",
       "document_includes": [],
       "protected_inventory": ["b.md", "a.md"],
       "finding_dispositions": []
@@ -208,7 +213,7 @@ fn rejects_policy_shape_defects() {
     for bad_path in ["/abs.md", "a//b.md", "a/../b.md", "a\\\\b.md", "a/./b.md"] {
         let doc = format!(
             r#"{{
-              "schema": "amiss/scanner-policy/v1",
+              "schema": "amiss/scanner-policy",
               "document_includes": [],
               "protected_inventory": ["{bad_path}"],
               "finding_dispositions": []
@@ -265,7 +270,7 @@ fn rejects_floors_over_the_combined_entry_limit() {
     };
     let doc = format!(
         r#"{{
-  "schema": "amiss/organization-floor/v1",
+  "schema": "amiss/organization-floor",
   "floor_id": "acme/too-big",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
   "ref": "refs/heads/main",
@@ -293,7 +298,7 @@ fn rejects_floors_over_the_combined_entry_limit() {
 #[test]
 fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
     let doc = br#"{
-  "schema": "amiss/organization-floor/v1",
+  "schema": "amiss/organization-floor",
   "floor_id": "acme/self-inconsistent",
   "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
   "ref": "refs/heads/main",
@@ -318,7 +323,7 @@ fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
 }
 
 #[test]
-fn branch_refs_follow_ref_format_v1() {
+fn branch_refs_follow_ref_format() {
     let valid = [
         "refs/heads/main",
         "refs/heads/feature/a+b",
@@ -387,6 +392,7 @@ fn parses_a_valid_debt_snapshot() {
     );
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
     let snapshot = DebtSnapshot::parse(doc.as_bytes()).unwrap();
+    assert_eq!(snapshot.schema(), "amiss/debt-snapshot");
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(snapshot.items.first().unwrap().finding_key.to_string(), key);
 }
@@ -495,6 +501,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
     let doc = waiver_bundle(&[item]);
     let bundle = WaiverBundle::parse(doc.as_bytes()).unwrap();
+    assert_eq!(bundle.schema(), "amiss/waiver-bundle");
     assert_eq!(bundle.items.len(), 1);
 
     let same_owner = waiver_item("waiver/one", &key, &fact, "team:docs-platform");
@@ -535,12 +542,13 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
 }
 
 const TIME_STATEMENT: &str = r#"{
-  "schema": "amiss/scanner-trusted-time-statement/v1",
-  "controller": "github-actions-required-workflow-clock-v1",
-  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "schema": "amiss/scanner-trusted-time-statement",
+  "controller": "external-required-check-clock",
+  "repository": { "host": "gitlab.com", "owner": "platform/security", "name": "docs" },
   "ref": "refs/heads/main",
   "candidate_identity_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-  "provider_run_id": "987654321",
+  "provider": "gitlab-ci",
+  "provider_run_id": "pipeline/01J2Z9-7",
   "provider_run_attempt": 2,
   "evaluation_instant": "2026-07-12T10:00:00Z",
   "valid_until": "2026-07-12T10:10:00Z"
@@ -550,7 +558,17 @@ const TIME_STATEMENT: &str = r#"{
 fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     assert_eq!(STATEMENT_TTL_MAX_SECONDS, 600);
     let statement = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
-    assert_eq!(statement.provider_run_id, "987654321");
+    assert_eq!(statement.schema(), "amiss/scanner-trusted-time-statement");
+    assert_eq!(statement.controller(), "external-required-check-clock");
+    assert_eq!(statement.provider, "gitlab-ci");
+    assert_eq!(
+        statement.digest,
+        hj(
+            "amiss/scanner-trusted-time-statement",
+            &json::parse(TIME_STATEMENT.as_bytes()).unwrap()
+        )
+    );
+    assert_eq!(statement.provider_run_id, "pipeline/01J2Z9-7");
     assert_eq!(statement.provider_run_attempt, 2);
     assert_eq!(
         statement.evaluation_instant.as_str(),
@@ -575,24 +593,30 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
             .kind,
         ErrorKind::InvalidValue
     );
-    let zero_run = TIME_STATEMENT.replace("987654321", "0987");
+    let trailing_separator = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "pipeline/");
     assert_eq!(
-        TrustedTimeStatement::parse(zero_run.as_bytes())
+        TrustedTimeStatement::parse(trailing_separator.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
     );
+    let uppercase_provider = TIME_STATEMENT.replace("gitlab-ci", "GitLab-CI");
+    assert_eq!(
+        TrustedTimeStatement::parse(uppercase_provider.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+    let numeric_run = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "987654321");
+    assert!(TrustedTimeStatement::parse(numeric_run.as_bytes()).is_ok());
 }
 
 #[test]
-fn provider_bound_v1_controls_stay_github_scoped() {
-    let floor = String::from_utf8(FLOOR.to_vec())
-        .unwrap()
-        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
-    assert_eq!(
-        floor_schema_kind(OrganizationFloor::parse(floor.as_bytes()).unwrap_err()),
-        ErrorKind::InvalidValue
-    );
+fn controls_accept_open_forge_identities() {
+    let floor = OrganizationFloor::parse(FLOOR).unwrap();
+    assert_eq!(floor.schema(), "amiss/organization-floor");
+    assert_eq!(floor.repository.host, "gitlab.com");
+    assert_eq!(floor.repository.owner, "platform/security");
 
     let (key, fact) = computed_digests();
     let item = debt_item(
@@ -603,40 +627,34 @@ fn provider_bound_v1_controls_stay_github_scoped() {
         "2026-08-01T00:00:00Z",
     );
     let debt = debt_snapshot("2026-07-02T00:00:00Z", &[item])
-        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
-    assert_eq!(
-        DebtSnapshot::parse(debt.as_bytes()).unwrap_err().kind,
-        ErrorKind::InvalidValue
-    );
+        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
+        .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
+    let debt_value = json::parse(debt.as_bytes()).unwrap();
+    let debt = DebtSnapshot::parse(debt.as_bytes()).unwrap();
+    assert_eq!(debt.schema(), "amiss/debt-snapshot");
+    assert_eq!(debt.repository.owner, "platform/security");
+    assert_eq!(debt.digest, hj("amiss/debt-snapshot", &debt_value));
 
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
-    let waiver =
-        waiver_bundle(&[item]).replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
-    assert_eq!(
-        WaiverBundle::parse(waiver.as_bytes()).unwrap_err().kind,
-        ErrorKind::InvalidValue
-    );
+    let waiver = waiver_bundle(&[item])
+        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
+        .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
+    let waiver_value = json::parse(waiver.as_bytes()).unwrap();
+    let waiver = WaiverBundle::parse(waiver.as_bytes()).unwrap();
+    assert_eq!(waiver.schema(), "amiss/waiver-bundle");
+    assert_eq!(waiver.repository.owner, "platform/security");
+    assert_eq!(waiver.digest, hj("amiss/waiver-bundle", &waiver_value));
 
-    let time = TIME_STATEMENT.replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"");
-    assert_eq!(
-        TrustedTimeStatement::parse(time.as_bytes())
-            .unwrap_err()
-            .kind,
-        ErrorKind::InvalidValue
-    );
-
-    let nested_owner =
-        TIME_STATEMENT.replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    assert_eq!(
-        TrustedTimeStatement::parse(nested_owner.as_bytes())
-            .unwrap_err()
-            .kind,
-        ErrorKind::InvalidValue
-    );
+    let time = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
+    assert_eq!(time.schema(), "amiss/scanner-trusted-time-statement");
+    assert_eq!(time.controller(), "external-required-check-clock");
+    assert_eq!(time.repository.owner, "platform/security");
+    assert_eq!(time.provider, "gitlab-ci");
+    assert_eq!(time.provider_run_id, "pipeline/01J2Z9-7");
 }
 
 const CONSTRAINT: &str = r#"{
-  "schema": "amiss/scanner-execution-constraint/v1",
+  "schema": "amiss/scanner-execution-constraint",
   "action_repository": { "host": "github.com", "owner": "acme", "name": "amiss-action" },
   "action_object_format": "sha1",
   "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -645,7 +663,7 @@ const CONSTRAINT: &str = r#"{
   "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
   "selected_platform": "linux-x86_64",
   "required_status_name": "amiss / documentation assurance",
-  "bootstrap_contract": "amiss-action-bootstrap-v1",
+  "bootstrap_contract": "amiss-action-bootstrap",
   "bootstrap_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 }"#;
 

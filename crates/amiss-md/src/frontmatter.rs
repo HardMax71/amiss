@@ -6,7 +6,7 @@ pub const MAX_BYTES: usize = 65_536;
 
 const BOM: [u8; 3] = [0xef, 0xbb, 0xbf];
 
-/// A recognized `frontmatter-v1` region. `bytes` counts the region itself
+/// A recognized `frontmatter` region. `bytes` counts the region itself
 /// (both delimiters and every line ending inside it) and never the BOM, so the
 /// raw document offset the parser resumes at is `bom_bytes + bytes`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,10 +1,11 @@
 {
-  "schema": "amiss/scanner-trusted-time-statement/v1",
-  "controller": "github-actions-required-workflow-clock-v1",
-  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "schema": "amiss/scanner-trusted-time-statement",
+  "controller": "external-required-check-clock",
+  "repository": { "host": "gitlab.com", "owner": "platform/security", "name": "docs" },
   "ref": "refs/heads/main",
   "candidate_identity_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-  "provider_run_id": "987654321",
+  "provider": "gitlab-ci",
+  "provider_run_id": "pipeline/01J2Z9-7",
   "provider_run_attempt": 2,
   "evaluation_instant": "2026-07-12T10:00:00Z",
   "valid_until": "2026-07-12T10:10:00Z"

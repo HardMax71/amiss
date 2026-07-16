@@ -125,7 +125,8 @@ fn release(mutate: impl FnOnce(&Path)) -> Release {
     }];
     let build = StagedBuild {
         engine_version: "0.1.0-experimental".to_owned(),
-        owner: "hardmax71".to_owned(),
+        host: "git.example.internal".to_owned(),
+        owner: "platform/security".to_owned(),
         repository: "amiss".to_owned(),
         object_format: "sha1",
         commit_oid: "a".repeat(40),
@@ -185,12 +186,12 @@ fn object(members: Vec<(&str, Value)>) -> Value {
 /// exact action commit, tree, manifest digest, platform, and bootstrap.
 fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
     let value = object(vec![
-        ("schema", string("amiss/scanner-execution-constraint/v1")),
+        ("schema", string("amiss/scanner-execution-constraint")),
         (
             "action_repository",
             object(vec![
-                ("host", string("github.com")),
-                ("owner", string("hardmax71")),
+                ("host", string("git.example.internal")),
+                ("owner", string("platform/security")),
                 ("name", string("amiss")),
             ]),
         ),
@@ -204,7 +205,7 @@ fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
         ),
         ("selected_platform", string(release.platform.as_str())),
         ("required_status_name", string("amiss / assure")),
-        ("bootstrap_contract", string("amiss-action-bootstrap-v1")),
+        ("bootstrap_contract", string("amiss-action-bootstrap")),
         (
             "bootstrap_digest",
             string(&hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, BOOTSTRAP).to_string()),
@@ -228,6 +229,10 @@ fn the_pinned_release_validates_end_to_end() {
     assert_eq!(validated.platform, release.platform);
     assert_eq!(validated.engine_digest, release.engine_digest);
     assert_eq!(validated.manifest.engine_version, "0.1.0-experimental");
+    assert_eq!(
+        validated.manifest.build_source.repository.owner,
+        "platform/security"
+    );
     assert_eq!(validated.artifact.runtime_files.len(), 3);
     assert!(
         validated.artifact.runtime_files.iter().any(|file| {
@@ -442,7 +447,7 @@ fn a_tampered_runtime_file_refuses_on_its_checksum() {
 #[test]
 fn a_manifest_from_another_tree_refuses_on_its_digest() {
     let mut release = release(|_root| {});
-    release.manifest_digest = hb("amiss/scanner-release-manifest/v1", b"another tree");
+    release.manifest_digest = hb("amiss/scanner-release-manifest", b"another tree");
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(outcome.err(), Some(Refusal::ManifestDigest));
 }
@@ -492,7 +497,8 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     }];
     let build = StagedBuild {
         engine_version: "0.1.0-experimental".to_owned(),
-        owner: "hardmax71".to_owned(),
+        host: "git.example.internal".to_owned(),
+        owner: "platform/security".to_owned(),
         repository: "amiss".to_owned(),
         object_format: "sha1",
         commit_oid: "a".repeat(40),

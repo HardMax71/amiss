@@ -1,5 +1,5 @@
 {
-  "schema": "amiss/scanner-execution-constraint/v1",
+  "schema": "amiss/scanner-execution-constraint",
   "action_repository": { "host": "git.example.internal", "owner": "platform/security", "name": "amiss-action" },
   "action_object_format": "sha1",
   "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -8,6 +8,6 @@
   "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
   "selected_platform": "linux-x86_64",
   "required_status_name": "amiss / documentation assurance",
-  "bootstrap_contract": "amiss-action-bootstrap-v1",
+  "bootstrap_contract": "amiss-action-bootstrap",
   "bootstrap_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 }

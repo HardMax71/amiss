@@ -1,6 +1,0 @@
-{
-  "schema": "assure/scanner-snapshot-request/v1",
-  "materialization": "git-objects",
-  "repository_handle": 3,
-  "pre_acquired": true
-}

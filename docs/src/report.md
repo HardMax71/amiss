@@ -31,9 +31,9 @@ The envelope, down to its top-level keys:
 
 ```json
 {
-  "schema": "amiss/scanner-report-envelope/v3",
+  "schema": "amiss/scanner-report-envelope",
   "payload": {
-    "schema": "amiss/scanner-report-payload/v3",
+    "schema": "amiss/scanner-report-payload",
     "compatibility": "experimental",
     "engine": { "engine_digest": "sha256:…" },
     "evaluation": {},
@@ -74,16 +74,15 @@ cut short: a serialized report that would cross the 64 MiB `machine-json-bytes` 
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).
 
-The active machine contract is the
-[v3 report schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report-v3.schema.json)
-and its
-[canonical example](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-report-v3.canonical.json).
-The test suite validates emitted bytes against v3 with an independent validator. Versioned
-fields move or change meaning only with a report-version bump: v2 introduced the text-or-byte
-path union, and v3 generalized forge identity and its reference summary while preserving the
-meaning of previously producible inner digests.
+The machine contract is the
+[current report schema](../../spec/scanner-report.schema.json), its
+[readable example](../../spec/examples/scanner-report.json), and the corresponding
+[canonical bytes](../../spec/examples/scanner-report.canonical.json). The test suite validates
+emitted bytes with an independent schema validator, checks the canonical example, and checks
+that the schema identifiers match the writer constants in the
+[documentation contract test](../../crates/amiss/tests/documentation_contracts.rs).
 
-The `spec/` directory also retains v1 and v2 report contracts and several `assure/*` schemas
-from the predecessor design. Those files are historical artifacts, not formats emitted or
-accepted by the current public command. Until an Amiss-named schema and its implementation
-are tested together, do not infer public support merely from a file's presence in `spec/`.
+This is one rolling, unversioned wire contract during the pre-1.0 `experimental` series.
+Only the unsuffixed schema and examples linked above describe public report output. The
+schema, examples, parsers, and writer change together. Consumers that need a stable
+integration must pin an Amiss release and its shipped schema.

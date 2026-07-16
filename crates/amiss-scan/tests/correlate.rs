@@ -18,7 +18,7 @@ fn rp(path: &str) -> RepoPath {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+        digest: hb("amiss/scanner-engine", b"test engine"),
     }
 }
 
@@ -34,14 +34,14 @@ fn repo_intent(path: &str) -> Intent {
 }
 
 fn resolved(path: &str, body: &[u8]) -> Resolution {
-    let raw = hb("amiss/raw-evidence/v1", body);
+    let raw = hb("amiss/raw-evidence", body);
     Resolution {
         code: ResolutionCode::ExactPath,
         path: RepoPath::new(path.to_owned()),
         entry_kind: Some(EntryKind::Blob),
         git_mode: Some(GitMode::RegularFile),
         raw_digest: Some(raw),
-        projection_digest: Some(hb("amiss/scanner-target-projection/v1", body)),
+        projection_digest: Some(hb("amiss/scanner-target-projection", body)),
         content_availability: ContentAvailability::Available,
     }
 }
@@ -85,9 +85,9 @@ fn observation(spec: &Spec) -> Observation {
             end_line: 1,
             end_column: 2,
         },
-        projection_digest: hb("amiss/scanner-source-projection/v1", spec.block.as_bytes()),
+        projection_digest: hb("amiss/scanner-source-projection", spec.block.as_bytes()),
         raw_destination_digest: hb(
-            "amiss/scanner-raw-destination/v1",
+            "amiss/scanner-raw-destination",
             spec.raw_destination.as_bytes(),
         ),
     };
@@ -120,7 +120,7 @@ fn side(observations: Vec<Observation>) -> Side {
             entry.document.clone(),
             (
                 GitMode::RegularFile,
-                hb("amiss/raw-evidence/v1", entry.document.as_bytes()),
+                hb("amiss/raw-evidence", entry.document.as_bytes()),
             ),
         );
     }
@@ -462,7 +462,7 @@ fn an_exact_rename_pairs_only_unique_content() {
     let base_spec = moved("old/name.md");
     let candidate_spec = moved("new/name.md");
 
-    let digest = hb("amiss/raw-evidence/v1", b"the very same document bytes");
+    let digest = hb("amiss/raw-evidence", b"the very same document bytes");
     let mut base_side = side(vec![observation(&base_spec)]);
     base_side
         .documents
@@ -499,7 +499,7 @@ fn a_rename_requires_the_same_source_projection() {
     let mut candidate_spec = basic("new/name.md", "shared/t.md", "rewritten [x](x)");
     candidate_spec.node_path = vec![3, 0];
 
-    let digest = hb("amiss/raw-evidence/v1", b"the very same document bytes");
+    let digest = hb("amiss/raw-evidence", b"the very same document bytes");
     let mut base_side = side(vec![observation(&base_spec)]);
     base_side
         .documents

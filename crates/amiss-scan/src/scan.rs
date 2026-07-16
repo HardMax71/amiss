@@ -39,7 +39,7 @@ pub struct GovernedSource {
     pub digest: Digest,
 }
 
-pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source/v1";
+pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Scanned {
@@ -151,7 +151,7 @@ fn length(bytes: &[u8]) -> u64 {
     u64::try_from(bytes.len()).unwrap_or(u64::MAX)
 }
 
-/// `SourceProjectionV1`: CRLF and bare CR become LF; every other source byte
+/// `SourceProjection`: CRLF and bare CR become LF; every other source byte
 /// is preserved, including final-newline presence.
 #[must_use]
 pub fn normalize_newlines(source: &[u8]) -> Vec<u8> {

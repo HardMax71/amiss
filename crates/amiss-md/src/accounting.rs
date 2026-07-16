@@ -9,7 +9,7 @@ use crate::frontmatter;
 use crate::lines::scan;
 use crate::profile::parse_options;
 
-/// The frozen node resources of `parser-work-accounting-v1`: `nodes` is the
+/// The frozen node resources of `parser-work-accounting`: `nodes` is the
 /// logical node count of one document and `nesting` its maximum node depth.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Work {

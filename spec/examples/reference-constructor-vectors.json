@@ -1,0 +1,563 @@
+{
+  "schema": "amiss/reference-constructor-vectors",
+  "contract": "reference-constructor",
+  "cases": [
+    {
+      "id": "RI-001-native-link-kind",
+      "operation": "target-kind",
+      "construct": "markdown-inline-link",
+      "github_form": null,
+      "expected": "either"
+    },
+    {
+      "id": "RI-002-native-image-kind",
+      "operation": "target-kind",
+      "construct": "markdown-inline-image",
+      "github_form": null,
+      "expected": "blob"
+    },
+    {
+      "id": "RI-003-github-blob-kind",
+      "operation": "target-kind",
+      "construct": "markdown-autolink",
+      "github_form": "blob",
+      "expected": "blob"
+    },
+    {
+      "id": "RI-004-github-tree-kind",
+      "operation": "target-kind",
+      "construct": "markdown-inline-link",
+      "github_form": "tree",
+      "expected": "tree"
+    },
+    {
+      "id": "RI-005-line-single",
+      "operation": "github-line-fragment",
+      "value": "L1",
+      "expected": true
+    },
+    {
+      "id": "RI-006-line-range",
+      "operation": "github-line-fragment",
+      "value": "L10-L20",
+      "expected": true
+    },
+    {
+      "id": "RI-007-line-zero",
+      "operation": "github-line-fragment",
+      "value": "L0",
+      "expected": false
+    },
+    {
+      "id": "RI-008-line-leading-zero",
+      "operation": "github-line-fragment",
+      "value": "L01",
+      "expected": false
+    },
+    {
+      "id": "RI-009-line-reversed",
+      "operation": "github-line-fragment",
+      "value": "L20-L10",
+      "expected": false
+    },
+    {
+      "id": "RI-010-line-too-large",
+      "operation": "github-line-fragment",
+      "value": "L9007199254740992",
+      "expected": false
+    },
+    {
+      "id": "RI-011-line-lowercase",
+      "operation": "github-line-fragment",
+      "value": "l10",
+      "expected": false
+    },
+    {
+      "id": "RI-012-unicode-ref",
+      "operation": "github-ref-split",
+      "encoded_suffix": "rel%C3%A9ase/v1/src/a.scala",
+      "candidate_ref": "refs/heads/rel\u00e9ase/v1",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "src/a.scala"
+      }
+    },
+    {
+      "id": "RI-013-percent-once",
+      "operation": "github-ref-split",
+      "encoded_suffix": "feature%25name/docs/a.md",
+      "candidate_ref": "refs/heads/feature%name",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "RI-014-encoded-slash-ref",
+      "operation": "github-ref-split",
+      "encoded_suffix": "feature%2Fone/docs/a.md",
+      "candidate_ref": "refs/heads/feature/one",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-015-only-default-ref",
+      "operation": "github-ref-split",
+      "encoded_suffix": "main/docs/a.md",
+      "candidate_ref": "refs/heads/feature",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "RI-016-two-trusted-splits",
+      "operation": "github-ref-split",
+      "encoded_suffix": "release/v1/docs/a.md",
+      "candidate_ref": "refs/heads/release",
+      "default_ref": "refs/heads/release/v1",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-017-empty-native-destination",
+      "operation": "empty-native-destination",
+      "source_document": "docs/a.md",
+      "expected": "docs/a.md"
+    },
+    {
+      "id": "RI-018-uppercase-external-scheme",
+      "operation": "external-scheme",
+      "value": "HTTPS",
+      "expected": "https"
+    },
+    {
+      "id": "RI-019-network-path",
+      "operation": "network-path",
+      "value": "//example.com/a",
+      "expected": "network-path-unsupported"
+    },
+    {
+      "id": "RI-020-commonmark-uri-autolink",
+      "operation": "semantic-autolink",
+      "form": "commonmark-uri",
+      "token": "https://example.com/a?b#c",
+      "expected": "https://example.com/a?b#c"
+    },
+    {
+      "id": "RI-021-commonmark-email-autolink",
+      "operation": "semantic-autolink",
+      "form": "commonmark-email",
+      "token": "foo@example.com",
+      "expected": "mailto:foo@example.com"
+    },
+    {
+      "id": "RI-022-gfm-protocol-autolink",
+      "operation": "semantic-autolink",
+      "form": "gfm-protocol",
+      "token": "https://example.com/a",
+      "expected": "https://example.com/a"
+    },
+    {
+      "id": "RI-023-gfm-www-autolink",
+      "operation": "semantic-autolink",
+      "form": "gfm-www",
+      "token": "www.example.com/a",
+      "expected": "http://www.example.com/a"
+    },
+    {
+      "id": "RI-024-gfm-email-autolink",
+      "operation": "semantic-autolink",
+      "form": "gfm-email",
+      "token": "foo.bar@example.com",
+      "expected": "mailto:foo.bar@example.com"
+    },
+    {
+      "id": "RI-025-multiple-question-components",
+      "operation": "uri-components",
+      "value": "a?x?y#z?u",
+      "expected": {
+        "path": "a",
+        "query": "x?y",
+        "fragment": "z?u"
+      }
+    },
+    {
+      "id": "RI-026-question-inside-fragment",
+      "operation": "uri-components",
+      "value": "a#z?u",
+      "expected": {
+        "path": "a",
+        "query": null,
+        "fragment": "z?u"
+      }
+    },
+    {
+      "id": "RI-027-mixed-case-github-identity",
+      "operation": "github-identity",
+      "host": "github.com",
+      "url_owner": "HardMax71",
+      "url_repository": "spec_to_rest",
+      "identity_owner": "hardmax71",
+      "identity_repository": "spec_to_rest",
+      "expected": true
+    },
+    {
+      "id": "RI-028-encoded-github-identity",
+      "operation": "github-identity",
+      "host": "github.com",
+      "url_owner": "Hard%4Dax71",
+      "url_repository": "spec_to_rest",
+      "identity_owner": "hardmax71",
+      "identity_repository": "spec_to_rest",
+      "expected": false
+    },
+    {
+      "id": "RI-029-current-ref-without-path",
+      "operation": "github-ref-split",
+      "encoded_suffix": "main",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-030-document-query-and-fragment",
+      "operation": "resolution-boundary",
+      "target_class": "document",
+      "query_present": true,
+      "fragment_present": true,
+      "github_line_fragment": false,
+      "expected": "unsupported-fragment-semantics"
+    },
+    {
+      "id": "RI-031-code-query-and-fragment",
+      "operation": "resolution-boundary",
+      "target_class": "code",
+      "query_present": true,
+      "fragment_present": true,
+      "github_line_fragment": false,
+      "expected": "unsupported-query-semantics"
+    },
+    {
+      "id": "RI-032-github-line-is-boundary",
+      "operation": "resolution-boundary",
+      "target_class": "code",
+      "query_present": false,
+      "fragment_present": true,
+      "github_line_fragment": true,
+      "expected": "code-fragment-unevaluated"
+    },
+    {
+      "id": "RI-033-uppercase-github-host-is-foreign",
+      "operation": "github-identity",
+      "host": "GitHub.com",
+      "url_owner": "HardMax71",
+      "url_repository": "spec_to_rest",
+      "identity_owner": "hardmax71",
+      "identity_repository": "spec_to_rest",
+      "expected": false
+    },
+    {
+      "id": "RI-034-default-only-invalid-path",
+      "operation": "github-ref-split",
+      "encoded_suffix": "main/../secrets",
+      "candidate_ref": "refs/heads/feature",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "RI-035-native-link-directory-hint",
+      "operation": "target-kind",
+      "construct": "markdown-inline-link",
+      "github_form": null,
+      "trailing_slash": true,
+      "expected": "tree"
+    },
+    {
+      "id": "RI-036-native-image-terminal-slash-invalid",
+      "operation": "native-trailing-slash",
+      "construct": "markdown-inline-image",
+      "expected": "invalid-reference"
+    },
+    {
+      "id": "RI-037-github-tree-terminal-slash",
+      "operation": "github-ref-split",
+      "github_form": "tree",
+      "encoded_suffix": "main/docs/",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs"
+      }
+    },
+    {
+      "id": "RI-038-github-blob-terminal-slash-invalid",
+      "operation": "github-ref-split",
+      "github_form": "blob",
+      "encoded_suffix": "main/docs/file.md/",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "invalid",
+        "path": null
+      }
+    },
+    {
+      "id": "FD-001-github-default",
+      "operation": "forge-dialect-default",
+      "host": "github.com",
+      "flag": null,
+      "expected": "github"
+    },
+    {
+      "id": "FD-002-gitlab-default",
+      "operation": "forge-dialect-default",
+      "host": "gitlab.com",
+      "flag": null,
+      "expected": "gitlab"
+    },
+    {
+      "id": "FD-003-unknown-host-null",
+      "operation": "forge-dialect-default",
+      "host": "git.example.internal",
+      "flag": null,
+      "expected": null
+    },
+    {
+      "id": "FD-004-ghes-flagged",
+      "operation": "forge-dialect-default",
+      "host": "ghes.corp.example",
+      "flag": "github",
+      "expected": "github"
+    },
+    {
+      "id": "FD-005-self-hosted-gitlab-flagged",
+      "operation": "forge-dialect-default",
+      "host": "git.example.internal",
+      "flag": "gitlab",
+      "expected": "gitlab"
+    },
+    {
+      "id": "GH-101-ghes-identity",
+      "operation": "forge-identity",
+      "dialect": "github",
+      "url": "https://ghes.example/Team/Repo/blob/main/docs/a.md",
+      "identity_host": "ghes.example",
+      "identity_owner": "team",
+      "identity_name": "repo",
+      "expected": "same-repository"
+    },
+    {
+      "id": "GH-102-dotcom-external-under-ghes",
+      "operation": "forge-identity",
+      "dialect": "github",
+      "url": "https://github.com/team/repo/blob/main/docs/a.md",
+      "identity_host": "ghes.example",
+      "identity_owner": "team",
+      "identity_name": "repo",
+      "expected": "external"
+    },
+    {
+      "id": "GL-001-ref-split-candidate",
+      "operation": "gitlab-ref-split",
+      "encoded_suffix": "main/docs/a.md",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GL-002-legacy-form-foreign",
+      "operation": "forge-form",
+      "suffix": "acme/widgets/blob/main/docs/a.md",
+      "expected": "foreign",
+      "dialect": "gitlab"
+    },
+    {
+      "id": "GL-003-nested-group-identity",
+      "operation": "forge-identity",
+      "dialect": "gitlab",
+      "url": "https://gitlab.com/Acme/Platform/widgets/-/blob/main/docs/a.md",
+      "identity_host": "gitlab.com",
+      "identity_owner": "acme/platform",
+      "identity_name": "widgets",
+      "expected": "same-repository"
+    },
+    {
+      "id": "GL-004-raw-form-foreign",
+      "operation": "forge-form",
+      "suffix": "acme/widgets/-/raw/main/docs/a.md",
+      "expected": "foreign",
+      "dialect": "gitlab"
+    },
+    {
+      "id": "GL-005-tree-terminal-slash",
+      "operation": "gitlab-ref-split",
+      "gitlab_form": "tree",
+      "encoded_suffix": "main/docs/",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs"
+      }
+    },
+    {
+      "id": "GL-006-slashed-ref-candidate",
+      "operation": "gitlab-ref-split",
+      "encoded_suffix": "release/v1/docs/a.md",
+      "candidate_ref": "refs/heads/release/v1",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GL-007-line-range-bare",
+      "operation": "gitlab-line-fragment",
+      "value": "L10-20",
+      "expected": true
+    },
+    {
+      "id": "GL-008-line-range-github-style-rejected",
+      "operation": "gitlab-line-fragment",
+      "value": "L10-L20",
+      "expected": false
+    },
+    {
+      "id": "GL-009-early-separator-foreign",
+      "operation": "forge-form",
+      "suffix": "acme/-/blob/main/docs/a.md",
+      "expected": "foreign",
+      "dialect": "gitlab"
+    },
+    {
+      "id": "GL-010-bare-range-rejected-by-github",
+      "operation": "github-line-fragment",
+      "value": "L10-20",
+      "expected": false
+    },
+    {
+      "id": "GL-011-wrong-subgroup-foreign",
+      "operation": "forge-identity",
+      "dialect": "gitlab",
+      "url": "https://gitlab.com/acme/other/widgets/-/blob/main/docs/a.md",
+      "identity_host": "gitlab.com",
+      "identity_owner": "acme/platform",
+      "identity_name": "widgets",
+      "expected": "foreign"
+    },
+    {
+      "id": "FD-006-codeberg-default",
+      "operation": "forge-dialect-default",
+      "host": "codeberg.org",
+      "flag": null,
+      "expected": "gitea"
+    },
+    {
+      "id": "GT-001-branch-either-kind",
+      "operation": "forge-form",
+      "dialect": "gitea",
+      "suffix": "acme/widgets/src/branch/main/docs/a.md",
+      "expected": "either"
+    },
+    {
+      "id": "GT-002-branch-split-unicode-slashed-ref",
+      "operation": "gitea-branch-split",
+      "encoded_suffix": "rel%C3%A9ase/v1/docs/a.md",
+      "candidate_ref": "refs/heads/rel\u00e9ase/v1",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GT-003-commit-candidate-oid",
+      "operation": "gitea-commit-split",
+      "oid_segment": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+      "candidate_oid": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+      "encoded_suffix": "docs/a.md",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GT-004-commit-other-oid-version-scope",
+      "operation": "gitea-commit-split",
+      "oid_segment": "fac650e0f7e2f43acecdfd6c37fc975aeb0b9e88",
+      "candidate_oid": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+      "encoded_suffix": "docs/a.md",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "GT-005-commit-short-oid-foreign",
+      "operation": "forge-form",
+      "dialect": "gitea",
+      "suffix": "acme/widgets/src/commit/deadbeef/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "GT-006-tag-version-scope",
+      "operation": "forge-form",
+      "dialect": "gitea",
+      "suffix": "acme/widgets/src/tag/v1.0/docs/a.md",
+      "expected": "unsupported-version-scope"
+    },
+    {
+      "id": "GT-007-line-range",
+      "operation": "gitea-line-fragment",
+      "value": "L10-L20",
+      "expected": true
+    },
+    {
+      "id": "GT-008-line-range-bare-rejected",
+      "operation": "gitea-line-fragment",
+      "value": "L10-20",
+      "expected": false
+    },
+    {
+      "id": "GT-009-untyped-src-foreign",
+      "operation": "forge-form",
+      "dialect": "gitea",
+      "suffix": "acme/widgets/src/main/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "GT-010-branch-directory-hint",
+      "operation": "forge-form",
+      "dialect": "gitea",
+      "suffix": "acme/widgets/src/branch/main/docs/",
+      "expected": "tree"
+    },
+    {
+      "id": "GT-011-commit-uppercase-hex-foreign",
+      "operation": "forge-form",
+      "dialect": "gitea",
+      "suffix": "acme/widgets/src/commit/6A66EF14B9B8B174A54CCF8EA4B0DD18F42F9F22/docs/a.md",
+      "expected": "foreign"
+    }
+  ]
+}

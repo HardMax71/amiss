@@ -29,8 +29,8 @@ pub use resolve::{ForgeContext, Intent, Resolution, TargetCache, resolve};
 pub use resources::{ScanLimits, ScanResources};
 pub use scan::{Scanned, ScannedOccurrence, SpanDisplay, scan_bytes, scan_document};
 
-pub const SOURCE_PROJECTION_DOMAIN: &str = "amiss/scanner-source-projection/v1";
-pub const RAW_DESTINATION_DOMAIN: &str = "amiss/scanner-raw-destination/v1";
+pub const SOURCE_PROJECTION_DOMAIN: &str = "amiss/scanner-source-projection";
+pub const RAW_DESTINATION_DOMAIN: &str = "amiss/scanner-raw-destination";
 
 /// One failure: a parse fault in the contract's precedence, a Git acquisition
 /// defect, a tree or index name outside `RepoPath`, or the first resource

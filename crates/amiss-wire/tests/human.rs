@@ -44,7 +44,7 @@ fn two_hundred_scalars_then_a_literal_ellipsis() {
     );
 }
 
-/// `human-atom-bytes-v1`: printable ASCII literal, every other byte the
+/// `human-atom-bytes`: printable ASCII literal, every other byte the
 /// two-digit escape of its value, never an invented scalar, truncation at
 /// the same bound as text.
 #[test]

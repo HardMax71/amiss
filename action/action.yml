@@ -138,7 +138,8 @@ runs:
         } >> "$GITHUB_OUTPUT"
         if [ -n "$BRANCH" ] && [ -n "$DEFAULT_BRANCH" ] \
           && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
-          host="${SERVER_URL#https://}"
+          host="${SERVER_URL#*://}"
+          host="${host%/}"
           {
             printf 'identity=%s/%s\n' "${host,,}" "${REPOSITORY,,}"
             printf 'ref=refs/heads/%s\n' "$BRANCH"

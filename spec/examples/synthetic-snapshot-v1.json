@@ -1,8 +1,0 @@
-{
-  "schema": "assure/scanner-snapshot/v1",
-  "kind": "index",
-  "identity_scope": "complete-logical-index",
-  "base_object_format": "sha1",
-  "base_commit_oid": "1111111111111111111111111111111111111111",
-  "index_projection_digest": "sha256:744ba61a0f30ee6ecbc6b3e93323428ef523034a0636f9eb6c6215c3504c40bd"
-}

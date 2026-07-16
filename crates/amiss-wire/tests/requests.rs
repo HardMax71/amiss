@@ -6,48 +6,39 @@
 use std::fs;
 use std::path::Path;
 
-use amiss_wire::controls::Profile;
-use amiss_wire::model::ObjectFormat;
+use amiss_wire::controls::{OrganizationFloor, Profile, TrustedTimeStatement};
+use amiss_wire::model::{ForgeDialect, ObjectFormat};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL, RequestMode, RequestTrust,
     SnapshotRequest,
 };
 
-/// The dossier's own canonical instance of a request, in this implementation's
-/// namespace. Reading the frozen example rather than a copy of it is the point:
-/// a hand-kept fixture drifts from the specification it was copied out of, and
-/// nothing notices. The wire strings are the only difference, and they are
-/// rewritten wholesale.
-fn dossier_request(name: &str) -> Vec<u8> {
-    let raw = fs::read(
+fn request_example(name: &str) -> Vec<u8> {
+    fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../spec/examples")
             .join(name),
     )
-    .expect("the dossier ships this example");
-    String::from_utf8(raw)
-        .expect("the example is UTF-8")
-        .replace("assure/", "amiss/")
-        .into_bytes()
+    .expect("the specification ships this request example")
 }
 
-/// The three request contracts are the only shapes in amiss-wire with no
-/// consumer: no wrapper API is authorized in v0, so nothing in the workspace
-/// constructs or parses one, and until now nothing tested one either. They are
-/// the interface the request-wire RFC has to land against, and an untested
-/// parser is a specification nobody has checked the code against.
+/// The examples are executable contract fixtures, not illustrations copied out
+/// of the schemas. A field or grammar change therefore has to update the parser,
+/// schema, and published example together.
 #[test]
-fn the_frozen_request_examples_parse_to_what_they_say() {
+fn the_request_examples_parse_to_what_they_say() {
     let evaluation =
-        EvaluationRequest::parse(&dossier_request("scanner-evaluation-request-v1.json")).unwrap();
+        EvaluationRequest::parse(&request_example("scanner-evaluation-request.json")).unwrap();
     assert_eq!(evaluation.profile, Profile::Enforce);
     assert_eq!(evaluation.mode, RequestMode::CommitPair);
     assert_eq!(evaluation.object_format, ObjectFormat::Sha1);
     let repository = evaluation
         .repository
         .expect("the example names a repository");
-    assert_eq!(repository.owner, "acme");
-    assert_eq!(repository.name, "spec-to-rest");
+    assert_eq!(repository.host, "gitlab.example.internal");
+    assert_eq!(repository.owner, "platform/security");
+    assert_eq!(repository.name, "docs");
+    assert_eq!(evaluation.forge, Some(ForgeDialect::Gitlab));
     assert_eq!(
         evaluation.base_commit.as_str(),
         "8d7f2c31a09b64e5dd10fcab7e93245160c8ba72"
@@ -62,23 +53,112 @@ fn the_frozen_request_examples_parse_to_what_they_say() {
     );
 
     let snapshot =
-        SnapshotRequest::parse(&dossier_request("scanner-snapshot-request-v1.json")).unwrap();
+        SnapshotRequest::parse(&request_example("scanner-snapshot-request.json")).unwrap();
     assert_eq!(snapshot.materialization, RequestMode::CommitPair);
 
     let controls =
-        ControlsRequest::parse(&dossier_request("scanner-controls-request-v1.json")).unwrap();
+        ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
     let floor = controls
         .organization_floor
         .expect("the example supplies one");
-    assert_eq!(floor.trust_source, RequestTrust::OrganizationRuleset);
+    assert_eq!(floor.trust_source, RequestTrust::OrganizationPolicy);
+    let parsed_floor = OrganizationFloor::parse(&amiss_wire::json::canonical(&floor.value))
+        .expect("the embedded organization floor is valid");
+    assert_eq!(
+        floor.expected_digest, parsed_floor.digest,
+        "the request carries the floor's independently reproducible semantic digest"
+    );
     let time = controls.trusted_time.expect("and a trusted instant");
-    assert_eq!(time.provider_run_id, "987654321");
+    assert_eq!(time.provider, "gitlab");
+    assert_eq!(time.provider_run_id, "pipeline/987654321:job-42");
     assert_eq!(time.provider_run_attempt, 2);
+    let parsed_time = TrustedTimeStatement::parse(&amiss_wire::json::canonical(&time.value))
+        .expect("the embedded trusted-time statement is valid");
+    assert_eq!(
+        time.expected_digest, parsed_time.digest,
+        "the request carries the statement's independently reproducible semantic digest"
+    );
     assert!(
         controls.debt_snapshot.is_none()
             && controls.waiver_bundle.is_none()
             && controls.execution_constraint.is_none(),
         "an absent control is absent, never a default"
+    );
+}
+
+#[test]
+fn wrong_or_legacy_request_contracts_are_not_silent_aliases() {
+    let evaluation = String::from_utf8(request_example("scanner-evaluation-request.json")).unwrap();
+    let wrong_schema = evaluation.replace(
+        "amiss/scanner-evaluation-request",
+        "amiss/not-the-scanner-evaluation-request",
+    );
+    assert!(
+        EvaluationRequest::parse(wrong_schema.as_bytes()).is_err(),
+        "the rolling contract has one exact unversioned identity"
+    );
+
+    let controls = String::from_utf8(request_example("scanner-controls-request.json")).unwrap();
+    let legacy_authority = controls.replace("organization-policy", "repository-ruleset");
+    assert!(
+        ControlsRequest::parse(legacy_authority.as_bytes()).is_err(),
+        "only provider-neutral authority roles belong to the current contract"
+    );
+
+    let wrong_schema = controls.replace(
+        "amiss/scanner-controls-request",
+        "amiss/not-the-scanner-controls-request",
+    );
+    assert!(
+        ControlsRequest::parse(wrong_schema.as_bytes()).is_err(),
+        "other schema strings do not select hidden parsing modes"
+    );
+
+    let snapshot = String::from_utf8(request_example("scanner-snapshot-request.json")).unwrap();
+    let wrong_schema = snapshot.replace(
+        "amiss/scanner-snapshot-request",
+        "amiss/not-the-scanner-snapshot-request",
+    );
+    assert!(
+        SnapshotRequest::parse(wrong_schema.as_bytes()).is_err(),
+        "snapshot requests use the same rolling identity rule"
+    );
+}
+
+#[test]
+fn the_forge_and_provider_run_are_closed_and_coherent() {
+    let evaluation = String::from_utf8(request_example("scanner-evaluation-request.json")).unwrap();
+    let no_repository = evaluation.replace(
+        r#""repository": {
+    "host": "gitlab.example.internal",
+    "owner": "platform/security",
+    "name": "docs"
+  }"#,
+        r#""repository": null"#,
+    );
+    assert!(
+        EvaluationRequest::parse(no_repository.as_bytes()).is_err(),
+        "a forge dialect without a repository identity has no subject"
+    );
+
+    let github_nested = evaluation.replace(r#""forge": "gitlab""#, r#""forge": "github""#);
+    assert!(
+        EvaluationRequest::parse(github_nested.as_bytes()).is_err(),
+        "GitHub and Gitea dialects never reinterpret a nested GitLab owner"
+    );
+
+    let controls = String::from_utf8(request_example("scanner-controls-request.json")).unwrap();
+    let edge_punctuation =
+        controls.replace("pipeline/987654321:job-42", "/pipeline/987654321:job-42");
+    assert!(
+        ControlsRequest::parse(edge_punctuation.as_bytes()).is_err(),
+        "the opaque run ID still has canonical alphanumeric edges"
+    );
+
+    let uppercase_provider = controls.replace(r#""provider": "gitlab""#, r#""provider": "GitLab""#);
+    assert!(
+        ControlsRequest::parse(uppercase_provider.as_bytes()).is_err(),
+        "the provider ID is canonical lowercase"
     );
 }
 
@@ -88,7 +168,7 @@ fn the_frozen_request_examples_parse_to_what_they_say() {
 /// request the engine could act on, and neither parses.
 #[test]
 fn the_evaluation_request_binds_the_candidate_to_the_mode() {
-    let example = String::from_utf8(dossier_request("scanner-evaluation-request-v1.json")).unwrap();
+    let example = String::from_utf8(request_example("scanner-evaluation-request.json")).unwrap();
 
     let index_with_candidate = example.replace(r#""mode": "commit-pair""#, r#""mode": "index""#);
     assert!(
@@ -113,7 +193,7 @@ fn the_evaluation_request_binds_the_candidate_to_the_mode() {
 /// take away.
 #[test]
 fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
-    let example = String::from_utf8(dossier_request("scanner-snapshot-request-v1.json")).unwrap();
+    let example = String::from_utf8(request_example("scanner-snapshot-request.json")).unwrap();
     assert_eq!(REPOSITORY_HANDLE_ORDINAL, 3);
 
     let other_handle = example.replace(r#""repository_handle": 3"#, r#""repository_handle": 4"#);
@@ -147,10 +227,10 @@ fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
 /// and the request carrying it does not parse.
 #[test]
 fn a_control_from_an_unknown_authority_is_not_a_control() {
-    let example = String::from_utf8(dossier_request("scanner-controls-request-v1.json")).unwrap();
+    let example = String::from_utf8(request_example("scanner-controls-request.json")).unwrap();
 
     let forged = example.replace(
-        r#""trust_source": "organization-ruleset""#,
+        r#""trust_source": "organization-policy""#,
         r#""trust_source": "repository-workflow""#,
     );
     assert!(
@@ -159,7 +239,7 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
     );
 
     let empty = br#"{
-  "schema": "amiss/scanner-controls-request/v1",
+  "schema": "amiss/scanner-controls-request",
   "organization_floor": null,
   "debt_snapshot": null,
   "waiver_bundle": null,
@@ -169,6 +249,6 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
     assert_eq!(
         ControlsRequest::parse(empty).unwrap(),
         ControlsRequest::default(),
-        "supplying no controls is lawful, and is what every v0 run does"
+        "supplying no controls is lawful"
     );
 }

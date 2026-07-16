@@ -372,7 +372,7 @@ pub fn effects(
 ) -> Effects {
     let mut controls: Vec<ControlSeed> = Vec::new();
     let empty = ScannerPolicy {
-        digest: amiss_wire::digest::hb("amiss/raw-evidence/v1", b""),
+        digest: amiss_wire::digest::hb("amiss/raw-evidence", b""),
         document_includes: Vec::new(),
         protected_inventory: Vec::new(),
         finding_dispositions: Vec::new(),
@@ -485,16 +485,16 @@ pub struct FloorInput {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrustSource {
-    ExternalRequiredWorkflow,
-    OrganizationRuleset,
+    ExternalRequiredCheck,
+    OrganizationPolicy,
 }
 
 impl TrustSource {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::ExternalRequiredWorkflow => "external-required-workflow",
-            Self::OrganizationRuleset => "organization-ruleset",
+            Self::ExternalRequiredCheck => "external-required-check",
+            Self::OrganizationPolicy => "organization-policy",
         }
     }
 }
@@ -557,6 +557,7 @@ pub struct WaiverInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimeInput {
     pub statement: amiss_wire::controls::TrustedTimeStatement,
+    pub provider: String,
     pub provider_run_id: String,
     pub provider_run_attempt: u64,
 }
@@ -606,6 +607,7 @@ pub fn verify_time(
         repository,
         candidate_ref,
     ) && statement.candidate_identity_digest == *candidate_identity
+        && statement.provider == input.provider
         && statement.provider_run_id == input.provider_run_id
         && statement.provider_run_attempt == input.provider_run_attempt;
     if bound {
@@ -724,7 +726,7 @@ pub enum ProtectedState {
     Present(Digest),
 }
 
-pub const PROTECTED_CONTROL_EVIDENCE_DOMAIN: &str = "amiss/scanner-protected-control-evidence/v1";
+pub const PROTECTED_CONTROL_EVIDENCE_DOMAIN: &str = "amiss/scanner-protected-control-evidence";
 
 /// Reads one protected control path's state from a snapshot: the evidence
 /// digest binds path, mode, and raw digest; the blob is size-checked under

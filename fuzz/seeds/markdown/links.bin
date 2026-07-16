@@ -14,4 +14,4 @@ See [inline](docs/a.md#frag?x=1) and ![img](assets/logo.png "t").
 
 Autolink <https://example.com/auto> and `code [not](a.md)`.
 
-> [amiss:claim v1]: governed/definition.md
+> [amiss:claim]: governed/definition.md

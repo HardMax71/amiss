@@ -18,7 +18,7 @@ The supported repository form is a primary non-bare checkout with a real `.git` 
 A bare repository or linked worktree whose `.git` entry is a file is refused as unavailable,
 and objects available only through Git alternates are not consulted. These are explicit
 boundaries of the direct
-[repository reader](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs),
+[repository reader](../../crates/amiss-git/src/repo.rs),
 not empty snapshots or silently missing documents.
 
 File access happens through directory handles opened step by step, never following links.

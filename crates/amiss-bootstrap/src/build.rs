@@ -29,6 +29,7 @@ pub struct StagedArtifact<'bytes> {
 /// The build namespace and the lockfiles that pinned it.
 pub struct StagedBuild<'bytes> {
     pub engine_version: String,
+    pub host: String,
     pub owner: String,
     pub repository: String,
     pub object_format: &'static str,
@@ -91,7 +92,7 @@ pub fn build_manifest(
                 (
                     "repository",
                     object(vec![
-                        ("host", string("github.com")),
+                        ("host", string(&build.host)),
                         ("owner", string(&build.owner)),
                         ("name", string(&build.repository)),
                     ]),

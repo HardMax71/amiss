@@ -11,7 +11,7 @@ The profile picks the built-in disposition for each kind. `observe` turns the th
 structural reference failures into warnings, while `enforce` makes them blocking. Several
 control-integrity findings fail under both profiles, and many coverage or change observations
 are records rather than warnings. The exact table below is generated from
-[`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs)
+[`FindingKind::built_in_disposition`](../../crates/amiss-wire/src/report.rs)
 and checked in CI.
 
 <!-- amiss-doc-contract:profiles:start -->
@@ -80,6 +80,6 @@ The kinds, with what each one means:
 The control families exist so that loosening rules and presenting invalid outside authority
 are themselves visible. Repository policy may raise only `explicit-target-missing`,
 `explicit-target-type-mismatch`, and `invalid-reference`, as enforced by the
-[policy parser and evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs).
+[policy parser and evaluator](../../crates/amiss-scan/src/policy.rs).
 It may never lower a disposition. There is no suppression syntax anywhere; the way to remove
 a repository-policy finding is to fix what it points at.

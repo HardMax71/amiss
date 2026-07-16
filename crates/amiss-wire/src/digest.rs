@@ -6,7 +6,7 @@ use crate::json::{Sink, Value, stream};
 
 /// The domain for a digest over exact raw bytes taken as evidence: a resolved
 /// target's blob, or one build lockfile as the release manifest records it.
-pub const RAW_EVIDENCE_DOMAIN: &str = "amiss/raw-evidence/v1";
+pub const RAW_EVIDENCE_DOMAIN: &str = "amiss/raw-evidence";
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Digest([u8; 32]);

@@ -2,16 +2,19 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::model::{BranchRef, RepositoryIdentity, UtcInstant};
 
-use super::{decode_branch_ref, decode_digest, decode_instant, decode_repository, root};
+use super::{
+    decode_branch_ref, decode_digest, decode_instant, decode_provider_id, decode_provider_run_id,
+    decode_repository, root,
+};
 
-const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement/v1";
-const TRUSTED_TIME_CONTROLLER: &str = "github-actions-required-workflow-clock-v1";
+const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
+const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
 
 /// The controller's maximum statement lifetime: `evaluation_instant <
 /// valid_until <= evaluation_instant + 600` whole seconds.
 pub const STATEMENT_TTL_MAX_SECONDS: i64 = 600;
 
-/// A trusted-time statement issued by the required-workflow clock inside the
+/// A trusted-time statement issued by the required-check clock inside the
 /// externally controlled run. Parsing establishes shape and the TTL law; the
 /// evaluation-side bindings (repository, ref, candidate identity, run,
 /// attempt) are separate verification.
@@ -21,6 +24,7 @@ pub struct TrustedTimeStatement {
     pub repository: RepositoryIdentity,
     pub ref_name: BranchRef,
     pub candidate_identity_digest: Digest,
+    pub provider: String,
     pub provider_run_id: String,
     pub provider_run_attempt: u64,
     pub evaluation_instant: UtcInstant,
@@ -28,6 +32,16 @@ pub struct TrustedTimeStatement {
 }
 
 impl TrustedTimeStatement {
+    #[must_use]
+    pub const fn schema(&self) -> &'static str {
+        TRUSTED_TIME_STATEMENT_SCHEMA
+    }
+
+    #[must_use]
+    pub const fn controller(&self) -> &'static str {
+        TRUSTED_TIME_CONTROLLER
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, invalid grammar
@@ -53,16 +67,9 @@ impl TrustedTimeStatement {
             &obj.field("candidate_identity_digest"),
             obj.take("candidate_identity_digest")?,
         )?;
+        let provider = decode_provider_id(&obj.field("provider"), obj.take("provider")?)?;
         let run_id_path = obj.field("provider_run_id");
-        let provider_run_id = de::string(&run_id_path, obj.take("provider_run_id")?)?;
-        let run_id_bytes = provider_run_id.as_bytes();
-        if run_id_bytes.is_empty()
-            || run_id_bytes.len() > 32
-            || !matches!(run_id_bytes.first(), Some(b'1'..=b'9'))
-            || !run_id_bytes.iter().all(u8::is_ascii_digit)
-        {
-            return fail(&run_id_path, ErrorKind::InvalidValue);
-        }
+        let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
         let attempt_path = obj.field("provider_run_attempt");
         let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
         let provider_run_attempt = u64::try_from(attempt_raw)
@@ -87,6 +94,7 @@ impl TrustedTimeStatement {
             repository,
             ref_name,
             candidate_identity_digest,
+            provider,
             provider_run_id,
             provider_run_attempt,
             evaluation_instant,

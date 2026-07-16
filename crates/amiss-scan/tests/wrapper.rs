@@ -33,7 +33,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+        digest: hb("amiss/scanner-engine", b"test engine"),
     }
 }
 
@@ -77,7 +77,7 @@ fn fixture(candidate_readme: &str) -> Fixture {
 
 fn floor_input() -> FloorInput {
     let doc = r#"{
-  "schema": "amiss/organization-floor/v1",
+  "schema": "amiss/organization-floor",
   "floor_id": "acme/scanner-floor-2026-07",
   "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
   "ref": "refs/heads/main",
@@ -92,7 +92,7 @@ fn floor_input() -> FloorInput {
 }"#;
     FloorInput {
         floor: OrganizationFloor::parse(doc.as_bytes()).unwrap(),
-        trust_source: TrustSource::OrganizationRuleset,
+        trust_source: TrustSource::OrganizationPolicy,
     }
 }
 
@@ -148,12 +148,13 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
     let digest = candidate_identity_digest(&setup);
     let doc = format!(
         r#"{{
-  "schema": "amiss/scanner-trusted-time-statement/v1",
-  "controller": "github-actions-required-workflow-clock-v1",
+  "schema": "amiss/scanner-trusted-time-statement",
+  "controller": "external-required-check-clock",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
   "ref": "refs/heads/main",
   "candidate_identity_digest": "{digest}",
-  "provider_run_id": "987654321",
+  "provider": "gitlab-ci",
+  "provider_run_id": "pipeline/987654321",
   "provider_run_attempt": 2,
   "evaluation_instant": "{INSTANT}",
   "valid_until": "2026-07-12T10:09:00Z"
@@ -161,7 +162,8 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
     );
     TimeInput {
         statement: TrustedTimeStatement::parse(doc.as_bytes()).unwrap(),
-        provider_run_id: "987654321".to_owned(),
+        provider: "gitlab-ci".to_owned(),
+        provider_run_id: "pipeline/987654321".to_owned(),
         provider_run_attempt: 2,
     }
 }
@@ -208,7 +210,7 @@ fn debt_json(
 ) -> String {
     format!(
         r#"{{
-  "schema": "amiss/debt-snapshot/v1",
+  "schema": "amiss/debt-snapshot",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
   "ref": "refs/heads/main",
   "organization_floor_digest": "{floor_digest}",
@@ -236,7 +238,7 @@ fn debt_input(doc: &str) -> DebtInput {
         snapshot: DebtSnapshot::parse(doc.as_bytes())
             .map_err(|defect| format!("{defect:?}"))
             .unwrap(),
-        trust_source: TrustSource::ExternalRequiredWorkflow,
+        trust_source: TrustSource::ExternalRequiredCheck,
     }
 }
 
@@ -253,7 +255,7 @@ fn waiver_json(
 ) -> String {
     format!(
         r#"{{
-  "schema": "amiss/waiver-bundle/v1",
+  "schema": "amiss/waiver-bundle",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
   "ref": "refs/heads/main",
   "organization_floor_digest": "{floor_digest}",
@@ -283,7 +285,7 @@ fn waiver_input(doc: &str) -> WaiverInput {
         bundle: WaiverBundle::parse(doc.as_bytes())
             .map_err(|defect| format!("{defect:?}"))
             .unwrap(),
-        trust_source: TrustSource::ExternalRequiredWorkflow,
+        trust_source: TrustSource::ExternalRequiredCheck,
     }
 }
 
@@ -291,7 +293,7 @@ fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
     let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate);
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -326,7 +328,7 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
     setup.constraint = Some(ConstraintInput {
         descriptor: ExecutionConstraintDescriptor::parse(
             br#"{
-  "schema": "amiss/scanner-execution-constraint/v1",
+  "schema": "amiss/scanner-execution-constraint",
   "action_repository": { "host": "git.example.internal", "owner": "platform/security", "name": "amiss-action" },
   "action_object_format": "sha1",
   "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -335,12 +337,12 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
   "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
   "selected_platform": "linux-x86_64",
   "required_status_name": "amiss / documentation assurance",
-  "bootstrap_contract": "amiss-action-bootstrap-v1",
+  "bootstrap_contract": "amiss-action-bootstrap",
   "bootstrap_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 }"#,
         )
         .unwrap(),
-        trust_source: TrustSource::OrganizationRuleset,
+        trust_source: TrustSource::OrganizationPolicy,
     });
     let report = payload(&fx, &setup);
 

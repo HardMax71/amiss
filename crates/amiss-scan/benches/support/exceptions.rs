@@ -71,8 +71,8 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             }
         })
         .collect();
-    let debt_digest = hb("amiss/bench-debt-context/v1", b"matching debt items");
-    let time_digest = hb("amiss/bench-time-context/v1", b"trusted time");
+    let debt_digest = hb("amiss/bench-debt-context", b"matching debt items");
+    let time_digest = hb("amiss/bench-time-context", b"trusted time");
     let policy = Effects {
         debt: Some(DebtContext {
             digest: debt_digest,
@@ -87,7 +87,8 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                     .unwrap_or_else(|| panic!("benchmark repository identity")),
                 ref_name: BranchRef::new("refs/heads/main".to_owned())
                     .unwrap_or_else(|| panic!("benchmark branch")),
-                candidate_identity_digest: hb("amiss/bench-candidate-identity/v1", b"candidate"),
+                candidate_identity_digest: hb("amiss/bench-candidate-identity", b"candidate"),
+                provider: "github-actions".to_owned(),
                 provider_run_id: "1".to_owned(),
                 provider_run_attempt: 1,
                 evaluation_instant: instant("2026-07-12T10:00:00Z"),
@@ -106,7 +107,7 @@ fn exception_observation(index: usize) -> (Observation, FindingKeyInput, Fact) {
     let target_text = format!("targets/{token}.rs");
     let document = repo_path(document_text.clone());
     let target = repo_path(target_text.clone());
-    let projection_digest = hb("amiss/scanner-source-projection/v1", b"reference");
+    let projection_digest = hb("amiss/scanner-source-projection", b"reference");
     let key_input = FindingKeyInput {
         finding_kind: EligibleFindingKind::ExplicitTargetMissing,
         scope: FindingScope {
@@ -135,7 +136,7 @@ fn exception_observation(index: usize) -> (Observation, FindingKeyInput, Fact) {
         },
     };
     let observation = Observation {
-        id: hb("amiss/bench-exception-observation/v1", token.as_bytes()),
+        id: hb("amiss/bench-exception-observation", token.as_bytes()),
         document,
         span: (0, 0),
         display: SpanDisplay {
@@ -156,7 +157,7 @@ fn exception_observation(index: usize) -> (Observation, FindingKeyInput, Fact) {
             query: None,
             fragment: None,
         },
-        raw_destination_digest: hb("amiss/scanner-raw-destination/v1", target_text.as_bytes()),
+        raw_destination_digest: hb("amiss/scanner-raw-destination", target_text.as_bytes()),
         projection_digest,
         resolution: TargetResolution {
             code: ResolutionCode::PathNotFound,

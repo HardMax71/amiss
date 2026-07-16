@@ -1,8 +1,8 @@
 # Parser-profile corpus
 
-`parser-profile-corpus-v1.json` is the gate the scanner spec puts in front of parser
+`parser-profile-corpus.json` is the gate the scanner spec puts in front of parser
 integration. Each case carries its raw source, what upstream says about it, the exact node count
-and depth that `parser-work-accounting-v1` charges for it under every profile, and, under the two
+and depth that `parser-work-accounting` charges for it under every profile, and, under the two
 parsing profiles, the full extraction goldens: every occurrence with both destination
 representations, its byte span, its node-path address, its block owner, and the document's opaque
 partition. An implementation that does not reproduce this manifest may not sit under the
@@ -73,7 +73,7 @@ The equivalence is not asserted on lineage alone. It is held up by upstream grou
 
 - all 652 CommonMark 0.31.2 examples reproduce byte for byte, with the extensions off;
 - all 22 examples that GFM 0.29 tags with an extension and actually executes reproduce under the
-  pinned `commonmark-gfm-v1` options, except the one divergence below;
+  pinned `commonmark-gfm` options, except the one divergence below;
 - of the 257 MDX fixtures, none is rejected here that the pinned grammar accepts, 166 of the 172
   that publish HTML reproduce it exactly, and every remaining difference is one of the recorded
   cases below;
@@ -218,7 +218,7 @@ unmatched JSX tag is `DOCUMENT_INVALID`, not a parser failure.
 
 ## Coverage, and what is missing
 
-Published profiles: `commonmark-gfm-v1`, `mdx-source-v1`, and `plain-zero-lexer-v1`. Every case is
+Published profiles: `commonmark-gfm`, `mdx-source`, and `plain-zero-lexer`. Every case is
 charged under all three, so a grammar change anywhere moves the manifest.
 
 With extraction, span, address, owner, and opaque goldens in the manifest, every golden family
