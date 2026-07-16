@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use amiss_fixtures::stage_symlink;
 use amiss_git::{Error, GitLimits, GitResources, Repository, parse_index_file};
@@ -15,17 +14,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn git_allow_failure(dir: &Path, args: &[&str]) {
-    Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
-        .output()
-        .expect("run git");
+    amiss_fixtures::git_output(dir, args).expect("run git");
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]

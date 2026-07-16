@@ -4,6 +4,28 @@ use std::process::{Command, Stdio};
 
 use sha1_checked::Digest as _;
 
+/// Repository-local variables Git exports to hooks. They must not select the
+/// repository, index, object store, or configuration for a fixture command.
+/// Keep this list in sync with `git rev-parse --local-env-vars`; the integration
+/// test detects additions made by the Git version running in CI.
+const GIT_REPOSITORY_LOCAL_ENVIRONMENT: &[&str] = &[
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+];
+
 /// The adversarial 4 MiB document behind the parser-eligibility law: the
 /// densest legal stress on the reference grammars while staying valid under
 /// every contract ceiling. Unpaired emphasis delimiters exercise the
@@ -418,19 +440,57 @@ pub fn path_arg(path: &Path) -> String {
     path.to_str().expect("fixture paths are utf-8").to_owned()
 }
 
-/// One quiet, hermetic git invocation with pinned identity and dates. The
-/// global config names a path that does not exist, which every platform reads
-/// as an empty file, where `/dev/null` would not resolve on Windows. Skipping
-/// the system config matters twice over there: it is what carries Git for
-/// Windows' `core.autocrlf=true`, so blobs and worktree bytes stay LF on
-/// every platform and the fixtures hash the same everywhere.
+/// One quiet, hermetic git invocation with pinned identity and dates. Any
+/// repository-local environment inherited from a hook is removed first, so a
+/// linked worktree's `GIT_DIR`, common directory, index, and object store
+/// cannot capture commands intended for a fixture repository. The global
+/// config names a path that does not exist, which every platform reads as an
+/// empty file, where `/dev/null` would not resolve on Windows. Skipping the
+/// system config matters twice over there: it is what carries Git for Windows'
+/// `core.autocrlf=true`, so blobs and worktree bytes stay LF on every platform
+/// and the fixtures hash the same everywhere.
 ///
 /// # Errors
 ///
 /// Spawn failures and nonzero exits, as plain I/O errors.
 pub fn git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
-    let output = Command::new("git")
-        .args(args)
+    let output = git_output(dir, args)?;
+    if !output.status.success() {
+        let mut detail = std::io::stderr().lock();
+        let _best_effort = detail.write_all(&output.stderr);
+        return Err(std::io::Error::other(format!("git {args:?} failed")));
+    }
+    String::from_utf8(output.stdout).map_err(std::io::Error::other)
+}
+
+/// One hermetic git invocation whose output is returned even when git exits
+/// unsuccessfully. This is for fixtures that deliberately create a rejected
+/// operation, such as a merge conflict.
+///
+/// # Errors
+///
+/// Git could not be spawned or its output could not be collected.
+pub fn git_output(dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
+    git_command(dir).args(args).output()
+}
+
+fn git_command(dir: &Path) -> Command {
+    let mut command = Command::new("git");
+    configure_git_command(&mut command, dir);
+    command
+}
+
+/// Makes a git command hermetic for one fixture repository. Repository-local
+/// variables inherited from a hook are explicitly removed, and configuration,
+/// identity, dates, working directory, and standard input are pinned.
+///
+/// Explicitly removed variables override values already attached to `command`
+/// as well as values inherited from its parent process.
+pub fn configure_git_command(command: &mut Command, dir: &Path) {
+    for name in GIT_REPOSITORY_LOCAL_ENVIRONMENT {
+        command.env_remove(name);
+    }
+    command
         .current_dir(dir)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", dir.join("absent-global-config"))
@@ -440,12 +500,5 @@ pub fn git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
         .env("GIT_COMMITTER_NAME", "t")
         .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
         .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-        .stdin(Stdio::null())
-        .output()?;
-    if !output.status.success() {
-        let mut detail = std::io::stderr().lock();
-        let _best_effort = detail.write_all(&output.stderr);
-        return Err(std::io::Error::other(format!("git {args:?} failed")));
-    }
-    String::from_utf8(output.stdout).map_err(std::io::Error::other)
+        .stdin(Stdio::null());
 }
