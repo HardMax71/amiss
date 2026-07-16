@@ -11,8 +11,10 @@ expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
 stated blind spot rather than an invisible one.
 
-Each destination then passes through the
-[resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs).
+Each destination then passes through the generic
+[resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);
+trusted absolute forge spellings continue through the private
+[dialect module](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve/forge.rs).
 A relative path resolves from the document's own directory and must stay inside the
 repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
 with `/` is a site route, not a repository-root shorthand, and is reported as unsupported
