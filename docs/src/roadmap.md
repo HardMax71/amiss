@@ -26,7 +26,8 @@ predictable, and maintainable outside its own repository.
 
 This phase exits when supported-reference accuracy and reviewer burden have recorded
 thresholds, hostile maximum-size inputs meet a truthful published runtime contract, active
-machine examples validate against active schemas, and every supported CI event has an
+schema-backed input examples validate against their schemas and typed readers, canonical
+report bytes clear their wrapper acceptance path, and every supported CI event has an
 end-to-end fixture or recorded run.
 
 ## Next: provider-verified controls

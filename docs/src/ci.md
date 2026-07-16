@@ -11,6 +11,9 @@ annotations on the pull request:
 - uses: HardMax71/amiss@v0
 ```
 
+Replace `<pinned-sha>` with the reviewed full commit id of `actions/checkout`, here and in
+the direct form below.
+
 The moving major ref follows the engine's semver major, `v0` for the 0.x series and
 `v1` from 1.0.0 on, so one series can never rewrite another's ref; `action/vX.Y.Z`
 tags are immutable exact pins, and pinning the full commit id works as everywhere. The action verifies the selected binary against
@@ -39,7 +42,7 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
   with:
     fetch-depth: 2
     persist-credentials: false
-- run: cargo install --locked --registry crates-io --version 0.4.0 amiss
+- run: cargo install --locked --registry crates-io --version '=<reviewed-version>' amiss
 - env:
     REPOSITORY: ${{ github.repository }}
     BRANCH: ${{ github.head_ref || github.ref_name }}
@@ -54,9 +57,13 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
       --profile enforce --format json > amiss-report.json
 ```
 
-The direct form pins both the released crate and its packaged dependency graph. Cargo checks
-the downloaded crate archive against the SHA-256 checksum in the crates.io index, while
-`--locked` refuses to recompute the packaged lockfile.
+Replace `<reviewed-version>` with the exact release you reviewed. The leading `=` makes the
+Cargo requirement exact instead of selecting another compatible release. The direct form
+then pins both the released crate and its packaged dependency graph: Cargo checks the
+downloaded crate archive against the SHA-256 checksum in the crates.io index, while
+`--locked` refuses to recompute the packaged lockfile. The placeholder is deliberately
+release-independent: the book does not copy each patch version out of the workspace package
+metadata that release-plz updates.
 
 Three details carry weight. Both named commits must exist in the checkout. The Action derives
 pull-request base and merge-result commits, merge-group base and head commits, or push

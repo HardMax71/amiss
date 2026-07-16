@@ -28,10 +28,12 @@ In CI the same engine ships as an action that derives both commits from the even
 annotates findings on the pull request:
 
 ```yaml
-- uses: actions/checkout@v7
+- uses: actions/checkout@<pinned-sha>
   with:
     fetch-depth: 2
 - uses: HardMax71/amiss@v0
 ```
+
+Replace `<pinned-sha>` with the reviewed full commit id of `actions/checkout`.
 
 Everything else is in the [documentation](https://hardmax71.github.io/amiss/).
