@@ -161,7 +161,7 @@ fn domain_separation_changes_the_digest() {
 /// The identity grammar after the host opened: a host is any nonempty
 /// slash-free claim up to the cap, an owner is one or more slash-joined
 /// segments, and the github constructor keeps the strict single-segment
-/// form the v1 control documents can spell.
+/// form the GitHub-bound v1 documents can spell.
 #[test]
 fn the_open_identity_grammar_admits_claims_and_keeps_structure() {
     use amiss_wire::model::{ForgeDialect, RepositoryIdentity};

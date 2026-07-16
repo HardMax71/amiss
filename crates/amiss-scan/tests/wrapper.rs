@@ -327,7 +327,7 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
         descriptor: ExecutionConstraintDescriptor::parse(
             br#"{
   "schema": "amiss/scanner-execution-constraint/v1",
-  "action_repository": { "host": "github.com", "owner": "acme", "name": "amiss-action" },
+  "action_repository": { "host": "git.example.internal", "owner": "platform/security", "name": "amiss-action" },
   "action_object_format": "sha1",
   "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -367,6 +367,14 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
     assert_eq!(
         report["controls"]["execution_constraint"]["descriptor"]["selected_platform"],
         "linux-x86_64"
+    );
+    assert_eq!(
+        report["controls"]["execution_constraint"]["descriptor"]["action_repository"]["host"],
+        "git.example.internal"
+    );
+    assert_eq!(
+        report["controls"]["execution_constraint"]["descriptor"]["action_repository"]["owner"],
+        "platform/security"
     );
 
     let finding = report["findings"]
