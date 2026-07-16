@@ -60,13 +60,16 @@ impl Includes {
             return true;
         }
         let raw = path.as_bytes();
-        self.trees.iter().any(|root| {
-            let stem = root.as_bytes();
-            raw == stem
-                || (raw.len() > stem.len()
-                    && raw.get(..stem.len()) == Some(stem)
-                    && raw.get(stem.len()) == Some(&b'/'))
-        })
+        self.trees.contains(raw)
+            || raw
+                .iter()
+                .enumerate()
+                .rev()
+                .filter(|(_, byte)| **byte == b'/')
+                .any(|(separator, _)| {
+                    raw.get(..separator)
+                        .is_some_and(|ancestor| self.trees.contains(ancestor))
+                })
     }
 }
 
@@ -376,13 +379,19 @@ pub fn effects(
     };
     let base_policy = base.policy.as_ref().unwrap_or(&empty);
     let candidate_policy = candidate.policy.as_ref().unwrap_or(&empty);
+    let candidate_includes: BTreeSet<(&str, IncludeKind)> = candidate_policy
+        .document_includes
+        .iter()
+        .map(|row| (row.path.as_str(), row.kind))
+        .collect();
+    let candidate_inventory: BTreeSet<&str> = candidate_policy
+        .protected_inventory
+        .iter()
+        .map(amiss_wire::model::RepoPathText::as_str)
+        .collect();
 
     for include in &base_policy.document_includes {
-        let kept = candidate_policy
-            .document_includes
-            .iter()
-            .any(|row| row.kind == include.kind && row.path.as_str() == include.path.as_str());
-        if !kept {
+        if !candidate_includes.contains(&(include.path.as_str(), include.kind)) {
             let rule = match include.kind {
                 IncludeKind::Document => "policy/include-document-removed",
                 IncludeKind::Tree => "policy/include-tree-removed",
@@ -395,11 +404,7 @@ pub fn effects(
         }
     }
     for member in &base_policy.protected_inventory {
-        let kept = candidate_policy
-            .protected_inventory
-            .iter()
-            .any(|row| row.as_str() == member.as_str());
-        if !kept {
+        if !candidate_inventory.contains(member.as_str()) {
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
                 rule_id: "policy/inventory-removed".to_owned(),
@@ -430,12 +435,7 @@ pub fn effects(
             .iter()
             .map(amiss_wire::model::RepoPathText::as_str),
     );
-    inventory.extend(
-        candidate_policy
-            .protected_inventory
-            .iter()
-            .map(amiss_wire::model::RepoPathText::as_str),
-    );
+    inventory.extend(candidate_inventory);
     for path in inventory {
         let rule = match candidate_documents(path) {
             InventoryState::Scanned => continue,

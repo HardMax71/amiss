@@ -11,6 +11,18 @@ observe warning to `fail` and can never downgrade or suppress it. An unknown
 field makes the whole file invalid and the run incomplete, which is what keeps the policy
 from growing into a plugin system one field at a time.
 
+A `document` include names one exact path. A `tree` include names that path and descendants
+separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching
+is bytewise, including for paths JSON cannot represent as text. Each snapshot policy can carry
+the [published repository-policy entry ceiling](limits.md), so the base/candidate
+classification union can contain twice that many distinct roots. The
+[`policy` tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/policy.rs)
+pin the semantic boundaries, and the release
+[`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/eligibility.rs)
+checks the maximum union without scanning every policy row for every discovered path. The
+`amiss-scan` `controls` benchmark tracks both tree matching and policy-set comparison as the
+entry count grows.
+
 External controls come from outside the repository, because anything stored inside it could
 be rewritten by the very pull request under review. The contract defines five: an
 organization floor (tightens ceilings and dispositions across many repositories), an
