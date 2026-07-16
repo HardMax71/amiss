@@ -7,16 +7,47 @@ before-and-after framing does not apply, or `unknown` when the match-up could no
 without guessing. The disposition says what the run does about it: `record` (noted),
 `warn` (shown), or `fail` (blocks). The location says where, down to byte offsets.
 
-The profile picks the default disposition for each kind. `observe` warns on everything and
-blocks on nothing; that is where a rollout starts, because it makes existing breakage
-visible without turning the repository red on day one. `enforce` makes a broken reference
-fail the run, and is meant to become a required check once the old breakage is cleaned up.
+The profile picks the built-in disposition for each kind. `observe` turns the three
+structural reference failures into warnings, while `enforce` makes them blocking. Several
+control-integrity findings fail under both profiles, and many coverage or change observations
+are records rather than warnings. The exact table below is generated from
+[`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs)
+and checked in CI.
 
-Two rules hold in both profiles. A link that does not resolve is always the serious case:
-`explicit-target-missing` is what blocks under enforce. And a file changing under an
-unchanged paragraph never blocks in any profile, because the change might be exactly what
-the paragraph already says. Amiss reports that the code moved and the prose did not. Whether
-that is a problem is a human call, and the tool refuses to fake it.
+<!-- amiss-doc-contract:profiles:start -->
+| Finding kind | Observe | Enforce |
+| --- | --- | --- |
+| `explicit-target-missing` | `warn` | `fail` |
+| `explicit-target-type-mismatch` | `warn` | `fail` |
+| `invalid-reference` | `warn` | `fail` |
+| `unsupported-reference-semantics` | `record` | `record` |
+| `unsupported-document-format` | `record` | `record` |
+| `unsupported-target-kind` | `record` | `record` |
+| `unsupported-version-scope` | `record` | `record` |
+| `unsupported-capability` | `fail` | `fail` |
+| `dependency-changed-subject-unchanged` | `warn` | `warn` |
+| `dependency-and-subject-cochanged` | `record` | `record` |
+| `subject-changed` | `record` | `record` |
+| `explicit-reference-removed` | `warn` | `warn` |
+| `document-removed` | `record` | `record` |
+| `external-out-of-scope` | `record` | `record` |
+| `opaque-mdx-region` | `record` | `record` |
+| `opaque-html-region` | `record` | `record` |
+| `observation-correlation-ambiguous` | `record` | `record` |
+| `unlinked-document` | `record` | `record` |
+| `policy-weakened` | `fail` | `fail` |
+| `coverage-reduced` | `fail` | `fail` |
+| `control-plane-changed` | `fail` | `fail` |
+| `debt-worsened` | `fail` | `fail` |
+| `debt-expired` | `fail` | `fail` |
+| `waiver-invalid` | `fail` | `fail` |
+<!-- amiss-doc-contract:profiles:end -->
+
+Two rules hold in both profiles. A supported explicit reference that does not resolve is the
+serious structural case: `explicit-target-missing` warns under observe and fails under
+enforce. A file changing under an unchanged paragraph is a warning in both profiles, because
+the change might be exactly what the paragraph already says. Amiss reports that the target
+moved and the prose did not; whether the prose is now wrong remains a human decision.
 
 The kinds, with what each one means:
 
@@ -30,7 +61,7 @@ The kinds, with what each one means:
 | `dependency-and-subject-cochanged` | both changed together, the healthy case |
 | `explicit-reference-removed` | a reference that existed in the base is gone |
 | `document-removed` | a whole document left the tree |
-| `unlinked-document` | a document nothing links to and that links to nothing |
+| `unlinked-document` | a scanned document from which Amiss extracted no references; inbound reachability is not computed |
 | `external-out-of-scope` | a URL to somewhere Amiss does not check, counted and left alone |
 | `opaque-html-region` | raw HTML the parser cannot see into, size and place reported |
 | `opaque-mdx-region` | the same for [MDX](https://mdxjs.com) expressions and JSX |
@@ -45,7 +76,9 @@ The kinds, with what each one means:
 | `control-plane-changed` | the candidate touches the control configuration |
 | `debt-worsened`, `debt-expired`, `waiver-invalid` | the external-control cases, see [Controls and policy](controls.md) |
 
-The last four families exist so that loosening the rules is itself reported under the rules
-being loosened. A repository policy may raise any kind's disposition and may never lower
-one. There is no suppression syntax anywhere; the way to silence a finding is to fix what it
-points at.
+The control families exist so that loosening rules and presenting invalid outside authority
+are themselves visible. Repository policy may raise only `explicit-target-missing`,
+`explicit-target-type-mismatch`, and `invalid-reference`, as enforced by the
+[policy parser and evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs).
+It may never lower a disposition. There is no suppression syntax anywhere; the way to remove
+a repository-policy finding is to fix what it points at.

@@ -8,13 +8,6 @@ use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
 
-/// The engine's memory ceiling, held as an address-space limit. It is the
-/// blocking sandbox descriptor's figure, applied here as well so that a
-/// repository which cannot be scanned under the required check cannot be
-/// scanned locally either, and the two runs stay the same run.
-#[cfg(unix)]
-const SANDBOX_MEMORY_BYTES: u64 = 1_073_741_824;
-
 /// Self-restriction, in safe Rust only: no child processes (the contract's
 /// zero repository-process budget), no core dumps (the address space holds
 /// repository bytes), and the sandbox's memory ceiling. Failures are
@@ -34,8 +27,8 @@ fn apply_sandbox() {
     let _memory = setrlimit(
         Resource::As,
         Rlimit {
-            current: Some(SANDBOX_MEMORY_BYTES),
-            maximum: Some(SANDBOX_MEMORY_BYTES),
+            current: Some(report::EVALUATOR_MANAGED_MEMORY_BYTES),
+            maximum: Some(report::EVALUATOR_MANAGED_MEMORY_BYTES),
         },
     );
 }

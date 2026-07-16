@@ -24,9 +24,10 @@ need no ledger, no lock, no refresh, and no belief about anyone's intent, and ev
 the rejected designs had agreed on them. The v0 scanner is that surviving part, built
 alone, under the review's discipline: fail closed, report every count, guess nothing.
 
-The full investigation, market survey, adversarial reviews, experiment data, and the frozen
-contracts this implementation was built against live in the repository's history as a
-complete dossier. The machine-readable contracts, schemas and canonical examples, ship in
+The full investigation, market survey, adversarial reviews, and experiment data remain in
+the repository's history as an
+[immutable dossier](https://github.com/HardMax71/amiss/tree/26df8f76f84ee0e8bbee3f8c7a5ab49a44eaaadc/docs).
+The machine-readable contracts, schemas and canonical examples, ship in
 [`spec/`](https://github.com/HardMax71/amiss/tree/main/spec). Where this book and the
 dossier disagree, the shipped code and its tests are the authority for what the tool does;
 the dossier remains the authority for why.

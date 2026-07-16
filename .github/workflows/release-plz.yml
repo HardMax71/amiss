@@ -39,9 +39,52 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
+      - id: release-plz
+        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      # release-plz updates the root workspace lockfile, but fuzz is an
+      # intentionally separate workspace. Commit its path-package IDs to the
+      # release PR too, so locked CI verifies the repository instead of fixing
+      # an incomplete release checkout in place.
+      - name: Refresh the fuzz lockfile in the release PR
+        shell: bash
+        env:
+          PR: ${{ steps.release-plz.outputs.pr }}
+          TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          branch="$(jq -r '.head_branch // empty' <<<"$PR")"
+          if [[ -z "$branch" ]]; then
+            echo "No release PR to refresh"
+            exit 0
+          fi
+
+          git fetch --no-tags origin "refs/heads/${branch}:refs/remotes/origin/${branch}"
+          git switch --force-create "$branch" "origin/$branch"
+          cargo update --workspace --manifest-path fuzz/Cargo.toml
+          cargo test --manifest-path fuzz/Cargo.toml --locked --release
+
+          if git diff --quiet -- fuzz/Cargo.lock; then
+            echo "The fuzz lockfile is already current"
+            exit 0
+          fi
+          if [[ -n "$(git status --short --untracked-files=all -- . ':(exclude)fuzz/Cargo.lock')" ]]; then
+            echo "Refreshing the fuzz lockfile changed an unexpected path"
+            git status --short
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fuzz/Cargo.lock
+          git commit -m "chore: refresh fuzz lockfile"
+
+          # Authenticate for this push only; do not persist the token in the
+          # checkout's config, remote URL, or process arguments.
+          helper='!f() { printf "username=x-access-token\npassword=%s\n" "$TOKEN"; }; f'
+          git -c credential.helper= -c credential.helper="$helper" \
+            push "https://github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${branch}"

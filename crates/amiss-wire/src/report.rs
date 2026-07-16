@@ -10,6 +10,15 @@ pub const ENGINE_CONTRACT: &str = "amiss/scanner-v0";
 /// envelope plus the trailing newline, never exceeds this.
 pub const MACHINE_JSON_BYTES: u64 = 67_108_864;
 
+/// The evaluator-managed memory ceiling asserted by the sandbox descriptor.
+pub const EVALUATOR_MANAGED_MEMORY_BYTES: u64 = 1_073_741_824;
+
+/// The private temporary-storage ceiling asserted by the sandbox descriptor.
+pub const PRIVATE_TEMPORARY_STORAGE_BYTES: u64 = 67_108_864;
+
+/// The watchdog ceiling asserted by the sandbox descriptor.
+pub const WATCHDOG_MILLISECONDS: u64 = 120_000;
+
 /// The fatal serializer's fixed scratch allowance: the staging buffer it
 /// reserves up front plus every transient allocation one streaming emission
 /// may make. The E0 maximal golden proves emission stays inside it.
@@ -761,6 +770,34 @@ pub enum FindingKind {
 }
 
 impl FindingKind {
+    /// Every finding kind in schema declaration order.
+    pub const ALL: [Self; 24] = [
+        Self::ExplicitTargetMissing,
+        Self::ExplicitTargetTypeMismatch,
+        Self::InvalidReference,
+        Self::UnsupportedReferenceSemantics,
+        Self::UnsupportedDocumentFormat,
+        Self::UnsupportedTargetKind,
+        Self::UnsupportedVersionScope,
+        Self::UnsupportedCapability,
+        Self::DependencyChangedSubjectUnchanged,
+        Self::DependencyAndSubjectCochanged,
+        Self::SubjectChanged,
+        Self::ExplicitReferenceRemoved,
+        Self::DocumentRemoved,
+        Self::ExternalOutOfScope,
+        Self::OpaqueMdxRegion,
+        Self::OpaqueHtmlRegion,
+        Self::ObservationCorrelationAmbiguous,
+        Self::UnlinkedDocument,
+        Self::PolicyWeakened,
+        Self::CoverageReduced,
+        Self::ControlPlaneChanged,
+        Self::DebtWorsened,
+        Self::DebtExpired,
+        Self::WaiverInvalid,
+    ];
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -883,18 +920,29 @@ pub fn sandbox_descriptor() -> (Value, Digest) {
         ("environment", string("scanner-process-env-v1")),
         (
             "physical_memory",
-            object(vec![("maximum_bytes", Value::Integer(1_073_741_824))]),
+            object(vec![(
+                "maximum_bytes",
+                Value::Integer(i64::try_from(EVALUATOR_MANAGED_MEMORY_BYTES).unwrap_or(i64::MAX)),
+            )]),
         ),
         (
             "temporary_storage",
             object(vec![
                 ("kind", string("private-bounded")),
-                ("maximum_bytes", Value::Integer(67_108_864)),
+                (
+                    "maximum_bytes",
+                    Value::Integer(
+                        i64::try_from(PRIVATE_TEMPORARY_STORAGE_BYTES).unwrap_or(i64::MAX),
+                    ),
+                ),
             ]),
         ),
         (
             "watchdog",
-            object(vec![("maximum_milliseconds", Value::Integer(120_000))]),
+            object(vec![(
+                "maximum_milliseconds",
+                Value::Integer(i64::try_from(WATCHDOG_MILLISECONDS).unwrap_or(i64::MAX)),
+            )]),
         ),
     ]);
     let digest = hj(SANDBOX_SCHEMA, &descriptor);
