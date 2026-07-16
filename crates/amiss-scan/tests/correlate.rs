@@ -193,6 +193,21 @@ fn an_escape_spelling_change_is_candidate_never_exact() {
 }
 
 #[test]
+fn native_and_same_repository_forge_intents_share_a_candidate_class() {
+    let base = basic("docs/a.md", "docs/b.md", "see [x](x)");
+    let mut forge = basic("docs/a.md", "docs/b.md", "see [x](x)");
+    forge.intent.kind = IntentKind::SameRepositoryGithub;
+    forge.raw_destination = "https://github.com/acme/repo/blob/main/docs/b.md".to_owned();
+
+    let got = run(
+        &side(vec![observation(&base)]),
+        &side(vec![observation(&forge)]),
+    );
+    assert_eq!(got.len(), 1);
+    assert_eq!(got.first().map(|row| row.outcome), Some(Outcome::Candidate));
+}
+
+#[test]
 fn the_derivation_table_is_total() {
     let source_changed = |from: &Spec| {
         let mut changed = from.clone();
@@ -326,6 +341,95 @@ fn ambiguity_selects_smallest_primaries_and_keeps_alternatives() {
 }
 
 #[test]
+fn dense_ambiguity_keeps_every_occurrence_once_in_identity_order() {
+    let mut base_first = basic("d.md", "t.md", "base one [x](x)");
+    base_first.node_path = vec![1, 0];
+    let mut base_second = basic("d.md", "t.md", "base two [x](x)");
+    base_second.node_path = vec![2, 0];
+    let mut candidate_first = basic("d.md", "t.md", "candidate one [x](x)");
+    candidate_first.node_path = vec![3, 0];
+    let mut candidate_second = basic("d.md", "t.md", "candidate two [x](x)");
+    candidate_second.node_path = vec![4, 0];
+
+    let base_observations = vec![observation(&base_first), observation(&base_second)];
+    let candidate_observations = vec![
+        observation(&candidate_first),
+        observation(&candidate_second),
+    ];
+    let mut expected_base: Vec<_> = base_observations.iter().map(|item| item.id).collect();
+    let mut expected_candidate: Vec<_> =
+        candidate_observations.iter().map(|item| item.id).collect();
+    expected_base.sort_unstable();
+    expected_candidate.sort_unstable();
+
+    let got = run(
+        &side(base_observations.into_iter().rev().collect()),
+        &side(candidate_observations.into_iter().rev().collect()),
+    );
+    assert_eq!(got.len(), 1);
+    let Some(row) = got.first() else { return };
+    assert_eq!(row.outcome, Outcome::Ambiguous);
+    let actual_base: Vec<_> = row
+        .base
+        .iter()
+        .chain(&row.alternatives_base)
+        .map(|item| item.id)
+        .collect();
+    let actual_candidate: Vec<_> = row
+        .candidate
+        .iter()
+        .chain(&row.alternatives_candidate)
+        .map(|item| item.id)
+        .collect();
+    assert_eq!(actual_base, expected_base);
+    assert_eq!(actual_candidate, expected_candidate);
+}
+
+#[test]
+fn exact_identity_is_removed_before_semantic_ambiguity() {
+    let exact = basic("d.md", "t.md", "exact [x](x)");
+    let mut base_other = basic("d.md", "t.md", "base other [x](x)");
+    base_other.node_path = vec![1, 0];
+    let mut candidate_first = basic("d.md", "t.md", "candidate one [x](x)");
+    candidate_first.node_path = vec![2, 0];
+    let mut candidate_second = basic("d.md", "t.md", "candidate two [x](x)");
+    candidate_second.node_path = vec![3, 0];
+    let exact_id = observation(&exact).id;
+
+    let got = run(
+        &side(vec![observation(&base_other), observation(&exact)]),
+        &side(vec![
+            observation(&candidate_second),
+            observation(&exact),
+            observation(&candidate_first),
+        ]),
+    );
+    assert_eq!(got.len(), 2);
+    assert!(got.iter().any(|row| row.outcome == Outcome::Exact));
+    let Some(exact_row) = got.iter().find(|row| row.outcome == Outcome::Exact) else {
+        return;
+    };
+    assert_eq!(exact_row.base.as_ref().map(|item| item.id), Some(exact_id));
+    assert_eq!(
+        exact_row.candidate.as_ref().map(|item| item.id),
+        Some(exact_id)
+    );
+    assert!(got.iter().any(|row| row.outcome == Outcome::Ambiguous));
+    let Some(ambiguous) = got.iter().find(|row| row.outcome == Outcome::Ambiguous) else {
+        return;
+    };
+    assert!(
+        ambiguous
+            .base
+            .iter()
+            .chain(&ambiguous.alternatives_base)
+            .chain(ambiguous.candidate.iter())
+            .chain(&ambiguous.alternatives_candidate)
+            .all(|item| item.id != exact_id)
+    );
+}
+
+#[test]
 fn isolated_occurrences_are_added_or_removed() {
     let only_base = basic("d.md", "gone.md", "old [x](x)");
     let only_candidate = basic("d.md", "new.md", "new [x](x)");
@@ -386,6 +490,29 @@ fn an_exact_rename_pairs_only_unique_content() {
         .insert(rp("another/copy.md"), (GitMode::RegularFile, digest));
     let got = run(&base_side, &duplicated);
     assert_eq!(got.len(), 2, "duplicate content forms no rename edge");
+    assert!(got.iter().all(|row| row.outcome == Outcome::None));
+}
+
+#[test]
+fn a_rename_requires_the_same_source_projection() {
+    let base_spec = basic("old/name.md", "shared/t.md", "kept [x](x)");
+    let mut candidate_spec = basic("new/name.md", "shared/t.md", "rewritten [x](x)");
+    candidate_spec.node_path = vec![3, 0];
+
+    let digest = hb("amiss/raw-evidence/v1", b"the very same document bytes");
+    let mut base_side = side(vec![observation(&base_spec)]);
+    base_side
+        .documents
+        .insert(rp("old/name.md"), (GitMode::RegularFile, digest));
+    base_side.documents.remove(b"new/name.md".as_slice());
+    let mut candidate_side = side(vec![observation(&candidate_spec)]);
+    candidate_side
+        .documents
+        .insert(rp("new/name.md"), (GitMode::RegularFile, digest));
+    candidate_side.documents.remove(b"old/name.md".as_slice());
+
+    let got = run(&base_side, &candidate_side);
+    assert_eq!(got.len(), 2);
     assert!(got.iter().all(|row| row.outcome == Outcome::None));
 }
 
