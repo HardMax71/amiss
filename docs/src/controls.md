@@ -34,6 +34,8 @@ control-specific: the current floor, debt, waiver, and trusted-time v1 documents
 GitHub-scoped and match the scanned repository and branch exactly. Trusted time also
 matches the candidate identity and authenticated provider run, debt must reproduce its
 adoption tree, and a waiver item for another candidate tree is simply not selected.
+The commit and staged-index paths share one
+[external-control verification gate](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 
 Debt and waiver require verified trusted time and a complete Git candidate. Their item
 schemas can name only `explicit-target-missing` or `explicit-target-type-mismatch`, and
