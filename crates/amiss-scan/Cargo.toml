@@ -32,6 +32,10 @@ name = "correlation"
 harness = false
 
 [[bench]]
+name = "controls"
+harness = false
+
+[[bench]]
 name = "pipeline"
 harness = false
 
