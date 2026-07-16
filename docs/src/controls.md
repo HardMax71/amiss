@@ -31,9 +31,11 @@ bundle (time-limited permission to pass despite a named failure), trusted time, 
 execution constraint. The run identity itself accepts any grammar-valid declared forge
 host, including enterprise and self-hosted instances. Bindings and effects are
 control-specific: the current floor, debt, waiver, and trusted-time v1 documents remain
-GitHub-scoped and match the scanned repository and branch exactly. Trusted time also
-matches the candidate identity and authenticated provider run, debt must reproduce its
-adoption tree, and a waiver item for another candidate tree is simply not selected.
+GitHub-scoped and match the scanned repository and branch exactly. The
+[trusted-time v1 parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls/trusted_time.rs)
+pins the statement shape and TTL; verification also matches the candidate identity and
+authenticated provider run. Debt must reproduce its adoption tree, and a waiver item for
+another candidate tree is simply not selected.
 The commit and staged-index paths share one
 [external-control verification gate](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 

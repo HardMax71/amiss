@@ -1,6 +1,7 @@
 use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, FACT_DOMAIN, FINDING_KEY_DOMAIN, FloorDefect,
-    OrganizationFloor, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
+    OrganizationFloor, STATEMENT_TTL_MAX_SECONDS, ScannerPolicy, TrustedTimeStatement,
+    WaiverBundle,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -547,6 +548,7 @@ const TIME_STATEMENT: &str = r#"{
 
 #[test]
 fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
+    assert_eq!(STATEMENT_TTL_MAX_SECONDS, 600);
     let statement = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
     assert_eq!(statement.provider_run_id, "987654321");
     assert_eq!(statement.provider_run_attempt, 2);
