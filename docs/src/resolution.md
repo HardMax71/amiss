@@ -16,10 +16,13 @@ Each destination then passes through the
 A relative path resolves from the document's own directory and must stay inside the
 repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
 with `/` is a site route, not a repository-root shorthand, and is reported as unsupported
-reference semantics. When the invocation provides the `--repository` triple and a dialect,
-a URL on the declared host that names this same repository in the dialect's own spelling
-and a ref the scan can vouch for is converted to the path it points at. Every other URL is
-`external-out-of-scope`: counted, reported, left alone.
+reference semantics. Forge URLs need the complete identity group, not only the repository
+name. When the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
+selects a dialect, a URL on the declared host that names the same repository in that
+dialect's spelling is converted to a path only when it names the candidate branch or, for
+Gitea, the exact candidate commit. A same-repository URL for any other version is
+`unsupported-version-scope`; URLs outside that identity are `external-out-of-scope`:
+counted, reported, left alone.
 
 Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
 The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
@@ -41,7 +44,7 @@ One document, every destination shape:
 [site](/docs/guide.md)                unsupported site route; it is not rewritten as a tree path
 [escape](../../etc/passwd)            invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
-[gh](https://github.com/o/r/blob/main/src/lib.rs)   a path, when the triple names o/r on github.com
+[gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
 [web](https://example.com/manual)     external-out-of-scope: counted, left alone
 [anchor](guide.md#setup)              target read; fragment semantics reported unsupported
 ```
@@ -57,18 +60,22 @@ digraph resolve {
   rel   [label = "relative path"];
   route [label = "leading-slash
 site route"];
-  gh    [label = "forge URL,
+  forge [label = "forge URL,
 same repository"];
+  scope [label = "candidate ref
+(or Gitea candidate OID)"];
   other [label = "any other URL"];
   tree  [label = "resolve against
 the tree"];
   ext   [label = "external-out-of-scope"];
+  vers  [label = "unsupported-version-scope"];
   unsup [label = "unsupported-reference-semantics"];
   hit   [label = "target bytes
 and mode read"];
   miss  [label = "explicit-target-missing"];
-  dest -> rel; dest -> gh [label = "with the triple"]; dest -> route; dest -> other;
-  rel -> tree; gh -> tree; route -> unsup; other -> ext;
+  dest -> rel; dest -> forge [label = "with identity + dialect"]; dest -> route; dest -> other;
+  rel -> tree; forge -> scope; scope -> tree [label = "matches"];
+  scope -> vers [label = "other version"]; route -> unsup; other -> ext;
   tree -> hit [label = "found"]; tree -> miss [label = "absent"];
 }
 ```
@@ -86,8 +93,9 @@ UTF-8 is dropped rather than digested, since carrying it would change the record
 identity of every existing observation for no resolution gain. For a relative path with a
 nonempty fragment, the target path is resolved but the heading or code meaning is not
 checked, producing `unsupported-reference-semantics`. A leading-slash site route produces
-the same finding kind. A recognized same-repository forge
-URL whose ref is outside the declared candidate/default scope produces
+the same finding kind. Only the candidate version is read. `--default-branch-ref` supplies a
+second trusted spelling so the resolver can split a ref from its path without guessing;
+when a URL names the default branch but the candidate ref differs, it is still
 `unsupported-version-scope`. Site generators and language-aware tools own route, anchor,
 and symbol semantics; guessing them here would turn honest ignorance into a false pass. The
 [resolver tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
