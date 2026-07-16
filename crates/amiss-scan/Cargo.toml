@@ -28,6 +28,10 @@ name = "adapters"
 harness = false
 
 [[bench]]
+name = "correlation"
+harness = false
+
+[[bench]]
 name = "pipeline"
 harness = false
 

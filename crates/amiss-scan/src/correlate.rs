@@ -121,17 +121,17 @@ pub struct Comparison {
 /// escape-only change still forms a candidate edge; external, site-route, and
 /// unsupported intents keep their raw digest because no safer semantic
 /// identity exists for them.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum CorrelationIntent {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum CorrelationIntent<'a> {
     Repository {
-        path: Option<RepoPath>,
+        path: Option<&'a RepoPath>,
         target_kind: TargetKind,
         query: Option<Digest>,
         fragment: Option<Digest>,
     },
     External {
         raw: Digest,
-        scheme: String,
+        scheme: &'a str,
         query: Option<Digest>,
         fragment: Option<Digest>,
     },
@@ -143,7 +143,7 @@ enum CorrelationIntent {
     },
 }
 
-fn correlation_intent(observation: &Observation) -> CorrelationIntent {
+fn correlation_intent(observation: &Observation) -> CorrelationIntent<'_> {
     let intent = &observation.intent;
     let query = observe::query_digest(intent);
     let fragment = observe::fragment_digest(intent);
@@ -152,14 +152,14 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent {
         | IntentKind::SameRepositoryGithub
         | IntentKind::SameRepositoryGitlab
         | IntentKind::SameRepositoryGitea => CorrelationIntent::Repository {
-            path: intent.repository_path.clone(),
+            path: intent.repository_path.as_ref(),
             target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
             query,
             fragment,
         },
         IntentKind::ExternalUrl => CorrelationIntent::External {
             raw: observation.raw_destination_digest,
-            scheme: intent.external_scheme.clone().unwrap_or_default(),
+            scheme: intent.external_scheme.as_deref().unwrap_or_default(),
             query,
             fragment,
         },
@@ -170,6 +170,52 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent {
             fragment,
         },
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct CorrelationKey<'a> {
+    adapter: Adapter,
+    construct: SourceConstruct,
+    intent: CorrelationIntent<'a>,
+}
+
+impl<'a> From<&'a Observation> for CorrelationKey<'a> {
+    fn from(observation: &'a Observation) -> Self {
+        Self {
+            adapter: observation.adapter,
+            construct: observation.construct,
+            intent: correlation_intent(observation),
+        }
+    }
+}
+
+#[derive(Default)]
+struct DocumentGroup<'a> {
+    observations: Vec<&'a Observation>,
+    projections: BTreeMap<Digest, Vec<&'a Observation>>,
+}
+
+type ObservationGroups<'a> =
+    BTreeMap<CorrelationKey<'a>, BTreeMap<&'a RepoPath, DocumentGroup<'a>>>;
+
+fn observation_groups<'a>(
+    observations: impl Iterator<Item = &'a Observation>,
+) -> ObservationGroups<'a> {
+    let mut groups: ObservationGroups<'a> = BTreeMap::new();
+    for observation in observations {
+        let document = groups
+            .entry(CorrelationKey::from(observation))
+            .or_default()
+            .entry(&observation.document)
+            .or_default();
+        document.observations.push(observation);
+        document
+            .projections
+            .entry(observation.projection_digest)
+            .or_default()
+            .push(observation);
+    }
+    groups
 }
 
 /// Exact Git renames among unmatched document paths: a removed base blob and
@@ -261,13 +307,10 @@ pub fn correlate(base: &Side, candidate: &Side) -> Result<Vec<Comparison>, Error
     for id in base_by_id.keys().chain(candidate_by_id.keys()) {
         parent.insert(*id, *id);
     }
-    for left in base_by_id.values() {
-        for right in candidate_by_id.values() {
-            if plausible(left, right, &renames) {
-                union(&mut parent, left.id, right.id);
-            }
-        }
-    }
+
+    let base_groups = observation_groups(base_by_id.values().copied());
+    let candidate_groups = observation_groups(candidate_by_id.values().copied());
+    connect_candidates(&mut parent, &base_groups, &candidate_groups, &renames);
 
     let mut grouped: BTreeMap<Digest, (Vec<&Observation>, Vec<&Observation>)> = BTreeMap::new();
     for (id, observation) in &base_by_id {
@@ -309,6 +352,39 @@ pub fn correlate(base: &Side, candidate: &Side) -> Result<Vec<Comparison>, Error
     Ok(comparisons)
 }
 
+fn connect_candidates(
+    parent: &mut BTreeMap<Digest, Digest>,
+    base_groups: &ObservationGroups<'_>,
+    candidate_groups: &ObservationGroups<'_>,
+    renames: &BTreeMap<RepoPath, RepoPath>,
+) {
+    for (key, base_documents) in base_groups {
+        let Some(candidate_documents) = candidate_groups.get(key) else {
+            continue;
+        };
+        for (base_document, base_group) in base_documents {
+            if let Some(candidate_group) = candidate_documents.get(base_document) {
+                connect(
+                    parent,
+                    &base_group.observations,
+                    &candidate_group.observations,
+                );
+            }
+            let Some(candidate_document) = renames.get(*base_document) else {
+                continue;
+            };
+            let Some(candidate_group) = candidate_documents.get(candidate_document) else {
+                continue;
+            };
+            for (projection, base_ids) in &base_group.projections {
+                if let Some(candidate_ids) = candidate_group.projections.get(projection) {
+                    connect(parent, base_ids, candidate_ids);
+                }
+            }
+        }
+    }
+}
+
 fn root(parent: &BTreeMap<Digest, Digest>, id: Digest) -> Digest {
     let mut at = id;
     while let Some(next) = parent.get(&at) {
@@ -334,22 +410,19 @@ fn union(parent: &mut BTreeMap<Digest, Digest>, left: Digest, right: Digest) {
     parent.insert(high, low);
 }
 
-fn plausible(
-    left: &Observation,
-    right: &Observation,
-    renames: &BTreeMap<RepoPath, RepoPath>,
-) -> bool {
-    if left.adapter != right.adapter
-        || left.construct != right.construct
-        || correlation_intent(left) != correlation_intent(right)
-    {
-        return false;
+/// Connects one complete bipartite edge set with a linear spanning tree.
+/// Correlation consumes connected components rather than individual edges,
+/// so this is equivalent to inserting every left-by-right pair.
+fn connect(parent: &mut BTreeMap<Digest, Digest>, left: &[&Observation], right: &[&Observation]) {
+    let (Some(left_primary), Some(right_primary)) = (left.first(), right.first()) else {
+        return;
+    };
+    for observation in left {
+        union(parent, observation.id, right_primary.id);
     }
-    if left.document == right.document {
-        return true;
+    for observation in right.iter().skip(1) {
+        union(parent, left_primary.id, observation.id);
     }
-    renames.get(&left.document) == Some(&right.document)
-        && left.projection_digest == right.projection_digest
 }
 
 fn component_comparison(
