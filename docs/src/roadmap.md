@@ -1,63 +1,80 @@
 # Roadmap
 
-The local command is the whole product today, and the boundaries it declares are the
-roadmap's table of contents.
+This page contains future work, not release notes or a promise that every candidate will
+ship. The factual boundary of the current product is in [Project status](status.md), and
+completed changes move to the
+[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md) instead of being
+repeated here.
 
-The nearest lane is verified external controls. The request wire, a signed envelope
-carrying the evaluation request and the five controls described in
-[Controls and policy](controls.md), is specified in the project record and deliberately
-unbuilt; the report already carries its fields as `none`. When those formats revise, they
-also pick up the report's second-contract path union, closing the gap where a finding on
-a byte-named document is reportable but not yet waivable. When it lands, organization
-floors, adoption debt, waivers, trusted time, and execution constraints become usable in
-required checks, each tied to the exact tree it authorizes. The same revision is where
-controls learn hosts other than github.com: the scanner already evaluates any declared
-forge identity, but a control document can bind to one only when its format can spell it
-and a trust anchor exists there. The `amiss-bootstrap` wrapper
-and the release manifest chain, which validate a pinned action tree and launch a verified
-engine, ship in the repository now and wait on that same lane.
+## Now: validate and harden
 
-Reference support grows only where a boundary can be made exact. Heading-anchor resolution
-is the most requested candidate, and it enters only with a slug algorithm pinned the way
-the parsers are pinned, because a wrong guess about slugs is a false pass.
-reStructuredText and AsciiDoc parsers would slot in the way the [MDX](https://mdxjs.com) parser does today:
-pinned grammar, test corpus, honest opacity for whatever the grammar cannot see.
+Stronger enforcement should follow evidence that the existing scanner is accurate,
+predictable, and maintainable outside its own repository.
 
-The governed layer, typed claims, acceptance records, verified review, everything the
-rejected predecessor wanted to be, stays closed behind the project record's gates. The
-contracts exist and the semantics are worked out, but none of it is authorized until the
-scanner has earned adoption evidence and the storage experiments pass. The position has
-not changed: a check that cannot yet be made trustworthy does not ship wearing a
-trustworthy costume.
+- Keep the book, active schemas, canonical examples, and released behavior aligned. Prefer
+  generated contract blocks and links to implementation artifacts where a claim is
+  mechanical.
+- Bound parser CPU work while parsing, or narrow the published runtime guarantee to the
+  resources the engine can currently measure. Decide whether the convenience Action needs
+  an independent wall-clock watchdog.
+- Run shadow scans on unrelated repositories and record denominators, false positives,
+  clean-page false negatives, reviewer actionability, latency, and maintenance cost.
+- Exercise pull-request, push, merge-group, fork, shallow-checkout, and staged-index paths in
+  their real hosting environments.
+- Accumulate benchmark, fuzz, mutation, security, and compatibility results long enough to
+  distinguish a trend from a single green run.
 
-Performance work follows measurement. The published ceilings bound the worst case, a
-benchmark job watches the common case, and the known slow corners in the pinned upstream
-grammars are documented in the corpus notes rather than papered over.
+This phase exits when supported-reference accuracy and reviewer burden have recorded
+thresholds, hostile maximum-size inputs meet a truthful published runtime contract, active
+machine examples validate against active schemas, and every supported CI event has an
+end-to-end fixture or recorded run.
 
-## The specified future, in claim kinds
+## Next: provider-verified controls
 
-The project record specifies a ladder of claim kinds beyond the v0 scanner, each named after
-the question it answers and each grounded in an observed failure from
-[the evidence base](evidence.md). Deterministic kinds: a snippet claim (displayed code equals
-the selected source), a value claim (a number or name in prose equals a value extracted from
-code, for the hand-written counts that were wrong everywhere), an inventory claim (a
-documented set equals an extracted set, two-sided, because the audited page that listed only
-correct files still failed by omission), a tree claim, a graph claim, and a transcript claim
-(a recorded command run, fingerprinting the binary that produced it, because transcripts
-against a stale binary stayed green). Two review kinds sit above them: a narrative claim,
-free prose attested against fingerprinted evidence, and an external claim, prose that depends
-on the world outside the repository and re-checks on a schedule, the one place wall-clock
-time is a sanctioned input.
+This milestone is conditional on the validation phase. Internal request parsers, control
+semantics, and bootstrap supervision already exist; their exact maturity is recorded in
+[Project status](status.md). The remaining product work is integration and an independent
+trust boundary:
 
-Extraction wider than explicit links is specified and deliberately deferred, because the
-noise classes are documented: prose that tells the reader to create a file matches every
-existing-directory heuristic forever, gitignored build artifacts look like broken references,
-and a bare filename that binds uniquely today becomes ambiguous the day a same-named file
-appears. Each of those has a worked answer in the record, and none of the answers is free, so
-none of them ships until the simple layer has earned its keep.
+- acquire and authenticate provider-created evaluation and control requests;
+- feed the authenticated request into the engine instead of constructing an all-absent
+  control shell in the CLI;
+- include and invoke `amiss-bootstrap` in the protected required-check path;
+- define trust anchors, freshness, revocation, and replay behavior;
+- revise control formats so every reportable byte path and supported forge identity can be
+  bound without lossy text conversions; and
+- cover wrong identity, wrong tree, expiry, replay, missing output, timeout, and tampered
+  runtime closure in end-to-end negative tests.
 
-The enforcement model for all of it is tiered by proof strength, a lesson from the
-failure-mode study: hard blocks only for what is deterministically wrong, required human
-acknowledgment for impact, advisory discovery for everything heuristic, and no bulk
-acceptance gesture anywhere, because the audit's cheapest-bypass finding applies to any gate
-this project ever ships.
+The lane is ready only when the verifier is acquired independently of the action tree it
+checks, every authorization binds the exact repository and tree, and a report distinguishes
+verified provenance from local self-assertion without relying on repository-controlled
+input.
+
+## Reference-coverage candidates
+
+These are candidates, not scheduled milestones. Each enters the roadmap only after observed
+demand and a pinned semantic contract exist.
+
+- Heading anchors require a pinned slugging corpus for each supported renderer. Checking
+  only the file while guessing the anchor would create false passes.
+- reStructuredText or AsciiDoc requires a pinned grammar, conformance corpus, extraction
+  goldens, resource accounting, and honest opaque regions.
+- Bare-path inference remains advisory research until measured precision is high enough to
+  justify the ambiguity and reviewer load it introduces.
+
+## Research, not committed work
+
+Typed snippet, value, inventory, tree, graph, transcript, narrative, and external claims
+remain research. Persistent acceptance records and governed review state reopen storage,
+concurrency, ownership, expiry, and cheapest-bypass problems that the stateless scanner
+avoids.
+
+No claim kind becomes a milestone without design-partner demand, a proof-strength model,
+measured review burden, and experiments covering persistence and concurrent branches. Until
+then these are design vocabulary, not advertised capability.
+
+The permanent boundaries remain in [What Amiss is not](non-goals.md): no semantic truth
+verdicts about prose, no repository-executed hooks, no live-network validation inside the
+engine, no automatic prose rewriting, and no repository-controlled weakening of a required
+policy.

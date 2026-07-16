@@ -4,9 +4,10 @@ Two kinds of configuration can shape a run, and they carry opposite amounts of t
 
 The repository policy is the one input read from the scanned tree itself, and it is
 correspondingly weak. `.amiss/scanner-policy.json` can add directories to scan, list
-protected paths whose removal is always a finding, and raise how severely a finding kind is
-treated. Raise only: `record` can become `warn` or `fail`, and nothing can go the other
-way. So a repository can make its own check stricter and can never loosen it. An unknown
+protected paths whose removal is always a finding, and raise the disposition of
+`explicit-target-missing`, `explicit-target-type-mismatch`, and `invalid-reference`. Raise
+only: repository policy combines with the built-in profile by maximum, so it can promote an
+observe warning to `fail` and can never downgrade or suppress it. An unknown
 field makes the whole file invalid and the run incomplete, which is what keeps the policy
 from growing into a plugin system one field at a time.
 
@@ -26,12 +27,18 @@ finding on a document whose name is raw bytes, but the waiver and debt formats s
 paths as text, so such a finding is reportable yet cannot be waived or adopted until those
 formats revise.
 
-In the shipped v0 command line, all five external controls are `none`, and the report says
-so plainly: `provider_verified` is false, and each control's absence is recorded. The
-delivery lane for verified controls, a provider-signed request format, is specified but not
-built. The report already has the fields so that adding the lane later breaks nothing. Until
-then, the honest reading of any local report is: these findings, under this policy, with no
-outside authority consulted.
+In the public command and composite Action, all five external controls are absent. The
+report records `status: "none"` separately for organization floor, debt snapshot, waiver
+bundle, execution constraint, and trusted time; its sandbox assurance is `self-asserted`.
+There is no aggregate `provider_verified` field. The exact projection is built in the
+[report writer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/report.rs).
+
+Strict request parsers and the five control semantics exist as internal library surfaces,
+but authenticated provider acquisition and public CLI/bootstrap wiring do not. The public
+[CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) supplies
+each value as `None`. Until the delivery lane in [Project status](status.md) is complete, the
+honest reading of a local or convenience-Action report is: these findings, under this
+repository policy, with no outside authority consulted.
 
 The control-plane finding family closes the loop from the other side. When a candidate
 weakens its own policy file, shrinks what gets scanned, or edits the control configuration,

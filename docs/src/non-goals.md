@@ -20,31 +20,32 @@ and react when reality drifts from the record. The rejected design is described 
 migration, merge-conflict, and trust-on-edit failure modes wholesale, at the price of
 answering a smaller question.
 
-It does not check heading anchors, site routes, code symbols, or other repositories. Each
-of those is a real check that belongs to a layer holding the right information: the site
-generator knows its routes, the language server knows its symbols. Amiss lists them as
-explicit unsupported boundaries in the report instead of guessing, because a guessed pass
-looks exactly like a real one until it burns you.
+It resolves the file portion of a relative link with a heading fragment, but it does not
+check the heading's slug. It also does not validate site routes, code symbols, live URLs, or
+other repositories. Those checks belong to a layer holding the right information: the site
+generator knows its routes and the language server knows its symbols. Where a supported
+construct reaches one of these boundaries, Amiss records the unsupported or out-of-scope
+semantics instead of guessing, because a guessed pass looks exactly like a real one until it
+burns you.
 
 And it accepts no configuration that would let a repository weaken its own check. No
 suppression comments, no severity downgrades, no hooks. The absence is the point.
 
 ## Against the alternatives
 
-The project record compares the design against every neighboring school, and says where each
-one wins.
+The predecessor investigation compared the design with several neighboring approaches and
+recorded where each one wins.
 
-Swimm wins wherever docs are authored inside its platform: its auto-sync genuinely repairs a
-renamed token without a human. Amiss never edits prose, because the best published
-comment-updating system reached 16.7% exact match, and a tool that is wrong five times out of
-six does not get write access. Swimm sees only documents written in its format; Amiss reads
-the repository as it already is.
+Swimm wins wherever docs are authored inside its platform: its auto-sync can repair a renamed
+token without a human. Amiss never edits prose because a structural observation does not
+authorize a semantic rewrite. Swimm sees documents authored for its platform; Amiss reads
+supported document classes already present in the repository.
 
-Fiberplane's drift is the closest mechanism, and for a solo developer with twenty hand-placed
-anchors it is the right amount of tool: an authored `@path#Symbol` anchor is never a false
-positive. It checks only what someone annotated, though, and unannotated pages are its silent
-majority. Amiss starts from zero authoring and reports the whole surface, including the pages
-nobody thought to anchor.
+Fiberplane's drift is the closest mechanism, and for a small set of hand-placed anchors it
+can be the right amount of tool: an authored `@path#Symbol` precisely states what should be
+checked. It checks only what someone annotated. Amiss starts from zero authoring and discovers
+its closed document set automatically, reporting supported references and explicit coverage
+boundaries without claiming to understand every sentence or path-like phrase.
 
 The AI-rewrite agents win the pitch, because "we update your docs" sounds better than "we
 tell you what moved". They lose everything that makes a gate: no coverage guarantee for the

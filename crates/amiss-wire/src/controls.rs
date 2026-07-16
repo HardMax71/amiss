@@ -365,6 +365,12 @@ pub enum ResourceName {
 }
 
 impl ResourceName {
+    /// Every resource name in wire-contract order.
+    #[must_use]
+    pub fn all() -> impl ExactSizeIterator<Item = Self> {
+        Self::ALL.iter().map(|(_, resource)| *resource)
+    }
+
     /// The phase a resource crossing reports, from the closed partition.
     #[must_use]
     pub const fn phase(self) -> &'static str {

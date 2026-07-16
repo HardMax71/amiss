@@ -12,7 +12,7 @@ digraph amiss {
   md    [label = "amiss-md\npinned document parsers"];
   scan  [label = "amiss-scan\ndiscovery, resolution,\ncorrelation, evaluation, policy"];
   cli   [label = "amiss\nthe engine binary"];
-  boot  [label = "amiss-bootstrap\ntrusted CI wrapper"];
+  boot  [label = "amiss-bootstrap\nverified-run wrapper"];
   git -> wire;
   md -> wire;
   scan -> git;
@@ -44,11 +44,12 @@ base-versus-candidate comparison, policy, and report construction. It is a libra
 does no I/O beyond the store handed to it.
 
 `amiss` is the binary: the closed command grammar, the in-process run, the two output
-formats. `amiss-bootstrap` is the CI wrapper that validates a pinned action tree as data
-and launches a verified engine. It is the one crate allowed to start a process, and the
-process it starts is the binary it just verified. A seventh crate, `amiss-fixtures`,
-exists only for tests: it writes hostile Git bytes straight into test repositories so the
-same fixtures exist on every platform.
+formats. `amiss-bootstrap` validates a pinned action tree as data and launches a verified
+engine. It is the production crate allowed to start a process, and the process it starts is
+the binary it just verified. The bootstrap path exists but is not integrated into the
+published convenience Action; [Project status](status.md) keeps that distinction explicit.
+A seventh crate, `amiss-fixtures`, exists only for tests: it writes hostile Git bytes
+straight into test repositories so the same fixtures exist on every platform.
 
 Inside a run, the stages form a line:
 
@@ -68,6 +69,9 @@ digraph pipeline {
 }
 ```
 
-Every stage pays its resource budget before it works, every stage refuses rather than
-repairs, and the report at the end is a pure function of the two trees and the command
-line.
+Stages charge resource counters at defined admission or observation points and refuse rather
+than repair when a measured ceiling is crossed. Not every counter is a pre-work bound:
+document bytes are admitted before parsing, while parser node and nesting totals are charged
+after the grammar returns. [Security model](security.md) records the resulting CPU-boundary
+limitation. Subject to those declared inputs and boundaries, the report is a pure function
+of the two snapshots and invocation.

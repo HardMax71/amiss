@@ -14,6 +14,13 @@ best-effort read. Every SHA-1 object is re-hashed as it is read, with collision 
 switched on, so an object that does not hash to its own name simply does not exist as far
 as the evaluation is concerned.
 
+The supported repository form is a primary non-bare checkout with a real `.git` directory.
+A bare repository or linked worktree whose `.git` entry is a file is refused as unavailable,
+and objects available only through Git alternates are not consulted. These are explicit
+boundaries of the direct
+[repository reader](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs),
+not empty snapshots or silently missing documents.
+
 File access happens through directory handles opened step by step, never following links.
 A symlink, junction, or reparse point at the repository root, at `.git`, at `objects`, or
 anywhere along the path to an object is refused outright. The refusal is a different error

@@ -7,12 +7,12 @@ engine binary always produces the same bytes. The payload facts agree across pla
 envelope's own digests differ by build, because they name the exact binary that ran. Duplicate keys are rejected everywhere on input, and
 the contract's numbers are integers, never floats.
 
-The outer envelope carries the payload plus three self-descriptions: `payload_digest`, a
-hash of the payload's canonical bytes; `engine_digest`, a hash of the binary that produced
-the report; and `compatibility`, which says `experimental` for the v0 series. Every digest
-in the system is domain-separated, meaning the hash input starts with a label naming its
-purpose, so a digest computed for one context can never be replayed as a digest for
-another.
+The outer envelope has three members: its schema, the payload, and `payload_digest`, a hash
+of the payload's canonical bytes. The payload carries its own schema, `compatibility`
+(`experimental` for the v0 series), and an engine block whose `engine_digest` names the
+binary that produced it. Every digest in the system is domain-separated, meaning the hash
+input starts with a label naming its purpose, so a digest computed for one context cannot be
+replayed as a digest for another.
 
 Inside the payload: which trees were compared and how; the result block with `status`,
 `complete`, and `exit_code`; the summary counts; a `documents` array with one row per
@@ -31,18 +31,21 @@ The envelope, down to its top-level keys:
 
 ```json
 {
-  "schema": "amiss/scanner-report-envelope/v2",
-  "compatibility": "experimental",
-  "engine_digest": "sha256:…",
-  "payload_digest": "sha256:…",
+  "schema": "amiss/scanner-report-envelope/v3",
   "payload": {
+    "schema": "amiss/scanner-report-payload/v3",
+    "compatibility": "experimental",
+    "engine": { "engine_digest": "sha256:…" },
     "evaluation": {},
+    "controls": {},
     "result": { "status": "fail", "complete": true, "exit_code": 1 },
     "summary": {},
     "documents": [],
+    "observations": [],
     "findings": [],
     "errors": []
-  }
+  },
+  "payload_digest": "sha256:…"
 }
 ```
 
@@ -71,17 +74,16 @@ cut short: a serialized report that would cross the 64 MiB `machine-json-bytes` 
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).
 
-The schema for all of this ships in the repository under
-[`spec/`](https://github.com/HardMax71/amiss/tree/main/spec), with canonical example
-files. The test suite validates the emitted bytes against that schema using an independent
-validator. The schema is the compatibility contract: fields appear, move, or change
-meaning only with a version bump, and the move from v1 to v2 is exactly one such change,
-the path union above. Every digest computed under a v1 preimage comes out identical under
-v2, because a text path serializes to the same bytes in both and the object form was not
-producible before, so the identities in old reports stay valid rather than orphaned. The
-move to v3 repeats the law for the identity: the host opens from a github.com constant to
-any declared spelling, the owner to slash-joined group paths, the evaluation names the
-recognition dialect in a nullable `forge` field, and the reference summary counts one
-`same_repository` total because a run has exactly one dialect. No v2 writer could emit any
-of that, so every inner digest keeps its meaning and its bytes; only the envelope and
-payload constants moved.
+The active machine contract is the
+[v3 report schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report-v3.schema.json)
+and its
+[canonical example](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-report-v3.canonical.json).
+The test suite validates emitted bytes against v3 with an independent validator. Versioned
+fields move or change meaning only with a report-version bump: v2 introduced the text-or-byte
+path union, and v3 generalized forge identity and its reference summary while preserving the
+meaning of previously producible inner digests.
+
+The `spec/` directory also retains v1 and v2 report contracts and several `assure/*` schemas
+from the predecessor design. Those files are historical artifacts, not formats emitted or
+accepted by the current public command. Until an Amiss-named schema and its implementation
+are tested together, do not infer public support merely from a file's presence in `spec/`.

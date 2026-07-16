@@ -48,9 +48,12 @@ foreign and the report's `evaluation.forge` is null. An explicit flag always bea
 table, which is how a self-hosted instance gets its grammar. The github and gitea dialects
 refuse a nested owner they could never match.
 
-`--explain-scope` prints the scanning scope rules and exits. `--format json` emits the exact
-report described in [The report](report.md); `human` prints the same facts readably, capped
-at the first two hundred findings.
+`--explain-scope` does not create a separate early-exit command. The scan still runs, and in
+human format the flag adds deterministic scope lines to the normal result. JSON output is
+unchanged by the flag. This behavior is pinned by the
+[CLI test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/cli.rs).
+`--format json` emits the exact report described in [The report](report.md); `human` prints
+the same facts readably, capped at the first two hundred findings.
 
 Exit codes are three classes, not detail. Exit 0: the run completed and nothing blocks. Exit
 1: the run completed and at least one finding blocks. Exit 2: something prevented a

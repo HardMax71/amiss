@@ -1,11 +1,13 @@
 # Discovery
 
-Discovery decides which files count as documents, and it is deliberately narrow. Markdown
-and [MDX](https://mdxjs.com) files are documents, classified `structured-markdown` and `structured-mdx`. A small
-fixed list of well-known extensionless names, `llms.txt` among them, is classified
-`plain-advisory` and scanned by a profile that extracts nothing but honestly reports that
-the file exists and was not parsed. Every other file is a possible link target, not a
-document.
+Discovery decides which files count as documents, and it is deliberately narrow. Files with
+the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx` files are
+`structured-mdx`. Six exact extensionless basenames, `README`, `CONTRIBUTING`, `CHANGELOG`,
+`SECURITY`, `SUPPORT`, and `CODE_OF_CONDUCT`, are `extensionless-markdown` and use the
+Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
+adapter that extracts no references. Every other file is a possible reference target, not a
+built-in document. These rows come directly from the
+[classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
 Seven directory names are always skipped, wherever they appear in a path:
 
@@ -24,15 +26,17 @@ Five paths through the classifier:
 ```text
 docs/guide.md               structured-markdown   scanned
 site/page.mdx               structured-mdx        scanned
+README                      extensionless-markdown scanned
 llms.txt                    plain-advisory        scanned, nothing extracted
 vendor/lib/README.md        excluded              the vendor component is in the closed set
 src/parser.rs               not a document        a reference target only
 ```
 
-Every count is reported: discovered, scanned, unsupported, excluded, unlinked. A document
-that nothing links to and that links to nothing is also reported as an `unlinked-document`
-finding, because a page nobody can reach is worth knowing about even though it blocks
-nothing.
+Every count is reported: discovered, scanned, unsupported, excluded, unlinked. Despite its
+historical name, `unlinked-document` means a scanned document from which Amiss extracted
+zero references. The evaluator does not construct an inbound reachability graph, so the
+finding does not assert that no other page links to the document. The exact predicate is in
+the [document finding evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/evaluate.rs).
 
 Paths are treated as bytes. Amiss does not fold case and does not normalize Unicode,
 because Git addresses files by exact bytes, and a checker that guesses two names are

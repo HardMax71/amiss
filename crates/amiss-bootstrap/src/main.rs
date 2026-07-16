@@ -11,12 +11,12 @@ use amiss_bootstrap::supervise::{
 use amiss_bootstrap::{Refusal, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::controls::ExecutionConstraintDescriptor;
-use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::report::{MACHINE_JSON_BYTES, WATCHDOG_MILLISECONDS};
 
 /// The operational wall ceiling from the security contract: the trusted
 /// wrapper kills the whole evaluator after 120 seconds, and a killed evaluator
 /// yields no accepted result.
-const WATCHDOG_CEILING: Duration = Duration::from_mins(2);
+const WATCHDOG_CEILING: Duration = Duration::from_millis(WATCHDOG_MILLISECONDS);
 
 /// The trusted bootstrap, which is also the trusted wrapper the security
 /// contract names. It validates the pinned action tree as data, launches the

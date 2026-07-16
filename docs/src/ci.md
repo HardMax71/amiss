@@ -1,7 +1,7 @@
 # Running it in CI
 
-The short form is the published action, which carries the engine inside the pinned
-tree, derives both commits from the triggering event, and turns findings into file
+The short form is the published action, which carries the engine inside the selected
+action tree, derives both commits from the triggering event, and turns findings into file
 annotations on the pull request:
 
 ```yaml
@@ -23,9 +23,12 @@ the report claims the instance's own host and recognizes that host's blob and tr
 links, with the github dialect declared explicitly; nothing about the action assumes
 github.com.
 
-The long form is the engine invoked directly, which is how Amiss runs on its own
-repository under `--profile enforce`, and the job is four commands. This shape is
-lifted from this repository's workflow:
+The long form invokes the engine directly. It is useful outside GitHub Actions or when a
+workflow needs to construct the exact evaluation itself, but it is not the repository's
+dogfood path. Amiss's
+[self-scan workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/ci.yml)
+builds the pull request's engine, assembles a local action tree with its manifest, and runs
+that composite under `--profile enforce`. A minimal adjacent-commit direct invocation is:
 
 ```yaml
 - uses: actions/checkout@<pinned-sha>
@@ -47,16 +50,20 @@ lifted from this repository's workflow:
       --profile enforce --format json > amiss-report.json
 ```
 
-Three details carry weight. `fetch-depth: 2` exists because a scan needs a base commit, and
-on a pull request checkout the parent of `HEAD` is the pull request's base. The repository
-and branch names go through environment variables instead of being pasted into the script by
-the workflow engine, because a branch can be named anything, and text pasted into a shell
-script becomes code. And the owner is lowercased in shell because GitHub hands it over with
-its original capitals while Amiss requires the lowercase form and refuses anything else.
+Three details carry weight. Both named commits must exist in the checkout. The Action derives
+pull-request base and merge-result commits, merge-group base and head commits, or push
+`before` and head commits from the event; explicit `base` and `candidate` inputs override
+them. `fetch-depth: 2` is normally enough for the pull-request merge checkout, while a batched
+push or unusual checkout may require `fetch-depth: 0`. The repository and branch names go
+through environment variables instead of being pasted into the script by the workflow
+engine, because a branch can be named anything, and text pasted into a shell script becomes
+code. The owner is lowercased in shell because GitHub hands it over with its original
+capitals while Amiss requires the lowercase form and refuses anything else.
 
-On a pull request, compare the merge result against its first parent, as above. On a push,
-the same two commits work. A scan is a pure function of the two trees, so there is no cache
-to warm and nothing to restore between runs.
+For a direct adjacent-commit scan, `HEAD~1` and `HEAD` work as above. For event-aware runs,
+prefer the composite Action's derivation or pass the exact two commits explicitly. A scan is
+a pure function of the two snapshots and invocation, so there is no baseline cache to warm
+or restore between runs.
 
 When a run blocks, read the JSON, not the human printout. The printout stops at two hundred
 findings, so a repository with hundreds of harmless records can fill the screen and still

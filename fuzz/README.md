@@ -12,7 +12,7 @@ grows lives in `corpus/<target>/` and stays untracked. The per-change smoke
 runs on stable and replays every seed plus a deterministic mutation sweep:
 
 ```
-cd fuzz && cargo test --release
+cd fuzz && cargo test --locked --release
 ```
 
 The coverage-guided long runs need nightly and cargo-fuzz. Pass both

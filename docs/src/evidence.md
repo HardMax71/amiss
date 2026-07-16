@@ -8,6 +8,12 @@ transcluded snippets, executable CLI examples, five golden-file suites, a proof-
 diff gate, a link checker. A repository that tries that hard and still drifts tells you what a
 tool must actually do.
 
+The removed working dossier remains available at the immutable pre-extraction commit: the
+[repository audit](https://github.com/HardMax71/amiss/blob/26df8f76f84ee0e8bbee3f8c7a5ab49a44eaaadc/docs/repo-audit.md)
+contains the observed cases, and the
+[experiment index](https://github.com/HardMax71/amiss/blob/26df8f76f84ee0e8bbee3f8c7a5ab49a44eaaadc/docs/experiments/README.md)
+points to the recorded measurements summarized here.
+
 The audit found seven live drift classes despite all those defenses. A few, concretely:
 
 - The architecture page said ten workflows; the tree had 22. It named a workflow file that had

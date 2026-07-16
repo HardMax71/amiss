@@ -11,14 +11,15 @@ expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
 stated blind spot rather than an invisible one.
 
-Each destination then resolves against the tree, and only three shapes are in scope. A
-relative path resolves from the document's own directory and must stay inside the
-repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A
-repository-rooted path resolves from the root. And when the invocation provides the
-`--repository` triple and a dialect, a URL on the declared host that names this same
-repository in the dialect's own spelling and a ref the scan can vouch for is converted to
-the path it points at. Every other URL is `external-out-of-scope`: counted, reported,
-left alone.
+Each destination then passes through the
+[resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs).
+A relative path resolves from the document's own directory and must stay inside the
+repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
+with `/` is a site route, not a repository-root shorthand, and is reported as unsupported
+reference semantics. When the invocation provides the `--repository` triple and a dialect,
+a URL on the declared host that names this same repository in the dialect's own spelling
+and a ref the scan can vouch for is converted to the path it points at. Every other URL is
+`external-out-of-scope`: counted, reported, left alone.
 
 Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
 The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
@@ -37,12 +38,12 @@ One document, every destination shape:
 
 ```markdown
 [guide](guide.md)                     resolves beside this document
-[root](/docs/guide.md)                resolves from the repository root
+[site](/docs/guide.md)                unsupported site route; it is not rewritten as a tree path
 [escape](../../etc/passwd)            invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path, when the triple names o/r on github.com
 [web](https://example.com/manual)     external-out-of-scope: counted, left alone
-[anchor](guide.md#setup)              the path resolves; the fragment is recorded, not checked
+[anchor](guide.md#setup)              target read; fragment semantics reported unsupported
 ```
 
 The same decision, drawn:
@@ -53,19 +54,21 @@ digraph resolve {
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [fontname = "Latin Modern, Georgia, serif", fontsize = 10, arrowsize = 0.7];
   dest  [label = "destination"];
-  rel   [label = "relative or
-rooted path"];
+  rel   [label = "relative path"];
+  route [label = "leading-slash
+site route"];
   gh    [label = "forge URL,
 same repository"];
   other [label = "any other URL"];
   tree  [label = "resolve against
 the tree"];
   ext   [label = "external-out-of-scope"];
+  unsup [label = "unsupported-reference-semantics"];
   hit   [label = "target bytes
 and mode read"];
   miss  [label = "explicit-target-missing"];
-  dest -> rel; dest -> gh [label = "with the triple"]; dest -> other;
-  rel -> tree; gh -> tree; other -> ext;
+  dest -> rel; dest -> gh [label = "with the triple"]; dest -> route; dest -> other;
+  rel -> tree; gh -> tree; route -> unsup; other -> ext;
   tree -> hit [label = "found"]; tree -> miss [label = "absent"];
 }
 ```
@@ -80,10 +83,15 @@ because Git names files in bytes and so does the resolver. Query strings and fra
 recorded as digests but ignored for resolution, because a tree has no queries and no
 anchors. One narrow divergence is deliberate: a fragment whose escapes decode outside
 UTF-8 is dropped rather than digested, since carrying it would change the recorded
-identity of every existing observation for no resolution gain. Heading anchors, site
-routes, code symbols, and version-pinned references are all reported as
-`unsupported-reference-semantics`: real checks for those belong to tools that have the
-right information, and a guess here would turn honest ignorance into a false pass.
+identity of every existing observation for no resolution gain. For a relative path with a
+nonempty fragment, the target path is resolved but the heading or code meaning is not
+checked, producing `unsupported-reference-semantics`. A leading-slash site route produces
+the same finding kind. A recognized same-repository forge
+URL whose ref is outside the declared candidate/default scope produces
+`unsupported-version-scope`. Site generators and language-aware tools own route, anchor,
+and symbol semantics; guessing them here would turn honest ignorance into a false pass. The
+[resolver tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
+pin these distinctions.
 
 Each resolved target is read from the object store and hashed, so the comparison knows the
 exact bytes and file mode on both sides. A symlink or submodule target is
