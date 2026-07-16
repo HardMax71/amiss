@@ -12,6 +12,7 @@ amiss-wire = { path = "../amiss-wire", version = "0.4.0" }
 tempfile = "3"
 
 [dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
 tempfile = "3"
 
 [lints]
