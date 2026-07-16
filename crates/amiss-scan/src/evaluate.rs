@@ -688,13 +688,18 @@ fn waiver_diagnostic(
     ])
 }
 
-/// The candidate finding an exception item may target: the exact key with a
-/// candidate fact, which excludes resolved projections and every scope an
-/// exception cannot touch.
-fn exception_target(findings: &[Finding], key: Digest) -> Option<usize> {
-    findings
-        .iter()
-        .position(|finding| finding.finding_key == key && finding.candidate_fact.is_some())
+/// Candidate findings exception items may target: exact keys with candidate
+/// facts, excluding resolved projections and every scope exceptions cannot
+/// touch. First insertion preserves the former linear `position` semantics if
+/// an invalid directly constructed finding slice repeats a key.
+fn exception_targets(findings: &[Finding]) -> BTreeMap<Digest, usize> {
+    let mut targets = BTreeMap::new();
+    for (index, finding) in findings.iter().enumerate() {
+        if finding.candidate_fact.is_some() {
+            targets.entry(finding.finding_key).or_insert(index);
+        }
+    }
+    targets
 }
 
 fn candidate_digest_of(finding: &Finding) -> Option<Digest> {
@@ -710,6 +715,9 @@ fn apply_exceptions(
     enforce: bool,
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
     let mut extra: Vec<Finding> = Vec::new();
+    if policy.debt.is_none() && policy.waiver.is_none() {
+        return (extra, Vec::new());
+    }
     let Some(instant) = policy
         .time
         .as_ref()
@@ -717,8 +725,9 @@ fn apply_exceptions(
     else {
         return (extra, Vec::new());
     };
-    let debt_valid = debt_pass(findings, policy, enforce, &instant, &mut extra);
-    let waiver_valid = waiver_pass(findings, policy, enforce, &instant, &mut extra);
+    let targets = exception_targets(findings);
+    let debt_valid = debt_pass(findings, &targets, policy, enforce, &instant, &mut extra);
+    let waiver_valid = waiver_pass(findings, &targets, policy, enforce, &instant, &mut extra);
     let overlap = apply_valid_exceptions(findings, policy, &debt_valid, &waiver_valid);
     let errors = if overlap {
         vec![ErrorDetail {
@@ -738,6 +747,7 @@ fn apply_exceptions(
 /// treatment.
 fn debt_pass(
     findings: &[Finding],
+    targets: &BTreeMap<Digest, usize>,
     policy: &crate::policy::Effects,
     enforce: bool,
     instant: &amiss_wire::model::UtcInstant,
@@ -748,7 +758,7 @@ fn debt_pass(
         return debt_valid;
     };
     for (index, item) in context.items.iter().enumerate() {
-        let Some(target) = exception_target(findings, item.finding_key) else {
+        let Some(target) = targets.get(&item.finding_key).copied() else {
             continue;
         };
         let Some(current) = findings.get(target).and_then(candidate_digest_of) else {
@@ -788,6 +798,7 @@ fn debt_pass(
 /// candidate finding.
 fn waiver_pass(
     findings: &[Finding],
+    targets: &BTreeMap<Digest, usize>,
     policy: &crate::policy::Effects,
     enforce: bool,
     instant: &amiss_wire::model::UtcInstant,
@@ -801,7 +812,7 @@ fn waiver_pass(
         if item.candidate_tree != context.candidate_tree {
             continue;
         }
-        let target = exception_target(findings, item.finding_key);
+        let target = targets.get(&item.finding_key).copied();
         let current = target.and_then(|found| findings.get(found).and_then(candidate_digest_of));
         let mut defects: Vec<&'static str> = Vec::new();
         if *instant < item.not_before {

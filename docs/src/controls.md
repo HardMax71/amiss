@@ -28,12 +28,26 @@ be rewritten by the very pull request under review. The contract defines five: a
 organization floor (tightens ceilings and dispositions across many repositories), an
 adoption debt snapshot (a recorded list of known failures being worked off), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
-execution constraint. Each one is tied to the exact repository and tree it was issued for, host included: the
-v1 control formats can only spell github.com, so a control presented to a run whose
-declared identity names any other forge fails its binding the same way a wrong owner
-would. Presenting a control against a different tree is a `CONTROL_BINDING_MISMATCH`
-refusal, not a shrug. Waivers are the only sanctioned way to pass with a known failure, they expire, and
-every waiver that touches a finding appears as a visible step in that finding's history.
+execution constraint. The run identity itself accepts any grammar-valid declared forge
+host, including enterprise and self-hosted instances. Bindings and effects are
+control-specific: the current floor, debt, waiver, and trusted-time v1 documents remain
+GitHub-scoped and match the scanned repository and branch exactly. Trusted time also
+matches the candidate identity and authenticated provider run, debt must reproduce its
+adoption tree, and a waiver item for another candidate tree is simply not selected.
+
+Debt and waiver require verified trusted time and a complete Git candidate. Their item
+schemas can name only `explicit-target-missing` or `explicit-target-type-mismatch`, and
+selection uses an exact current finding key with a candidate fact. A resolved projection
+or an absent key is not an exception target. Matching still requires the exact fact digest:
+active unchanged debt records tolerance at `warn`, while an applied waiver changes only
+`fail` to `warn`. Invalid, expired, worsened, or overlapping items suppress nothing, and
+an overlap makes evaluation incomplete. The
+[wrapper tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/wrapper.rs)
+pin binding, trusted-time, expiry, fact-drift, wrong-tree selection, resolved-target, and
+overlap behavior. The published [`complete-findings`, `debt-items`, and `waiver-items`
+ceilings](limits.md) bound the accepted sets; the `amiss-scan` `pipeline` benchmark tracks
+matching as findings and exception items grow.
+
 One asymmetry follows from the control formats' own versioning: the report can carry a
 finding on a document whose name is raw bytes, but the waiver and debt formats still spell
 paths as text, so such a finding is reportable yet cannot be waived or adopted until those
