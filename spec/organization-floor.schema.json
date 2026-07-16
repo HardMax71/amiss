@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:organization-floor",
+  "title": "Amiss external organization floor",
+  "description": "A bare, externally acquired, digest-bound semantic policy floor for one repository and exact branch scope. It never embeds debt, waiver, scanner-release, action, status-name, or execution-constraint digests; required execution is independently pinned and cross-bound so release rotation does not invalidate semantic debt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "floor_id",
+    "repository",
+    "ref",
+    "minimum_profile",
+    "minimum_dispositions",
+    "protected_inventory",
+    "protected_control_paths",
+    "waivable_finding_kinds",
+    "authorized_debt_owners",
+    "authorized_waiver_issuers",
+    "resource_limits"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/organization-floor"
+    },
+    "floor_id": {
+      "$ref": "#/$defs/ArtifactId"
+    },
+    "repository": {
+      "$ref": "#/$defs/RepositoryIdentity"
+    },
+    "ref": {
+      "$ref": "#/$defs/ExactBranchRef"
+    },
+    "minimum_profile": {
+      "enum": [
+        "observe",
+        "enforce"
+      ]
+    },
+    "minimum_dispositions": {
+      "type": "array",
+      "maxItems": 3,
+      "description": "Sort by finding_kind UTF-8 bytes. Only deterministic scanner finding kinds are promotable.",
+      "x-amiss-order": [
+        "finding_kind"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/FloorDisposition"
+      }
+    },
+    "protected_inventory": {
+      "type": "array",
+      "maxItems": 100000,
+      "description": "Exact paths, sorted by RepoPath UTF-8 bytes.",
+      "x-amiss-order": [
+        "RepoPath"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/RepoPath"
+      }
+    },
+    "protected_control_paths": {
+      "type": "array",
+      "maxItems": 100000,
+      "description": "Exact paths, sorted by RepoPath UTF-8 bytes.",
+      "x-amiss-order": [
+        "RepoPath"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/RepoPath"
+      }
+    },
+    "waivable_finding_kinds": {
+      "type": "array",
+      "maxItems": 2,
+      "description": "Sort by UTF-8 bytes. This is an allow-list, not a pattern language.",
+      "x-amiss-order": [
+        "FindingKind"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/DebtEligibleFindingKind"
+      }
+    },
+    "authorized_debt_owners": {
+      "type": "array",
+      "maxItems": 10000,
+      "description": "Sort by UTF-8 bytes.",
+      "x-amiss-order": [
+        "OwnerId"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/OwnerId"
+      }
+    },
+    "authorized_waiver_issuers": {
+      "type": "array",
+      "maxItems": 10000,
+      "description": "Sort by UTF-8 bytes.",
+      "x-amiss-order": [
+        "OwnerId"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/OwnerId"
+      }
+    },
+    "resource_limits": {
+      "type": "array",
+      "maxItems": 34,
+      "description": "Sort by resource UTF-8 bytes. A floor may only tighten the built-in ceiling.",
+      "x-amiss-order": [
+        "resource"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/ResourceLimit"
+      }
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "OwnerId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160,
+      "pattern": "^(team|service|user):[a-z0-9][a-z0-9._/-]*$"
+    },
+    "RepoPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![\\s\\S]*//)(?![\\s\\S]*(?:^|/)(?:\\.{1,2})(?:/|$))(?![\\s\\S]*[\\\\\\u0000])[^/]+(?:/[^/]+)*$"
+    },
+    "RepositoryIdentity": {
+      "type": "object",
+      "description": "An opaque caller-canonical host, slash-joined owner segments, and repository name. Exact bytes are the identity; the engine does not resolve or normalize the host.",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "owner",
+        "name"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!\\.{1,2}$)[a-z0-9._-]{1,100}$",
+          "maxLength": 100
+        }
+      }
+    },
+    "ExactBranchRef": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 266,
+      "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+    },
+    "DebtEligibleFindingKind": {
+      "enum": [
+        "explicit-target-missing",
+        "explicit-target-type-mismatch"
+      ]
+    },
+    "FloorPromotableFindingKind": {
+      "enum": [
+        "explicit-target-missing",
+        "explicit-target-type-mismatch",
+        "invalid-reference"
+      ]
+    },
+    "FloorDisposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_kind",
+        "disposition"
+      ],
+      "properties": {
+        "finding_kind": {
+          "$ref": "#/$defs/FloorPromotableFindingKind"
+        },
+        "disposition": {
+          "enum": [
+            "warn",
+            "fail"
+          ]
+        }
+      }
+    },
+    "ResourceName": {
+      "enum": [
+        "git-object-bytes",
+        "git-compressed-object-bytes",
+        "aggregate-git-compressed-object-bytes-per-evaluation",
+        "git-pack-directory-entries",
+        "git-pack-files",
+        "git-pack-index-bytes",
+        "aggregate-git-pack-index-bytes",
+        "git-delta-depth",
+        "git-index-bytes",
+        "git-tree-entries-per-snapshot",
+        "documents-per-snapshot",
+        "control-input-bytes",
+        "selected-control-blob-bytes",
+        "aggregate-selected-control-bytes-per-snapshot",
+        "repository-policy-entries",
+        "debt-items",
+        "waiver-items",
+        "raw-path-bytes",
+        "document-blob-bytes",
+        "referenced-target-blob-bytes",
+        "aggregate-referenced-target-bytes-per-snapshot",
+        "aggregate-document-bytes-per-snapshot",
+        "raw-link-destination-bytes",
+        "parser-nesting",
+        "parser-nodes-per-document",
+        "parser-nodes-per-snapshot",
+        "references-per-document",
+        "references-per-snapshot",
+        "organization-policy-entries",
+        "complete-findings",
+        "typed-analysis-errors-retained",
+        "machine-json-bytes",
+        "private-temporary-storage-bytes",
+        "evaluator-managed-memory-bytes"
+      ]
+    },
+    "ResourceLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource",
+        "maximum"
+      ],
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/ResourceName"
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "resource": {
+                "const": "typed-analysis-errors-retained"
+              }
+            },
+            "required": [
+              "resource"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "resource": {
+                "const": "machine-json-bytes"
+              }
+            },
+            "required": [
+              "resource"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maximum": {
+                "type": "integer",
+                "minimum": 67108864,
+                "maximum": 67108864
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

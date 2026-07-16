@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-execution-constraint",
+  "title": "Amiss execution constraint",
+  "description": "The rolling externally protected allow-list entry for one scanner action tree, release manifest, bootstrap contract, platform, and required provider status name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "action_repository",
+    "action_object_format",
+    "action_commit_oid",
+    "action_tree_oid",
+    "manifest_path",
+    "release_manifest_digest",
+    "selected_platform",
+    "required_status_name",
+    "bootstrap_contract",
+    "bootstrap_digest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/scanner-execution-constraint"
+    },
+    "action_repository": {
+      "$ref": "#/$defs/RepositoryIdentity"
+    },
+    "action_object_format": {
+      "enum": ["sha1", "sha256"]
+    },
+    "action_commit_oid": {
+      "$ref": "#/$defs/GitOid"
+    },
+    "action_tree_oid": {
+      "$ref": "#/$defs/GitOid"
+    },
+    "manifest_path": {
+      "$ref": "#/$defs/RepoPath"
+    },
+    "release_manifest_digest": {
+      "$ref": "#/$defs/Digest"
+    },
+    "selected_platform": {
+      "$ref": "#/$defs/Platform"
+    },
+    "required_status_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9 ._/-]{0,158}[A-Za-z0-9._/-])?$"
+    },
+    "bootstrap_contract": {
+      "const": "amiss-action-bootstrap"
+    },
+    "bootstrap_digest": {
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"action_object_format": {"const": "sha1"}},
+        "required": ["action_object_format"]
+      },
+      "then": {
+        "properties": {
+          "action_commit_oid": {"$ref": "#/$defs/Sha1Oid"},
+          "action_tree_oid": {"$ref": "#/$defs/Sha1Oid"}
+        }
+      },
+      "else": {
+        "properties": {
+          "action_commit_oid": {"$ref": "#/$defs/Sha256Oid"},
+          "action_tree_oid": {"$ref": "#/$defs/Sha256Oid"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Sha1Oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "Sha256Oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "GitOid": {
+      "oneOf": [
+        {"$ref": "#/$defs/Sha1Oid"},
+        {"$ref": "#/$defs/Sha256Oid"}
+      ]
+    },
+    "RepoPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![\\s\\S]*//)(?![\\s\\S]*(?:^|/)(?:\\.{1,2})(?:/|$))(?![\\s\\S]*[\\\\\\u0000])[^/]+(?:/[^/]+)*$"
+    },
+    "RepositoryIdentity": {
+      "type": "object",
+      "description": "An opaque caller-canonical host, slash-joined owner segments, and repository name.",
+      "additionalProperties": false,
+      "required": ["host", "owner", "name"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^(?!\\.{1,2}$)[a-z0-9._-]{1,100}$"
+        }
+      }
+    },
+    "Platform": {
+      "enum": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64",
+        "windows-aarch64",
+        "windows-x86_64"
+      ]
+    }
+  }
+}

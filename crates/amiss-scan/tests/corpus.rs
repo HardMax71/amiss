@@ -43,7 +43,7 @@ fn span(value: Option<&Value>) -> (u64, u64) {
 #[test]
 fn the_scan_layer_reproduces_the_corpus_goldens() {
     let manifest = fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/parser-profile-corpus-v1.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/parser-profile-corpus.json"),
     )
     .unwrap();
     let Value::Object(root) = parse(&manifest).unwrap() else {
@@ -66,8 +66,8 @@ fn the_scan_layer_reproduces_the_corpus_goldens() {
             panic!("{case_id} lacks work")
         };
         for (profile, adapter) in [
-            ("commonmark-gfm-v1", Adapter::Markdown),
-            ("mdx-source-v1", Adapter::Mdx),
+            ("commonmark-gfm", Adapter::Markdown),
+            ("mdx-source", Adapter::Mdx),
         ] {
             let Some(Value::Object(golden)) = field(work, profile) else {
                 continue;

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-trusted-time-statement",
+  "title": "Amiss trusted-time statement",
+  "description": "The rolling externally issued clock statement. The typed parser additionally requires evaluation_instant < valid_until <= evaluation_instant + 600 seconds; evaluation binds every identity field to the authenticated invocation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "controller",
+    "repository",
+    "ref",
+    "candidate_identity_digest",
+    "provider",
+    "provider_run_id",
+    "provider_run_attempt",
+    "evaluation_instant",
+    "valid_until"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/scanner-trusted-time-statement"
+    },
+    "controller": {
+      "const": "external-required-check-clock"
+    },
+    "repository": {
+      "$ref": "#/$defs/RepositoryIdentity"
+    },
+    "ref": {
+      "$ref": "#/$defs/ExactBranchRef"
+    },
+    "candidate_identity_digest": {
+      "$ref": "#/$defs/Digest"
+    },
+    "provider": {
+      "$ref": "#/$defs/ProviderId"
+    },
+    "provider_run_id": {
+      "$ref": "#/$defs/ProviderRunId"
+    },
+    "provider_run_attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9223372036854775807
+    },
+    "evaluation_instant": {
+      "$ref": "#/$defs/UtcInstant"
+    },
+    "valid_until": {
+      "$ref": "#/$defs/UtcInstant"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ProviderId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "ProviderRunId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,126}[A-Za-z0-9])?$"
+    },
+    "RepositoryIdentity": {
+      "type": "object",
+      "description": "An opaque caller-canonical host, slash-joined owner segments, and repository name.",
+      "additionalProperties": false,
+      "required": ["host", "owner", "name"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^(?!\\.{1,2}$)[a-z0-9._-]{1,100}$"
+        }
+      }
+    },
+    "ExactBranchRef": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 266,
+      "pattern": "^refs/heads/(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*\\.$).+$"
+    },
+    "UtcInstant": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    }
+  }
+}

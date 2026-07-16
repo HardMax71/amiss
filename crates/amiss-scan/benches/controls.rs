@@ -63,7 +63,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
         })
         .collect();
     let policy = ScannerPolicy {
-        digest: hb("amiss/raw-evidence/v1", b"benchmark policy"),
+        digest: hb("amiss/raw-evidence", b"benchmark policy"),
         document_includes,
         protected_inventory: Vec::new(),
         finding_dispositions: Vec::new(),

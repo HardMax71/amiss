@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
-use amiss_wire::report::PAYLOAD_SCHEMA;
+use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
 
 /// The exact acceptance defect, most specific first in evaluation order. The
 /// trusted wrapper publishes success only when acceptance returns no defect.
@@ -76,7 +76,13 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
     if canonical(&envelope) != trimmed {
         return Err(AcceptanceDefect::Noncanonical);
     }
+    if text(&envelope, "schema") != Some(ENVELOPE_SCHEMA) {
+        return Err(AcceptanceDefect::Shape);
+    }
     let payload = member(&envelope, "payload").ok_or(AcceptanceDefect::Shape)?;
+    if text(payload, "schema") != Some(PAYLOAD_SCHEMA) {
+        return Err(AcceptanceDefect::Shape);
+    }
     let recorded = text(&envelope, "payload_digest").ok_or(AcceptanceDefect::Shape)?;
     if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
         return Err(AcceptanceDefect::PayloadDigest);

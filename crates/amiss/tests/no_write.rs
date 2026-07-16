@@ -82,7 +82,7 @@ fn fixture(with_governed: bool) -> amiss_fixtures::CommitPair {
         ),
         (
             ".amiss/scanner-policy.json",
-            r#"{"schema":"amiss/scanner-policy/v1","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
+            r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
         ),
     ];
     if with_governed {

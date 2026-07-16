@@ -9,10 +9,10 @@ use crate::correlate::{Comparison, Impact, Observation, Outcome};
 use crate::observe;
 use crate::scan::SpanDisplay;
 
-pub const FINDING_KEY_SCHEMA: &str = "amiss/scanner-finding-key-input/v1";
-pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key/v1";
-pub const FACT_SCHEMA: &str = "amiss/scanner-fact/v1";
-pub const FACT_DOMAIN: &str = "amiss/scanner-fact/v1";
+pub const FINDING_KEY_SCHEMA: &str = "amiss/scanner-finding-key-input";
+pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
+pub const FACT_SCHEMA: &str = "amiss/scanner-fact";
+pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
 
 /// One document path's paired sides, reduced to what finding construction
 /// reads. A failed side never reaches this projection: analysis errors are
@@ -388,7 +388,7 @@ fn built_in_step(kind: FindingKind, enforce: bool) -> PolicyStep {
     let profile = if enforce { "enforce" } else { "observe" };
     PolicyStep {
         source: "built-in",
-        rule_id: format!("scanner-policy-defaults-v1/{}/{profile}", kind.as_str()),
+        rule_id: format!("scanner-policy-defaults/{}/{profile}", kind.as_str()),
         before: Disposition::Record,
         after: kind.built_in_disposition(enforce),
     }
@@ -1322,7 +1322,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
             steps: if attribution == Attribution::Resolved {
                 vec![PolicyStep {
                     source: "resolved-projection",
-                    rule_id: "resolved-projection-v1".to_owned(),
+                    rule_id: "resolved-projection".to_owned(),
                     before: Disposition::Record,
                     after: Disposition::Record,
                 }]

@@ -350,7 +350,7 @@ impl View {
 /// cannot change facts, ordering, totals, or exit. It prints the result, all
 /// retained analysis errors, the first two hundred findings in canonical
 /// order, and exact totals; every repository-derived scalar passes through
-/// `human-atom-v1`, and no source excerpt, raw destination, or query value
+/// `human-atom`, and no source excerpt, raw destination, or query value
 /// appears.
 #[expect(clippy::print_stdout, reason = "the human output channel")]
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {

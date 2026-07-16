@@ -85,13 +85,13 @@ fn artifact(platform: &str) -> Value {
         ("tree_path", string(&maximal_path(9_000))),
         ("binary_sha256", string(DIGEST)),
         ("engine_digest", string(DIGEST)),
-        ("runtime_contract", string("manifest-closed-v1")),
-        ("environment_contract", string("scanner-process-env-v1")),
+        ("runtime_contract", string("manifest-closed")),
+        ("environment_contract", string("scanner-process-env")),
         ("runtime_files", Value::Array(files)),
     ])
 }
 
-/// The schema-maximum github-action provenance: six artifacts of 256 runtime
+/// The schema-maximum forge-action provenance: six artifacts of 256 runtime
 /// files each (the 1,536 runtime paths of the paper bound), 32 dependency
 /// lock files, and every bounded field at its widest.
 fn maximal_provenance() -> Value {
@@ -113,7 +113,7 @@ fn maximal_provenance() -> Value {
         })
         .collect();
     let manifest = object(vec![
-        ("schema", string("amiss/scanner-release-manifest/v1")),
+        ("schema", string("amiss/scanner-release-manifest")),
         (
             "engine_version",
             string(&format!("100.200.300-{}", "a".repeat(52))),
@@ -124,8 +124,11 @@ fn maximal_provenance() -> Value {
                 (
                     "repository",
                     object(vec![
-                        ("host", string("github.com")),
-                        ("owner", string(&"o".repeat(100))),
+                        ("host", string("git.example.internal")),
+                        (
+                            "owner",
+                            string(&format!("{}/{}", "o".repeat(100), "g".repeat(100))),
+                        ),
                         ("name", string(&"n".repeat(100))),
                     ]),
                 ),
@@ -136,7 +139,7 @@ fn maximal_provenance() -> Value {
         (
             "dependency_lock",
             object(vec![
-                ("schema", string("amiss/scanner-dependency-lock-input/v1")),
+                ("schema", string("amiss/scanner-dependency-lock-input")),
                 ("files", Value::Array(locks)),
             ]),
         ),
@@ -144,12 +147,15 @@ fn maximal_provenance() -> Value {
         ("artifacts", Value::Array(artifacts)),
     ]);
     object(vec![
-        ("kind", string("github-action")),
+        ("kind", string("forge-action")),
         (
             "action_repository",
             object(vec![
-                ("host", string("github.com")),
-                ("owner", string(&"o".repeat(100))),
+                ("host", string("git.example.internal")),
+                (
+                    "owner",
+                    string(&format!("{}/{}", "o".repeat(100), "g".repeat(100))),
+                ),
                 ("name", string(&"n".repeat(100))),
             ]),
         ),
@@ -192,7 +198,7 @@ fn maximal_error(index: usize) -> Value {
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn assert_schema_valid(wire: &[u8]) {
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -213,7 +219,7 @@ fn assert_schema_valid(wire: &[u8]) {
 fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     let engine = EngineProvenance {
         version: format!("100.200.300-{}", "a".repeat(52)),
-        digest: hb("amiss/scanner-engine/v1", b"maximal golden"),
+        digest: hb("amiss/scanner-engine", b"maximal golden"),
     };
     let codes: BTreeSet<AnalysisErrorCode> = [
         AnalysisErrorCode::InvalidInvocation,
@@ -223,7 +229,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     ]
     .into_iter()
     .collect();
-    let request_digest = hb("amiss/scanner-evaluation-request/v1", b"maximal");
+    let request_digest = hb("amiss/scanner-evaluation-request", b"maximal");
     let base_wire =
         unavailable_evaluation_wire(&engine, &codes, Some(request_digest), Some(request_digest))
             .unwrap();
@@ -348,7 +354,7 @@ fn prove_streamed_emission(maximal: &Value, wire: &[u8]) {
 #[test]
 fn the_schema_path_union_accepts_and_refuses_at_pair_alignment() {
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();

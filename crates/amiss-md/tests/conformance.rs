@@ -14,7 +14,7 @@ use fixtures::{github_pairs, harvest};
 const GFM_DIVERGENCE: [&str; 1] = ["gfm-0.29/628"];
 
 /// The MDX suites test one extension at a time, so a few of their expectations
-/// belong to a construct set that is not `mdx-source-v1`, and their throwaway
+/// belong to a construct set that is not `mdx-source`, and their throwaway
 /// HTML extensions do not drop line endings the way a real MDX compiler does.
 /// Neither kind of difference is a grammar difference, and asserting the set
 /// exactly means a real one cannot hide among them.
@@ -104,7 +104,7 @@ fn reproduces_commonmark_0_31_2() {
 }
 
 /// The extension half: every example GFM 0.29 marks with an extension and
-/// executes, under the pinned `commonmark-gfm-v1` options. That document's
+/// executes, under the pinned `commonmark-gfm` options. That document's
 /// untagged examples are `CommonMark` 0.29, which 0.31.2 supersedes, so they
 /// are corpus inputs rather than goldens here.
 #[test]

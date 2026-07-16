@@ -125,43 +125,43 @@ fn canonical_escapes_match_jcs() {
 fn reproduces_the_normative_seed_vectors() {
     let gv001 = parse(br#"{"claim_id":"docs.expr-precedence"}"#).unwrap();
     assert_eq!(
-        hj("assure/claim-key/v1", &gv001).to_string(),
-        "sha256:f6a22f480cab9ed6e0fc82bcbe67eba85d88f10103f5107008809dec44fb71b0"
+        hj("assure/claim-key", &gv001).to_string(),
+        "sha256:a283ff8a204bef21e06e1932774f08bfe1dc72546aded00e67a18c15cfa98e8a"
     );
 
     let gv002 = parse(br#"{"members":[]}"#).unwrap();
     assert_eq!(
-        hj("assure/path-set-projection/v1", &gv002).to_string(),
-        "sha256:6765a67e22b2efbaaf89509cd34a70682613f002cd82d0ff4e08332e26b76954"
+        hj("assure/path-set-projection", &gv002).to_string(),
+        "sha256:434d3282c0603bde1304e3003f386c21c5ab6320ba1adc3e1e4db94ee14a39e2"
     );
 
     let gv003 = parse("{\"z\":\"\u{e9}\",\"a\":1}".as_bytes()).unwrap();
     assert_eq!(
-        hj("assure/test-json/v1", &gv003).to_string(),
-        "sha256:1a2aab8858a444002cd16e1fa53cc33fd12e5e6ac4568f85e06bef971a28425d"
+        hj("assure/test-json", &gv003).to_string(),
+        "sha256:1bf2a7df49e484b1539f9eb54bc3719ffd8a3383c594e7008d7d844fed89c4bb"
     );
 
     assert_eq!(
-        hb("assure/text-projection/v1", b"a\nb\n").to_string(),
-        "sha256:bab154d44fb1340ee8c20af6a1e36b9a903a5e44c584f8ce524237f0289b88c6"
+        hb("assure/text-projection", b"a\nb\n").to_string(),
+        "sha256:9094314bad0be6ebcf36a94c249de35e8c0cded01502f6d1d685ee5b1ee6190e"
     );
 
     assert_eq!(
-        hb("assure/raw-bytes/v1", b"").to_string(),
-        "sha256:28031daa5fbb3a297dc947195957fe4a05c1bd2e58c56163013ee62be9368fac"
+        hb("assure/raw-bytes", b"").to_string(),
+        "sha256:c214a4103772cd3a23acd41acd40eef154232d1f02848cdcbb67236da126c67e"
     );
 }
 
 #[test]
 fn domain_separation_changes_the_digest() {
-    assert_ne!(hb("amiss/a/v1", b"x"), hb("amiss/b/v1", b"x"));
-    assert_ne!(hb("amiss/a/v1", b"x"), hb("amiss/a/v1", b"y"));
+    assert_ne!(hb("amiss/a", b"x"), hb("amiss/b", b"x"));
+    assert_ne!(hb("amiss/a", b"x"), hb("amiss/a", b"y"));
 }
 
 /// The identity grammar after the host opened: a host is any nonempty
 /// slash-free claim up to the cap, an owner is one or more slash-joined
 /// segments, and the github constructor keeps the strict single-segment
-/// form the GitHub-bound v1 documents can spell.
+/// form GitHub identities can spell.
 #[test]
 fn the_open_identity_grammar_admits_claims_and_keeps_structure() {
     use amiss_wire::model::{ForgeDialect, RepositoryIdentity};

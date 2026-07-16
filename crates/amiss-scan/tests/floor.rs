@@ -20,14 +20,14 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"test engine"),
+        digest: hb("amiss/scanner-engine", b"test engine"),
     }
 }
 
 fn floor_json(extra: &str) -> String {
     format!(
         r#"{{
-  "schema": "amiss/organization-floor/v1",
+  "schema": "amiss/organization-floor",
   "floor_id": "acme/scanner-floor-2026-07",
   "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
   "ref": "refs/heads/main",
@@ -49,7 +49,7 @@ const EMPTY_ARRAYS: &str = r#"  "minimum_dispositions": [],
 fn floor_input(extra: &str) -> FloorInput {
     FloorInput {
         floor: OrganizationFloor::parse(floor_json(extra).as_bytes()).unwrap(),
-        trust_source: TrustSource::ExternalRequiredWorkflow,
+        trust_source: TrustSource::ExternalRequiredCheck,
     }
 }
 
@@ -108,7 +108,7 @@ fn payload(
     let built = commit_pair(repo, &engine(), None, setup, base, candidate);
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report-v3.schema.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
     let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
@@ -151,7 +151,7 @@ fn the_floor_binding_is_repository_ref_and_profile_equality() {
         )
         .map_err(|defect| format!("{defect:?}"))
         .unwrap(),
-        trust_source: TrustSource::OrganizationRuleset,
+        trust_source: TrustSource::OrganizationPolicy,
     };
     assert!(verify_floor(&strict, Some(&repository), Some("refs/heads/main"), false).is_err());
     assert!(verify_floor(&strict, Some(&repository), Some("refs/heads/main"), true).is_ok());
@@ -216,7 +216,7 @@ fn a_verified_floor_raises_dispositions_and_discloses_provenance() {
         provenance["digest"],
         serde_json::Value::String(floor_digest)
     );
-    assert_eq!(provenance["trust_source"], "external-required-workflow");
+    assert_eq!(provenance["trust_source"], "external-required-check");
 
     let finding = report["findings"]
         .as_array()
@@ -353,7 +353,7 @@ fn a_verified_floor_tightens_the_policy_entry_budget() {
     fs::write(
         root.join(".amiss/scanner-policy.json"),
         r#"{
-  "schema": "amiss/scanner-policy/v1",
+  "schema": "amiss/scanner-policy",
   "document_includes": [
     { "path": "docs/a.rst", "kind": "document" },
     { "path": "docs/b.rst", "kind": "document" }

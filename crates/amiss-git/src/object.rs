@@ -264,7 +264,7 @@ fn hex_digit(value: u32) -> char {
     char::from_digit(value, 16).unwrap_or('0')
 }
 
-/// Parses a tree body under `git-object-grammar-v1`.
+/// Parses a tree body under `git-object-grammar`.
 ///
 /// # Errors
 ///
@@ -338,7 +338,7 @@ fn tree_mode(bytes: &[u8]) -> Result<GitMode, Error> {
     }
 }
 
-/// Parses a commit body's headers under `git-object-grammar-v1`; the message
+/// Parses a commit body's headers under `git-object-grammar`; the message
 /// stays opaque.
 ///
 /// # Errors

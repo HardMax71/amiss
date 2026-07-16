@@ -33,45 +33,6 @@ fn foreign_expectations() -> Expectations {
     }
 }
 
-#[test]
-fn the_indented_example_is_rejected_as_noncanonical() {
-    let indented = dossier_example("scanner-report-v1.json");
-    assert_eq!(
-        accept(&indented, &foreign_expectations()),
-        Err(AcceptanceDefect::Noncanonical),
-        "a readable parsed-value example is not a valid emitted byte fixture"
-    );
-}
-
-#[test]
-fn the_canonical_golden_is_the_canonicalization_of_the_indented_value() {
-    let indented = dossier_example("scanner-report-v1.json");
-    let golden = dossier_example("scanner-report-v1.canonical.json");
-    let parsed = parse(&indented).unwrap();
-    let mut recanonicalized = canonical(&parsed);
-    recanonicalized.push(b'\n');
-    assert_eq!(
-        recanonicalized, golden,
-        "the smoke-checker equivalence holds under this serializer"
-    );
-}
-
-#[test]
-fn the_canonical_golden_clears_the_canonicality_gate() {
-    let golden = dossier_example("scanner-report-v1.canonical.json");
-    let defect = accept(&golden, &foreign_expectations()).unwrap_err();
-    assert_ne!(
-        defect,
-        AcceptanceDefect::Noncanonical,
-        "the exact one-line golden is canonical"
-    );
-    assert_eq!(
-        defect,
-        AcceptanceDefect::PayloadDigest,
-        "the frozen example's digest lives in the research namespace"
-    );
-}
-
 /// A killed engine yields no accepted result, whatever it managed to print.
 #[test]
 fn a_killed_engine_settles_to_nothing() {
@@ -211,12 +172,12 @@ fn exited(code: i32) -> ExitStatus {
 }
 
 /// One envelope the acceptance law admits, with the expectations that admit
-/// it. The third-contract golden is this engine's own output under this exact
+/// it. The rolling-contract golden is this engine's own output under this exact
 /// payload domain, so its recorded digest already recomputes here and the wire
 /// is admitted whole, no re-digest; the expectations are read back out of the
 /// identities that payload carries.
 fn accepted_report() -> (Vec<u8>, Expectations) {
-    let wire = dossier_example("scanner-report-v3.canonical.json");
+    let wire = dossier_example("scanner-report.canonical.json");
     let envelope = parse(&wire).unwrap();
     let payload = member(&envelope, "payload").unwrap();
 
@@ -255,8 +216,8 @@ fn text(value: &Value, key: &str) -> Option<String> {
 }
 
 #[test]
-fn the_indented_second_contract_example_is_rejected_as_noncanonical() {
-    let indented = dossier_example("scanner-report-v2.json");
+fn the_indented_contract_example_is_rejected_as_noncanonical() {
+    let indented = dossier_example("scanner-report.json");
     assert_eq!(
         accept(&indented, &foreign_expectations()),
         Err(AcceptanceDefect::Noncanonical),
@@ -265,9 +226,9 @@ fn the_indented_second_contract_example_is_rejected_as_noncanonical() {
 }
 
 #[test]
-fn the_second_contract_golden_is_the_canonicalization_of_its_indented_value() {
-    let indented = dossier_example("scanner-report-v2.json");
-    let golden = dossier_example("scanner-report-v2.canonical.json");
+fn the_contract_golden_is_the_canonicalization_of_its_indented_value() {
+    let indented = dossier_example("scanner-report.json");
+    let golden = dossier_example("scanner-report.canonical.json");
     let parsed = parse(&indented).unwrap();
     let mut recanonicalized = canonical(&parsed);
     recanonicalized.push(b'\n');
@@ -277,64 +238,42 @@ fn the_second_contract_golden_is_the_canonicalization_of_its_indented_value() {
     );
 }
 
-/// The v2 golden cleared this gate end to end while the engine spoke the
-/// second contract; the payload domain is the third contract's now, so the
-/// frozen example joins the v1 goldens as history whose digest no longer
-/// recomputes here. Every check before the digest still holds, and the
-/// engine-emitted v3 golden has taken over the end-to-end clearance below.
+/// The rolling golden clears the end-to-end acceptance law. Its payload
+/// digest recomputes in the active domain, and both explicit schema identities
+/// agree with the wrapper before any engine or evaluation claim is accepted.
 #[test]
-fn the_second_contract_golden_is_canonical_history_now() {
-    let golden = dossier_example("scanner-report-v2.canonical.json");
-    let defect = accept(&golden, &foreign_expectations()).unwrap_err();
-    assert_ne!(
-        defect,
-        AcceptanceDefect::Noncanonical,
-        "the exact one-line golden is canonical"
-    );
-    assert_eq!(
-        defect,
-        AcceptanceDefect::PayloadDigest,
-        "the frozen example's digest lives in the second contract's domain"
-    );
-}
-
-#[test]
-fn the_indented_third_contract_example_is_rejected_as_noncanonical() {
-    let indented = dossier_example("scanner-report-v3.json");
-    assert_eq!(
-        accept(&indented, &foreign_expectations()),
-        Err(AcceptanceDefect::Noncanonical),
-        "a readable parsed-value example is not a valid emitted byte fixture"
-    );
-}
-
-#[test]
-fn the_third_contract_golden_is_the_canonicalization_of_its_indented_value() {
-    let indented = dossier_example("scanner-report-v3.json");
-    let golden = dossier_example("scanner-report-v3.canonical.json");
-    let parsed = parse(&indented).unwrap();
-    let mut recanonicalized = canonical(&parsed);
-    recanonicalized.push(b'\n');
-    assert_eq!(
-        recanonicalized, golden,
-        "the smoke-checker equivalence holds under this serializer"
-    );
-}
-
-/// The end-to-end clearance the v1 and v2 goldens can no longer stand for: a
-/// forge-bearing report this engine emitted under the third contract, admitted
-/// whole. Its recorded payload digest recomputes here because the payload lives
-/// in the domain `accept` hashes against, and the run carries the fields that
-/// only exist in v3, a non-github host, a slash-joined owner, and a
-/// `same-repository-gitlab` intent, so the frozen bytes exercise the widening
-/// end to end. The expectations are the identities the payload names, so the
-/// engine and commit checks pass on the same evidence they authenticate.
-#[test]
-fn the_third_contract_golden_clears_the_acceptance_law_end_to_end() {
+fn the_contract_golden_clears_the_acceptance_law_end_to_end() {
     let (wire, expectations) = accepted_report();
     assert_eq!(
         accept(&wire, &expectations),
         Ok(0),
-        "the engine-emitted v3 golden is admissible whole, digest included"
+        "the engine-emitted golden is admissible whole, digest included"
+    );
+}
+
+#[test]
+fn schema_labels_are_part_of_the_acceptance_law() {
+    let (wire, expectations) = accepted_report();
+    let text = String::from_utf8(wire).unwrap();
+    let wrong_envelope = text.replacen(
+        "amiss/scanner-report-envelope",
+        "amiss/not-the-scanner-report-envelope",
+        1,
+    );
+    assert_eq!(
+        accept(wrong_envelope.as_bytes(), &expectations),
+        Err(AcceptanceDefect::Shape),
+        "a payload cannot ride a different envelope label"
+    );
+
+    let wrong_payload = text.replacen(
+        "amiss/scanner-report-payload",
+        "amiss/not-the-scanner-report-payload",
+        1,
+    );
+    assert_eq!(
+        accept(wrong_payload.as_bytes(), &expectations),
+        Err(AcceptanceDefect::Shape),
+        "a different payload label cannot pass under the report digest domain"
     );
 }

@@ -5,7 +5,7 @@ use amiss_wire::report::AnalysisErrorCode;
 
 use crate::extract::{Extraction, Occurrence, analyze};
 
-pub const SCHEMA: &str = "amiss/parser-profile-corpus/v1";
+pub const SCHEMA: &str = "amiss/parser-profile-corpus";
 
 pub const COMMONMARK_FAMILY: &str = "commonmark-0.31.2";
 pub const COMMONMARK_PIN: &str =

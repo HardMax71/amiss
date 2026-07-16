@@ -7,7 +7,7 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
 adapter that extracts no references. Every other file is a possible reference target, not a
 built-in document. These rows come directly from the
-[classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
+[classifier](../../crates/amiss-scan/src/document.rs).
 
 Seven directory names are always skipped, wherever they appear in a path:
 
@@ -36,7 +36,7 @@ Every count is reported: discovered, scanned, unsupported, excluded, unlinked. D
 historical name, `unlinked-document` means a scanned document from which Amiss extracted
 zero references. The evaluator does not construct an inbound reachability graph, so the
 finding does not assert that no other page links to the document. The exact predicate is in
-the [document finding evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/evaluate.rs).
+the [document finding evaluator](../../crates/amiss-scan/src/evaluate.rs).
 
 Paths are treated as bytes. Amiss does not fold case and does not normalize Unicode,
 because Git addresses files by exact bytes, and a checker that guesses two names are
@@ -54,7 +54,7 @@ the one defect no reader can notice.
 Both commit-tree and staged-index discovery emit document rows strictly increasing and unique
 by those raw path bytes. Exact document queries and policy-inventory checks therefore use
 binary search, while two-sided report construction merge-joins the ordered sides. The
-[`discovery` ordering test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/discovery.rs)
+[`discovery` ordering test](../../crates/amiss-scan/tests/discovery.rs)
 pins the Git directory-boundary ordering against both snapshot modes, and the report test
 pins interleaved base and candidate rows. The `amiss-scan` `pipeline` benchmark tracks both
 late exact lookup and the same-document merge as the row count grows.

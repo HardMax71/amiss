@@ -5,7 +5,7 @@ the block: the paragraph, list item, or table cell that contains the reference.
 
 Correlation has an exact phase and a conservative candidate phase. Equal observation
 identities pair exactly. Among the remaining occurrences, a candidate edge exists only when
-the adapter, source construct, and `CorrelationIntentV1` projection agree. Repository paths
+the adapter, source construct, and `CorrelationIntent` projection agree. Repository paths
 and same-repository forge links share a semantic class, so an equivalent spelling change can
 still correlate; external, site-route, and unsupported references retain their raw
 destination identity.
@@ -14,7 +14,7 @@ A candidate edge normally stays within one document. The only cross-document exc
 unique exact Git rename: exactly one removed path and one added path must share the same Git
 mode and raw-evidence digest, and the occurrence's source projection must be unchanged.
 Duplicate document content disables rename correlation instead of forcing a tie-break. The
-[`correlate` integration tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlate.rs)
+[`correlate` integration tests](../../crates/amiss-scan/tests/correlate.rs)
 fix the matching boundary, while the `amiss-scan` `correlation` benchmark tracks its scaling.
 
 The candidate edges form a bipartite graph. A component with one occurrence from each side is

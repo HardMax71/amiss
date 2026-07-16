@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-snapshot-request",
+  "title": "Amiss scanner snapshot request",
+  "description": "The rolling materialization request of the wrapper-to-engine wire. The fixed repository handle keeps request bytes identical across in-process and subprocess lanes; pre_acquired promises that every needed object is already in the primary object database.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "materialization", "repository_handle", "pre_acquired"],
+  "properties": {
+    "schema": {
+      "const": "amiss/scanner-snapshot-request"
+    },
+    "materialization": {
+      "description": "git-objects pairs with evaluation mode commit-pair; index pairs with evaluation mode index. Any other pairing is an invalid invocation.",
+      "enum": ["git-objects", "index"]
+    },
+    "repository_handle": {
+      "const": 3
+    },
+    "pre_acquired": {
+      "const": true
+    }
+  }
+}

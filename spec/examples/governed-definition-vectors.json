@@ -1,0 +1,112 @@
+{
+  "schema": "amiss/governed-definition-vectors",
+  "contract": "governed-definition-source",
+  "cases": [
+    {
+      "id": "GD-001-canonical-candidate",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "decoded_label": "amiss:foo",
+          "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:7f405fb569d6251db9d7649f0fdc025aeb325e2355e79448f4feaa966d56d7f0",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-002-decoded-colon",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "decoded_label": "amiss:foo",
+          "source": "[amiss&#58;foo]: <amiss:future>"
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:e1a3738bf796df68407b9e9a2e15aa4c5b8d8569b3dc381e16c94bd4fcc7f11d",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-003-uppercase-not-reserved",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "decoded_label": "Amiss:foo",
+          "source": "[Amiss:foo]: <amiss:x>"
+        }
+      ],
+      "expected_member_count": 0,
+      "expected_sources": []
+    },
+    {
+      "id": "GD-004-duplicate-source-multiplicity",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "decoded_label": "amiss:foo",
+          "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
+        },
+        {
+          "decoded_label": "amiss:foo",
+          "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
+        }
+      ],
+      "expected_member_count": 2,
+      "expected_sources": [
+        {
+          "digest": "sha256:7f405fb569d6251db9d7649f0fdc025aeb325e2355e79448f4feaa966d56d7f0",
+          "multiplicity": 2
+        }
+      ]
+    },
+    {
+      "id": "GD-005-base-only-does-not-emit",
+      "base_definitions": [
+        {
+          "decoded_label": "amiss:foo",
+          "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
+        }
+      ],
+      "candidate_definitions": [],
+      "expected_member_count": 0,
+      "expected_sources": []
+    },
+    {
+      "id": "GD-006-losing-reserved-does-not-suppress",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "decoded_label": "Amiss:x",
+          "normalized_label": "amiss:x",
+          "source": "[Amiss:x]: docs/a.md"
+        },
+        {
+          "decoded_label": "amiss:x",
+          "normalized_label": "amiss:x",
+          "source": "[amiss:x]: <amiss:future>"
+        }
+      ],
+      "consuming_normalized_labels": [
+        "amiss:x"
+      ],
+      "expected_ordinary_reference_count": 1,
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:69989ff1f72dab422fe615e94cfc93936e6740670aea9cdb2686a83f3f1c0f2c",
+          "multiplicity": 1
+        }
+      ]
+    }
+  ]
+}

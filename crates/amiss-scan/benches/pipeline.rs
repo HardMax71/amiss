@@ -90,7 +90,7 @@ fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-bench".to_owned(),
-        digest: hb("amiss/scanner-engine/v1", b"bench engine"),
+        digest: hb("amiss/scanner-engine", b"bench engine"),
     }
 }
 

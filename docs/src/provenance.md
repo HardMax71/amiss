@@ -27,7 +27,7 @@ alone, under the review's discipline: fail closed, report every count, guess not
 The full investigation, market survey, adversarial reviews, and experiment data remain in
 the repository's history as an
 [immutable dossier](https://github.com/HardMax71/amiss/tree/26df8f76f84ee0e8bbee3f8c7a5ab49a44eaaadc/docs).
-The machine-readable contracts, schemas and canonical examples, ship in
-[`spec/`](https://github.com/HardMax71/amiss/tree/main/spec). Where this book and the
+The machine-readable contracts, schemas and canonical examples ship in `spec/`, led by the
+[current report contract](../../spec/scanner-report.schema.json). Where this book and the
 dossier disagree, the shipped code and its tests are the authority for what the tool does;
 the dossier remains the authority for why.

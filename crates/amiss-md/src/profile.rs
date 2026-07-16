@@ -30,10 +30,10 @@ fn code_ends_here(source: &str) -> MdxSignal {
     }
 }
 
-/// The grammar pin. `commonmark-gfm-v1` is `CommonMark` plus exactly the
-/// `remark-gfm` bundle with single-tilde strikethrough; `mdx-source-v1` is that
+/// The grammar pin. `commonmark-gfm` is `CommonMark` plus exactly the
+/// `remark-gfm` bundle with single-tilde strikethrough; `mdx-source` is that
 /// profile plus MDX ESM, JSX, and expressions, minus the constructs MDX removes
-/// (indented code, raw HTML, and plain autolinks). `plain-zero-lexer-v1` runs
+/// (indented code, raw HTML, and plain autolinks). `plain-zero-lexer` runs
 /// no grammar at all.
 #[must_use]
 pub fn parse_options(adapter: Adapter) -> Option<ParseOptions> {

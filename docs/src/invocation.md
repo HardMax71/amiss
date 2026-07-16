@@ -54,7 +54,7 @@ refuse a nested owner they could never match.
 `--explain-scope` does not create a separate early-exit command. The scan still runs, and in
 human format the flag adds deterministic scope lines to the normal result. JSON output is
 unchanged by the flag. This behavior is pinned by the
-[CLI test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/cli.rs).
+[CLI test](../../crates/amiss/tests/cli.rs).
 `--format json` emits the exact report described in [The report](report.md); `human` prints
 the same facts readably, capped at the first two hundred findings.
 

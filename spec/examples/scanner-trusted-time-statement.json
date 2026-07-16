@@ -1,0 +1,16 @@
+{
+  "schema": "amiss/scanner-trusted-time-statement",
+  "controller": "external-required-check-clock",
+  "repository": {
+    "host": "gitlab.example.internal",
+    "owner": "platform/security",
+    "name": "docs"
+  },
+  "ref": "refs/heads/main",
+  "candidate_identity_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "provider": "gitlab-ci",
+  "provider_run_id": "pipeline/01J2Z9-7",
+  "provider_run_attempt": 2,
+  "evaluation_instant": "2026-07-12T10:00:00Z",
+  "valid_until": "2026-07-12T10:10:00Z"
+}

@@ -17,7 +17,7 @@ use crate::{Error, lfs};
 mod forge;
 
 pub use amiss_wire::digest::RAW_EVIDENCE_DOMAIN;
-pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection/v1";
+pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
 
@@ -295,7 +295,7 @@ const fn hex_value(byte: u8) -> Option<u8> {
     }
 }
 
-/// Absolute URIs under `uri-reference-v1`: ASCII generic syntax, no
+/// Absolute URIs under `uri-reference`: ASCII generic syntax, no
 /// normalization, two-hex-digit escapes, and for HTTP(S) a `//` plus nonempty
 /// authority. Only the emitted scheme is lowercased. The exact `https://`
 /// spelling of the declared host opens same-repository recognition, the

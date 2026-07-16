@@ -1,0 +1,8 @@
+{
+  "schema": "amiss/scanner-snapshot",
+  "kind": "index",
+  "identity_scope": "complete-logical-index",
+  "base_object_format": "sha1",
+  "base_commit_oid": "1111111111111111111111111111111111111111",
+  "index_projection_digest": "sha256:d6ca91112ae5d88bde3bbfc8a5e0a7061489d779ef9ef376066444516bd12965"
+}

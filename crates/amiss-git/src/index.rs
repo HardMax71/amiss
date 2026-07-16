@@ -76,7 +76,7 @@ fn prefix_conflict(seen: &[Vec<u8>], path: &[u8]) -> bool {
     false
 }
 
-/// Parses one complete raw `.git/index` byte string under `git-index-v1`:
+/// Parses one complete raw `.git/index` byte string under `git-index`:
 /// versions two through four, ordinary stage-zero rows only, the exact mode
 /// pairings, strictly increasing prefix-free paths, mandatory unknown or
 /// split-index and sparse-directory extensions rejected, and the trailing

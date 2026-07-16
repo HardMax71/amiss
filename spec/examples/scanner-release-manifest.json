@@ -1,0 +1,54 @@
+{
+  "schema": "amiss/scanner-release-manifest",
+  "engine_version": "0.4.0",
+  "build_source": {
+    "repository": {
+      "host": "gitlab.example.internal",
+      "owner": "platform/security",
+      "name": "amiss"
+    },
+    "object_format": "sha1",
+    "commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependency_lock": {
+    "schema": "amiss/scanner-dependency-lock-input",
+    "files": [
+      {
+        "path": "Cargo.lock",
+        "raw_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ]
+  },
+  "dependency_lock_digest": "sha256:8c677a5026b612d0e29a0de5d153cd3318bf4ea946780733d246de2b5dee44cf",
+  "artifacts": [
+    {
+      "platform": "linux-x86_64",
+      "artifact_name": "amiss-linux-x86_64",
+      "tree_path": "dist/amiss-linux-x86_64",
+      "binary_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "engine_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "runtime_contract": "manifest-closed",
+      "environment_contract": "scanner-process-env",
+      "runtime_files": [
+        {
+          "path": "action.yml",
+          "role": "runtime-data",
+          "git_mode": "100644",
+          "file_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        {
+          "path": "dist/amiss-linux-x86_64",
+          "role": "executable",
+          "git_mode": "100755",
+          "file_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "path": "dist/launcher.js",
+          "role": "launcher",
+          "git_mode": "100644",
+          "file_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Running it in CI
 
-The short form is the published action, which carries the engine inside the selected
+The short form is the published GitHub adapter. It carries the engine inside the selected
 action tree, derives both commits from the triggering event, and turns findings into file
 annotations on the pull request:
 
@@ -18,15 +18,19 @@ the release manifest shipped in the same tree before running it, fails the job o
 classes 1 and 2 under the default `enforce` profile, and exposes `exit-class` and
 `report` outputs for anything downstream. Its inputs (`profile`, `base`, `candidate`,
 `repo`, `object-format`, `annotations`) exist for the cases the defaults do not cover.
-The identity host comes from the event's server URL, so on GitHub Enterprise Server
-the report claims the instance's own host and recognizes that host's blob and tree
-links, with the github dialect declared explicitly; nothing about the action assumes
-github.com.
+The identity host comes from the event's server URL, so on GitHub Enterprise Server the
+report claims the instance's own host and recognizes that host's blob and tree links, with
+the github dialect declared explicitly. Release assembly likewise supplies the host to the
+[manifest builder](../../crates/amiss-bootstrap/src/build.rs), whose current contract stores
+an open build-source identity instead of assuming `github.com`; the
+[release workflow](../../.github/workflows/release.yml) is a checkable example of that input.
+The report and request formats are forge-neutral even though this repository currently ships
+only the GitHub event adapter.
 
 The long form invokes the engine directly. It is useful outside GitHub Actions or when a
 workflow needs to construct the exact evaluation itself, but it is not the repository's
 dogfood path. Amiss's
-[self-scan workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/ci.yml)
+[self-scan workflow](../../.github/workflows/ci.yml)
 builds the pull request's engine, assembles a local action tree with its manifest, and runs
 that composite under `--profile enforce`. A minimal adjacent-commit direct invocation is:
 
@@ -68,6 +72,11 @@ For a direct adjacent-commit scan, `HEAD~1` and `HEAD` work as above. For event-
 prefer the composite Action's derivation or pass the exact two commits explicitly. A scan is
 a pure function of the two snapshots and invocation, so there is no baseline cache to warm
 or restore between runs.
+
+This adapter does not yet acquire provider-authenticated external controls, and no public
+adapter currently maps another forge's authenticated run context into the request wire. See
+[Project status](status.md) for that trust boundary; using the open identity fields alone
+does not turn caller-supplied JSON into provider authority.
 
 When a run blocks, read the JSON, not the human printout. The printout stops at two hundred
 findings, so a repository with hundreds of harmless records can fill the screen and still

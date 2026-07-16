@@ -13,7 +13,7 @@ use amiss_wire::model::{Oid, RepoPathText};
 /// definition, so the two can never drift apart and silently stop matching.
 pub use amiss_wire::report::ENGINE_DOMAIN;
 
-pub const BOOTSTRAP_DOMAIN: &str = "amiss/scanner-action-bootstrap/v1";
+pub const BOOTSTRAP_DOMAIN: &str = "amiss/scanner-action-bootstrap";
 pub const ACTION_METADATA_PATH: &str = "action.yml";
 
 /// The exact reason a validation refused, in the order the contract checks

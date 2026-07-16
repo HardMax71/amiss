@@ -285,7 +285,7 @@ fn days_in_month(year: u32, month: u32) -> u32 {
     }
 }
 
-/// Full branch ref under the frozen `ref-format-v1` contract.
+/// Full branch ref under the rolling `ref-format` contract.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BranchRef(String);
 
@@ -293,7 +293,7 @@ impl BranchRef {
     #[must_use]
     #[expect(
         clippy::case_sensitive_file_extension_comparisons,
-        reason = "ref-format-v1 component rules are byte-exact"
+        reason = "ref-format component rules are byte-exact"
     )]
     pub fn new(raw: String) -> Option<Self> {
         if raw.len() > 266 {
@@ -350,8 +350,8 @@ impl RepositoryIdentity {
         }
     }
 
-    /// The identity form the GitHub-bound v1 documents can spell: host fixed
-    /// to github.com, single-segment owner.
+    /// Convenience constructor for GitHub's fixed host and single-segment
+    /// owner form.
     #[must_use]
     pub fn github(owner: String, name: String) -> Option<Self> {
         if identity_segment(owner.as_bytes()) && name_valid(&name) {
@@ -505,9 +505,9 @@ impl Adapter {
     #[must_use]
     pub const fn adapter_id(self) -> &'static str {
         match self {
-            Self::Markdown => "markdown-v1",
-            Self::Mdx => "mdx-v1",
-            Self::PlainAdvisory => "plain-advisory-v1",
+            Self::Markdown => "markdown",
+            Self::Mdx => "mdx",
+            Self::PlainAdvisory => "plain-advisory",
         }
     }
 
@@ -523,16 +523,16 @@ impl Adapter {
     #[must_use]
     pub const fn grammar_profile(self) -> &'static str {
         match self {
-            Self::Markdown => "commonmark-gfm-v1",
-            Self::Mdx => "mdx-source-v1",
-            Self::PlainAdvisory => "plain-zero-lexer-v1",
+            Self::Markdown => "commonmark-gfm",
+            Self::Mdx => "mdx-source",
+            Self::PlainAdvisory => "plain-zero-lexer",
         }
     }
 
     #[must_use]
     pub const fn frontmatter_contract(self) -> &'static str {
         match self {
-            Self::Markdown | Self::Mdx => "frontmatter-v1",
+            Self::Markdown | Self::Mdx => "frontmatter",
             Self::PlainAdvisory => "none",
         }
     }
@@ -540,7 +540,7 @@ impl Adapter {
     #[must_use]
     pub const fn source_projection(self) -> &'static str {
         match self {
-            Self::Markdown | Self::Mdx => "source-projection-v1",
+            Self::Markdown | Self::Mdx => "source-projection",
             Self::PlainAdvisory => "none",
         }
     }

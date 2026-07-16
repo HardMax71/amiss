@@ -6,12 +6,12 @@ use crate::digest::{Digest, hj};
 use crate::json::Value;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-pub const MANIFEST_SCHEMA: &str = "amiss/scanner-release-manifest/v1";
-pub const DEPENDENCY_LOCK_SCHEMA: &str = "amiss/scanner-dependency-lock-input/v1";
-pub const MANIFEST_DOMAIN: &str = "amiss/scanner-release-manifest/v1";
-pub const DEPENDENCY_LOCK_DOMAIN: &str = "amiss/scanner-dependency-lock/v1";
-pub const RUNTIME_CONTRACT: &str = "manifest-closed-v1";
-pub const ENVIRONMENT_CONTRACT: &str = "scanner-process-env-v1";
+pub const MANIFEST_SCHEMA: &str = "amiss/scanner-release-manifest";
+pub const DEPENDENCY_LOCK_SCHEMA: &str = "amiss/scanner-dependency-lock-input";
+pub const MANIFEST_DOMAIN: &str = "amiss/scanner-release-manifest";
+pub const DEPENDENCY_LOCK_DOMAIN: &str = "amiss/scanner-dependency-lock";
+pub const RUNTIME_CONTRACT: &str = "manifest-closed";
+pub const ENVIRONMENT_CONTRACT: &str = "scanner-process-env";
 
 /// One runtime file of the reviewed action closure: a regular blob in the
 /// pinned action tree with its exact mode and plain SHA-256.

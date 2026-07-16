@@ -11,20 +11,55 @@ use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::report::{
-    EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
-    PRIVATE_TEMPORARY_STORAGE_BYTES,
+    ENVELOPE_SCHEMA, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
+    PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
 };
 
 fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn v3_report_schema() -> serde_json::Value {
+fn report_schema() -> serde_json::Value {
     serde_json::from_slice(
-        &fs::read(repository_root().join("spec/scanner-report-v3.schema.json"))
-            .expect("v3 report schema is readable"),
+        &fs::read(repository_root().join("spec/scanner-report.schema.json"))
+            .expect("report schema is readable"),
     )
-    .expect("v3 report schema is JSON")
+    .expect("report schema is JSON")
+}
+
+fn public_schema_examples() -> Vec<(PathBuf, PathBuf)> {
+    let specification_directory = repository_root().join("spec");
+    let examples_directory = specification_directory.join("examples");
+    let mut pairs = Vec::new();
+
+    for entry in
+        fs::read_dir(&specification_directory).expect("specification directory is readable")
+    {
+        let schema_path = entry.expect("specification entry is readable").path();
+        if !schema_path.is_file() {
+            continue;
+        }
+
+        let file_name = schema_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("public schema names are UTF-8");
+        let Some(contract_name) = file_name.strip_suffix(".schema.json") else {
+            continue;
+        };
+        let example_path = examples_directory.join(format!("{contract_name}.json"));
+        assert!(
+            example_path.is_file(),
+            "{} has no matching public example at {}",
+            schema_path.display(),
+            example_path.display(),
+        );
+        pairs.push((schema_path, example_path));
+    }
+
+    pairs.sort();
+    assert!(!pairs.is_empty(), "no public JSON Schema contracts found");
+    pairs
 }
 
 fn schema_enum(schema: &serde_json::Value, name: &str) -> Vec<String> {
@@ -174,8 +209,8 @@ fn documented_limits_are_generated_from_runtime_constants() {
 }
 
 #[test]
-fn documented_enum_sources_match_the_report_schema() {
-    let schema = v3_report_schema();
+fn documented_enum_sources_match_the_active_report_schema() {
+    let schema = report_schema();
     let findings: Vec<String> = FindingKind::ALL
         .iter()
         .map(|kind| kind.as_str().to_owned())
@@ -187,35 +222,156 @@ fn documented_enum_sources_match_the_report_schema() {
     assert_eq!(
         findings,
         schema_enum(&schema, "FindingKind"),
-        "FindingKind::ALL drifted from the v3 schema"
+        "FindingKind::ALL drifted from the report schema"
     );
     assert_eq!(
         resources,
         schema_enum(&schema, "ResourceName"),
-        "ResourceName::all drifted from the v3 schema"
+        "ResourceName::all drifted from the report schema"
     );
 }
 
 #[test]
-fn frozen_v3_report_is_schema_clean_and_matches_its_canonical_form() {
+fn active_report_schema_ids_match_the_writer_contract() {
+    let schema = report_schema();
+    assert_eq!(
+        amiss_scan::report::ENVELOPE_SCHEMA,
+        ENVELOPE_SCHEMA,
+        "the scan and wire envelope writers disagree on the active identity"
+    );
+    assert_eq!(
+        schema
+            .pointer("/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(ENVELOPE_SCHEMA),
+        "the active schema and writer disagree on the envelope identity"
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/ReportPayload/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(PAYLOAD_SCHEMA),
+        "the active schema and writer disagree on the payload identity"
+    );
+}
+
+#[test]
+fn all_public_contract_examples_are_schema_clean() {
+    let mut defects = Vec::new();
+
+    for (schema_path, example_path) in public_schema_examples() {
+        let schema: serde_json::Value =
+            serde_json::from_slice(&fs::read(&schema_path).expect("public schema is readable"))
+                .unwrap_or_else(|error| panic!("{} is not JSON: {error}", schema_path.display()));
+        let example: serde_json::Value =
+            serde_json::from_slice(&fs::read(&example_path).expect("public example is readable"))
+                .unwrap_or_else(|error| panic!("{} is not JSON: {error}", example_path.display()));
+        let validator = jsonschema::validator_for(&schema)
+            .unwrap_or_else(|error| panic!("{} does not compile: {error}", schema_path.display()));
+
+        defects.extend(validator.iter_errors(&example).map(|error| {
+            format!(
+                "{} against {} at {}: {error}",
+                example_path.display(),
+                schema_path.display(),
+                error.instance_path(),
+            )
+        }));
+    }
+
+    assert!(
+        defects.is_empty(),
+        "public contract examples violate their schemas:\n{}",
+        defects.join("\n"),
+    );
+}
+
+#[test]
+fn repository_relative_documentation_links_resolve() {
+    let documentation_directory = repository_root().join("docs/src");
+    let mut checked = 0_u64;
+
+    for entry in
+        fs::read_dir(&documentation_directory).expect("documentation directory is readable")
+    {
+        let path = entry.expect("documentation entry is readable").path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("md") {
+            continue;
+        }
+
+        let document = fs::read_to_string(&path).expect("documentation source is readable");
+        let mut fenced = false;
+        for (line_index, line) in document.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+                fenced = !fenced;
+                continue;
+            }
+            if fenced {
+                continue;
+            }
+
+            let mut remainder = line;
+            while let Some(open) = remainder.find("](") {
+                let after_open = remainder
+                    .get(open + 2..)
+                    .expect("the ASCII link opener ends at a UTF-8 boundary");
+                let Some(close) = after_open.find(')') else {
+                    break;
+                };
+                let destination = after_open
+                    .get(..close)
+                    .expect("the ASCII link closer starts at a UTF-8 boundary");
+                if destination.starts_with("../../") {
+                    let target = destination
+                        .split(['#', '?'])
+                        .next()
+                        .expect("split always yields one component");
+                    let resolved = path
+                        .parent()
+                        .expect("documentation source has a parent")
+                        .join(target);
+                    assert!(
+                        resolved.exists(),
+                        "{}:{} links to missing repository path {destination}",
+                        path.display(),
+                        line_index + 1,
+                    );
+                    checked = checked.saturating_add(1);
+                }
+                remainder = after_open
+                    .get(close + 1..)
+                    .expect("the ASCII link closer ends at a UTF-8 boundary");
+            }
+        }
+    }
+
+    assert!(
+        checked > 0,
+        "documentation contains no repository-relative implementation links"
+    );
+}
+
+#[test]
+fn report_example_is_schema_clean_and_matches_its_canonical_form() {
     let root = repository_root();
-    let pretty = fs::read(root.join("spec/examples/scanner-report-v3.json"))
-        .expect("pretty v3 report example is readable");
-    let frozen = fs::read(root.join("spec/examples/scanner-report-v3.canonical.json"))
-        .expect("canonical v3 report example is readable");
+    let pretty = fs::read(root.join("spec/examples/scanner-report.json"))
+        .expect("pretty report example is readable");
+    let canonical_fixture = fs::read(root.join("spec/examples/scanner-report.canonical.json"))
+        .expect("canonical report example is readable");
 
     let parsed = amiss_wire::json::parse(&pretty).expect("pretty example is strict JSON");
     let mut canonical = amiss_wire::json::canonical(&parsed);
     canonical.push(b'\n');
     assert_eq!(
-        canonical, frozen,
-        "pretty and canonical v3 examples drifted"
+        canonical, canonical_fixture,
+        "pretty and canonical report examples drifted"
     );
 
-    let schema = v3_report_schema();
+    let schema = report_schema();
     let example: serde_json::Value =
-        serde_json::from_slice(&pretty).expect("v3 report example is JSON");
-    let validator = jsonschema::validator_for(&schema).expect("v3 report schema compiles");
+        serde_json::from_slice(&pretty).expect("report example is JSON");
+    let validator = jsonschema::validator_for(&schema).expect("report schema compiles");
     let defects: Vec<String> = validator
         .iter_errors(&example)
         .map(|error| format!("{}: {error}", error.instance_path()))
@@ -223,6 +379,6 @@ fn frozen_v3_report_is_schema_clean_and_matches_its_canonical_form() {
     assert_eq!(
         defects,
         Vec::<String>::new(),
-        "v3 example violates its schema"
+        "report example violates its schema"
     );
 }

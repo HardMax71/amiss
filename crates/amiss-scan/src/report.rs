@@ -15,9 +15,9 @@ use crate::evaluate::{
 };
 use crate::{Impact, observe};
 
-pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope/v3";
-pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection/v1";
-pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot/v1";
+pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
+pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection";
+pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot";
 
 /// The canonical logical-index projection and the synthetic snapshot input
 /// built over it, with both digests.
@@ -877,15 +877,27 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
     ]
 }
 
-pub const CANDIDATE_IDENTITY_DOMAIN: &str = "amiss/scanner-candidate-identity/v1";
+/// The rolling candidate identity. The selected forge is resolution-significant,
+/// so it is bound alongside the repository and snapshots.
+pub const CANDIDATE_IDENTITY_DOMAIN: &str = "amiss/scanner-candidate-identity";
 
-/// The candidate-identity digest a trusted-time statement must carry: `HJ`
-/// over the resolved evaluation's identity projection before time is added.
-#[must_use]
-pub fn candidate_identity_digest(setup: &Setup) -> Digest {
+fn candidate_identity_value(setup: &Setup) -> Value {
     let mut rows = vec![("schema", string(CANDIDATE_IDENTITY_DOMAIN))];
     rows.extend(identity_rows(setup));
-    hj(CANDIDATE_IDENTITY_DOMAIN, &object(rows))
+    rows.push((
+        "forge",
+        setup
+            .forge
+            .map_or(Value::Null, |dialect| string(dialect.as_str())),
+    ));
+    object(rows)
+}
+
+/// The candidate-identity digest a trusted-time statement must carry: `HJ`
+/// over the resolved-evaluation identity, including its forge.
+#[must_use]
+pub fn candidate_identity_digest(setup: &Setup) -> Digest {
+    hj(CANDIDATE_IDENTITY_DOMAIN, &candidate_identity_value(setup))
 }
 
 fn evaluation_value(setup: &Setup) -> Value {
@@ -1010,7 +1022,7 @@ fn controls_value(setup: &Setup) -> Value {
                         ("status", string("verified")),
                         ("statement", time_statement_value(&time.statement)),
                         ("statement_digest", digest_value(time.digest)),
-                        ("trust_source", string("external-required-workflow")),
+                        ("trust_source", string("external-required-check")),
                     ])
                 },
             ),
@@ -1022,7 +1034,7 @@ fn constraint_descriptor_value(
     descriptor: &amiss_wire::controls::ExecutionConstraintDescriptor,
 ) -> Value {
     object(vec![
-        ("schema", string("amiss/scanner-execution-constraint/v1")),
+        ("schema", string("amiss/scanner-execution-constraint")),
         (
             "action_repository",
             object(vec![
@@ -1059,7 +1071,7 @@ fn constraint_descriptor_value(
             "required_status_name",
             string(&descriptor.required_status_name),
         ),
-        ("bootstrap_contract", string("amiss-action-bootstrap-v1")),
+        ("bootstrap_contract", string("amiss-action-bootstrap")),
         (
             "bootstrap_digest",
             digest_value(descriptor.bootstrap_digest),
@@ -1068,12 +1080,9 @@ fn constraint_descriptor_value(
 }
 
 fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) -> Value {
-    object(vec![
-        ("schema", string("amiss/scanner-trusted-time-statement/v1")),
-        (
-            "controller",
-            string("github-actions-required-workflow-clock-v1"),
-        ),
+    let mut rows = vec![
+        ("schema", string(statement.schema())),
+        ("controller", string(statement.controller())),
         (
             "repository",
             object(vec![
@@ -1087,6 +1096,9 @@ fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) 
             "candidate_identity_digest",
             digest_value(statement.candidate_identity_digest),
         ),
+    ];
+    rows.push(("provider", string(&statement.provider)));
+    rows.extend([
         ("provider_run_id", string(&statement.provider_run_id)),
         (
             "provider_run_attempt",
@@ -1097,7 +1109,8 @@ fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) 
             string(statement.evaluation_instant.as_str()),
         ),
         ("valid_until", string(statement.valid_until.as_str())),
-    ])
+    ]);
+    object(rows)
 }
 
 struct Counts {

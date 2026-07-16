@@ -14,7 +14,7 @@ use amiss_wire::manifest::RuntimeRole;
 /// file. Every platform row comes from the artifact's own header, so a
 /// mislabeled binary cannot enter the manifest.
 ///
-/// `amiss-manifest --tree DIR --version V --owner O --repository R
+/// `amiss-manifest --tree DIR --version V --host H --owner O --repository R
 ///  --commit OID --action PATH --launcher PATH --lock PATH [--lock PATH]...
 ///  --artifact PATH [...]`
 #[expect(clippy::print_stderr, reason = "the build tool's diagnostic channel")]
@@ -36,6 +36,7 @@ fn main() -> ExitCode {
 struct Args {
     tree: PathBuf,
     version: String,
+    host: String,
     owner: String,
     repository: String,
     commit: String,
@@ -92,6 +93,7 @@ fn run(args: &Args) -> Result<(), String> {
 
     let build = StagedBuild {
         engine_version: args.version.clone(),
+        host: args.host.clone(),
         owner: args.owner.clone(),
         repository: args.repository.clone(),
         object_format: "sha1",
@@ -120,6 +122,7 @@ fn read_at(tree: &Path, path: &str) -> Result<Vec<u8>, String> {
 fn parse_args(argv: &[OsString]) -> Option<Args> {
     let mut tree: Option<PathBuf> = None;
     let mut version: Option<String> = None;
+    let mut host: Option<String> = None;
     let mut owner: Option<String> = None;
     let mut repository: Option<String> = None;
     let mut commit: Option<String> = None;
@@ -133,6 +136,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         match flag.to_str()? {
             "--tree" => tree = Some(PathBuf::from(value)),
             "--version" => version = Some(value),
+            "--host" => host = Some(value),
             "--owner" => owner = Some(value),
             "--repository" => repository = Some(value),
             "--commit" => commit = Some(value),
@@ -149,6 +153,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     Some(Args {
         tree: tree?,
         version: version?,
+        host: host?,
         owner: owner?,
         repository: repository?,
         commit: commit?,

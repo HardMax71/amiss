@@ -1,6 +1,6 @@
 pub const ATOM_SCALAR_BOUND: usize = 200;
 
-/// `human-atom-v1`: every repository-derived scalar is rendered as a
+/// `human-atom`: every repository-derived scalar is rendered as a
 /// double-quoted ASCII JSON-style string. At most the first two hundred
 /// Unicode scalar values are kept, with a literal `...` appended inside the
 /// quotes when any were omitted. Quote and backslash escape as `\"` and
@@ -41,7 +41,7 @@ pub fn atom(text: &str) -> String {
     out
 }
 
-/// `human-atom-bytes-v1`: a repository-derived value that is raw bytes, not
+/// `human-atom-bytes`: a repository-derived value that is raw bytes, not
 /// text, rendered under the same law as [`atom`]. At most the first two
 /// hundred bytes are kept with a literal `...` appended inside the quotes
 /// when any were omitted; printable ASCII stays literal with quote and

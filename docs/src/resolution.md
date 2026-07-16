@@ -12,9 +12,9 @@ expressions become opaque regions, reported with their size and place as
 stated blind spot rather than an invisible one.
 
 Each destination then passes through the generic
-[resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);
+[resolver](../../crates/amiss-scan/src/resolve.rs);
 trusted absolute forge spellings continue through the private
-[dialect module](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve/forge.rs).
+[dialect module](../../crates/amiss-scan/src/resolve/forge.rs).
 A relative path resolves from the document's own directory and must stay inside the
 repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
 with `/` is a site route, not a repository-root shorthand, and is reported as unsupported
@@ -100,7 +100,7 @@ second trusted spelling so the resolver can split a ref from its path without gu
 when a URL names the default branch but the candidate ref differs, it is still
 `unsupported-version-scope`. Site generators and language-aware tools own route, anchor,
 and symbol semantics; guessing them here would turn honest ignorance into a false pass. The
-[resolver tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
+[resolver tests](../../crates/amiss-scan/tests/resolve.rs)
 pin these distinctions.
 
 Each resolved target is read from the object store and hashed, so the comparison knows the

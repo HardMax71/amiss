@@ -4,17 +4,30 @@ use std::path::Path;
 use amiss_scan::lfs::is_pointer;
 use amiss_wire::json::{Value, parse};
 
-/// The finite positive and negative corpus the spec pins for `lfs-pointer-v1`.
+/// The finite positive and negative corpus the spec pins for the conservative
+/// LFS-pointer recognizer.
 #[test]
 fn the_pinned_vectors_decide_recognition() {
     let bytes = fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../spec/examples/lfs-pointer-v1-vectors.json"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/lfs-pointer-vectors.json"),
     )
     .unwrap();
     let Value::Object(root) = parse(&bytes).unwrap() else {
         panic!("vectors are an object")
     };
+    let field = |name: &str| {
+        root.iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value)
+    };
+    assert_eq!(
+        field("schema"),
+        Some(&Value::String("amiss/lfs-pointer-vectors".to_owned()))
+    );
+    assert_eq!(
+        field("contract"),
+        Some(&Value::String("lfs-pointer-conservative".to_owned()))
+    );
     let Some((_, Value::Array(cases))) = root.iter().find(|(key, _)| key == "cases") else {
         panic!("vectors hold cases")
     };

@@ -3,10 +3,10 @@ use crate::digest::{Digest, hj};
 use crate::json::Value;
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-use super::{decode_digest, decode_repo_path, root};
+use super::{decode_digest, decode_repo_path, decode_repository, root};
 
-const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint/v1";
-const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap-v1";
+const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
+const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConstraintPlatform {
@@ -63,16 +63,6 @@ pub struct ExecutionConstraintDescriptor {
     pub bootstrap_digest: Digest,
 }
 
-fn decode_action_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let host = de::string(&obj.field("host"), obj.take("host")?)?;
-    let owner = de::string(&obj.field("owner"), obj.take("owner")?)?;
-    let name = de::string(&obj.field("name"), obj.take("name")?)?;
-    obj.finish()?;
-    RepositoryIdentity::new(host, owner, name)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
 fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
     let raw = de::string(path, value)?;
     let bytes = raw.as_bytes();
@@ -111,7 +101,7 @@ impl ExecutionConstraintDescriptor {
             obj.take("schema")?,
             EXECUTION_CONSTRAINT_SCHEMA,
         )?;
-        let action_repository = decode_action_repository(
+        let action_repository = decode_repository(
             &obj.field("action_repository"),
             obj.take("action_repository")?,
         )?;

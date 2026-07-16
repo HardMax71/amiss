@@ -1,12 +1,18 @@
 {
-  "schema": "amiss/scanner-controls-request/v1",
+  "schema": "amiss/scanner-controls-request",
   "organization_floor": {
-    "value": { "schema": "amiss/organization-floor/v1" },
+    "value": { "schema": "amiss/organization-floor" },
     "expected_digest": "sha256:6f0b1f7a2c9d4e8b5a3c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a",
-    "trust_source": "organization-ruleset"
+    "trust_source": "organization-policy"
   },
   "debt_snapshot": null,
   "waiver_bundle": null,
-  "trusted_time": null,
+  "trusted_time": {
+    "value": { "schema": "amiss/scanner-trusted-time-statement" },
+    "expected_digest": "sha256:9e8d7c6b5a4f30291e8d7c6b5a4f30291e8d7c6b5a4f30291e8d7c6b5a4f3029",
+    "provider": "gitlab",
+    "provider_run_id": "pipeline/987654321:job-42",
+    "provider_run_attempt": 2
+  },
   "execution_constraint": null
 }

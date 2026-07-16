@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-evaluation-request",
+  "title": "Amiss scanner evaluation request",
+  "description": "The rolling run-identity request of the wrapper-to-engine wire. It carries caller-canonical forge identities and the nullable URL dialect explicitly, so a self-hosted instance never has to impersonate a public host.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "profile",
+    "mode",
+    "object_format",
+    "repository",
+    "forge",
+    "ref",
+    "default_branch_ref",
+    "base_commit_oid",
+    "candidate_commit_oid"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/scanner-evaluation-request"
+    },
+    "profile": {
+      "enum": ["observe", "enforce"]
+    },
+    "mode": {
+      "description": "commit-pair evaluates two explicit commits; index evaluates the base commit against the complete logical staged index. candidate_commit_oid is null exactly when mode is index.",
+      "enum": ["commit-pair", "index"]
+    },
+    "object_format": {
+      "enum": ["sha1", "sha256"]
+    },
+    "repository": {
+      "oneOf": [{ "$ref": "#/$defs/RepositoryIdentity" }, { "type": "null" }]
+    },
+    "forge": {
+      "description": "The same-repository URL dialect selected by the authenticated caller. Null means no forge URL grammar applies.",
+      "enum": ["github", "gitlab", "gitea", null]
+    },
+    "ref": {
+      "oneOf": [{ "$ref": "#/$defs/ExactBranchRef" }, { "type": "null" }]
+    },
+    "default_branch_ref": {
+      "oneOf": [{ "$ref": "#/$defs/ExactBranchRef" }, { "type": "null" }]
+    },
+    "base_commit_oid": {
+      "$ref": "#/$defs/GitOid"
+    },
+    "candidate_commit_oid": {
+      "oneOf": [{ "$ref": "#/$defs/GitOid" }, { "type": "null" }]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "repository": { "type": "null" } },
+        "required": ["repository"]
+      },
+      "then": {
+        "properties": { "forge": { "type": "null" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "forge": { "enum": ["github", "gitea"] } },
+        "required": ["forge"]
+      },
+      "then": {
+        "properties": {
+          "repository": {
+            "oneOf": [
+              { "$ref": "#/$defs/SingleOwnerRepositoryIdentity" },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "commit-pair" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "properties": { "candidate_commit_oid": { "$ref": "#/$defs/GitOid" } }
+      },
+      "else": {
+        "properties": { "candidate_commit_oid": { "type": "null" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "object_format": { "const": "sha1" } },
+        "required": ["object_format"]
+      },
+      "then": {
+        "properties": {
+          "base_commit_oid": { "$ref": "#/$defs/Sha1Oid" },
+          "candidate_commit_oid": {
+            "oneOf": [{ "$ref": "#/$defs/Sha1Oid" }, { "type": "null" }]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "base_commit_oid": { "$ref": "#/$defs/Sha256Oid" },
+          "candidate_commit_oid": {
+            "oneOf": [{ "$ref": "#/$defs/Sha256Oid" }, { "type": "null" }]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "RepositoryIdentity": {
+      "type": "object",
+      "description": "An opaque caller-canonical host, slash-joined owner segments, and repository name. Exact bytes are the identity; the engine does not resolve or normalize the host.",
+      "additionalProperties": false,
+      "required": ["host", "owner", "name"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^(?!\\.{1,2}$)[a-z0-9._-]{1,100}$"
+        }
+      }
+    },
+    "SingleOwnerRepositoryIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "owner", "name"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^(?!\\.{1,2}$)[a-z0-9._-]{1,100}$"
+        }
+      }
+    },
+    "ExactBranchRef": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 266,
+      "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+    },
+    "GitOid": {
+      "oneOf": [
+        { "$ref": "#/$defs/Sha1Oid" },
+        { "$ref": "#/$defs/Sha256Oid" }
+      ]
+    },
+    "Sha1Oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "Sha256Oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

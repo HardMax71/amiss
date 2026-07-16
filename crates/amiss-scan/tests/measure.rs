@@ -26,7 +26,7 @@ fn representative_repository_latency_and_memory() {
     let shell = SetupShell {
         engine: EngineProvenance {
             version: "0.0.0-measure".to_owned(),
-            digest: hb("amiss/scanner-engine/v1", b"measure engine"),
+            digest: hb("amiss/scanner-engine", b"measure engine"),
         },
         enforce: false,
         repository: None,

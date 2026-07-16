@@ -9,10 +9,10 @@ use crate::model::{
     UtcInstant,
 };
 
-/// Execution-constraint v1 descriptor, forge-neutral action-repository
+/// Execution-constraint descriptor, forge-neutral action-repository
 /// identity, and closed platform grammar.
 mod execution_constraint;
-/// Trusted-time v1 statement grammar, digest, and bounded-lifetime parser.
+/// Trusted-time statement grammar, digest, and bounded-lifetime parser.
 mod trusted_time;
 
 pub use execution_constraint::{ConstraintPlatform, ExecutionConstraintDescriptor};
@@ -20,15 +20,15 @@ pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeStatement};
 
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
 
-const SCANNER_POLICY_SCHEMA: &str = "amiss/scanner-policy/v1";
-const ORGANIZATION_FLOOR_SCHEMA: &str = "amiss/organization-floor/v1";
-const DEBT_SNAPSHOT_SCHEMA: &str = "amiss/debt-snapshot/v1";
-const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle/v1";
+const SCANNER_POLICY_SCHEMA: &str = "amiss/scanner-policy";
+const ORGANIZATION_FLOOR_SCHEMA: &str = "amiss/organization-floor";
+const DEBT_SNAPSHOT_SCHEMA: &str = "amiss/debt-snapshot";
+const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle";
 
-const FINDING_KEY_INPUT_SCHEMA: &str = "amiss/scanner-finding-key-input/v1";
-const FACT_SCHEMA: &str = "amiss/scanner-fact/v1";
-pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key/v1";
-pub const FACT_DOMAIN: &str = "amiss/scanner-fact/v1";
+const FINDING_KEY_INPUT_SCHEMA: &str = "amiss/scanner-finding-key-input";
+const FACT_SCHEMA: &str = "amiss/scanner-fact";
+pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
+pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IncludeKind {
@@ -621,6 +621,11 @@ impl From<Error> for FloorDefect {
 pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 
 impl OrganizationFloor {
+    #[must_use]
+    pub const fn schema(&self) -> &'static str {
+        ORGANIZATION_FLOOR_SCHEMA
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
@@ -800,6 +805,11 @@ pub struct DebtSnapshot {
 }
 
 impl DebtSnapshot {
+    #[must_use]
+    pub const fn schema(&self) -> &'static str {
+        DEBT_SNAPSHOT_SCHEMA
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, embedded key or
@@ -886,6 +896,11 @@ pub struct WaiverBundle {
 }
 
 impl WaiverBundle {
+    #[must_use]
+    pub const fn schema(&self) -> &'static str {
+        WAIVER_BUNDLE_SCHEMA
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, embedded key or
@@ -1092,11 +1107,38 @@ fn decode_nullable_digest(path: &str, value: Value) -> Result<Option<Digest>, Er
 
 pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
     let mut obj = Obj::new(path, value)?;
-    de::const_str(&obj.field("host"), obj.take("host")?, "github.com")?;
+    let host = de::string(&obj.field("host"), obj.take("host")?)?;
     let owner = de::string(&obj.field("owner"), obj.take("owner")?)?;
     let name = de::string(&obj.field("name"), obj.take("name")?)?;
     obj.finish()?;
-    RepositoryIdentity::github(owner, name).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+    RepositoryIdentity::new(host, owner, name)
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+}
+
+pub(crate) fn decode_provider_run_id(path: &str, value: Value) -> Result<String, Error> {
+    let raw = de::string(path, value)?;
+    let bytes = raw.as_bytes();
+    let allowed = |byte: &u8| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
+    };
+    if bytes.is_empty()
+        || bytes.len() > 128
+        || !bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        || !bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+        || !bytes.iter().all(allowed)
+    {
+        return fail(path, ErrorKind::InvalidValue);
+    }
+    Ok(raw)
+}
+
+pub(crate) fn decode_provider_id(path: &str, value: Value) -> Result<String, Error> {
+    let raw = de::string(path, value)?;
+    if ArtifactId::new(raw.clone()).is_some() {
+        Ok(raw)
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
 }
 
 fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {

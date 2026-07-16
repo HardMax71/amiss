@@ -1,0 +1,50 @@
+{
+  "schema": "amiss/scanner-controls-request",
+  "organization_floor": {
+    "value": {
+      "schema": "amiss/organization-floor",
+      "floor_id": "platform/scanner-floor-2026-07",
+      "repository": {
+        "host": "gitlab.example.internal",
+        "owner": "platform/security",
+        "name": "docs"
+      },
+      "ref": "refs/heads/main",
+      "minimum_profile": "observe",
+      "minimum_dispositions": [],
+      "protected_inventory": [],
+      "protected_control_paths": [],
+      "waivable_finding_kinds": ["explicit-target-missing"],
+      "authorized_debt_owners": ["team:docs-platform"],
+      "authorized_waiver_issuers": ["team:release-engineering"],
+      "resource_limits": []
+    },
+    "expected_digest": "sha256:a58e0252d2abce3d18ce0f11dbd67a6b752865b95a08fe963b359829c7830b24",
+    "trust_source": "organization-policy"
+  },
+  "debt_snapshot": null,
+  "waiver_bundle": null,
+  "trusted_time": {
+    "value": {
+      "schema": "amiss/scanner-trusted-time-statement",
+      "controller": "external-required-check-clock",
+      "provider": "gitlab",
+      "repository": {
+        "host": "gitlab.example.internal",
+        "owner": "platform/security",
+        "name": "docs"
+      },
+      "ref": "refs/heads/main",
+      "candidate_identity_digest": "sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809",
+      "provider_run_id": "pipeline/987654321:job-42",
+      "provider_run_attempt": 2,
+      "evaluation_instant": "2026-07-12T10:00:00Z",
+      "valid_until": "2026-07-12T10:09:00Z"
+    },
+    "expected_digest": "sha256:f9465abb933a9c742894340ef3c2db31086fea40e48ceae4e5212a28647635db",
+    "provider": "gitlab",
+    "provider_run_id": "pipeline/987654321:job-42",
+    "provider_run_attempt": 2
+  },
+  "execution_constraint": null
+}

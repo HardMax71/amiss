@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-controls-request",
+  "title": "Amiss scanner controls request",
+  "description": "The rolling external-control request of the wrapper-to-engine wire. It names provider-neutral authority roles and binds trusted time to an explicit provider plus an opaque provider run identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "organization_floor",
+    "debt_snapshot",
+    "waiver_bundle",
+    "trusted_time",
+    "execution_constraint"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/scanner-controls-request"
+    },
+    "organization_floor": {
+      "oneOf": [{ "$ref": "#/$defs/SuppliedControl" }, { "type": "null" }]
+    },
+    "debt_snapshot": {
+      "oneOf": [{ "$ref": "#/$defs/SuppliedControl" }, { "type": "null" }]
+    },
+    "waiver_bundle": {
+      "oneOf": [{ "$ref": "#/$defs/SuppliedControl" }, { "type": "null" }]
+    },
+    "trusted_time": {
+      "oneOf": [{ "$ref": "#/$defs/SuppliedTime" }, { "type": "null" }]
+    },
+    "execution_constraint": {
+      "oneOf": [{ "$ref": "#/$defs/SuppliedControl" }, { "type": "null" }]
+    }
+  },
+  "$defs": {
+    "SuppliedControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "expected_digest", "trust_source"],
+      "properties": {
+        "value": {
+          "description": "The exact control JSON value under its own schema. The per-control raw ceiling applies to its canonical bytes before typed parsing.",
+          "type": "object"
+        },
+        "expected_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "trust_source": {
+          "description": "A closed provider-neutral authority role. Repository-controlled workflows are not an authority.",
+          "enum": ["external-required-check", "organization-policy"]
+        }
+      }
+    },
+    "SuppliedTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "expected_digest",
+        "provider",
+        "provider_run_id",
+        "provider_run_attempt"
+      ],
+      "properties": {
+        "value": {
+          "description": "The exact trusted-time statement value. Its authority role is fixed: external-required-check.",
+          "type": "object"
+        },
+        "expected_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "provider": {
+          "$ref": "#/$defs/ProviderId"
+        },
+        "provider_run_id": {
+          "$ref": "#/$defs/ProviderRunId"
+        },
+        "provider_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "ProviderId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "ProviderRunId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,126}[A-Za-z0-9])?$"
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

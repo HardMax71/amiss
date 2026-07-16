@@ -14,16 +14,16 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
-[weekly mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
+[weekly mutation workflow](../../.github/workflows/mutants.yml)
 publishes a non-gating measurement of that property; it does not currently certify a global
 mutation threshold.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the
-[corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md) document every
+[corpus notes](../../corpus/README.md) document every
 known difference. Each parser that takes untrusted bytes also has a fuzz target under
 `fuzz/`, with committed regression inputs and a
-[nightly coverage-guided run](https://github.com/HardMax71/amiss/blob/main/.github/workflows/fuzz-long.yml).
+[nightly coverage-guided run](../../.github/workflows/fuzz-long.yml).
 
 The scanner runs on its own repository under `--profile enforce` in CI. This documentation
 passes through that same gate: every relative link in this book resolves in the tree, or

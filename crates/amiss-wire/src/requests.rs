@@ -1,13 +1,14 @@
-use crate::controls::Profile;
-use crate::controls::root;
+use crate::controls::{
+    Profile, decode_provider_id, decode_provider_run_id, decode_repository, root,
+};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
 use crate::json::Value;
-use crate::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-pub const EVALUATION_REQUEST_SCHEMA: &str = "amiss/scanner-evaluation-request/v1";
-pub const SNAPSHOT_REQUEST_SCHEMA: &str = "amiss/scanner-snapshot-request/v1";
-pub const CONTROLS_REQUEST_SCHEMA: &str = "amiss/scanner-controls-request/v1";
+pub const EVALUATION_REQUEST_SCHEMA: &str = "amiss/scanner-evaluation-request";
+pub const SNAPSHOT_REQUEST_SCHEMA: &str = "amiss/scanner-snapshot-request";
+pub const CONTROLS_REQUEST_SCHEMA: &str = "amiss/scanner-controls-request";
 
 /// Every request stream is one complete bounded byte capture from byte zero
 /// through EOF; its diagnostic digest exists exactly when EOF was obtained
@@ -43,6 +44,7 @@ pub struct EvaluationRequest {
     pub mode: RequestMode,
     pub object_format: ObjectFormat,
     pub repository: Option<RepositoryIdentity>,
+    pub forge: Option<ForgeDialect>,
     pub ref_name: Option<BranchRef>,
     pub default_branch_ref: Option<BranchRef>,
     pub base_commit: Oid,
@@ -78,8 +80,12 @@ impl EvaluationRequest {
         let repository_path = obj.field("repository");
         let repository = match de::nullable(obj.take("repository")?) {
             None => None,
-            Some(value) => Some(crate::controls::decode_repository(&repository_path, value)?),
+            Some(value) => Some(decode_repository(&repository_path, value)?),
         };
+        let forge_path = obj.field("forge");
+        let forge = de::nullable(obj.take("forge")?)
+            .map(|value| decode_forge(&forge_path, value))
+            .transpose()?;
         let ref_path = obj.field("ref");
         let ref_name = match de::nullable(obj.take("ref")?) {
             None => None,
@@ -112,16 +118,34 @@ impl EvaluationRequest {
         if !consistent {
             return fail(&candidate_path, ErrorKind::Inconsistent);
         }
+        if forge.is_some() && repository.is_none()
+            || matches!(forge, Some(ForgeDialect::Github | ForgeDialect::Gitea))
+                && repository
+                    .as_ref()
+                    .is_some_and(|identity| identity.owner.contains('/'))
+        {
+            return fail(&forge_path, ErrorKind::Inconsistent);
+        }
         Ok(Self {
             profile,
             mode,
             object_format,
             repository,
+            forge,
             ref_name,
             default_branch_ref,
             base_commit,
             candidate_commit,
         })
+    }
+}
+
+fn decode_forge(path: &str, value: Value) -> Result<ForgeDialect, Error> {
+    match de::string(path, value)?.as_str() {
+        "github" => Ok(ForgeDialect::Github),
+        "gitlab" => Ok(ForgeDialect::Gitlab),
+        "gitea" => Ok(ForgeDialect::Gitea),
+        _ => fail(path, ErrorKind::InvalidValue),
     }
 }
 
@@ -183,23 +207,23 @@ pub struct SuppliedControl {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RequestTrust {
-    ExternalRequiredWorkflow,
-    OrganizationRuleset,
+    ExternalRequiredCheck,
+    OrganizationPolicy,
 }
 
 impl RequestTrust {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::ExternalRequiredWorkflow => "external-required-workflow",
-            Self::OrganizationRuleset => "organization-ruleset",
+            Self::ExternalRequiredCheck => "external-required-check",
+            Self::OrganizationPolicy => "organization-policy",
         }
     }
 
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
-            "external-required-workflow" => Ok(Self::ExternalRequiredWorkflow),
-            "organization-ruleset" => Ok(Self::OrganizationRuleset),
+            "external-required-check" => Ok(Self::ExternalRequiredCheck),
+            "organization-policy" => Ok(Self::OrganizationPolicy),
             _ => fail(path, ErrorKind::InvalidValue),
         }
     }
@@ -211,6 +235,7 @@ impl RequestTrust {
 pub struct SuppliedTime {
     pub value: Value,
     pub expected_digest: Digest,
+    pub provider: String,
     pub provider_run_id: String,
     pub provider_run_attempt: u64,
 }
@@ -301,16 +326,9 @@ fn decode_time(path: &str, value: Value) -> Result<Option<SuppliedTime>, Error> 
     let expected_digest =
         Digest::from_wire(&de::string(&digest_path, obj.take("expected_digest")?)?)
             .ok_or_else(|| Error::new(&digest_path, ErrorKind::InvalidValue))?;
+    let provider = decode_provider_id(&obj.field("provider"), obj.take("provider")?)?;
     let run_id_path = obj.field("provider_run_id");
-    let provider_run_id = de::string(&run_id_path, obj.take("provider_run_id")?)?;
-    let run_id_bytes = provider_run_id.as_bytes();
-    if run_id_bytes.is_empty()
-        || run_id_bytes.len() > 32
-        || !matches!(run_id_bytes.first(), Some(b'1'..=b'9'))
-        || !run_id_bytes.iter().all(u8::is_ascii_digit)
-    {
-        return fail(&run_id_path, ErrorKind::InvalidValue);
-    }
+    let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
     let attempt_path = obj.field("provider_run_attempt");
     let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
     let provider_run_attempt = u64::try_from(attempt_raw)
@@ -321,6 +339,7 @@ fn decode_time(path: &str, value: Value) -> Result<Option<SuppliedTime>, Error> 
     Ok(Some(SuppliedTime {
         value: embedded,
         expected_digest,
+        provider,
         provider_run_id,
         provider_run_attempt,
     }))
