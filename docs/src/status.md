@@ -66,9 +66,15 @@ Links from factual prose to the implementation are deliberate. The repository's 
 scan makes a changed dependency under unchanged prose visible for review. Exact default
 dispositions in [Profiles and findings](profiles.md) and exact resource ceilings in
 [Limits and refusals](limits.md) are generated from the Rust contract by a test, so changing
-the corresponding constants without updating the book fails CI. The same test validates the
-current report example against its schema and canonical bytes, and checks that writer and
-schema identities agree. See the
+the corresponding constants without updating the book fails CI. The same test discovers
+every public schema-backed example and validates it against that schema. Input examples also
+pass their owning typed reader; adding a contract without registering a reader fails CI. The
+report's readable form passes the strict JSON reader, while its canonical form separately
+clears the [end-to-end wrapper acceptance law](../../crates/amiss-bootstrap/tests/acceptance.rs).
+Published CI snippets require immutable upstream Action pins, an explicit reviewed crate
+version, and the current Amiss release major. Fixture version strings inside report and
+release-manifest examples are reproducible evidence, not claims about the latest package
+release. See the
 [documentation contract test](../../crates/amiss/tests/documentation_contracts.rs). Neither
 mechanism pretends to prove the meaning of free prose; together they make the most
 mechanical drift visible.

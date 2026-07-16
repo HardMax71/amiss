@@ -9,11 +9,16 @@ use std::path::{Path, PathBuf};
 
 use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
-use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
+use amiss_wire::controls::{
+    DebtSnapshot, ExecutionConstraintDescriptor, ORGANIZATION_POLICY_ENTRIES_LIMIT,
+    OrganizationFloor, ResourceName, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
+};
+use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::report::{
     ENVELOPE_SCHEMA, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
     PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
 };
+use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
 
 fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -27,7 +32,7 @@ fn report_schema() -> serde_json::Value {
     .expect("report schema is JSON")
 }
 
-fn public_schema_examples() -> Vec<(PathBuf, PathBuf)> {
+fn public_schema_examples() -> Vec<(String, PathBuf, PathBuf)> {
     let specification_directory = repository_root().join("spec");
     let examples_directory = specification_directory.join("examples");
     let mut pairs = Vec::new();
@@ -54,12 +59,33 @@ fn public_schema_examples() -> Vec<(PathBuf, PathBuf)> {
             schema_path.display(),
             example_path.display(),
         );
-        pairs.push((schema_path, example_path));
+        pairs.push((contract_name.to_owned(), schema_path, example_path));
     }
 
     pairs.sort();
     assert!(!pairs.is_empty(), "no public JSON Schema contracts found");
     pairs
+}
+
+fn parse_defect<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<String> {
+    result.err().map(|error| format!("{error:?}"))
+}
+
+fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
+    match contract_name {
+        "debt-snapshot" => parse_defect(DebtSnapshot::parse(bytes)),
+        "organization-floor" => parse_defect(OrganizationFloor::parse(bytes)),
+        "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
+        "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
+        "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
+        "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
+        "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
+        "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
+        "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
+        "scanner-trusted-time-statement" => parse_defect(TrustedTimeStatement::parse(bytes)),
+        "waiver-bundle" => parse_defect(WaiverBundle::parse(bytes)),
+        _ => Some("no authoritative example reader is registered".to_owned()),
+    }
 }
 
 fn schema_enum(schema: &serde_json::Value, name: &str) -> Vec<String> {
@@ -232,6 +258,94 @@ fn documented_enum_sources_match_the_active_report_schema() {
 }
 
 #[test]
+fn published_ci_examples_expose_every_moving_release_choice() {
+    let root = repository_root();
+    let sources = [
+        (root.join("README.md"), 1_usize),
+        (root.join("docs/src/ci.md"), 2_usize),
+    ];
+    let workspace_major = env!("CARGO_PKG_VERSION")
+        .split('.')
+        .next()
+        .expect("a Cargo package version has a major component");
+    let expected_action = format!("v{workspace_major}");
+
+    for (path, expected_upstream_references) in &sources {
+        let document = fs::read_to_string(path).expect("published CI example is readable");
+        let mut amiss_references = 0_usize;
+        let mut upstream_references = 0_usize;
+        for (line_index, line) in document.lines().enumerate() {
+            let trimmed = line.trim();
+            let Some(specification) = trimmed.strip_prefix("- uses: ") else {
+                continue;
+            };
+            if specification.starts_with("./") {
+                continue;
+            }
+            let Some((action, reference)) = specification
+                .split_whitespace()
+                .next()
+                .and_then(|token| token.split_once('@'))
+            else {
+                panic!(
+                    "{}:{} has an external Action without a reference",
+                    path.display(),
+                    line_index + 1,
+                );
+            };
+
+            if action == "HardMax71/amiss" {
+                assert_eq!(
+                    reference,
+                    expected_action,
+                    "{}:{} advertises the wrong moving Amiss release major",
+                    path.display(),
+                    line_index + 1,
+                );
+                amiss_references = amiss_references.saturating_add(1);
+            } else {
+                assert!(
+                    reference == "<pinned-sha>"
+                        || (reference.len() == 40
+                            && reference.bytes().all(|byte| byte.is_ascii_hexdigit())),
+                    "{}:{} hides a mutable upstream Action reference",
+                    path.display(),
+                    line_index + 1,
+                );
+                upstream_references = upstream_references.saturating_add(1);
+            }
+        }
+
+        assert_eq!(
+            amiss_references,
+            1,
+            "{} must advertise the supported Amiss Action exactly once",
+            path.display(),
+        );
+        assert_eq!(
+            upstream_references,
+            *expected_upstream_references,
+            "{} must keep every published upstream Action dependency explicit",
+            path.display(),
+        );
+    }
+
+    let ci = fs::read_to_string(root.join("docs/src/ci.md")).expect("CI documentation is readable");
+    let installs: Vec<&str> = ci
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("cargo install") && line.ends_with(" amiss"))
+        .collect();
+    assert_eq!(
+        installs,
+        [
+            "- run: cargo install --locked --registry crates-io --version '=<reviewed-version>' amiss"
+        ],
+        "the direct CI form must demand an exact reviewed version without copying the current patch release"
+    );
+}
+
+#[test]
 fn active_report_schema_ids_match_the_writer_contract() {
     let schema = report_schema();
     assert_eq!(
@@ -256,16 +370,16 @@ fn active_report_schema_ids_match_the_writer_contract() {
 }
 
 #[test]
-fn all_public_contract_examples_are_schema_clean() {
+fn all_public_contract_examples_clear_their_schema_and_registered_reader() {
     let mut defects = Vec::new();
 
-    for (schema_path, example_path) in public_schema_examples() {
-        let schema: serde_json::Value =
-            serde_json::from_slice(&fs::read(&schema_path).expect("public schema is readable"))
-                .unwrap_or_else(|error| panic!("{} is not JSON: {error}", schema_path.display()));
-        let example: serde_json::Value =
-            serde_json::from_slice(&fs::read(&example_path).expect("public example is readable"))
-                .unwrap_or_else(|error| panic!("{} is not JSON: {error}", example_path.display()));
+    for (contract_name, schema_path, example_path) in public_schema_examples() {
+        let schema_bytes = fs::read(&schema_path).expect("public schema is readable");
+        let example_bytes = fs::read(&example_path).expect("public example is readable");
+        let schema: serde_json::Value = serde_json::from_slice(&schema_bytes)
+            .unwrap_or_else(|error| panic!("{} is not JSON: {error}", schema_path.display()));
+        let example: serde_json::Value = serde_json::from_slice(&example_bytes)
+            .unwrap_or_else(|error| panic!("{} is not JSON: {error}", example_path.display()));
         let validator = jsonschema::validator_for(&schema)
             .unwrap_or_else(|error| panic!("{} does not compile: {error}", schema_path.display()));
 
@@ -277,11 +391,18 @@ fn all_public_contract_examples_are_schema_clean() {
                 error.instance_path(),
             )
         }));
+
+        if let Some(error) = example_reader_defect(&contract_name, &example_bytes) {
+            defects.push(format!(
+                "{} was rejected by the {contract_name} example reader: {error}",
+                example_path.display(),
+            ));
+        }
     }
 
     assert!(
         defects.is_empty(),
-        "public contract examples violate their schemas:\n{}",
+        "public contract examples violate their schemas or registered readers:\n{}",
         defects.join("\n"),
     );
 }
