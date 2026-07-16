@@ -9,20 +9,20 @@ use crate::model::{
     TreeIdentity, UtcInstant,
 };
 
+/// Trusted-time v1 statement grammar, digest, and bounded-lifetime parser.
+mod trusted_time;
+
+pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeStatement};
+
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
 
 const SCANNER_POLICY_SCHEMA: &str = "amiss/scanner-policy/v1";
 const ORGANIZATION_FLOOR_SCHEMA: &str = "amiss/organization-floor/v1";
 const DEBT_SNAPSHOT_SCHEMA: &str = "amiss/debt-snapshot/v1";
 const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle/v1";
-const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement/v1";
-const TRUSTED_TIME_CONTROLLER: &str = "github-actions-required-workflow-clock-v1";
 const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint/v1";
 const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap-v1";
 
-/// The controller's maximum statement lifetime: `evaluation_instant <
-/// valid_until <= evaluation_instant + 600` whole seconds.
-pub const STATEMENT_TTL_MAX_SECONDS: i64 = 600;
 const FINDING_KEY_INPUT_SCHEMA: &str = "amiss/scanner-finding-key-input/v1";
 const FACT_SCHEMA: &str = "amiss/scanner-fact/v1";
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key/v1";
@@ -727,90 +727,6 @@ impl OrganizationFloor {
             authorized_debt_owners,
             authorized_waiver_issuers,
             resource_limits,
-        })
-    }
-}
-
-/// A trusted-time statement issued by the required-workflow clock inside the
-/// externally controlled run. Parsing establishes shape and the TTL law; the
-/// evaluation-side bindings (repository, ref, candidate identity, run,
-/// attempt) are separate verification.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrustedTimeStatement {
-    pub digest: Digest,
-    pub repository: RepositoryIdentity,
-    pub ref_name: BranchRef,
-    pub candidate_identity_digest: Digest,
-    pub provider_run_id: String,
-    pub provider_run_attempt: u64,
-    pub evaluation_instant: UtcInstant,
-    pub valid_until: UtcInstant,
-}
-
-impl TrustedTimeStatement {
-    /// # Errors
-    ///
-    /// Fails on strict-JSON defects, schema-shape violations, invalid grammar
-    /// values, and a lifetime outside `0 < valid_until - evaluation_instant
-    /// <= 600` seconds.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(TRUSTED_TIME_STATEMENT_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            TRUSTED_TIME_STATEMENT_SCHEMA,
-        )?;
-        de::const_str(
-            &obj.field("controller"),
-            obj.take("controller")?,
-            TRUSTED_TIME_CONTROLLER,
-        )?;
-        let repository = decode_repository(&obj.field("repository"), obj.take("repository")?)?;
-        let ref_name = decode_branch_ref(&obj.field("ref"), obj.take("ref")?)?;
-        let candidate_identity_digest = decode_digest(
-            &obj.field("candidate_identity_digest"),
-            obj.take("candidate_identity_digest")?,
-        )?;
-        let run_id_path = obj.field("provider_run_id");
-        let provider_run_id = de::string(&run_id_path, obj.take("provider_run_id")?)?;
-        let run_id_bytes = provider_run_id.as_bytes();
-        if run_id_bytes.is_empty()
-            || run_id_bytes.len() > 32
-            || !matches!(run_id_bytes.first(), Some(b'1'..=b'9'))
-            || !run_id_bytes.iter().all(u8::is_ascii_digit)
-        {
-            return fail(&run_id_path, ErrorKind::InvalidValue);
-        }
-        let attempt_path = obj.field("provider_run_attempt");
-        let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
-        let provider_run_attempt = u64::try_from(attempt_raw)
-            .ok()
-            .filter(|attempt| *attempt >= 1)
-            .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-        let evaluation_instant = decode_instant(
-            &obj.field("evaluation_instant"),
-            obj.take("evaluation_instant")?,
-        )?;
-        let until_path = obj.field("valid_until");
-        let valid_until = decode_instant(&until_path, obj.take("valid_until")?)?;
-        obj.finish()?;
-        let lifetime = valid_until
-            .epoch_seconds()
-            .saturating_sub(evaluation_instant.epoch_seconds());
-        if lifetime <= 0 || lifetime > STATEMENT_TTL_MAX_SECONDS {
-            return fail(&until_path, ErrorKind::InvalidValue);
-        }
-        Ok(Self {
-            digest,
-            repository,
-            ref_name,
-            candidate_identity_digest,
-            provider_run_id,
-            provider_run_attempt,
-            evaluation_instant,
-            valid_until,
         })
     }
 }
