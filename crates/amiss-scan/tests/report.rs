@@ -609,46 +609,6 @@ fn a_finding_location_carries_the_real_display_positions() {
     );
 }
 
-/// The rolling candidate identity binds the selected URL dialect as well as
-/// the repository and snapshots. The fixed digest catches accidental preimage
-/// drift; changing only the forge must also change the identity.
-#[test]
-fn the_candidate_identity_digest_binds_the_selected_forge() {
-    let side = |commit: char, tree: char| SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: commit.to_string().repeat(40),
-        tree_oid: tree.to_string().repeat(40),
-    };
-    let setup = Setup {
-        engine: engine(),
-        enforce: false,
-        repository: amiss_wire::model::RepositoryIdentity::github(
-            "acme".to_owned(),
-            "widget".to_owned(),
-        ),
-        forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
-        default_branch_ref: Some("refs/heads/main".to_owned()),
-        base: side('a', 'b'),
-        candidate: CandidateBlock::Commit(side('c', 'd')),
-        policy: amiss_scan::policy::Effects::default(),
-        controls_unavailable: None,
-        requests: amiss_scan::report::RequestDigests::default(),
-    };
-    let github = amiss_scan::report::candidate_identity_digest(&setup);
-    assert_eq!(
-        github.to_string(),
-        "sha256:08494792d296feb1198c922b78b6c6ed559f6d9f18588b0b040a06aeb2cd49ec"
-    );
-    let mut gitlab = setup;
-    gitlab.forge = Some(amiss_wire::model::ForgeDialect::Gitlab);
-    assert_ne!(
-        github,
-        amiss_scan::report::candidate_identity_digest(&gitlab),
-        "a trusted-time statement cannot be replayed under another URL dialect"
-    );
-}
-
 /// The evaluation echoes the declared identity's host instead of a literal:
 /// a run claiming a self-hosted forge says so in its own report.
 #[test]

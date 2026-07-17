@@ -14,6 +14,7 @@ use amiss_wire::controls::{
     OrganizationFloor, ResourceName, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::manifest::ReleaseManifest;
+use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
     ENVELOPE_SCHEMA, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
     PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
@@ -244,6 +245,10 @@ fn documented_enum_sources_match_the_active_report_schema() {
     let resources: Vec<String> = ResourceName::all()
         .map(|resource| resource.as_str().to_owned())
         .collect();
+    let forges: Vec<String> = ForgeDialect::ALL
+        .into_iter()
+        .map(|forge| forge.as_str().to_owned())
+        .collect();
 
     assert_eq!(
         findings,
@@ -254,6 +259,11 @@ fn documented_enum_sources_match_the_active_report_schema() {
         resources,
         schema_enum(&schema, "ResourceName"),
         "ResourceName::all drifted from the report schema"
+    );
+    assert_eq!(
+        forges,
+        schema_enum(&schema, "ForgeDialect"),
+        "the runtime forge dialects drifted from the report schema"
     );
 }
 

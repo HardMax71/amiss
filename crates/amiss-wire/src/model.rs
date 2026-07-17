@@ -401,6 +401,9 @@ pub enum ForgeDialect {
 }
 
 impl ForgeDialect {
+    /// Every supported URL dialect in wire-contract order.
+    pub const ALL: [Self; 3] = [Self::Github, Self::Gitlab, Self::Gitea];
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
