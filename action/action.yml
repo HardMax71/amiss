@@ -186,7 +186,8 @@ runs:
     # Workflow commands are an injection surface, and repository paths are
     # repository-controlled, so every value is escaped per the command
     # grammar before it reaches stdout. A path only bytes can spell has no
-    # file property; its hex is stated in the message.
+    # file property; its hex is stated in the message. Each report row carries
+    # its own description sentence, so this step holds no text of its own.
     - id: annotate
       shell: bash
       env:
@@ -200,21 +201,24 @@ runs:
         jq -r '
           def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
           def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
+          def why($text): ($text // "") as $m
+            | if $m == "" then "" else "; " + ($m|d) end;
           (.payload.errors[]
            | "::error title=amiss \(.code|d)::\(.code) in phase \(.phase)"
              + (if (.path | type) == "string" then " at \(.path|d)"
                 elif .path_bytes_hex != null then " at bytes \(.path_bytes_hex)"
-                else "" end)),
+                else "" end)
+             + why(.description)),
           (limit(50; .payload.findings[]
            | select(.effective_disposition == "fail" or .effective_disposition == "warn")
            | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
-           | if (.location.path | type) == "string" and .location.span != null then
+           | (if (.location.path | type) == "string" and .location.span != null then
                "::\($level) file=\(.location.path|p),line=\(.location.span.start_line),endLine=\(.location.span.end_line),col=\(.location.span.start_column),endColumn=\(.location.span.end_column),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
              elif (.location.path | type) == "string" then
                "::\($level) file=\(.location.path|p),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
              else
                "::\($level) title=amiss \(.kind|d)::\(.kind) at bytes \(.location.path.bytes_hex // "-"), \(.attribution)"
-             end))
+             end) + why(.description)))
         ' "$REPORT"
 
     - id: verdict

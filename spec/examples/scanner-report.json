@@ -297,6 +297,7 @@
           }
         },
         "kind": "explicit-target-missing",
+        "description": "a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link",
         "location": {
           "path": "docs/guide.md",
           "side": "candidate",
@@ -405,6 +406,7 @@
           }
         },
         "kind": "unlinked-document",
+        "description": "a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages",
         "location": {
           "path": "README.md",
           "side": "candidate",
@@ -531,6 +533,7 @@
           }
         },
         "kind": "external-out-of-scope",
+        "description": "the destination is an external URL Amiss never fetches; counted, reported, and left alone",
         "location": {
           "path": "docs/guide.md",
           "side": "candidate",
@@ -739,6 +742,7 @@
           }
         },
         "kind": "dependency-and-subject-cochanged",
+        "description": "the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on",
         "location": {
           "path": "docs/guide.md",
           "side": "candidate",
@@ -1101,6 +1105,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:c221f0a224fa193bdb1e15c7f5034b5c8b9472dbc99d9458fb5db3669acd4260",
+  "payload_digest": "sha256:2ebf98a0245c5ccb223a5d3e7cd9ca8acecd17732d2609e713a0a61f103d8fe1",
   "schema": "amiss/scanner-report-envelope"
 }

@@ -54,6 +54,7 @@ And one finding row from a real failing run, abridged to its skeleton:
 ```json
 {
   "kind": "explicit-target-missing",
+  "description": "a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link",
   "attribution": "introduced",
   "effective_disposition": "fail",
   "location": {
@@ -66,10 +67,17 @@ And one finding row from a real failing run, abridged to its skeleton:
 }
 ```
 
-Findings are sorted by finding key, a domain-separated hash of kind plus scope. The human
-format prints the same facts in the same order, replaces every byte outside printable
-ASCII with a `\uXXXX` escape so a hostile filename cannot inject terminal control codes or
-a forged CI command into a log, and stops after two hundred findings. The JSON is never
+Findings are sorted by finding key, a domain-separated hash of kind plus scope. Every
+finding and error row carries a `description`: the fixed engine-owned sentence for its
+kind or code, stating what the row means and what to do about it, so no consumer needs a
+second source to act on a report. The sentences live in one place,
+[`FindingKind::meaning` and `AnalysisErrorCode::meaning`](../../crates/amiss-wire/src/report.rs);
+the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
+and the shipped example are checked against that source in CI. The human format prints
+the same facts in the same order, replaces every byte outside printable ASCII with a
+`\uXXXX` escape so a hostile filename cannot inject terminal control codes or a forged CI
+command into a log, stops after two hundred findings, and prints each distinct
+description once as a `note` line rather than two hundred times. The JSON is never
 cut short: a serialized report that would cross the 64 MiB `machine-json-bytes` ceiling
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).

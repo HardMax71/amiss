@@ -148,7 +148,7 @@ pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract";
 pub const BUILT_IN_POLICY: &str = "scanner-policy-defaults";
 
 /// The closed analysis-error codes in schema declaration order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
 pub enum AnalysisErrorCode {
     InvalidInvocation,
     InvalidEvent,
@@ -189,6 +189,119 @@ pub enum AnalysisErrorCode {
 }
 
 impl AnalysisErrorCode {
+    /// Every analysis-error code in schema declaration order.
+    #[must_use]
+    pub fn all() -> impl ExactSizeIterator<Item = Self> {
+        Self::iter()
+    }
+
+    /// One fixed engine-owned sentence per code: what blocked the run and how
+    /// to unblock it. Printed by the human projection as a `note` line and
+    /// rendered into the documentation from this same text.
+    #[must_use]
+    pub const fn meaning(self) -> &'static str {
+        match self {
+            Self::InvalidInvocation => {
+                "the command line does not match the closed grammar; each documented option appears at most once and nothing else is accepted"
+            }
+            Self::InvalidEvent => {
+                "the declared repository, ref, or default-branch identity is not in canonical form; pass a lowercase owner and name and full refs/heads/ references"
+            }
+            Self::InvalidProfile => "the profile is not one of observe or enforce",
+            Self::RequestUnreadable => {
+                "the machine evaluation request bytes could not be read; nothing was evaluated"
+            }
+            Self::ConfigurationInvalid => {
+                "a policy or control input violates its schema; one unknown field or malformed value makes the whole file invalid rather than partly honored"
+            }
+            Self::DuplicateJsonKey => {
+                "a JSON input repeats an object key; strict parsing refuses the file instead of choosing one of the values"
+            }
+            Self::InvalidUtf8 => "a JSON input carries bytes that are not UTF-8",
+            Self::InvalidJson => "an input that must be JSON does not parse as strict JSON",
+            Self::UnknownSchema => {
+                "a JSON input declares a schema identifier this engine does not recognize"
+            }
+            Self::UnknownField => {
+                "a JSON input carries a field its closed schema does not define; unknown fields refuse rather than pass through unread"
+            }
+            Self::NoncanonicalArray => {
+                "a JSON input array violates its required canonical ordering or uniqueness"
+            }
+            Self::DigestMismatch => {
+                "a digest carried by an input does not match the bytes it names; the input is stale or altered"
+            }
+            Self::ControlBindingMismatch => {
+                "an external control is bound to a different repository, ref, or run identity than this evaluation; nothing is applied and the run ends incomplete"
+            }
+            Self::ExceptionOverlap => {
+                "accepted exception items select the same finding more than once; overlap ends evaluation incomplete instead of double-suppressing"
+            }
+            Self::UnsupportedCapability => {
+                "a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim"
+            }
+            Self::GitRepositoryUnavailable => {
+                "the --repo path does not open as a Git repository of the declared object format"
+            }
+            Self::GitObjectMissing => {
+                "a commit, tree, or blob the run needs is absent from the object store; fetch full history or name commits the store holds"
+            }
+            Self::GitObjectWrongKind => {
+                "a Git object is not the kind its use requires, as when a named commit resolves to another type"
+            }
+            Self::GitObjectUnreadable => "a Git object exists but its bytes cannot be decoded",
+            Self::GitIndexInvalid => "the staged index file does not parse under the index grammar",
+            Self::GitIndexUnmerged => {
+                "the index holds unmerged conflict entries, so no single staged state exists; finish or abort the merge before checking the index"
+            }
+            Self::GitIntentToAdd => {
+                "the index holds an intent-to-add entry whose content is not staged; stage the file or drop the intent entry before checking the index"
+            }
+            Self::GitSnapshotChanged => {
+                "the staged index changed while the run was reading it; rerun when the repository is quiet"
+            }
+            Self::UnrepresentablePath => {
+                "a tree or index name is outside the path grammar, a backslash, a NUL, or a dot segment; the exact bytes are disclosed as hex"
+            }
+            Self::DocumentInvalid => {
+                "a discovered document's bytes cannot be decoded as its format requires; the run refuses instead of skipping the file and passing"
+            }
+            Self::ParserError => {
+                "the pinned parser failed on a document; the document is named and the run is incomplete rather than the file silently dropped"
+            }
+            Self::ParserPanic => {
+                "the pinned parser panicked on a document; the panic is caught and reported, and the run is incomplete"
+            }
+            Self::InvalidSourceSpan => {
+                "the parser returned a node whose byte span does not address the document; the parse is not trusted"
+            }
+            Self::ResolutionError => {
+                "reference resolution failed internally; the run ends incomplete rather than reporting around the gap"
+            }
+            Self::ResourceLimitExceeded => {
+                "a named resource crossed its ceiling; the row carries the resource, the configured limit, and the observed lower bound"
+            }
+            Self::OutputLimitExceeded => {
+                "the serialized report would cross the machine-json-bytes ceiling; the run ends incomplete instead of shortening the findings"
+            }
+            Self::TooManyErrors => {
+                "more distinct analysis errors accumulated than the retention ceiling; the lowest-keyed rows are kept and this sentinel stands for the rest"
+            }
+            Self::ReportConstructionFailed => {
+                "the report could not be constructed or emitted; the run has no trustworthy output"
+            }
+            Self::SandboxViolation => {
+                "the run breached its sandbox descriptor; the result is not trustworthy"
+            }
+            Self::TrustedTimeInvalid => {
+                "a control that needs trusted time has no statement that verifies, absent or failing its binding; the run will not act on an unverified clock"
+            }
+            Self::InternalError => {
+                "an engine invariant failed; this is a defect in Amiss, not in the input, and the run has no trustworthy result"
+            }
+        }
+    }
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -828,6 +941,88 @@ impl FindingKind {
         }
     }
 
+    /// One fixed engine-owned sentence per kind: what the finding means and
+    /// what to do about it. The human projection prints it as a `note` line
+    /// and the documentation renders the same text, so the sentence a reader
+    /// meets in a CI log is the sentence the book teaches.
+    #[must_use]
+    pub const fn meaning(self) -> &'static str {
+        match self {
+            Self::ExplicitTargetMissing => {
+                "a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link"
+            }
+            Self::ExplicitTargetTypeMismatch => {
+                "the referenced path exists as a different kind than the reference promises, as when a trailing slash names a regular file; make the spelling match the target"
+            }
+            Self::InvalidReference => {
+                "the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination"
+            }
+            Self::UnsupportedReferenceSemantics => {
+                "the reference uses semantics Amiss does not evaluate, a heading fragment or a leading-slash site route; the unchecked part is declared instead of guessed"
+            }
+            Self::UnsupportedDocumentFormat => {
+                "a policy-included document has no parser in this engine; it is discovered and counted, and its content is never scanned"
+            }
+            Self::UnsupportedTargetKind => {
+                "the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed"
+            }
+            Self::UnsupportedVersionScope => {
+                "a forge URL names this repository at another version, a different branch, tag, or commit; only the candidate version is read, so the link is recognized and left unresolved"
+            }
+            Self::UnsupportedCapability => {
+                "a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim"
+            }
+            Self::DependencyChangedSubjectUnchanged => {
+                "the referenced content changed and the block citing it did not; a reason for a person to reread the prose, never a machine verdict that it is wrong"
+            }
+            Self::DependencyAndSubjectCochanged => {
+                "the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on"
+            }
+            Self::SubjectChanged => {
+                "the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible"
+            }
+            Self::ExplicitReferenceRemoved => {
+                "a reference that existed in the base is gone from the candidate; removal may be deliberate, so this warns for review instead of blocking"
+            }
+            Self::DocumentRemoved => {
+                "a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one"
+            }
+            Self::ExternalOutOfScope => {
+                "the destination is an external URL Amiss never fetches; counted, reported, and left alone"
+            }
+            Self::OpaqueMdxRegion => {
+                "an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place"
+            }
+            Self::OpaqueHtmlRegion => {
+                "a raw HTML region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place"
+            }
+            Self::ObservationCorrelationAmbiguous => {
+                "an occurrence has more than one plausible counterpart across the comparison; Amiss never chooses by input order, so the match is recorded as undecided"
+            }
+            Self::UnlinkedDocument => {
+                "a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages"
+            }
+            Self::PolicyWeakened => {
+                "the candidate loosens its own repository policy, dropping an include, a protected path, or a raised disposition; loosening the rules is reported under the rules being loosened"
+            }
+            Self::CoverageReduced => {
+                "a protected path is gone or not a scannable document while its protection stands; restore it or amend the protection in a reviewed change"
+            }
+            Self::ControlPlaneChanged => {
+                "a floor-protected control path is not the identical present blob on both sides, in mode and content; the floor exists so control edits are always visible"
+            }
+            Self::DebtWorsened => {
+                "the finding an accepted debt item names no longer matches the recorded fact; debt tolerates exactly the recorded state, so any drift fails"
+            }
+            Self::DebtExpired => {
+                "trusted time reached a debt item's expiry while its finding persists; fix the finding or renew the debt in a reviewed change"
+            }
+            Self::WaiverInvalid => {
+                "a waiver item cannot apply, expired against trusted time or issued outside the floor's authority; an invalid waiver suppresses nothing"
+            }
+        }
+    }
+
     #[must_use]
     pub const fn invariant_class(self) -> &'static str {
         match self {
@@ -901,6 +1096,7 @@ fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
     object(vec![
         ("phase", string(phase)),
         ("code", string(detail.code.as_str())),
+        ("description", string(detail.code.meaning())),
         (
             "path",
             detail

@@ -143,6 +143,20 @@ fn enforce_fails_on_a_missing_target() {
         })
         .unwrap_or_default();
     assert!(kinds.iter().any(|kind| kind == "explicit-target-missing"));
+    let missing = payload["findings"]
+        .as_array()
+        .and_then(|findings| {
+            findings
+                .iter()
+                .find(|finding| finding["kind"] == "explicit-target-missing")
+        })
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        missing["description"],
+        amiss_wire::report::FindingKind::ExplicitTargetMissing.meaning(),
+        "every finding row carries its kind's fixed description"
+    );
 }
 
 #[test]
@@ -242,6 +256,13 @@ fn human_output_projects_the_same_result() {
     assert!(
         text.contains("warn explicit-target-missing introduced \"docs/guide.md\" x1"),
         "the path is an inert quoted atom: {text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "note explicit-target-missing: {}",
+            amiss_wire::report::FindingKind::ExplicitTargetMissing.meaning()
+        )),
+        "each present kind carries its fixed meaning: {text}"
     );
     assert!(
         text.contains("references: extracted "),
@@ -561,6 +582,11 @@ fn human_details_truncate_at_two_hundred() {
         "the first two hundred findings in key order"
     );
     assert!(text.contains("details truncated: "), "{text}");
+    assert_eq!(
+        text.matches("note explicit-target-missing:").count(),
+        1,
+        "one meaning line per kind, however many findings share it"
+    );
 
     let (_code, stdout, _stderr) = amiss(&[
         "check",
@@ -731,6 +757,29 @@ fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
     assert_eq!(
         invalid["path"], "docs/bad.md",
         "the error names the document, not just the failure"
+    );
+
+    let (code, human, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 2);
+    let human = String::from_utf8_lossy(&human);
+    assert!(
+        human.contains(&format!(
+            "note DOCUMENT_INVALID: {}",
+            amiss_wire::report::AnalysisErrorCode::DocumentInvalid.meaning()
+        )),
+        "an exit-2 log says how to unblock the run: {human}"
     );
 }
 

@@ -92,3 +92,47 @@ error code (`GIT_OBJECT_MISSING`, `DOCUMENT_INVALID`, `UNREPRESENTABLE_PATH`, an
 of a closed list), and each ends the run at exit 2. A name that is merely not UTF-8 is
 not on that list: it is an ordinary document whose path the report writes as hex. The
 alternative in every one of these cases is a report that looks complete and is not.
+
+The closed list, one fixed sentence per code, generated from
+[`AnalysisErrorCode::meaning`](../../crates/amiss-wire/src/report.rs) and checked in CI.
+The human output prints the same sentence as a `note` line whenever a code appears, so an
+exit-2 log says how to unblock the run without this page open.
+
+<!-- amiss-doc-contract:error-meanings:start -->
+- `INVALID_INVOCATION`: the command line does not match the closed grammar; each documented option appears at most once and nothing else is accepted
+- `INVALID_EVENT`: the declared repository, ref, or default-branch identity is not in canonical form; pass a lowercase owner and name and full refs/heads/ references
+- `INVALID_PROFILE`: the profile is not one of observe or enforce
+- `REQUEST_UNREADABLE`: the machine evaluation request bytes could not be read; nothing was evaluated
+- `CONFIGURATION_INVALID`: a policy or control input violates its schema; one unknown field or malformed value makes the whole file invalid rather than partly honored
+- `DUPLICATE_JSON_KEY`: a JSON input repeats an object key; strict parsing refuses the file instead of choosing one of the values
+- `INVALID_UTF8`: a JSON input carries bytes that are not UTF-8
+- `INVALID_JSON`: an input that must be JSON does not parse as strict JSON
+- `UNKNOWN_SCHEMA`: a JSON input declares a schema identifier this engine does not recognize
+- `UNKNOWN_FIELD`: a JSON input carries a field its closed schema does not define; unknown fields refuse rather than pass through unread
+- `NONCANONICAL_ARRAY`: a JSON input array violates its required canonical ordering or uniqueness
+- `DIGEST_MISMATCH`: a digest carried by an input does not match the bytes it names; the input is stale or altered
+- `CONTROL_BINDING_MISMATCH`: an external control is bound to a different repository, ref, or run identity than this evaluation; nothing is applied and the run ends incomplete
+- `EXCEPTION_OVERLAP`: accepted exception items select the same finding more than once; overlap ends evaluation incomplete instead of double-suppressing
+- `UNSUPPORTED_CAPABILITY`: a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim
+- `GIT_REPOSITORY_UNAVAILABLE`: the --repo path does not open as a Git repository of the declared object format
+- `GIT_OBJECT_MISSING`: a commit, tree, or blob the run needs is absent from the object store; fetch full history or name commits the store holds
+- `GIT_OBJECT_WRONG_KIND`: a Git object is not the kind its use requires, as when a named commit resolves to another type
+- `GIT_OBJECT_UNREADABLE`: a Git object exists but its bytes cannot be decoded
+- `GIT_INDEX_INVALID`: the staged index file does not parse under the index grammar
+- `GIT_INDEX_UNMERGED`: the index holds unmerged conflict entries, so no single staged state exists; finish or abort the merge before checking the index
+- `GIT_INTENT_TO_ADD`: the index holds an intent-to-add entry whose content is not staged; stage the file or drop the intent entry before checking the index
+- `GIT_SNAPSHOT_CHANGED`: the staged index changed while the run was reading it; rerun when the repository is quiet
+- `UNREPRESENTABLE_PATH`: a tree or index name is outside the path grammar, a backslash, a NUL, or a dot segment; the exact bytes are disclosed as hex
+- `DOCUMENT_INVALID`: a discovered document's bytes cannot be decoded as its format requires; the run refuses instead of skipping the file and passing
+- `PARSER_ERROR`: the pinned parser failed on a document; the document is named and the run is incomplete rather than the file silently dropped
+- `PARSER_PANIC`: the pinned parser panicked on a document; the panic is caught and reported, and the run is incomplete
+- `INVALID_SOURCE_SPAN`: the parser returned a node whose byte span does not address the document; the parse is not trusted
+- `RESOLUTION_ERROR`: reference resolution failed internally; the run ends incomplete rather than reporting around the gap
+- `RESOURCE_LIMIT_EXCEEDED`: a named resource crossed its ceiling; the row carries the resource, the configured limit, and the observed lower bound
+- `OUTPUT_LIMIT_EXCEEDED`: the serialized report would cross the machine-json-bytes ceiling; the run ends incomplete instead of shortening the findings
+- `TOO_MANY_ERRORS`: more distinct analysis errors accumulated than the retention ceiling; the lowest-keyed rows are kept and this sentinel stands for the rest
+- `REPORT_CONSTRUCTION_FAILED`: the report could not be constructed or emitted; the run has no trustworthy output
+- `SANDBOX_VIOLATION`: the run breached its sandbox descriptor; the result is not trustworthy
+- `TRUSTED_TIME_INVALID`: a control that needs trusted time has no statement that verifies, absent or failing its binding; the run will not act on an unverified clock
+- `INTERNAL_ERROR`: an engine invariant failed; this is a defect in Amiss, not in the input, and the run has no trustworthy result
+<!-- amiss-doc-contract:error-meanings:end -->

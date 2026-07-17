@@ -181,6 +181,7 @@ fn maximal_error(index: usize) -> Value {
     object(vec![
         ("phase", string("configuration")),
         ("code", string("RESOURCE_LIMIT_EXCEEDED")),
+        ("description", string(&"d".repeat(400))),
         ("path", string(&maximal_path(index))),
         ("path_bytes_hex", string(&"ab".repeat(4_096))),
         (

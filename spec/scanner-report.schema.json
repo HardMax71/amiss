@@ -3711,6 +3711,7 @@
         "key_input",
         "finding_key",
         "kind",
+        "description",
         "coverage_requirement",
         "evidence_class",
         "invariant_class",
@@ -3737,6 +3738,12 @@
         },
         "kind": {
           "$ref": "#/$defs/FindingKind"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "The fixed engine-owned sentence for this kind: what it means and what to do."
         },
         "coverage_requirement": {
           "enum": [
@@ -3868,6 +3875,7 @@
       "required": [
         "phase",
         "code",
+        "description",
         "path",
         "path_bytes_hex",
         "resource",
@@ -3890,6 +3898,12 @@
         },
         "code": {
           "$ref": "#/$defs/AnalysisErrorCode"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "The fixed engine-owned sentence for this code: what blocked the run and how to unblock it."
         },
         "path": {
           "$ref": "#/$defs/NullableRepoPath"
