@@ -7,7 +7,6 @@
       "base_definitions": [],
       "candidate_definitions": [
         {
-          "decoded_label": "amiss:foo",
           "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
         }
       ],
@@ -24,7 +23,6 @@
       "base_definitions": [],
       "candidate_definitions": [
         {
-          "decoded_label": "amiss:foo",
           "source": "[amiss&#58;foo]: <amiss:future>"
         }
       ],
@@ -41,7 +39,6 @@
       "base_definitions": [],
       "candidate_definitions": [
         {
-          "decoded_label": "Amiss:foo",
           "source": "[Amiss:foo]: <amiss:x>"
         }
       ],
@@ -53,11 +50,9 @@
       "base_definitions": [],
       "candidate_definitions": [
         {
-          "decoded_label": "amiss:foo",
           "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
         },
         {
-          "decoded_label": "amiss:foo",
           "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
         }
       ],
@@ -73,7 +68,6 @@
       "id": "GD-005-base-only-does-not-emit",
       "base_definitions": [
         {
-          "decoded_label": "amiss:foo",
           "source": "[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>"
         }
       ],
@@ -86,13 +80,9 @@
       "base_definitions": [],
       "candidate_definitions": [
         {
-          "decoded_label": "Amiss:x",
-          "normalized_label": "amiss:x",
           "source": "[Amiss:x]: docs/a.md"
         },
         {
-          "decoded_label": "amiss:x",
-          "normalized_label": "amiss:x",
           "source": "[amiss:x]: <amiss:future>"
         }
       ],
@@ -104,6 +94,45 @@
       "expected_sources": [
         {
           "digest": "sha256:69989ff1f72dab422fe615e94cfc93936e6740670aea9cdb2686a83f3f1c0f2c",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-007-backslash-decoded-colon",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss\\:foo]: <amiss:future>"
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:26caa88b83c7c9ba79d85f8d3e53c8bb227fb5b829fc3316b4f9f7feb40457db",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-008-distinct-sources-sort-by-digest",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:a]: <amiss:first>"
+        },
+        {
+          "source": "[amiss:b]: <amiss:second>"
+        }
+      ],
+      "expected_member_count": 2,
+      "expected_sources": [
+        {
+          "digest": "sha256:1290e8ba186bf8034b1640164f96cd0c61d7b5b220f2f8e35606eadf8d328288",
+          "multiplicity": 1
+        },
+        {
+          "digest": "sha256:dcd47032a2e45b4ca52c664a5b164cd12ff96d44cf0d8b73058f8f0068cd0227",
           "multiplicity": 1
         }
       ]

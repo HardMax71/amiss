@@ -74,6 +74,13 @@ clears the [end-to-end wrapper acceptance law](../../crates/amiss-bootstrap/test
 The standalone commit and staged-index identity preimages likewise validate against their
 report-schema fragments and reproduce the production digest chain in the
 [identity golden test](../../crates/amiss-scan/tests/identity.rs).
+Published semantic corpora also execute their owning runtime paths: the
+[frontmatter vectors](../../spec/examples/frontmatter-vectors.json) drive the
+[recognizer](../../crates/amiss-md/tests/frontmatter.rs), the
+[correlation vectors](../../spec/examples/correlation-intent-vectors.json) drive the live
+[correlation-intent projection](../../crates/amiss-scan/tests/correlation_vectors.rs), and the
+[governed-definition vectors](../../spec/examples/governed-definition-vectors.json) drive
+parser extraction through [report construction](../../crates/amiss-scan/tests/governed.rs).
 Published CI snippets require immutable upstream Action pins, an explicit reviewed crate
 version, and the current Amiss release major. Fixture version strings inside report and
 release-manifest examples are reproducible evidence, not claims about the latest package

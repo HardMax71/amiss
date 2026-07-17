@@ -116,8 +116,8 @@ pub struct Comparison {
     pub impact: Impact,
 }
 
-/// The `CorrelationIntent` projection. Repository and same-repository
-/// GitHub intents collapse into one class that omits the raw spelling, so an
+/// The `CorrelationIntent` projection. Repository and same-repository forge
+/// intents collapse into one class that omits the raw spelling, so an
 /// escape-only change still forms a candidate edge; external, site-route, and
 /// unsupported intents keep their raw digest because no safer semantic
 /// identity exists for them.
