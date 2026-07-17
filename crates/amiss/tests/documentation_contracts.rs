@@ -16,8 +16,8 @@ use amiss_wire::controls::{
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
-    ENVELOPE_SCHEMA, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
-    PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
+    AnalysisErrorCode, ENVELOPE_SCHEMA, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind,
+    MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
 };
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
 
@@ -136,6 +136,17 @@ fn profile_table() -> String {
     table
 }
 
+fn meanings_list<'a>(rows: impl Iterator<Item = (&'a str, &'a str)>) -> String {
+    let mut list = String::new();
+    for (name, meaning) in rows {
+        if !list.is_empty() {
+            list.push('\n');
+        }
+        write!(list, "- `{name}`: {meaning}").expect("writing to a String is infallible");
+    }
+    list
+}
+
 fn grouped_decimal(number: u64) -> String {
     let digits = number.to_string();
     let mut grouped = String::with_capacity(digits.len().saturating_add(digits.len() / 3));
@@ -222,6 +233,30 @@ fn documented_profiles_are_generated_from_the_policy_contract() {
         documented_contract(&document, "profiles"),
         profile_table(),
         "{} drifted from FindingKind::built_in_disposition",
+        path.display(),
+    );
+}
+
+#[test]
+fn documented_finding_meanings_are_generated_from_the_engine_text() {
+    let path = repository_root().join("docs/src/profiles.md");
+    let document = fs::read_to_string(&path).expect("profiles documentation is readable");
+    assert_eq!(
+        documented_contract(&document, "finding-meanings"),
+        meanings_list(FindingKind::all().map(|kind| (kind.as_str(), kind.meaning()))),
+        "{} drifted from FindingKind::meaning",
+        path.display(),
+    );
+}
+
+#[test]
+fn documented_error_meanings_are_generated_from_the_engine_text() {
+    let path = repository_root().join("docs/src/limits.md");
+    let document = fs::read_to_string(&path).expect("limits documentation is readable");
+    assert_eq!(
+        documented_contract(&document, "error-meanings"),
+        meanings_list(AnalysisErrorCode::all().map(|code| (code.as_str(), code.meaning()))),
+        "{} drifted from AnalysisErrorCode::meaning",
         path.display(),
     );
 }
@@ -316,6 +351,9 @@ fn documented_enum_sources_match_the_active_report_schema() {
     let findings: Vec<String> = FindingKind::all()
         .map(|kind| kind.as_str().to_owned())
         .collect();
+    let codes: Vec<String> = AnalysisErrorCode::all()
+        .map(|code| code.as_str().to_owned())
+        .collect();
     let resources: Vec<String> = ResourceName::all()
         .map(|resource| resource.as_str().to_owned())
         .collect();
@@ -327,6 +365,11 @@ fn documented_enum_sources_match_the_active_report_schema() {
         findings,
         schema_enum(&schema, "FindingKind"),
         "the runtime finding kinds drifted from the report schema"
+    );
+    assert_eq!(
+        codes,
+        schema_enum(&schema, "AnalysisErrorCode"),
+        "the runtime analysis-error codes drifted from the report schema"
     );
     assert_eq!(
         resources,
@@ -585,4 +628,31 @@ fn report_example_is_schema_clean_and_matches_its_canonical_form() {
         Vec::<String>::new(),
         "report example violates its schema"
     );
+
+    let payload = &example["payload"];
+    for row in payload["errors"].as_array().expect("errors is an array") {
+        let code = row["code"].as_str().expect("an error row names its code");
+        let meaning = AnalysisErrorCode::all()
+            .find(|candidate| candidate.as_str() == code)
+            .expect("the example uses schema error codes")
+            .meaning();
+        assert_eq!(
+            row["description"], meaning,
+            "the example description for {code} drifted from the engine text"
+        );
+    }
+    for row in payload["findings"]
+        .as_array()
+        .expect("findings is an array")
+    {
+        let kind = row["kind"].as_str().expect("a finding row names its kind");
+        let meaning = FindingKind::all()
+            .find(|candidate| candidate.as_str() == kind)
+            .expect("the example uses schema finding kinds")
+            .meaning();
+        assert_eq!(
+            row["description"], meaning,
+            "the example description for {kind} drifted from the engine text"
+        );
+    }
 }

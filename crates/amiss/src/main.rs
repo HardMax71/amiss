@@ -349,9 +349,9 @@ impl View {
 /// The human projection: a non-wire convenience over the same payload that
 /// cannot change facts, ordering, totals, or exit. It prints the result, all
 /// retained analysis errors, the first two hundred findings in canonical
-/// order, and exact totals; every repository-derived scalar passes through
-/// `human-atom`, and no source excerpt, raw destination, or query value
-/// appears.
+/// order, one fixed note per distinct error code and finding kind, and exact
+/// totals; every repository-derived scalar passes through `human-atom`, and
+/// no source excerpt, raw destination, or query value appears.
 #[expect(clippy::print_stdout, reason = "the human output channel")]
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let envelope = View::of(Some(&built.envelope));
@@ -385,7 +385,25 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
             finding.view("aggregation").number("member_count").max(1)
         );
     }
+    notes(&payload);
     totals(&payload);
+}
+
+/// One `note` line per distinct error code and finding kind: the row
+/// descriptions the payload already carries, deduplicated in first-encounter
+/// order, so two hundred findings of one kind explain themselves once.
+#[expect(clippy::print_stdout, reason = "the human output channel")]
+fn notes(payload: &View) {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (rows, name_field) in [("errors", "code"), ("findings", "kind")] {
+        for row in payload.rows(rows) {
+            let name = row.text(name_field);
+            let description = row.text("description");
+            if !name.is_empty() && !description.is_empty() && seen.insert(name.clone()) {
+                println!("note {name}: {description}");
+            }
+        }
+    }
 }
 
 #[expect(clippy::print_stdout, reason = "the human output channel")]

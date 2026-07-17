@@ -43,6 +43,40 @@ and checked in CI.
 | `waiver-invalid` | `fail` | `fail` |
 <!-- amiss-doc-contract:profiles:end -->
 
+## What each kind means
+
+One fixed sentence per kind, generated from
+[`FindingKind::meaning`](../../crates/amiss-wire/src/report.rs) and checked in CI. The
+human output prints the same sentence as a `note` line under the findings it applies to,
+so a CI log carries its own legend and this page is the reference, not a prerequisite.
+
+<!-- amiss-doc-contract:finding-meanings:start -->
+- `explicit-target-missing`: a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link
+- `explicit-target-type-mismatch`: the referenced path exists as a different kind than the reference promises, as when a trailing slash names a regular file; make the spelling match the target
+- `invalid-reference`: the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination
+- `unsupported-reference-semantics`: the reference uses semantics Amiss does not evaluate, a heading fragment or a leading-slash site route; the unchecked part is declared instead of guessed
+- `unsupported-document-format`: a policy-included document has no parser in this engine; it is discovered and counted, and its content is never scanned
+- `unsupported-target-kind`: the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed
+- `unsupported-version-scope`: a forge URL names this repository at another version, a different branch, tag, or commit; only the candidate version is read, so the link is recognized and left unresolved
+- `unsupported-capability`: a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim
+- `dependency-changed-subject-unchanged`: the referenced content changed and the block citing it did not; a reason for a person to reread the prose, never a machine verdict that it is wrong
+- `dependency-and-subject-cochanged`: the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on
+- `subject-changed`: the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible
+- `explicit-reference-removed`: a reference that existed in the base is gone from the candidate; removal may be deliberate, so this warns for review instead of blocking
+- `document-removed`: a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one
+- `external-out-of-scope`: the destination is an external URL Amiss never fetches; counted, reported, and left alone
+- `opaque-mdx-region`: an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
+- `opaque-html-region`: a raw HTML region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
+- `observation-correlation-ambiguous`: an occurrence has more than one plausible counterpart across the comparison; Amiss never chooses by input order, so the match is recorded as undecided
+- `unlinked-document`: a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages
+- `policy-weakened`: the candidate loosens its own repository policy, dropping an include, a protected path, or a raised disposition; loosening the rules is reported under the rules being loosened
+- `coverage-reduced`: a protected path is gone or not a scannable document while its protection stands; restore it or amend the protection in a reviewed change
+- `control-plane-changed`: a floor-protected control path is not the identical present blob on both sides, in mode and content; the floor exists so control edits are always visible
+- `debt-worsened`: the finding an accepted debt item names no longer matches the recorded fact; debt tolerates exactly the recorded state, so any drift fails
+- `debt-expired`: trusted time reached a debt item's expiry while its finding persists; fix the finding or renew the debt in a reviewed change
+- `waiver-invalid`: a waiver item cannot apply, expired against trusted time or issued outside the floor's authority; an invalid waiver suppresses nothing
+<!-- amiss-doc-contract:finding-meanings:end -->
+
 ## Before and after
 
 Only the shown state changes. Floor, debt, waiver, and trusted-time examples use the control
