@@ -23,6 +23,7 @@ const REQUIRED_VECTOR_IDS: [&str; 11] = [
     "FM-010-whitespace-suffixed-closer",
     "FM-011-double-bom",
 ];
+const DOCUMENT_SUFFIX: &[u8] = b"body";
 
 fn object<'a>(value: &'a Value, context: &str) -> &'a [(String, Value)] {
     let Value::Object(members) = value else {
@@ -193,6 +194,7 @@ impl<'a> Vector<'a> {
             source.extend_from_slice(closer.as_bytes());
             if !self.closer_at_eof {
                 source.extend_from_slice(self.ending);
+                source.extend_from_slice(DOCUMENT_SUFFIX);
             }
         }
         source
@@ -221,12 +223,21 @@ impl<'a> Vector<'a> {
                 "{} suffix offset",
                 self.id
             );
-            assert_eq!(
-                region.suffix_offset,
-                source.len(),
-                "{} consumes its source",
-                self.id
-            );
+            if self.closer_at_eof {
+                assert_eq!(
+                    region.suffix_offset,
+                    source.len(),
+                    "{} reaches EOF",
+                    self.id
+                );
+            } else {
+                assert_eq!(
+                    source.get(region.suffix_offset..),
+                    Some(DOCUMENT_SUFFIX),
+                    "{} resumes at the document suffix",
+                    self.id
+                );
+            }
             assert_eq!(region.suffix_line, 3, "{} suffix line", self.id);
             assert!(
                 region.bytes <= MAX_BYTES,
