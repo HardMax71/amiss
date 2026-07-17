@@ -31,8 +31,8 @@ findings are subsequently merged into one fact carrying a multiplicity count.
 For each matched pair, the two snapshots tell one of three stories:
 
 - `subject-changed`: the block holding the reference changed.
-- `dependency-changed-subject-unchanged`: the selected target content changed and the block did
-  not. This is the finding the tool exists for, and it never blocks: the code moved and the
+- `dependency-changed-subject-unchanged`: the selected target projection changed and the block
+  did not. This is the finding the tool exists for, and it never blocks: the code moved and the
   prose did not, which is a reason for a person to look, not a machine's verdict that the
   prose is now wrong.
 - `dependency-and-subject-cochanged`: both moved together, which is what a maintained page
@@ -67,8 +67,9 @@ in the base is gone from the candidate and warns under both profiles. `document-
 means the whole file left the tree and is recorded without warning.
 
 Formatting noise stays out by construction. Amiss does not normalize referenced content:
-for a whole-file reference, any target byte change is a change; for a numeric line fragment,
-any byte change inside the inclusive selection is a change and bytes outside it are not.
+for a whole-file reference, any change to the target bytes or file mode is a change; for a
+numeric line fragment, any change to the file mode or to bytes inside the inclusive selection
+is a change and bytes outside it are not.
 Every normalizer is a parser for someone else's language and each one shipped would be a
 place for a real change to hide. For the block itself, the compared projection is
 structural, so re-wrapping a paragraph without changing its text does not create fake
