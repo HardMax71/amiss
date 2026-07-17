@@ -3,7 +3,8 @@
 The toolchain version is pinned in `rust-toolchain.toml`, `unsafe` is forbidden in every
 crate, and the lint table denies panics, lossy casts, wildcard matches, and undocumented
 errors. Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
-warnings denied, the full test suite, `cargo deny`, and `cargo shear` on push. CI runs the
+warnings denied, the full test suite, `cargo deny`, `cargo shear`, and an exact-count
+[similarity-rs](https://github.com/mizchi/similarity) twin-function ratchet on push. CI runs the
 same two hook stages, so passing locally and passing remotely are the same thing unless the
 hook table itself has a bug.
 

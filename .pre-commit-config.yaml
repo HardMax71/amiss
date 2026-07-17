@@ -91,3 +91,22 @@ repos:
         types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
+      # Whole functions compared by AST edit distance: threshold 0.85, eight
+      # lines minimum, counted by a pinned similarity-rs. The baseline is exact
+      # rather than a ceiling, so a new twin fails as a regression and a cleanup
+      # lowers the number in the same change.
+      - id: similarity-ratchet
+        name: function twins stay at the baseline
+        entry: >-
+          sh -c 'set -eu;
+          want="similarity-rs 0.5.0"; have="$(similarity-rs --version)";
+          [ "$have" = "$want" ] || { echo "the ratchet pins $want, found $have"; exit 1; };
+          pairs="$(similarity-rs crates --threshold 0.85 --min-lines 8 | grep -c "Similarity:" || true)";
+          baseline=161;
+          [ "$pairs" -eq "$baseline" ] ||
+          { echo "near-twin function pairs: $pairs, baseline $baseline
+          (similarity-rs crates --threshold 0.85 --min-lines 8)"; exit 1; }'
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
