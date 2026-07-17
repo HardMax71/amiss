@@ -13,6 +13,7 @@ bench = false
 amiss-git = { path = "../amiss-git", version = "0.4.0" }
 amiss-md = { path = "../amiss-md", version = "0.4.0" }
 amiss-wire = { path = "../amiss-wire", version = "0.4.0" }
+strum.workspace = true
 
 [dev-dependencies]
 amiss-fixtures = { path = "../amiss-fixtures" }

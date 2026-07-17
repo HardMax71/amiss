@@ -173,6 +173,7 @@
         "document-blob-bytes",
         "referenced-target-blob-bytes",
         "aggregate-referenced-target-bytes-per-snapshot",
+        "aggregate-line-fragment-evaluation-bytes-per-snapshot",
         "aggregate-document-bytes-per-snapshot",
         "raw-link-destination-bytes",
         "parser-nesting",
@@ -2269,95 +2270,383 @@
         }
       ]
     },
-    "Resolution": {
+    "AvailableResolutionContent": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status",
-        "code",
-        "path",
-        "entry_kind",
-        "git_mode",
+        "kind",
         "raw_digest",
-        "projection_digest",
-        "content_availability"
+        "projection_digest"
       ],
       "properties": {
-        "status": {
+        "kind": {
+          "const": "available"
+        },
+        "raw_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "projection_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "LfsPointerResolutionContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "raw_digest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "lfs-pointer"
+        },
+        "raw_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "ResolutionContent": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AvailableResolutionContent"
+        },
+        {
+          "$ref": "#/$defs/LfsPointerResolutionContent"
+        }
+      ]
+    },
+    "TreeResolutionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "tree"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "BlobResolutionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "mode",
+        "content"
+      ],
+      "properties": {
+        "kind": {
+          "const": "blob"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "mode": {
           "enum": [
-            "resolved",
-            "missing",
-            "type-mismatch",
-            "unsupported",
-            "invalid",
-            "external-out-of-scope"
+            "100644",
+            "100755"
           ]
         },
-        "code": {
+        "content": {
+          "$ref": "#/$defs/ResolutionContent"
+        }
+      }
+    },
+    "ResolutionTarget": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TreeResolutionTarget"
+        },
+        {
+          "$ref": "#/$defs/BlobResolutionTarget"
+        }
+      ]
+    },
+    "KnownVersionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "known-path"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "UnknownVersionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unknown-path"
+        }
+      }
+    },
+    "VersionScope": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/KnownVersionScope"
+        },
+        {
+          "$ref": "#/$defs/UnknownVersionScope"
+        }
+      ]
+    },
+    "ResolvedResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "const": "resolved"
+        },
+        "target": {
+          "$ref": "#/$defs/ResolutionTarget"
+        }
+      }
+    },
+    "MissingResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "missing"
+        },
+        "reason": {
           "enum": [
-            "exact-path",
             "path-not-found",
-            "target-type-mismatch",
-            "symlink-entry",
-            "gitlink-entry",
-            "unsupported-query-semantics",
-            "unsupported-fragment-semantics",
-            "unsupported-version-scope",
-            "site-route-unsupported",
-            "network-path-unsupported",
-            "code-fragment-unevaluated",
-            "invalid-uri",
-            "invalid-percent-encoding",
+            "line-fragment-out-of-range"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "TypeMismatchResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "const": "type-mismatch"
+        },
+        "target": {
+          "$ref": "#/$defs/ResolutionTarget"
+        }
+      }
+    },
+    "UnsupportedTargetResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unsupported-target"
+        },
+        "reason": {
+          "enum": [
+            "symlink",
+            "gitlink"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "TargetUnsupportedSemanticsResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unsupported-semantics"
+        },
+        "reason": {
+          "enum": [
+            "query",
+            "code-fragment"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/ResolutionTarget"
+        }
+      }
+    },
+    "FragmentUnsupportedSemanticsResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unsupported-semantics"
+        },
+        "reason": {
+          "const": "fragment"
+        },
+        "target": {
+          "$ref": "#/$defs/BlobResolutionTarget"
+        }
+      }
+    },
+    "RouteUnsupportedSemanticsResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unsupported-semantics"
+        },
+        "reason": {
+          "enum": [
+            "site-route",
+            "network-path"
+          ]
+        }
+      }
+    },
+    "UnsupportedSemanticsResolution": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TargetUnsupportedSemanticsResolution"
+        },
+        {
+          "$ref": "#/$defs/FragmentUnsupportedSemanticsResolution"
+        },
+        {
+          "$ref": "#/$defs/RouteUnsupportedSemanticsResolution"
+        }
+      ]
+    },
+    "UnsupportedVersionResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "scope"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unsupported-version"
+        },
+        "scope": {
+          "$ref": "#/$defs/VersionScope"
+        }
+      }
+    },
+    "InvalidResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "properties": {
+        "kind": {
+          "const": "invalid"
+        },
+        "reason": {
+          "enum": [
+            "uri",
+            "percent-encoding",
             "decoded-path-control",
             "path-traversal",
             "backslash-separator",
             "encoded-slash",
-            "invalid-fragment-encoding",
-            "invalid-reference",
-            "external-url",
-            "foreign-repository"
+            "fragment-encoding",
+            "syntax"
           ]
-        },
-        "path": {
-          "$ref": "#/$defs/NullableRepoPath"
-        },
-        "entry_kind": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "blob",
-            "tree",
-            "symlink",
-            "gitlink",
-            null
-          ]
-        },
-        "git_mode": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "100644",
-            "100755",
-            "040000",
-            "120000",
-            "160000",
-            null
-          ]
-        },
-        "raw_digest": {
-          "$ref": "#/$defs/NullableDigest"
-        },
-        "projection_digest": {
-          "$ref": "#/$defs/NullableDigest"
-        },
-        "content_availability": {
-          "$ref": "#/$defs/ContentAvailability"
         }
       }
+    },
+    "ExternalResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "properties": {
+        "kind": {
+          "const": "external"
+        },
+        "reason": {
+          "enum": [
+            "url",
+            "foreign-repository"
+          ]
+        }
+      }
+    },
+    "Resolution": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ResolvedResolution"
+        },
+        {
+          "$ref": "#/$defs/MissingResolution"
+        },
+        {
+          "$ref": "#/$defs/TypeMismatchResolution"
+        },
+        {
+          "$ref": "#/$defs/UnsupportedTargetResolution"
+        },
+        {
+          "$ref": "#/$defs/UnsupportedSemanticsResolution"
+        },
+        {
+          "$ref": "#/$defs/UnsupportedVersionResolution"
+        },
+        {
+          "$ref": "#/$defs/InvalidResolution"
+        },
+        {
+          "$ref": "#/$defs/ExternalResolution"
+        }
+      ]
     },
     "SourceConstruct": {
       "enum": [

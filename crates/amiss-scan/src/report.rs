@@ -4,9 +4,10 @@ use amiss_wire::json::{Value, canonical, canonical_length};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, EngineProvenance, ErrorDetail, FindingKind, FindingScope,
-    IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ResolutionStatus, engine_block,
-    error_row_value, sandbox_descriptor,
+    IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block, error_row_value,
+    sandbox_descriptor,
 };
+use amiss_wire::resolution::Resolution;
 
 use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
@@ -207,7 +208,7 @@ fn occurrence_value(engine: &EngineProvenance, observation: &Observation) -> Val
         &observation.intent,
         observation.raw_destination_digest,
     );
-    let resolution = crate::evaluate::resolution_value_public(&observation.resolution);
+    let resolution = crate::evaluate::resolution_row(&observation.resolution);
     object(vec![
         ("observation_id", digest_value(id)),
         ("observation_id_input", input),
@@ -1231,15 +1232,22 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
         )
         .unwrap_or(u64::MAX)
     };
-    let status_count = |status: ResolutionStatus| {
-        u64::try_from(
-            candidate_observations
-                .iter()
-                .filter(|observation| observation.resolution.code.status() == status)
-                .count(),
-        )
-        .unwrap_or(u64::MAX)
-    };
+    let (resolved, missing) =
+        candidate_observations
+            .iter()
+            .fold(
+                (0_u64, 0_u64),
+                |(resolved, missing), observation| match &observation.resolution {
+                    Resolution::Resolved(_) => (resolved.saturating_add(1), missing),
+                    Resolution::Missing(_) => (resolved, missing.saturating_add(1)),
+                    Resolution::TypeMismatch(_)
+                    | Resolution::UnsupportedTarget(_)
+                    | Resolution::UnsupportedSemantics(_)
+                    | Resolution::UnsupportedVersion(_)
+                    | Resolution::Invalid(_)
+                    | Resolution::External(_) => (resolved, missing),
+                },
+            );
     object(vec![
         (
             "extracted",
@@ -1265,11 +1273,8 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             "unsupported",
             integer(bucket(IntentKind::SiteRoute).saturating_add(bucket(IntentKind::Unsupported))),
         ),
-        (
-            "resolved",
-            integer(status_count(ResolutionStatus::Resolved)),
-        ),
-        ("missing", integer(status_count(ResolutionStatus::Missing))),
+        ("resolved", integer(resolved)),
+        ("missing", integer(missing)),
     ])
 }
 

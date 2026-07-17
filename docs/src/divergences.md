@@ -27,9 +27,9 @@ separator, and GitLab reserves the name anyway. Gitea's untyped `src/<ref>/` for
 some tooling still generates, is foreign because the typed `src/branch/` spelling is what
 the forge emits; a gitea tag link is out of version scope even when its segments spell the
 candidate branch exactly, because no tag is a trusted ref. And the line-anchor grammars do
-not leak: `#L10-20` is a line reference only under the gitlab dialect, `#L10-L20` only
-under github and gitea, so the same fragment can classify differently on two forges and
-each classification is that forge's truth.
+not leak: `#L10-20` selects lines only under the gitlab dialect, `#L10-L20` only under
+github and gitea, so the same fragment can resolve on one forge and remain unsupported on
+another. Single-line `#L10` is common to all three.
 
 The parser pin records its known differences instead of hiding them. Measured against the
 pinned grammar bundle and against GitHub's own rendering, exactly one difference

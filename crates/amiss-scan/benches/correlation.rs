@@ -2,10 +2,11 @@ use amiss_md::extract::BlockKind;
 use amiss_scan::correlate::{Observation, Side, correlate};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
-use amiss_wire::controls::{ContentAvailability, SourceConstruct, TargetKind};
+use amiss_wire::controls::{SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::{IntentKind, ResolutionCode};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::Missing;
 use divan::{Bencher, black_box};
 
 fn main() {
@@ -84,15 +85,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
         },
         raw_destination_digest: hb("amiss/scanner-raw-destination", target.as_bytes()),
         projection_digest: hb("amiss/scanner-source-projection", b"reference"),
-        resolution: Resolution {
-            code: ResolutionCode::PathNotFound,
-            path: Some(target),
-            entry_kind: None,
-            git_mode: None,
-            raw_digest: None,
-            projection_digest: None,
-            content_availability: ContentAvailability::NotApplicable,
-        },
+        resolution: Resolution::Missing(Missing::PathNotFound { path: target }),
     }
 }
 

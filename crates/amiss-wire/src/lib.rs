@@ -8,6 +8,7 @@ pub mod manifest;
 pub mod model;
 pub mod report;
 pub mod requests;
+pub mod resolution;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitClass {

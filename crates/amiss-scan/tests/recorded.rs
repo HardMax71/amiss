@@ -236,7 +236,7 @@ fn the_recorded_resolved_links_stay_in_the_trusted_class_and_resolve() {
 
     let resolved: Vec<&str> = github
         .iter()
-        .filter(|row| row["candidate"]["resolution"]["code"] == "exact-path")
+        .filter(|row| row["candidate"]["resolution"]["kind"] == "resolved")
         .map(|row| {
             row["candidate"]["intent"]["repository_path"]
                 .as_str()

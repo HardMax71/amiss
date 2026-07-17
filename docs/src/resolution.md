@@ -35,7 +35,8 @@ whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selector
 lowercase object id is the candidate commit and is out of version scope otherwise, and
 `src/tag/` is always out of version scope because no tag is a trusted ref. Line anchors
 follow the forge: `#L10-L20` is a line reference on github and gitea, `#L10-20` on
-gitlab, and each spelling is nothing on the other's forge. A recognized reference's
+gitlab, and each range spelling is nothing on the other's forge. `#L10` is common to all
+three. Relative references use the run's declared dialect when one is present. A recognized reference's
 intent kind names the dialect that read it, not the host, so an Enterprise repository's
 links carry the same kind GitHub's do.
 
@@ -47,6 +48,7 @@ One document, every destination shape:
 [escape](../../etc/passwd)            invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
+[lines](../src/lib.rs#L45-L48)         exact inclusive line selection under github or gitea
 [web](https://example.com/manual)     external-out-of-scope: counted, left alone
 [anchor](guide.md#setup)              target read; fragment semantics reported unsupported
 ```
@@ -88,24 +90,32 @@ a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even th
 literal three characters `%2F` in the name instead of turning into a second slash. A
 percent escape may decode to bytes that are not text at all, and those bytes are simply
 the path: `bad-%FF-name.md` resolves against the tree entry carrying that exact byte,
-because Git names files in bytes and so does the resolver. Query strings and fragments are
-recorded as digests but ignored for resolution, because a tree has no queries and no
-anchors. One narrow divergence is deliberate: a fragment whose escapes decode outside
+because Git names files in bytes and so does the resolver. Query strings and non-line fragments
+are recorded as digests but do not acquire semantics here. One narrow divergence is deliberate:
+a fragment whose escapes decode outside
 UTF-8 is dropped rather than digested, since carrying it would change the recorded
 identity of every existing observation for no resolution gain. For a relative path with a
-nonempty fragment, the target path is resolved but the heading or code meaning is not
-checked, producing `unsupported-reference-semantics`. A leading-slash site route produces
-the same finding kind. Only the candidate version is read. `--default-branch-ref` supplies a
+heading or other non-line fragment, the target path is resolved but the fragment meaning is
+not checked, producing `unsupported-reference-semantics`. A recognized numeric line fragment
+instead selects the inclusive raw lines. A range beyond the blob produces resolution
+`kind: missing` with `reason: line-fragment-out-of-range`, reported as an explicit missing
+target; a valid range replaces the whole-file projection with a projection of only the
+selected bytes and file mode. Thus a change outside the range does not claim that this
+occurrence's dependency changed. Git LFS pointers and trees have no available line selection
+and remain unsupported. A leading-slash site route produces the same unsupported finding
+kind. Only the candidate version is read. `--default-branch-ref` supplies a
 second trusted spelling so the resolver can split a ref from its path without guessing;
 when a URL names the default branch but the candidate ref differs, it is still
-`unsupported-version-scope`. Site generators and language-aware tools own route, anchor,
+`unsupported-version-scope`. Site generators and language-aware tools own route, heading-anchor,
 and symbol semantics; guessing them here would turn honest ignorance into a false pass. The
 [resolver tests](../../crates/amiss-scan/tests/resolve.rs)
 pin these distinctions.
 
 Each resolved target is read from the object store and hashed, so the comparison knows the
-exact bytes and file mode on both sides. A symlink or submodule target is
+exact selected bytes and file mode on both sides. Numeric positions do not prove that those
+bytes still mean what the prose claims; they only make movement and byte drift observable.
+A symlink or submodule target is
 `unsupported-target-kind`, because following one leaves the world of exact bytes where the
-guarantees live. A [Git LFS](https://git-lfs.com) pointer file is recognized and its
-declared content digest is carried, so swapping the large file behind a pointer counts as
-a change even though the pointer text barely moves.
+guarantees live. A [Git LFS](https://git-lfs.com) pointer file is recognized and its committed
+pointer bytes are hashed. Those bytes include the declared OID, so an OID-text change is
+observable; a backing-store change that leaves the committed pointer unchanged is not.

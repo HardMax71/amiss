@@ -237,6 +237,7 @@
         "document-blob-bytes",
         "referenced-target-blob-bytes",
         "aggregate-referenced-target-bytes-per-snapshot",
+        "aggregate-line-fragment-evaluation-bytes-per-snapshot",
         "aggregate-document-bytes-per-snapshot",
         "raw-link-destination-bytes",
         "parser-nesting",

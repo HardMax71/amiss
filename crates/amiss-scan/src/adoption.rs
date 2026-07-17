@@ -47,7 +47,7 @@ pub fn reproduce(
     let documents: BTreeSet<RepoPath> = context
         .items
         .iter()
-        .map(|item| RepoPath::from(&item.key_input.scope.document))
+        .map(|item| RepoPath::from(&item.accepted_fact.key_input().scope.document))
         .collect();
 
     let mut scan = ScanResources::new(scan_limits);

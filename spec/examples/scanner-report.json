@@ -240,14 +240,9 @@
             "kind": "reference",
             "occurrence_multiplicity": 1,
             "resolution": {
-              "code": "path-not-found",
-              "content_availability": "not-applicable",
-              "entry_kind": null,
-              "git_mode": null,
-              "path": "docs/missing.md",
-              "projection_digest": null,
-              "raw_digest": null,
-              "status": "missing"
+              "kind": "missing",
+              "reason": "path-not-found",
+              "path": "docs/missing.md"
             }
           },
           "finding_kind": "explicit-target-missing",
@@ -273,7 +268,7 @@
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:41330303e847134a06d066ee3087d8141b4d31862d8f96e8ef862578f7301a12",
+        "candidate_fact_digest": "sha256:8964bd6fdd03d135e3f22a0d7f143e25a5ebb81129f6019dbc48749f1e7728e2",
         "configured_disposition": "warn",
         "coverage_requirement": "none",
         "debt": null,
@@ -486,14 +481,8 @@
                   }
                 },
                 "resolution": {
-                  "code": "external-url",
-                  "content_availability": "not-applicable",
-                  "entry_kind": null,
-                  "git_mode": null,
-                  "path": null,
-                  "projection_digest": null,
-                  "raw_digest": null,
-                  "status": "external-out-of-scope"
+                  "kind": "external",
+                  "reason": "url"
                 },
                 "source_construct": "markdown-inline-link",
                 "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -525,7 +514,7 @@
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:e0585ae63905d4e0b811e20fd65fb6878987de9db476396311b8183517749fe8",
+        "candidate_fact_digest": "sha256:42a7b70450defc1b5e9476f15d4efffd2e7d6692f29d99f5f486bbee630f1a5f",
         "configured_disposition": "record",
         "coverage_requirement": "none",
         "debt": null,
@@ -626,14 +615,17 @@
                   }
                 },
                 "resolution": {
-                  "code": "exact-path",
-                  "content_availability": "available",
-                  "entry_kind": "blob",
-                  "git_mode": "100644",
-                  "path": "docs/guide.md",
-                  "projection_digest": "sha256:a610eac450cdaf93ee35f8c8e7ba461e8e16c958b55ab1a0040d30e5e1acdb46",
-                  "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883",
-                  "status": "resolved"
+                  "kind": "resolved",
+                  "target": {
+                    "content": {
+                      "kind": "available",
+                      "projection_digest": "sha256:a610eac450cdaf93ee35f8c8e7ba461e8e16c958b55ab1a0040d30e5e1acdb46",
+                      "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883"
+                    },
+                    "kind": "blob",
+                    "mode": "100644",
+                    "path": "docs/guide.md"
+                  }
                 },
                 "source_construct": "markdown-inline-link",
                 "source_projection_digest": "sha256:b3ba6f952078d7d09f00dd355e173ea72c5d7c2b86181cd240e5ad7a03eda01e",
@@ -688,14 +680,17 @@
                   }
                 },
                 "resolution": {
-                  "code": "exact-path",
-                  "content_availability": "available",
-                  "entry_kind": "blob",
-                  "git_mode": "100644",
-                  "path": "docs/guide.md",
-                  "projection_digest": "sha256:924564a69b11bbb8bf507014527ff8a79352ab4b88681aa48847b34e6e8fdf49",
-                  "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37",
-                  "status": "resolved"
+                  "kind": "resolved",
+                  "target": {
+                    "content": {
+                      "kind": "available",
+                      "projection_digest": "sha256:924564a69b11bbb8bf507014527ff8a79352ab4b88681aa48847b34e6e8fdf49",
+                      "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37"
+                    },
+                    "kind": "blob",
+                    "mode": "100644",
+                    "path": "docs/guide.md"
+                  }
                 },
                 "source_construct": "markdown-inline-link",
                 "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -727,7 +722,7 @@
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:d1da8fff135458d1674b3606755e30e493592c3f0fe32bfaf9c3b0629c6454c0",
+        "candidate_fact_digest": "sha256:2865ca4c842e389fac4993995beaba569c3d5285260c4da4e537267d1a0e2223",
         "configured_disposition": "record",
         "coverage_requirement": "none",
         "debt": null,
@@ -819,14 +814,8 @@
             }
           },
           "resolution": {
-            "code": "external-url",
-            "content_availability": "not-applicable",
-            "entry_kind": null,
-            "git_mode": null,
-            "path": null,
-            "projection_digest": null,
-            "raw_digest": null,
-            "status": "external-out-of-scope"
+            "kind": "external",
+            "reason": "url"
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -893,14 +882,9 @@
             }
           },
           "resolution": {
-            "code": "path-not-found",
-            "content_availability": "not-applicable",
-            "entry_kind": null,
-            "git_mode": null,
-            "path": "docs/missing.md",
-            "projection_digest": null,
-            "raw_digest": null,
-            "status": "missing"
+            "kind": "missing",
+            "reason": "path-not-found",
+            "path": "docs/missing.md"
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -966,14 +950,17 @@
             }
           },
           "resolution": {
-            "code": "exact-path",
-            "content_availability": "available",
-            "entry_kind": "blob",
-            "git_mode": "100644",
-            "path": "docs/guide.md",
-            "projection_digest": "sha256:a610eac450cdaf93ee35f8c8e7ba461e8e16c958b55ab1a0040d30e5e1acdb46",
-            "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883",
-            "status": "resolved"
+            "kind": "resolved",
+            "target": {
+              "content": {
+                "kind": "available",
+                "projection_digest": "sha256:a610eac450cdaf93ee35f8c8e7ba461e8e16c958b55ab1a0040d30e5e1acdb46",
+                "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883"
+              },
+              "kind": "blob",
+              "mode": "100644",
+              "path": "docs/guide.md"
+            }
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:b3ba6f952078d7d09f00dd355e173ea72c5d7c2b86181cd240e5ad7a03eda01e",
@@ -1028,14 +1015,17 @@
             }
           },
           "resolution": {
-            "code": "exact-path",
-            "content_availability": "available",
-            "entry_kind": "blob",
-            "git_mode": "100644",
-            "path": "docs/guide.md",
-            "projection_digest": "sha256:924564a69b11bbb8bf507014527ff8a79352ab4b88681aa48847b34e6e8fdf49",
-            "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37",
-            "status": "resolved"
+            "kind": "resolved",
+            "target": {
+              "content": {
+                "kind": "available",
+                "projection_digest": "sha256:924564a69b11bbb8bf507014527ff8a79352ab4b88681aa48847b34e6e8fdf49",
+                "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37"
+              },
+              "kind": "blob",
+              "mode": "100644",
+              "path": "docs/guide.md"
+            }
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -1111,6 +1101,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:f42f659303353e4635119abf39f6a9fcfb01881e578dcb242c59d9ba5e5d1efb",
+  "payload_digest": "sha256:c221f0a224fa193bdb1e15c7f5034b5c8b9472dbc99d9458fb5db3669acd4260",
   "schema": "amiss/scanner-report-envelope"
 }

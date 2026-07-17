@@ -56,8 +56,10 @@ commit and staged-index paths share one
 [trusted-time, debt, and waiver pipeline](../../crates/amiss-scan/src/pipeline/external.rs).
 
 Debt and waiver require verified trusted time and a complete Git candidate. Their item
-schemas can name only `explicit-target-missing` or `explicit-target-type-mismatch`, and
-selection uses an exact current finding key with a candidate fact. A resolved projection
+schemas carry the accepted or authorized fact as the sole source of its finding kind and
+key-input preimage; `finding_key` is recomputed from that nested key. The fact can name only
+`explicit-target-missing` or `explicit-target-type-mismatch`, and selection uses an exact
+current finding key with a candidate fact. A resolved projection
 or an absent key is not an exception target. Matching still requires the exact fact digest:
 active unchanged debt records tolerance at `warn`, while an applied waiver changes only
 `fail` to `warn`. Invalid, expired, worsened, or overlapping items suppress nothing, and

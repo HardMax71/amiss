@@ -1188,7 +1188,7 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
         &[(
             "docs/guide.md",
             "# Guide\n\n[self](https://git.example.internal/group/subgroup/widget/-/blob/main/docs/guide.md) \
-             and [lines](https://git.example.internal/group/subgroup/widget/-/blob/main/docs/guide.md#L2-4)\n",
+             and [lines](https://git.example.internal/group/subgroup/widget/-/blob/main/docs/guide.md#L2-3)\n",
         )],
     )
     .unwrap();
@@ -1242,10 +1242,7 @@ fn a_nested_group_gitlab_identity_works_end_to_end() {
     );
     let references = &payload["summary"]["references"];
     assert_eq!(references["same_repository"], 2);
-    assert_eq!(
-        references["resolved"], 1,
-        "the bare link resolves; the anchored one terminates at its line fragment"
-    );
+    assert_eq!(references["resolved"], 2);
     assert_eq!(references["missing"], 0);
 }
 
