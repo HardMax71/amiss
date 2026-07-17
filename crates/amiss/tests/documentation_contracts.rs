@@ -224,6 +224,78 @@ fn documented_profiles_are_generated_from_the_policy_contract() {
 }
 
 #[test]
+fn documented_finding_examples_cover_the_report_schema() {
+    let path = repository_root().join("docs/src/profiles.md");
+    let document = fs::read_to_string(&path).expect("profiles documentation is readable");
+    let table = documented_contract(&document, "finding-examples");
+    let mut lines = table.lines();
+    assert_eq!(
+        lines.next(),
+        Some("| Finding kind | Before | After |"),
+        "{} has the wrong finding-example table header",
+        path.display(),
+    );
+    assert_eq!(
+        lines.next(),
+        Some("| --- | --- | --- |"),
+        "{} has the wrong finding-example table divider",
+        path.display(),
+    );
+
+    let mut documented_kinds = Vec::new();
+    for (index, line) in lines.enumerate() {
+        let cells: Vec<&str> = line
+            .trim()
+            .trim_matches('|')
+            .split('|')
+            .map(str::trim)
+            .collect();
+        let [kind, before, after] = cells.as_slice() else {
+            panic!(
+                "{} finding-example row {} must have exactly three cells",
+                path.display(),
+                index + 1,
+            );
+        };
+        let kind = kind
+            .strip_prefix('`')
+            .and_then(|value| value.strip_suffix('`'))
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} finding-example row {} must format its kind as inline code",
+                    path.display(),
+                    index + 1,
+                )
+            });
+        for (side, example) in [("before", before), ("after", after)] {
+            assert!(
+                !example.is_empty()
+                    && !example.eq_ignore_ascii_case("tbd")
+                    && !example.eq_ignore_ascii_case("todo"),
+                "{} finding-example row {} needs a concrete {side} state",
+                path.display(),
+                index + 1,
+            );
+        }
+        assert_ne!(
+            before,
+            after,
+            "{} finding-example row {} must describe a change",
+            path.display(),
+            index + 1,
+        );
+        documented_kinds.push(kind.to_owned());
+    }
+
+    assert_eq!(
+        documented_kinds,
+        schema_enum(&report_schema(), "FindingKind"),
+        "{} must give every schema finding one before/after example in schema order",
+        path.display(),
+    );
+}
+
+#[test]
 fn documented_limits_are_generated_from_runtime_constants() {
     let path = repository_root().join("docs/src/limits.md");
     let document = fs::read_to_string(&path).expect("limits documentation is readable");
