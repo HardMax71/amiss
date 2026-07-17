@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_wire::controls::{EligibleFindingKind, PromotableFindingKind};
+use amiss_wire::controls::{EligibleFindingKind, PromotableFindingKind, ResourceName};
 use amiss_wire::resolution::{
     BlobContentTag, BlobMode, ExternalReference, InvalidReference, MissingTag, ResolutionTag,
     TargetTag, UnsupportedSemanticsTag, UnsupportedTargetTag, VersionScopeTag,
@@ -326,6 +326,25 @@ fn control_finding_kind_subsets_match_their_schemas() {
     assert_definition_atoms::<EligibleFindingKind>(&floor, "DebtEligibleFindingKind");
     assert_definition_atoms::<EligibleFindingKind>(&debt, "DebtEligibleFindingKind");
     assert_definition_atoms::<EligibleFindingKind>(&waiver, "WaiverEligibleFindingKind");
+}
+
+#[test]
+fn floor_resource_limits_admit_every_resource() {
+    let floor = schema("organization-floor.schema.json");
+    let report = schema("scanner-report.schema.json");
+
+    assert_definition_atoms::<ResourceName>(&floor, "ResourceName");
+    assert_definition_atoms::<ResourceName>(&report, "ResourceName");
+
+    let cap = floor
+        .pointer("/properties/resource_limits/maxItems")
+        .and_then(Value::as_u64)
+        .expect("floor schema caps resource_limits");
+    assert_eq!(
+        cap,
+        u64::try_from(ResourceName::all().len()).expect("resource count fits"),
+        "resource_limits admits one row per resource"
+    );
 }
 
 #[test]

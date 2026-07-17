@@ -1,7 +1,7 @@
 use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact,
-    FloorDefect, OrganizationFloor, STATEMENT_TTL_MAX_SECONDS, ScannerPolicy, TrustedTimeStatement,
-    WaiverBundle,
+    FloorDefect, OrganizationFloor, ResourceName, STATEMENT_TTL_MAX_SECONDS, ScannerPolicy,
+    TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::hj;
@@ -225,6 +225,48 @@ fn parses_the_floor_fixture() {
     assert_eq!(floor.ref_name.as_str(), "refs/heads/main");
     assert_eq!(floor.resource_limits.len(), 2);
     assert_ne!(floor.digest, ScannerPolicy::parse(POLICY).unwrap().digest);
+}
+
+#[test]
+fn parses_a_floor_declaring_every_resource() {
+    let mut declared: Vec<(&'static str, i64)> = ResourceName::all()
+        .map(|resource| {
+            let maximum = if resource == ResourceName::MachineJsonBytes {
+                67_108_864
+            } else if resource == ResourceName::TypedAnalysisErrorsRetained {
+                64
+            } else {
+                100_000
+            };
+            (resource.as_str(), maximum)
+        })
+        .collect();
+    declared.sort_unstable();
+    let rows: Vec<String> = declared
+        .iter()
+        .map(|(resource, maximum)| {
+            format!("{{ \"resource\": \"{resource}\", \"maximum\": {maximum} }}")
+        })
+        .collect();
+    let doc = format!(
+        r#"{{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/every-resource",
+  "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": [{rows}]
+}}"#,
+        rows = rows.join(",")
+    );
+    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
+    assert_eq!(floor.resource_limits.len(), ResourceName::all().len());
 }
 
 #[test]
