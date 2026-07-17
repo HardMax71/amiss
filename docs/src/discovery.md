@@ -32,6 +32,25 @@ vendor/lib/README.md        excluded              the vendor component is in the
 src/parser.rs               not a document        a reference target only
 ```
 
+Markdown and MDX recognize frontmatter only at byte zero, optionally after one UTF-8 BOM.
+The first complete line must be exactly `---` or `+++`; the closing line repeats it, except
+that `---` also permits `...`. A recognized region is opaque to the document grammar and may
+contain at most 65,536 bytes, excluding the BOM. An opener without a permitted closer, or a
+closer past that bound, remains ordinary document text. The published
+[frontmatter vectors](../../spec/examples/frontmatter-vectors.json) execute this boundary,
+including LF, CRLF, bare CR, BOM, and exact-limit cases, through the production recognizer in
+the [frontmatter test](../../crates/amiss-md/tests/frontmatter.rs).
+
+A reference definition whose decoded label begins with exact lowercase `amiss:` is a
+reserved governed claim. Entity and escape decoding happens before that test, but case is not
+folded. Every reserved definition node contributes its exact source digest, including a
+losing normalized duplicate; only the first normalized definition controls whether a
+consumer becomes an ordinary reference. Candidate-side governed claims are an unsupported
+capability boundary and make the run incomplete with exit 2, while a base-only claim does
+not. The [governed-definition vectors](../../spec/examples/governed-definition-vectors.json)
+drive extraction, source hashing, candidate-only grouping, and report construction in the
+[governed test](../../crates/amiss-scan/tests/governed.rs).
+
 Every count is reported: discovered, scanned, unsupported, excluded, unlinked. Despite its
 historical name, `unlinked-document` means a scanned document from which Amiss extracted
 zero references. The evaluator does not construct an inbound reachability graph, so the

@@ -4,7 +4,7 @@
   "cases": [
     {
       "id": "FM-001-no-bom-exact-bound",
-      "bom": false,
+      "bom_count": 0,
       "opener": "---",
       "closer": "---",
       "payload_bytes": 65528,
@@ -14,7 +14,7 @@
     },
     {
       "id": "FM-002-no-bom-over-bound",
-      "bom": false,
+      "bom_count": 0,
       "opener": "---",
       "closer": "---",
       "payload_bytes": 65529,
@@ -24,7 +24,7 @@
     },
     {
       "id": "FM-003-bom-exact-bound",
-      "bom": true,
+      "bom_count": 1,
       "opener": "---",
       "closer": "...",
       "payload_bytes": 65528,
@@ -34,7 +34,7 @@
     },
     {
       "id": "FM-004-bom-over-bound",
-      "bom": true,
+      "bom_count": 1,
       "opener": "---",
       "closer": "---",
       "payload_bytes": 65529,
@@ -44,7 +44,7 @@
     },
     {
       "id": "FM-005-plus-matched",
-      "bom": false,
+      "bom_count": 0,
       "opener": "+++",
       "closer": "+++",
       "payload_bytes": 3,
@@ -54,7 +54,7 @@
     },
     {
       "id": "FM-006-mismatched-closer",
-      "bom": false,
+      "bom_count": 0,
       "opener": "+++",
       "closer": "---",
       "payload_bytes": 3,
@@ -64,7 +64,7 @@
     },
     {
       "id": "FM-007-no-closer",
-      "bom": true,
+      "bom_count": 1,
       "opener": "---",
       "closer": null,
       "payload_bytes": 3,
@@ -74,7 +74,7 @@
     },
     {
       "id": "FM-008-crlf-matched",
-      "bom": false,
+      "bom_count": 0,
       "opener": "---",
       "closer": "---",
       "payload_bytes": 3,
@@ -85,7 +85,7 @@
     },
     {
       "id": "FM-009-bare-cr-matched-at-eof",
-      "bom": false,
+      "bom_count": 0,
       "opener": "+++",
       "closer": "+++",
       "payload_bytes": 3,
@@ -93,6 +93,26 @@
       "closer_at_eof": true,
       "expected": true,
       "expected_frontmatter_bytes": 11
+    },
+    {
+      "id": "FM-010-whitespace-suffixed-closer",
+      "bom_count": 0,
+      "opener": "---",
+      "closer": "--- ",
+      "payload_bytes": 3,
+      "closer_at_eof": true,
+      "expected": false,
+      "expected_frontmatter_bytes": null
+    },
+    {
+      "id": "FM-011-double-bom",
+      "bom_count": 2,
+      "opener": "---",
+      "closer": "---",
+      "payload_bytes": 3,
+      "closer_at_eof": true,
+      "expected": false,
+      "expected_frontmatter_bytes": null
     }
   ]
 }

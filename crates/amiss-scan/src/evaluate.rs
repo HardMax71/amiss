@@ -457,7 +457,7 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
                     Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
                 ),
                 (
-                    "source_digest".to_owned(),
+                    "digest".to_owned(),
                     Value::String(source_digest.to_string()),
                 ),
             ])
@@ -484,6 +484,20 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
                 (
                     "candidate_control_state".to_owned(),
                     Value::Object(vec![
+                        (
+                            "schema".to_owned(),
+                            Value::String("amiss/scanner-control-state".to_owned()),
+                        ),
+                        (
+                            "rule_id".to_owned(),
+                            Value::String("unsupported/governed-claim".to_owned()),
+                        ),
+                        (
+                            "path".to_owned(),
+                            seed.document
+                                .as_str()
+                                .map_or(Value::Null, |path| Value::String(path.to_owned())),
+                        ),
                         ("sources".to_owned(), Value::Array(sources)),
                         ("state".to_owned(), Value::String("unsupported".to_owned())),
                     ]),

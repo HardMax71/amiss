@@ -3,9 +3,6 @@
     reason = "integration assertions over repository-owned identity goldens"
 )]
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use amiss_scan::report::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
     SnapshotIdentity, candidate_identity_digest, synthetic_candidate,
@@ -16,47 +13,15 @@ use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{ForgeDialect, RepoPath, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 
-fn repository_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+mod support;
 
-fn fixture_bytes(name: &str) -> Vec<u8> {
-    fs::read(repository_root().join("spec/examples").join(name))
-        .expect("the specification ships this identity fixture")
-}
-
-fn assert_report_schema_fragment(bytes: &[u8], definition: &str) {
-    let schema: serde_json::Value = serde_json::from_slice(
-        &fs::read(repository_root().join("spec/scanner-report.schema.json"))
-            .expect("the report schema is readable"),
-    )
-    .expect("the report schema is JSON");
-    let harness = serde_json::json!({
-        "$schema": schema
-            .get("$schema")
-            .expect("the report schema declares its dialect"),
-        "$defs": schema
-            .get("$defs")
-            .expect("the report schema publishes fragment definitions"),
-        "$ref": format!("#/$defs/{definition}"),
-    });
-    let validator = jsonschema::validator_for(&harness).expect("the fragment schema compiles");
-    let example: serde_json::Value =
-        serde_json::from_slice(bytes).expect("the identity fixture is JSON");
-    let defects: Vec<String> = validator
-        .iter_errors(&example)
-        .map(|error| format!("{}: {error}", error.instance_path()))
-        .collect();
-    assert!(
-        defects.is_empty(),
-        "the identity fixture violates $defs/{definition}:\n{}",
-        defects.join("\n"),
-    );
-}
+use support::{ReportSchemaFragment, fixture_bytes};
 
 fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
     let bytes = fixture_bytes(name);
-    assert_report_schema_fragment(&bytes, definition);
+    let schema_value: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("the identity fixture is JSON");
+    ReportSchemaFragment::new(definition).assert_value(&schema_value, name);
     let value: Value = parse(&bytes).expect("the identity fixture is strict JSON");
     hj(domain, &value)
 }

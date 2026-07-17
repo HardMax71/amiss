@@ -1,6 +1,26 @@
 {
   "schema": "amiss/correlation-intent-vectors",
   "contract": "correlation-intent",
+  "query_preimages": [
+    {
+      "value": "query-alpha",
+      "digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac"
+    },
+    {
+      "value": "query-beta",
+      "digest": "sha256:89d7b2eb818082e40083365981f9a9c0035f11d47235c7b6e5a8c6396784e393"
+    }
+  ],
+  "fragment_preimages": [
+    {
+      "value": "fragment-alpha",
+      "digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14"
+    },
+    {
+      "value": "fragment-beta",
+      "digest": "sha256:d003c5b577d651f040f4392618f844d2ac21e8a1a92e0f2c97af2400fb3f61af"
+    }
+  ],
   "cases": [
     {
       "id": "CI-001-native-github-equivalent",
@@ -84,7 +104,7 @@
         "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "repository_path": "docs/a.md",
         "target_kind": "either",
-        "query_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
         "fragment_digest": null,
         "external_scheme": null
       },
@@ -177,6 +197,336 @@
         "external_scheme": null
       },
       "expected_equal": false
+    },
+    {
+      "id": "CI-009-native-gitlab-equivalent",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "tree",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "same-repository-gitlab",
+        "raw_destination_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "repository_path": "docs/a.md",
+        "target_kind": "tree",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": true
+    },
+    {
+      "id": "CI-010-native-gitea-equivalent",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "same-repository-gitea",
+        "raw_destination_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": true
+    },
+    {
+      "id": "CI-011-fragment-changed",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-012-external-scheme-changed",
+      "left": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": "https"
+      },
+      "right": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": "http"
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-013-site-route-raw-changed",
+      "left": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-014-other-kind-changed",
+      "left": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "unsupported",
+        "raw_destination_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-015-repository-query-digest-changed",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": "sha256:89d7b2eb818082e40083365981f9a9c0035f11d47235c7b6e5a8c6396784e393",
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-016-repository-fragment-digest-changed",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": "sha256:d003c5b577d651f040f4392618f844d2ac21e8a1a92e0f2c97af2400fb3f61af",
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-017-external-query-digest-changed",
+      "left": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": null,
+        "external_scheme": "https"
+      },
+      "right": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:89d7b2eb818082e40083365981f9a9c0035f11d47235c7b6e5a8c6396784e393",
+        "fragment_digest": null,
+        "external_scheme": "https"
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-018-external-fragment-digest-changed",
+      "left": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": "https"
+      },
+      "right": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": "sha256:d003c5b577d651f040f4392618f844d2ac21e8a1a92e0f2c97af2400fb3f61af",
+        "external_scheme": "https"
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-019-site-route-query-digest-changed",
+      "left": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:89d7b2eb818082e40083365981f9a9c0035f11d47235c7b6e5a8c6396784e393",
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-020-unsupported-fragment-digest-changed",
+      "left": {
+        "kind": "unsupported",
+        "raw_destination_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "unsupported",
+        "raw_destination_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": null,
+        "fragment_digest": "sha256:d003c5b577d651f040f4392618f844d2ac21e8a1a92e0f2c97af2400fb3f61af",
+        "external_scheme": null
+      },
+      "expected_equal": false
+    },
+    {
+      "id": "CI-021-repository-components-identical",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "blob",
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "same-repository-github",
+        "raw_destination_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "repository_path": "docs/a.md",
+        "target_kind": "blob",
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "expected_equal": true
+    },
+    {
+      "id": "CI-022-external-components-identical",
+      "left": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": "https"
+      },
+      "right": {
+        "kind": "external-url",
+        "raw_destination_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": "https"
+      },
+      "expected_equal": true
+    },
+    {
+      "id": "CI-023-other-components-identical",
+      "left": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "site-route",
+        "raw_destination_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "repository_path": null,
+        "target_kind": null,
+        "query_digest": "sha256:05f7ba2468c93d1735250bec4217e83aea0ac2cec2b554e79ecd3d8887c3b1ac",
+        "fragment_digest": "sha256:2655149b711c13c0512f0857c0cbcf1406de98fa97fdda127e7f60ef65006b14",
+        "external_scheme": null
+      },
+      "expected_equal": true
     }
   ]
 }

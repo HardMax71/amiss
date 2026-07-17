@@ -70,7 +70,7 @@ The kinds, with what each one means:
 | `unsupported-document-format` | a document class Amiss knows it cannot parse |
 | `unsupported-target-kind` | the target is a symlink or a submodule, which Amiss will not follow |
 | `unsupported-version-scope` | a reference pinned to a branch or version the scan cannot vouch for |
-| `unsupported-capability` | a policy asks for something this version does not do |
+| `unsupported-capability` | a reserved governed definition asks for behavior the engine does not implement |
 | `observation-correlation-ambiguous` | two matches were equally plausible, so no guess was made |
 | `policy-weakened` | the candidate loosens its own policy file |
 | `coverage-reduced` | the candidate shrinks what gets scanned |

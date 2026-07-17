@@ -8,7 +8,12 @@ identities pair exactly. Among the remaining occurrences, a candidate edge exist
 the adapter, source construct, and `CorrelationIntent` projection agree. Repository paths
 and same-repository forge links share a semantic class, so an equivalent spelling change can
 still correlate; external, site-route, and unsupported references retain their raw
-destination identity.
+destination identity. The repository class also binds path, target kind, query, and fragment;
+the external class binds scheme, query, and fragment; the remaining classes bind their kind,
+query, and fragment. The
+[correlation-intent vectors](../../spec/examples/correlation-intent-vectors.json) pin those
+fields and the GitHub, GitLab, and Gitea equivalence rows through the production projection in
+the [vector test](../../crates/amiss-scan/tests/correlation_vectors.rs).
 
 A candidate edge normally stays within one document. The only cross-document exception is a
 unique exact Git rename: exactly one removed path and one added path must share the same Git
