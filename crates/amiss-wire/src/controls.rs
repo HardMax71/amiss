@@ -312,7 +312,17 @@ impl ContentAvailability {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter, IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumString,
+    EnumIter,
+    IntoStaticStr,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum ResourceName {
@@ -610,7 +620,8 @@ impl OrganizationFloor {
         })?;
         let authorized_debt_owners = decode_owner_items(&owners_path, owners_raw)?;
         let authorized_waiver_issuers = decode_owner_items(&issuers_path, issuers_raw)?;
-        let resource_limits = decode_items(&limits_path, limits_raw, 34, decode_resource_limit)?;
+        let cap = ResourceName::all().len();
+        let resource_limits = decode_items(&limits_path, limits_raw, cap, decode_resource_limit)?;
         sorted_set(&limits_path, &resource_limits, |a, b| {
             a.resource.as_str().cmp(b.resource.as_str())
         })?;
