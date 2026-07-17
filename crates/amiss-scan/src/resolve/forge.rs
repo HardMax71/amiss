@@ -1,15 +1,15 @@
 use amiss_git::{GitResources, Repository};
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::{ForgeDialect, RepoPath};
-use amiss_wire::report::{IntentKind, ResolutionCode};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
 
 use crate::Error;
 use crate::discovery::SnapshotDiscovery;
 use crate::resources::ScanResources;
 
 use super::{
-    ForgeContext, Intent, Resolution, TargetCache, decode_segment, defect_code, lookup, null_row,
-    unsupported_intent,
+    ForgeContext, Intent, Resolution, TargetCache, decode_segment, lookup, unsupported_intent,
 };
 
 #[expect(
@@ -52,7 +52,7 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
             query,
             fragment,
         },
-        null_row(ResolutionCode::ForeignRepository),
+        Resolution::External(ExternalReference::ForeignRepository),
     )
 }
 
@@ -103,8 +103,8 @@ fn github(
         segments.get(3..).unwrap_or_default(),
     ) {
         Ok(split) => split,
-        Err(code) => {
-            return Ok((unsupported_intent(query, fragment), null_row(code)));
+        Err(resolution) => {
+            return Ok((unsupported_intent(query, fragment), resolution));
         }
     };
 
@@ -117,9 +117,10 @@ fn github(
         fragment: fragment.clone(),
     };
     if !matched_candidate {
-        let mut row = null_row(ResolutionCode::UnsupportedVersionScope);
-        row.path = Some(joined);
-        return Ok((intent, row));
+        return Ok((
+            intent,
+            Resolution::UnsupportedVersion(VersionScope::KnownPath { path: joined }),
+        ));
     }
     let row = lookup(
         repo,
@@ -193,8 +194,8 @@ fn gitlab(
     let (matched_candidate, joined) =
         match trusted_split(identity, target_kind == TargetKind::Tree, tail) {
             Ok(split) => split,
-            Err(code) => {
-                return Ok((unsupported_intent(query, fragment), null_row(code)));
+            Err(resolution) => {
+                return Ok((unsupported_intent(query, fragment), resolution));
             }
         };
 
@@ -207,9 +208,10 @@ fn gitlab(
         fragment: fragment.clone(),
     };
     if !matched_candidate {
-        let mut row = null_row(ResolutionCode::UnsupportedVersionScope);
-        row.path = Some(joined);
-        return Ok((intent, row));
+        return Ok((
+            intent,
+            Resolution::UnsupportedVersion(VersionScope::KnownPath { path: joined }),
+        ));
     }
     let row = lookup(
         repo,
@@ -287,16 +289,16 @@ fn gitea(
             match decoded_tail(directory_hint, raw_tail) {
                 Ok(decoded) => contained_path(&decoded)
                     .map(|path| (identity.candidate_oid.as_deref() == Some(pinned), path)),
-                Err(code) => Err(code),
+                Err(resolution) => Err(resolution),
             }
         }
-        "tag" => Err(ResolutionCode::UnsupportedVersionScope),
+        "tag" => Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath)),
         _ => return Ok(foreign_row(query, fragment)),
     };
     let (matched_candidate, joined) = match split {
         Ok(split) => split,
-        Err(code) => {
-            return Ok((unsupported_intent(query, fragment), null_row(code)));
+        Err(resolution) => {
+            return Ok((unsupported_intent(query, fragment), resolution));
         }
     };
 
@@ -309,9 +311,10 @@ fn gitea(
         fragment: fragment.clone(),
     };
     if !matched_candidate {
-        let mut row = null_row(ResolutionCode::UnsupportedVersionScope);
-        row.path = Some(joined);
-        return Ok((intent, row));
+        return Ok((
+            intent,
+            Resolution::UnsupportedVersion(VersionScope::KnownPath { path: joined }),
+        ));
     }
     let row = lookup(
         repo,
@@ -345,7 +348,7 @@ fn trusted_split(
     identity: &ForgeContext,
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
-) -> Result<(bool, RepoPath), ResolutionCode> {
+) -> Result<(bool, RepoPath), Resolution> {
     let decoded = decoded_tail(tolerate_terminal_slash, raw_tail)?;
 
     let candidate = ref_segments(&identity.candidate_ref);
@@ -357,12 +360,14 @@ fn trusted_split(
             if candidate == default {
                 (true, after_candidate)
             } else {
-                return Err(ResolutionCode::UnsupportedVersionScope);
+                return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
             }
         }
         (Some(after), None) => (true, after),
         (None, Some(after)) => (false, after),
-        (None, None) => return Err(ResolutionCode::UnsupportedVersionScope),
+        (None, None) => {
+            return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
+        }
     };
     Ok((matched_candidate, contained_path(&remaining)?))
 }
@@ -372,7 +377,7 @@ fn trusted_split(
 fn decoded_tail(
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
-) -> Result<Vec<Vec<u8>>, ResolutionCode> {
+) -> Result<Vec<Vec<u8>>, Resolution> {
     let mut tail: Vec<&str> = raw_tail.to_vec();
     if tolerate_terminal_slash && tail.len() > 1 && tail.last() == Some(&"") {
         tail.pop();
@@ -380,26 +385,26 @@ fn decoded_tail(
     let mut decoded: Vec<Vec<u8>> = Vec::new();
     for segment in &tail {
         if segment.is_empty() {
-            return Err(ResolutionCode::InvalidReference);
+            return Err(Resolution::Invalid(InvalidReference::Syntax));
         }
-        decoded.push(decode_segment(segment).map_err(defect_code)?);
+        decoded.push(decode_segment(segment)?);
     }
     Ok(decoded)
 }
 
 /// The remaining segments as a contained repository path: nonempty, no dot
 /// segments, and inside the frozen byte grammar.
-fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, ResolutionCode> {
+fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, Resolution> {
     if remaining.is_empty() {
-        return Err(ResolutionCode::InvalidReference);
+        return Err(Resolution::Invalid(InvalidReference::Syntax));
     }
     if remaining
         .iter()
         .any(|segment| segment == b"." || segment == b"..")
     {
-        return Err(ResolutionCode::PathTraversal);
+        return Err(Resolution::Invalid(InvalidReference::PathTraversal));
     }
-    RepoPath::from_bytes(remaining.join(&b'/')).ok_or(ResolutionCode::InvalidReference)
+    RepoPath::from_bytes(remaining.join(&b'/')).ok_or(Resolution::Invalid(InvalidReference::Syntax))
 }
 
 fn ref_segments(full_ref: &str) -> Vec<Vec<u8>> {

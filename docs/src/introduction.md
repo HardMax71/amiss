@@ -3,13 +3,14 @@
 Amiss checks structural relationships between documentation and the repository tree it
 describes. It discovers a closed set of Markdown and MDX documents, extracts supported
 explicit references, and resolves their repository targets. When a supported reference
-points at a file that is gone, it reports that. When the file is still there but its content
+points at a file or line range that is gone, it reports that. When the selected target bytes
 changed while the paragraph containing the reference did not, it reports that too. It never
 reads meaning: it cannot tell you whether a sentence is true, and it does not try.
 
 “Supported explicit reference” is an important boundary. Bare path-like prose is not
 inferred, raw HTML and MDX code regions are opaque, and site routes, heading semantics, code
-symbols, live URLs, and other repositories need information this engine does not have. The
+symbols, live URLs, and other repositories need information this engine does not have. Numeric
+line fragments are the narrow exception: they select bytes, not language symbols or meaning. The
 exact document classifier and resolver are linked from [Project status](status.md), while
 [Discovery](discovery.md) and [Resolution](resolution.md) describe the visible boundary rows.
 
@@ -18,7 +19,7 @@ started) and the candidate (usually the commit being reviewed). Amiss answers fo
 about them, and nothing else:
 
 1. Does every supported explicit reference still point at something in the candidate tree?
-2. Did the content or file mode of a referenced file change between base and candidate?
+2. Did the selected content or file mode of a referenced target change between base and candidate?
 3. Did the paragraph holding the reference change too, stay exactly the same, disappear, or
    become impossible to match up without guessing?
 4. What did the scan actually see: which documents it read, skipped, could not parse, or

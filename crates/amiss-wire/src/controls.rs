@@ -1,12 +1,18 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
+
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::{self, Value};
 use crate::model::{
     ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity,
     UtcInstant,
+};
+use crate::resolution::{
+    BlobContent, BlobContentTag, BlobMode, BlobTarget, Missing, MissingTag, Resolution,
+    ResolutionTag, Target, TargetTag,
 };
 
 /// Execution-constraint descriptor, forge-neutral action-repository
@@ -89,7 +95,20 @@ impl Profile {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum PromotableFindingKind {
     ExplicitTargetMissing,
     ExplicitTargetTypeMismatch,
@@ -98,25 +117,31 @@ pub enum PromotableFindingKind {
 
 impl PromotableFindingKind {
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ExplicitTargetMissing => "explicit-target-missing",
-            Self::ExplicitTargetTypeMismatch => "explicit-target-type-mismatch",
-            Self::InvalidReference => "invalid-reference",
-        }
+    pub fn as_str(self) -> &'static str {
+        self.into()
     }
 
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "explicit-target-missing" => Ok(Self::ExplicitTargetMissing),
-            "explicit-target-type-mismatch" => Ok(Self::ExplicitTargetTypeMismatch),
-            "invalid-reference" => Ok(Self::InvalidReference),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
+        let raw = de::string(path, value)?;
+        raw.parse()
+            .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum EligibleFindingKind {
     ExplicitTargetMissing,
     ExplicitTargetTypeMismatch,
@@ -124,19 +149,14 @@ pub enum EligibleFindingKind {
 
 impl EligibleFindingKind {
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ExplicitTargetMissing => "explicit-target-missing",
-            Self::ExplicitTargetTypeMismatch => "explicit-target-type-mismatch",
-        }
+    pub fn as_str(self) -> &'static str {
+        self.into()
     }
 
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "explicit-target-missing" => Ok(Self::ExplicitTargetMissing),
-            "explicit-target-type-mismatch" => Ok(Self::ExplicitTargetTypeMismatch),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
+        let raw = de::string(path, value)?;
+        raw.parse()
+            .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
     }
 }
 
@@ -247,16 +267,6 @@ impl EntryKind {
             Self::Gitlink => "gitlink",
         }
     }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "blob" => Ok(Self::Blob),
-            "tree" => Ok(Self::Tree),
-            "symlink" => Ok(Self::Symlink),
-            "gitlink" => Ok(Self::Gitlink),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -279,17 +289,6 @@ impl GitMode {
             Self::Gitlink => "160000",
         }
     }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "100644" => Ok(Self::RegularFile),
-            "100755" => Ok(Self::ExecutableFile),
-            "040000" => Ok(Self::Tree),
-            "120000" => Ok(Self::Symlink),
-            "160000" => Ok(Self::Gitlink),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -310,25 +309,12 @@ impl ContentAvailability {
             Self::LfsPointerOnly => "lfs-pointer-only",
         }
     }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "available" => Ok(Self::Available),
-            "not-read" => Ok(Self::NotRead),
-            "not-applicable" => Ok(Self::NotApplicable),
-            "lfs-pointer-only" => Ok(Self::LfsPointerOnly),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ResolutionKind {
-    Missing,
-    TypeMismatch,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter, IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ResourceName {
     GitObjectBytes,
     GitCompressedObjectBytes,
@@ -351,6 +337,7 @@ pub enum ResourceName {
     DocumentBlobBytes,
     ReferencedTargetBlobBytes,
     AggregateReferencedTargetBytesPerSnapshot,
+    AggregateLineFragmentEvaluationBytesPerSnapshot,
     AggregateDocumentBytesPerSnapshot,
     RawLinkDestinationBytes,
     ParserNesting,
@@ -370,7 +357,7 @@ impl ResourceName {
     /// Every resource name in wire-contract order.
     #[must_use]
     pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::ALL.iter().map(|(_, resource)| *resource)
+        Self::iter()
     }
 
     /// The phase a resource crossing reports, from the closed partition.
@@ -404,9 +391,9 @@ impl ResourceName {
             | Self::ParserNodesPerSnapshot
             | Self::ReferencesPerDocument
             | Self::ReferencesPerSnapshot => "parse",
-            Self::ReferencedTargetBlobBytes | Self::AggregateReferencedTargetBytesPerSnapshot => {
-                "resolution"
-            }
+            Self::ReferencedTargetBlobBytes
+            | Self::AggregateReferencedTargetBytesPerSnapshot
+            | Self::AggregateLineFragmentEvaluationBytesPerSnapshot => "resolution",
             Self::CompleteFindings => "policy",
             Self::MachineJsonBytes => "output",
             Self::TypedAnalysisErrorsRetained
@@ -415,97 +402,17 @@ impl ResourceName {
         }
     }
 
-    const ALL: [(&'static str, Self); 34] = [
-        ("git-object-bytes", Self::GitObjectBytes),
-        (
-            "git-compressed-object-bytes",
-            Self::GitCompressedObjectBytes,
-        ),
-        (
-            "aggregate-git-compressed-object-bytes-per-evaluation",
-            Self::AggregateGitCompressedObjectBytesPerEvaluation,
-        ),
-        ("git-pack-directory-entries", Self::GitPackDirectoryEntries),
-        ("git-pack-files", Self::GitPackFiles),
-        ("git-pack-index-bytes", Self::GitPackIndexBytes),
-        (
-            "aggregate-git-pack-index-bytes",
-            Self::AggregateGitPackIndexBytes,
-        ),
-        ("git-delta-depth", Self::GitDeltaDepth),
-        ("git-index-bytes", Self::GitIndexBytes),
-        (
-            "git-tree-entries-per-snapshot",
-            Self::GitTreeEntriesPerSnapshot,
-        ),
-        ("documents-per-snapshot", Self::DocumentsPerSnapshot),
-        ("control-input-bytes", Self::ControlInputBytes),
-        (
-            "selected-control-blob-bytes",
-            Self::SelectedControlBlobBytes,
-        ),
-        (
-            "aggregate-selected-control-bytes-per-snapshot",
-            Self::AggregateSelectedControlBytesPerSnapshot,
-        ),
-        ("repository-policy-entries", Self::RepositoryPolicyEntries),
-        ("debt-items", Self::DebtItems),
-        ("waiver-items", Self::WaiverItems),
-        ("raw-path-bytes", Self::RawPathBytes),
-        ("document-blob-bytes", Self::DocumentBlobBytes),
-        (
-            "referenced-target-blob-bytes",
-            Self::ReferencedTargetBlobBytes,
-        ),
-        (
-            "aggregate-referenced-target-bytes-per-snapshot",
-            Self::AggregateReferencedTargetBytesPerSnapshot,
-        ),
-        (
-            "aggregate-document-bytes-per-snapshot",
-            Self::AggregateDocumentBytesPerSnapshot,
-        ),
-        ("raw-link-destination-bytes", Self::RawLinkDestinationBytes),
-        ("parser-nesting", Self::ParserNesting),
-        ("parser-nodes-per-document", Self::ParserNodesPerDocument),
-        ("parser-nodes-per-snapshot", Self::ParserNodesPerSnapshot),
-        ("references-per-document", Self::ReferencesPerDocument),
-        ("references-per-snapshot", Self::ReferencesPerSnapshot),
-        (
-            "organization-policy-entries",
-            Self::OrganizationPolicyEntries,
-        ),
-        ("complete-findings", Self::CompleteFindings),
-        (
-            "typed-analysis-errors-retained",
-            Self::TypedAnalysisErrorsRetained,
-        ),
-        ("machine-json-bytes", Self::MachineJsonBytes),
-        (
-            "private-temporary-storage-bytes",
-            Self::PrivateTemporaryStorageBytes,
-        ),
-        (
-            "evaluator-managed-memory-bytes",
-            Self::EvaluatorManagedMemoryBytes,
-        ),
-    ];
-
     #[must_use]
     pub fn as_str(self) -> &'static str {
-        Self::ALL
-            .iter()
-            .find(|(_, variant)| *variant == self)
-            .map_or("", |(name, _)| name)
+        self.into()
     }
 
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         let raw = de::string(path, value)?;
-        Self::ALL
-            .iter()
-            .find(|(name, _)| *name == raw)
-            .map(|(_, variant)| *variant)
-            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+        let Ok(resource) = raw.parse() else {
+            return fail(path, ErrorKind::InvalidValue);
+        };
+        Ok(resource)
     }
 }
 
@@ -761,28 +668,54 @@ pub struct FindingKeyInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Resolution {
-    pub kind: ResolutionKind,
-    pub path: Option<RepoPathText>,
-    pub entry_kind: Option<EntryKind>,
-    pub git_mode: Option<GitMode>,
-    pub raw_digest: Option<Digest>,
-    pub projection_digest: Option<Digest>,
-    pub content_availability: ContentAvailability,
+pub struct Fact {
+    key_input: FindingKeyInput,
+    resolution: Resolution<RepoPathText>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Fact {
-    pub finding_kind: EligibleFindingKind,
-    pub key_input: FindingKeyInput,
-    pub resolution: Resolution,
+impl Fact {
+    /// Builds a structural fact only when the key kind and resolution family agree.
+    /// Non-structural resolution families are not eligible for control items.
+    #[must_use]
+    pub fn new(key_input: FindingKeyInput, resolution: Resolution<RepoPathText>) -> Option<Self> {
+        let expected = match &resolution {
+            Resolution::Missing(_) => EligibleFindingKind::ExplicitTargetMissing,
+            Resolution::TypeMismatch(_) => EligibleFindingKind::ExplicitTargetTypeMismatch,
+            Resolution::Resolved(_)
+            | Resolution::UnsupportedTarget(_)
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedVersion(_)
+            | Resolution::Invalid(_)
+            | Resolution::External(_) => return None,
+        };
+        (key_input.finding_kind == expected).then_some(Self {
+            key_input,
+            resolution,
+        })
+    }
+
+    /// The finding kind fixed by the validated key and resolution family.
+    #[must_use]
+    pub const fn finding_kind(&self) -> EligibleFindingKind {
+        self.key_input.finding_kind
+    }
+
+    /// The canonical finding-key preimage embedded in this fact.
+    #[must_use]
+    pub const fn key_input(&self) -> &FindingKeyInput {
+        &self.key_input
+    }
+
+    /// The structural resolution evidence embedded in this fact.
+    #[must_use]
+    pub const fn resolution(&self) -> &Resolution<RepoPathText> {
+        &self.resolution
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DebtItem {
     pub debt_id: ArtifactId,
-    pub finding_kind: EligibleFindingKind,
-    pub key_input: FindingKeyInput,
     pub finding_key: Digest,
     pub accepted_fact: Fact,
     pub accepted_fact_digest: Digest,
@@ -813,7 +746,7 @@ impl DebtSnapshot {
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, embedded key or
-    /// fact digests that do not recompute, kind or preimage inconsistencies,
+    /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
     /// causal time-order violations, and unsorted or duplicate items or keys.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         let value = root(bytes)?;
@@ -871,8 +804,6 @@ impl DebtSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WaiverItem {
     pub waiver_id: ArtifactId,
-    pub finding_kind: EligibleFindingKind,
-    pub key_input: FindingKeyInput,
     pub finding_key: Digest,
     pub authorized_fact: Fact,
     pub authorized_fact_digest: Digest,
@@ -904,7 +835,7 @@ impl WaiverBundle {
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, embedded key or
-    /// fact digests that do not recompute, kind or preimage inconsistencies,
+    /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
     /// causal time-order violations, duplicate waiver IDs, and duplicate
     /// `(candidate_tree, finding_key)` pairs.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
@@ -1237,68 +1168,118 @@ fn decode_key_input(path: &str, value: Value) -> Result<(FindingKeyInput, Digest
     ))
 }
 
-fn decode_resolution(path: &str, value: Value) -> Result<Resolution, Error> {
+fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText>, Error> {
     let mut obj = Obj::new(path, value)?;
-    let status_path = obj.field("status");
-    let status = de::string(&status_path, obj.take("status")?)?;
-    let code = de::string(&obj.field("code"), obj.take("code")?)?;
-    let kind = match (status.as_str(), code.as_str()) {
-        ("missing", "path-not-found") => ResolutionKind::Missing,
-        ("type-mismatch", "target-type-mismatch") => ResolutionKind::TypeMismatch,
-        _ => return fail(&status_path, ErrorKind::Inconsistent),
+    let kind_path = obj.field("kind");
+    let kind_text = de::string(&kind_path, obj.take("kind")?)?;
+    let Ok(kind) = kind_text.parse::<ResolutionTag>() else {
+        return fail(&kind_path, ErrorKind::InvalidValue);
     };
-    let res_path = de::nullable(obj.take("path")?)
-        .map(|v| decode_repo_path(&obj.field("path"), v))
-        .transpose()?;
-    let entry_kind = de::nullable(obj.take("entry_kind")?)
-        .map(|v| EntryKind::decode(&obj.field("entry_kind"), v))
-        .transpose()?;
-    let git_mode = de::nullable(obj.take("git_mode")?)
-        .map(|v| GitMode::decode(&obj.field("git_mode"), v))
-        .transpose()?;
-    let raw_digest = decode_nullable_digest(&obj.field("raw_digest"), obj.take("raw_digest")?)?;
-    let projection_digest = decode_nullable_digest(
-        &obj.field("projection_digest"),
-        obj.take("projection_digest")?,
-    )?;
-    let content_availability = ContentAvailability::decode(
-        &obj.field("content_availability"),
-        obj.take("content_availability")?,
-    )?;
-    obj.finish()?;
-
-    let shape_ok = match kind {
-        ResolutionKind::Missing => {
-            entry_kind.is_none()
-                && git_mode.is_none()
-                && raw_digest.is_none()
-                && projection_digest.is_none()
-                && content_availability == ContentAvailability::NotApplicable
+    match kind {
+        ResolutionTag::Missing => {
+            let reason_path = obj.field("reason");
+            let reason_text = de::string(&reason_path, obj.take("reason")?)?;
+            let Ok(reason) = reason_text.parse::<MissingTag>() else {
+                return fail(&reason_path, ErrorKind::InvalidValue);
+            };
+            let resolved_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
+            obj.finish()?;
+            Ok(Resolution::Missing(match reason {
+                MissingTag::PathNotFound => Missing::PathNotFound {
+                    path: resolved_path,
+                },
+                MissingTag::LineFragmentOutOfRange => Missing::LineFragmentOutOfRange {
+                    path: resolved_path,
+                },
+            }))
         }
-        ResolutionKind::TypeMismatch => entry_kind.is_some() && git_mode.is_some(),
-    };
-    if !shape_ok {
-        return fail(path, ErrorKind::Inconsistent);
+        ResolutionTag::TypeMismatch => {
+            let target = decode_resolution_target(&obj.field("target"), obj.take("target")?)?;
+            obj.finish()?;
+            Ok(Resolution::TypeMismatch(target))
+        }
+        ResolutionTag::Resolved
+        | ResolutionTag::UnsupportedTarget
+        | ResolutionTag::UnsupportedSemantics
+        | ResolutionTag::UnsupportedVersion
+        | ResolutionTag::Invalid
+        | ResolutionTag::External => fail(&kind_path, ErrorKind::InvalidValue),
     }
-    Ok(Resolution {
-        kind,
-        path: res_path,
-        entry_kind,
-        git_mode,
-        raw_digest,
-        projection_digest,
-        content_availability,
-    })
 }
 
-fn decode_fact(path: &str, value: Value) -> Result<(Fact, Digest), Error> {
-    let digest = hj(FACT_DOMAIN, &value);
+fn decode_resolution_target(path: &str, value: Value) -> Result<Target<RepoPathText>, Error> {
+    let mut obj = Obj::new(path, value)?;
+    let kind_path = obj.field("kind");
+    let kind_text = de::string(&kind_path, obj.take("kind")?)?;
+    let Ok(kind) = kind_text.parse::<TargetTag>() else {
+        return fail(&kind_path, ErrorKind::InvalidValue);
+    };
+    let resolved_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
+    match kind {
+        TargetTag::Tree => {
+            obj.finish()?;
+            Ok(Target::Tree {
+                path: resolved_path,
+            })
+        }
+        TargetTag::Blob => {
+            let mode_path = obj.field("mode");
+            let mode_text = de::string(&mode_path, obj.take("mode")?)?;
+            let Ok(mode) = mode_text.parse::<BlobMode>() else {
+                return fail(&mode_path, ErrorKind::InvalidValue);
+            };
+            let content = decode_resolution_content(&obj.field("content"), obj.take("content")?)?;
+            obj.finish()?;
+            Ok(Target::Blob(BlobTarget {
+                path: resolved_path,
+                mode,
+                content,
+            }))
+        }
+    }
+}
+
+fn decode_resolution_content(path: &str, value: Value) -> Result<BlobContent, Error> {
+    let mut obj = Obj::new(path, value)?;
+    let kind_path = obj.field("kind");
+    let kind_text = de::string(&kind_path, obj.take("kind")?)?;
+    let Ok(kind) = kind_text.parse::<BlobContentTag>() else {
+        return fail(&kind_path, ErrorKind::InvalidValue);
+    };
+    let raw_digest = decode_digest(&obj.field("raw_digest"), obj.take("raw_digest")?)?;
+    match kind {
+        BlobContentTag::Available => {
+            let projection_digest = decode_digest(
+                &obj.field("projection_digest"),
+                obj.take("projection_digest")?,
+            )?;
+            obj.finish()?;
+            Ok(BlobContent::Available {
+                raw_digest,
+                projection_digest,
+            })
+        }
+        BlobContentTag::LfsPointer => {
+            obj.finish()?;
+            Ok(BlobContent::LfsPointer { raw_digest })
+        }
+    }
+}
+
+struct DecodedFact {
+    fact: Fact,
+    fact_digest: Digest,
+    finding_key: Digest,
+}
+
+fn decode_fact(path: &str, value: Value) -> Result<DecodedFact, Error> {
+    let fact_digest = hj(FACT_DOMAIN, &value);
     let mut obj = Obj::new(path, value)?;
     de::const_str(&obj.field("schema"), obj.take("schema")?, FACT_SCHEMA)?;
     let finding_kind =
         EligibleFindingKind::decode(&obj.field("finding_kind"), obj.take("finding_kind")?)?;
     let key_path = obj.field("key_input");
-    let (key_input, _) = decode_key_input(&key_path, obj.take("key_input")?)?;
+    let (key_input, finding_key) = decode_key_input(&key_path, obj.take("key_input")?)?;
     let evidence_path = obj.field("evidence");
     let mut evidence = Obj::new(&evidence_path, obj.take("evidence")?)?;
     de::const_str(&evidence.field("kind"), evidence.take("kind")?, "reference")?;
@@ -1315,28 +1296,20 @@ fn decode_fact(path: &str, value: Value) -> Result<(Fact, Digest), Error> {
     evidence.finish()?;
     obj.finish()?;
 
-    let kind_matches = match resolution.kind {
-        ResolutionKind::Missing => finding_kind == EligibleFindingKind::ExplicitTargetMissing,
-        ResolutionKind::TypeMismatch => {
-            finding_kind == EligibleFindingKind::ExplicitTargetTypeMismatch
-        }
+    let Some(fact) = Fact::new(key_input, resolution) else {
+        return fail(path, ErrorKind::Inconsistent);
     };
-    if !kind_matches || key_input.finding_kind != finding_kind {
+    if fact.finding_kind() != finding_kind {
         return fail(path, ErrorKind::Inconsistent);
     }
-    Ok((
-        Fact {
-            finding_kind,
-            key_input,
-            resolution,
-        },
-        digest,
-    ))
+    Ok(DecodedFact {
+        fact,
+        fact_digest,
+        finding_key,
+    })
 }
 
 struct ItemCore {
-    finding_kind: EligibleFindingKind,
-    key_input: FindingKeyInput,
     finding_key: Digest,
     fact: Fact,
     fact_digest: Digest,
@@ -1346,36 +1319,27 @@ struct ItemCore {
     expires_at: UtcInstant,
 }
 
-fn decode_item_core(path: &str, obj: &mut Obj, fact_field: &str) -> Result<ItemCore, Error> {
-    let finding_kind =
-        EligibleFindingKind::decode(&obj.field("finding_kind"), obj.take("finding_kind")?)?;
-    let key_path = obj.field("key_input");
-    let (key_input, computed_key) = decode_key_input(&key_path, obj.take("key_input")?)?;
+fn decode_item_core(obj: &mut Obj, fact_field: &str) -> Result<ItemCore, Error> {
     let finding_key_path = obj.field("finding_key");
     let finding_key = decode_digest(&finding_key_path, obj.take("finding_key")?)?;
-    if finding_key != computed_key {
+    let fact_path = obj.field(fact_field);
+    let decoded_fact = decode_fact(&fact_path, obj.take(fact_field)?)?;
+    if finding_key != decoded_fact.finding_key {
         return fail(&finding_key_path, ErrorKind::DigestMismatch);
     }
-    let fact_path = obj.field(fact_field);
-    let (fact, computed_fact) = decode_fact(&fact_path, obj.take(fact_field)?)?;
     let fact_digest_field = format!("{fact_field}_digest");
     let fact_digest_path = obj.field(&fact_digest_field);
     let fact_digest = decode_digest(&fact_digest_path, obj.take(&fact_digest_field)?)?;
-    if fact_digest != computed_fact {
+    if fact_digest != decoded_fact.fact_digest {
         return fail(&fact_digest_path, ErrorKind::DigestMismatch);
-    }
-    if key_input.finding_kind != finding_kind || fact.key_input != key_input {
-        return fail(path, ErrorKind::Inconsistent);
     }
     let owner = decode_owner(&obj.field("owner"), obj.take("owner")?)?;
     let reason = decode_reason(&obj.field("reason"), obj.take("reason")?)?;
     let created_at = decode_instant(&obj.field("created_at"), obj.take("created_at")?)?;
     let expires_at = decode_instant(&obj.field("expires_at"), obj.take("expires_at")?)?;
     Ok(ItemCore {
-        finding_kind,
-        key_input,
         finding_key,
-        fact,
+        fact: decoded_fact.fact,
         fact_digest,
         owner,
         reason,
@@ -1387,15 +1351,13 @@ fn decode_item_core(path: &str, obj: &mut Obj, fact_field: &str) -> Result<ItemC
 fn decode_debt_item(path: &str, value: Value) -> Result<DebtItem, Error> {
     let mut obj = Obj::new(path, value)?;
     let debt_id = decode_artifact_id(&obj.field("debt_id"), obj.take("debt_id")?)?;
-    let core = decode_item_core(path, &mut obj, "accepted_fact")?;
+    let core = decode_item_core(&mut obj, "accepted_fact")?;
     obj.finish()?;
     if core.created_at >= core.expires_at {
         return fail(path, ErrorKind::Inconsistent);
     }
     Ok(DebtItem {
         debt_id,
-        finding_kind: core.finding_kind,
-        key_input: core.key_input,
         finding_key: core.finding_key,
         accepted_fact: core.fact,
         accepted_fact_digest: core.fact_digest,
@@ -1409,7 +1371,7 @@ fn decode_debt_item(path: &str, value: Value) -> Result<DebtItem, Error> {
 fn decode_waiver_item(path: &str, value: Value) -> Result<WaiverItem, Error> {
     let mut obj = Obj::new(path, value)?;
     let waiver_id = decode_artifact_id(&obj.field("waiver_id"), obj.take("waiver_id")?)?;
-    let core = decode_item_core(path, &mut obj, "authorized_fact")?;
+    let core = decode_item_core(&mut obj, "authorized_fact")?;
     let candidate_tree = decode_tree(&obj.field("candidate_tree"), obj.take("candidate_tree")?)?;
     let issuer = decode_owner(&obj.field("issuer"), obj.take("issuer")?)?;
     let not_before = decode_instant(&obj.field("not_before"), obj.take("not_before")?)?;
@@ -1424,8 +1386,6 @@ fn decode_waiver_item(path: &str, value: Value) -> Result<WaiverItem, Error> {
     }
     Ok(WaiverItem {
         waiver_id,
-        finding_kind: core.finding_kind,
-        key_input: core.key_input,
         finding_key: core.finding_key,
         authorized_fact: core.fact,
         authorized_fact_digest: core.fact_digest,

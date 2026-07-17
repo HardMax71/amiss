@@ -3,7 +3,12 @@ use std::collections::BTreeMap;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::{Disposition, ErrorDetail, FindingKind, ResolutionCode, ResolutionStatus};
+use amiss_wire::report::{Disposition, ErrorDetail, FindingKind};
+use amiss_wire::resolution::{
+    BlobContent, BlobTarget, Missing, Resolution, Target, TargetTag, UnsupportedSemantics,
+    UnsupportedTarget, VersionScope,
+};
+use strum::IntoDiscriminant;
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
 use crate::observe;
@@ -222,53 +227,170 @@ fn reference_scope(observation: &Observation) -> Value {
     ])
 }
 
-/// The wire resolution row.
-#[must_use]
-pub fn resolution_value_public(resolution: &crate::resolve::Resolution) -> Value {
-    resolution_row(resolution)
-}
-
 fn resolution_value(observation: &Observation) -> Value {
     resolution_row(&observation.resolution)
 }
 
-fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
-    let nullable = |text: Option<String>| text.map_or(Value::Null, Value::String);
+pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
+    match resolution {
+        Resolution::Resolved(target) | Resolution::TypeMismatch(target) => resolution_object(
+            resolution.discriminant().as_ref(),
+            vec![("target", target_value(target))],
+        ),
+        Resolution::Missing(missing) => match missing {
+            Missing::PathNotFound { path } | Missing::LineFragmentOutOfRange { path } => {
+                reasoned_resolution(
+                    resolution.discriminant().as_ref(),
+                    missing.discriminant().as_ref(),
+                    vec![("path", path.to_value())],
+                )
+            }
+        },
+        Resolution::UnsupportedTarget(target) => {
+            unsupported_target_value(resolution.discriminant().as_ref(), target)
+        }
+        Resolution::UnsupportedSemantics(semantics) => {
+            unsupported_semantics_value(resolution.discriminant().as_ref(), semantics)
+        }
+        Resolution::UnsupportedVersion(scope) => resolution_object(
+            resolution.discriminant().as_ref(),
+            vec![("scope", version_scope_value(scope))],
+        ),
+        Resolution::Invalid(reason) => reasoned_resolution(
+            resolution.discriminant().as_ref(),
+            reason.as_ref(),
+            Vec::new(),
+        ),
+        Resolution::External(reason) => reasoned_resolution(
+            resolution.discriminant().as_ref(),
+            reason.as_ref(),
+            Vec::new(),
+        ),
+    }
+}
+
+fn resolution_object(kind: &str, fields: Vec<(&str, Value)>) -> Value {
+    let mut members = Vec::with_capacity(fields.len().saturating_add(1));
+    members.push(("kind".to_owned(), Value::String(kind.to_owned())));
+    members.extend(
+        fields
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value)),
+    );
+    Value::Object(members)
+}
+
+fn reasoned_resolution(kind: &str, reason: &str, fields: Vec<(&str, Value)>) -> Value {
+    let mut fields = fields;
+    fields.insert(0, ("reason", Value::String(reason.to_owned())));
+    resolution_object(kind, fields)
+}
+
+fn unsupported_target_value(kind: &str, target: &UnsupportedTarget<RepoPath>) -> Value {
+    let path = match target {
+        UnsupportedTarget::Symlink { path } | UnsupportedTarget::Gitlink { path } => path,
+    };
+    reasoned_resolution(
+        kind,
+        target.discriminant().as_ref(),
+        vec![("path", path.to_value())],
+    )
+}
+
+fn unsupported_semantics_value(kind: &str, semantics: &UnsupportedSemantics<RepoPath>) -> Value {
+    match semantics {
+        UnsupportedSemantics::Query(target) | UnsupportedSemantics::CodeFragment(target) => {
+            reasoned_resolution(
+                kind,
+                semantics.discriminant().as_ref(),
+                vec![("target", target_value(target))],
+            )
+        }
+        UnsupportedSemantics::Fragment(blob) => reasoned_resolution(
+            kind,
+            semantics.discriminant().as_ref(),
+            vec![("target", blob_target_value(blob))],
+        ),
+        UnsupportedSemantics::SiteRoute | UnsupportedSemantics::NetworkPath => {
+            reasoned_resolution(kind, semantics.discriminant().as_ref(), Vec::new())
+        }
+    }
+}
+
+fn target_value(target: &Target<RepoPath>) -> Value {
+    match target {
+        Target::Tree { path } => Value::Object(vec![
+            (
+                "kind".to_owned(),
+                Value::String(target.discriminant().as_ref().to_owned()),
+            ),
+            ("path".to_owned(), path.to_value()),
+        ]),
+        Target::Blob(blob) => blob_target_value(blob),
+    }
+}
+
+fn blob_target_value(blob: &BlobTarget<RepoPath>) -> Value {
     Value::Object(vec![
         (
-            "status".to_owned(),
-            Value::String(resolution.code.status().as_str().to_owned()),
+            "kind".to_owned(),
+            Value::String(TargetTag::Blob.as_ref().to_owned()),
         ),
+        ("path".to_owned(), blob.path.to_value()),
         (
-            "code".to_owned(),
-            Value::String(resolution.code.as_str().to_owned()),
+            "mode".to_owned(),
+            Value::String(blob.mode.as_ref().to_owned()),
         ),
-        ("path".to_owned(), nullable_path(resolution.path.as_ref())),
-        (
-            "entry_kind".to_owned(),
-            nullable(resolution.entry_kind.map(|kind| kind.as_str().to_owned())),
-        ),
-        (
-            "git_mode".to_owned(),
-            nullable(resolution.git_mode.map(|mode| mode.as_str().to_owned())),
-        ),
-        (
-            "raw_digest".to_owned(),
-            nullable(resolution.raw_digest.map(|digest| digest.to_string())),
-        ),
-        (
-            "projection_digest".to_owned(),
-            nullable(
-                resolution
-                    .projection_digest
-                    .map(|digest| digest.to_string()),
-            ),
-        ),
-        (
-            "content_availability".to_owned(),
-            Value::String(resolution.content_availability.as_str().to_owned()),
-        ),
+        ("content".to_owned(), blob_content_value(blob.content)),
     ])
+}
+
+fn blob_content_value(content: BlobContent) -> Value {
+    match content {
+        BlobContent::Available {
+            raw_digest,
+            projection_digest,
+        } => Value::Object(vec![
+            (
+                "kind".to_owned(),
+                Value::String(content.discriminant().as_ref().to_owned()),
+            ),
+            (
+                "raw_digest".to_owned(),
+                Value::String(raw_digest.to_string()),
+            ),
+            (
+                "projection_digest".to_owned(),
+                Value::String(projection_digest.to_string()),
+            ),
+        ]),
+        BlobContent::LfsPointer { raw_digest } => Value::Object(vec![
+            (
+                "kind".to_owned(),
+                Value::String(content.discriminant().as_ref().to_owned()),
+            ),
+            (
+                "raw_digest".to_owned(),
+                Value::String(raw_digest.to_string()),
+            ),
+        ]),
+    }
+}
+
+fn version_scope_value(scope: &VersionScope<RepoPath>) -> Value {
+    match scope {
+        VersionScope::KnownPath { path } => Value::Object(vec![
+            (
+                "kind".to_owned(),
+                Value::String(scope.discriminant().as_ref().to_owned()),
+            ),
+            ("path".to_owned(), path.to_value()),
+        ]),
+        VersionScope::UnknownPath => Value::Object(vec![(
+            "kind".to_owned(),
+            Value::String(scope.discriminant().as_ref().to_owned()),
+        )]),
+    }
 }
 
 fn reference_fact(
@@ -300,46 +422,29 @@ fn reference_fact(
     (fact, digest)
 }
 
-const fn structural_kind(status: ResolutionStatus) -> Option<FindingKind> {
-    match status {
-        ResolutionStatus::Missing => Some(FindingKind::ExplicitTargetMissing),
-        ResolutionStatus::TypeMismatch => Some(FindingKind::ExplicitTargetTypeMismatch),
-        ResolutionStatus::Resolved
-        | ResolutionStatus::Unsupported
-        | ResolutionStatus::Invalid
-        | ResolutionStatus::ExternalOutOfScope => None,
+const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<FindingKind> {
+    match resolution {
+        Resolution::Missing(_) => Some(FindingKind::ExplicitTargetMissing),
+        Resolution::TypeMismatch(_) => Some(FindingKind::ExplicitTargetTypeMismatch),
+        Resolution::Resolved(_)
+        | Resolution::UnsupportedTarget(_)
+        | Resolution::UnsupportedSemantics(_)
+        | Resolution::UnsupportedVersion(_)
+        | Resolution::Invalid(_)
+        | Resolution::External(_) => None,
     }
 }
 
 /// The occurrence-boundary mapping of step two: which non-structural kind one
 /// candidate resolution emits, if any.
-const fn boundary_kind(code: ResolutionCode) -> Option<FindingKind> {
-    match code {
-        ResolutionCode::InvalidUri
-        | ResolutionCode::InvalidPercentEncoding
-        | ResolutionCode::DecodedPathControl
-        | ResolutionCode::PathTraversal
-        | ResolutionCode::BackslashSeparator
-        | ResolutionCode::EncodedSlash
-        | ResolutionCode::InvalidFragmentEncoding
-        | ResolutionCode::InvalidReference => Some(FindingKind::InvalidReference),
-        ResolutionCode::UnsupportedQuerySemantics
-        | ResolutionCode::UnsupportedFragmentSemantics
-        | ResolutionCode::CodeFragmentUnevaluated
-        | ResolutionCode::SiteRouteUnsupported
-        | ResolutionCode::NetworkPathUnsupported => {
-            Some(FindingKind::UnsupportedReferenceSemantics)
-        }
-        ResolutionCode::UnsupportedVersionScope => Some(FindingKind::UnsupportedVersionScope),
-        ResolutionCode::SymlinkEntry | ResolutionCode::GitlinkEntry => {
-            Some(FindingKind::UnsupportedTargetKind)
-        }
-        ResolutionCode::ExternalUrl | ResolutionCode::ForeignRepository => {
-            Some(FindingKind::ExternalOutOfScope)
-        }
-        ResolutionCode::ExactPath
-        | ResolutionCode::PathNotFound
-        | ResolutionCode::TargetTypeMismatch => None,
+const fn boundary_kind(resolution: &crate::resolve::Resolution) -> Option<FindingKind> {
+    match resolution {
+        Resolution::Invalid(_) => Some(FindingKind::InvalidReference),
+        Resolution::UnsupportedSemantics(_) => Some(FindingKind::UnsupportedReferenceSemantics),
+        Resolution::UnsupportedVersion(_) => Some(FindingKind::UnsupportedVersionScope),
+        Resolution::UnsupportedTarget(_) => Some(FindingKind::UnsupportedTargetKind),
+        Resolution::External(_) => Some(FindingKind::ExternalOutOfScope),
+        Resolution::Resolved(_) | Resolution::Missing(_) | Resolution::TypeMismatch(_) => None,
     }
 }
 
@@ -837,17 +942,19 @@ fn waiver_pass(
         if !context.authorized_issuers.contains(&item.issuer) {
             defects.push("issuer");
         }
-        if !context.waivable_kinds.contains(&item.finding_kind) {
+        if !context
+            .waivable_kinds
+            .contains(&item.authorized_fact.finding_kind())
+        {
             defects.push("kind");
         }
         if item.owner == item.issuer {
             defects.push("same-owner");
         }
         if let Some(found) = target {
-            if findings
-                .get(found)
-                .is_some_and(|finding| finding.kind.as_str() != item.finding_kind.as_str())
-            {
+            if findings.get(found).is_some_and(|finding| {
+                finding.kind.as_str() != item.authorized_fact.finding_kind().as_str()
+            }) {
                 defects.push("key");
             }
             if current != Some(item.authorized_fact_digest) {
@@ -1087,12 +1194,10 @@ fn ordinary(
                 enforce,
             ));
         };
-        if let Some(kind) = boundary_kind(observation.resolution.code) {
+        if let Some(kind) = boundary_kind(&observation.resolution) {
             emit(kind);
         }
-        let pointer_only = observation.resolution.content_availability
-            == amiss_wire::controls::ContentAvailability::LfsPointerOnly;
-        if pointer_only {
+        if observation.resolution.is_lfs_pointer() {
             emit(FindingKind::UnsupportedTargetKind);
         }
     }
@@ -1221,7 +1326,7 @@ fn collect_structural<'a>(
     observation: &'a Observation,
     is_base: bool,
 ) {
-    let Some(kind) = structural_kind(observation.resolution.code.status()) else {
+    let Some(kind) = structural_kind(&observation.resolution) else {
         return;
     };
     let scope = reference_scope(observation);

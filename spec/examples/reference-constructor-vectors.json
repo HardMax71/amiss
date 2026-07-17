@@ -143,7 +143,10 @@
       "id": "RI-019-network-path",
       "operation": "network-path",
       "value": "//example.com/a",
-      "expected": "network-path-unsupported"
+      "expected": {
+        "kind": "unsupported-semantics",
+        "reason": "network-path"
+      }
     },
     {
       "id": "RI-020-commonmark-uri-autolink",
@@ -238,7 +241,10 @@
       "query_present": true,
       "fragment_present": true,
       "github_line_fragment": false,
-      "expected": "unsupported-fragment-semantics"
+      "expected": {
+        "kind": "unsupported-semantics",
+        "reason": "fragment"
+      }
     },
     {
       "id": "RI-031-code-query-and-fragment",
@@ -247,7 +253,10 @@
       "query_present": true,
       "fragment_present": true,
       "github_line_fragment": false,
-      "expected": "unsupported-query-semantics"
+      "expected": {
+        "kind": "unsupported-semantics",
+        "reason": "query"
+      }
     },
     {
       "id": "RI-032-github-line-is-boundary",
@@ -256,7 +265,9 @@
       "query_present": false,
       "fragment_present": true,
       "github_line_fragment": true,
-      "expected": "code-fragment-unevaluated"
+      "expected": {
+        "kind": "resolved"
+      }
     },
     {
       "id": "RI-033-uppercase-github-host-is-foreign",
@@ -291,7 +302,10 @@
       "id": "RI-036-native-image-terminal-slash-invalid",
       "operation": "native-trailing-slash",
       "construct": "markdown-inline-image",
-      "expected": "invalid-reference"
+      "expected": {
+        "kind": "invalid",
+        "reason": "syntax"
+      }
     },
     {
       "id": "RI-037-github-tree-terminal-slash",
@@ -315,6 +329,19 @@
       "expected": {
         "status": "invalid",
         "path": null
+      }
+    },
+    {
+      "id": "RI-039-line-fragment-out-of-range",
+      "operation": "resolution-boundary",
+      "target_class": "code",
+      "query_present": false,
+      "fragment_present": true,
+      "github_line_fragment": true,
+      "line_fragment": "L2",
+      "expected": {
+        "kind": "missing",
+        "reason": "line-fragment-out-of-range"
       }
     },
     {

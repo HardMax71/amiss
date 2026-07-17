@@ -11,6 +11,7 @@ repository = "https://github.com/HardMax71/amiss"
 
 [workspace.dependencies]
 sha2 = "0.11"
+strum = { version = "0.28", features = ["derive"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

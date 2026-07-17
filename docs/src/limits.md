@@ -10,6 +10,10 @@ are charged before parsing, but parser node and nesting totals are charged after
 returns. The known in-parse CPU limitation and bootstrap-only watchdog are described in
 [Security model](security.md).
 
+Line-fragment work is charged pessimistically by the complete target size once per distinct
+path and numeric range. Successful and out-of-range results are cached, so repeated identical
+anchors do not multiply the charge.
+
 <!-- amiss-doc-contract:limits:start -->
 | Report resource | Limit |
 | --- | ---: |
@@ -34,6 +38,7 @@ returns. The known in-parse CPU limitation and bootstrap-only watchdog are descr
 | `document-blob-bytes` | 4,194,304 |
 | `referenced-target-blob-bytes` | 16,777,216 |
 | `aggregate-referenced-target-bytes-per-snapshot` | 536,870,912 |
+| `aggregate-line-fragment-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `aggregate-document-bytes-per-snapshot` | 536,870,912 |
 | `raw-link-destination-bytes` | 16,384 |
 | `parser-nesting` | 256 |

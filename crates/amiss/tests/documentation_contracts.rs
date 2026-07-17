@@ -123,7 +123,7 @@ fn documented_contract(document: &str, name: &str) -> String {
 
 fn profile_table() -> String {
     let mut table = String::from("| Finding kind | Observe | Enforce |\n| --- | --- | --- |");
-    for kind in FindingKind::ALL {
+    for kind in FindingKind::all() {
         write!(
             table,
             "\n| `{}` | `{}` | `{}` |",
@@ -178,6 +178,9 @@ fn resource_limit(resource: ResourceName) -> u64 {
         ResourceName::ReferencedTargetBlobBytes => scan.referenced_target_blob_bytes,
         ResourceName::AggregateReferencedTargetBytesPerSnapshot => {
             scan.aggregate_referenced_target_bytes_per_snapshot
+        }
+        ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot => {
+            scan.aggregate_line_fragment_evaluation_bytes_per_snapshot
         }
         ResourceName::AggregateDocumentBytesPerSnapshot => {
             scan.aggregate_document_bytes_per_snapshot
@@ -310,27 +313,25 @@ fn documented_limits_are_generated_from_runtime_constants() {
 #[test]
 fn documented_enum_sources_match_the_active_report_schema() {
     let schema = report_schema();
-    let findings: Vec<String> = FindingKind::ALL
-        .iter()
+    let findings: Vec<String> = FindingKind::all()
         .map(|kind| kind.as_str().to_owned())
         .collect();
     let resources: Vec<String> = ResourceName::all()
         .map(|resource| resource.as_str().to_owned())
         .collect();
-    let forges: Vec<String> = ForgeDialect::ALL
-        .into_iter()
+    let forges: Vec<String> = ForgeDialect::all()
         .map(|forge| forge.as_str().to_owned())
         .collect();
 
     assert_eq!(
         findings,
         schema_enum(&schema, "FindingKind"),
-        "FindingKind::ALL drifted from the report schema"
+        "the runtime finding kinds drifted from the report schema"
     );
     assert_eq!(
         resources,
         schema_enum(&schema, "ResourceName"),
-        "ResourceName::all drifted from the report schema"
+        "the runtime resource names drifted from the report schema"
     );
     assert_eq!(
         forges,

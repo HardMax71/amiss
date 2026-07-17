@@ -5,10 +5,13 @@ use amiss_scan::correlate::{
 use amiss_scan::observe::occurrence_id;
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
-use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, SourceConstruct, TargetKind};
+use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::{EngineProvenance, IntentKind, ResolutionCode};
+use amiss_wire::report::{EngineProvenance, IntentKind};
+use amiss_wire::resolution::{
+    BlobContent, BlobMode, BlobTarget, ExternalReference, Missing, Target,
+};
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn rp(path: &str) -> RepoPath {
@@ -35,27 +38,18 @@ fn repo_intent(path: &str) -> Intent {
 
 fn resolved(path: &str, body: &[u8]) -> Resolution {
     let raw = hb("amiss/raw-evidence", body);
-    Resolution {
-        code: ResolutionCode::ExactPath,
-        path: RepoPath::new(path.to_owned()),
-        entry_kind: Some(EntryKind::Blob),
-        git_mode: Some(GitMode::RegularFile),
-        raw_digest: Some(raw),
-        projection_digest: Some(hb("amiss/scanner-target-projection", body)),
-        content_availability: ContentAvailability::Available,
-    }
+    Resolution::Resolved(Target::Blob(BlobTarget {
+        path: rp(path),
+        mode: BlobMode::Regular,
+        content: BlobContent::Available {
+            raw_digest: raw,
+            projection_digest: hb("amiss/scanner-target-projection", body),
+        },
+    }))
 }
 
 fn missing(path: &str) -> Resolution {
-    Resolution {
-        code: ResolutionCode::PathNotFound,
-        path: RepoPath::new(path.to_owned()),
-        entry_kind: None,
-        git_mode: None,
-        raw_digest: None,
-        projection_digest: None,
-        content_availability: ContentAvailability::NotApplicable,
-    }
+    Resolution::Missing(Missing::PathNotFound { path: rp(path) })
 }
 
 #[derive(Clone)]
@@ -290,15 +284,7 @@ fn the_derivation_table_is_total() {
         query: None,
         fragment: None,
     };
-    external.resolution = Resolution {
-        code: ResolutionCode::ExternalUrl,
-        path: None,
-        entry_kind: None,
-        git_mode: None,
-        raw_digest: None,
-        projection_digest: None,
-        content_availability: ContentAvailability::NotApplicable,
-    };
+    external.resolution = Resolution::External(ExternalReference::Url);
     let got = run(
         &side(vec![observation(&external)]),
         &side(vec![observation(&external)]),

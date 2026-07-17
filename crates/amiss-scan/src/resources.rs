@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use amiss_wire::controls::ResourceName;
 
 use crate::Error;
@@ -17,6 +19,7 @@ pub struct ScanLimits {
     pub references_per_snapshot: u64,
     pub referenced_target_blob_bytes: u64,
     pub aggregate_referenced_target_bytes_per_snapshot: u64,
+    pub aggregate_line_fragment_evaluation_bytes_per_snapshot: u64,
     pub selected_control_blob_bytes: u64,
     pub aggregate_selected_control_bytes_per_snapshot: u64,
     pub control_input_bytes: u64,
@@ -40,6 +43,7 @@ impl ScanLimits {
         references_per_snapshot: 1_000_000,
         referenced_target_blob_bytes: 16_777_216,
         aggregate_referenced_target_bytes_per_snapshot: 536_870_912,
+        aggregate_line_fragment_evaluation_bytes_per_snapshot: 536_870_912,
         selected_control_blob_bytes: 16_777_216,
         aggregate_selected_control_bytes_per_snapshot: 67_108_864,
         control_input_bytes: 16_777_216,
@@ -56,15 +60,33 @@ impl ScanLimits {
 /// an aggregate observes the prior charged total plus the first crossing
 /// member, and a member rejected by its per-value limit is never charged to
 /// the aggregate.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ScanResources {
+    cache_scope: Arc<()>,
     limits: ScanLimits,
     documents: u64,
     document_bytes: u64,
     nodes: u64,
     references: u64,
     target_bytes: u64,
+    line_fragment_bytes: u64,
     control_bytes: u64,
+}
+
+impl Clone for ScanResources {
+    fn clone(&self) -> Self {
+        Self {
+            cache_scope: Arc::new(()),
+            limits: self.limits,
+            documents: self.documents,
+            document_bytes: self.document_bytes,
+            nodes: self.nodes,
+            references: self.references,
+            target_bytes: self.target_bytes,
+            line_fragment_bytes: self.line_fragment_bytes,
+            control_bytes: self.control_bytes,
+        }
+    }
 }
 
 pub(crate) const fn crossing(
@@ -81,14 +103,16 @@ pub(crate) const fn crossing(
 
 impl ScanResources {
     #[must_use]
-    pub const fn new(limits: ScanLimits) -> Self {
+    pub fn new(limits: ScanLimits) -> Self {
         Self {
+            cache_scope: Arc::new(()),
             limits,
             documents: 0,
             document_bytes: 0,
             nodes: 0,
             references: 0,
             target_bytes: 0,
+            line_fragment_bytes: 0,
             control_bytes: 0,
         }
     }
@@ -96,6 +120,10 @@ impl ScanResources {
     #[must_use]
     pub const fn limits(&self) -> &ScanLimits {
         &self.limits
+    }
+
+    pub(crate) const fn cache_scope(&self) -> &Arc<()> {
+        &self.cache_scope
     }
 
     #[must_use]
@@ -121,6 +149,11 @@ impl ScanResources {
     #[must_use]
     pub const fn target_bytes(&self) -> u64 {
         self.target_bytes
+    }
+
+    #[must_use]
+    pub const fn line_fragment_bytes(&self) -> u64 {
+        self.line_fragment_bytes
     }
 
     /// Charges one selected control blob's declared size to the snapshot
@@ -159,6 +192,30 @@ impl ScanResources {
             ));
         }
         self.target_bytes = total;
+        Ok(())
+    }
+
+    /// Charges one distinct target-and-line-range evaluation pessimistically
+    /// by the complete target size. Cached repeats are not charged again.
+    ///
+    /// # Errors
+    ///
+    /// The aggregate crossing, observing the prior total plus this evaluation.
+    pub fn charge_line_fragment_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
+        let total = self.line_fragment_bytes.saturating_add(declared_bytes);
+        if total
+            > self
+                .limits
+                .aggregate_line_fragment_evaluation_bytes_per_snapshot
+        {
+            return Err(crossing(
+                ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot,
+                self.limits
+                    .aggregate_line_fragment_evaluation_bytes_per_snapshot,
+                total,
+            ));
+        }
+        self.line_fragment_bytes = total;
         Ok(())
     }
 

@@ -17,8 +17,12 @@ use amiss_scan::{
 };
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::{IntentKind, ResolutionCode, ResolutionStatus};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::{
+    ExternalReference, InvalidReference, Missing, Target, UnsupportedSemantics, VersionScope,
+};
 use serde_json::Value;
+use strum::IntoDiscriminant;
 
 struct Bed {
     _pair: amiss_fixtures::CommitPair,
@@ -34,7 +38,10 @@ impl Bed {
         let pair = amiss_fixtures::commit_pair(
             &[
                 ("README.md", "# R\n"),
-                ("docs/a.md", "# A\n"),
+                (
+                    "docs/a.md",
+                    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n",
+                ),
                 ("docs/file.md", "# F\n"),
                 ("src/a.scala", "object A\n"),
                 ("auto/uri.md", "<https://example.com/a?b#c>\n"),
@@ -199,18 +206,16 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     let expected = case.get("expected").unwrap();
     let expected_path = expected.get("path").and_then(Value::as_str);
-    let row_path = row
-        .path
-        .as_ref()
-        .and_then(|path| path.as_str().map(str::to_owned));
     match text(expected, "status") {
         "candidate" => {
-            assert_ne!(
-                row.code,
-                ResolutionCode::UnsupportedVersionScope,
-                "{id}: the candidate ref matched"
-            );
-            assert_eq!(row_path.as_deref(), expected_path, "{id}");
+            let Resolution::Resolved(target) = &row else {
+                panic!("{id}: the candidate ref did not resolve: {row:?}");
+            };
+            let path = match target {
+                Target::Tree { path } => path,
+                Target::Blob(blob) => &blob.path,
+            };
+            assert_eq!(path.as_str(), expected_path, "{id}");
             assert_eq!(
                 intent
                     .repository_path
@@ -220,13 +225,20 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
                 "{id}"
             );
         }
-        "unsupported-version-scope" => {
-            assert_eq!(row.code, ResolutionCode::UnsupportedVersionScope, "{id}");
-            assert_eq!(row_path.as_deref(), expected_path, "{id}");
-        }
+        "unsupported-version-scope" => match (&row, expected_path) {
+            (
+                Resolution::UnsupportedVersion(VersionScope::KnownPath { path }),
+                Some(expected_path),
+            ) => assert_eq!(path.as_str(), Some(expected_path), "{id}"),
+            (Resolution::UnsupportedVersion(VersionScope::UnknownPath), None) => {}
+            _ => panic!("{id}: unexpected version-scoped outcome: {row:?}"),
+        },
         "invalid" => {
-            assert_eq!(row.code.status(), ResolutionStatus::Invalid, "{id}");
-            assert_eq!(row_path, None, "{id}");
+            assert!(
+                matches!(&row, Resolution::Invalid(_)),
+                "{id}: expected an invalid outcome, got {row:?}"
+            );
+            assert_eq!(expected_path, None, "{id}");
         }
         other => panic!("{id}: unknown split status {other}"),
     }
@@ -272,13 +284,16 @@ fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
         )
     };
     let (_intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
-    let expected = if case.get("expected").and_then(Value::as_bool).unwrap() {
-        ResolutionCode::CodeFragmentUnevaluated
+    let matches_boundary = if case.get("expected").and_then(Value::as_bool).unwrap() {
+        matches!(&row, Resolution::Resolved(_))
     } else {
-        ResolutionCode::UnsupportedFragmentSemantics
+        matches!(
+            &row,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+        )
     };
-    assert_eq!(
-        row.code, expected,
+    assert!(
+        matches_boundary,
         "{id}: a document target classifies the fragment"
     );
 }
@@ -330,9 +345,18 @@ fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
             "{id}: got {:?}",
             intent.kind
         ),
-        "foreign" => assert_eq!(row.code, ResolutionCode::ForeignRepository, "{id}"),
+        "foreign" => assert!(
+            matches!(
+                &row,
+                Resolution::External(ExternalReference::ForeignRepository)
+            ),
+            "{id}: expected a foreign repository, got {row:?}"
+        ),
         "external" => {
-            assert_eq!(row.code, ResolutionCode::ExternalUrl, "{id}");
+            assert!(
+                matches!(&row, Resolution::External(ExternalReference::Url)),
+                "{id}: expected an external URL, got {row:?}"
+            );
             assert_eq!(intent.kind, IntentKind::ExternalUrl, "{id}");
         }
         other => panic!("{id}: unknown identity expectation {other}"),
@@ -358,10 +382,17 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
     let url = format!("https://{host}/{}", text(case, "suffix"));
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     match text(case, "expected") {
-        "foreign" => assert_eq!(row.code, ResolutionCode::ForeignRepository, "{id}"),
-        "unsupported-version-scope" => {
-            assert_eq!(row.code, ResolutionCode::UnsupportedVersionScope, "{id}");
-        }
+        "foreign" => assert!(
+            matches!(
+                &row,
+                Resolution::External(ExternalReference::ForeignRepository)
+            ),
+            "{id}: expected a foreign repository, got {row:?}"
+        ),
+        "unsupported-version-scope" => assert!(
+            matches!(&row, Resolution::UnsupportedVersion(_)),
+            "{id}: expected an unsupported version, got {row:?}"
+        ),
         expected => assert_eq!(
             intent
                 .target_kind
@@ -426,10 +457,44 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
             .get("github_line_fragment")
             .and_then(Value::as_bool)
             .unwrap();
-        destination.push_str(if line { "#L10" } else { "#sec" });
+        if line {
+            destination.push('#');
+            destination.push_str(
+                case.get("line_fragment")
+                    .and_then(Value::as_str)
+                    .unwrap_or("L1"),
+            );
+        } else {
+            destination.push_str("#sec");
+        }
     }
     let (_intent, row) = bed.run(None, "README.md", false, &destination);
-    assert_eq!(row.code.as_str(), text(case, "expected"), "{id}");
+    let expected = case.get("expected").unwrap();
+    assert_eq!(row.discriminant().as_ref(), text(expected, "kind"), "{id}");
+    let expected_reason = expected.get("reason").and_then(Value::as_str);
+    match &row {
+        Resolution::Resolved(_) => assert_eq!(expected_reason, None, "{id}"),
+        Resolution::Missing(missing @ Missing::LineFragmentOutOfRange { .. }) => {
+            assert_eq!(
+                Some(missing.discriminant().as_ref()),
+                expected_reason,
+                "{id}"
+            );
+        }
+        Resolution::UnsupportedSemantics(semantics) => {
+            assert_eq!(
+                Some(semantics.discriminant().as_ref()),
+                expected_reason,
+                "{id}"
+            );
+        }
+        Resolution::Missing(_)
+        | Resolution::TypeMismatch(_)
+        | Resolution::UnsupportedTarget(_)
+        | Resolution::UnsupportedVersion(_)
+        | Resolution::Invalid(_)
+        | Resolution::External(_) => panic!("{id}: unexpected boundary outcome: {row:?}"),
+    }
 }
 
 fn dialect_default_case(case: &Value, id: &str) {
@@ -488,11 +553,10 @@ fn dispatch(bed: &mut Bed, case: &Value) {
         "empty-native-destination" => {
             let source = text(case, "source_document");
             let (_intent, row) = bed.run(None, source, false, "");
-            assert_eq!(
-                row.path.as_ref().and_then(|path| path.as_str()),
-                Some(text(case, "expected")),
-                "{id}"
-            );
+            let Resolution::Resolved(Target::Blob(blob)) = &row else {
+                panic!("{id}: the empty destination did not resolve to its document: {row:?}");
+            };
+            assert_eq!(blob.path.as_str(), Some(text(case, "expected")), "{id}");
         }
         "external-scheme" => {
             let destination = format!("{}://example.com/a", text(case, "value"));
@@ -505,7 +569,18 @@ fn dispatch(bed: &mut Bed, case: &Value) {
         }
         "network-path" => {
             let (_intent, row) = bed.run(None, "README.md", false, text(case, "value"));
-            assert_eq!(row.code.as_str(), text(case, "expected"), "{id}");
+            let expected = case.get("expected").unwrap();
+            assert_eq!(row.discriminant().as_ref(), text(expected, "kind"), "{id}");
+            let Resolution::UnsupportedSemantics(semantics @ UnsupportedSemantics::NetworkPath) =
+                &row
+            else {
+                panic!("{id}: unexpected network-path outcome: {row:?}");
+            };
+            assert_eq!(
+                semantics.discriminant().as_ref(),
+                text(expected, "reason"),
+                "{id}"
+            );
         }
         "semantic-autolink" => {
             let document = match text(case, "form") {
@@ -547,7 +622,12 @@ fn dispatch(bed: &mut Bed, case: &Value) {
         "native-trailing-slash" => {
             let is_image = text(case, "construct").contains("image");
             let (_intent, row) = bed.run(None, "README.md", is_image, "docs/");
-            assert_eq!(row.code.as_str(), text(case, "expected"), "{id}");
+            let expected = case.get("expected").unwrap();
+            assert_eq!(row.discriminant().as_ref(), text(expected, "kind"), "{id}");
+            let Resolution::Invalid(invalid @ InvalidReference::Syntax) = &row else {
+                panic!("{id}: unexpected trailing-slash outcome: {row:?}");
+            };
+            assert_eq!(invalid.as_ref(), text(expected, "reason"), "{id}");
         }
         other => panic!("unknown operation {other}: the harness must learn the contract"),
     }

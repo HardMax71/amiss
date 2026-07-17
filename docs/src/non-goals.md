@@ -21,8 +21,10 @@ migration, merge-conflict, and trust-on-edit failure modes wholesale, at the pri
 answering a smaller question.
 
 It resolves the file portion of a relative link with a heading fragment, but it does not
-check the heading's slug. It also does not validate site routes, code symbols, live URLs, or
-other repositories. Those checks belong to a layer holding the right information: the site
+check the heading's slug. A recognized numeric line fragment is narrower: Amiss can select
+and compare those exact bytes, but cannot tell whether they still express the idea the prose
+intended. It also does not validate site routes, code symbols, live URLs, or other repositories.
+Those checks belong to a layer holding the right information: the site
 generator knows its routes and the language server knows its symbols. Where a supported
 construct reaches one of these boundaries, Amiss records the unsupported or out-of-scope
 semantics instead of guessing, because a guessed pass looks exactly like a real one until it

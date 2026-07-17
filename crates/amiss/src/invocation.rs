@@ -344,10 +344,14 @@ fn classify_forge(
 ) -> Option<ForgeDialect> {
     let declared = match (gathered.forge.present(), gathered.forge.unique_value()) {
         (false, _) => None,
-        (true, Some("github")) => Some(ForgeDialect::Github),
-        (true, Some("gitlab")) => Some(ForgeDialect::Gitlab),
-        (true, Some("gitea")) => Some(ForgeDialect::Gitea),
-        (true, Some(_) | None) => {
+        (true, Some(value)) => match value.parse::<ForgeDialect>() {
+            Ok(dialect) => Some(dialect),
+            Err(_unknown) => {
+                codes.insert(Code::InvalidInvocation);
+                return None;
+            }
+        },
+        (true, None) => {
             codes.insert(Code::InvalidInvocation);
             return None;
         }

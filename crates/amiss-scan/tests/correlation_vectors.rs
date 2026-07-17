@@ -11,11 +11,12 @@ use amiss_scan::correlate::{Observation, Outcome, Side, correlate};
 use amiss_scan::observe::intent_value;
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
-use amiss_wire::controls::{ContentAvailability, SourceConstruct, TargetKind};
+use amiss_wire::controls::{SourceConstruct, TargetKind};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::{IntentKind, ResolutionCode};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::ExternalReference;
 
 mod support;
 
@@ -207,15 +208,7 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
             "amiss/test-correlation-vector-projection",
             projection.as_bytes(),
         ),
-        resolution: Resolution {
-            code: ResolutionCode::ExternalUrl,
-            path: None,
-            entry_kind: None,
-            git_mode: None,
-            raw_digest: None,
-            projection_digest: None,
-            content_availability: ContentAvailability::NotApplicable,
-        },
+        resolution: Resolution::External(ExternalReference::Url),
     }
 }
 

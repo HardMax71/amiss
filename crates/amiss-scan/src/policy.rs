@@ -891,6 +891,9 @@ pub fn tightened_limits(
             ResourceName::AggregateReferencedTargetBytesPerSnapshot => {
                 Some(&mut scan.aggregate_referenced_target_bytes_per_snapshot)
             }
+            ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot => {
+                Some(&mut scan.aggregate_line_fragment_evaluation_bytes_per_snapshot)
+            }
             ResourceName::SelectedControlBlobBytes => Some(&mut scan.selected_control_blob_bytes),
             ResourceName::AggregateSelectedControlBytesPerSnapshot => {
                 Some(&mut scan.aggregate_selected_control_bytes_per_snapshot)

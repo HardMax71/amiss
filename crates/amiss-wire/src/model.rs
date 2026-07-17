@@ -1,3 +1,5 @@
+use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
+
 use crate::json::Value;
 
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
@@ -393,7 +395,8 @@ fn identity_byte(byte: u8) -> bool {
 
 /// The same-repository URL dialect a run applies: named in the report's
 /// evaluation and selecting the recognition grammar in the resolver.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum ForgeDialect {
     Github,
     Gitlab,
@@ -402,15 +405,14 @@ pub enum ForgeDialect {
 
 impl ForgeDialect {
     /// Every supported URL dialect in wire-contract order.
-    pub const ALL: [Self; 3] = [Self::Github, Self::Gitlab, Self::Gitea];
+    #[must_use]
+    pub fn all() -> impl ExactSizeIterator<Item = Self> {
+        Self::iter()
+    }
 
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Github => "github",
-            Self::Gitlab => "gitlab",
-            Self::Gitea => "gitea",
-        }
+    pub fn as_str(self) -> &'static str {
+        self.into()
     }
 
     /// The known-host default table; an explicit flag always wins over it.
@@ -495,7 +497,7 @@ fn oid_hex(object_format: ObjectFormat, raw: &str) -> bool {
 /// The three closed source adapters. Every wire string an adapter contributes
 /// (identity, grammar profile, frontmatter contract, projection, address
 /// scheme) is frozen here so no call site can spell one by hand.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
 pub enum Adapter {
     Markdown,
     Mdx,
@@ -503,7 +505,11 @@ pub enum Adapter {
 }
 
 impl Adapter {
-    pub const ALL: [Self; 3] = [Self::Markdown, Self::Mdx, Self::PlainAdvisory];
+    /// Every source adapter in wire-contract order.
+    #[must_use]
+    pub fn all() -> impl ExactSizeIterator<Item = Self> {
+        Self::iter()
+    }
 
     #[must_use]
     pub const fn adapter_id(self) -> &'static str {

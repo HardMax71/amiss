@@ -8,10 +8,14 @@ use amiss_scan::evaluate::{
 use amiss_scan::observe::occurrence_id;
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
-use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, SourceConstruct, TargetKind};
+use amiss_wire::controls::{SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, IntentKind, ResolutionCode};
+use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, IntentKind};
+use amiss_wire::resolution::{
+    BlobContent, BlobMode, BlobTarget, ExternalReference, InvalidReference, Missing, Target,
+    UnsupportedSemantics, UnsupportedTarget, VersionScope,
+};
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -31,16 +35,40 @@ fn repo_intent(path: &str) -> Intent {
     }
 }
 
-fn resolution(code: ResolutionCode, path: Option<&str>) -> Resolution {
-    Resolution {
-        code,
-        path: path.and_then(|p| RepoPath::new(p.to_owned())),
-        entry_kind: None,
-        git_mode: None,
-        raw_digest: None,
-        projection_digest: None,
-        content_availability: ContentAvailability::NotApplicable,
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn repo_path(path: &str) -> RepoPath {
+    RepoPath::new(path.to_owned()).unwrap()
+}
+
+fn available_blob(path: &str, body: &[u8]) -> BlobTarget<RepoPath> {
+    BlobTarget {
+        path: repo_path(path),
+        mode: BlobMode::Regular,
+        content: BlobContent::Available {
+            raw_digest: hb("amiss/raw-evidence", body),
+            projection_digest: hb("amiss/scanner-target-projection", body),
+        },
     }
+}
+
+fn resolved_blob(path: &str, body: &[u8]) -> Resolution {
+    Resolution::Resolved(Target::Blob(available_blob(path, body)))
+}
+
+fn lfs_pointer(path: &str) -> Resolution {
+    Resolution::Resolved(Target::Blob(BlobTarget {
+        path: repo_path(path),
+        mode: BlobMode::Regular,
+        content: BlobContent::LfsPointer {
+            raw_digest: hb("amiss/raw-evidence", b"lfs pointer"),
+        },
+    }))
+}
+
+fn path_not_found(path: &str) -> Resolution {
+    Resolution::Missing(Missing::PathNotFound {
+        path: repo_path(path),
+    })
 }
 
 struct Spec {
@@ -51,15 +79,22 @@ struct Spec {
     resolution: Resolution,
 }
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn spec(document: &str, target: &str, code: ResolutionCode) -> Spec {
+fn spec(document: &str, target: &str, resolution: Resolution) -> Spec {
     Spec {
-        document: RepoPath::new(document.to_owned()).unwrap(),
+        document: repo_path(document),
         node_path: vec![0, 0],
         block: format!("see [x]({target})"),
         intent: repo_intent(target),
-        resolution: resolution(code, Some(target)),
+        resolution,
     }
+}
+
+fn resolved_spec(document: &str, target: &str) -> Spec {
+    spec(document, target, resolved_blob(target, target.as_bytes()))
+}
+
+fn missing_spec(document: &str, target: &str) -> Spec {
+    spec(document, target, path_not_found(target))
 }
 
 fn observation(from: &Spec) -> Observation {
@@ -178,38 +213,47 @@ fn document_findings_follow_step_one() {
 #[test]
 fn boundary_kinds_follow_the_mapping() {
     let rows = [
-        (ResolutionCode::PathTraversal, FindingKind::InvalidReference),
         (
-            ResolutionCode::UnsupportedFragmentSemantics,
+            Resolution::Invalid(InvalidReference::PathTraversal),
+            FindingKind::InvalidReference,
+        ),
+        (
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(available_blob(
+                "t.md", b"target",
+            ))),
             FindingKind::UnsupportedReferenceSemantics,
         ),
         (
-            ResolutionCode::SiteRouteUnsupported,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
             FindingKind::UnsupportedReferenceSemantics,
         ),
         (
-            ResolutionCode::UnsupportedVersionScope,
+            Resolution::UnsupportedVersion(VersionScope::KnownPath {
+                path: repo_path("t.md"),
+            }),
             FindingKind::UnsupportedVersionScope,
         ),
         (
-            ResolutionCode::SymlinkEntry,
+            Resolution::UnsupportedTarget(UnsupportedTarget::Symlink {
+                path: repo_path("t.md"),
+            }),
             FindingKind::UnsupportedTargetKind,
         ),
-        (ResolutionCode::ExternalUrl, FindingKind::ExternalOutOfScope),
+        (
+            Resolution::External(ExternalReference::Url),
+            FindingKind::ExternalOutOfScope,
+        ),
     ];
-    for (code, expected) in rows {
-        let candidate = observation(&spec("d.md", "t.md", code));
+    for (resolution, expected) in rows {
+        let candidate = observation(&spec("d.md", "t.md", resolution));
         let findings = evaluate(&[], &comparisons(Vec::new(), vec![candidate]), false);
         assert!(
             kinds(&findings).contains(&expected),
-            "{code:?} emits {expected:?}"
+            "typed boundary emits {expected:?}"
         );
     }
 
-    let mut pointer = spec("d.md", "t.md", ResolutionCode::ExactPath);
-    pointer.resolution.content_availability = ContentAvailability::LfsPointerOnly;
-    pointer.resolution.entry_kind = Some(EntryKind::Blob);
-    pointer.resolution.git_mode = Some(GitMode::RegularFile);
+    let pointer = spec("d.md", "t.md", lfs_pointer("t.md"));
     let findings = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&pointer)]),
@@ -224,8 +268,8 @@ fn boundary_kinds_follow_the_mapping() {
 
 #[test]
 fn structural_findings_aggregate_and_attribute() {
-    let missing = spec("d.md", "absent.md", ResolutionCode::PathNotFound);
-    let mut second = spec("d.md", "absent.md", ResolutionCode::PathNotFound);
+    let missing = missing_spec("d.md", "absent.md");
+    let mut second = missing_spec("d.md", "absent.md");
     second.node_path = vec![3, 1];
 
     let introduced = evaluate(
@@ -285,9 +329,35 @@ fn structural_findings_aggregate_and_attribute() {
 }
 
 #[test]
+fn every_missing_reason_emits_the_structural_finding() {
+    let rows = [
+        (
+            "absent.md",
+            Missing::PathNotFound {
+                path: repo_path("absent.md"),
+            },
+        ),
+        (
+            "target.rs",
+            Missing::LineFragmentOutOfRange {
+                path: repo_path("target.rs"),
+            },
+        ),
+    ];
+    for (target, missing) in rows {
+        let candidate = observation(&spec("d.md", target, Resolution::Missing(missing)));
+        let findings = evaluate(&[], &comparisons(Vec::new(), vec![candidate]), false);
+        assert!(
+            kinds(&findings).contains(&FindingKind::ExplicitTargetMissing),
+            "every typed missing reason is structural"
+        );
+    }
+}
+
+#[test]
 fn unknown_attribution_needs_unequal_facts_on_one_key() {
-    let base = spec("d.md", "absent.md", ResolutionCode::PathNotFound);
-    let mut doubled = spec("d.md", "absent.md", ResolutionCode::PathNotFound);
+    let base = missing_spec("d.md", "absent.md");
+    let mut doubled = missing_spec("d.md", "absent.md");
     doubled.node_path = vec![7, 0];
     let findings = evaluate(
         &[],
@@ -307,7 +377,7 @@ fn unknown_attribution_needs_unequal_facts_on_one_key() {
 
 #[test]
 fn comparison_findings_follow_step_four() {
-    let removed_spec = spec("d.md", "t.md", ResolutionCode::ExactPath);
+    let removed_spec = resolved_spec("d.md", "t.md");
     let findings = evaluate(
         &[],
         &comparisons(vec![observation(&removed_spec)], Vec::new()),
@@ -317,11 +387,11 @@ fn comparison_findings_follow_step_four() {
     assert_eq!(removed.location.side, LocationSide::Base);
     assert_eq!(removed.configured_disposition, Disposition::Warn);
 
-    let mut lone_base = spec("d.md", "t.md", ResolutionCode::ExactPath);
+    let mut lone_base = resolved_spec("d.md", "t.md");
     lone_base.block = "base wording [x](t.md)".to_owned();
-    let mut one = spec("d.md", "t.md", ResolutionCode::ExactPath);
+    let mut one = resolved_spec("d.md", "t.md");
     one.block = "first candidate [x](t.md)".to_owned();
-    let mut two = spec("d.md", "t.md", ResolutionCode::ExactPath);
+    let mut two = resolved_spec("d.md", "t.md");
     two.block = "second candidate [x](t.md)".to_owned();
     two.node_path = vec![9, 9];
     let ambiguous = evaluate(
@@ -335,13 +405,8 @@ fn comparison_findings_follow_step_four() {
     let finding = only(ambiguous, FindingKind::ObservationCorrelationAmbiguous);
     assert_eq!(finding.member_count, 1);
 
-    let mut base_available = spec("d.md", "t.md", ResolutionCode::ExactPath);
-    base_available.resolution.content_availability = ContentAvailability::Available;
-    base_available.resolution.projection_digest =
-        Some(hb("amiss/scanner-target-projection", b"before"));
-    let mut candidate_available = base_available_clone(&base_available);
-    candidate_available.resolution.projection_digest =
-        Some(hb("amiss/scanner-target-projection", b"after"));
+    let base_available = spec("d.md", "t.md", resolved_blob("t.md", b"before"));
+    let candidate_available = spec("d.md", "t.md", resolved_blob("t.md", b"after"));
     let impact = evaluate(
         &[],
         &comparisons(
@@ -355,20 +420,10 @@ fn comparison_findings_follow_step_four() {
     assert_eq!(finding.attribution, Attribution::NotApplicable);
 }
 
-fn base_available_clone(from: &Spec) -> Spec {
-    Spec {
-        document: from.document.clone(),
-        node_path: from.node_path.clone(),
-        block: from.block.clone(),
-        intent: from.intent.clone(),
-        resolution: from.resolution.clone(),
-    }
-}
-
 #[test]
 fn findings_sort_by_canonical_key() {
-    let one = spec("a.md", "missing-one.md", ResolutionCode::PathNotFound);
-    let two = spec("b.md", "missing-two.md", ResolutionCode::PathNotFound);
+    let one = missing_spec("a.md", "missing-one.md");
+    let two = missing_spec("b.md", "missing-two.md");
     let findings = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&one), observation(&two)]),

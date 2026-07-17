@@ -141,12 +141,9 @@ impl EvaluationRequest {
 }
 
 fn decode_forge(path: &str, value: Value) -> Result<ForgeDialect, Error> {
-    match de::string(path, value)?.as_str() {
-        "github" => Ok(ForgeDialect::Github),
-        "gitlab" => Ok(ForgeDialect::Gitlab),
-        "gitea" => Ok(ForgeDialect::Gitea),
-        _ => fail(path, ErrorKind::InvalidValue),
-    }
+    let raw = de::string(path, value)?;
+    raw.parse()
+        .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
 }
 
 fn decode_ref(path: &str, value: Value) -> Result<BranchRef, Error> {

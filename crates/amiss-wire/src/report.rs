@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
 
+use strum::{EnumIter, IntoEnumIterator, IntoStaticStr};
+
 use crate::digest::{Digest, hj};
 use crate::json::{Scratch, Sink, Value, canonical, canonical_length};
 use crate::model::Adapter;
@@ -481,10 +483,9 @@ pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, 
 /// version, and the three adapter descriptors with their digests.
 #[must_use]
 pub fn engine_block(engine: &EngineProvenance) -> Value {
-    let adapter_rows: Vec<Value> = Adapter::ALL
-        .iter()
+    let adapter_rows: Vec<Value> = Adapter::all()
         .map(|adapter| {
-            let (descriptor, digest) = adapter_contract(engine, *adapter);
+            let (descriptor, digest) = adapter_contract(engine, adapter);
             object(vec![
                 ("adapter_id", string(adapter.adapter_id())),
                 ("contract_descriptor", descriptor),
@@ -577,113 +578,6 @@ fn string(value: &str) -> Value {
     Value::String(value.to_owned())
 }
 
-/// The six resolution statuses. The status is total in the code: no other
-/// pairing exists.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ResolutionStatus {
-    Resolved,
-    Missing,
-    TypeMismatch,
-    Unsupported,
-    Invalid,
-    ExternalOutOfScope,
-}
-
-impl ResolutionStatus {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Resolved => "resolved",
-            Self::Missing => "missing",
-            Self::TypeMismatch => "type-mismatch",
-            Self::Unsupported => "unsupported",
-            Self::Invalid => "invalid",
-            Self::ExternalOutOfScope => "external-out-of-scope",
-        }
-    }
-}
-
-/// The closed resolution codes in schema declaration order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ResolutionCode {
-    ExactPath,
-    PathNotFound,
-    TargetTypeMismatch,
-    SymlinkEntry,
-    GitlinkEntry,
-    UnsupportedQuerySemantics,
-    UnsupportedFragmentSemantics,
-    UnsupportedVersionScope,
-    SiteRouteUnsupported,
-    NetworkPathUnsupported,
-    CodeFragmentUnevaluated,
-    InvalidUri,
-    InvalidPercentEncoding,
-    DecodedPathControl,
-    PathTraversal,
-    BackslashSeparator,
-    EncodedSlash,
-    InvalidFragmentEncoding,
-    InvalidReference,
-    ExternalUrl,
-    ForeignRepository,
-}
-
-impl ResolutionCode {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ExactPath => "exact-path",
-            Self::PathNotFound => "path-not-found",
-            Self::TargetTypeMismatch => "target-type-mismatch",
-            Self::SymlinkEntry => "symlink-entry",
-            Self::GitlinkEntry => "gitlink-entry",
-            Self::UnsupportedQuerySemantics => "unsupported-query-semantics",
-            Self::UnsupportedFragmentSemantics => "unsupported-fragment-semantics",
-            Self::UnsupportedVersionScope => "unsupported-version-scope",
-            Self::SiteRouteUnsupported => "site-route-unsupported",
-            Self::NetworkPathUnsupported => "network-path-unsupported",
-            Self::CodeFragmentUnevaluated => "code-fragment-unevaluated",
-            Self::InvalidUri => "invalid-uri",
-            Self::InvalidPercentEncoding => "invalid-percent-encoding",
-            Self::DecodedPathControl => "decoded-path-control",
-            Self::PathTraversal => "path-traversal",
-            Self::BackslashSeparator => "backslash-separator",
-            Self::EncodedSlash => "encoded-slash",
-            Self::InvalidFragmentEncoding => "invalid-fragment-encoding",
-            Self::InvalidReference => "invalid-reference",
-            Self::ExternalUrl => "external-url",
-            Self::ForeignRepository => "foreign-repository",
-        }
-    }
-
-    #[must_use]
-    pub const fn status(self) -> ResolutionStatus {
-        match self {
-            Self::ExactPath => ResolutionStatus::Resolved,
-            Self::PathNotFound => ResolutionStatus::Missing,
-            Self::TargetTypeMismatch => ResolutionStatus::TypeMismatch,
-            Self::SymlinkEntry
-            | Self::GitlinkEntry
-            | Self::UnsupportedQuerySemantics
-            | Self::UnsupportedFragmentSemantics
-            | Self::UnsupportedVersionScope
-            | Self::SiteRouteUnsupported
-            | Self::NetworkPathUnsupported
-            | Self::CodeFragmentUnevaluated => ResolutionStatus::Unsupported,
-            Self::InvalidUri
-            | Self::InvalidPercentEncoding
-            | Self::DecodedPathControl
-            | Self::PathTraversal
-            | Self::BackslashSeparator
-            | Self::EncodedSlash
-            | Self::InvalidFragmentEncoding
-            | Self::InvalidReference => ResolutionStatus::Invalid,
-            Self::ExternalUrl | Self::ForeignRepository => ResolutionStatus::ExternalOutOfScope,
-        }
-    }
-}
-
 /// The target-intent variants an occurrence can carry, in schema
 /// declaration order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -741,7 +635,8 @@ impl Disposition {
 }
 
 /// The complete closed finding taxonomy, in schema declaration order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum FindingKind {
     ExplicitTargetMissing,
     ExplicitTargetTypeMismatch,
@@ -771,61 +666,14 @@ pub enum FindingKind {
 
 impl FindingKind {
     /// Every finding kind in schema declaration order.
-    pub const ALL: [Self; 24] = [
-        Self::ExplicitTargetMissing,
-        Self::ExplicitTargetTypeMismatch,
-        Self::InvalidReference,
-        Self::UnsupportedReferenceSemantics,
-        Self::UnsupportedDocumentFormat,
-        Self::UnsupportedTargetKind,
-        Self::UnsupportedVersionScope,
-        Self::UnsupportedCapability,
-        Self::DependencyChangedSubjectUnchanged,
-        Self::DependencyAndSubjectCochanged,
-        Self::SubjectChanged,
-        Self::ExplicitReferenceRemoved,
-        Self::DocumentRemoved,
-        Self::ExternalOutOfScope,
-        Self::OpaqueMdxRegion,
-        Self::OpaqueHtmlRegion,
-        Self::ObservationCorrelationAmbiguous,
-        Self::UnlinkedDocument,
-        Self::PolicyWeakened,
-        Self::CoverageReduced,
-        Self::ControlPlaneChanged,
-        Self::DebtWorsened,
-        Self::DebtExpired,
-        Self::WaiverInvalid,
-    ];
+    #[must_use]
+    pub fn all() -> impl ExactSizeIterator<Item = Self> {
+        Self::iter()
+    }
 
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ExplicitTargetMissing => "explicit-target-missing",
-            Self::ExplicitTargetTypeMismatch => "explicit-target-type-mismatch",
-            Self::InvalidReference => "invalid-reference",
-            Self::UnsupportedReferenceSemantics => "unsupported-reference-semantics",
-            Self::UnsupportedDocumentFormat => "unsupported-document-format",
-            Self::UnsupportedTargetKind => "unsupported-target-kind",
-            Self::UnsupportedVersionScope => "unsupported-version-scope",
-            Self::UnsupportedCapability => "unsupported-capability",
-            Self::DependencyChangedSubjectUnchanged => "dependency-changed-subject-unchanged",
-            Self::DependencyAndSubjectCochanged => "dependency-and-subject-cochanged",
-            Self::SubjectChanged => "subject-changed",
-            Self::ExplicitReferenceRemoved => "explicit-reference-removed",
-            Self::DocumentRemoved => "document-removed",
-            Self::ExternalOutOfScope => "external-out-of-scope",
-            Self::OpaqueMdxRegion => "opaque-mdx-region",
-            Self::OpaqueHtmlRegion => "opaque-html-region",
-            Self::ObservationCorrelationAmbiguous => "observation-correlation-ambiguous",
-            Self::UnlinkedDocument => "unlinked-document",
-            Self::PolicyWeakened => "policy-weakened",
-            Self::CoverageReduced => "coverage-reduced",
-            Self::ControlPlaneChanged => "control-plane-changed",
-            Self::DebtWorsened => "debt-worsened",
-            Self::DebtExpired => "debt-expired",
-            Self::WaiverInvalid => "waiver-invalid",
-        }
+    pub fn as_str(self) -> &'static str {
+        self.into()
     }
 
     /// The closed key-scope assignment.

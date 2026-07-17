@@ -1,11 +1,17 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
-use amiss_wire::controls::{ContentAvailability, EntryKind, GitMode, ResourceName, TargetKind};
+use amiss_md::lines::scan;
+use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{ForgeDialect, Oid, RepoPath};
-use amiss_wire::report::{IntentKind, ResolutionCode};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::{
+    BlobContent, BlobMode, BlobTarget, ExternalReference, InvalidReference, Missing,
+    Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget,
+};
 
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::classify;
@@ -18,6 +24,7 @@ mod forge;
 
 pub use amiss_wire::digest::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
+pub const TARGET_LINE_PROJECTION_DOMAIN: &str = "amiss/scanner-target-line-projection";
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
 
@@ -34,18 +41,8 @@ pub struct Intent {
     pub fragment: Option<String>,
 }
 
-/// One occurrence's sole resolution row, with exactly the entry and content
-/// fields its status and code retain.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Resolution {
-    pub code: ResolutionCode,
-    pub path: Option<RepoPath>,
-    pub entry_kind: Option<EntryKind>,
-    pub git_mode: Option<GitMode>,
-    pub raw_digest: Option<Digest>,
-    pub projection_digest: Option<Digest>,
-    pub content_availability: ContentAvailability,
-}
+/// One occurrence's typed resolution against a binary-safe repository path.
+pub type Resolution = WireResolution<RepoPath>;
 
 /// The trusted run context for same-repository recognition: the declared
 /// host and dialect, lowercase owner and repository, the two exact full
@@ -71,28 +68,63 @@ fn same_repo_suffix<'a>(path_part: &'a str, host: &str) -> Option<&'a str> {
         .strip_prefix('/')
 }
 
-/// Referenced targets are read once per distinct path; the aggregate budget
-/// charges on the first read only.
+/// Referenced targets are read once per path and Git object within one scan
+/// resource scope. Reusing a cache with another scope clears its evidence.
 #[derive(Debug, Default)]
 pub struct TargetCache {
-    read: BTreeMap<RepoPath, Content>,
+    scope: Option<Arc<()>>,
+    read: BTreeMap<RepoPath, CachedContent>,
 }
 
-#[derive(Clone, Debug)]
+impl TargetCache {
+    fn bind(&mut self, scope: &Arc<()>) {
+        if self
+            .scope
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, scope))
+        {
+            return;
+        }
+        self.read.clear();
+        self.scope = Some(Arc::clone(scope));
+    }
+}
+
+#[derive(Debug)]
+struct CachedContent {
+    mode: GitMode,
+    oid: Oid,
+    content: Content,
+}
+
+#[derive(Debug)]
 enum Content {
-    Ordinary { raw: Digest, projection: Digest },
-    Pointer { raw: Digest },
+    Ordinary {
+        raw_digest: Digest,
+        projection_digest: Digest,
+        body: Box<[u8]>,
+        line_projections: BTreeMap<LineRange, Option<Digest>>,
+    },
+    LfsPointer {
+        raw_digest: Digest,
+    },
 }
 
-fn null_row(code: ResolutionCode) -> Resolution {
-    Resolution {
-        code,
-        path: None,
-        entry_kind: None,
-        git_mode: None,
-        raw_digest: None,
-        projection_digest: None,
-        content_availability: ContentAvailability::NotApplicable,
+impl Content {
+    const fn evidence(&self) -> BlobContent {
+        match self {
+            Self::Ordinary {
+                raw_digest,
+                projection_digest,
+                ..
+            } => BlobContent::Available {
+                raw_digest: *raw_digest,
+                projection_digest: *projection_digest,
+            },
+            Self::LfsPointer { raw_digest } => BlobContent::LfsPointer {
+                raw_digest: *raw_digest,
+            },
+        }
     }
 }
 
@@ -131,6 +163,7 @@ pub fn resolve(
     is_image: bool,
     semantic: &str,
 ) -> Result<(Intent, Resolution), Error> {
+    cache.bind(scan.cache_scope());
     let (path_part, query, fragment) = split_components(semantic);
 
     if let Some(raw_fragment) = &fragment
@@ -138,14 +171,14 @@ pub fn resolve(
     {
         return Ok((
             unsupported_intent(query, fragment.clone()),
-            null_row(ResolutionCode::InvalidFragmentEncoding),
+            Resolution::Invalid(InvalidReference::FragmentEncoding),
         ));
     }
 
     if path_part.starts_with("//") {
         return Ok((
             unsupported_intent(query, fragment),
-            null_row(ResolutionCode::NetworkPathUnsupported),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
         ));
     }
     if let Some(scheme) = scheme_of(&path_part) {
@@ -163,7 +196,7 @@ pub fn resolve(
                 query,
                 fragment,
             },
-            null_row(ResolutionCode::SiteRouteUnsupported),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
         ));
     }
     native(
@@ -177,6 +210,7 @@ pub fn resolve(
         &path_part,
         query,
         fragment,
+        context.map(|identity| identity.dialect),
     )
 }
 
@@ -216,26 +250,9 @@ fn scheme_of(path_part: &str) -> Option<String> {
     None
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DecodeDefect {
-    Escape,
-    Control,
-    Slash,
-    Backslash,
-}
-
-const fn defect_code(defect: DecodeDefect) -> ResolutionCode {
-    match defect {
-        DecodeDefect::Escape => ResolutionCode::InvalidPercentEncoding,
-        DecodeDefect::Control => ResolutionCode::DecodedPathControl,
-        DecodeDefect::Slash => ResolutionCode::EncodedSlash,
-        DecodeDefect::Backslash => ResolutionCode::BackslashSeparator,
-    }
-}
-
 /// One percent decode, never repeated: `%25` becomes a literal `%` and stays
 /// one.
-fn decode_bytes(text: &str) -> Result<Vec<u8>, DecodeDefect> {
+fn decode_bytes(text: &str) -> Result<Vec<u8>, Resolution> {
     let bytes = text.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut at = 0_usize;
@@ -244,10 +261,10 @@ fn decode_bytes(text: &str) -> Result<Vec<u8>, DecodeDefect> {
             let high = bytes.get(at.saturating_add(1)).copied();
             let low = bytes.get(at.saturating_add(2)).copied();
             let (Some(high), Some(low)) = (high, low) else {
-                return Err(DecodeDefect::Escape);
+                return Err(Resolution::Invalid(InvalidReference::PercentEncoding));
             };
             let (Some(high), Some(low)) = (hex_value(high), hex_value(low)) else {
-                return Err(DecodeDefect::Escape);
+                return Err(Resolution::Invalid(InvalidReference::PercentEncoding));
             };
             out.push(high.wrapping_shl(4) | low);
             at = at.saturating_add(3);
@@ -263,13 +280,15 @@ fn decode_bytes(text: &str) -> Result<Vec<u8>, DecodeDefect> {
 /// separator, so a decoded slash could only create one; a decoded backslash,
 /// control, or NUL is a defect either way. Bytes outside UTF-8 are ordinary
 /// path bytes.
-fn decode_segment(segment: &str) -> Result<Vec<u8>, DecodeDefect> {
+fn decode_segment(segment: &str) -> Result<Vec<u8>, Resolution> {
     let out = decode_bytes(segment)?;
     for &byte in &out {
         match byte {
-            b'/' => return Err(DecodeDefect::Slash),
-            b'\\' => return Err(DecodeDefect::Backslash),
-            0..=0x1f | 0x7f => return Err(DecodeDefect::Control),
+            b'/' => return Err(Resolution::Invalid(InvalidReference::EncodedSlash)),
+            b'\\' => return Err(Resolution::Invalid(InvalidReference::BackslashSeparator)),
+            0..=0x1f | 0x7f => {
+                return Err(Resolution::Invalid(InvalidReference::DecodedPathControl));
+            }
             _ => {}
         }
     }
@@ -320,7 +339,7 @@ fn absolute(
     let invalid = |query: Option<String>, fragment: Option<String>| {
         (
             unsupported_intent(query, fragment),
-            null_row(ResolutionCode::InvalidUri),
+            Resolution::Invalid(InvalidReference::Uri),
         )
     };
     if !uri_bytes_valid(path_part) || query.as_deref().is_some_and(|text| !uri_bytes_valid(text)) {
@@ -356,7 +375,7 @@ fn absolute(
             query,
             fragment,
         },
-        null_row(ResolutionCode::ExternalUrl),
+        Resolution::External(ExternalReference::Url),
     ))
 }
 
@@ -446,9 +465,10 @@ fn native(
     path_part: &str,
     query: Option<String>,
     fragment: Option<String>,
+    forge: Option<ForgeDialect>,
 ) -> Result<(Intent, Resolution), Error> {
-    let terminal = |code: ResolutionCode, query: Option<String>, fragment: Option<String>| {
-        (unsupported_intent(query, fragment), null_row(code))
+    let terminal = |resolution: Resolution, query: Option<String>, fragment: Option<String>| {
+        (unsupported_intent(query, fragment), resolution)
     };
 
     if path_part.is_empty() {
@@ -462,65 +482,12 @@ fn native(
             is_image,
             query.as_deref(),
             fragment.as_deref(),
+            forge,
         );
     }
-    if path_part.contains('\\') {
-        return Ok(terminal(
-            ResolutionCode::BackslashSeparator,
-            query,
-            fragment,
-        ));
-    }
-
-    let mut segments: Vec<&str> = path_part.split('/').collect();
-    let trailing_slash = segments.len() > 1 && segments.last() == Some(&"");
-    if trailing_slash {
-        segments.pop();
-    }
-    if segments.iter().any(|segment| segment.is_empty()) {
-        return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
-    }
-    let target_kind = if trailing_slash {
-        if is_image {
-            return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
-        }
-        TargetKind::Tree
-    } else if is_image {
-        TargetKind::Blob
-    } else {
-        TargetKind::Either
-    };
-
-    let raw_document = document_path.as_bytes();
-    let mut resolved: Vec<Vec<u8>> = match raw_document.iter().rposition(|byte| *byte == b'/') {
-        Some(split) => raw_document
-            .get(..split)
-            .unwrap_or_default()
-            .split(|byte| *byte == b'/')
-            .map(<[u8]>::to_vec)
-            .collect(),
-        None => Vec::new(),
-    };
-    for segment in segments {
-        let decoded = match decode_segment(segment) {
-            Ok(bytes) => bytes,
-            Err(defect) => return Ok(terminal(defect_code(defect), query, fragment)),
-        };
-        match decoded.as_slice() {
-            b"." => {}
-            b".." => {
-                if resolved.pop().is_none() {
-                    return Ok(terminal(ResolutionCode::PathTraversal, query, fragment));
-                }
-            }
-            _ => resolved.push(decoded),
-        }
-    }
-    if resolved.is_empty() {
-        return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
-    }
-    let Some(joined) = RepoPath::from_bytes(resolved.join(&b'/')) else {
-        return Ok(terminal(ResolutionCode::InvalidReference, query, fragment));
+    let (joined, target_kind) = match normalized_native_path(document_path, is_image, path_part) {
+        Ok(target) => target,
+        Err(resolution) => return Ok(terminal(resolution, query, fragment)),
     };
 
     let intent = Intent {
@@ -541,9 +508,61 @@ fn native(
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
-        None,
+        forge,
     )?;
     Ok((intent, row))
+}
+
+fn normalized_native_path(
+    document_path: &RepoPath,
+    is_image: bool,
+    path_part: &str,
+) -> Result<(RepoPath, TargetKind), Resolution> {
+    if path_part.contains('\\') {
+        return Err(Resolution::Invalid(InvalidReference::BackslashSeparator));
+    }
+    let mut segments: Vec<&str> = path_part.split('/').collect();
+    let trailing_slash = segments.len() > 1 && segments.last() == Some(&"");
+    if trailing_slash {
+        segments.pop();
+    }
+    if segments.iter().any(|segment| segment.is_empty()) || (trailing_slash && is_image) {
+        return Err(Resolution::Invalid(InvalidReference::Syntax));
+    }
+    let target_kind = if trailing_slash {
+        TargetKind::Tree
+    } else if is_image {
+        TargetKind::Blob
+    } else {
+        TargetKind::Either
+    };
+
+    let raw_document = document_path.as_bytes();
+    let mut resolved: Vec<Vec<u8>> = match raw_document.iter().rposition(|byte| *byte == b'/') {
+        Some(split) => raw_document
+            .get(..split)
+            .unwrap_or_default()
+            .split(|byte| *byte == b'/')
+            .map(<[u8]>::to_vec)
+            .collect(),
+        None => Vec::new(),
+    };
+    for segment in segments {
+        let decoded = decode_segment(segment)?;
+        match decoded.as_slice() {
+            b"." => {}
+            b".." => {
+                if resolved.pop().is_none() {
+                    return Err(Resolution::Invalid(InvalidReference::PathTraversal));
+                }
+            }
+            _ => resolved.push(decoded),
+        }
+    }
+    let Some(joined) = RepoPath::from_bytes(resolved.join(&b'/')) else {
+        return Err(Resolution::Invalid(InvalidReference::Syntax));
+    };
+    Ok((joined, target_kind))
 }
 
 /// An empty native destination targets the source document itself, whether
@@ -562,6 +581,7 @@ fn self_target(
     is_image: bool,
     query: Option<&str>,
     fragment: Option<&str>,
+    forge: Option<ForgeDialect>,
 ) -> Result<(Intent, Resolution), Error> {
     let self_kind = if is_image {
         TargetKind::Blob
@@ -586,28 +606,19 @@ fn self_target(
         self_kind,
         query,
         fragment,
-        None,
+        forge,
     )?;
     Ok((intent, row))
 }
 
-/// A resolved directory. A tree target has no content to read: it participates
-/// in structural resolution only, so it carries no digest and no availability,
-/// which is what lets an index answer for one without a tree identity.
-fn tree_row(path: &RepoPath) -> Resolution {
-    Resolution {
-        code: ResolutionCode::ExactPath,
-        path: Some(path.clone()),
-        entry_kind: Some(EntryKind::Tree),
-        git_mode: Some(GitMode::Tree),
-        raw_digest: None,
-        projection_digest: None,
-        content_availability: ContentAvailability::NotApplicable,
-    }
+/// A located directory. A tree target has no content to read, which lets an
+/// index answer for one without a tree identity.
+fn tree_target(path: &RepoPath) -> Target<RepoPath> {
+    Target::Tree { path: path.clone() }
 }
 
-/// A resolved regular file, with its content read and digested under the caps.
-fn blob_row(
+/// A located regular file, with its content read and digested under the caps.
+fn blob_target(
     repo: &Repository,
     git: &mut GitResources,
     scan: &mut ScanResources,
@@ -615,29 +626,24 @@ fn blob_row(
     path: &RepoPath,
     mode: GitMode,
     oid: &Oid,
-) -> Result<Resolution, Error> {
+) -> Result<Target<RepoPath>, Error> {
     let content = read_target(repo, git, scan, cache, path, mode, oid)?;
-    let (raw, projection, availability) = match content {
-        Content::Ordinary { raw, projection } => {
-            (Some(raw), Some(projection), ContentAvailability::Available)
-        }
-        Content::Pointer { raw } => (Some(raw), None, ContentAvailability::LfsPointerOnly),
+    let mode = match mode {
+        GitMode::RegularFile => BlobMode::Regular,
+        GitMode::ExecutableFile => BlobMode::Executable,
+        GitMode::Tree | GitMode::Symlink | GitMode::Gitlink => return Err(Error::Internal),
     };
-    Ok(Resolution {
-        code: ResolutionCode::ExactPath,
-        path: Some(path.clone()),
-        entry_kind: Some(EntryKind::Blob),
-        git_mode: Some(mode),
-        raw_digest: raw,
-        projection_digest: projection,
-        content_availability: availability,
-    })
+    Ok(Target::Blob(BlobTarget {
+        path: path.clone(),
+        mode,
+        content,
+    }))
 }
 
 /// Steps four through ten: exact lookup, special entries, kind compatibility,
 /// content availability, query semantics, fragment semantics, and only then
-/// `resolved/exact-path`. Compatible entry fields survive the query and
-/// fragment boundary rows.
+/// a resolved target. The typed target survives query and fragment boundary
+/// outcomes so downstream consumers retain the evidence they can evaluate.
 #[expect(
     clippy::too_many_arguments,
     reason = "the resolver context is the contract's"
@@ -654,40 +660,27 @@ fn lookup(
     fragment: Option<&str>,
     forge: Option<ForgeDialect>,
 ) -> Result<Resolution, Error> {
-    let special = |code: ResolutionCode, entry_kind: EntryKind, mode: GitMode| Resolution {
-        code,
-        path: Some(path.clone()),
-        entry_kind: Some(entry_kind),
-        git_mode: Some(mode),
-        raw_digest: None,
-        projection_digest: None,
-        content_availability: ContentAvailability::NotRead,
-    };
     let (mode, entry) = match snapshot.locate(path) {
         None => {
-            let mut row = null_row(ResolutionCode::PathNotFound);
-            row.path = Some(path.clone());
-            return Ok(row);
+            return Ok(Resolution::Missing(Missing::PathNotFound {
+                path: path.clone(),
+            }));
         }
         Some(Located::Entry(GitMode::Symlink, _)) => {
-            return Ok(special(
-                ResolutionCode::SymlinkEntry,
-                EntryKind::Symlink,
-                GitMode::Symlink,
-            ));
+            return Ok(Resolution::UnsupportedTarget(UnsupportedTarget::Symlink {
+                path: path.clone(),
+            }));
         }
         Some(Located::Entry(GitMode::Gitlink, _)) => {
-            return Ok(special(
-                ResolutionCode::GitlinkEntry,
-                EntryKind::Gitlink,
-                GitMode::Gitlink,
-            ));
+            return Ok(Resolution::UnsupportedTarget(UnsupportedTarget::Gitlink {
+                path: path.clone(),
+            }));
         }
         Some(Located::ImpliedTree | Located::Entry(GitMode::Tree, _)) => {
-            (GitMode::Tree, tree_row(path))
+            (GitMode::Tree, tree_target(path))
         }
         Some(Located::Entry(mode @ (GitMode::RegularFile | GitMode::ExecutableFile), oid)) => {
-            (mode, blob_row(repo, git, scan, cache, path, mode, oid)?)
+            (mode, blob_target(repo, git, scan, cache, path, mode, oid)?)
         }
     };
 
@@ -698,10 +691,7 @@ fn lookup(
         TargetKind::Either => true,
     };
     if !compatible {
-        return Ok(Resolution {
-            code: ResolutionCode::TargetTypeMismatch,
-            ..entry
-        });
+        return Ok(Resolution::TypeMismatch(entry));
     }
 
     if query.is_some() {
@@ -710,10 +700,9 @@ fn lookup(
                 .is_some_and(|class| class != crate::Classification::PlainAdvisory)
             && snapshot.is_scanned_structured(path);
         if !accepted {
-            return Ok(Resolution {
-                code: ResolutionCode::UnsupportedQuerySemantics,
-                ..entry
-            });
+            return Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::Query(entry),
+            ));
         }
     }
 
@@ -721,23 +710,100 @@ fn lookup(
         && !raw_fragment.is_empty()
     {
         let decoded = decode_fragment(raw_fragment).unwrap_or_default();
-        let code = if (forge.is_some() && is_tree) || line_fragment(forge, &decoded) {
-            ResolutionCode::CodeFragmentUnevaluated
-        } else if !is_tree && classify(path.as_bytes()).is_some() {
-            ResolutionCode::UnsupportedFragmentSemantics
-        } else {
-            ResolutionCode::CodeFragmentUnevaluated
-        };
-        return Ok(Resolution { code, ..entry });
+        if is_tree {
+            return Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::CodeFragment(entry),
+            ));
+        }
+        if let Some(range) = line_fragment(forge, &decoded) {
+            let Target::Blob(blob) = entry else {
+                return Err(Error::Internal);
+            };
+            return line_resolution(scan, cache, path, mode, blob, range);
+        }
+        if classify(path.as_bytes()).is_some() {
+            let Target::Blob(blob) = entry else {
+                return Err(Error::Internal);
+            };
+            return Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::Fragment(blob),
+            ));
+        }
+        return Ok(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::CodeFragment(entry),
+        ));
     }
-    Ok(entry)
+    Ok(Resolution::Resolved(entry))
+}
+
+/// An inclusive, one-indexed selection of raw source lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct LineRange {
+    first: u64,
+    last: u64,
+}
+
+fn line_resolution(
+    scan_resources: &mut ScanResources,
+    cache: &mut TargetCache,
+    path: &RepoPath,
+    mode: GitMode,
+    mut blob: BlobTarget<RepoPath>,
+    range: LineRange,
+) -> Result<Resolution, Error> {
+    let Some(cached) = cache.read.get_mut(path) else {
+        return Err(Error::Internal);
+    };
+    if cached.mode != mode || cached.content.evidence() != blob.content {
+        return Err(Error::Internal);
+    }
+    let Content::Ordinary {
+        body,
+        line_projections,
+        ..
+    } = &mut cached.content
+    else {
+        return Ok(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
+        ));
+    };
+
+    let projection = if let Some(cached) = line_projections.get(&range).copied() {
+        cached
+    } else {
+        scan_resources.charge_line_fragment_bytes(u64::try_from(body.len()).unwrap_or(u64::MAX))?;
+        let projection = selected_line_bytes(body, range).map(|selected| {
+            target_projection(
+                TARGET_LINE_PROJECTION_DOMAIN,
+                mode,
+                hb(RAW_EVIDENCE_DOMAIN, selected),
+            )
+        });
+        line_projections.insert(range, projection);
+        projection
+    };
+
+    let Some(projection_digest) = projection else {
+        return Ok(Resolution::Missing(Missing::LineFragmentOutOfRange {
+            path: path.clone(),
+        }));
+    };
+    let BlobContent::Available { raw_digest, .. } = blob.content else {
+        return Err(Error::Internal);
+    };
+    blob.content = BlobContent::Available {
+        raw_digest,
+        projection_digest,
+    };
+    Ok(Resolution::Resolved(Target::Blob(blob)))
 }
 
 /// Line-fragment syntax after one decode, in the dialect's spelling:
 /// `L<n>` alone, or the range form the forge renders. First digit nonzero,
 /// at most sixteen digits, each number within the safe range, and a range
-/// end at least its start. Native references keep the GitHub grammar.
-fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> bool {
+/// end at least its start. A native reference uses the declared run dialect,
+/// falling back to the GitHub/Gitea spelling when no forge context exists.
+fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> Option<LineRange> {
     fn number(text: &str) -> Option<u64> {
         let bytes = text.as_bytes();
         if bytes.is_empty() || bytes.len() > 16 || bytes.first() == Some(&b'0') {
@@ -748,25 +814,61 @@ fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> bool {
         }
         text.parse::<u64>().ok().filter(|value| *value <= MAX_SAFE)
     }
-    let Some(rest) = decoded.strip_prefix('L') else {
-        return false;
-    };
+    let rest = decoded.strip_prefix('L')?;
     let range = match forge {
         None | Some(ForgeDialect::Github | ForgeDialect::Gitea) => rest.split_once("-L"),
         Some(ForgeDialect::Gitlab) => rest.split_once('-'),
     };
     match range {
-        None => number(rest).is_some(),
+        None => number(rest).map(|line| LineRange {
+            first: line,
+            last: line,
+        }),
         Some((start, end)) => match (number(start), number(end)) {
-            (Some(from), Some(to)) => to >= from,
-            _ => false,
+            (Some(first), Some(last)) if last >= first => Some(LineRange { first, last }),
+            _ => None,
         },
     }
 }
 
-/// Reads one referenced regular blob once per distinct path, under the
-/// per-target cap and the snapshot aggregate. Pointer content keeps its raw
-/// digest and no projection; ordinary content carries both.
+/// Returns the exact byte span from the first selected line through the last,
+/// including every original CRLF, bare CR, or LF terminator. The shared line
+/// scanner deliberately does not synthesize an empty line after a final
+/// terminator, so a range beyond the bytes is absent rather than empty.
+fn selected_line_bytes(source: &[u8], range: LineRange) -> Option<&[u8]> {
+    let mut line_number = 0_u64;
+    let mut selection_start = None;
+    for line in scan(source) {
+        line_number = line_number.saturating_add(1);
+        if line_number == range.first {
+            selection_start = Some(line.start);
+        }
+        if line_number == range.last {
+            return source.get(selection_start?..line.end);
+        }
+    }
+    None
+}
+
+fn target_projection(domain: &str, mode: GitMode, raw_digest: Digest) -> Digest {
+    hj(
+        domain,
+        &Value::Object(vec![
+            (
+                "git_mode".to_owned(),
+                Value::String(mode.as_str().to_owned()),
+            ),
+            (
+                "raw_digest".to_owned(),
+                Value::String(raw_digest.to_string()),
+            ),
+        ]),
+    )
+}
+
+/// Reads one referenced regular blob once per exact path, mode, and object
+/// identity in the bound scan scope. Pointer content keeps its raw digest and
+/// no projection; ordinary content carries both.
 fn read_target(
     repo: &Repository,
     git: &mut GitResources,
@@ -775,9 +877,12 @@ fn read_target(
     path: &RepoPath,
     mode: GitMode,
     oid: &Oid,
-) -> Result<Content, Error> {
-    if let Some(content) = cache.read.get(path) {
-        return Ok(content.clone());
+) -> Result<BlobContent, Error> {
+    if let Some(cached) = cache.read.get(path)
+        && cached.mode == mode
+        && &cached.oid == oid
+    {
+        return Ok(cached.content.evidence());
     }
     let cap = ValueCap {
         resource: ResourceName::ReferencedTargetBlobBytes,
@@ -789,20 +894,23 @@ fn read_target(
     scan.charge_target_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
     let raw = hb(RAW_EVIDENCE_DOMAIN, &object.body);
     let content = if lfs::is_pointer(&object.body) {
-        Content::Pointer { raw }
+        Content::LfsPointer { raw_digest: raw }
     } else {
-        let projection = hj(
-            TARGET_PROJECTION_DOMAIN,
-            &Value::Object(vec![
-                (
-                    "git_mode".to_owned(),
-                    Value::String(mode.as_str().to_owned()),
-                ),
-                ("raw_digest".to_owned(), Value::String(raw.to_string())),
-            ]),
-        );
-        Content::Ordinary { raw, projection }
+        Content::Ordinary {
+            raw_digest: raw,
+            projection_digest: target_projection(TARGET_PROJECTION_DOMAIN, mode, raw),
+            body: object.body.into_boxed_slice(),
+            line_projections: BTreeMap::new(),
+        }
     };
-    cache.read.insert(path.clone(), content.clone());
-    Ok(content)
+    let evidence = content.evidence();
+    cache.read.insert(
+        path.clone(),
+        CachedContent {
+            mode,
+            oid: oid.clone(),
+            content,
+        },
+    );
+    Ok(evidence)
 }

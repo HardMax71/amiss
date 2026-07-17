@@ -170,7 +170,7 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
 
 /// One clean run whose report supplies the exact key and fact values the
 /// engine computes for the pre-existing structural finding.
-fn structural_evidence(fx: &Fixture, enforce: bool) -> (String, String, String, String) {
+fn structural_evidence(fx: &Fixture, enforce: bool) -> (String, String, String) {
     let built = commit_pair(
         &fx.repo,
         &engine(),
@@ -187,7 +187,6 @@ fn structural_evidence(fx: &Fixture, enforce: bool) -> (String, String, String, 
         .find(|row| row["kind"] == "explicit-target-missing")
         .expect("the fixture produces the structural finding");
     (
-        serde_json::to_string(&finding["key_input"]).unwrap(),
         finding["finding_key"].as_str().unwrap().to_owned(),
         serde_json::to_string(&finding["candidate_fact"]).unwrap(),
         finding["candidate_fact_digest"]
@@ -197,11 +196,9 @@ fn structural_evidence(fx: &Fixture, enforce: bool) -> (String, String, String, 
     )
 }
 
-#[expect(clippy::too_many_arguments, reason = "test fixture builder")]
 fn debt_json(
     floor_digest: &str,
     adoption_tree: &str,
-    key_input: &str,
     finding_key: &str,
     fact: &str,
     fact_digest: &str,
@@ -219,8 +216,6 @@ fn debt_json(
   "created_at": "2026-07-03T00:00:00Z",
   "items": [ {{
     "debt_id": "acme/legacy-guide-link",
-    "finding_kind": "explicit-target-missing",
-    "key_input": {key_input},
     "finding_key": "{finding_key}",
     "accepted_fact": {fact},
     "accepted_fact_digest": "{fact_digest}",
@@ -242,11 +237,9 @@ fn debt_input(doc: &str) -> DebtInput {
     }
 }
 
-#[expect(clippy::too_many_arguments, reason = "test fixture builder")]
 fn waiver_json(
     floor_digest: &str,
     candidate_tree: &str,
-    key_input: &str,
     finding_key: &str,
     fact: &str,
     fact_digest: &str,
@@ -262,8 +255,6 @@ fn waiver_json(
   "created_at": "2026-07-03T00:00:00Z",
   "items": [ {{
     "waiver_id": "acme/release-window",
-    "finding_kind": "explicit-target-missing",
-    "key_input": {key_input},
     "finding_key": "{finding_key}",
     "authorized_fact": {fact},
     "authorized_fact_digest": "{fact_digest}",
@@ -311,14 +302,13 @@ fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
 #[test]
 fn valid_active_debt_is_tolerated_with_full_provenance() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -401,14 +391,13 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
 #[test]
 fn an_expired_debt_item_fails_without_application() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -455,7 +444,7 @@ fn an_expired_debt_item_fails_without_application() {
 fn a_changed_fact_is_debt_worsened() {
     let fx = fixture("see [gone](missing.md)\n\nsee [gone](missing.md)\n");
     let base_only = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&base_only, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&base_only, true);
     drop(base_only);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
@@ -463,7 +452,6 @@ fn a_changed_fact_is_debt_worsened() {
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -517,14 +505,13 @@ fn a_nonreproducing_adoption_binding_is_fatal() {
         candidate_tree: git(root, &["rev-parse", "HEAD^{tree}"]).trim().to_owned(),
         _dir: dir,
     };
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &ancient_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -552,14 +539,13 @@ fn a_nonreproducing_adoption_binding_is_fatal() {
 #[test]
 fn a_valid_waiver_changes_fail_to_warn() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.waiver = Some(waiver_input(&waiver_json(
         &floor_digest,
         &fx.candidate_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -596,13 +582,12 @@ fn a_valid_waiver_changes_fail_to_warn() {
 #[test]
 fn waiver_defects_emit_invalid_rows_without_suppression() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
 
     let unauthorized = waiver_json(
         &floor_digest,
         &fx.candidate_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -645,7 +630,6 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
     let expired = waiver_json(
         &floor_digest,
         &fx.candidate_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -674,14 +658,13 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
 #[test]
 fn overlapping_valid_exceptions_are_fatal_and_apply_neither() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -691,7 +674,6 @@ fn overlapping_valid_exceptions_are_fatal_and_apply_neither() {
     setup.waiver = Some(waiver_input(&waiver_json(
         &floor_digest,
         &fx.candidate_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -726,14 +708,13 @@ fn overlapping_valid_exceptions_are_fatal_and_apply_neither() {
 fn resolved_finding_is_not_an_exception_target() {
     let fx = fixture("[note](note.md)\n");
     let standing = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&standing, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&standing, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -743,7 +724,6 @@ fn resolved_finding_is_not_an_exception_target() {
     setup.waiver = Some(waiver_input(&waiver_json(
         &floor_digest,
         &fx.candidate_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -786,13 +766,12 @@ fn resolved_finding_is_not_an_exception_target() {
 #[test]
 fn expiry_bearing_controls_require_a_trusted_instant() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -842,13 +821,12 @@ fn the_statement_binding_must_identify_the_authenticated_run() {
 #[test]
 fn index_mode_rejects_tree_bound_exceptions() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -878,12 +856,11 @@ fn index_mode_rejects_tree_bound_exceptions() {
 #[test]
 fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let valid = waiver_json(
         &floor_digest,
         &fx.candidate_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -954,14 +931,13 @@ fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() 
 #[test]
 fn a_waiver_item_written_for_another_tree_is_never_selected() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let mut setup = shell(true);
     setup.time = Some(time_input(&fx, true));
     setup.waiver = Some(waiver_input(&waiver_json(
         &floor_digest,
         &fx.base_tree, // the tree before this one, not the tree under evaluation
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,
@@ -1001,12 +977,11 @@ fn a_waiver_item_written_for_another_tree_is_never_selected() {
 #[test]
 fn a_debt_snapshot_bound_to_anything_else_verifies_nothing_and_tolerates_nothing() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (key_input, finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
     let valid = debt_json(
         &floor_digest,
         &fx.base_tree,
-        &key_input,
         &finding_key,
         &fact,
         &fact_digest,

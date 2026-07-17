@@ -6,26 +6,26 @@ use amiss_scan::correlate::{
 };
 use amiss_scan::evaluate::evaluate;
 use amiss_scan::policy::{DebtContext, Effects, TimeContext};
-use amiss_scan::resolve::{Intent, Resolution as TargetResolution};
+use amiss_scan::resolve::Intent;
 use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{
-    ContentAvailability, DebtItem, EligibleFindingKind, Fact, FindingKeyInput, FindingScope,
-    Resolution as ControlResolution, ResolutionKind, SourceConstruct, TargetIntent, TargetKind,
-    TrustedTimeStatement,
+    DebtItem, EligibleFindingKind, Fact, FindingKeyInput, FindingScope, SourceConstruct,
+    TargetIntent, TargetKind, TrustedTimeStatement,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::model::{
     Adapter, ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPath, RepoPathText,
     RepositoryIdentity, TreeIdentity, UtcInstant,
 };
-use amiss_wire::report::{IntentKind, ResolutionCode};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::{Missing, Resolution};
 
 pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
     let mut controls = BTreeMap::new();
     let comparisons: Vec<Comparison> = (0..count)
         .map(|index| {
-            let (observation, key_input, fact) = exception_observation(index);
-            controls.insert(observation.id, (key_input, fact));
+            let (observation, fact) = exception_observation(index);
+            controls.insert(observation.id, fact);
             Comparison {
                 outcome: Outcome::None,
                 reason: Reason::NewObservation,
@@ -50,7 +50,7 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 .first()
                 .copied()
                 .unwrap_or_else(|| panic!("benchmark finding observation"));
-            let (key_input, accepted_fact) = controls
+            let accepted_fact = controls
                 .remove(&observation_id)
                 .unwrap_or_else(|| panic!("benchmark control projection"));
             let accepted_fact_digest = finding
@@ -59,8 +59,6 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 .map_or_else(|| panic!("benchmark candidate fact"), |(_, digest)| *digest);
             DebtItem {
                 debt_id: artifact_id(format!("bench/debt-{index:05}")),
-                finding_kind: EligibleFindingKind::ExplicitTargetMissing,
-                key_input,
                 finding_key: finding.finding_key,
                 accepted_fact,
                 accepted_fact_digest,
@@ -101,7 +99,7 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
     (comparisons, policy)
 }
 
-fn exception_observation(index: usize) -> (Observation, FindingKeyInput, Fact) {
+fn exception_observation(index: usize) -> (Observation, Fact) {
     let token = format!("{index:05}");
     let document_text = "docs/references.md".to_owned();
     let target_text = format!("targets/{token}.rs");
@@ -122,19 +120,13 @@ fn exception_observation(index: usize) -> (Observation, FindingKeyInput, Fact) {
             source_projection_digest: projection_digest,
         },
     };
-    let fact = Fact {
-        finding_kind: EligibleFindingKind::ExplicitTargetMissing,
-        key_input: key_input.clone(),
-        resolution: ControlResolution {
-            kind: ResolutionKind::Missing,
-            path: Some(repo_path_text(target_text.clone())),
-            entry_kind: None,
-            git_mode: None,
-            raw_digest: None,
-            projection_digest: None,
-            content_availability: ContentAvailability::NotApplicable,
-        },
-    };
+    let fact = Fact::new(
+        key_input,
+        Resolution::<RepoPathText>::Missing(Missing::PathNotFound {
+            path: repo_path_text(target_text.clone()),
+        }),
+    )
+    .unwrap_or_else(|| panic!("benchmark structural fact"));
     let observation = Observation {
         id: hb("amiss/bench-exception-observation", token.as_bytes()),
         document,
@@ -159,17 +151,9 @@ fn exception_observation(index: usize) -> (Observation, FindingKeyInput, Fact) {
         },
         raw_destination_digest: hb("amiss/scanner-raw-destination", target_text.as_bytes()),
         projection_digest,
-        resolution: TargetResolution {
-            code: ResolutionCode::PathNotFound,
-            path: Some(target),
-            entry_kind: None,
-            git_mode: None,
-            raw_digest: None,
-            projection_digest: None,
-            content_availability: ContentAvailability::NotApplicable,
-        },
+        resolution: Resolution::<RepoPath>::Missing(Missing::PathNotFound { path: target }),
     };
-    (observation, key_input, fact)
+    (observation, fact)
 }
 
 fn repo_path(raw: String) -> RepoPath {

@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
-use amiss_wire::controls::{ContentAvailability, GitMode, SourceConstruct, TargetKind};
+use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::{IntentKind, ResolutionCode, ResolutionStatus};
+use amiss_wire::report::IntentKind;
+use amiss_wire::resolution::Resolution as WireResolution;
 
 use crate::resolve::{Intent, Resolution};
 use crate::{Error, observe};
@@ -516,48 +517,71 @@ fn derive(
 ) -> (TargetChange, Impact) {
     let left = &base.resolution;
     let right = &candidate.resolution;
-    let left_status = left.code.status();
-    let right_status = right.code.status();
     let source_changed = source == SourceChange::Changed;
 
-    let available = |resolution: &Resolution| {
-        resolution.code == ResolutionCode::ExactPath
-            && resolution.content_availability == ContentAvailability::Available
-    };
     let equal_impact = if source_changed {
         Impact::SubjectChanged
     } else {
         Impact::None
     };
 
-    if available(left) && available(right) {
-        if left.projection_digest == right.projection_digest {
-            return (TargetChange::Equal, equal_impact);
+    match (left, right) {
+        (WireResolution::Resolved(left_target), WireResolution::Resolved(right_target)) => {
+            let (Some(left_projection), Some(right_projection)) = (
+                left_target.projection_digest(),
+                right_target.projection_digest(),
+            ) else {
+                return (TargetChange::NotComparable, Impact::NotApplicable);
+            };
+            if left_projection == right_projection {
+                return (TargetChange::Equal, equal_impact);
+            }
+            let impact = if source_changed {
+                Impact::DependencyAndSubjectCochanged
+            } else {
+                Impact::DependencyChangedSubjectUnchanged
+            };
+            (TargetChange::Changed, impact)
         }
-        let impact = if source_changed {
-            Impact::DependencyAndSubjectCochanged
-        } else {
-            Impact::DependencyChangedSubjectUnchanged
-        };
-        return (TargetChange::Changed, impact);
-    }
-    let structural = |status: ResolutionStatus| {
-        matches!(
-            status,
-            ResolutionStatus::Missing | ResolutionStatus::TypeMismatch
-        )
-    };
-    if left_status == right_status && structural(left_status) {
-        if left == right {
-            return (TargetChange::Equal, equal_impact);
+        (WireResolution::Missing(left_missing), WireResolution::Missing(right_missing)) => {
+            if left_missing == right_missing {
+                (TargetChange::Equal, equal_impact)
+            } else {
+                (TargetChange::NotComparable, Impact::NotApplicable)
+            }
         }
-        return (TargetChange::NotComparable, Impact::NotApplicable);
+        (WireResolution::TypeMismatch(left_target), WireResolution::TypeMismatch(right_target)) => {
+            if left_target == right_target {
+                (TargetChange::Equal, equal_impact)
+            } else {
+                (TargetChange::NotComparable, Impact::NotApplicable)
+            }
+        }
+        (
+            WireResolution::Missing(_) | WireResolution::TypeMismatch(_),
+            WireResolution::Resolved(_),
+        ) => (TargetChange::NewlyResolved, Impact::ReferenceResolved),
+        (
+            WireResolution::Resolved(_),
+            WireResolution::Missing(_) | WireResolution::TypeMismatch(_),
+        ) => (TargetChange::BecameMissing, Impact::NotApplicable),
+        (
+            WireResolution::Resolved(_)
+            | WireResolution::Missing(_)
+            | WireResolution::TypeMismatch(_)
+            | WireResolution::UnsupportedTarget(_)
+            | WireResolution::UnsupportedSemantics(_)
+            | WireResolution::UnsupportedVersion(_)
+            | WireResolution::Invalid(_)
+            | WireResolution::External(_),
+            WireResolution::Resolved(_)
+            | WireResolution::Missing(_)
+            | WireResolution::TypeMismatch(_)
+            | WireResolution::UnsupportedTarget(_)
+            | WireResolution::UnsupportedSemantics(_)
+            | WireResolution::UnsupportedVersion(_)
+            | WireResolution::Invalid(_)
+            | WireResolution::External(_),
+        ) => (TargetChange::NotComparable, Impact::NotApplicable),
     }
-    if structural(left_status) && right_status == ResolutionStatus::Resolved {
-        return (TargetChange::NewlyResolved, Impact::ReferenceResolved);
-    }
-    if left_status == ResolutionStatus::Resolved && structural(right_status) {
-        return (TargetChange::BecameMissing, Impact::NotApplicable);
-    }
-    (TargetChange::NotComparable, Impact::NotApplicable)
 }

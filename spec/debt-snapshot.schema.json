@@ -280,98 +280,153 @@
         }
       }
     },
-    "StructuralResolution": {
+    "AvailableResolutionContent": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "status",
-        "code",
-        "path",
-        "entry_kind",
-        "git_mode",
+        "kind",
         "raw_digest",
-        "projection_digest",
-        "content_availability"
+        "projection_digest"
       ],
       "properties": {
-        "status": {
+        "kind": {
+          "const": "available"
+        },
+        "raw_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "projection_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "LfsPointerResolutionContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "raw_digest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "lfs-pointer"
+        },
+        "raw_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "ResolutionContent": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AvailableResolutionContent"
+        },
+        {
+          "$ref": "#/$defs/LfsPointerResolutionContent"
+        }
+      ]
+    },
+    "TreeResolutionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "tree"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "BlobResolutionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "mode",
+        "content"
+      ],
+      "properties": {
+        "kind": {
+          "const": "blob"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "mode": {
           "enum": [
-            "missing",
-            "type-mismatch"
+            "100644",
+            "100755"
           ]
         },
-        "code": {
+        "content": {
+          "$ref": "#/$defs/ResolutionContent"
+        }
+      }
+    },
+    "ResolutionTarget": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TreeResolutionTarget"
+        },
+        {
+          "$ref": "#/$defs/BlobResolutionTarget"
+        }
+      ]
+    },
+    "MissingResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "missing"
+        },
+        "reason": {
           "enum": [
             "path-not-found",
-            "target-type-mismatch"
+            "line-fragment-out-of-range"
           ]
         },
         "path": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/RepoPath"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "entry_kind": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "blob",
-            "tree",
-            "symlink",
-            "gitlink",
-            null
-          ]
-        },
-        "git_mode": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "100644",
-            "100755",
-            "040000",
-            "120000",
-            "160000",
-            null
-          ]
-        },
-        "raw_digest": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/Digest"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "projection_digest": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/Digest"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "content_availability": {
-          "enum": [
-            "available",
-            "not-read",
-            "not-applicable",
-            "lfs-pointer-only"
-          ]
+          "$ref": "#/$defs/RepoPath"
         }
       }
+    },
+    "TypeMismatchResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "const": "type-mismatch"
+        },
+        "target": {
+          "$ref": "#/$defs/ResolutionTarget"
+        }
+      }
+    },
+    "StructuralResolution": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MissingResolution"
+        },
+        {
+          "$ref": "#/$defs/TypeMismatchResolution"
+        }
+      ]
     },
     "StructuralFactEvidence": {
       "type": "object",
@@ -396,6 +451,66 @@
     "StructuralFindingFactInput": {
       "type": "object",
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "finding_kind": {
+              "const": "explicit-target-missing"
+            },
+            "key_input": {
+              "type": "object",
+              "required": [
+                "finding_kind"
+              ],
+              "properties": {
+                "finding_kind": {
+                  "const": "explicit-target-missing"
+                }
+              }
+            },
+            "evidence": {
+              "type": "object",
+              "required": [
+                "resolution"
+              ],
+              "properties": {
+                "resolution": {
+                  "$ref": "#/$defs/MissingResolution"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "finding_kind": {
+              "const": "explicit-target-type-mismatch"
+            },
+            "key_input": {
+              "type": "object",
+              "required": [
+                "finding_kind"
+              ],
+              "properties": {
+                "finding_kind": {
+                  "const": "explicit-target-type-mismatch"
+                }
+              }
+            },
+            "evidence": {
+              "type": "object",
+              "required": [
+                "resolution"
+              ],
+              "properties": {
+                "resolution": {
+                  "$ref": "#/$defs/TypeMismatchResolution"
+                }
+              }
+            }
+          }
+        }
+      ],
       "required": [
         "schema",
         "finding_kind",
@@ -422,8 +537,6 @@
       "additionalProperties": false,
       "required": [
         "debt_id",
-        "finding_kind",
-        "key_input",
         "finding_key",
         "accepted_fact",
         "accepted_fact_digest",
@@ -435,12 +548,6 @@
       "properties": {
         "debt_id": {
           "$ref": "#/$defs/ArtifactId"
-        },
-        "finding_kind": {
-          "$ref": "#/$defs/DebtEligibleFindingKind"
-        },
-        "key_input": {
-          "$ref": "#/$defs/DebtFindingKeyInput"
         },
         "finding_key": {
           "$ref": "#/$defs/Digest"
