@@ -93,6 +93,8 @@ honest reading of a local or convenience-adapter report is: these findings, unde
 repository policy, with no outside authority consulted.
 
 The control-plane finding family closes the loop from the other side. When a candidate
-weakens its own policy file, shrinks what gets scanned, or edits the control configuration,
-the comparison itself raises `policy-weakened`, `coverage-reduced`, or
-`control-plane-changed`. Loosening the rules is reported under the rules being loosened.
+weakens its own policy file or drops required coverage, the comparison raises
+`policy-weakened` or `coverage-reduced`. With a verified organization floor,
+`control-plane-changed` reports a protected control path unless both base and candidate are
+present supported blobs with identical path, mode, and raw-content evidence. Loosening the
+rules is reported under the rules being loosened.

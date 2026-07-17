@@ -63,9 +63,8 @@ a warning in every profile, pointing a reviewer at the paragraph with the line a
 of the reference that ties them together.
 
 Removals get their own kinds. `explicit-reference-removed` means a reference that existed
-in the base is gone from the candidate. `document-removed` means the whole file left the
-tree. Both are records, not accusations, because deleting stale prose is usually the fix,
-and the report treats it as information about the change.
+in the base is gone from the candidate and warns under both profiles. `document-removed`
+means the whole file left the tree and is recorded without warning.
 
 Formatting noise stays out by construction. Amiss does not normalize the content of
 referenced files; any byte change in a target is a change, even a formatter's, because

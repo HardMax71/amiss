@@ -43,39 +43,39 @@ and checked in CI.
 | `waiver-invalid` | `fail` | `fail` |
 <!-- amiss-doc-contract:profiles:end -->
 
-Two notable cases clarify what changes between profiles and what does not. A supported
-explicit reference that does not resolve is the serious structural case:
-`explicit-target-missing` warns under observe and fails under enforce. A file changing under
-an unchanged paragraph is a warning in both profiles, because the change might be exactly
-what the paragraph already says. Amiss reports that the target moved and the prose did not;
-whether the prose is now wrong remains a human decision.
+## Before and after
 
-The kinds, with what each one means:
+Only the shown state changes. Floor, debt, waiver, and trusted-time examples use the control
+API described in [Controls and policy](controls.md).
 
-| kind | meaning |
-| --- | --- |
-| `explicit-target-missing` | a link or path points at nothing in the tree |
-| `explicit-target-type-mismatch` | it points at a file where a directory was written, or the reverse |
-| `invalid-reference` | the reference cannot be resolved as written, for example a path escaping the repository |
-| `subject-changed` | the paragraph holding the reference changed |
-| `dependency-changed-subject-unchanged` | the referenced file changed; the paragraph did not |
-| `dependency-and-subject-cochanged` | both changed together, the healthy case |
-| `explicit-reference-removed` | a reference that existed in the base is gone |
-| `document-removed` | a whole document left the tree |
-| `unlinked-document` | a scanned document from which Amiss extracted no references; inbound reachability is not computed |
-| `external-out-of-scope` | a URL to somewhere Amiss does not check, counted and left alone |
-| `opaque-html-region` | raw HTML the parser cannot see into, size and place reported |
-| `opaque-mdx-region` | the same for [MDX](https://mdxjs.com) expressions and JSX |
-| `unsupported-reference-semantics` | anchors, site routes, symbols: real checks that belong to other tools |
-| `unsupported-document-format` | a document class Amiss knows it cannot parse |
-| `unsupported-target-kind` | the target is a symlink or a submodule, which Amiss will not follow |
-| `unsupported-version-scope` | a reference pinned to a branch or version the scan cannot vouch for |
-| `unsupported-capability` | a reserved governed definition asks for behavior the engine does not implement |
-| `observation-correlation-ambiguous` | two matches were equally plausible, so no guess was made |
-| `policy-weakened` | the candidate loosens its own policy file |
-| `coverage-reduced` | the candidate shrinks what gets scanned |
-| `control-plane-changed` | the candidate touches the control configuration |
-| `debt-worsened`, `debt-expired`, `waiver-invalid` | the external-control cases, see [Controls and policy](controls.md) |
+<!-- amiss-doc-contract:finding-examples:start -->
+| Finding kind | Before | After |
+| --- | --- | --- |
+| `explicit-target-missing` | `docs/index.md`: `# Index`; `docs/missing.md` is absent. | Append `[missing](missing.md)` to `docs/index.md`; the target remains absent. |
+| `explicit-target-type-mismatch` | `docs/index.md`: `# Index`; `docs/guide.md` is a regular file. | Append `[guide](guide.md/)`; the trailing slash promises a directory. |
+| `invalid-reference` | `docs/index.md`: `# Index`. | Append a link whose destination is `../../etc/passwd`, which escapes the repository from `docs/`. |
+| `unsupported-reference-semantics` | `docs/index.md`: `[setup](guide.md)`; `docs/guide.md` exists. | Change the link to `[setup](guide.md#setup)`; Amiss resolves the file but does not validate its heading. |
+| `unsupported-document-format` | Policy includes `docs/spec.rst` as a document; the file is absent. | Add `docs/spec.rst` containing `Title` and an `=====` underline. |
+| `unsupported-target-kind` | `alias` is a Git symlink; `docs/index.md` has no link to it. | Append `[alias](../alias)`; Amiss will not follow the symlink. |
+| `unsupported-version-scope` | Run with forge `github`, repository `github.com/acme/widgets`, candidate ref `refs/heads/feature/x`, and default ref `refs/heads/main`; the link names `blob/feature/x/docs/guide.md`. | Keep that identity context but change the link to name `blob/main/docs/guide.md`. |
+| `unsupported-capability` | `docs/claims.md`: `# Claims`. | Append `[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>`. |
+| `dependency-changed-subject-unchanged` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | Leave `docs/guide.md` unchanged.<br>Change `src/parser.rs` to `lex()`. |
+| `dependency-and-subject-cochanged` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | `docs/guide.md`: `See [revised parser](../src/parser.rs).`<br>`src/parser.rs`: `lex()` |
+| `subject-changed` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | Change the paragraph to `See [revised parser](../src/parser.rs).`<br>Leave `src/parser.rs` unchanged. |
+| `explicit-reference-removed` | `docs/guide.md` has separate `[parser](../src/parser.rs)` and `[lexer](../src/lexer.rs)` paragraphs. | Remove only the parser paragraph; both targets and the lexer paragraph remain. |
+| `document-removed` | `docs/obsolete.md` contains `# Obsolete`. | Delete `docs/obsolete.md`. |
+| `external-out-of-scope` | `guide.md`: `# Guide`. | Append `[Manual](https://example.com/manual)`. |
+| `opaque-mdx-region` | `page.mdx`: `[Parser](src/parser.rs)`. | Append `<Note>{"hidden"}</Note>`. |
+| `opaque-html-region` | `page.md`: `[Parser](src/parser.rs)`. | Append a separate `<div class="card">hidden</div>` block. |
+| `observation-correlation-ambiguous` | `docs/guide.md`: `Old [parser](../src/parser.rs).` | Replace it with two paragraphs: `First [parser](../src/parser.rs).` and `Second [parser](../src/parser.rs).` |
+| `unlinked-document` | `README.md` is absent. | Add `README.md` containing only `# Title` and prose with no references. |
+| `policy-weakened` | Repository policy sets `explicit-target-missing` to `fail`. | Remove that `finding_dispositions` entry. |
+| `coverage-reduced` | Repository policy protects `docs/required.md`, which contains `# Required`. | Keep the inventory obligation and delete `docs/required.md`. |
+| `control-plane-changed` | A verified floor protects `.github/workflows/scan.yml`, whose content is `on: push`. | Keep the floor and change the protected file to `on: pull_request`. |
+| `debt-worsened` | Verified debt accepts one occurrence of `see [gone](missing.md)`. | Keep the debt item and duplicate that occurrence, changing the finding fact. |
+| `debt-expired` | Debt expires at `2026-07-10T00:00:00Z`; trusted time is `2026-07-09T00:00:00Z`. | Keep the finding and debt unchanged; trusted time advances to `2026-07-10T00:00:00Z`. |
+| `waiver-invalid` | Waiver expires at `2026-08-01T00:00:00Z`; trusted time is `2026-07-12T10:00:00Z`. | Keep the finding and trusted time unchanged; set `expires_at` to `2026-07-10T00:00:00Z`. |
+<!-- amiss-doc-contract:finding-examples:end -->
 
 The control families exist so that loosening rules and presenting invalid outside authority
 are themselves visible. Repository policy may raise only `explicit-target-missing`,
