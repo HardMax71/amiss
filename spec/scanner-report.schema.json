@@ -258,6 +258,13 @@
         }
       }
     },
+    "ForgeDialect": {
+      "enum": [
+        "github",
+        "gitlab",
+        "gitea"
+      ]
+    },
     "GitOid": {
       "oneOf": [
         {
@@ -1204,11 +1211,13 @@
         },
         "forge": {
           "description": "The same-repository URL dialect this run recognized, or null when none applied: no declared identity, or an unknown host without an explicit dialect. Under null every absolute forge link remains external and the same_repository counter stays zero. github and gitea appear only with a single-segment owner.",
-          "enum": [
-            "github",
-            "gitlab",
-            "gitea",
-            null
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ForgeDialect"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "ref": {

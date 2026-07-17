@@ -71,6 +71,9 @@ every public schema-backed example and validates it against that schema. Input e
 pass their owning typed reader; adding a contract without registering a reader fails CI. The
 report's readable form passes the strict JSON reader, while its canonical form separately
 clears the [end-to-end wrapper acceptance law](../../crates/amiss-bootstrap/tests/acceptance.rs).
+The standalone commit and staged-index identity preimages likewise validate against their
+report-schema fragments and reproduce the production digest chain in the
+[identity golden test](../../crates/amiss-scan/tests/identity.rs).
 Published CI snippets require immutable upstream Action pins, an explicit reviewed crate
 version, and the current Amiss release major. Fixture version strings inside report and
 release-manifest examples are reproducible evidence, not claims about the latest package

@@ -6,6 +6,18 @@ There is no working-directory mode, no branch-name resolution, and no fetching. 
 object is not in the local object store, the run refuses; see
 [Limits and refusals](limits.md).
 
+In staged-index mode the identity covers the complete logical stage-zero index, including
+skip-worktree entries. The engine hashes the sorted
+[index projection](../../spec/examples/index-projection.json), hashes a
+[synthetic snapshot](../../spec/examples/synthetic-snapshot.json) over that projection, and
+then binds the result into the staged
+[candidate identity](../../spec/examples/candidate-identity-index.json). A commit-pair run
+uses the corresponding [commit candidate identity](../../spec/examples/candidate-identity.json).
+These JSON files are digest preimages, not accepted request documents. Their
+[identity golden test](../../crates/amiss-scan/tests/identity.rs) validates each one against
+its report-schema definition and reproduces the full digest chain through the production
+builders.
+
 Amiss reads [Git](https://git-scm.com)'s storage itself instead of asking the `git` command. Loose objects,
 packfiles, deltas, and the index file are parsed by the engine, and the parsers reject
 instead of repairing. A tree with entries out of order, an index whose checksum does not
