@@ -1,0 +1,245 @@
+name: Amiss
+description: >-
+  Checks documentation against the repository tree it describes and fails the
+  run when a reference stops resolving. Exit class 0 is a complete pass, 1 a
+  complete run with a blocking finding, 2 anything that prevented a result
+  worth trusting.
+branding:
+  icon: check-circle
+  color: gray-dark
+
+inputs:
+  profile:
+    description: observe (report only) or enforce (blocking findings fail the run)
+    default: enforce
+  base:
+    description: full base commit id; derived from the triggering event when empty
+    default: ""
+  candidate:
+    description: full candidate commit id; derived from the triggering event when empty
+    default: ""
+  repo:
+    description: path to the repository root inside the workspace
+    default: "."
+  object-format:
+    description: sha1 or sha256
+    default: sha1
+  annotations:
+    description: emit findings and errors as file annotations
+    default: "true"
+
+outputs:
+  exit-class:
+    description: the engine's exit class, 0, 1, or 2
+    value: ${{ steps.scan.outputs.exit-class }}
+  report:
+    description: path to the machine report, one canonical JSON line
+    value: ${{ steps.scan.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    # The engine ships inside this action tree and never leaves it: the ref
+    # the workflow pinned is the whole supply chain, and the manifest in the
+    # same tree must agree with the binary byte for byte before it runs.
+    - id: select
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        case "${RUNNER_OS}/${RUNNER_ARCH}" in
+          Linux/X64) platform=linux-x86_64 ;;
+          macOS/ARM64) platform=macos-aarch64 ;;
+          macOS/X64) platform=macos-x86_64 ;;
+          Windows/X64) platform=windows-x86_64 ;;
+          *)
+            echo "::error title=amiss::unsupported runner ${RUNNER_OS}/${RUNNER_ARCH}; the release carries linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64"
+            exit 2
+            ;;
+        esac
+        manifest="${ACTION_PATH}/release-manifest.json"
+        if [ ! -f "$manifest" ]; then
+          echo "::error title=amiss::this ref carries no release manifest; use a published action ref such as v0 or action/vX.Y.Z"
+          exit 2
+        fi
+        row="$(jq -c --arg name "amiss-${platform}" \
+          '.artifacts[] | select(.artifact_name == $name)' "$manifest")"
+        if [ -z "$row" ]; then
+          echo "::error title=amiss::the release manifest carries no artifact for ${platform}"
+          exit 2
+        fi
+        tree_path="$(jq -r '.tree_path' <<<"$row")"
+        expected="$(jq -r '.binary_sha256' <<<"$row")"
+        binary="${ACTION_PATH}/${tree_path}"
+        # hosted macOS guarantees shasum, not sha256sum; linux and windows have both
+        if command -v sha256sum > /dev/null; then
+          printf '%s  %s\n' "${expected#sha256:}" "$binary" | sha256sum -c - > /dev/null
+        else
+          printf '%s  %s\n' "${expected#sha256:}" "$binary" | shasum -a 256 -c - > /dev/null
+        fi
+        chmod +x "$binary"
+        printf 'binary=%s\n' "$binary" >> "$GITHUB_OUTPUT"
+
+    # Base and candidate come from the event unless given. The event payload
+    # values reach the script through the environment, never through ${{ }}
+    # expansion into its body: a branch may be named anything, and text
+    # expanded into a run block is code.
+    - id: derive
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_CANDIDATE: ${{ inputs.candidate }}
+        INPUT_REPO: ${{ inputs.repo }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        MG_BASE: ${{ github.event.merge_group.base_sha }}
+        MG_HEAD: ${{ github.event.merge_group.head_sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+        HEAD_SHA: ${{ github.sha }}
+        REPOSITORY: ${{ github.repository }}
+        SERVER_URL: ${{ github.server_url }}
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        REF_TYPE: ${{ github.ref_type }}
+      run: |
+        set -euo pipefail
+        base="$INPUT_BASE"
+        candidate="$INPUT_CANDIDATE"
+        if [ -z "$candidate" ]; then
+          case "$EVENT_NAME" in
+            merge_group) candidate="$MG_HEAD" ;;
+            *) candidate="$HEAD_SHA" ;;
+          esac
+        fi
+        if [ -z "$base" ]; then
+          case "$EVENT_NAME" in
+            pull_request|pull_request_target) base="$PR_BASE" ;;
+            merge_group) base="$MG_BASE" ;;
+            push) base="$PUSH_BEFORE" ;;
+          esac
+        fi
+        if [ -z "${base//0/}" ] || [ "$base" = "$candidate" ]; then
+          base="$(git -C "$INPUT_REPO" rev-parse --verify --quiet "${candidate}^" || true)"
+        fi
+        if [ -z "$base" ]; then
+          echo "::error title=amiss::no base commit could be derived for a ${EVENT_NAME} event; pass the base input"
+          exit 2
+        fi
+        for oid in "$base" "$candidate"; do
+          if ! git -C "$INPUT_REPO" cat-file -e "${oid}^{commit}" 2>/dev/null; then
+            echo "::error title=amiss::commit ${oid} is not in the checkout; give actions/checkout fetch-depth: 0, or 2 for pull requests"
+            exit 2
+          fi
+        done
+        {
+          printf 'base=%s\n' "$base"
+          printf 'candidate=%s\n' "$candidate"
+        } >> "$GITHUB_OUTPUT"
+        if [ -n "$BRANCH" ] && [ -n "$DEFAULT_BRANCH" ] \
+          && { [ "$EVENT_NAME" != "push" ] || [ "$REF_TYPE" = "branch" ]; }; then
+          host="${SERVER_URL#*://}"
+          host="${host%/}"
+          {
+            printf 'identity=%s/%s\n' "${host,,}" "${REPOSITORY,,}"
+            printf 'ref=refs/heads/%s\n' "$BRANCH"
+            printf 'default-ref=refs/heads/%s\n' "$DEFAULT_BRANCH"
+          } >> "$GITHUB_OUTPUT"
+        fi
+
+    - id: scan
+      shell: bash
+      env:
+        BINARY: ${{ steps.select.outputs.binary }}
+        BASE: ${{ steps.derive.outputs.base }}
+        CANDIDATE: ${{ steps.derive.outputs.candidate }}
+        IDENTITY: ${{ steps.derive.outputs.identity }}
+        REF: ${{ steps.derive.outputs.ref }}
+        DEFAULT_REF: ${{ steps.derive.outputs.default-ref }}
+        INPUT_REPO: ${{ inputs.repo }}
+        PROFILE: ${{ inputs.profile }}
+        OBJECT_FORMAT: ${{ inputs.object-format }}
+      run: |
+        set -uo pipefail
+        report="${RUNNER_TEMP}/amiss-report.json"
+        args=(check --repo "$INPUT_REPO" --object-format "$OBJECT_FORMAT"
+              --base "$BASE" --candidate "$CANDIDATE"
+              --profile "$PROFILE" --format json)
+        if [ -n "${IDENTITY:-}" ]; then
+          args+=(--repository "$IDENTITY" --ref "$REF" --default-branch-ref "$DEFAULT_REF"
+                --forge github)
+        fi
+        status=0
+        "$BINARY" "${args[@]}" > "$report" || status=$?
+        {
+          printf 'exit-class=%s\n' "$status"
+          printf 'report=%s\n' "$report"
+        } >> "$GITHUB_OUTPUT"
+        if [ -s "$report" ]; then
+          jq -r '
+            (.payload.result
+             | "amiss \(.status): \(.finding_count) findings, \(.error_count) errors, exit class \(.exit_code)"),
+            def told($text): ($text // "") as $d
+              | if $d == "" then "" else ": " + $d end;
+            (.payload as $p
+             | ($p.errors | group_by(.code)
+                | map("- `\(.[0].code)`\(if length > 1 then " x\(length)" else "" end)"
+                      + told(.[0].description)))
+               + ($p.findings | map(select(.effective_disposition != "record")) | group_by(.kind)
+                  | map((map(.aggregation.member_count // 1) | add) as $n
+                        | "- `\(.[0].kind)`\(if $n > 1 then " x\($n)" else "" end)"
+                          + told(.[0].description)))
+             | if length > 0 then "", .[] else empty end)
+          ' "$report" | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "amiss produced no report, exit class ${status}"
+        fi
+
+    # Workflow commands are an injection surface, and repository paths are
+    # repository-controlled, so every value is escaped per the command
+    # grammar before it reaches stdout. A path only bytes can spell has no
+    # file property; its hex is stated in the message. Each report row carries
+    # its own description sentence, so this step holds no text of its own.
+    - id: annotate
+      shell: bash
+      env:
+        ANNOTATIONS: ${{ inputs.annotations }}
+        REPORT: ${{ steps.scan.outputs.report }}
+      run: |
+        set -euo pipefail
+        if [ "$ANNOTATIONS" != "true" ] || [ ! -s "$REPORT" ]; then
+          exit 0
+        fi
+        jq -r '
+          def d: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+          def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
+          def why($text): ($text // "") as $m
+            | if $m == "" then "" else "; " + ($m|d) end;
+          (.payload.errors[]
+           | "::error title=amiss \(.code|d)::\(.code) in phase \(.phase)"
+             + (if (.path | type) == "string" then " at \(.path|d)"
+                elif .path_bytes_hex != null then " at bytes \(.path_bytes_hex)"
+                else "" end)
+             + (if .resource != null then
+                  " \(.resource|d) \(.configured_limit)/\(.observed_lower_bound)"
+                else "" end)
+             + why(.description)),
+          (.payload.findings[]
+           | select(.effective_disposition == "fail" or .effective_disposition == "warn")
+           | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
+           | (.key_input.scope.normalized_target_intent.path // null) as $target
+           | (if ($target | type) == "string" then " target \($target|d)" else "" end) as $named
+           | (if (.location.path | type) == "string" and .location.span != null then
+               "::\($level) file=\(.location.path|p),line=\(.location.span.start_line),endLine=\(.location.span.end_line),col=\(.location.span.start_column),endColumn=\(.location.span.end_column),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
+             elif (.location.path | type) == "string" then
+               "::\($level) file=\(.location.path|p),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
+             else
+               "::\($level) title=amiss \(.kind|d)::\(.kind) at bytes \(.location.path.bytes_hex // "-"), \(.attribution)"
+             end) + $named + why(.description))
+        ' "$REPORT"
+
+    - id: verdict
+      shell: bash
+      env:
+        STATUS: ${{ steps.scan.outputs.exit-class }}
+      run: exit "$STATUS"
