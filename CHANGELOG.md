@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/HardMax71/amiss/compare/v0.4.0...v0.5.0) - 2026-07-18
+
+### Changes
+
+- Flood annotations, explain the summary, index the book for agents
+- Teach the grammar in refusals and finish the terse lanes
+- Carry a fixed description on every finding and error row
+- admit a floor limiting every resource
+- Unify typed resolution contracts
+- Document finding examples
+- execute identity goldens
+- execute published contract examples
+- recover releases without forge defaults
+- *(wire)* use rolling forge-neutral contracts
+- align roadmap and release checks
+- make fixture git commands hermetic
+- enforce semantic vector contracts
+- *(wire)* open execution-constraint identity
+- *(scan)* split external control gate
+- *(scan)* split forge resolver
+- *(scan)* index exception targets
+- *(scan)* index policy include lookups
+- *(scan)* index discovered documents
+- *(scan)* index correlation candidates
+- exercise frontmatter suffix offset
+- *(wire)* split trusted-time control
+
 ## [0.4.0](https://github.com/HardMax71/amiss/compare/v0.3.0...v0.4.0) - 2026-07-15
 
 ### Changes
