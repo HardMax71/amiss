@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/HardMax71/amiss/compare/v0.5.1...v0.6.0) - 2026-07-18
+
+### Changes
+
+- Bound embedded-code evaluation in-parse and add the Action watchdog
+- Audit every chapter and fix the code links the site broke
+- Make the project findable where machines look
+- Drop a fired watchdog's report and tighten the charge surface
+- Trim test doc comments to the constraints the code cannot show
+- Cover the release-manifest laws the mutation run showed untested
+
 ## [0.5.1](https://github.com/HardMax71/amiss/compare/v0.5.0...v0.5.1) - 2026-07-18
 
 ### Changes
