@@ -54,12 +54,24 @@ done \
         -print0 | sort -z
     )
     if [ "${#license_files[@]}" -eq 0 ]; then
-      fallback="$rust_docs/licenses/${license}.txt"
-      if [ ! -f "$fallback" ]; then
-        echo "${name} ${version} packages no license file for ${license}" >&2
-        exit 1
-      fi
-      license_files=("$fallback")
+      mapfile -t license_ids < <(
+        awk '{
+          gsub(/[()\/]/, " ")
+          for (field = 1; field <= NF; field++) {
+            if ($field != "AND" && $field != "OR" && $field != "WITH") {
+              print $field
+            }
+          }
+        }' <<<"$license" | sort -u
+      )
+      for license_id in "${license_ids[@]}"; do
+        fallback="$rust_docs/licenses/${license_id}.txt"
+        if [ ! -f "$fallback" ]; then
+          echo "${name} ${version} has no license file or bundled text for ${license_id} (${license})" >&2
+          exit 1
+        fi
+        license_files+=("$fallback")
+      done
     fi
 
     printf '%s\n' '================================================================================'
