@@ -81,6 +81,72 @@ fn a_noncanonical_repository_owner_is_refused_in_terms_the_caller_can_act_on() {
     );
 }
 
+/// The first thing a person or an agent tries is `--help`, and the docs live
+/// in a repository they are not standing in. The refusal is the only channel
+/// the binary owns at that moment, so it teaches the entire closed grammar.
+#[test]
+fn a_help_seeker_is_taught_the_closed_grammar() {
+    let (code, stdout, stderr) = amiss(&["--help"]);
+    assert_eq!(code, 2, "there is no help lane, only the refusal");
+    assert!(stdout.is_empty(), "a refusal is not a report");
+    assert!(stderr.contains("INVALID_INVOCATION"), "{stderr}");
+    assert!(
+        stderr.contains(amiss::invocation::GRAMMAR),
+        "the refusal carries the whole grammar: {stderr}"
+    );
+}
+
+#[test]
+fn a_limit_crossing_names_the_resource_and_both_numbers() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("blob-content"), "# X\n").unwrap();
+    let blob = git(root, &["hash-object", "-w", "--", "blob-content"])
+        .trim()
+        .to_owned();
+    let long = format!("{}/x.md", vec!["a".repeat(200); 25].join("/"));
+    git(
+        root,
+        &[
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            &format!("100644,{blob},{long}"),
+        ],
+    );
+    let tree = git(root, &["write-tree"]).trim().to_owned();
+    let candidate = git(root, &["commit-tree", &tree, "-p", &base, "-m", "long"])
+        .trim()
+        .to_owned();
+
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 2, "a crossed ceiling is never a trustworthy result");
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains("error git RESOURCE_LIMIT_EXCEEDED - raw-path-bytes 4096/"),
+        "the crossing names the resource and both numbers: {text}"
+    );
+}
+
 #[test]
 fn a_clean_observe_run_passes_with_a_complete_report() {
     let fx = fixture();
@@ -256,6 +322,10 @@ fn human_output_projects_the_same_result() {
     assert!(
         text.contains("warn explicit-target-missing introduced \"docs/guide.md\" x1"),
         "the path is an inert quoted atom: {text}"
+    );
+    assert!(
+        text.contains("x1 target \"docs/missing.md\""),
+        "the line names the unresolved target: {text}"
     );
     assert!(
         text.contains(&format!(
