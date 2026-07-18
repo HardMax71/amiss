@@ -23,25 +23,31 @@ collecting impressions. The work in this phase, with its instruments:
   crossing is an ordinary reported resource row, and the trip is pinned by test. The
   convenience Action now carries a wall-clock watchdog on top; its default is the
   120-second window bootstrap enforces on its lane, and a workflow input can move it.
-- Shadow scans have started and their record is the [scan ledger](ledger.md). Six public
-  repositories hold rows from July 2026: two spotless (ripgrep at 766 references and
-  just at 3,101, zero missing in both), one with a single real introduced break, and
-  three mapping systematic non-adoption classes, clean URLs a site router resolves,
-  deliberately broken test fixtures, and targets a docs build generates. Every row
-  records the reference count, the missing count, the advisory rows, the changed
-  documentation lines, and the class of any finding a maintainer would reject.
+- Shadow scans have started and their record is the [scan ledger](ledger.md). Ten public
+  repositories hold rows from July 2026: four spotless (ripgrep, just, fd, hyperfine),
+  three carrying only real breaks (helix's one introduced in its range, bat's twelve and
+  alacritty's one pre-existing), and three mapping systematic non-adoption classes,
+  clean URLs a site router resolves, deliberately broken test fixtures, and targets a
+  docs build generates. Every row records the reference count, the missing count, the
+  advisory rows, the changed documentation lines, and the class of any finding a
+  maintainer would reject.
 - A false `explicit-target-missing` on a supported reference is a resolver bug, not a
   statistic: it gets a pinned test, and the accepted count of such bugs is zero.
 - Reviewer burden gets a defined metric before it gets a threshold: advisory rows per
   hundred changed documentation lines, recorded per scan in the
-  [ledger](ledger.md), where the first six rows already sit. The gate threshold is
-  chosen after ten recorded scans on repositories that are not this one.
-- The event matrix needs recorded runs, not assumptions. The self-scan exercises push
-  and pull-request paths today; merge groups, fork pull requests, shallow checkouts, and
-  staged-index runs in hosted CI each need an end-to-end fixture or a recorded run.
+  [ledger](ledger.md). Ten scans are recorded, five of them on denominators past the
+  small-line rule; the gate threshold gets chosen from that column.
+- The event matrix needs recorded runs, not assumptions. The self-scan exercises push,
+  pull-request, shallow-checkout, and staged-index paths in hosted CI: the pull-request
+  lane checks out at the consumer default depth of two, and every run also scans the
+  staged index against the parent commit. Merge groups have their trigger and wait on
+  the queue being enabled; fork pull requests wait on a real fork.
 - Trend instruments accumulate on their own schedules: the weekly non-gating mutation
-  run and the nightly coverage-guided fuzz run. The bar for calling a property stable is
-  two months of those runs without an unexplained regression.
+  run and the nightly coverage-guided fuzz run. The first mutation run recorded its
+  baseline on 2026-07-18: 2,728 mutants, 664 missed, and with the fixtures crate since
+  excluded from mutation the comparable numbers going forward are 2,672 and 616. The
+  bar for calling a property stable is two months of those runs without an unexplained
+  regression.
 
 This phase exits when every bullet above is either closed or has its recorded numbers:
 the MDX bound decided, the ledger at ten or more repositories, zero open false-missing
