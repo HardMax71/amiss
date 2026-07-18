@@ -1,0 +1,39 @@
+# Amiss
+
+> Amiss checks documentation against the repository tree it describes and fails the run
+> when a reference stops resolving. Exit 0 is a complete pass, 1 a complete run with a
+> blocking finding, 2 anything that prevented a trustworthy result. Reports are canonical
+> JSON; every finding and error row carries a fixed `description` sentence stating what it
+> means and what to do.
+
+## Using Amiss
+
+- [Introduction](https://hardmax71.github.io/amiss/introduction.html): what documentation drift the tool catches and how a run is framed
+- [Invocation](https://hardmax71.github.io/amiss/invocation.html): the closed command grammar, the identity flags, and the three exit classes
+- [Profiles and findings](https://hardmax71.github.io/amiss/profiles.html): every finding kind with its disposition, its meaning sentence, and a before/after example
+- [Running it in CI](https://hardmax71.github.io/amiss/ci.html): the composite Action, the direct form, and how to read the report from a workflow
+
+## The evaluation
+
+- [Snapshots](https://hardmax71.github.io/amiss/snapshots.html): the base and candidate trees, commit and staged-index addressing
+- [Discovery](https://hardmax71.github.io/amiss/discovery.html): which files count as documents and which trees are always skipped
+- [Resolution](https://hardmax71.github.io/amiss/resolution.html): how each destination resolves, the forge dialects, and line anchors
+- [Correlation and impact](https://hardmax71.github.io/amiss/correlation.html): pairing occurrences across the comparison and the impact quadrant
+- [The report](https://hardmax71.github.io/amiss/report.html): the canonical JSON wire, row descriptions, and the human projection
+- [Limits and refusals](https://hardmax71.github.io/amiss/limits.html): every resource ceiling and every analysis error code with its meaning
+
+## Trust
+
+- [Security model](https://hardmax71.github.io/amiss/security.html): the zero-capability sandbox posture and hostile-input handling
+- [Controls and policy](https://hardmax71.github.io/amiss/controls.html): repository policy, organization floors, debt, waivers, and trusted time
+
+## The project
+
+- [Architecture](https://hardmax71.github.io/amiss/architecture.html): how the crates divide the pipeline
+- [Edge cases and divergences](https://hardmax71.github.io/amiss/divergences.html): the exact-wording edge cases and known parser differences
+- [What Amiss is not](https://hardmax71.github.io/amiss/non-goals.html): the non-goals held deliberately
+- [The evidence base](https://hardmax71.github.io/amiss/evidence.html): the audited repository that generated the requirements
+- [Provenance](https://hardmax71.github.io/amiss/provenance.html): how the tool became what it is and what was discarded on the way
+- [Development](https://hardmax71.github.io/amiss/development.html): building, the gates, and the push ratchets
+- [Project status](https://hardmax71.github.io/amiss/status.html): what is delivered, self-asserted, or not yet built
+- [Roadmap](https://hardmax71.github.io/amiss/roadmap.html): what comes next and in what order
