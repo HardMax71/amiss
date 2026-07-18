@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://crates.io/crates/amiss"><img alt="version" src="https://img.shields.io/crates/v/amiss?style=flat-square&label=version&labelColor=1e293b&color=475569"></a>
   <a href="LICENSE.md"><img alt="license" src="https://img.shields.io/badge/license-FSL--1.1--ALv2-475569?style=flat-square&labelColor=1e293b"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/HardMax71/amiss"><img alt="scorecard" src="https://img.shields.io/ossf-scorecard/github.com/HardMax71/amiss?style=flat-square&label=scorecard&labelColor=1e293b&color=475569"></a>
 </p>
 
 Amiss checks documentation against the tree it describes. It reads the documents in a
@@ -35,5 +36,13 @@ annotates findings on the pull request:
 ```
 
 Replace `<pinned-sha>` with the reviewed full commit id of `actions/checkout`.
+
+Coding agents get the same treatment as people: every finding and error row carries a
+sentence saying what it means and what to do, a rejected invocation prints the whole
+grammar, and the book's
+[Working with agents](https://hardmax71.github.io/amiss/agents.html) chapter has a paste
+block for your repository's `AGENTS.md`. The book is one fetch at
+[llms.txt](https://hardmax71.github.io/amiss/llms.txt), or in full at
+[llms-full.txt](https://hardmax71.github.io/amiss/llms-full.txt).
 
 Everything else is in the [documentation](https://hardmax71.github.io/amiss/).

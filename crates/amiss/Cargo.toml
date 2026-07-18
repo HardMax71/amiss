@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 description = "Checks documentation against the repository tree it describes"
 documentation = "https://hardmax71.github.io/amiss/"
+homepage = "https://hardmax71.github.io/amiss/"
+keywords = ["documentation", "ci", "links", "markdown", "drift"]
+categories = ["development-tools", "command-line-utilities"]
 license.workspace = true
 repository.workspace = true
 
