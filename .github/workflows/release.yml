@@ -149,7 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: action-publication
+      group: action-publication-${{ github.ref_name }}
       cancel-in-progress: false
     permissions:
       contents: write
@@ -219,24 +219,12 @@ jobs:
           fi
 
           push=(git -c credential.helper= -c credential.helper="$helper" push -q "$remote")
-          if [ -z "$exact" ] && [ "$advance_major" = true ]; then
-            "${push[@]}" --atomic "$commit:$exact_ref" "$commit:$major_ref"
-          elif [ -z "$exact" ]; then
+          if [ -z "$exact" ]; then
             "${push[@]}" "$commit:$exact_ref"
-          elif [ "$advance_major" = true ] && [ "$current" != "$commit" ]; then
-            if [ -n "$current" ] && ! git merge-base --is-ancestor "$current" "$commit"; then
-              echo "${exact_ref} cannot fast-forward ${major_ref}"
-              exit 1
-            fi
-            "${push[@]}" "$commit:$major_ref"
           fi
 
           remote_exact="$(git ls-remote --refs "$remote" "$exact_ref" | awk '{print $1}')"
           [ "$remote_exact" = "$commit" ]
-          if [ "$advance_major" = true ]; then
-            remote_major="$(git ls-remote --heads "$remote" "$major_ref" | awk '{print $1}')"
-            [ "$remote_major" = "$commit" ]
-          fi
           printf 'advance-major=%s\n' "$advance_major" >> "$GITHUB_OUTPUT"
 
   smoke-action:
@@ -245,7 +233,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -272,14 +260,88 @@ jobs:
     needs: [publish-action, smoke-action]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: action-major-promotion
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
+      - id: promote
+        shell: bash
+        env:
+          ADVANCE_MAJOR: ${{ needs.publish-action.outputs.advance-major }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$ADVANCE_MAJOR" != true ]; then
+            printf 'major-is-latest=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git init -q promotion
+          cd promotion
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          helper='!f() { printf "username=x-access-token\npassword=%s\n" "$TOKEN"; }; f'
+          remote="https://github.com/${REPOSITORY}.git"
+          version="${TAG#v}"
+          exact_ref="refs/tags/action/${TAG}"
+          major_ref="refs/heads/${TAG%%.*}"
+          git fetch -q --no-tags "$remote" "$exact_ref"
+          exact="$(git rev-parse FETCH_HEAD)"
+          exact_tree="$(git rev-parse "${exact}^{tree}")"
+          push=(git -c credential.helper= -c credential.helper="$helper" push -q "$remote")
+
+          for attempt in 1 2 3 4 5; do
+            current="$(git ls-remote --heads "$remote" "$major_ref" | awk '{print $1}')"
+            if [ -n "$current" ]; then
+              git fetch -q --no-tags "$remote" "$major_ref"
+              current="$(git rev-parse FETCH_HEAD)"
+              current_version="$(git show "${current}:release-manifest.json" | jq -r '.engine_version')"
+              newest="$(printf '%s\n%s\n' "$current_version" "$version" | sort -V | tail -n 1)"
+              if [ "$newest" = "$current_version" ] && [ "$current_version" != "$version" ]; then
+                printf 'major-is-latest=false\n' >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if [ "$current_version" = "$version" ]; then
+                if [ "$(git rev-parse "${current}^{tree}")" != "$exact_tree" ]; then
+                  echo "${major_ref} already carries ${version} with different content"
+                  exit 1
+                fi
+                printf 'major-is-latest=true\n' >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+
+            if [ -z "$current" ] || git merge-base --is-ancestor "$current" "$exact"; then
+              commit="$exact"
+            else
+              commit="$(printf 'amiss action tree for %s\n' "$TAG" \
+                | git commit-tree "$exact_tree" -p "$current")"
+            fi
+            if "${push[@]}" "$commit:$major_ref"; then
+              remote_major="$(git ls-remote --heads "$remote" "$major_ref" | awk '{print $1}')"
+              [ "$remote_major" = "$commit" ]
+              printf 'major-is-latest=true\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            observed="$(git ls-remote --heads "$remote" "$major_ref" | awk '{print $1}')"
+            if [ "$observed" = "$current" ]; then
+              echo "${major_ref} failed to advance without a concurrent update"
+              exit 1
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "${major_ref} changed during every promotion attempt"
+              exit 1
+            fi
+          done
       - env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-          ADVANCE_MAJOR: ${{ needs.publish-action.outputs.advance-major }}
+          MAJOR_IS_LATEST: ${{ steps.promote.outputs.major-is-latest }}
         run: |
           set -euo pipefail
           release="$(gh api "repos/${REPOSITORY}/releases/tags/${TAG}")"
@@ -288,7 +350,7 @@ jobs:
             exit 0
           fi
           latest=false
-          if [ "$ADVANCE_MAJOR" = true ] && [ "$(jq -r '.prerelease' <<<"$release")" = false ]; then
+          if [ "$MAJOR_IS_LATEST" = true ] && [ "$(jq -r '.prerelease' <<<"$release")" = false ]; then
             latest=true
           fi
           id="$(jq -r '.id' <<<"$release")"

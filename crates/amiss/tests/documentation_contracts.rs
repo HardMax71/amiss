@@ -572,6 +572,28 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
         !runtime.contains("uses: HardMax71/amiss@"),
         "the generated runtime must never delegate back to the dispatcher"
     );
+    for event_contract in [
+        "PR_HEAD: ${{ github.event.pull_request.head.sha }}",
+        "pull_request_target) candidate=\"$PR_HEAD\" ;;",
+        "git -C \"$INPUT_REPO\" cat-file -e \"${oid}^{commit}\"",
+    ] {
+        assert!(
+            runtime.contains(event_contract),
+            "the runtime must select and require the pull_request_target head commit"
+        );
+    }
+    assert!(
+        !runtime.contains("git fetch"),
+        "the runtime must not acquire untrusted pull request objects"
+    );
+    assert!(
+        runtime.contains("if [[ ! \"$WATCHDOG_SECONDS\" =~ ^[0-9]*[1-9][0-9]*$ ]]; then"),
+        "the watchdog input must contain a nonzero digit"
+    );
+    assert!(
+        runtime.contains("if [ -s \"$report\" ]; then\n            printf 'report=%s\\n' \"$report\"\n          else\n            printf 'report=\\n'"),
+        "the runtime must not export a missing or empty report"
+    );
 
     for input in [
         "profile",
@@ -622,6 +644,40 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
         );
         assert!(!source.contains("install -m 0644 action.yml action-tree/action.yml"));
     }
+}
+
+#[test]
+fn release_smokes_every_runtime_before_promoting_the_major_ref() {
+    let workflow = fs::read_to_string(repository_root().join(".github/workflows/release.yml"))
+        .expect("release workflow is readable");
+    let (_, after_publish_heading) = workflow
+        .split_once("\n  publish-action:")
+        .expect("release workflow publishes the exact Action ref");
+    let (publish_action, after_smoke_heading) = after_publish_heading
+        .split_once("\n  smoke-action:")
+        .expect("release workflow has an Action smoke gate");
+    let (smoke_action, publish_release) = after_smoke_heading
+        .split_once("\n  publish-release:")
+        .expect("release workflow publishes only after smoke tests");
+
+    assert!(publish_action.contains("\"$commit:$exact_ref\""));
+    assert!(publish_action.contains("group: action-publication-${{ github.ref_name }}"));
+    assert!(
+        !publish_action.contains("\"$commit:$major_ref\""),
+        "exact Action publication must not move the major ref"
+    );
+    assert!(
+        smoke_action.contains("os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]")
+    );
+    assert!(publish_release.contains("needs: [publish-action, smoke-action]"));
+    assert!(publish_release.contains("group: action-major-promotion"));
+    assert!(publish_release.contains(
+        "current=\"$(git ls-remote --heads \"$remote\" \"$major_ref\" | awk '{print $1}')\""
+    ));
+    assert!(publish_release.contains("if \"${push[@]}\" \"$commit:$major_ref\"; then"));
+    assert!(publish_release.contains("git commit-tree \"$exact_tree\" -p \"$current\""));
+    assert!(publish_release.contains("for attempt in 1 2 3 4 5; do"));
+    assert!(publish_release.contains("steps.promote.outputs.major-is-latest"));
 }
 
 #[test]

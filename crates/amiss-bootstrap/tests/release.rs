@@ -72,8 +72,6 @@ fn engine_bytes(platform: ConstraintPlatform) -> Vec<u8> {
 /// the closure a release publishes, byte for byte.
 const LAUNCHER: &[u8] = include_bytes!("../../amiss/action/launcher.js");
 
-/// The reviewed action definition, pinned the same way: the closure the
-/// bootstrap validates is the closure a release publishes, byte for byte.
 const ACTION: &[u8] = include_bytes!("../../amiss/action/runtime.yml");
 
 struct Release {
