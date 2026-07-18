@@ -1,7 +1,7 @@
 - id: amiss
   name: amiss documentation check
   description: Checks staged documentation against the repository tree it describes.
-  entry: sh -c 'amiss check --repo . --object-format sha1 --base "$(git rev-parse HEAD)" --index --profile enforce'
+  entry: sh -c 'amiss check --repo . --object-format "$(git rev-parse --show-object-format)" --base "$(git rev-parse HEAD)" --index --profile enforce'
   language: system
   pass_filenames: false
   always_run: true
