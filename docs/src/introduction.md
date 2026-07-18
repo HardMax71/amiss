@@ -7,7 +7,7 @@ points at a file or line range that is gone, it reports that. When the selected 
 changed while the paragraph containing the reference did not, it reports that too. It never
 reads meaning: it cannot tell you whether a sentence is true, and it does not try.
 
-“Supported explicit reference” is an important boundary. Bare path-like prose is not
+"Supported explicit reference" is an important boundary. Bare path-like prose is not
 inferred, raw HTML and MDX code regions are opaque, and site routes, heading semantics, code
 symbols, live URLs, and other repositories need information this engine does not have. Numeric
 line fragments are the narrow exception: they select bytes, not language symbols or meaning. The
@@ -40,11 +40,11 @@ is in [Controls and policy](controls.md).
 Each promise below is enforced by a test in the suite:
 
 - It never writes to your repository. The
-  [no-write suite](../../crates/amiss/tests/no_write.rs)
+  [no-write suite](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/no_write.rs)
   compares trees before and after commands and also scans a read-only repository.
 - It never runs repository code and never calls the `git` command. It reads
   [Git](https://git-scm.com)'s objects, packs, and index through the
-  [repository reader](../../crates/amiss-git/src/repo.rs).
+  [repository reader](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs).
 - It never follows symlinks while reading. A link placed at the repository root, at `.git`,
   or anywhere along an object's path is refused, and the refusal is never confused with a
   missing file.
@@ -55,7 +55,7 @@ Each promise below is enforced by a test in the suite:
 - Stable public resource ceilings have names and published values. A measured crossing
   produces a typed error naming the limit and observed lower bound. Parser CPU work that
   occurs before node and depth accounting is a disclosed limitation in
-  [Security model](security.md), not covered by a stronger “nothing can hang” promise.
+  [Security model](security.md), not covered by a stronger "nothing can hang" promise.
 
 The rest of this book walks those promises in the order a run does: what counts as input,
 what gets scanned, how references resolve, what the report says, and where the boundaries

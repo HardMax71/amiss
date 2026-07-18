@@ -16,9 +16,9 @@ separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api
 is bytewise, including for paths JSON cannot represent as text. Each snapshot policy can carry
 the [published repository-policy entry ceiling](limits.md), so the base/candidate
 classification union can contain twice that many distinct roots. The
-[`policy` tests](../../crates/amiss-scan/tests/policy.rs)
+[`policy` tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/policy.rs)
 pin the semantic boundaries, and the release
-[`eligibility` test](../../crates/amiss-scan/tests/eligibility.rs)
+[`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/eligibility.rs)
 checks the maximum union without scanning every policy row for every discovered path. The
 `amiss-scan` `controls` benchmark tracks both tree matching and policy-set comparison as the
 entry count grows.
@@ -33,27 +33,27 @@ manifest, and execution-constraint identity uses the same open repository gramma
 caller-canonical host, a slash-joined owner when the forge supports nested groups, and a
 repository name. That admits enterprise and self-hosted instances without making them
 impersonate a public host. The
-[organization-floor](../../spec/organization-floor.schema.json),
-[debt-snapshot](../../spec/debt-snapshot.schema.json), and
-[waiver-bundle](../../spec/waiver-bundle.schema.json) schemas, the
-[control parsers](../../crates/amiss-wire/src/controls.rs), and their
-[open-forge contract tests](../../crates/amiss-wire/tests/controls.rs) pin that grammar and
+[organization-floor](https://github.com/HardMax71/amiss/blob/main/spec/organization-floor.schema.json),
+[debt-snapshot](https://github.com/HardMax71/amiss/blob/main/spec/debt-snapshot.schema.json), and
+[waiver-bundle](https://github.com/HardMax71/amiss/blob/main/spec/waiver-bundle.schema.json) schemas, the
+[control parsers](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls.rs), and their
+[open-forge contract tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/tests/controls.rs) pin that grammar and
 the exact repository/ref binding. The execution constraint additionally pins the action
 tree, release manifest, platform, status, and bootstrap in its
-[dedicated parser](../../crates/amiss-wire/src/controls/execution_constraint.rs).
+[dedicated parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls/execution_constraint.rs).
 
 Trusted time binds more than a timestamp. Its
-[current parser](../../crates/amiss-wire/src/controls/trusted_time.rs) requires the repository
+[current parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls/trusted_time.rs) requires the repository
 and ref, a provider namespace, an opaque bounded provider run ID and positive attempt, and
 the candidate-identity digest. That candidate identity includes the selected forge as well
 as the repository and snapshots, so changing the URL dialect cannot replay a statement for
 the same Git trees. The controls request must repeat the same provider/run tuple, and the
-[verification gate](../../crates/amiss-scan/src/policy.rs) compares it byte-for-byte before
+[verification gate](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) compares it byte-for-byte before
 using the time. These are binding rules, not authentication: an adapter still has to acquire
 the request and statement from a provider-controlled channel. Debt must reproduce its
 adoption tree, and a waiver item for another candidate tree is simply not selected. The
 commit and staged-index paths share one
-[trusted-time, debt, and waiver pipeline](../../crates/amiss-scan/src/pipeline/external.rs).
+[trusted-time, debt, and waiver pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 
 Debt and waiver require verified trusted time and a complete Git candidate. Their item
 schemas carry the accepted or authorized fact as the sole source of its finding kind and
@@ -64,7 +64,7 @@ or an absent key is not an exception target. Matching still requires the exact f
 active unchanged debt records tolerance at `warn`, while an applied waiver changes only
 `fail` to `warn`. Invalid, expired, worsened, or overlapping items suppress nothing, and
 an overlap makes evaluation incomplete. The
-[wrapper tests](../../crates/amiss-scan/tests/wrapper.rs)
+[wrapper tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/wrapper.rs)
 pin binding, trusted-time, expiry, fact-drift, wrong-tree selection, resolved-target, and
 overlap behavior. The published [`complete-findings`, `debt-items`, and `waiver-items`
 ceilings](limits.md) bound the accepted sets; the `amiss-scan` `pipeline` benchmark tracks
@@ -75,9 +75,9 @@ document whose name is raw bytes, but waiver and debt items spell paths as text.
 finding is reportable yet cannot be waived or adopted.
 
 The machine-facing evaluation and controls requests are closed by the
-[evaluation-request schema](../../spec/scanner-evaluation-request.schema.json) and
-[controls-request schema](../../spec/scanner-controls-request.schema.json), with matching
-[strict parser tests](../../crates/amiss-wire/tests/requests.rs). Their unversioned names are
+[evaluation-request schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-evaluation-request.schema.json) and
+[controls-request schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-controls-request.schema.json), with matching
+[strict parser tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/tests/requests.rs). Their unversioned names are
 intentional: before 1.0 the shipped schema, parser, examples, and report form one rolling
 contract and move together.
 
@@ -85,11 +85,11 @@ In the public command and GitHub composite Action, all five external controls ar
 report records `status: "none"` separately for organization floor, debt snapshot, waiver
 bundle, execution constraint, and trusted time; its sandbox assurance is `self-asserted`.
 There is no aggregate `provider_verified` field. The exact projection is built in the
-[report writer](../../crates/amiss-scan/src/report.rs).
+[report writer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/report.rs).
 
 Strict request parsers and the five control semantics exist as internal library surfaces,
 but authenticated provider acquisition and public CLI/bootstrap wiring do not. The public
-[CLI shell](../../crates/amiss/src/main.rs) supplies
+[CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) supplies
 each value as `None`. Until the delivery lane in [Project status](status.md) is complete, the
 honest reading of a local or convenience-adapter report is: these findings, under this
 repository policy, with no outside authority consulted.

@@ -636,15 +636,23 @@ fn repository_relative_documentation_links_resolve() {
                 let destination = after_open
                     .get(..close)
                     .expect("the ASCII link closer starts at a UTF-8 boundary");
-                if destination.starts_with("../../") {
-                    let target = destination
-                        .split(['#', '?'])
-                        .next()
-                        .expect("split always yields one component");
-                    let resolved = path
-                        .parent()
-                        .expect("documentation source has a parent")
-                        .join(target);
+                let tree_target = if destination.starts_with("../../") {
+                    Some(
+                        path.parent()
+                            .expect("documentation source has a parent")
+                            .join(destination),
+                    )
+                } else {
+                    destination
+                        .strip_prefix("https://github.com/HardMax71/amiss/blob/main/")
+                        .map(|target| repository_root().join(target))
+                };
+                if let Some(resolved) = tree_target {
+                    let resolved = resolved
+                        .to_str()
+                        .and_then(|text| text.split(['#', '?']).next())
+                        .map(PathBuf::from)
+                        .expect("documentation link paths are UTF-8");
                     assert!(
                         resolved.exists(),
                         "{}:{} links to missing repository path {destination}",

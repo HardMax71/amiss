@@ -13,7 +13,7 @@ engine.
 
 The engine has no network acquisition interface and does not fetch missing objects. It never
 writes to the repository, which the
-[no-write tests](../../crates/amiss/tests/no_write.rs)
+[no-write tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/no_write.rs)
 check both by comparing the tree and by scanning a read-only repository. Attempts to make it
 read outside the repository run into the never-follow-links rule described in
 [Snapshots](snapshots.md).
@@ -22,10 +22,10 @@ Parsers are the biggest attack surface and receive fuzz targets and pinned confo
 corpora. Document byte admission is charged before parsing. Parser node and nesting totals,
 however, are measured and charged only after the grammar returns; they are output budgets,
 not a general CPU deadline inside the parser. The order is explicit in the
-[scan pipeline](../../crates/amiss-scan/src/scan.rs).
+[scan pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/scan.rs).
 The pinned MDX lexer also has a documented quadratic unterminated-region case for which an
 in-parse work bound is not yet implemented; see the
-[corpus limitation](../../corpus/README.md).
+[corpus limitation](https://github.com/HardMax71/amiss/blob/main/corpus/README.md).
 
 A Markdown parser panic is caught and converted to `PARSER_PANIC` against the document that
 caused it instead of aborting the process. The known panic fixtures live in the conformance
@@ -43,17 +43,17 @@ because the log needs safety and the report needs fidelity, and those are differ
 channels with different rules.
 
 Two delivery paths need different trust descriptions. The published convenience
-[composite Action](../../action.yml) is a GitHub event adapter. It verifies
+[composite Action](https://github.com/HardMax71/amiss/blob/main/action.yml) is a GitHub event adapter. It verifies
 the selected engine's digest against the release manifest carried in the same action tree,
 then launches the engine directly. That detects an inconsistent tree, but the manifest is
 not an independently acquired trust anchor, and this lane does not use bootstrap's watchdog.
 The manifest's build-source host is supplied explicitly and its repository identity is
 forge-neutral, as pinned by the
-[release validation tests](../../crates/amiss-bootstrap/tests/release.rs); that prevents a
+[release validation tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/release.rs); that prevents a
 format-level `github.com` assumption but does not authenticate the supplied identity.
 
 The separately executable
-[`amiss-bootstrap`](../../crates/amiss-bootstrap/src/main.rs)
+[`amiss-bootstrap`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs)
 implements the stronger mechanism: validate an action tree and execution constraint as
 data, launch the selected engine with a cleared environment and fixed arguments, and enforce
 a 120-second wall-clock timeout. The request and control formats can bind an open forge

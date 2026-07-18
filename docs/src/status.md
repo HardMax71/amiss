@@ -2,30 +2,30 @@
 
 This page describes the supported surface on `main`, not the history of individual
 releases. Versions and release-specific changes live in the
-[changelog](../../CHANGELOG.md). Future work and its
+[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md). Future work and its
 entry conditions live in the [Roadmap](roadmap.md).
 
 ## Supported surface
 
 | Area | Current contract | Implementation anchor |
 | --- | --- | --- |
-| Command | `amiss check` compares a base commit with either a candidate commit or the staged index. The command grammar is closed. | [CLI parser](../../crates/amiss/src/invocation.rs) |
-| Repository access | The engine reads Git objects, packs, deltas, trees, and the index directly. It does not invoke `git`, follow repository symlinks, or fetch missing data. | [Git store](../../crates/amiss-git/src/repo.rs) |
-| Documents | Built-in discovery covers Markdown, GFM, MDX, six extensionless Markdown basenames, and two plain-advisory basenames. Repository policy may add paths without installing another parser. | [Classifier](../../crates/amiss-scan/src/document.rs) |
-| References | Relative repository paths and same-repository GitHub, GitLab, and Gitea-family URLs are resolved under their declared dialect. Numeric line fragments select and compare an exact inclusive byte range; unsupported and external shapes remain visible in the report. | [Resolver](../../crates/amiss-scan/src/resolve.rs) |
-| Policy | `.amiss/scanner-policy.json` may expand discovery and raise the disposition of missing targets, target-type mismatches, and invalid references. It cannot downgrade or suppress a finding. | [Policy application](../../crates/amiss-scan/src/policy.rs) |
-| Reports | Machine output uses the rolling pre-1.0 report envelope and payload contract. Its compatibility marker remains `experimental`. | [Current schema](../../spec/scanner-report.schema.json) |
-| GitHub adapter | The published composite Action derives snapshots from supported GitHub events, verifies the selected engine against the manifest in the same action tree, runs it, and emits annotations. It is one delivery adapter, not the identity model. | [Composite Action](../../action.yml) |
+| Command | `amiss check` compares a base commit with either a candidate commit or the staged index. The command grammar is closed. | [CLI parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/invocation.rs) |
+| Repository access | The engine reads Git objects, packs, deltas, trees, and the index directly. It does not invoke `git`, follow repository symlinks, or fetch missing data. | [Git store](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs) |
+| Documents | Built-in discovery covers Markdown, GFM, MDX, six extensionless Markdown basenames, and two plain-advisory basenames. Repository policy may add paths without installing another parser. | [Classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs) |
+| References | Relative repository paths and same-repository GitHub, GitLab, and Gitea-family URLs are resolved under their declared dialect. Numeric line fragments select and compare an exact inclusive byte range; unsupported and external shapes remain visible in the report. | [Resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs) |
+| Policy | `.amiss/scanner-policy.json` may expand discovery and raise the disposition of missing targets, target-type mismatches, and invalid references. It cannot downgrade or suppress a finding. | [Policy application](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) |
+| Reports | Machine output uses the rolling pre-1.0 report envelope and payload contract. Its compatibility marker remains `experimental`. | [Current schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report.schema.json) |
+| GitHub adapter | The published composite Action derives snapshots from supported GitHub events, verifies the selected engine against the manifest in the same action tree, runs it, and emits annotations. It is one delivery adapter, not the identity model. | [Composite Action](https://github.com/HardMax71/amiss/blob/main/action.yml) |
 
 Repository form is deliberately closed too. The reader accepts a primary non-bare checkout
 whose `.git` entry is a real directory. Bare repositories and linked worktrees represented
 by a `.git` file are unavailable, and alternate object stores are not consulted. The
-[repository boundary](../../crates/amiss-git/src/repo.rs)
-and its [boundary tests](../../crates/amiss-git/tests/boundary.rs)
+[repository boundary](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs)
+and its [boundary tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/tests/boundary.rs)
 pin that behavior.
 
-The supported reference surface is intentionally smaller than “every path-like phrase in
-prose.” Bare filenames in ordinary text are not inferred; raw HTML and MDX code regions are
+The supported reference surface is intentionally smaller than "every path-like phrase in
+prose." Bare filenames in ordinary text are not inferred; raw HTML and MDX code regions are
 opaque; leading-slash site routes, heading fragments, code symbols, live URLs, and references
 to other repositories are not validated under those systems' semantics. Their visible
 boundary behavior is described in [Discovery](discovery.md) and [Resolution](resolution.md).
@@ -38,20 +38,20 @@ time, and execution constraints. The library entry point accepts those values; t
 CLI supplies all five as absent. The current evaluation and controls requests carry open
 forge identity; trusted time additionally carries a provider namespace and opaque provider
 run identity. Compare the
-[request schemas](../../spec/scanner-evaluation-request.schema.json),
-[strict parsers](../../crates/amiss-wire/src/requests.rs),
-[pipeline shell](../../crates/amiss-scan/src/pipeline.rs), and
-[CLI wiring](../../crates/amiss/src/main.rs).
+[request schemas](https://github.com/HardMax71/amiss/blob/main/spec/scanner-evaluation-request.schema.json),
+[strict parsers](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/requests.rs),
+[pipeline shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline.rs), and
+[CLI wiring](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs).
 
 `amiss-bootstrap` can validate an action tree and execution constraint, launch a verified
 engine with a cleared environment, supervise it, and validate its report. It is built by the
 release workflow, but the published composite Action currently launches `amiss` directly;
 provider-authenticated request acquisition and bootstrap integration are therefore not a
 supported required-check lane. The distinction is visible in the
-[bootstrap entry point](../../crates/amiss-bootstrap/src/main.rs),
-[release assembly](../../.github/workflows/release.yml), and
-[Action execution](../../action.yml). Release manifests use the same open repository
-identity, and the [manifest builder](../../crates/amiss-bootstrap/src/build.rs) receives the
+[bootstrap entry point](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs),
+[release assembly](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml), and
+[Action execution](https://github.com/HardMax71/amiss/blob/main/action.yml). Release manifests use the same open repository
+identity, and the [manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs) receives the
 build host explicitly instead of assuming a public forge. Provider-authenticated acquisition
 adapters for GitHub or other forges remain unsupported.
 
@@ -70,21 +70,21 @@ the corresponding constants without updating the book fails CI. The same test di
 every public schema-backed example and validates it against that schema. Input examples also
 pass their owning typed reader; adding a contract without registering a reader fails CI. The
 report's readable form passes the strict JSON reader, while its canonical form separately
-clears the [end-to-end wrapper acceptance law](../../crates/amiss-bootstrap/tests/acceptance.rs).
+clears the [end-to-end wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/acceptance.rs).
 The standalone commit and staged-index identity preimages likewise validate against their
 report-schema fragments and reproduce the production digest chain in the
-[identity golden test](../../crates/amiss-scan/tests/identity.rs).
+[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs).
 Published semantic corpora also execute their owning runtime paths: the
-[frontmatter vectors](../../spec/examples/frontmatter-vectors.json) drive the
-[recognizer](../../crates/amiss-md/tests/frontmatter.rs), the
-[correlation vectors](../../spec/examples/correlation-intent-vectors.json) drive the live
-[correlation-intent projection](../../crates/amiss-scan/tests/correlation_vectors.rs), and the
-[governed-definition vectors](../../spec/examples/governed-definition-vectors.json) drive
-parser extraction through [report construction](../../crates/amiss-scan/tests/governed.rs).
+[frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json) drive the
+[recognizer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs), the
+[correlation vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json) drive the live
+[correlation-intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlation_vectors.rs), and the
+[governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json) drive
+parser extraction through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
 Published CI snippets require immutable upstream Action pins, an explicit reviewed crate
 version, and the current Amiss release major. Fixture version strings inside report and
 release-manifest examples are reproducible evidence, not claims about the latest package
 release. See the
-[documentation contract test](../../crates/amiss/tests/documentation_contracts.rs). Neither
+[documentation contract test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs). Neither
 mechanism pretends to prove the meaning of free prose; together they make the most
 mechanical drift visible.

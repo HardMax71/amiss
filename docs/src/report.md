@@ -19,7 +19,7 @@ Inside the payload: which trees were compared and how; the result block with `st
 discovered document, its classification, and whether its content was available; the
 `findings` array; and the `errors` array of analysis errors the run kept. A repository
 path in any of these is a plain string when its bytes are valid UTF-8, and otherwise an
-object of the form `{"bytes_hex": "…"}` naming the raw bytes as lowercase hex; a writer
+object of the form `{"bytes_hex": "..."}` naming the raw bytes as lowercase hex; a writer
 never uses the object form for bytes that decode as text, so one path has exactly one
 spelling and every derived digest stays whole. Every finding
 carries its kind, its location with byte offsets, its attribution, the policy steps that
@@ -35,7 +35,7 @@ The envelope, down to its top-level keys:
   "payload": {
     "schema": "amiss/scanner-report-payload",
     "compatibility": "experimental",
-    "engine": { "engine_digest": "sha256:…" },
+    "engine": { "engine_digest": "sha256:..." },
     "evaluation": {},
     "controls": {},
     "result": { "status": "fail", "complete": true, "exit_code": 1 },
@@ -45,7 +45,7 @@ The envelope, down to its top-level keys:
     "findings": [],
     "errors": []
   },
-  "payload_digest": "sha256:…"
+  "payload_digest": "sha256:..."
 }
 ```
 
@@ -71,7 +71,7 @@ Findings are sorted by finding key, a domain-separated hash of kind plus scope. 
 finding and error row carries a `description`: the fixed engine-owned sentence for its
 kind or code, stating what the row means and what to do about it, so no consumer needs a
 second source to act on a report. The sentences live in one place,
-[`FindingKind::meaning` and `AnalysisErrorCode::meaning`](../../crates/amiss-wire/src/report.rs);
+[`FindingKind::meaning` and `AnalysisErrorCode::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
 the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
 and the shipped example are checked against that source in CI. The human format prints
 the same facts in the same order, replaces every byte outside printable ASCII with a
@@ -83,12 +83,12 @@ ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the l
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).
 
 The machine contract is the
-[current report schema](../../spec/scanner-report.schema.json), its
-[readable example](../../spec/examples/scanner-report.json), and the corresponding
-[canonical bytes](../../spec/examples/scanner-report.canonical.json). The test suite validates
+[current report schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report.schema.json), its
+[readable example](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-report.json), and the corresponding
+[canonical bytes](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-report.canonical.json). The test suite validates
 emitted bytes with an independent schema validator, checks the canonical example, and checks
 that the schema identifiers match the writer constants in the
-[documentation contract test](../../crates/amiss/tests/documentation_contracts.rs).
+[documentation contract test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs).
 
 This is one rolling, unversioned wire contract during the pre-1.0 `experimental` series.
 Only the unsuffixed schema and examples linked above describe public report output. The

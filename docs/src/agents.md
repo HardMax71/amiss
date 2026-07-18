@@ -37,7 +37,7 @@ GitHub's agentic workflows run coding agents inside Actions and describe themsel
 augmenting deterministic CI rather than replacing it. Amiss is the deterministic half
 of that pairing: it finds drift and refuses to guess, and an agent repairs what it
 found. A starting recipe lives at
-[`integrations/gh-aw/docs-drift-fix.md`](../../integrations/gh-aw/docs-drift-fix.md):
+[`integrations/gh-aw/docs-drift-fix.md`](https://github.com/HardMax71/amiss/blob/main/integrations/gh-aw/docs-drift-fix.md):
 copied into `.github/workflows/` and compiled with the `gh aw` extension, it runs the
 scan on a schedule, reads the report, repairs the drift it can prove, and opens a pull
 request that passes back through the same gate it started from.
@@ -52,4 +52,4 @@ This repository doubles as a Claude Code plugin marketplace. One command registe
 
 Installing the `amiss` plugin from that marketplace adds a skill that knows the
 invocation grammar, the exit classes, and the fix loop; its text is maintained at
-[`integrations/claude`](../../integrations/claude/skills/amiss/SKILL.md).
+[`integrations/claude`](https://github.com/HardMax71/amiss/blob/main/integrations/claude/skills/amiss/SKILL.md).

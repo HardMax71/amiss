@@ -24,16 +24,16 @@ classes 1 and 2 under the default `enforce` profile, and exposes `exit-class` an
 The identity host comes from the event's server URL, so on GitHub Enterprise Server the
 report claims the instance's own host and recognizes that host's blob and tree links, with
 the github dialect declared explicitly. Release assembly likewise supplies the host to the
-[manifest builder](../../crates/amiss-bootstrap/src/build.rs), whose current contract stores
+[manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs), whose current contract stores
 an open build-source identity instead of assuming `github.com`; the
-[release workflow](../../.github/workflows/release.yml) is a checkable example of that input.
+[release workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml) is a checkable example of that input.
 The report and request formats are forge-neutral even though this repository currently ships
 only the GitHub event adapter.
 
 The long form invokes the engine directly. It is useful outside GitHub Actions or when a
 workflow needs to construct the exact evaluation itself, but it is not the repository's
 dogfood path. Amiss's
-[self-scan workflow](../../.github/workflows/ci.yml)
+[self-scan workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/ci.yml)
 builds the pull request's engine, assembles a local action tree with its manifest, and runs
 that composite under `--profile enforce`. A minimal adjacent-commit direct invocation is:
 

@@ -94,7 +94,7 @@ not on that list: it is an ordinary document whose path the report writes as hex
 alternative in every one of these cases is a report that looks complete and is not.
 
 The closed list, one fixed sentence per code, generated from
-[`AnalysisErrorCode::meaning`](../../crates/amiss-wire/src/report.rs) and checked in CI.
+[`AnalysisErrorCode::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs) and checked in CI.
 The human output prints the same sentence as a `note` line whenever a code appears, so an
 exit-2 log says how to unblock the run without this page open.
 
