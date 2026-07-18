@@ -19,10 +19,13 @@ from 1.0.0 on, so one series can never rewrite another's ref. `action/vX.Y.Z` ta
 immutable exact pins, and pinning the full commit id works as everywhere.
 
 Before running anything, the action verifies the selected binary against the release
-manifest shipped in the same tree. It fails the job on exit classes 1 and 2 under the
-default `enforce` profile and exposes `exit-class` and `report` outputs for anything
-downstream. Its inputs (`profile`, `base`, `candidate`, `repo`, `object-format`,
-`annotations`) exist for the cases the defaults do not cover.
+manifest shipped in the same tree. A wall-clock watchdog backstops the engine's
+resource ceilings: 120 seconds unless the `watchdog-seconds` input moves it, and a scan
+that outlives the window is ended so the job fails with no result. The action fails
+the job on exit classes 1 and 2 under the default `enforce` profile and exposes
+`exit-class` and `report` outputs for anything downstream. Its inputs (`profile`,
+`base`, `candidate`, `repo`, `object-format`, `annotations`, `watchdog-seconds`) exist
+for the cases the defaults do not cover.
 
 The identity host comes from the event's server URL. On GitHub Enterprise Server the
 report therefore claims the instance's own host and recognizes that host's blob and tree

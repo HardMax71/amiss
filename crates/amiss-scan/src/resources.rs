@@ -15,6 +15,7 @@ pub struct ScanLimits {
     pub parser_nesting: u64,
     pub parser_nodes_per_document: u64,
     pub parser_nodes_per_snapshot: u64,
+    pub aggregate_embedded_code_evaluation_bytes_per_snapshot: u64,
     pub references_per_document: u64,
     pub references_per_snapshot: u64,
     pub referenced_target_blob_bytes: u64,
@@ -39,6 +40,7 @@ impl ScanLimits {
         parser_nesting: 256,
         parser_nodes_per_document: 250_000,
         parser_nodes_per_snapshot: 5_000_000,
+        aggregate_embedded_code_evaluation_bytes_per_snapshot: 536_870_912,
         references_per_document: 4_096,
         references_per_snapshot: 1_000_000,
         referenced_target_blob_bytes: 16_777_216,
@@ -67,6 +69,7 @@ pub struct ScanResources {
     documents: u64,
     document_bytes: u64,
     nodes: u64,
+    embedded_code_bytes: u64,
     references: u64,
     target_bytes: u64,
     line_fragment_bytes: u64,
@@ -81,6 +84,7 @@ impl Clone for ScanResources {
             documents: self.documents,
             document_bytes: self.document_bytes,
             nodes: self.nodes,
+            embedded_code_bytes: self.embedded_code_bytes,
             references: self.references,
             target_bytes: self.target_bytes,
             line_fragment_bytes: self.line_fragment_bytes,
@@ -110,6 +114,7 @@ impl ScanResources {
             documents: 0,
             document_bytes: 0,
             nodes: 0,
+            embedded_code_bytes: 0,
             references: 0,
             target_bytes: 0,
             line_fragment_bytes: 0,
@@ -139,6 +144,38 @@ impl ScanResources {
     #[must_use]
     pub const fn nodes(&self) -> u64 {
         self.nodes
+    }
+
+    #[must_use]
+    pub const fn embedded_code_bytes(&self) -> u64 {
+        self.embedded_code_bytes
+    }
+
+    /// The embedded-code evaluation bytes still grantable to the next parse:
+    /// the aggregate ceiling minus what earlier parses charged.
+    #[must_use]
+    pub const fn embedded_code_allowance(&self) -> u64 {
+        self.limits
+            .aggregate_embedded_code_evaluation_bytes_per_snapshot
+            .saturating_sub(self.embedded_code_bytes)
+    }
+
+    /// Accumulates one completed parse's embedded-code bytes. Infallible: a
+    /// parse granted the remaining allowance can only spend inside it, so the
+    /// total never crosses the ceiling here.
+    pub fn charge_embedded_code(&mut self, spent: u64) {
+        self.embedded_code_bytes = self.embedded_code_bytes.saturating_add(spent);
+    }
+
+    /// The aggregate crossing for a parse the in-parse meter ended, observing
+    /// the prior charged total plus the ended parse's spent bytes.
+    pub(crate) const fn embedded_code_crossing(&self, spent: u64) -> Error {
+        crossing(
+            ResourceName::AggregateEmbeddedCodeEvaluationBytesPerSnapshot,
+            self.limits
+                .aggregate_embedded_code_evaluation_bytes_per_snapshot,
+            self.embedded_code_bytes.saturating_add(spent),
+        )
     }
 
     #[must_use]

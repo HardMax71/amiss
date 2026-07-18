@@ -885,6 +885,9 @@ pub fn tightened_limits(
             ResourceName::ParserNesting => Some(&mut scan.parser_nesting),
             ResourceName::ParserNodesPerDocument => Some(&mut scan.parser_nodes_per_document),
             ResourceName::ParserNodesPerSnapshot => Some(&mut scan.parser_nodes_per_snapshot),
+            ResourceName::AggregateEmbeddedCodeEvaluationBytesPerSnapshot => {
+                Some(&mut scan.aggregate_embedded_code_evaluation_bytes_per_snapshot)
+            }
             ResourceName::ReferencesPerDocument => Some(&mut scan.references_per_document),
             ResourceName::ReferencesPerSnapshot => Some(&mut scan.references_per_snapshot),
             ResourceName::ReferencedTargetBlobBytes => Some(&mut scan.referenced_target_blob_bytes),

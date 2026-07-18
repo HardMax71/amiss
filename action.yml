@@ -25,6 +25,9 @@ inputs:
   annotations:
     description: emit findings and errors as file annotations
     default: "true"
+  watchdog-seconds:
+    description: wall-clock seconds the scan may take before it is ended with no result
+    default: "120"
 
 outputs:
   exit-class:
@@ -145,6 +148,11 @@ runs:
           } >> "$GITHUB_OUTPUT"
         fi
 
+    # The engine's resource ceilings bound its work, and a wall-clock watchdog
+    # backstops them the way bootstrap's 120-second supervisor does on its
+    # lane: a scan that outlives the window is ended and the run has no
+    # result, never a verdict. The window is an input with a 120-second
+    # default, and only a positive integer is accepted.
     - id: scan
       shell: bash
       env:
@@ -157,9 +165,18 @@ runs:
         INPUT_REPO: ${{ inputs.repo }}
         PROFILE: ${{ inputs.profile }}
         OBJECT_FORMAT: ${{ inputs.object-format }}
+        WATCHDOG_SECONDS: ${{ inputs.watchdog-seconds }}
       run: |
         set -uo pipefail
+        case "$WATCHDOG_SECONDS" in
+          '' | *[!0-9]* | 0)
+            echo "::error title=amiss::watchdog-seconds must be a positive integer, got '${WATCHDOG_SECONDS}'"
+            exit 2
+            ;;
+        esac
         report="${RUNNER_TEMP}/amiss-report.json"
+        fired="${RUNNER_TEMP}/amiss-watchdog-fired"
+        rm -f "$fired"
         args=(check --repo "$INPUT_REPO" --object-format "$OBJECT_FORMAT"
               --base "$BASE" --candidate "$CANDIDATE"
               --profile "$PROFILE" --format json)
@@ -168,7 +185,21 @@ runs:
                 --forge github)
         fi
         status=0
-        "$BINARY" "${args[@]}" > "$report" || status=$?
+        "$BINARY" "${args[@]}" > "$report" &
+        engine=$!
+        ( sleep "$WATCHDOG_SECONDS"
+          touch "$fired"
+          kill -s TERM "$engine" 2>/dev/null
+          sleep 5
+          kill -s KILL "$engine" 2>/dev/null
+        ) >/dev/null 2>&1 &
+        watchdog=$!
+        wait "$engine" || status=$?
+        kill "$watchdog" 2>/dev/null || true
+        if [ -e "$fired" ]; then
+          echo "::error title=amiss::the scan crossed the ${WATCHDOG_SECONDS}-second wall-clock watchdog; the run ends with no result"
+          status=2
+        fi
         {
           printf 'exit-class=%s\n' "$status"
           printf 'report=%s\n' "$report"

@@ -8,7 +8,7 @@ use fixtures::harvest;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn extraction(adapter: Adapter, source: &str) -> Extraction {
-    analyze(adapter, source.as_bytes())
+    analyze(adapter, source.as_bytes(), u64::MAX)
         .expect("analyze")
         .extraction
         .expect("a parsing adapter extracts")
@@ -339,7 +339,7 @@ fn corpus_extraction_invariants_hold() {
             let Ok(Analysis {
                 extraction: Some(extraction),
                 ..
-            }) = analyze(adapter, case.source.as_bytes())
+            }) = analyze(adapter, case.source.as_bytes(), u64::MAX)
             else {
                 continue;
             };

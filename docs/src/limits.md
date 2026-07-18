@@ -5,10 +5,11 @@ a typed error carrying the wire resource name, configured limit, and observed lo
 a run that cannot complete exits 2. The table is rendered from the Rust defaults and checked
 in CI, so a default cannot change without updating this page.
 
-These are accounting ceilings, not all wall-clock deadlines. In particular, document bytes
-are charged before parsing, but parser node and nesting totals are charged after the grammar
-returns. The known in-parse CPU limitation and bootstrap-only watchdog are described in
-[Security model](security.md).
+These are accounting ceilings, not all wall-clock deadlines. Document bytes are charged
+before parsing, parser node and nesting totals after the grammar returns, and
+embedded-code evaluation bytes inside the parse itself, at every candidate close of an
+MDX code region. How the ceilings relate to CPU, and which lanes carry wall-clock
+watchdogs, is described in [Security model](security.md).
 
 Line-fragment work is charged pessimistically: the complete target size, once per
 distinct target identity (path, file mode, and object id) and numeric range. Successful
@@ -45,6 +46,7 @@ charge. A changed object or mode at the same path is charged again.
 | `parser-nesting` | 256 |
 | `parser-nodes-per-document` | 250,000 |
 | `parser-nodes-per-snapshot` | 5,000,000 |
+| `aggregate-embedded-code-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `references-per-document` | 4,096 |
 | `references-per-snapshot` | 1,000,000 |
 | `organization-policy-entries` | 100,000 |

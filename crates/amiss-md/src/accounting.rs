@@ -43,13 +43,33 @@ impl From<Fault> for AnalysisErrorCode {
     }
 }
 
+/// How one guarded parse fails: a fault in the contract's precedence, or a
+/// parse the embedded-code meter ended because the granted allowance was
+/// spent. The second is a resource crossing and never an attribution to the
+/// document, which is why it does not live in `Fault`; `spent` is the meter's
+/// total at the abort, the observed lower bound the caller reports.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnalyzeError {
+    Fault(Fault),
+    EmbeddedCodeAllowance { spent: u64 },
+}
+
+impl From<Fault> for AnalyzeError {
+    fn from(fault: Fault) -> Self {
+        Self::Fault(fault)
+    }
+}
+
 /// Recognizes frontmatter, hands only the suffix to the adapter's grammar, and
-/// guards the parse. `None` is the plain adapter, which runs no grammar.
+/// guards the parse under the embedded-code allowance. `None` is the plain
+/// adapter, which runs no grammar; the `u64` is the embedded-code bytes the
+/// parse spent.
 pub(crate) fn parsed(
     adapter: Adapter,
     source: &[u8],
-) -> Result<Option<(Node, usize, &str)>, Fault> {
-    let Some(options) = parse_options(adapter) else {
+    embedded_code_allowance: u64,
+) -> Result<Option<(Node, usize, &str, u64)>, AnalyzeError> {
+    let Some((options, meter)) = parse_options(adapter, embedded_code_allowance) else {
         return Ok(None);
     };
     let text = str::from_utf8(source).map_err(|_invalid| Fault::DocumentInvalid)?;
@@ -57,21 +77,30 @@ pub(crate) fn parsed(
     let suffix = text.get(suffix_offset..).ok_or(Fault::DocumentInvalid)?;
     let guarded = catch_unwind(AssertUnwindSafe(|| to_mdast(suffix, &options)))
         .map_err(|_panic| Fault::ParserPanic)?;
-    let tree = guarded.map_err(|_rejected| Fault::DocumentInvalid)?;
-    Ok(Some((tree, suffix_offset, suffix)))
+    let tree = guarded.map_err(|_rejected| {
+        if meter.tripped() {
+            AnalyzeError::EmbeddedCodeAllowance {
+                spent: meter.spent(),
+            }
+        } else {
+            AnalyzeError::Fault(Fault::DocumentInvalid)
+        }
+    })?;
+    Ok(Some((tree, suffix_offset, suffix, meter.spent())))
 }
 
-/// Charges one document against the adapter's grammar. Frontmatter contributes
-/// no node; an empty document still charges one root node at depth one.
+/// Charges one document against the adapter's grammar under an unbounded
+/// embedded-code allowance. Frontmatter contributes no node; an empty document
+/// still charges one root node at depth one.
 ///
 /// # Errors
 ///
 /// `DocumentInvalid` when the bytes are not UTF-8 under a parsing adapter or
 /// the grammar rejects the source, and `ParserPanic` when the parser panics.
-pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, Fault> {
-    match parsed(adapter, source)? {
+pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, AnalyzeError> {
+    match parsed(adapter, source, u64::MAX)? {
         None => Ok(plain(source)),
-        Some((tree, _offset, _suffix)) => Ok(walk(&tree)),
+        Some((tree, _offset, _suffix, _spent)) => Ok(walk(&tree)),
     }
 }
 
