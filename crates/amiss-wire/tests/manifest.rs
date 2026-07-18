@@ -55,9 +55,6 @@ fn closed() -> Vec<RuntimeFile> {
     ]
 }
 
-/// The closure law, violated one clause at a time: the executable row must be
-/// unique, must name the tree path, must carry mode 100755, and must carry
-/// the artifact's own checksum. Each clause alone turns the answer to none.
 #[test]
 fn the_executable_row_holds_every_clause_of_the_closure_law() {
     let sound = artifact(
@@ -143,8 +140,6 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
     }
 }
 
-/// The launcher row must be unique and a regular mode-100644 blob; a second
-/// row, an executable mode, or no row at all each yields none.
 #[test]
 fn the_launcher_row_is_a_single_regular_blob() {
     let sound = artifact(
@@ -191,8 +186,6 @@ fn the_launcher_row_is_a_single_regular_blob() {
     }
 }
 
-/// Selection matches platform and name together: the right pair finds its
-/// artifact, and either half alone finds nothing.
 #[test]
 fn selection_matches_platform_and_name_together() {
     let linux = artifact(
@@ -248,8 +241,7 @@ fn selection_matches_platform_and_name_together() {
     );
 }
 
-/// A complete strict manifest whose one artifact carries all four runtime
-/// roles, which is what makes every arm of the role decoder load-bearing.
+/// All four roles in one parsed manifest, so every decoder arm is load-bearing.
 #[test]
 fn a_complete_manifest_parses_with_every_runtime_role() {
     let lock = r#"{"schema":"amiss/scanner-dependency-lock-input","files":[{"path":"Cargo.lock","raw_digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444"}]}"#;
@@ -300,10 +292,7 @@ fn version_error_path(version: &str) -> String {
         .path
 }
 
-/// The version grammar, one clause at a time, read through where the decoder
-/// stops: a shape the grammar accepts moves the failure past the version to
-/// the missing build source, and a shape it rejects stops on the version
-/// field itself.
+/// An accepted shape moves the failure past the version field; a rejected one stops on it.
 #[test]
 fn version_strings_hold_the_release_shape() {
     let long_valid = format!("1.2.3-{}", "a".repeat(58));
