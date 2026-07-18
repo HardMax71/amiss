@@ -1,0 +1,14 @@
+{
+  "name": "amiss",
+  "owner": {
+    "name": "HardMax71",
+    "url": "https://github.com/HardMax71"
+  },
+  "plugins": [
+    {
+      "name": "amiss",
+      "source": "./integrations/claude",
+      "description": "Documentation drift checking with Amiss: run the scan, read the report, fix what it names."
+    }
+  ]
+}

@@ -12,6 +12,7 @@
 - [Invocation](https://hardmax71.github.io/amiss/invocation.html): the closed command grammar, the identity flags, and the three exit classes
 - [Profiles and findings](https://hardmax71.github.io/amiss/profiles.html): every finding kind with its disposition, its meaning sentence, and a before/after example
 - [Running it in CI](https://hardmax71.github.io/amiss/ci.html): the composite Action, the direct form, and how to read the report from a workflow
+- [Working with agents](https://hardmax71.github.io/amiss/agents.html): the AGENTS.md paste block, the Claude Code plugin, and the continuous-AI repair recipe
 
 ## The evaluation
 

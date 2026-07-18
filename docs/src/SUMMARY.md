@@ -7,6 +7,7 @@
 - [Invocation](invocation.md)
 - [Profiles and findings](profiles.md)
 - [Running it in CI](ci.md)
+- [Working with agents](agents.md)
 
 # The evaluation
 

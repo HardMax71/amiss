@@ -1,0 +1,10 @@
+{
+  "name": "amiss",
+  "version": "0.1.0",
+  "description": "Documentation drift checking with Amiss: run the scan, read the report, fix what it names.",
+  "author": {
+    "name": "HardMax71",
+    "url": "https://github.com/HardMax71"
+  },
+  "homepage": "https://hardmax71.github.io/amiss/"
+}
