@@ -10,12 +10,14 @@ The pre-implementation review killed that design, and the reasons survived a sec
 adversarial review. Identity rules that were safe for automatic observations were unsafe
 for recorded human attestations sharing the same storage. A committed ledger file
 conflicted between branches at rates that would have made merge queues the real product.
-Trusting a paragraph because it was edited blessed pages that were already wrong. And the
-deepest cut: the system's central promise, that a recorded acceptance meant a human had
-checked the prose against the evidence, is not something any mechanism can make true. The
-project's own experiments provided the counterexamples: of five replayed real-world cases,
-three had their paragraph edited while the reference stayed broken. The numbers and
-stories behind that verdict are in [The evidence base](evidence.md).
+Trusting a paragraph because it was edited blessed pages that were already wrong.
+
+The deepest cut was simpler than any of those. The system's central promise, that a
+recorded acceptance meant a human had checked the prose against the evidence, is not
+something any mechanism can make true. The project's own experiments provided the
+counterexamples: of five replayed real-world cases, three had their paragraph edited
+while the reference stayed broken. The numbers and stories behind that verdict are in
+[The evidence base](evidence.md).
 
 What survived is the part that never needed memory. A link either resolves in a tree or it
 does not. Bytes either changed between two commits or they did not. A paragraph either

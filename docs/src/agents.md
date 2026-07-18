@@ -2,11 +2,10 @@
 
 Amiss meets coding agents in two directions. The reactive one is the gate: a pull
 request fails, and everything the agent needs travels with the failure. Annotations
-carry each finding's fixed description and the normalized target path, the job summary
-lists every failing kind once with its sentence, and each report row explains itself.
-The refusal lane teaches too: a rejected invocation prints the closed grammar on
-stderr, so an agent with no book at hand can construct a working command from the
-refusal alone.
+carry each finding's fixed description and the normalized target path. The job summary
+lists every failing kind once with its sentence. Each report row explains itself. Even a
+rejected invocation teaches, printing the closed grammar on stderr, so an agent with no
+book at hand can construct a working command from the refusal alone.
 
 The preemptive direction is telling your repository's agents to check before they push.
 If your repository keeps an `AGENTS.md`, paste this section into it:

@@ -69,9 +69,9 @@ digraph pipeline {
 }
 ```
 
-Stages charge resource counters at defined admission or observation points and refuse rather
-than repair when a measured ceiling is crossed. Not every counter is a pre-work bound:
-document bytes are admitted before parsing, while parser node and nesting totals are charged
-after the grammar returns. [Security model](security.md) records the resulting CPU-boundary
-limitation. Subject to those declared inputs and boundaries, the report is a pure function
-of the two snapshots and invocation.
+Each stage charges resource counters at a defined admission or observation point, and a
+crossed ceiling is a refusal, never a repair. Not every counter is a pre-work bound:
+document bytes are admitted before parsing, while parser node and nesting totals are
+charged after the grammar returns. [Security model](security.md) records the CPU-boundary
+limitation that follows from that ordering. Subject to those declared inputs and
+boundaries, the report is a pure function of the two snapshots and the invocation.

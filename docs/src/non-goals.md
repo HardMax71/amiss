@@ -1,10 +1,10 @@
 # What Amiss is not
 
-Amiss does not read your prose. A hash can prove that a file changed; it cannot prove that
-a sentence became false, or that anyone reviewed it. The investigation behind this tool
-spent a long time on designs that pretended otherwise, and the strongest lesson in the
-record is that observation, acceptance, review, and trust are different facts, and dressing
-one up as another rots all of them. So Amiss reports structure: this link resolves or does
+Amiss does not read your prose. A hash can prove that a file changed; it cannot prove
+that a sentence became false, or that anyone reviewed it. The investigation behind this
+tool spent a long time on designs that pretended otherwise. The strongest lesson in that
+record: observation, acceptance, review, and trust are different facts, and dressing one
+up as another rots all of them. So Amiss reports structure. This link resolves or does
 not, these bytes changed or did not, this paragraph moved or did not. Judgment stays with
 people.
 
