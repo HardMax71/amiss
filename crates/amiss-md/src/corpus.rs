@@ -534,7 +534,7 @@ fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
 }
 
 fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
-    match analyze(adapter, source) {
+    match analyze(adapter, source, u64::MAX) {
         Ok(analysis) => {
             let mut members = vec![
                 (
@@ -551,10 +551,18 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
             }
             Value::Object(members)
         }
-        Err(fault) => Value::Object(vec![(
-            "fault".to_owned(),
-            Value::String(AnalysisErrorCode::from(fault).as_str().to_owned()),
-        )]),
+        Err(error) => {
+            let code = match error {
+                crate::AnalyzeError::Fault(fault) => AnalysisErrorCode::from(fault),
+                crate::AnalyzeError::EmbeddedCodeAllowance { .. } => {
+                    AnalysisErrorCode::ResourceLimitExceeded
+                }
+            };
+            Value::Object(vec![(
+                "fault".to_owned(),
+                Value::String(code.as_str().to_owned()),
+            )])
+        }
     }
 }
 

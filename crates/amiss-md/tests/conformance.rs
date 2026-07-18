@@ -121,7 +121,7 @@ fn reproduces_gfm_0_29_extensions() {
             continue;
         }
         checked = checked.saturating_add(1);
-        let Some(options) = parse_options(Adapter::Markdown) else {
+        let Some((options, _meter)) = parse_options(Adapter::Markdown, u64::MAX) else {
             panic!("the markdown adapter must pin parse options")
         };
         if render(&case.source, options, tag == "tagfilter").as_ref() != Some(want) {
@@ -173,7 +173,7 @@ fn reproduces_mdx_syntax_and_errors() {
     let mut agreed = 0_usize;
 
     for case in &cases {
-        let Some(options) = parse_options(Adapter::Mdx) else {
+        let Some((options, _meter)) = parse_options(Adapter::Mdx, u64::MAX) else {
             panic!("the mdx adapter must pin parse options")
         };
         let ours = render(&case.source, options, false);
@@ -329,7 +329,7 @@ fn other_profile(config: &str) -> bool {
 }
 
 fn rendered(source: &str) -> Option<String> {
-    let options = parse_options(Adapter::Markdown)?;
+    let (options, _meter) = parse_options(Adapter::Markdown, u64::MAX)?;
     let mut html = render(source, options, false)?;
     if !html.is_empty() && !html.ends_with('\n') {
         html.push('\n');

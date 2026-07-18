@@ -179,6 +179,7 @@
         "parser-nesting",
         "parser-nodes-per-document",
         "parser-nodes-per-snapshot",
+        "aggregate-embedded-code-evaluation-bytes-per-snapshot",
         "references-per-document",
         "references-per-snapshot",
         "organization-policy-entries",

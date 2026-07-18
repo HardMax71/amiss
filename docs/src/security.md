@@ -23,9 +23,11 @@ corpora. Document byte admission is charged before parsing. Parser node and nest
 however, are measured and charged only after the grammar returns; they are output budgets,
 not a general CPU deadline inside the parser. The order is explicit in the
 [scan pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/scan.rs).
-The pinned MDX lexer also has a documented quadratic unterminated-region case for which an
-in-parse work bound is not yet implemented; see the
-[corpus limitation](https://github.com/HardMax71/amiss/blob/main/corpus/README.md).
+One budget does act inside the parse: every candidate close of an MDX code region charges
+the accumulated region against the `aggregate-embedded-code-evaluation-bytes-per-snapshot`
+ceiling before the lexical scan reads it, which bounds the one measured quadratic case.
+The history of that case is in the
+[corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md).
 
 A Markdown parser panic is caught and converted to `PARSER_PANIC` against the document that
 caused it instead of aborting the process. The known panic fixtures live in the conformance
@@ -46,7 +48,10 @@ Two delivery paths need different trust descriptions. The published convenience
 [composite Action](https://github.com/HardMax71/amiss/blob/main/action.yml) is a GitHub event adapter. It verifies
 the selected engine's digest against the release manifest carried in the same action tree,
 then launches the engine directly. That detects an inconsistent tree, but the manifest is
-not an independently acquired trust anchor, and this lane does not use bootstrap's watchdog.
+not an independently acquired trust anchor, and this lane does not use bootstrap's
+supervisor; it enforces its own wall-clock watchdog, 120 seconds unless the workflow
+sets the `watchdog-seconds` input, and a scan that outlives the window ends with no
+result.
 The manifest's build-source host is supplied explicitly and its repository identity is
 forge-neutral, as pinned by the
 [release validation tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/release.rs); that prevents a

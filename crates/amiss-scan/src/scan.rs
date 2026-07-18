@@ -1,6 +1,6 @@
 use amiss_md::extract::GovernedDefinition;
 use amiss_md::lines::{Line, scan};
-use amiss_md::{Occurrence, Opaque, Work, analyze};
+use amiss_md::{AnalyzeError, Occurrence, Opaque, Work, analyze};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Adapter;
 
@@ -77,7 +77,15 @@ pub fn scan_bytes(
     adapter: Adapter,
     source: &[u8],
 ) -> Result<Scanned, Error> {
-    let analysis = analyze(adapter, source).map_err(Error::Parse)?;
+    let analysis = analyze(adapter, source, resources.embedded_code_allowance()).map_err(
+        |error| match error {
+            AnalyzeError::Fault(fault) => Error::Parse(fault),
+            AnalyzeError::EmbeddedCodeAllowance { spent } => {
+                resources.embedded_code_crossing(spent)
+            }
+        },
+    )?;
+    resources.charge_embedded_code(analysis.embedded_code_bytes);
     resources.charge_work(analysis.work.nodes, analysis.work.nesting)?;
 
     let Some(extraction) = analysis.extraction else {

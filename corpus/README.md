@@ -117,7 +117,10 @@ blank, `2`) ends at the blank line here and continues upstream.
 Asking at every `}` is quadratic in the length of a region that stays open, which the pinned
 bundle is too, since it runs acorn at each candidate. A document built to exploit that (an
 unterminated string holding a million braces) would be slow here and slow upstream. The resource
-ceilings have to bound it; that work is not in this slice.
+ceilings bound it: every ask charges the accumulated region against
+`aggregate-embedded-code-evaluation-bytes-per-snapshot` before the scan reads it, and a crossing
+aborts the parse as a resource row, never as a claim about the document. The trip, its
+determinism, and the one-ask overshoot bound are pinned in `crates/amiss-md/tests/mdx.rs`.
 
 ## The extraction goldens
 

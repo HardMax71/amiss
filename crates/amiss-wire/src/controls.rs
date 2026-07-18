@@ -353,6 +353,7 @@ pub enum ResourceName {
     ParserNesting,
     ParserNodesPerDocument,
     ParserNodesPerSnapshot,
+    AggregateEmbeddedCodeEvaluationBytesPerSnapshot,
     ReferencesPerDocument,
     ReferencesPerSnapshot,
     OrganizationPolicyEntries,
@@ -399,6 +400,7 @@ impl ResourceName {
             | Self::ParserNesting
             | Self::ParserNodesPerDocument
             | Self::ParserNodesPerSnapshot
+            | Self::AggregateEmbeddedCodeEvaluationBytesPerSnapshot
             | Self::ReferencesPerDocument
             | Self::ReferencesPerSnapshot => "parse",
             Self::ReferencedTargetBlobBytes

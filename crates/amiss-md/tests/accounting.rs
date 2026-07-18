@@ -1,4 +1,4 @@
-use amiss_md::{Fault, Work, charge};
+use amiss_md::{AnalyzeError, Fault, Work, charge};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 
@@ -111,7 +111,7 @@ fn only_a_parsing_adapter_requires_utf8() {
     let invalid = [0xffu8, 0xfe, 0x00];
     assert_eq!(
         charge(Adapter::Markdown, &invalid),
-        Err(Fault::DocumentInvalid)
+        Err(AnalyzeError::Fault(Fault::DocumentInvalid))
     );
     assert_eq!(
         charge(Adapter::PlainAdvisory, &invalid),

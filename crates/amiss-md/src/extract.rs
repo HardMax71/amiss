@@ -2,7 +2,7 @@ use amiss_wire::controls::SourceConstruct;
 use amiss_wire::model::Adapter;
 use markdown::mdast::{Node, ReferenceKind};
 
-use crate::accounting::{Fault, Work, parsed, plain, walk};
+use crate::accounting::{AnalyzeError, Fault, Work, parsed, plain, walk};
 use crate::frontmatter;
 
 /// The block owner of one occurrence, selected by the override order: the
@@ -64,26 +64,37 @@ pub struct Extraction {
     pub governed: Vec<GovernedDefinition>,
 }
 
-/// Everything one parse yields: the work charge, and the extraction for a
-/// parsing adapter. The plain adapter has no spans, addresses, or occurrences.
+/// Everything one parse yields: the work charge, the embedded-code bytes the
+/// grammar's candidate-close asks spent, and the extraction for a parsing
+/// adapter. The plain adapter has no spans, addresses, or occurrences.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Analysis {
     pub work: Work,
+    pub embedded_code_bytes: u64,
     pub extraction: Option<Extraction>,
 }
 
-/// Charges and extracts one document in a single guarded parse.
+/// Charges and extracts one document in a single guarded parse, spending at
+/// most `embedded_code_allowance` bytes on embedded-code rescans.
 ///
 /// # Errors
 ///
 /// `DocumentInvalid` for non-UTF-8 bytes or a grammar rejection under a
 /// parsing adapter, `ParserPanic` when the parser panics, `ParserError` when
-/// the returned tree breaks the parser's own contract, and `InvalidSourceSpan`
-/// when a span violates the closed source contract.
-pub fn analyze(adapter: Adapter, source: &[u8]) -> Result<Analysis, Fault> {
-    let Some((tree, offset, suffix)) = parsed(adapter, source)? else {
+/// the returned tree breaks the parser's own contract, `InvalidSourceSpan`
+/// when a span violates the closed source contract, and
+/// `EmbeddedCodeAllowance` when the meter ends the parse.
+pub fn analyze(
+    adapter: Adapter,
+    source: &[u8],
+    embedded_code_allowance: u64,
+) -> Result<Analysis, AnalyzeError> {
+    let Some((tree, offset, suffix, embedded_code_bytes)) =
+        parsed(adapter, source, embedded_code_allowance)?
+    else {
         return Ok(Analysis {
             work: plain(source),
+            embedded_code_bytes: 0,
             extraction: None,
         });
     };
@@ -91,6 +102,7 @@ pub fn analyze(adapter: Adapter, source: &[u8]) -> Result<Analysis, Fault> {
     let extraction = extract_tree(&tree, suffix, offset, source, frontmatter_bytes)?;
     Ok(Analysis {
         work: walk(&tree),
+        embedded_code_bytes,
         extraction: Some(extraction),
     })
 }

@@ -1,12 +1,12 @@
 use amiss_md::profile::parse_options;
-use amiss_md::{Fault, Work, charge};
+use amiss_md::{AnalyzeError, Fault, Work, analyze, charge};
 use amiss_wire::model::Adapter;
 use markdown::mdast::Node;
 use markdown::to_mdast;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn tree(source: &str) -> Node {
-    let options = parse_options(Adapter::Mdx).expect("mdx parse options");
+    let (options, _meter) = parse_options(Adapter::Mdx, u64::MAX).expect("mdx parse options");
     to_mdast(source, &options).expect("mdx parse")
 }
 
@@ -106,8 +106,8 @@ fn a_panicking_parser_is_caught_and_reported() {
     let image = charge(Adapter::Mdx, b"a ![open <b> close](c) </b> d.");
     std::panic::set_hook(previous);
 
-    assert_eq!(link, Err(Fault::ParserPanic));
-    assert_eq!(image, Err(Fault::ParserPanic));
+    assert_eq!(link, Err(AnalyzeError::Fault(Fault::ParserPanic)));
+    assert_eq!(image, Err(AnalyzeError::Fault(Fault::ParserPanic)));
 }
 
 /// MDX removes indented code, raw HTML, and plain autolinks, so a document that
@@ -131,13 +131,53 @@ fn mdx_removes_the_constructs_it_must() {
     );
 }
 
+/// The quadratic case from the corpus notes: a region that never closes makes
+/// the parser ask at every brace, and every ask rescans the whole accumulated
+/// region. The meter charges each ask before the scan runs, so the total the
+/// document can demand is the allowance plus at most one further ask, and the
+/// parse ends as a spent allowance rather than as a verdict about the source.
+#[test]
+fn an_unterminated_region_cannot_scan_past_its_allowance() {
+    let source = format!("{{\"{}", "}".repeat(65_536));
+    let allowance = 100_000_u64;
+    let result = analyze(Adapter::Mdx, source.as_bytes(), allowance);
+    let one_ask_past = allowance.saturating_add(u64::try_from(source.len()).unwrap_or(u64::MAX));
+    let tripped = matches!(
+        &result,
+        Err(AnalyzeError::EmbeddedCodeAllowance { spent })
+            if *spent > allowance && *spent <= one_ask_past
+    );
+    assert!(
+        tripped,
+        "the meter ends the parse within one ask of the line: {result:?}"
+    );
+}
+
+/// The meter is exact and observes only real asks: the same document spends
+/// the same bytes, an allowance equal to that spend still parses because only
+/// crossing it trips, and the markdown grammar, which runs no embedded code,
+/// spends nothing even under a zero allowance.
+#[test]
+fn spent_embedded_code_bytes_are_deterministic_and_sufficient() {
+    let source = b"a {'}'} b\n\nexport {\n\n  a\n\n} from \"c\"\n";
+    let first = analyze(Adapter::Mdx, source, u64::MAX).expect("mdx parse");
+    let second = analyze(Adapter::Mdx, source, u64::MAX).expect("mdx parse");
+    assert_eq!(first.embedded_code_bytes, second.embedded_code_bytes);
+    assert!(first.embedded_code_bytes > 0);
+    let exact =
+        analyze(Adapter::Mdx, source, first.embedded_code_bytes).expect("the exact spend parses");
+    assert_eq!(exact.embedded_code_bytes, first.embedded_code_bytes);
+    let markdown = analyze(Adapter::Markdown, source, 0).expect("markdown parse");
+    assert_eq!(markdown.embedded_code_bytes, 0);
+}
+
 /// An unmatched tag is a grammar rejection attributable to the source, which
 /// the contract calls `DOCUMENT_INVALID` rather than a parser failure.
 #[test]
 fn an_unmatched_tag_is_an_invalid_document() {
     assert_eq!(
         charge(Adapter::Mdx, b"a <b> c"),
-        Err(Fault::DocumentInvalid)
+        Err(AnalyzeError::Fault(Fault::DocumentInvalid))
     );
     assert_eq!(
         charge(Adapter::Mdx, b"a <b></b> c"),

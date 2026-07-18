@@ -289,3 +289,64 @@ fn errors_map_to_their_analysis_codes() {
         AnalysisErrorCode::ResourceLimitExceeded
     );
 }
+
+/// The in-parse meter surfaces as the aggregate resource crossing: the row
+/// names the resource and both numbers, and the crossing exhausts the
+/// snapshot's budget rather than failing one document.
+#[test]
+fn an_exhausted_embedded_code_allowance_is_the_aggregate_crossing() {
+    let limits = ScanLimits {
+        aggregate_embedded_code_evaluation_bytes_per_snapshot: 4_096,
+        ..ScanLimits::CONTRACT
+    };
+    let mut resources = ScanResources::new(limits);
+    let hostile = format!("{{\"{}", "}".repeat(4_096));
+    let result = scan_document(&mut resources, Adapter::Mdx, hostile.as_bytes());
+    let crossed = matches!(
+        &result,
+        Err(Error::ResourceLimit {
+            resource: ResourceName::AggregateEmbeddedCodeEvaluationBytesPerSnapshot,
+            configured_limit: 4_096,
+            observed_lower_bound,
+        }) if *observed_lower_bound > 4_096
+    );
+    assert!(
+        crossed,
+        "a spent allowance is the aggregate crossing: {result:?}"
+    );
+    if let Err(error) = &result {
+        assert!(!error.is_document_scoped(), "the aggregate ends the stage");
+    }
+}
+
+/// What one parse spends shrinks what the next parse is granted, so a
+/// snapshot cannot re-grant the whole ceiling to every document.
+#[test]
+fn embedded_code_spending_accumulates_across_documents() {
+    let source = b"a {'}'} b\n";
+    let probe = amiss_md::analyze(Adapter::Mdx, source, u64::MAX).expect("mdx parse");
+    let spent = probe.embedded_code_bytes;
+    assert!(spent > 0, "the fixture must exercise the meter");
+
+    let limits = ScanLimits {
+        aggregate_embedded_code_evaluation_bytes_per_snapshot: spent
+            .saturating_mul(2)
+            .saturating_sub(1),
+        ..ScanLimits::CONTRACT
+    };
+    let mut resources = ScanResources::new(limits);
+    scan_document(&mut resources, Adapter::Mdx, source).expect("the first document parses");
+    assert_eq!(resources.embedded_code_bytes(), spent);
+    let second = scan_document(&mut resources, Adapter::Mdx, source);
+    let crossed = matches!(
+        &second,
+        Err(Error::ResourceLimit {
+            resource: ResourceName::AggregateEmbeddedCodeEvaluationBytesPerSnapshot,
+            ..
+        })
+    );
+    assert!(
+        crossed,
+        "the second document inherits only the remainder: {second:?}"
+    );
+}

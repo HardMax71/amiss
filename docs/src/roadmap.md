@@ -15,12 +15,14 @@ collecting impressions. The work in this phase, with its instruments:
   tests generate the disposition and ceiling tables, compare the meaning sentences, the
   grammar, and the llms index, and execute every schema-backed example. A claim that can
   be generated gets generated; the rest links its implementation.
-- Parser CPU has one named hole: the pinned MDX lexer's quadratic unterminated-region
+- Parser CPU had one named hole: the pinned MDX lexer's quadratic unterminated-region
   case, recorded in the
-  [corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md). Either
-  an in-parse work bound closes it, or the published runtime guarantee narrows to the
-  resources the engine measures today. The convenience Action may also need its own
-  wall-clock watchdog; bootstrap already enforces 120 seconds on its lane.
+  [corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md). An
+  in-parse bound closed it in July 2026: every candidate close charges the accumulated
+  region against the `aggregate-embedded-code-evaluation-bytes-per-snapshot` ceiling, a
+  crossing is an ordinary reported resource row, and the trip is pinned by test. The
+  convenience Action now carries a wall-clock watchdog on top; its default is the
+  120-second window bootstrap enforces on its lane, and a workflow input can move it.
 - Shadow scans have started. Six public repositories were scanned in July 2026: helix,
   ripgrep, just, mdBook, starship, and ruff. Two were spotless (ripgrep at 766 references
   and just at 3,101, zero missing in both). One carried a single real introduced break.

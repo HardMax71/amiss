@@ -200,6 +200,9 @@ fn resource_limit(resource: ResourceName) -> u64 {
         ResourceName::ParserNesting => scan.parser_nesting,
         ResourceName::ParserNodesPerDocument => scan.parser_nodes_per_document,
         ResourceName::ParserNodesPerSnapshot => scan.parser_nodes_per_snapshot,
+        ResourceName::AggregateEmbeddedCodeEvaluationBytesPerSnapshot => {
+            scan.aggregate_embedded_code_evaluation_bytes_per_snapshot
+        }
         ResourceName::ReferencesPerDocument => scan.references_per_document,
         ResourceName::ReferencesPerSnapshot => scan.references_per_snapshot,
         ResourceName::OrganizationPolicyEntries => ORGANIZATION_POLICY_ENTRIES_LIMIT,
