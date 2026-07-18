@@ -36,12 +36,17 @@ collecting impressions. The work in this phase, with its instruments:
   hundred changed documentation lines, recorded per scan in the
   [ledger](ledger.md), where the first six rows already sit. The gate threshold is
   chosen after ten recorded scans on repositories that are not this one.
-- The event matrix needs recorded runs, not assumptions. The self-scan exercises push
-  and pull-request paths today; merge groups, fork pull requests, shallow checkouts, and
-  staged-index runs in hosted CI each need an end-to-end fixture or a recorded run.
+- The event matrix needs recorded runs, not assumptions. The self-scan exercises push,
+  pull-request, shallow-checkout, and staged-index paths in hosted CI: the pull-request
+  lane checks out at the consumer default depth of two, and every run also scans the
+  staged index against the parent commit. Merge groups have their trigger and wait on
+  the queue being enabled; fork pull requests wait on a real fork.
 - Trend instruments accumulate on their own schedules: the weekly non-gating mutation
-  run and the nightly coverage-guided fuzz run. The bar for calling a property stable is
-  two months of those runs without an unexplained regression.
+  run and the nightly coverage-guided fuzz run. The first mutation run recorded its
+  baseline on 2026-07-18: 2,728 mutants, 664 missed, and with the fixtures crate since
+  excluded from mutation the comparable numbers going forward are 2,672 and 616. The
+  bar for calling a property stable is two months of those runs without an unexplained
+  regression.
 
 This phase exits when every bullet above is either closed or has its recorded numbers:
 the MDX bound decided, the ledger at ten or more repositories, zero open false-missing

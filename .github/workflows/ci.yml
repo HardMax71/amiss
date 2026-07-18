@@ -50,7 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0 # a push can move main by several commits, and the event's before must be in the checkout
+          # Pull requests check out at the consumer default of 2 so every PR
+          # records the shallow path; a push can move main by several commits,
+          # and the event's before must be in the checkout, so pushes stay 0.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -102,6 +105,14 @@ jobs:
           jq -e '.payload.schema == "amiss/scanner-report-payload"' "$REPORT" > /dev/null
           jq -e '.payload.evaluation.forge == "github"' "$REPORT" > /dev/null
           jq -e '.payload.documents | length > 0' "$REPORT" > /dev/null
+      # The staged-index lane in hosted CI: the checkout's clean index against
+      # the parent commit, recording that event-matrix row on every run.
+      - shell: bash
+        run: |
+          set -eu
+          ./target/release/amiss check --repo . --object-format sha1 \
+            --base "$(git rev-parse HEAD^)" --index \
+            --profile observe --format json > /dev/null
 
   fuzz-smoke:
     runs-on: ubuntu-latest
