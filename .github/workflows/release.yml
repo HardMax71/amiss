@@ -100,7 +100,7 @@ jobs:
           mkdir -p action-tree/dist
           cp Cargo.lock action-tree/Cargo.lock
           install -m 0644 action/launcher.js action-tree/dist/launcher.js
-          install -m 0644 action/action.yml action-tree/action.yml
+          install -m 0644 action.yml action-tree/action.yml
           args=""
           for binary in engines/amiss-*; do
             name="$(basename "$binary")"

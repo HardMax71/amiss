@@ -74,7 +74,7 @@ const LAUNCHER: &[u8] = include_bytes!("../../../action/launcher.js");
 
 /// The reviewed action definition, pinned the same way: the closure the
 /// bootstrap validates is the closure a release publishes, byte for byte.
-const ACTION: &[u8] = include_bytes!("../../../action/action.yml");
+const ACTION: &[u8] = include_bytes!("../../../action.yml");
 
 struct Release {
     dir: TempDir,

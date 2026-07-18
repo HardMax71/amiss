@@ -15,7 +15,7 @@ entry conditions live in the [Roadmap](roadmap.md).
 | References | Relative repository paths and same-repository GitHub, GitLab, and Gitea-family URLs are resolved under their declared dialect. Numeric line fragments select and compare an exact inclusive byte range; unsupported and external shapes remain visible in the report. | [Resolver](../../crates/amiss-scan/src/resolve.rs) |
 | Policy | `.amiss/scanner-policy.json` may expand discovery and raise the disposition of missing targets, target-type mismatches, and invalid references. It cannot downgrade or suppress a finding. | [Policy application](../../crates/amiss-scan/src/policy.rs) |
 | Reports | Machine output uses the rolling pre-1.0 report envelope and payload contract. Its compatibility marker remains `experimental`. | [Current schema](../../spec/scanner-report.schema.json) |
-| GitHub adapter | The published composite Action derives snapshots from supported GitHub events, verifies the selected engine against the manifest in the same action tree, runs it, and emits annotations. It is one delivery adapter, not the identity model. | [Composite Action](../../action/action.yml) |
+| GitHub adapter | The published composite Action derives snapshots from supported GitHub events, verifies the selected engine against the manifest in the same action tree, runs it, and emits annotations. It is one delivery adapter, not the identity model. | [Composite Action](../../action.yml) |
 
 Repository form is deliberately closed too. The reader accepts a primary non-bare checkout
 whose `.git` entry is a real directory. Bare repositories and linked worktrees represented
@@ -50,7 +50,7 @@ provider-authenticated request acquisition and bootstrap integration are therefo
 supported required-check lane. The distinction is visible in the
 [bootstrap entry point](../../crates/amiss-bootstrap/src/main.rs),
 [release assembly](../../.github/workflows/release.yml), and
-[Action execution](../../action/action.yml). Release manifests use the same open repository
+[Action execution](../../action.yml). Release manifests use the same open repository
 identity, and the [manifest builder](../../crates/amiss-bootstrap/src/build.rs) receives the
 build host explicitly instead of assuming a public forge. Provider-authenticated acquisition
 adapters for GitHub or other forges remain unsupported.
