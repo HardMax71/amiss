@@ -6,6 +6,8 @@
 > JSON; every finding and error row carries a fixed `description` sentence stating what it
 > means and what to do.
 
+The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
+
 ## Using Amiss
 
 - [Introduction](https://hardmax71.github.io/amiss/introduction.html): what documentation drift the tool catches and how a run is framed
