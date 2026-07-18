@@ -248,7 +248,9 @@ fn fatal(
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
-    if reserve.emit(envelope, &mut std::io::stdout()).is_err() {
+    if let Err(defect) = reserve.emit(envelope, &mut std::io::stdout())
+        && defect.kind() != std::io::ErrorKind::BrokenPipe
+    {
         eprintln!(
             "amiss: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_str()
@@ -347,6 +349,35 @@ impl View {
     }
 }
 
+/// The human output channel: a closed pipe ends the narration and never the
+/// verdict, so a consumer that stops reading still gets the run's exit class.
+struct Channel {
+    out: std::io::Stdout,
+    open: bool,
+}
+
+impl Channel {
+    fn new() -> Self {
+        Self {
+            out: std::io::stdout(),
+            open: true,
+        }
+    }
+
+    fn line(&mut self, text: std::fmt::Arguments<'_>) {
+        use std::io::Write as _;
+        if self.open && writeln!(self.out, "{text}").is_err() {
+            self.open = false;
+        }
+    }
+}
+
+macro_rules! say {
+    ($out:expr, $($arg:tt)*) => {
+        $out.line(format_args!($($arg)*))
+    };
+}
+
 /// The human projection: a non-wire convenience over the same payload that
 /// cannot change facts, ordering, totals, or exit. It prints the result, all
 /// retained analysis errors with a crossed resource and its two numbers, the
@@ -355,12 +386,13 @@ impl View {
 /// code and finding kind, and exact totals; every repository-derived scalar
 /// passes through `human-atom`, and no source excerpt, raw destination, or
 /// query value appears.
-#[expect(clippy::print_stdout, reason = "the human output channel")]
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
+    let mut out = Channel::new();
     let envelope = View::of(Some(&built.envelope));
     let payload = envelope.view("payload");
     let result = payload.view("result");
-    println!(
+    say!(
+        out,
         "amiss: {} (findings {}, errors {}, exit {})",
         built.status,
         result.number("finding_count"),
@@ -368,19 +400,21 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
         built.exit_code
     );
     if explain_scope {
-        explain(&payload);
+        explain(&mut out, &payload);
     }
     for row in payload.rows("errors") {
         let resource = row.text("resource");
         if resource.is_empty() {
-            println!(
+            say!(
+                out,
                 "error {} {} {}",
                 row.text("phase"),
                 row.text("code"),
                 row.atom_or_dash("path")
             );
         } else {
-            println!(
+            say!(
+                out,
                 "error {} {} {} {} {}/{}",
                 row.text("phase"),
                 row.text("code"),
@@ -402,7 +436,8 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
         } else {
             format!(" target {target}")
         };
-        println!(
+        say!(
+            out,
             "{} {} {} {} x{}{}",
             finding.text("effective_disposition"),
             finding.text("kind"),
@@ -412,36 +447,35 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
             target
         );
     }
-    notes(&payload);
-    totals(&payload);
+    notes(&mut out, &payload);
+    totals(&mut out, &payload);
 }
 
 /// One `note` line per distinct error code and finding kind: the row
 /// descriptions the payload already carries, deduplicated in first-encounter
 /// order, so two hundred findings of one kind explain themselves once.
-#[expect(clippy::print_stdout, reason = "the human output channel")]
-fn notes(payload: &View) {
+fn notes(out: &mut Channel, payload: &View) {
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for (rows, name_field) in [("errors", "code"), ("findings", "kind")] {
         for row in payload.rows(rows) {
             let name = row.text(name_field);
             let description = row.text("description");
             if !name.is_empty() && !description.is_empty() && seen.insert(name.clone()) {
-                println!("note {name}: {description}");
+                say!(out, "note {name}: {description}");
             }
         }
     }
 }
 
-#[expect(clippy::print_stdout, reason = "the human output channel")]
-fn totals(payload: &View) {
+fn totals(out: &mut Channel, payload: &View) {
     let summary = payload.view("summary");
     let truncated = summary.number("human_details_truncated");
     if truncated > 0 {
-        println!("details truncated: {truncated}");
+        say!(out, "details truncated: {truncated}");
     }
     let documents = summary.view("documents");
-    println!(
+    say!(
+        out,
         "documents: discovered {} scanned {} unsupported {} excluded {} unlinked {}",
         documents.number("discovered"),
         documents.number("scanned"),
@@ -450,7 +484,8 @@ fn totals(payload: &View) {
         documents.number("unlinked"),
     );
     let references = summary.view("references");
-    println!(
+    say!(
+        out,
         "references: extracted {} local {} same-repo {} external {} unsupported {} missing {}",
         references.number("extracted"),
         references.number("explicit_local"),
@@ -460,7 +495,8 @@ fn totals(payload: &View) {
         references.number("missing"),
     );
     let findings = summary.view("findings");
-    println!(
+    say!(
+        out,
         "findings: total {} fail {} warn {} record {}",
         findings.number("total"),
         findings.number("fail"),
@@ -471,14 +507,26 @@ fn totals(payload: &View) {
 
 /// The deterministic scope explanation the human projection may add: the
 /// closed built-in document classes and this run's discovered surface.
-#[expect(clippy::print_stdout, reason = "the human output channel")]
-fn explain(payload: &View) {
-    println!("scope: built-in documents are *.md, *.mdx, *.markdown, six extensionless");
-    println!("scope: basenames, and .cursorrules and llms.txt as plain advisory");
-    println!("scope: node_modules, vendor, third_party, dist, build, .next, and target");
-    println!("scope: trees are excluded unless a repository policy includes them");
+fn explain(out: &mut Channel, payload: &View) {
+    say!(
+        out,
+        "scope: built-in documents are *.md, *.mdx, *.markdown, six extensionless"
+    );
+    say!(
+        out,
+        "scope: basenames, and .cursorrules and llms.txt as plain advisory"
+    );
+    say!(
+        out,
+        "scope: node_modules, vendor, third_party, dist, build, .next, and target"
+    );
+    say!(
+        out,
+        "scope: trees are excluded unless a repository policy includes them"
+    );
     let documents = payload.view("summary").view("documents");
-    println!(
+    say!(
+        out,
         "scope: this run discovered {} candidate documents and scanned {}",
         documents.number("discovered"),
         documents.number("scanned"),

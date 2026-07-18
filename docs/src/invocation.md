@@ -69,4 +69,6 @@ Exit codes are three classes, not detail. Exit 0: the run completed and nothing 
 1: the run completed and at least one finding blocks. Exit 2: something prevented a
 trustworthy result, an unreadable repository, a bad invocation, a crossed limit, an
 undecodable document. Details live in the report; the exit code only tells you which of the
-three worlds you are in.
+three worlds you are in. A consumer that closes the pipe early, `head` among them, ends
+the printing and not the verdict: the exit class reports the run, never the state of
+stdout.
