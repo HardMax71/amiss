@@ -130,6 +130,10 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # Full debuginfo made the Windows target cache 2.2 GiB of PDBs; line
+      # tables keep file:line backtraces and cut the blob and the MSVC links.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -145,8 +149,8 @@ jobs:
             ~/.cargo/git/db
             target
             fuzz/target
-          key: platform-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock') }}
-          restore-keys: platform-${{ runner.os }}-
+          key: platform2-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'fuzz/Cargo.lock') }}
+          restore-keys: platform2-${{ runner.os }}-
       - run: cargo nextest run --workspace --locked
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
       - name: Verify the committed fuzz lockfile
