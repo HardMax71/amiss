@@ -4,6 +4,7 @@
 
 # Using Amiss
 
+- [Documentation drift](drift.md)
 - [Invocation](invocation.md)
 - [Profiles and findings](profiles.md)
 - [Running it in CI](ci.md)
@@ -28,6 +29,7 @@
 - [Architecture](architecture.md)
 - [Edge cases and divergences](divergences.md)
 - [What Amiss is not](non-goals.md)
+- [Amiss and link checkers](comparison.md)
 - [The evidence base](evidence.md)
 - [Provenance](provenance.md)
 - [Development](development.md)

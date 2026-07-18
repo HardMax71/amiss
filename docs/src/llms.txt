@@ -11,6 +11,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 ## Using Amiss
 
 - [Introduction](https://hardmax71.github.io/amiss/introduction.html): what documentation drift the tool catches and how a run is framed
+- [Documentation drift](https://hardmax71.github.io/amiss/drift.html): what drift is, the audit evidence behind the tool, and why detection gates while repair stays accountable
 - [Invocation](https://hardmax71.github.io/amiss/invocation.html): the closed command grammar, the identity flags, and the three exit classes
 - [Profiles and findings](https://hardmax71.github.io/amiss/profiles.html): every finding kind with its disposition, its meaning sentence, and a before/after example
 - [Running it in CI](https://hardmax71.github.io/amiss/ci.html): the composite Action, the direct form, and how to read the report from a workflow
@@ -35,6 +36,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Architecture](https://hardmax71.github.io/amiss/architecture.html): how the crates divide the pipeline
 - [Edge cases and divergences](https://hardmax71.github.io/amiss/divergences.html): the exact-wording edge cases and known parser differences
 - [What Amiss is not](https://hardmax71.github.io/amiss/non-goals.html): the non-goals held deliberately
+- [Amiss and link checkers](https://hardmax71.github.io/amiss/comparison.html): what lychee does well, what only two-snapshot comparison can see, and when to run both
 - [The evidence base](https://hardmax71.github.io/amiss/evidence.html): the audited repository that generated the requirements
 - [Provenance](https://hardmax71.github.io/amiss/provenance.html): how the tool became what it is and what was discarded on the way
 - [Development](https://hardmax71.github.io/amiss/development.html): building, the gates, and the push ratchets

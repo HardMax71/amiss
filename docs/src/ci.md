@@ -90,6 +90,18 @@ findings, so a repository with hundreds of harmless records can fill the screen 
 not show the row that blocked. The blocking rows are in the report's `errors` array and in
 the findings whose `effective_disposition` is `fail`.
 
+The same check runs before a commit exists. The repository publishes a
+[pre-commit](https://pre-commit.com) hook that scans the staged index against `HEAD`
+with an installed `amiss` binary:
+
+```yaml
+repos:
+  - repo: https://github.com/HardMax71/amiss
+    rev: v0.5.1
+    hooks:
+      - id: amiss
+```
+
 The action's `report` output names that JSON file, so a later step or a tool reads it
 without rerunning anything. One line lists every actionable row with its location and
 target:
