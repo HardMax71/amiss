@@ -34,13 +34,10 @@ are where Amiss lives:
 
 The smaller checkers sit on the same side of the line as lychee with less reach:
 markdown-link-check and linkinator examine files one state at a time from JavaScript,
-and mdbook-linkcheck is scoped to mdBook books. All are one-shot examiners; none
-compares, attributes, or ratchets.
+and mdbook-linkcheck is scoped to mdBook books. None of them compares snapshots.
 
-The honest pairing for a repository with a published site is both: lychee for the web,
-where liveness is the question, and Amiss for the tree, where agreement is the question
-and where a gate must not be quietly loosened. For a repository whose documentation
-points mostly at itself, which is most repositories, Amiss covers the surface that
-actually breaks, and adds the half no checker attempts: telling you when the code moved
-and the prose did not, in a report whose every row
-[explains itself](profiles.md).
+For a repository with a published site the honest answer is both tools: lychee for the
+web, Amiss for the tree. For a repository whose documentation points mostly at itself,
+which is most repositories, Amiss covers the surface that actually breaks and notices
+the thing no checker looks for: the code moved and the prose did not. Every row of that
+report [explains itself](profiles.md).
