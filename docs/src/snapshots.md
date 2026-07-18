@@ -8,13 +8,13 @@ object is not in the local object store, the run refuses; see
 
 In staged-index mode the identity covers the complete logical stage-zero index, including
 skip-worktree entries. The engine hashes the sorted
-[index projection](../../spec/examples/index-projection.json), hashes a
-[synthetic snapshot](../../spec/examples/synthetic-snapshot.json) over that projection, and
+[index projection](https://github.com/HardMax71/amiss/blob/main/spec/examples/index-projection.json), hashes a
+[synthetic snapshot](https://github.com/HardMax71/amiss/blob/main/spec/examples/synthetic-snapshot.json) over that projection, and
 then binds the result into the staged
-[candidate identity](../../spec/examples/candidate-identity-index.json). A commit-pair run
-uses the corresponding [commit candidate identity](../../spec/examples/candidate-identity.json).
+[candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity-index.json). A commit-pair run
+uses the corresponding [commit candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity.json).
 These JSON files are digest preimages, not accepted request documents. Their
-[identity golden test](../../crates/amiss-scan/tests/identity.rs) validates each one against
+[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs) validates each one against
 its report-schema definition and reproduces the full digest chain through the production
 builders.
 
@@ -30,7 +30,7 @@ The supported repository form is a primary non-bare checkout with a real `.git` 
 A bare repository or linked worktree whose `.git` entry is a file is refused as unavailable,
 and objects available only through Git alternates are not consulted. These are explicit
 boundaries of the direct
-[repository reader](../../crates/amiss-git/src/repo.rs),
+[repository reader](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs),
 not empty snapshots or silently missing documents.
 
 File access happens through directory handles opened step by step, never following links.

@@ -3,7 +3,7 @@
 This page contains future work, not release notes or a promise that every candidate will
 ship. The factual boundary of the current product is in [Project status](status.md), and
 completed changes move to the
-[changelog](../../CHANGELOG.md) instead of being
+[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md) instead of being
 repeated here.
 
 ## Now: validate and harden

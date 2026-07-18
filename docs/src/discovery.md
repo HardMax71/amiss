@@ -7,7 +7,7 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
 adapter that extracts no references. Every other file is a possible reference target, not a
 built-in document. These rows come directly from the
-[classifier](../../crates/amiss-scan/src/document.rs).
+[classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
 Seven directory names are always skipped, wherever they appear in a path:
 
@@ -37,9 +37,9 @@ The first complete line must be exactly `---` or `+++`; the closing line repeats
 that `---` also permits `...`. A recognized region is opaque to the document grammar and may
 contain at most 65,536 bytes, excluding the BOM. An opener without a permitted closer, or a
 closer past that bound, remains ordinary document text. The published
-[frontmatter vectors](../../spec/examples/frontmatter-vectors.json) execute this boundary,
+[frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json) execute this boundary,
 including LF, CRLF, bare CR, BOM, and exact-limit cases, through the production recognizer in
-the [frontmatter test](../../crates/amiss-md/tests/frontmatter.rs).
+the [frontmatter test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs).
 
 A reference definition whose decoded label begins with exact lowercase `amiss:` is a
 reserved governed claim. Entity and escape decoding happens before that test, but case is not
@@ -47,15 +47,15 @@ folded. Every reserved definition node contributes its exact source digest, incl
 losing normalized duplicate; only the first normalized definition controls whether a
 consumer becomes an ordinary reference. Candidate-side governed claims are an unsupported
 capability boundary and make the run incomplete with exit 2, while a base-only claim does
-not. The [governed-definition vectors](../../spec/examples/governed-definition-vectors.json)
+not. The [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
 drive extraction, source hashing, candidate-only grouping, and report construction in the
-[governed test](../../crates/amiss-scan/tests/governed.rs).
+[governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
 
 Every count is reported: discovered, scanned, unsupported, excluded, unlinked. Despite its
 historical name, `unlinked-document` means a scanned document from which Amiss extracted
 zero references. The evaluator does not construct an inbound reachability graph, so the
 finding does not assert that no other page links to the document. The exact predicate is in
-the [document finding evaluator](../../crates/amiss-scan/src/evaluate.rs).
+the [document finding evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/evaluate.rs).
 
 Paths are treated as bytes. Amiss does not fold case and does not normalize Unicode,
 because Git addresses files by exact bytes, and a checker that guesses two names are
@@ -73,7 +73,7 @@ the one defect no reader can notice.
 Both commit-tree and staged-index discovery emit document rows strictly increasing and unique
 by those raw path bytes. Exact document queries and policy-inventory checks therefore use
 binary search, while two-sided report construction merge-joins the ordered sides. The
-[`discovery` ordering test](../../crates/amiss-scan/tests/discovery.rs)
+[`discovery` ordering test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/discovery.rs)
 pins the Git directory-boundary ordering against both snapshot modes, and the report test
 pins interleaved base and candidate rows. The `amiss-scan` `pipeline` benchmark tracks both
 late exact lookup and the same-document merge as the row count grows.
