@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 2 # a scan needs a base, and on a merge checkout HEAD~1 is the pull request's
+          fetch-depth: 0 # a push can move main by several commits, and the event's before must be in the checkout
           persist-credentials: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
