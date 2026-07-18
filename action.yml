@@ -85,7 +85,10 @@ runs:
     # Base and candidate come from the event unless given. The event payload
     # values reach the script through the environment, never through ${{ }}
     # expansion into its body: a branch may be named anything, and text
-    # expanded into a run block is code.
+    # expanded into a run block is code. For a pull request the base is the
+    # merge commit's own first parent: the payload's base.sha races the lazily
+    # rebuilt merge ref, and the ref is the one consistent source for the
+    # pair, at any fetch depth.
     - id: derive
       shell: bash
       env:
@@ -115,7 +118,10 @@ runs:
         fi
         if [ -z "$base" ]; then
           case "$EVENT_NAME" in
-            pull_request|pull_request_target) base="$PR_BASE" ;;
+            pull_request)
+              base="$(git -C "$INPUT_REPO" rev-parse --verify --quiet "${candidate}^1" || true)"
+              ;;
+            pull_request_target) base="$PR_BASE" ;;
             merge_group) base="$MG_BASE" ;;
             push) base="$PUSH_BEFORE" ;;
           esac
