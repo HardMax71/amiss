@@ -34,4 +34,5 @@
 - [Provenance](provenance.md)
 - [Development](development.md)
 - [Project status](status.md)
+- [The scan ledger](ledger.md)
 - [Roadmap](roadmap.md)

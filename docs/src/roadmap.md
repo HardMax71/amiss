@@ -23,18 +23,19 @@ collecting impressions. The work in this phase, with its instruments:
   crossing is an ordinary reported resource row, and the trip is pinned by test. The
   convenience Action now carries a wall-clock watchdog on top; its default is the
   120-second window bootstrap enforces on its lane, and a workflow input can move it.
-- Shadow scans have started. Six public repositories were scanned in July 2026: helix,
-  ripgrep, just, mdBook, starship, and ruff. Two were spotless (ripgrep at 766 references
-  and just at 3,101, zero missing in both). One carried a single real introduced break.
-  Three mapped systematic non-adoption classes: clean URLs a site router resolves,
-  deliberately broken test fixtures, and targets a docs build generates. The ledger
-  going forward records, per repository, the reference counts, the missing counts, and
-  the class of every finding a maintainer would reject.
+- Shadow scans have started and their record is the [scan ledger](ledger.md). Six public
+  repositories hold rows from July 2026: two spotless (ripgrep at 766 references and
+  just at 3,101, zero missing in both), one with a single real introduced break, and
+  three mapping systematic non-adoption classes, clean URLs a site router resolves,
+  deliberately broken test fixtures, and targets a docs build generates. Every row
+  records the reference count, the missing count, the advisory rows, the changed
+  documentation lines, and the class of any finding a maintainer would reject.
 - A false `explicit-target-missing` on a supported reference is a resolver bug, not a
   statistic: it gets a pinned test, and the accepted count of such bugs is zero.
 - Reviewer burden gets a defined metric before it gets a threshold: advisory rows per
-  hundred changed documentation lines, recorded per scan. The gate threshold is chosen
-  after ten recorded scans on repositories that are not this one.
+  hundred changed documentation lines, recorded per scan in the
+  [ledger](ledger.md), where the first six rows already sit. The gate threshold is
+  chosen after ten recorded scans on repositories that are not this one.
 - The event matrix needs recorded runs, not assumptions. The self-scan exercises push
   and pull-request paths today; merge groups, fork pull requests, shallow checkouts, and
   staged-index runs in hosted CI each need an end-to-end fixture or a recorded run.

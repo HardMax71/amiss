@@ -41,4 +41,5 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Provenance](https://hardmax71.github.io/amiss/provenance.html): how the tool became what it is and what was discarded on the way
 - [Development](https://hardmax71.github.io/amiss/development.html): building, the gates, and the push ratchets
 - [Project status](https://hardmax71.github.io/amiss/status.html): what is delivered, self-asserted, or not yet built
+- [The scan ledger](https://hardmax71.github.io/amiss/ledger.html): the counted shadow scans behind the validation phase, one recorded row per repository
 - [Roadmap](https://hardmax71.github.io/amiss/roadmap.html): what comes next and in what order
