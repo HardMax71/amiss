@@ -30,8 +30,12 @@ The scanner runs on its own repository under `--profile enforce` in CI. This doc
 passes through that same gate: every relative link in this book resolves in the tree, or
 the pull request that broke it fails.
 
-Releases are automated. A bot keeps a release pull request current with the version bump
-and changelog; merging it publishes the crates, the version tag, and the GitHub release.
+Releases are automated. A bot keeps a release pull request current with the version bump,
+changelog, and exact Action-dispatch ref. Merging it publishes the crates and source tag while
+the GitHub release remains a draft. The release workflow then assembles the immutable
+`action/vX.Y.Z` tree, advances the stable major ref without rewriting history, and exercises the
+source-tag dispatcher on Linux, macOS, and Windows. Only a green smoke matrix makes the release
+public; prereleases never advance the major ref.
 If a forge outage leaves that pull request stale, manually dispatching the
 [release automation](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release-plz.yml) on `main` refreshes its metadata
 without running the publishing job; crate publication remains restricted to pushes on `main`.

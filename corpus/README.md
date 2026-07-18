@@ -21,6 +21,8 @@ hand. A golden cannot move without the move showing up in review.
 Every input is upstream bytes, pinned by SHA-256 in `crates/amiss-md/src/corpus.rs`. Nothing in
 this directory is touched by the formatting hooks, because a fixer that appended a newline would
 silently break a pin.
+Licenses, exact upstream revisions, and attributions are collected in
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
 
 The directory is named `third_party/` because that is what these files are, and because
 `third_party` is one of the seven tree names the scanner always excludes. Amiss therefore never

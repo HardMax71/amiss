@@ -29,13 +29,17 @@ In CI the same engine ships as an action that derives both commits from the even
 annotates findings on the pull request:
 
 ```yaml
-- uses: actions/checkout@<pinned-sha>
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
   with:
     fetch-depth: 2
 - uses: HardMax71/amiss@v0
+  with:
+    profile: observe
 ```
 
-Replace `<pinned-sha>` with the reviewed full commit id of `actions/checkout`.
+Start in `observe` so findings can be triaged without blocking pull requests; an incomplete or
+untrusted run still fails. Switch the input to `enforce` once the initial backlog and repository
+policy have been reviewed.
 
 Coding agents get the same treatment as people: every finding and error row carries a
 sentence saying what it means and what to do, a rejected invocation prints the whole
@@ -45,4 +49,6 @@ block for your repository's `AGENTS.md`. The book is one fetch at
 [llms.txt](https://hardmax71.github.io/amiss/llms.txt), or in full at
 [llms-full.txt](https://hardmax71.github.io/amiss/llms-full.txt).
 
-Everything else is in the [documentation](https://hardmax71.github.io/amiss/).
+Everything else is in the [documentation](https://hardmax71.github.io/amiss/). Distribution terms
+and third-party attributions are in [the license](LICENSE.md) and
+[notices](THIRD_PARTY_NOTICES.md).

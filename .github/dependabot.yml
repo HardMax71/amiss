@@ -30,3 +30,5 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:
+      - dependency-name: HardMax71/amiss

@@ -70,11 +70,11 @@ fn engine_bytes(platform: ConstraintPlatform) -> Vec<u8> {
 
 /// The launcher this repository ships, so the closure these tests validate is
 /// the closure a release publishes, byte for byte.
-const LAUNCHER: &[u8] = include_bytes!("../../../action/launcher.js");
+const LAUNCHER: &[u8] = include_bytes!("../../amiss/action/launcher.js");
 
 /// The reviewed action definition, pinned the same way: the closure the
 /// bootstrap validates is the closure a release publishes, byte for byte.
-const ACTION: &[u8] = include_bytes!("../../../action.yml");
+const ACTION: &[u8] = include_bytes!("../../amiss/action/runtime.yml");
 
 struct Release {
     dir: TempDir,
@@ -272,7 +272,7 @@ fn the_shipped_launcher_refuses_instead_of_passing() {
     let output = Command::new("node")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../action/launcher.js"
+            "/../amiss/action/launcher.js"
         ))
         .output()
         .expect("node runs the launcher; every runner image ships it");

@@ -75,8 +75,10 @@ jobs:
           set -eu
           mkdir -p action-tree/dist
           cp Cargo.lock action-tree/Cargo.lock
-          install -m 0644 action/launcher.js action-tree/dist/launcher.js
-          install -m 0644 action.yml action-tree/action.yml
+          cp LICENSE.md action-tree/LICENSE.md
+          bash scripts/release-licenses.sh action-tree/THIRD_PARTY_LICENSES.txt
+          install -m 0644 crates/amiss/action/launcher.js action-tree/dist/launcher.js
+          install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml
           install -m 0755 target/release/amiss action-tree/dist/amiss-linux-x86_64
           HOST="${SERVER_URL#*://}"
           HOST="${HOST%/}"
@@ -93,6 +95,8 @@ jobs:
             --artifact dist/amiss-linux-x86_64
       - id: action
         uses: ./action-tree
+        with:
+          profile: enforce
       - if: always() && steps.action.outputs.report != ''
         shell: bash
         env:
