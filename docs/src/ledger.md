@@ -39,8 +39,8 @@ of the finding rather than a missed contribution. ripgrep and just were spotless
 missing references; just's single advisory row sits on a nine-line change, the
 small-denominator case the burden rule sets aside.
 
-The three nonzero missing columns are the three rejection classes, and none of them is a
-resolver bug. mdBook's 36 all live inside its own link-handling test suite, deliberately
+The three rows with a named rejection class map the adoption boundary, and none of their
+missing counts is a resolver bug. mdBook's 36 all live inside its own link-handling test suite, deliberately
 broken fixtures under `tests/testsuite`; its range changed no Markdown at all. starship's
 242 are extensionless clean URLs its site router resolves and the tree does not,
 concentrated in translation mirrors of the preset pages. ruff's 102 name targets its
