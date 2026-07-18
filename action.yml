@@ -197,6 +197,7 @@ runs:
         wait "$engine" || status=$?
         kill "$watchdog" 2>/dev/null || true
         if [ -e "$fired" ]; then
+          rm -f "$report"
           echo "::error title=amiss::the scan crossed the ${WATCHDOG_SECONDS}-second wall-clock watchdog; the run ends with no result"
           status=2
         fi

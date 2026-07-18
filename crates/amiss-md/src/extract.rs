@@ -74,8 +74,12 @@ pub struct Analysis {
     pub extraction: Option<Extraction>,
 }
 
-/// Charges and extracts one document in a single guarded parse, spending at
-/// most `embedded_code_allowance` bytes on embedded-code rescans.
+/// Charges and extracts one document in a single guarded parse. The lexical
+/// rescans of embedded code stay inside `embedded_code_allowance`: every ask
+/// is charged before it is scanned, so a crossing ends the parse with the
+/// rejected ask charged but never read, and the spent total an
+/// `EmbeddedCodeAllowance` error reports may exceed the allowance by that one
+/// ask.
 ///
 /// # Errors
 ///

@@ -162,8 +162,9 @@ impl ScanResources {
 
     /// Accumulates one completed parse's embedded-code bytes. Infallible: a
     /// parse granted the remaining allowance can only spend inside it, so the
-    /// total never crosses the ceiling here.
-    pub fn charge_embedded_code(&mut self, spent: u64) {
+    /// total never crosses the ceiling here. Crate-private because that
+    /// invariant is the parse path's, not a caller contract.
+    pub(crate) fn charge_embedded_code(&mut self, spent: u64) {
         self.embedded_code_bytes = self.embedded_code_bytes.saturating_add(spent);
     }
 
