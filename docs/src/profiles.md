@@ -111,9 +111,9 @@ API described in [Controls and policy](controls.md).
 | `waiver-invalid` | Waiver expires at `2026-08-01T00:00:00Z`; trusted time is `2026-07-12T10:00:00Z`. | Keep the finding and trusted time unchanged; set `expires_at` to `2026-07-10T00:00:00Z`. |
 <!-- amiss-doc-contract:finding-examples:end -->
 
-The control families exist so that loosening rules and presenting invalid outside authority
-are themselves visible. Repository policy may raise only `explicit-target-missing`,
-`explicit-target-type-mismatch`, and `invalid-reference`, as enforced by the
-[policy parser and evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs).
-It may never lower a disposition. There is no suppression syntax anywhere; the way to remove
-a repository-policy finding is to fix what it points at.
+The control families exist so that loosening rules and presenting invalid outside
+authority are themselves visible. Repository policy may raise only
+`explicit-target-missing`, `explicit-target-type-mismatch`, and `invalid-reference`, as
+the [policy parser and evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs)
+enforces. It may never lower a disposition. There is no suppression syntax anywhere. The
+way to remove a repository-policy finding is to fix what it points at.

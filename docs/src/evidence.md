@@ -1,12 +1,14 @@
 # The evidence base
 
-The design was not reasoned from an armchair. Before any code, one real repository was audited
-end to end and used as the requirements generator. The project record calls it user zero: a
-Scala compiler with machine-checked proofs, three code-generation targets, a published docs
-site, 22 CI workflows, and roughly a dozen hand-built drift defenses already in place,
-transcluded snippets, executable CLI examples, five golden-file suites, a proof-extraction
-diff gate, a link checker. A repository that tries that hard and still drifts tells you what a
-tool must actually do.
+The design was not reasoned from an armchair. Before any code, one real repository was
+audited end to end and used as the requirements generator. The project record calls it
+user zero, and it is public:
+[spec_to_rest](https://github.com/HardMax71/spec_to_rest), a Scala compiler with
+machine-checked proofs, three code-generation targets, a published docs site, and 22 CI
+workflows. It already ran roughly a dozen hand-built drift
+defenses: transcluded snippets, executable CLI examples, five golden-file suites, a
+proof-extraction diff gate, a link checker. A repository that tries that hard and still
+drifts tells you what a tool must actually do.
 
 The removed working dossier remains available at the immutable pre-extraction commit: the
 [repository audit](https://github.com/HardMax71/amiss/blob/26df8f76f84ee0e8bbee3f8c7a5ab49a44eaaadc/docs/repo-audit.md)

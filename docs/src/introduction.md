@@ -8,11 +8,12 @@ changed while the paragraph containing the reference did not, it reports that to
 reads meaning: it cannot tell you whether a sentence is true, and it does not try.
 
 "Supported explicit reference" is an important boundary. Bare path-like prose is not
-inferred, raw HTML and MDX code regions are opaque, and site routes, heading semantics, code
-symbols, live URLs, and other repositories need information this engine does not have. Numeric
-line fragments are the narrow exception: they select bytes, not language symbols or meaning. The
-exact document classifier and resolver are linked from [Project status](status.md), while
-[Discovery](discovery.md) and [Resolution](resolution.md) describe the visible boundary rows.
+inferred. Raw HTML and MDX code regions are opaque. Site routes, heading semantics, code
+symbols, live URLs, and other repositories need information this engine does not have, so
+they stay visible as declared boundaries instead of being guessed at. Numeric line
+fragments are the narrow exception: they select bytes, not language symbols or meaning.
+[Discovery](discovery.md) and [Resolution](resolution.md) describe the boundary rows, and
+[Project status](status.md) links the classifier and resolver that draw them.
 
 A run compares two exact states of the repository: the base (usually where your branch
 started) and the candidate (usually the commit being reviewed). Amiss answers four questions

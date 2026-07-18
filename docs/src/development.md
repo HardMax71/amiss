@@ -35,7 +35,8 @@ and changelog; merging it publishes the crates, the version tag, and the GitHub 
 If a forge outage leaves that pull request stale, manually dispatching the
 [release automation](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release-plz.yml) on `main` refreshes its metadata
 without running the publishing job; crate publication remains restricted to pushes on `main`.
-Security checks are layered in CI as well: dependency update PRs with a cooldown, a weekly
-advisory re-check against a fresh database, [CodeQL](https://codeql.github.com) over both the Rust and the workflows,
-[Scorecard](https://scorecard.dev), secret scanning with push protection, and build provenance attestations on
-release binaries.
+Security checks layer in CI as well. Dependency update PRs arrive with a cooldown, a
+weekly advisory re-check runs against a fresh database, and
+[CodeQL](https://codeql.github.com) covers both the Rust and the workflows.
+[Scorecard](https://scorecard.dev), secret scanning with push protection, and build
+provenance attestations on release binaries round it out.

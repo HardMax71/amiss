@@ -7,16 +7,18 @@ object is not in the local object store, the run refuses; see
 [Limits and refusals](limits.md).
 
 In staged-index mode the identity covers the complete logical stage-zero index, including
-skip-worktree entries. The engine hashes the sorted
-[index projection](https://github.com/HardMax71/amiss/blob/main/spec/examples/index-projection.json), hashes a
-[synthetic snapshot](https://github.com/HardMax71/amiss/blob/main/spec/examples/synthetic-snapshot.json) over that projection, and
-then binds the result into the staged
-[candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity-index.json). A commit-pair run
-uses the corresponding [commit candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity.json).
-These JSON files are digest preimages, not accepted request documents. Their
-[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs) validates each one against
-its report-schema definition and reproduces the full digest chain through the production
-builders.
+skip-worktree entries. The digest chain has three steps: hash the sorted
+[index projection](https://github.com/HardMax71/amiss/blob/main/spec/examples/index-projection.json),
+hash a
+[synthetic snapshot](https://github.com/HardMax71/amiss/blob/main/spec/examples/synthetic-snapshot.json)
+over that projection, then bind the result into the staged
+[candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity-index.json).
+A commit-pair run uses the corresponding
+[commit candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity.json).
+These JSON files are digest preimages, not accepted request documents, and the
+[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs)
+validates each against its report-schema definition and reproduces the full chain through
+the production builders.
 
 Amiss reads [Git](https://git-scm.com)'s storage itself instead of asking the `git` command. Loose objects,
 packfiles, deltas, and the index file are parsed by the engine, and the parsers reject

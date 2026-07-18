@@ -20,16 +20,16 @@ is a reported limit crossing carrying both numbers. A tracked file whose object 
 from the store refuses and names the document, instead of guessing about content it
 cannot see.
 
-The forge dialects pin the URL spellings the forges' own browsers emit and nothing looser.
-GitLab's legacy pre-separator form still redirects in a browser and is foreign here, as is
-`/-/raw/`; a GitLab project literally named `-` could never be told apart from the
-separator, and GitLab reserves the name anyway. Gitea's untyped `src/<ref>/` form, which
-some tooling still generates, is foreign because the typed `src/branch/` spelling is what
-the forge emits; a gitea tag link is out of version scope even when its segments spell the
-candidate branch exactly, because no tag is a trusted ref. And the line-anchor grammars do
-not leak: `#L10-20` selects lines only under the gitlab dialect, `#L10-L20` only under
-github and gitea, so the same fragment can resolve on one forge and remain unsupported on
-another. Single-line `#L10` is common to all three.
+The forge dialects pin the URL spellings the forges' own browsers emit and nothing
+looser. GitLab's legacy pre-separator form still redirects in a browser and is foreign
+here, as is `/-/raw/`; a GitLab project literally named `-` could never be told apart
+from the separator, and GitLab reserves the name anyway. Gitea's untyped `src/<ref>/`
+form, which some tooling still generates, is foreign because the typed `src/branch/`
+spelling is what the forge emits. A gitea tag link is out of version scope even when its
+segments spell the candidate branch exactly, because no tag is a trusted ref. The
+line-anchor grammars do not leak either: `#L10-20` selects lines only under the gitlab
+dialect, `#L10-L20` only under github and gitea, so the same fragment can resolve on one
+forge and remain unsupported on another. Single-line `#L10` is common to all three.
 
 The parser pin records its known differences instead of hiding them. Measured against the
 pinned grammar bundle and against GitHub's own rendering, exactly one difference

@@ -10,10 +10,10 @@ are charged before parsing, but parser node and nesting totals are charged after
 returns. The known in-parse CPU limitation and bootstrap-only watchdog are described in
 [Security model](security.md).
 
-Line-fragment work is charged pessimistically by the complete target size once per distinct
-target identity (path, file mode, and object id) and numeric range. Successful and
-out-of-range results are cached, so repeated identical anchors do not multiply the charge;
-a changed object or mode at the same path is charged again.
+Line-fragment work is charged pessimistically: the complete target size, once per
+distinct target identity (path, file mode, and object id) and numeric range. Successful
+and out-of-range results are cached, so repeated identical anchors do not multiply the
+charge. A changed object or mode at the same path is charged again.
 
 <!-- amiss-doc-contract:limits:start -->
 | Report resource | Limit |
