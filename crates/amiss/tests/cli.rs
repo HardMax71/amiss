@@ -147,6 +147,52 @@ fn a_limit_crossing_names_the_resource_and_both_numbers() {
     );
 }
 
+/// Piping either output through `head` closes stdout mid-print. The narration
+/// stops; the verdict does not: the exit class reports the run, never whether
+/// anyone kept reading, and a closed pipe is not a panic and not an error.
+#[test]
+fn a_closed_pipe_ends_the_narration_and_not_the_verdict() {
+    let fx = fixture();
+    for format in ["human", "json"] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_amiss"))
+            .args([
+                "check",
+                "--repo",
+                &fx.repo,
+                "--object-format",
+                "sha1",
+                "--base",
+                &fx.base,
+                "--candidate",
+                &fx.candidate,
+                "--profile",
+                "observe",
+                "--format",
+                format,
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn amiss");
+        drop(child.stdout.take());
+        let output = child.wait_with_output().expect("collect the run");
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{format}: the verdict survives the closed pipe"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("panicked"),
+            "{format}: a closed pipe is not a panic: {stderr}"
+        );
+        assert!(
+            !stderr.contains("REPORT_CONSTRUCTION_FAILED"),
+            "{format}: a consumer leaving is not a construction failure: {stderr}"
+        );
+    }
+}
+
 #[test]
 fn a_clean_observe_run_passes_with_a_complete_report() {
     let fx = fixture();
