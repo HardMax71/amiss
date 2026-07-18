@@ -1,9 +1,7 @@
-name: Amiss
+name: Amiss Documentation Check
 description: >-
   Checks documentation against the repository tree it describes and fails the
-  run when a reference stops resolving. Exit class 0 is a complete pass, 1 a
-  complete run with a blocking finding, 2 anything that prevented a result
-  worth trusting.
+  run when a reference stops resolving.
 branding:
   icon: check-circle
   color: gray-dark
