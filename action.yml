@@ -11,7 +11,9 @@ inputs:
     description: observe (report only) or enforce (blocking findings fail the run)
     default: enforce
   base:
-    description: full base commit id; derived from the triggering event when empty
+    description: >-
+      full base commit id; when empty, pull requests derive the candidate's
+      first parent and other events read the payload
     default: ""
   candidate:
     description: full candidate commit id; derived from the triggering event when empty
