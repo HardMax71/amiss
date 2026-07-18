@@ -7,6 +7,19 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryId
 
 pub const MALFORMED_OUTPUT_LINE: &str = "amiss: invalid invocation\n";
 
+/// The closed grammar, verbatim. A rejected human invocation prints it after
+/// the code lines, because there is no `--help` and the caller may hold
+/// neither the book nor a network; the documentation contract test keeps the
+/// invocation chapter's copy equal to this one.
+pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha256>
+            --base <full-oid> (--candidate <full-oid> | --index)
+            [--repository <host>/<owner>/<name>
+             --ref refs/heads/<name>
+             --default-branch-ref refs/heads/<name>
+             [--forge <github|gitlab|gitea>]]
+            --profile <observe|enforce>
+            [--explain-scope] [--format <human|json>]";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Code {
     InvalidEvent,

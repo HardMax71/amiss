@@ -208,17 +208,22 @@ runs:
              + (if (.path | type) == "string" then " at \(.path|d)"
                 elif .path_bytes_hex != null then " at bytes \(.path_bytes_hex)"
                 else "" end)
+             + (if .resource != null then
+                  " \(.resource|d) \(.configured_limit)/\(.observed_lower_bound)"
+                else "" end)
              + why(.description)),
           (limit(50; .payload.findings[]
            | select(.effective_disposition == "fail" or .effective_disposition == "warn")
            | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
+           | (.key_input.scope.normalized_target_intent.path // null) as $target
+           | (if ($target | type) == "string" then " target \($target|d)" else "" end) as $named
            | (if (.location.path | type) == "string" and .location.span != null then
                "::\($level) file=\(.location.path|p),line=\(.location.span.start_line),endLine=\(.location.span.end_line),col=\(.location.span.start_column),endColumn=\(.location.span.end_column),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
              elif (.location.path | type) == "string" then
                "::\($level) file=\(.location.path|p),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
              else
                "::\($level) title=amiss \(.kind|d)::\(.kind) at bytes \(.location.path.bytes_hex // "-"), \(.attribution)"
-             end) + why(.description)))
+             end) + $named + why(.description)))
         ' "$REPORT"
 
     - id: verdict

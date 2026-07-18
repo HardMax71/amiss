@@ -262,6 +262,45 @@ fn documented_error_meanings_are_generated_from_the_engine_text() {
 }
 
 #[test]
+fn documented_grammar_matches_the_refusal_grammar() {
+    let path = repository_root().join("docs/src/invocation.md");
+    let document = fs::read_to_string(&path).expect("invocation documentation is readable");
+    let fenced = documented_contract(&document, "invocation-grammar");
+    let body = fenced
+        .strip_prefix("```text\n")
+        .and_then(|rest| rest.strip_suffix("\n```"))
+        .expect("the grammar contract is one text fence");
+    assert_eq!(
+        body,
+        amiss::invocation::GRAMMAR,
+        "{} drifted from the grammar the refusal prints",
+        path.display(),
+    );
+}
+
+#[test]
+fn meaning_sentences_stay_inside_the_wire_bounds() {
+    let sentences = FindingKind::all()
+        .map(|kind| (kind.as_str(), kind.meaning()))
+        .chain(AnalysisErrorCode::all().map(|code| (code.as_str(), code.meaning())));
+    for (name, sentence) in sentences {
+        assert!(
+            (1..=400).contains(&sentence.len()),
+            "{name}: the schema bounds a description at 400 bytes, got {}",
+            sentence.len(),
+        );
+        assert!(
+            sentence.chars().all(|scalar| (' '..='~').contains(&scalar)),
+            "{name}: a description is printable ASCII so every lane prints it inert",
+        );
+        assert!(
+            !sentence.contains('"'),
+            "{name}: the human lane reserves double quotes for repository atoms",
+        );
+    }
+}
+
+#[test]
 fn documented_finding_examples_cover_the_report_schema() {
     let path = repository_root().join("docs/src/profiles.md");
     let document = fs::read_to_string(&path).expect("profiles documentation is readable");

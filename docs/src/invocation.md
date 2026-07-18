@@ -8,8 +8,11 @@ cargo install amiss
 
 The command line is closed: the grammar below is everything, each option appears at most
 once, order does not matter, and anything else is rejected as an invalid invocation. There
-is no `--help`, which is why the grammar is written out here.
+is no `--help`; a rejected human invocation prints this same grammar under its refusal, so
+the binary teaches the command even where this book is not installed, and the copy below
+is checked against the binary's in CI.
 
+<!-- amiss-doc-contract:invocation-grammar:start -->
 ```text
 amiss check --repo <path> --object-format <sha1|sha256>
             --base <full-oid> (--candidate <full-oid> | --index)
@@ -20,6 +23,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
             --profile <observe|enforce>
             [--explain-scope] [--format <human|json>]
 ```
+<!-- amiss-doc-contract:invocation-grammar:end -->
 
 `--base` and `--candidate` take full commit IDs, never branch names or short forms. Amiss
 evaluates exactly the trees you name and resolves nothing for you. Use `--index` instead of

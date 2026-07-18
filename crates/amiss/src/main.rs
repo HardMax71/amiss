@@ -89,6 +89,7 @@ fn main() -> ExitCode {
                 eprintln!("amiss: {}", code.as_str());
                 eprintln!("  {}", code.contract());
             }
+            eprintln!("{}", invocation::GRAMMAR);
             failure
         }
         Outcome::Accepted(invocation) => run(&invocation, &mut reserve),
@@ -348,10 +349,12 @@ impl View {
 
 /// The human projection: a non-wire convenience over the same payload that
 /// cannot change facts, ordering, totals, or exit. It prints the result, all
-/// retained analysis errors, the first two hundred findings in canonical
-/// order, one fixed note per distinct error code and finding kind, and exact
-/// totals; every repository-derived scalar passes through `human-atom`, and
-/// no source excerpt, raw destination, or query value appears.
+/// retained analysis errors with a crossed resource and its two numbers, the
+/// first two hundred findings in canonical order with the normalized target
+/// path where the finding carries one, one fixed note per distinct error
+/// code and finding kind, and exact totals; every repository-derived scalar
+/// passes through `human-atom`, and no source excerpt, raw destination, or
+/// query value appears.
 #[expect(clippy::print_stdout, reason = "the human output channel")]
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let envelope = View::of(Some(&built.envelope));
@@ -368,21 +371,45 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
         explain(&payload);
     }
     for row in payload.rows("errors") {
-        println!(
-            "error {} {} {}",
-            row.text("phase"),
-            row.text("code"),
-            row.atom_or_dash("path")
-        );
+        let resource = row.text("resource");
+        if resource.is_empty() {
+            println!(
+                "error {} {} {}",
+                row.text("phase"),
+                row.text("code"),
+                row.atom_or_dash("path")
+            );
+        } else {
+            println!(
+                "error {} {} {} {} {}/{}",
+                row.text("phase"),
+                row.text("code"),
+                row.atom_or_dash("path"),
+                resource,
+                row.number("configured_limit"),
+                row.number("observed_lower_bound")
+            );
+        }
     }
     for finding in payload.rows("findings").iter().take(200) {
+        let target = finding
+            .view("key_input")
+            .view("scope")
+            .view("normalized_target_intent")
+            .atom_or_dash("path");
+        let target = if target == "-" {
+            String::new()
+        } else {
+            format!(" target {target}")
+        };
         println!(
-            "{} {} {} {} x{}",
+            "{} {} {} {} x{}{}",
             finding.text("effective_disposition"),
             finding.text("kind"),
             finding.text("attribution"),
             finding.view("location").atom_or_dash("path"),
-            finding.view("aggregation").number("member_count").max(1)
+            finding.view("aggregation").number("member_count").max(1),
+            target
         );
     }
     notes(&payload);
