@@ -176,9 +176,21 @@ runs:
           printf 'report=%s\n' "$report"
         } >> "$GITHUB_OUTPUT"
         if [ -s "$report" ]; then
-          jq -r '.payload.result
-                 | "amiss \(.status): \(.finding_count) findings, \(.error_count) errors, exit class \(.exit_code)"' \
-            "$report" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -r '
+            (.payload.result
+             | "amiss \(.status): \(.finding_count) findings, \(.error_count) errors, exit class \(.exit_code)"),
+            def told($text): ($text // "") as $d
+              | if $d == "" then "" else ": " + $d end;
+            (.payload as $p
+             | ($p.errors | group_by(.code)
+                | map("- `\(.[0].code)`\(if length > 1 then " x\(length)" else "" end)"
+                      + told(.[0].description)))
+               + ($p.findings | map(select(.effective_disposition != "record")) | group_by(.kind)
+                  | map((map(.aggregation.member_count // 1) | add) as $n
+                        | "- `\(.[0].kind)`\(if $n > 1 then " x\($n)" else "" end)"
+                          + told(.[0].description)))
+             | if length > 0 then "", .[] else empty end)
+          ' "$report" | tee -a "$GITHUB_STEP_SUMMARY"
         else
           echo "amiss produced no report, exit class ${status}"
         fi
@@ -212,7 +224,7 @@ runs:
                   " \(.resource|d) \(.configured_limit)/\(.observed_lower_bound)"
                 else "" end)
              + why(.description)),
-          (limit(50; .payload.findings[]
+          (.payload.findings[]
            | select(.effective_disposition == "fail" or .effective_disposition == "warn")
            | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
            | (.key_input.scope.normalized_target_intent.path // null) as $target
@@ -223,7 +235,7 @@ runs:
                "::\($level) file=\(.location.path|p),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
              else
                "::\($level) title=amiss \(.kind|d)::\(.kind) at bytes \(.location.path.bytes_hex // "-"), \(.attribution)"
-             end) + $named + why(.description)))
+             end) + $named + why(.description))
         ' "$REPORT"
 
     - id: verdict

@@ -89,3 +89,20 @@ When a run blocks, read the JSON, not the human printout. The printout stops at 
 findings, so a repository with hundreds of harmless records can fill the screen and still
 not show the row that blocked. The blocking rows are in the report's `errors` array and in
 the findings whose `effective_disposition` is `fail`.
+
+The action's `report` output names that JSON file, so a later step or a tool reads it
+without rerunning anything. One line lists every actionable row with its location and
+target:
+
+```sh
+jq -r '.payload.findings[]
+  | select(.effective_disposition != "record")
+  | [.effective_disposition, .kind,
+     ((.location.path | strings) // "-"),
+     ((.key_input.scope.normalized_target_intent.path | strings) // "-")]
+  | @tsv' amiss-report.json
+```
+
+An annotation is emitted for every actionable row and every error. GitHub's interface
+displays at most ten of each level per step; the complete set is always in the report, and
+the job summary lists each failing kind once with its count and description.

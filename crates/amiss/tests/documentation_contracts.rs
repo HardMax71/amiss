@@ -301,6 +301,34 @@ fn meaning_sentences_stay_inside_the_wire_bounds() {
 }
 
 #[test]
+fn the_llms_index_names_real_chapters_on_the_published_book() {
+    let root = repository_root();
+    let path = root.join("docs/src/llms.txt");
+    let document = fs::read_to_string(&path).expect("the llms index is readable");
+    let mut checked = 0_usize;
+    for line in document.lines() {
+        let Some(rest) = line.strip_prefix("- [") else {
+            continue;
+        };
+        let (_, after) = rest
+            .split_once("](")
+            .expect("an index row is a markdown link");
+        let (url, tail) = after.split_once(')').expect("an index link closes");
+        assert!(tail.starts_with(": "), "each row explains its page: {line}");
+        let chapter = url
+            .strip_prefix("https://hardmax71.github.io/amiss/")
+            .and_then(|page| page.strip_suffix(".html"))
+            .expect("an index link names a chapter on the published book");
+        assert!(
+            root.join(format!("docs/src/{chapter}.md")).is_file(),
+            "{url} names a chapter that does not exist"
+        );
+        checked = checked.saturating_add(1);
+    }
+    assert!(checked >= 15, "the index covers the book, saw {checked}");
+}
+
+#[test]
 fn documented_finding_examples_cover_the_report_schema() {
     let path = repository_root().join("docs/src/profiles.md");
     let document = fs::read_to_string(&path).expect("profiles documentation is readable");

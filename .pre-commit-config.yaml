@@ -22,7 +22,7 @@ repos:
           awk 'FNR==1{j=0} !j&&NF{sub(/^[ \t]+/,""); if(/^\/[\/*]/||(/^#/&&!/^#[![]/)){print FILENAME": file starts with a comment";e=1} j=1} END{exit e}'
         language: system
         types: [text]
-        exclude: (^|/)Cargo\.lock$|\.md$
+        exclude: (^|/)Cargo\.lock$|\.md$|(^|/)llms\.txt$
       - id: no-tests-in-src
         name: tests live outside src/
         entry: >-
