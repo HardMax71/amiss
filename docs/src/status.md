@@ -63,28 +63,32 @@ assurance is `self-asserted`; there is no aggregate `provider_verified` report f
 ## Keeping this page honest
 
 Links from factual prose to the implementation are deliberate. The repository's own Amiss
-scan makes a changed dependency under unchanged prose visible for review. Exact default
-dispositions in [Profiles and findings](profiles.md) and exact resource ceilings in
-[Limits and refusals](limits.md) are generated from the Rust contract by a test, so changing
-the corresponding constants without updating the book fails CI. The same test discovers
-every public schema-backed example and validates it against that schema. Input examples also
-pass their owning typed reader; adding a contract without registering a reader fails CI. The
-report's readable form passes the strict JSON reader, while its canonical form separately
-clears the [end-to-end wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/acceptance.rs).
-The standalone commit and staged-index identity preimages likewise validate against their
-report-schema fragments and reproduce the production digest chain in the
+scan makes a changed dependency under unchanged prose visible for review.
+
+The mechanical claims are generated, not maintained. Default dispositions in
+[Profiles and findings](profiles.md) and resource ceilings in
+[Limits and refusals](limits.md) come from the Rust constants through a test, so changing
+a constant without the book fails CI. The same
+[documentation contract test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs)
+finds every public schema-backed example, validates it against its schema, and feeds it to
+its owning typed reader; a contract without a registered reader fails CI too.
+
+The examples execute. The report's readable form passes the strict JSON reader, and its
+canonical bytes clear the
+[wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/acceptance.rs)
+end to end. The commit and staged-index identity preimages reproduce the production digest
+chain in the
 [identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs).
-Published semantic corpora also execute their owning runtime paths: the
-[frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json) drive the
-[recognizer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs), the
-[correlation vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json) drive the live
-[correlation-intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlation_vectors.rs), and the
-[governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json) drive
-parser extraction through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
-Published CI snippets require immutable upstream Action pins, an explicit reviewed crate
-version, and the current Amiss release major. Fixture version strings inside report and
-release-manifest examples are reproducible evidence, not claims about the latest package
-release. See the
-[documentation contract test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs). Neither
-mechanism pretends to prove the meaning of free prose; together they make the most
-mechanical drift visible.
+The published semantic corpora drive their live code paths:
+[frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json)
+through the [recognizer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs),
+[correlation vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json)
+through the [intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlation_vectors.rs), and
+[governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
+through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
+
+Published CI snippets must pin upstream Actions immutably, name an explicit reviewed crate
+version, and advertise the current release major. Version strings inside example fixtures
+are reproducible evidence, not claims about the latest release. None of this proves the
+meaning of free prose. It makes the mechanical drift visible, which is the part a machine
+can own.

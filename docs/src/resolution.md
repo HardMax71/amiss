@@ -84,30 +84,33 @@ and mode read"];
 }
 ```
 
-Resolution is exact, and the small rules matter. A trailing slash means the author promised
-a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even though
-`guide.md` exists. Percent-encoding is decoded exactly once, so `%252F` stays as the
-literal three characters `%2F` in the name instead of turning into a second slash. A
-percent escape may decode to bytes that are not text at all, and those bytes are simply
-the path: `bad-%FF-name.md` resolves against the tree entry carrying that exact byte,
-because Git names files in bytes and so does the resolver. Query strings and non-line fragments
-are recorded as digests but do not acquire semantics here. One narrow divergence is deliberate:
-a fragment whose escapes decode outside
-UTF-8 is dropped rather than digested, since carrying it would change the recorded
-identity of every existing observation for no resolution gain. For a relative path with a
-heading or other non-line fragment, the target path is resolved but the fragment meaning is
-not checked, producing `unsupported-reference-semantics`. A recognized numeric line fragment
-instead selects the inclusive raw lines. A range beyond the blob produces resolution
-`kind: missing` with `reason: line-fragment-out-of-range`, reported as an explicit missing
-target; a valid range replaces the whole-file projection with a projection of only the
-selected bytes and file mode. Thus a change outside the range does not claim that this
-occurrence's dependency changed. Git LFS pointers and trees have no available line selection
-and remain unsupported. A leading-slash site route produces the same unsupported finding
-kind. Only the candidate version is read. `--default-branch-ref` supplies a
-second trusted spelling so the resolver can split a ref from its path without guessing;
-when a URL names the default branch but the candidate ref differs, it is still
-`unsupported-version-scope`. Site generators and language-aware tools own route, heading-anchor,
-and symbol semantics; guessing them here would turn honest ignorance into a false pass. The
+Resolution is exact, and the small rules matter. A trailing slash means the author
+promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even
+though `guide.md` exists. Percent-encoding is decoded exactly once: `%252F` stays as the
+literal three characters `%2F` instead of turning into a second slash. A percent escape
+may decode to bytes that are not text at all, and those bytes are simply the path.
+`bad-%FF-name.md` resolves against the tree entry carrying that exact byte, because Git
+names files in bytes and so does the resolver.
+
+Fragments split by kind. Query strings and non-line fragments are recorded as digests and
+acquire no semantics here; for a relative path with a heading fragment, the target file is
+resolved but the fragment meaning is not checked, which is `unsupported-reference-semantics`.
+One narrow divergence is deliberate: a fragment whose escapes decode outside UTF-8 is
+dropped rather than digested, since carrying it would change the recorded identity of
+every existing observation for no resolution gain. A recognized numeric line fragment is
+the exception with teeth. It selects the inclusive raw lines. A range beyond the blob is
+resolution `kind: missing` with `reason: line-fragment-out-of-range`, reported as an
+explicit missing target. A valid range replaces the whole-file projection with only the
+selected bytes and file mode, so a change outside the range does not claim this
+occurrence's dependency changed. Git LFS pointers and trees have no line selection and
+stay unsupported.
+
+Version scope is equally narrow. Only the candidate version is read.
+`--default-branch-ref` supplies a second trusted spelling so the resolver can split a ref
+from its path without guessing, and a URL naming the default branch while the candidate
+ref differs is still `unsupported-version-scope`. Site generators and language-aware tools
+own route, heading-anchor, and symbol semantics; guessing them here would turn honest
+ignorance into a false pass. The
 [resolver tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
 pin these distinctions.
 

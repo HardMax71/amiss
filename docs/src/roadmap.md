@@ -24,11 +24,11 @@ predictable, and maintainable outside its own repository.
 - Accumulate benchmark, fuzz, mutation, security, and compatibility results long enough to
   distinguish a trend from a single green run.
 
-This phase exits when supported-reference accuracy and reviewer burden have recorded
-thresholds, hostile maximum-size inputs meet a truthful published runtime contract, active
-schema-backed input examples validate against their schemas and typed readers, canonical
-report bytes clear their wrapper acceptance path, and every supported CI event has an
-end-to-end fixture or recorded run.
+The exit bar for this phase: supported-reference accuracy and reviewer burden have
+recorded thresholds; hostile maximum-size inputs meet a truthful published runtime
+contract; schema-backed input examples validate against their schemas and typed readers;
+canonical report bytes clear the wrapper acceptance path; and every supported CI event
+has an end-to-end fixture or recorded run.
 
 ## Next: provider-verified controls
 

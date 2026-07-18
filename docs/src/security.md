@@ -35,12 +35,12 @@ does not turn the post-parse node limits into a wall-clock guarantee.
 Output is part of the surface too. Repository paths end up in terminals and CI logs, so
 the human format escapes every byte outside printable ASCII. An ANSI escape sequence, a
 carriage return, or a forged `::error::` workflow command embedded in a filename reaches
-the log only as harmless `\uXXXX` text, and a path that is raw bytes rather than text
-renders each such byte as the two-digit escape of its value, never inventing a character
-the bytes never encoded. The JSON report keeps fidelity its own way: a UTF-8 path is the
-exact original string, and a non-UTF-8 path is a `bytes_hex` object naming every byte,
-because the log needs safety and the report needs fidelity, and those are different
-channels with different rules.
+the log only as harmless `\uXXXX` text. A path that is raw bytes rather than text renders
+each such byte as the two-digit escape of its value, never inventing a character the
+bytes never encoded. The JSON report keeps fidelity its own way, the exact original
+string for a UTF-8 path and a `bytes_hex` object for anything else, because the log needs
+safety and the report needs fidelity, and those are different channels with different
+rules.
 
 Two delivery paths need different trust descriptions. The published convenience
 [composite Action](https://github.com/HardMax71/amiss/blob/main/action.yml) is a GitHub event adapter. It verifies

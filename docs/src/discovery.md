@@ -42,12 +42,12 @@ including LF, CRLF, bare CR, BOM, and exact-limit cases, through the production 
 the [frontmatter test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs).
 
 A reference definition whose decoded label begins with exact lowercase `amiss:` is a
-reserved governed claim. Entity and escape decoding happens before that test, but case is not
+reserved governed claim. Entity and escape decoding happens before that test; case is not
 folded. Every reserved definition node contributes its exact source digest, including a
-losing normalized duplicate; only the first normalized definition controls whether a
-consumer becomes an ordinary reference. Candidate-side governed claims are an unsupported
-capability boundary and make the run incomplete with exit 2, while a base-only claim does
-not. The [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
+losing normalized duplicate, and only the first normalized definition controls whether a
+consumer becomes an ordinary reference. A governed claim on the candidate side is an
+unsupported capability boundary: the run ends incomplete with exit 2. A base-only claim
+does not. The [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
 drive extraction, source hashing, candidate-only grouping, and report construction in the
 [governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
 
@@ -70,10 +70,11 @@ exit is 2. Dropping such an entry silently would be the worst bug this tool coul
 the report would come back green with a document missing from it, and a missing row is
 the one defect no reader can notice.
 
-Both commit-tree and staged-index discovery emit document rows strictly increasing and unique
-by those raw path bytes. Exact document queries and policy-inventory checks therefore use
-binary search, while two-sided report construction merge-joins the ordered sides. The
+Both commit-tree and staged-index discovery emit document rows strictly increasing and
+unique by those raw path bytes. That ordering is load-bearing: exact document queries and
+policy-inventory checks use binary search over it, and two-sided report construction
+merge-joins the ordered sides. The
 [`discovery` ordering test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/discovery.rs)
-pins the Git directory-boundary ordering against both snapshot modes, and the report test
-pins interleaved base and candidate rows. The `amiss-scan` `pipeline` benchmark tracks both
-late exact lookup and the same-document merge as the row count grows.
+pins the Git directory-boundary ordering against both snapshot modes, the report test
+pins interleaved base and candidate rows, and the `amiss-scan` `pipeline` benchmark
+tracks lookup and merge cost as the row count grows.

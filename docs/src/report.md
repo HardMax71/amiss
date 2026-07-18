@@ -17,15 +17,17 @@ replayed as a digest for another.
 Inside the payload: which trees were compared and how; the result block with `status`,
 `complete`, and `exit_code`; the summary counts; a `documents` array with one row per
 discovered document, its classification, and whether its content was available; the
-`findings` array; and the `errors` array of analysis errors the run kept. A repository
-path in any of these is a plain string when its bytes are valid UTF-8, and otherwise an
-object of the form `{"bytes_hex": "..."}` naming the raw bytes as lowercase hex; a writer
-never uses the object form for bytes that decode as text, so one path has exactly one
-spelling and every derived digest stays whole. Every finding
-carries its kind, its location with byte offsets, its attribution, the policy steps that
-set its final disposition, and the digests of the facts underneath it. The `key_input`
-that produced the finding's identity is included, so an external system can recompute any
-finding's identity from the report alone.
+`findings` array; and the `errors` array of analysis errors the run kept.
+
+A repository path anywhere in the payload has exactly one spelling. Valid UTF-8 bytes
+travel as a plain string; anything else travels as `{"bytes_hex": "..."}` naming the raw
+bytes as lowercase hex. A writer never uses the object form for bytes that decode as
+text, so every derived digest stays whole.
+
+Every finding carries its kind, its location with byte offsets, its attribution, the
+policy steps that set its final disposition, and the digests of the facts underneath it.
+The `key_input` that produced the finding's identity is included too, so an external
+system can recompute any finding's identity from the report alone.
 
 The envelope, down to its top-level keys:
 
