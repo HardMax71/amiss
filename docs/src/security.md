@@ -43,7 +43,7 @@ because the log needs safety and the report needs fidelity, and those are differ
 channels with different rules.
 
 Two delivery paths need different trust descriptions. The published convenience
-[composite Action](../../action/action.yml) is a GitHub event adapter. It verifies
+[composite Action](../../action.yml) is a GitHub event adapter. It verifies
 the selected engine's digest against the release manifest carried in the same action tree,
 then launches the engine directly. That detects an inconsistent tree, but the manifest is
 not an independently acquired trust anchor, and this lane does not use bootstrap's watchdog.
