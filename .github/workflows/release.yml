@@ -93,14 +93,26 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           COMMIT: ${{ github.sha }}
         run: |
-          set -eu
+          set -euo pipefail
           VERSION="${INPUT_VERSION:-${TAG_NAME#v}}"
+          WORKSPACE_VERSION="$(cargo metadata --locked --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "amiss") | .version')"
+          if [ "$VERSION" != "$WORKSPACE_VERSION" ]; then
+            echo "release version ${VERSION} does not match workspace ${WORKSPACE_VERSION}"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "$TAG_NAME" != "v${WORKSPACE_VERSION}" ]; then
+            echo "release tag ${TAG_NAME} does not match workspace v${WORKSPACE_VERSION}"
+            exit 1
+          fi
           HOST="${SERVER_URL#*://}"
           HOST="${HOST%/}"
           mkdir -p action-tree/dist
           cp Cargo.lock action-tree/Cargo.lock
-          install -m 0644 action/launcher.js action-tree/dist/launcher.js
-          install -m 0644 action.yml action-tree/action.yml
+          cp LICENSE.md action-tree/LICENSE.md
+          bash scripts/release-licenses.sh action-tree/THIRD_PARTY_LICENSES.txt
+          install -m 0644 crates/amiss/action/launcher.js action-tree/dist/launcher.js
+          install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml
           args=""
           for binary in engines/amiss-*; do
             name="$(basename "$binary")"
@@ -136,31 +148,149 @@ jobs:
     needs: manifest
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: action-publication
+      cancel-in-progress: false
     permissions:
       contents: write
+    outputs:
+      advance-major: ${{ steps.publish.outputs.advance-major }}
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: action-tree
           path: tree
-      - shell: bash
+      - id: publish
+        shell: bash
         env:
           TAG: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
           TOKEN: ${{ github.token }}
         run: |
-          set -eu
+          set -euo pipefail
           cd tree
           git init -q
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -qm "amiss action tree for ${TAG}"
+          tree="$(git write-tree)"
           # the helper reads the token from the environment at callback time:
           # nothing lands in a config file, a remote URL, or the process list
           helper='!f() { printf "username=x-access-token\npassword=%s\n" "$TOKEN"; }; f'
+          remote="https://github.com/${REPOSITORY}.git"
           major="${TAG%%.*}"
-          git -c credential.helper= -c credential.helper="$helper" \
-            push -q "https://github.com/${REPOSITORY}.git" "HEAD:refs/tags/action/${TAG}"
-          git -c credential.helper= -c credential.helper="$helper" \
-            push -q -f "https://github.com/${REPOSITORY}.git" "HEAD:refs/heads/${major}"
+          version="${TAG#v}"
+          exact_ref="refs/tags/action/${TAG}"
+          major_ref="refs/heads/${major}"
+
+          exact="$(git ls-remote --refs "$remote" "$exact_ref" | awk '{print $1}')"
+          current="$(git ls-remote --heads "$remote" "$major_ref" | awk '{print $1}')"
+          if [ -n "$current" ]; then
+            git fetch -q --no-tags "$remote" "$major_ref"
+            current="$(git rev-parse FETCH_HEAD)"
+          fi
+
+          advance_major=true
+          if [[ "$version" == *-* ]]; then
+            advance_major=false
+          elif [ -n "$current" ]; then
+            current_version="$(git show "${current}:release-manifest.json" | jq -r '.engine_version')"
+            newest="$(printf '%s\n%s\n' "$current_version" "$version" | sort -V | tail -n 1)"
+            if [ "$newest" = "$current_version" ] && [ "$current_version" != "$version" ]; then
+              advance_major=false
+            elif [ "$current_version" = "$version" ] && [ -z "$exact" ]; then
+              echo "${major_ref} already carries ${version}, but ${exact_ref} is absent"
+              exit 1
+            fi
+          fi
+
+          if [ -n "$exact" ]; then
+            git fetch -q --no-tags "$remote" "$exact_ref"
+            exact="$(git rev-parse FETCH_HEAD)"
+            if [ "$(git rev-parse "${exact}^{tree}")" != "$tree" ]; then
+              echo "${exact_ref} already exists with different content"
+              exit 1
+            fi
+            commit="$exact"
+          elif [ -n "$current" ]; then
+            commit="$(printf 'amiss action tree for %s\n' "$TAG" | git commit-tree "$tree" -p "$current")"
+          else
+            commit="$(printf 'amiss action tree for %s\n' "$TAG" | git commit-tree "$tree")"
+          fi
+
+          push=(git -c credential.helper= -c credential.helper="$helper" push -q "$remote")
+          if [ -z "$exact" ] && [ "$advance_major" = true ]; then
+            "${push[@]}" --atomic "$commit:$exact_ref" "$commit:$major_ref"
+          elif [ -z "$exact" ]; then
+            "${push[@]}" "$commit:$exact_ref"
+          elif [ "$advance_major" = true ] && [ "$current" != "$commit" ]; then
+            if [ -n "$current" ] && ! git merge-base --is-ancestor "$current" "$commit"; then
+              echo "${exact_ref} cannot fast-forward ${major_ref}"
+              exit 1
+            fi
+            "${push[@]}" "$commit:$major_ref"
+          fi
+
+          remote_exact="$(git ls-remote --refs "$remote" "$exact_ref" | awk '{print $1}')"
+          [ "$remote_exact" = "$commit" ]
+          if [ "$advance_major" = true ]; then
+            remote_major="$(git ls-remote --heads "$remote" "$major_ref" | awk '{print $1}')"
+            [ "$remote_major" = "$commit" ]
+          fi
+          printf 'advance-major=%s\n' "$advance_major" >> "$GITHUB_OUTPUT"
+
+  smoke-action:
+    if: github.ref_type == 'tag'
+    needs: publish-action
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - id: amiss
+        uses: ./
+        with:
+          profile: observe
+          annotations: "false"
+      - shell: bash
+        env:
+          EXIT_CLASS: ${{ steps.amiss.outputs.exit-class }}
+          REPORT: ${{ steps.amiss.outputs.report }}
+        run: |
+          set -euo pipefail
+          [ "$EXIT_CLASS" = 0 ]
+          jq -e '.schema == "amiss/scanner-report-envelope"' "$REPORT" > /dev/null
+
+  publish-release:
+    if: github.ref_type == 'tag'
+    needs: [publish-action, smoke-action]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          ADVANCE_MAJOR: ${{ needs.publish-action.outputs.advance-major }}
+        run: |
+          set -euo pipefail
+          release="$(gh api "repos/${REPOSITORY}/releases/tags/${TAG}")"
+          if [ "$(jq -r '.draft' <<<"$release")" != true ]; then
+            echo "${TAG} is already public"
+            exit 0
+          fi
+          latest=false
+          if [ "$ADVANCE_MAJOR" = true ] && [ "$(jq -r '.prerelease' <<<"$release")" = false ]; then
+            latest=true
+          fi
+          id="$(jq -r '.id' <<<"$release")"
+          gh api --method PATCH "repos/${REPOSITORY}/releases/${id}" \
+            -F draft=false -f make_latest="$latest" > /dev/null

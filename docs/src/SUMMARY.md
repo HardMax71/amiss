@@ -23,6 +23,7 @@
 
 - [Security model](security.md)
 - [Controls and policy](controls.md)
+- [Licenses and notices](licenses.md)
 
 # The project
 

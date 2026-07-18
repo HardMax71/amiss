@@ -5,18 +5,24 @@ action tree, derives both commits from the triggering event, and turns findings 
 annotations on the pull request:
 
 ```yaml
-- uses: actions/checkout@<pinned-sha>
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
   with:
     fetch-depth: 2
 - uses: HardMax71/amiss@v0
+  with:
+    profile: observe
 ```
 
-Replace `<pinned-sha>` with the reviewed full commit id of `actions/checkout`, here and in
-the direct form below.
+The published first run uses `observe`: findings are reported and annotated without blocking,
+while an incomplete or untrusted run still fails. Triage the initial report, adopt any repository
+policy it needs, then change the input to `profile: enforce` to make blocking findings fail.
 
 The moving major ref follows the engine's semver major: `v0` for the 0.x series, `v1`
-from 1.0.0 on, so one series can never rewrite another's ref. `action/vX.Y.Z` tags are
-immutable exact pins, and pinning the full commit id works as everywhere.
+from 1.0.0 on, so one series can never rewrite another's ref. A conventional `vX.Y.Z`
+source tag is an immutable exact pin whose dispatcher delegates to the equally immutable
+`action/vX.Y.Z` runtime tag. Pin `action/vX.Y.Z` directly, or its generated Action commit,
+when policy requires the complete runtime tree in one ref. A source commit pins the dispatcher
+but still makes that immutable second hop.
 
 Before running anything, the action verifies the selected binary against the release
 manifest shipped in the same tree. A wall-clock watchdog backstops the engine's
@@ -52,7 +58,7 @@ builds the pull request's engine, assembles a local action tree with its manifes
 that composite under `--profile enforce`. A minimal adjacent-commit direct invocation is:
 
 ```yaml
-- uses: actions/checkout@<pinned-sha>
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
   with:
     fetch-depth: 2
     persist-credentials: false
@@ -68,7 +74,7 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
       --repository "github.com/${REPOSITORY,,}" \
       --ref "refs/heads/${BRANCH}" \
       --default-branch-ref "refs/heads/${DEFAULT_BRANCH}" \
-      --profile enforce --format json > amiss-report.json
+      --profile observe --format json > amiss-report.json
 ```
 
 Replace `<reviewed-version>` with the exact release you reviewed. The leading `=` makes the
@@ -78,6 +84,8 @@ downloaded crate archive against the SHA-256 checksum in the crates.io index, wh
 `--locked` refuses to recompute the packaged lockfile. The placeholder is deliberately
 release-independent: the book does not copy each patch version out of the workspace package
 metadata that release-plz updates.
+As with the Action form, graduate this command to `--profile enforce` after the first report is
+triaged.
 
 Three details carry weight. Both named commits must exist in the checkout. The Action derives
 pull-request base and merge-result commits, merge-group base and head commits, or push

@@ -20,6 +20,7 @@ use amiss_wire::report::{
     MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
 };
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
+use sha2::{Digest as _, Sha256};
 
 fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -500,11 +501,10 @@ fn published_ci_examples_expose_every_moving_release_choice() {
                 );
                 amiss_references = amiss_references.saturating_add(1);
             } else {
-                assert!(
-                    reference == "<pinned-sha>"
-                        || (reference.len() == 40
-                            && reference.bytes().all(|byte| byte.is_ascii_hexdigit())),
-                    "{}:{} hides a mutable upstream Action reference",
+                assert_eq!(
+                    reference,
+                    "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+                    "{}:{} must use the reviewed checkout release",
                     path.display(),
                     line_index + 1,
                 );
@@ -524,6 +524,18 @@ fn published_ci_examples_expose_every_moving_release_choice() {
             "{} must keep every published upstream Action dependency explicit",
             path.display(),
         );
+        assert_eq!(
+            document
+                .lines()
+                .filter(|line| {
+                    let line = line.trim();
+                    line == "profile: observe" || line.contains("--profile observe")
+                })
+                .count(),
+            2,
+            "{} must make every first-run CI form observe-first",
+            path.display(),
+        );
     }
 
     let ci = fs::read_to_string(root.join("docs/src/ci.md")).expect("CI documentation is readable");
@@ -539,6 +551,133 @@ fn published_ci_examples_expose_every_moving_release_choice() {
         ],
         "the direct CI form must demand an exact reviewed version without copying the current patch release"
     );
+}
+
+#[test]
+fn action_dispatcher_tracks_the_packaged_runtime() {
+    let root = repository_root();
+    let dispatcher = fs::read_to_string(root.join("action.yml")).expect("dispatcher is readable");
+    let runtime = fs::read_to_string(root.join("crates/amiss/action/runtime.yml"))
+        .expect("packaged Action runtime is readable");
+    let versioned_ref = format!(
+        "      uses: HardMax71/amiss@action/v{}",
+        env!("CARGO_PKG_VERSION")
+    );
+    assert_eq!(
+        dispatcher.matches(&versioned_ref).count(),
+        1,
+        "the source dispatcher must make one immutable same-version hop"
+    );
+    assert!(
+        !runtime.contains("uses: HardMax71/amiss@"),
+        "the generated runtime must never delegate back to the dispatcher"
+    );
+
+    for input in [
+        "profile",
+        "base",
+        "candidate",
+        "repo",
+        "object-format",
+        "annotations",
+        "watchdog-seconds",
+    ] {
+        let declaration = format!("  {input}:");
+        assert_eq!(
+            dispatcher
+                .lines()
+                .filter(|line| *line == declaration)
+                .count(),
+            1
+        );
+        assert_eq!(
+            runtime.lines().filter(|line| *line == declaration).count(),
+            1
+        );
+        let forwarding = format!("        {input}: ${{{{ inputs.{input} }}}}");
+        assert_eq!(
+            dispatcher.matches(&forwarding).count(),
+            1,
+            "the dispatcher must forward {input} exactly once"
+        );
+    }
+    for output in ["exit-class", "report"] {
+        let forwarding = format!("value: ${{{{ steps.amiss.outputs.{output} }}}}");
+        assert_eq!(dispatcher.matches(&forwarding).count(), 1);
+    }
+
+    for workflow in [
+        root.join(".github/workflows/ci.yml"),
+        root.join(".github/workflows/release.yml"),
+    ] {
+        let source = fs::read_to_string(&workflow).expect("Action assembly workflow is readable");
+        assert!(
+            source
+                .contains("install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml")
+        );
+        assert!(source.contains("cp LICENSE.md action-tree/LICENSE.md"));
+        assert!(
+            source
+                .contains("bash scripts/release-licenses.sh action-tree/THIRD_PARTY_LICENSES.txt")
+        );
+        assert!(!source.contains("install -m 0644 action.yml action-tree/action.yml"));
+    }
+}
+
+#[test]
+fn third_party_material_keeps_its_attribution() {
+    let root = repository_root();
+    let notices = fs::read_to_string(root.join("THIRD_PARTY_NOTICES.md"))
+        .expect("third-party notices are readable");
+    for source in [
+        "commonmark-0.31.2.spec.json",
+        "gfm-0.29.spec.txt",
+        "0.29.0.gfm.13",
+        "ad0a49c",
+        "2891b75",
+        "7cc9131",
+        "df527f5",
+        "a3a75cc",
+        "2de5cc58d87b3a58413020f9f15bd8c261c29e13",
+        "mdBook 0.5.4",
+        "Highlight.js 10.1.1",
+        "Font Awesome Free 6.2.0",
+    ] {
+        assert!(
+            notices.contains(source),
+            "third-party notices omit {source}"
+        );
+    }
+
+    for (file, expected) in [
+        (
+            "LM-bold-italic.woff2",
+            "3d41e67617603684e0353953f9460893cd441049398be31857c9fbaaa2521811",
+        ),
+        (
+            "LM-bold.woff2",
+            "449ad146efbd630d36e08f956b1249e862463797a26b61f5fe7999513c328c03",
+        ),
+        (
+            "LM-italic.woff2",
+            "3eb5daf8d26e6f882207633b8f45a27b389ac1b2a6713562fdef4d982f24b192",
+        ),
+        (
+            "LM-regular.woff2",
+            "c2e0d602fee55a45e44f8ab3f4f561d73d2c23db1efee295865d79f9307977db",
+        ),
+    ] {
+        let bytes = fs::read(root.join("docs/src/fonts").join(file)).expect("font is readable");
+        let mut actual = String::with_capacity(64);
+        for byte in Sha256::digest(bytes) {
+            write!(&mut actual, "{byte:02x}").expect("writing to a string is infallible");
+        }
+        assert_eq!(actual, expected);
+    }
+
+    let summary =
+        fs::read_to_string(root.join("docs/src/SUMMARY.md")).expect("book summary is readable");
+    assert!(summary.contains("[Licenses and notices](licenses.md)"));
 }
 
 #[test]

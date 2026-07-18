@@ -44,8 +44,9 @@ string for a UTF-8 path and a `bytes_hex` object for anything else, because the 
 safety and the report needs fidelity, and those are different channels with different
 rules.
 
-Two delivery paths need different trust descriptions. The published convenience
-[composite Action](https://github.com/HardMax71/amiss/blob/main/action.yml) is a GitHub event adapter. It verifies
+Two delivery paths need different trust descriptions. The root
+[Action dispatcher](https://github.com/HardMax71/amiss/blob/main/action.yml) makes conventional source release tags usable by delegating to the same version's immutable
+[`action/vX.Y.Z` runtime](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml). That immutable second ref is part of a source-tag or source-commit pin; users that require one complete tree can pin the generated runtime tag or commit directly. The runtime is a GitHub event adapter. It verifies
 the selected engine's digest against the release manifest carried in the same action tree,
 then launches the engine directly. That detects an inconsistent tree, but the manifest is
 not an independently acquired trust anchor, and this lane does not use bootstrap's
