@@ -17,9 +17,11 @@ because a small denominator makes the ratio noise.
 
 ## July 2026
 
-Six repositories, scanned 2026-07-18 with the v0.5.1 release build under
+Ten repositories, scanned 2026-07-18 with the v0.5.1 release build under
 `--profile observe`, each from its latest release tag to that day's default-branch head.
-ripgrep tags rarely, so its base is the 150th ancestor of its head instead.
+Two bases bend that convention: ripgrep tags rarely, so its base is the 150th ancestor
+of its head, and alacritty tags on release branches, so its base is the latest stable
+tag's merge point with master.
 
 | Repository | Range | References | Missing | Advisory | Doc lines | Per hundred | Rejection class |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -29,6 +31,10 @@ ripgrep tags rarely, so its base is the 150th ancestor of its head instead.
 | mdBook | `2ea30c00f006..69287f26827e` | 1,206 | 36 | 35 | 0 | undefined | test fixtures |
 | starship | `fca92d8dcbd5..3c3aaf4f7ed2` | 7,508 | 242 | 844 | 84,485 | 1.0 | clean URLs |
 | ruff | `0177a7e0d2c4..5055442b5875` | 5,244 | 102 | 102 | 1,146 | 8.9 | generated targets |
+| bat | `979ba22628bc..78951393e29b` | 451 | 12 | 27 | 214 | 12.6 | none |
+| fd | `7027d45303b4..1bfeea237a48` | 96 | 0 | 1 | 79 | 1.3 | none |
+| hyperfine | `975fe108c4ee..f12f3d9f86f3` | 48 | 0 | 1 | 37 | 2.7 | none |
+| alacritty | `a0be6eb8240c..852e971cddfa` | 87 | 1 | 5 | 65 | 7.7 | none |
 
 helix's one missing reference was a real introduced break: a guide page linked
 `./themes.md` where the page lives one directory up, invisible to mdBook's own build. A
@@ -50,6 +56,16 @@ correctly against the tree; the maintainers would still close the report, and th
 be right to, which is what makes the class worth recording. These are the measured
 adoption boundary behind the declared-generated-targets candidate on the
 [roadmap](roadmap.md).
+
+The four later rows were picked deliberately from repositories without a docs-site
+generator, and they produced no rejection class at all: every nonzero count there is a
+real break. bat's twelve are pre-existing and live in four translated READMEs whose
+relative links carry the wrong prefix, `doc/LICENSE-MIT` for a root file and a doubled
+`doc/doc/` for siblings, and each renders as a 404 on GitHub today. alacritty's one is
+the same shape as helix's: a commit moved the escape-sequence docs into the manpage and
+`docs/features.md` still links the deleted `escape_support.md`. fd and hyperfine were
+spotless. On this evidence the rejection classes are a docs-site phenomenon; a plain
+tree yields either zero or the genuinely broken.
 
 ## What a row must be
 

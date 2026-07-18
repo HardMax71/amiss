@@ -58,6 +58,8 @@ repos:
         name: typos
         entry: typos
         language: system
+        # commit-range hex in the scan ledger tokenizes into short words
+        exclude: (^|/)ledger\.md$
       - id: fmt
         name: cargo fmt
         entry: cargo fmt --
