@@ -27,6 +27,11 @@ the job on exit classes 1 and 2 under the default `enforce` profile and exposes
 `base`, `candidate`, `repo`, `object-format`, `annotations`, `watchdog-seconds`) exist
 for the cases the defaults do not cover.
 
+For pull requests the derived base is the merge commit's own first parent, not the
+event payload's base tip. The payload races the merge ref GitHub rebuilds lazily after
+a base branch moves; the first parent is the base the tested tree was actually built
+from, and it is present in any checkout that holds the merge commit at all.
+
 The identity host comes from the event's server URL. On GitHub Enterprise Server the
 report therefore claims the instance's own host and recognizes that host's blob and tree
 links, with the github dialect declared explicitly. Release assembly supplies the host
