@@ -28,8 +28,9 @@ be rewritten by the very pull request under review. The contract defines five: a
 organization floor (tightens ceilings and dispositions across many repositories), an
 adoption debt snapshot (a recorded list of known failures being worked off), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
-execution constraint. Every current request, floor, debt, waiver, trusted-time, release-
-manifest, and execution-constraint identity uses the same open repository grammar: a
+execution constraint.
+
+Every control identity, and the release manifest's, uses one open repository grammar: a
 caller-canonical host, a slash-joined owner when the forge supports nested groups, and a
 repository name. That admits enterprise and self-hosted instances without making them
 impersonate a public host. The
@@ -49,26 +50,29 @@ the candidate-identity digest. That candidate identity includes the selected for
 as the repository and snapshots, so changing the URL dialect cannot replay a statement for
 the same Git trees. The controls request must repeat the same provider/run tuple, and the
 [verification gate](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) compares it byte-for-byte before
-using the time. These are binding rules, not authentication: an adapter still has to acquire
-the request and statement from a provider-controlled channel. Debt must reproduce its
-adoption tree, and a waiver item for another candidate tree is simply not selected. The
-commit and staged-index paths share one
+using the time.
+
+These are binding rules, not authentication. An adapter still has to acquire the request
+and statement from a provider-controlled channel. Debt must reproduce its adoption tree,
+and a waiver item for another candidate tree is simply not selected. The commit and
+staged-index paths share one
 [trusted-time, debt, and waiver pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 
-Debt and waiver require verified trusted time and a complete Git candidate. Their item
-schemas carry the accepted or authorized fact as the sole source of its finding kind and
-key-input preimage; `finding_key` is recomputed from that nested key. The fact can name only
-`explicit-target-missing` or `explicit-target-type-mismatch`, and selection uses an exact
-current finding key with a candidate fact. A resolved projection
-or an absent key is not an exception target. Matching still requires the exact fact digest:
-active unchanged debt records tolerance at `warn`, while an applied waiver changes only
-`fail` to `warn`. Invalid, expired, worsened, or overlapping items suppress nothing, and
-an overlap makes evaluation incomplete. The
-[wrapper tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/wrapper.rs)
+Debt and waiver require verified trusted time and a complete Git candidate. An item
+carries its accepted fact, and that fact is the sole source of the finding kind and the
+key-input preimage; `finding_key` is recomputed from the nested key. The fact can name
+only `explicit-target-missing` or `explicit-target-type-mismatch`. Selection needs an
+exact current finding key with a candidate fact; a resolved projection or an absent key
+is not an exception target. Matching also requires the exact fact digest. When
+everything lines up, active unchanged debt records tolerance at `warn`, and an applied
+waiver changes only `fail` to `warn`. Invalid, expired, worsened, or overlapping items
+suppress nothing, and an overlap makes evaluation incomplete.
+
+The [wrapper tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/wrapper.rs)
 pin binding, trusted-time, expiry, fact-drift, wrong-tree selection, resolved-target, and
 overlap behavior. The published [`complete-findings`, `debt-items`, and `waiver-items`
-ceilings](limits.md) bound the accepted sets; the `amiss-scan` `pipeline` benchmark tracks
-matching as findings and exception items grow.
+ceilings](limits.md) bound the accepted sets, and the `amiss-scan` `pipeline` benchmark
+tracks matching as findings and exception items grow.
 
 One asymmetry remains in the current control contract: the report can carry a finding on a
 document whose name is raw bytes, but waiver and debt items spell paths as text. Such a

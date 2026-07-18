@@ -33,19 +33,21 @@ state and is read from the index like everything else.
 
 The optional identity group (`--repository`, `--ref`, and `--default-branch-ref`) tells
 Amiss which repository and candidate branch this tree belongs to. With a selected forge
-dialect, a link like
-`https://github.com/<owner>/<name>/blob/main/src/lib.rs` becomes a repository path only when
-`--ref` is `refs/heads/main`; a URL for the declared default branch while another candidate
-is under test is recognized but remains `unsupported-version-scope`. Without the identity
-group, forge links remain external URLs and are skipped, and the report says so. The host
-is any spelling without a slash: Amiss never resolves it, and it is matched byte for byte
-against the URLs in your documents, so pass the lowercase form your links actually use. The
-owner is one or more slash-joined segments, nested only for GitLab group paths, and owner and
-name must be lowercase. Forges report them with whatever capitals the owner registered, so
-a workflow passing `github.repository` has to lowercase the value first. Amiss will not do
-that for you: the identity you pass is a claim it cannot verify, and a checker that silently
-rewrites an unverifiable claim has started making things up. It refuses instead, and the
-refusal says why.
+dialect, a link like `https://github.com/<owner>/<name>/blob/main/src/lib.rs` becomes a
+repository path only when `--ref` is `refs/heads/main`; a URL for the declared default
+branch while another candidate is under test is recognized but remains
+`unsupported-version-scope`. Without the identity group, forge links remain external URLs
+and are skipped, and the report says so.
+
+The identity's spelling is strict. The host is any spelling without a slash: Amiss never
+resolves it, and it is matched byte for byte against the URLs in your documents, so pass
+the lowercase form your links actually use. The owner is one or more slash-joined
+segments, nested only for GitLab group paths, and owner and name must be lowercase.
+Forges report them with whatever capitals the owner registered, so a workflow passing
+`github.repository` has to lowercase the value first. Amiss will not do that for you.
+The identity you pass is a claim it cannot verify, a checker that silently rewrites an
+unverifiable claim has started making things up, and so it refuses, and the refusal says
+why.
 
 `--forge` names the URL dialect the resolver applies: `github` for GitHub and GitHub
 Enterprise, `gitlab` for GitLab's separator form, `gitea` for Gitea, Forgejo, and

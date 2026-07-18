@@ -14,21 +14,25 @@ annotations on the pull request:
 Replace `<pinned-sha>` with the reviewed full commit id of `actions/checkout`, here and in
 the direct form below.
 
-The moving major ref follows the engine's semver major, `v0` for the 0.x series and
-`v1` from 1.0.0 on, so one series can never rewrite another's ref; `action/vX.Y.Z`
-tags are immutable exact pins, and pinning the full commit id works as everywhere. The action verifies the selected binary against
-the release manifest shipped in the same tree before running it, fails the job on exit
-classes 1 and 2 under the default `enforce` profile, and exposes `exit-class` and
-`report` outputs for anything downstream. Its inputs (`profile`, `base`, `candidate`,
-`repo`, `object-format`, `annotations`) exist for the cases the defaults do not cover.
-The identity host comes from the event's server URL, so on GitHub Enterprise Server the
-report claims the instance's own host and recognizes that host's blob and tree links, with
-the github dialect declared explicitly. Release assembly likewise supplies the host to the
-[manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs), whose current contract stores
-an open build-source identity instead of assuming `github.com`; the
-[release workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml) is a checkable example of that input.
-The report and request formats are forge-neutral even though this repository currently ships
-only the GitHub event adapter.
+The moving major ref follows the engine's semver major: `v0` for the 0.x series, `v1`
+from 1.0.0 on, so one series can never rewrite another's ref. `action/vX.Y.Z` tags are
+immutable exact pins, and pinning the full commit id works as everywhere.
+
+Before running anything, the action verifies the selected binary against the release
+manifest shipped in the same tree. It fails the job on exit classes 1 and 2 under the
+default `enforce` profile and exposes `exit-class` and `report` outputs for anything
+downstream. Its inputs (`profile`, `base`, `candidate`, `repo`, `object-format`,
+`annotations`) exist for the cases the defaults do not cover.
+
+The identity host comes from the event's server URL. On GitHub Enterprise Server the
+report therefore claims the instance's own host and recognizes that host's blob and tree
+links, with the github dialect declared explicitly. Release assembly supplies the host
+the same way, to a
+[manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs)
+that stores an open build-source identity instead of assuming `github.com`; the
+[release workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml)
+is a checkable example of that input. The report and request formats are forge-neutral
+even though this repository currently ships only the GitHub event adapter.
 
 The long form invokes the engine directly. It is useful outside GitHub Actions or when a
 workflow needs to construct the exact evaluation itself, but it is not the repository's

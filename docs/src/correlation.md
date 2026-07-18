@@ -4,13 +4,15 @@ The base-versus-candidate comparison works per occurrence, and the unit it reaso
 the block: the paragraph, list item, or table cell that contains the reference.
 
 Correlation has an exact phase and a conservative candidate phase. Equal observation
-identities pair exactly. Among the remaining occurrences, a candidate edge exists only when
-the adapter, source construct, and `CorrelationIntent` projection agree. Repository paths
-and same-repository forge links share a semantic class, so an equivalent spelling change can
-still correlate; external, site-route, and unsupported references retain their raw
-destination identity. The repository class also binds path, target kind, query, and fragment;
-the external class binds scheme, query, and fragment; the remaining classes bind their kind,
-query, and fragment. The
+identities pair exactly. Among the remaining occurrences, a candidate edge exists only
+when the adapter, source construct, and `CorrelationIntent` projection agree.
+
+What counts as agreement depends on the reference's class. Repository paths and
+same-repository forge links share one semantic class, so an equivalent spelling change
+can still correlate; that class binds path, target kind, query, and fragment. External,
+site-route, and unsupported references keep their raw destination identity, with the
+external class binding scheme, query, and fragment, and the remaining classes binding
+their kind, query, and fragment. The
 [correlation-intent vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json) pin those
 fields and the GitHub, GitLab, and Gitea equivalence rows through the production projection in
 the [vector test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlation_vectors.rs).
