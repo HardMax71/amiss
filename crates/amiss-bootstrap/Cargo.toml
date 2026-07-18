@@ -7,8 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-amiss-git = { path = "../amiss-git", version = "0.5.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.5.0" }
+amiss-git = { path = "../amiss-git", version = "0.5.1" }
+amiss-wire = { path = "../amiss-wire", version = "0.5.1" }
 tempfile = "3"
 
 [dev-dependencies]
