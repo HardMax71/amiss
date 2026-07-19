@@ -1,63 +1,56 @@
 # Roadmap
 
-This page contains future work, not release notes or a promise that every candidate will
-ship. The factual boundary of the current product is in [Project status](status.md), and
-completed changes move to the
-[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md) instead of being
-repeated here.
+This page tracks future work and the evidence for completed phases; it is not release
+notes or a promise that every candidate will ship. The factual boundary of the current
+product is in [Project status](status.md).
+Completed phase evidence stays in collapsed Done sections so the exit decision remains
+inspectable; version-specific history stays in the
+[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md).
 
-## Now: validate and harden
+<details>
+<summary>Done: validation and hardening</summary>
 
-The scanner's claims are exact, so validation is about counting error classes, not
-collecting impressions. The work in this phase, with its instruments:
-
-- Book alignment is already mechanical and stays that way: the documentation contract
-  tests generate the disposition and ceiling tables, compare the meaning sentences, the
-  grammar, and the llms index, and execute every schema-backed example. A claim that can
-  be generated gets generated; the rest links its implementation.
-- Parser CPU had one named hole: the pinned MDX lexer's quadratic unterminated-region
-  case, recorded in the
-  [corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md). An
-  in-parse bound closed it in July 2026: every candidate close charges the accumulated
-  region against the `aggregate-embedded-code-evaluation-bytes-per-snapshot` ceiling, a
-  crossing is an ordinary reported resource row, and the trip is pinned by test. The
-  convenience Action now carries a wall-clock watchdog on top; its default is the
-  120-second window bootstrap enforces on its lane, and a workflow input can move it.
-- Shadow scans have started and their record is the [scan ledger](ledger.md). Ten public
-  repositories hold rows from July 2026: four spotless (ripgrep, just, fd, hyperfine),
-  three carrying only real breaks (helix's one introduced in its range, bat's twelve and
-  alacritty's one pre-existing), and three mapping systematic non-adoption classes,
-  clean URLs a site router resolves, deliberately broken test fixtures, and targets a
-  docs build generates. Every row records the reference count, the missing count, the
-  advisory rows, the changed documentation lines, and the class of any finding a
-  maintainer would reject.
+- Book alignment is mechanical: documentation contract tests generate the disposition
+  and ceiling tables, compare the meaning sentences, grammar, and llms index, and execute
+  every schema-backed example. A claim that can be generated gets generated; the rest
+  links its implementation.
+- The pinned MDX lexer's quadratic unterminated-region case recorded in the
+  [corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md) is bounded
+  in-parse. Every candidate close charges the accumulated region against the
+  `aggregate-embedded-code-evaluation-bytes-per-snapshot` ceiling, a crossing is an
+  ordinary resource row, and the trip is pinned by test. The convenience Action also
+  carries a configurable wall-clock watchdog whose default is the bootstrap lane's
+  120-second window.
+- The [scan ledger](ledger.md) holds ten public repositories from July 2026: four
+  spotless, three carrying only real breaks (helix's one introduced, bat's twelve and
+  alacritty's one pre-existing), and three mapping systematic non-adoption classes. Every
+  row records reference and missing counts, advisory rows, changed documentation lines,
+  and the class of any finding a maintainer would reject.
 - A false `explicit-target-missing` on a supported reference is a resolver bug, not a
-  statistic: it gets a pinned test, and the accepted count of such bugs is zero.
-- **PR feedback stays focused.** Related findings are grouped by the target that broke
-  or changed. Fixes come first; Checks stay in the summary; Existing findings never use
-  PR annotations; scan failures are separate. A PR shows at most ten items, with any
-  overflow kept in the full report.
-- The event matrix needs recorded runs, not assumptions. The self-scan exercises push,
-  pull-request, shallow-checkout, and staged-index paths in hosted CI: the pull-request
-  lane checks out at the consumer default depth of two, and every run also scans the
-  staged index against the parent commit. Merge groups have their trigger and wait on
-  the queue being enabled; fork pull requests wait on a real fork.
-- Trend instruments accumulate on their own schedules: the weekly non-gating mutation
-  run and the nightly coverage-guided fuzz run. The first mutation run recorded its
-  baseline on 2026-07-18: 2,728 mutants, 664 missed, and with the fixtures crate since
-  excluded from mutation the comparable numbers going forward are 2,672 and 616. The
-  bar for calling a property stable is two months of those runs without an unexplained
-  regression.
+  statistic. It gets a pinned test, and the accepted count of such bugs is zero.
+- PR feedback is engine-owned and focused. Related findings are grouped by target, Fixes
+  precede Checks, Existing findings never use PR annotations, scan failures stay
+  separate, and the CLI and Action show at most ten items while retaining overflow in the
+  full report.
+- Hosted self-scans have recorded push, same-repository pull-request, depth-two shallow
+  checkout, and staged-index paths. Separate fork and merge-group runs are not retained
+  as phase gates. The fork path uses the same unprivileged pull-request workflow. As of
+  July 2026 GitHub does not offer a merge queue to this public, user-owned repository. The
+  `merge_group` trigger and event mapping remain in place for repositories where a queue
+  is available.
+- The weekly non-gating mutation run and nightly coverage-guided fuzz run are installed.
+  The first mutation run recorded 2,728 mutants and 664 missed on 2026-07-18; after
+  excluding the fixtures crate, the comparable baseline is 2,672 and 616. These runs
+  continue independently, and no property is called stable until two months pass without
+  an unexplained regression.
 
-This phase exits when every bullet above is either closed or has its recorded numbers:
-the MDX bound decided, the ledger at ten or more repositories, zero open false-missing
-bugs, the focused-feedback contract pinned by tests, and the event matrix covered.
+</details>
 
-## Next: provider-verified controls
+## Now: provider-verified controls
 
-Conditional on the validation phase. The parsers, control semantics, and bootstrap
-supervision already exist as library surfaces; [Project status](status.md) records their
-exact maturity. What remains is integration and an independent trust boundary:
+The validation phase is closed. The parsers, control semantics, and bootstrap supervision
+already exist as library surfaces; [Project status](status.md) records their exact
+maturity. What remains is integration and an independent trust boundary:
 
 - acquire and authenticate provider-created evaluation and control requests;
 - implement provider adapters that translate independently authenticated run context
