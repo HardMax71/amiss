@@ -241,15 +241,33 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - id: amiss
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: action/${{ github.ref_name }}
+          path: action-under-test
+          persist-credentials: false
+      - id: exact
+        uses: ./action-under-test
+        with:
+          profile: observe
+          annotations: "false"
+      - shell: bash
+        env:
+          EXIT_CLASS: ${{ steps.exact.outputs.exit-class }}
+          REPORT: ${{ steps.exact.outputs.report }}
+        run: |
+          set -euo pipefail
+          [ "$EXIT_CLASS" = 0 ]
+          jq -e '.schema == "amiss/scanner-report-envelope"' "$REPORT" > /dev/null
+      - id: dispatcher
         uses: ./
         with:
           profile: observe
           annotations: "false"
       - shell: bash
         env:
-          EXIT_CLASS: ${{ steps.amiss.outputs.exit-class }}
-          REPORT: ${{ steps.amiss.outputs.report }}
+          EXIT_CLASS: ${{ steps.dispatcher.outputs.exit-class }}
+          REPORT: ${{ steps.dispatcher.outputs.report }}
         run: |
           set -euo pipefail
           [ "$EXIT_CLASS" = 0 ]
