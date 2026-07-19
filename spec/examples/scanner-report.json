@@ -224,6 +224,32 @@
       "skip_worktree_paths": 0,
       "trusted_time": false
     },
+    "feedback": {
+      "existing_count": 0,
+      "items": [
+        {
+          "action": "fix",
+          "annotation": {
+            "path": "docs/guide.md",
+            "span": {
+              "end_byte": 116,
+              "end_column": 108,
+              "end_line": 3,
+              "start_byte": 98,
+              "start_column": 90,
+              "start_line": 3
+            }
+          },
+          "effective_disposition": "warn",
+          "finding_kinds": [
+            "explicit-target-missing"
+          ],
+          "location_count": 1,
+          "target": "docs/missing.md"
+        }
+      ],
+      "status": "available"
+    },
     "findings": [
       {
         "aggregation": {
@@ -1092,7 +1118,6 @@
         "warn": 1
       },
       "governed_claims": 0,
-      "human_details_truncated": 0,
       "references": {
         "explicit_local": 1,
         "external_out_of_scope": 1,
@@ -1105,6 +1130,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:2ebf98a0245c5ccb223a5d3e7cd9ca8acecd17732d2609e713a0a61f103d8fe1",
+  "payload_digest": "sha256:6dce0a7fd7b3f8d109ad7e8d90efaba83488f7095141219fd22386803e9d6f52",
   "schema": "amiss/scanner-report-envelope"
 }

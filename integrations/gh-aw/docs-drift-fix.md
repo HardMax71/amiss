@@ -27,6 +27,8 @@ and the findings whose `effective_disposition` is not `record`. Every row carrie
 `description` stating what it means, `location.path` with `location.span` naming the
 exact source position, and for reference findings
 `key_input.scope.normalized_target_intent.path` naming the target.
+The `feedback` block is the grouped PR view; do not substitute it for the raw evidence
+when deciding an automated edit.
 
 Repair only what you can prove from the repository itself:
 

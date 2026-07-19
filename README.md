@@ -25,8 +25,9 @@ amiss check --repo . --object-format sha1 \
     --profile observe
 ```
 
-In CI the same engine ships as an action that derives both commits from the event and
-annotates findings on the pull request:
+In CI the same engine ships as an action that derives both commits from the event. It groups
+related findings by target, shows Fixes before Checks, and annotates only Fixes introduced by
+the pull request:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -37,9 +38,9 @@ annotates findings on the pull request:
     profile: observe
 ```
 
-Start in `observe` so findings can be triaged without blocking pull requests; an incomplete or
-untrusted run still fails. Switch the input to `enforce` once the initial backlog and repository
-policy have been reviewed.
+Start in `observe` so Fixes can be triaged without blocking pull requests; Existing problems
+stay in the report, Checks stay in the summary, and an incomplete or untrusted run still fails.
+Switch the input to `enforce` once the initial backlog and repository policy have been reviewed.
 
 Coding agents get the same treatment as people: every finding and error row carries a
 sentence saying what it means and what to do, a rejected invocation prints the whole

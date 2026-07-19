@@ -385,7 +385,8 @@ fn comparison_findings_follow_step_four() {
     );
     let removed = only(findings, FindingKind::ExplicitReferenceRemoved);
     assert_eq!(removed.location.side, LocationSide::Base);
-    assert_eq!(removed.configured_disposition, Disposition::Warn);
+    assert_eq!(removed.configured_disposition, Disposition::Record);
+    assert_eq!(removed.steps[0].after, Disposition::Record);
 
     let mut lone_base = resolved_spec("d.md", "t.md");
     lone_base.block = "base wording [x](t.md)".to_owned();

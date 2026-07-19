@@ -393,6 +393,13 @@ fn assert_report(
     );
     assert_eq!(built.status, "incomplete", "{id} boundary status");
     assert_eq!(built.exit_code, 2, "{id} boundary exit class");
+    assert_eq!(
+        envelope
+            .pointer("/payload/feedback/status")
+            .and_then(Value::as_str),
+        Some("unavailable"),
+        "{id} must not present an incomplete comparison as empty feedback"
+    );
 }
 
 fn run_case(index: usize, value: &Value) {

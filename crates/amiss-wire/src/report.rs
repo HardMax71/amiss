@@ -546,6 +546,7 @@ pub fn unavailable_evaluation_envelope(
                 ("reasons", Value::Array(vec![string("not-parsed")])),
             ]),
         ),
+        ("feedback", object(vec![("status", string("unavailable"))])),
         (
             "result",
             object(vec![
@@ -663,7 +664,6 @@ fn zero_summary() -> Value {
         ("documents", zero_counts(&documents)),
         ("references", zero_counts(&references)),
         ("findings", zero_counts(&findings)),
-        ("human_details_truncated", Value::Integer(0)),
         ("governed_claims", Value::Integer(0)),
         ("unattested_claims", Value::Integer(0)),
     ])
@@ -842,15 +842,14 @@ impl FindingKind {
             | Self::DebtWorsened
             | Self::DebtExpired
             | Self::WaiverInvalid => Disposition::Fail,
-            Self::DependencyChangedSubjectUnchanged | Self::ExplicitReferenceRemoved => {
-                Disposition::Warn
-            }
+            Self::DependencyChangedSubjectUnchanged => Disposition::Warn,
             Self::UnsupportedReferenceSemantics
             | Self::UnsupportedDocumentFormat
             | Self::UnsupportedTargetKind
             | Self::UnsupportedVersionScope
             | Self::DependencyAndSubjectCochanged
             | Self::SubjectChanged
+            | Self::ExplicitReferenceRemoved
             | Self::DocumentRemoved
             | Self::ExternalOutOfScope
             | Self::OpaqueMdxRegion
@@ -982,7 +981,7 @@ impl FindingKind {
                 "the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible"
             }
             Self::ExplicitReferenceRemoved => {
-                "a reference that existed in the base is gone from the candidate; removal may be deliberate, so this warns for review instead of blocking"
+                "a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong"
             }
             Self::DocumentRemoved => {
                 "a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one"

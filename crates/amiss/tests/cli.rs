@@ -364,27 +364,65 @@ fn human_output_projects_the_same_result() {
     ]);
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
-    assert!(text.starts_with("amiss: pass (findings "), "got: {text}");
     assert!(
-        text.contains("warn explicit-target-missing introduced \"docs/guide.md\" x1"),
-        "the path is an inert quoted atom: {text}"
+        text.starts_with("amiss: pass (fix 1, check 1, existing 0, errors 0, exit 0)"),
+        "got: {text}"
     );
     assert!(
-        text.contains("x1 target \"docs/missing.md\""),
-        "the line names the unresolved target: {text}"
+        text.contains("Fix target \"docs/missing.md\" affected places 1"),
+        "the grouped item names its target and affected-place count: {text}"
     );
     assert!(
-        text.contains(&format!(
-            "note explicit-target-missing: {}",
-            amiss_wire::report::FindingKind::ExplicitTargetMissing.meaning()
-        )),
-        "each present kind carries its fixed meaning: {text}"
+        text.contains("Check target \"docs/guide.md\" affected places 1"),
+        "the unchanged backlink becomes one check: {text}"
+    );
+    assert!(
+        !text.contains("explicit-target-missing"),
+        "internal finding kinds stay out of the focused human projection: {text}"
     );
     assert!(
         text.contains("references: extracted "),
         "totals close the projection"
     );
     assert!(!text.contains('\r'), "LF-only stdout");
+}
+
+#[test]
+fn human_output_keeps_existing_findings_out_of_feedback_and_notes() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::write(root.join("source.rs"), "pub fn untouched() {}\n").unwrap_or_default();
+    git(root, &["add", "source.rs"]);
+    git(root, &["commit", "-qm", "unrelated"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.starts_with("amiss: pass (fix 0, check 0, existing 1, errors 0, exit 0)"),
+        "got: {text}"
+    );
+    assert!(!text.lines().any(|line| line.starts_with("Fix ")), "{text}");
+    assert!(
+        !text.contains("note explicit-target-missing:"),
+        "background findings do not expand the focused projection: {text}"
+    );
+    assert!(
+        text.contains("findings: total "),
+        "raw totals still expose the inventory: {text}"
+    );
 }
 
 #[test]
@@ -662,7 +700,7 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
 }
 
 #[test]
-fn human_details_truncate_at_two_hundred() {
+fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
     let fx = fixture();
     let root = fx.root();
     let mut links = Vec::new();
@@ -689,19 +727,23 @@ fn human_details_truncate_at_two_hundred() {
     ]);
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
-    let detail_lines = text
-        .lines()
-        .filter(|line| line.starts_with("warn explicit-target-missing"))
-        .count();
+    let detail_lines = text.lines().filter(|line| line.starts_with("Fix ")).count();
     assert_eq!(
-        detail_lines, 200,
-        "the first two hundred findings in key order"
+        detail_lines, 10,
+        "only the first ten grouped feedback items are shown"
     );
-    assert!(text.contains("details truncated: "), "{text}");
+    assert!(
+        text.starts_with("amiss: pass (fix 201, check 0, existing 1, errors 0, exit 0)"),
+        "the header counts the complete grouped projection: {text}"
+    );
+    assert!(
+        text.contains("feedback overflow: 191 more in the full report"),
+        "{text}"
+    );
     assert_eq!(
-        text.matches("note explicit-target-missing:").count(),
-        1,
-        "one meaning line per kind, however many findings share it"
+        text.matches("explicit-target-missing").count(),
+        0,
+        "machine finding kinds stay out of the focused human projection"
     );
 
     let (_code, stdout, _stderr) = amiss(&[
@@ -721,11 +763,9 @@ fn human_details_truncate_at_two_hundred() {
     ]);
     let payload = payload(&stdout);
     assert_eq!(
-        payload["summary"]["human_details_truncated"].as_u64(),
-        payload["result"]["finding_count"]
-            .as_u64()
-            .map(|count| count.saturating_sub(200)),
-        "the payload records the truncation regardless of format"
+        payload["feedback"]["items"].as_array().map(Vec::len),
+        Some(201),
+        "the report retains every item; only presentation is capped"
     );
 }
 
@@ -891,6 +931,11 @@ fn a_document_it_cannot_decode_fails_the_run_instead_of_vanishing_from_it() {
     assert_eq!(code, 2);
     let human = String::from_utf8_lossy(&human);
     assert!(
+        human.starts_with("amiss: scan failed (errors "),
+        "an incomplete comparison is never presented as zero feedback: {human}"
+    );
+    assert!(!human.contains("fix 0, check 0"), "{human}");
+    assert!(
         human.contains(&format!(
             "note DOCUMENT_INVALID: {}",
             amiss_wire::report::AnalysisErrorCode::DocumentInvalid.meaning()
@@ -960,6 +1005,30 @@ fn a_formatting_only_change_to_a_target_is_advisory_and_never_a_verdict() {
         "it accuses nobody: the bytes moved, and that is all anyone knows"
     );
     assert_eq!(payload["summary"]["findings"]["fail"], 0);
+
+    let (code, human, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+    ]);
+    assert_eq!(code, 0);
+    let human = String::from_utf8_lossy(&human);
+    assert!(
+        human.starts_with("amiss: pass (fix 0, check 1, existing 0, errors 0, exit 0)"),
+        "{human}"
+    );
+    assert!(
+        human.contains("Check target \"target.txt\" affected places 1"),
+        "checks stay visible without being called fixes: {human}"
+    );
 }
 
 /// SHA-1 and SHA-256 repositories holding the same files must yield the same
@@ -1178,12 +1247,10 @@ fn a_skip_worktree_document_is_read_from_the_index_and_disclosed() {
 
 /// A repository path is untrusted bytes, and the human projection is a place those
 /// bytes could become terminal control sequences, a forged workflow command, or a
-/// second log line. The `human-atom` law says every scalar outside printable
-/// ASCII becomes a `\uXXXX` escape, so an ESC, a carriage return, and a bell in a
-/// document's own path all leave the renderer inert. The escaping law has unit
-/// tests; this drives a genuinely hostile path all the way through the binary and
-/// reads the bytes it actually printed, because a law is only worth what the
-/// product does with it.
+/// second log line. Feedback prints a grouped target instead of every source path,
+/// and every repository-derived value it does print still passes through the
+/// `human-atom` law. This drives a genuinely hostile source path through the binary
+/// and proves it cannot leak control bytes into the focused projection.
 #[test]
 fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
     let dir = TempDir::new().unwrap();
@@ -1238,8 +1305,8 @@ fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
     }
     let human_text = String::from_utf8(human).expect("human output is utf-8");
     assert!(
-        human_text.contains("\\u001b") && human_text.contains("\\u000d"),
-        "the control bytes are present, but only as escapes"
+        human_text.contains("Fix target \"docs/nowhere.md\" affected places 1"),
+        "the feedback names the normalized target, not the hostile source: {human_text}"
     );
 
     let (code, json, _stderr) = amiss(&[

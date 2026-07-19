@@ -28,7 +28,7 @@ and checked in CI.
 | `dependency-changed-subject-unchanged` | `warn` | `warn` |
 | `dependency-and-subject-cochanged` | `record` | `record` |
 | `subject-changed` | `record` | `record` |
-| `explicit-reference-removed` | `warn` | `warn` |
+| `explicit-reference-removed` | `record` | `record` |
 | `document-removed` | `record` | `record` |
 | `external-out-of-scope` | `record` | `record` |
 | `opaque-mdx-region` | `record` | `record` |
@@ -47,8 +47,8 @@ and checked in CI.
 
 One fixed sentence per kind, generated from
 [`FindingKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs) and checked in CI. The
-human output prints the same sentence as a `note` line under the findings it applies to,
-so a CI log carries its own legend and this page is the reference, not a prerequisite.
+machine report carries the same sentence on every finding row, so this page is a reference,
+not a second source of truth.
 
 <!-- amiss-doc-contract:finding-meanings:start -->
 - `explicit-target-missing`: a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link
@@ -62,7 +62,7 @@ so a CI log carries its own legend and this page is the reference, not a prerequ
 - `dependency-changed-subject-unchanged`: the referenced content changed and the block citing it did not; a reason for a person to reread the prose, never a machine verdict that it is wrong
 - `dependency-and-subject-cochanged`: the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on
 - `subject-changed`: the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible
-- `explicit-reference-removed`: a reference that existed in the base is gone from the candidate; removal may be deliberate, so this warns for review instead of blocking
+- `explicit-reference-removed`: a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong
 - `document-removed`: a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one
 - `external-out-of-scope`: the destination is an external URL Amiss never fetches; counted, reported, and left alone
 - `opaque-mdx-region`: an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place

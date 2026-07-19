@@ -42,7 +42,9 @@ each such byte as the two-digit escape of its value, never inventing a character
 bytes never encoded. The JSON report keeps fidelity its own way, the exact original
 string for a UTF-8 path and a `bytes_hex` object for anything else, because the log needs
 safety and the report needs fidelity, and those are different channels with different
-rules.
+rules. The Action separately HTML-escapes repository-controlled targets before placing
+them in its Markdown summary and applies GitHub workflow-command escaping to annotation
+paths and messages.
 
 Two delivery paths need different trust descriptions. The root
 [Action dispatcher](https://github.com/HardMax71/amiss/blob/main/action.yml) makes conventional source release tags usable by delegating to the same version's immutable

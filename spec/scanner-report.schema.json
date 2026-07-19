@@ -3043,6 +3043,153 @@
         "waiver-invalid"
       ]
     },
+    "FeedbackAction": {
+      "enum": [
+        "fix",
+        "check"
+      ]
+    },
+    "FeedbackAnnotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "span"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/RepoPathText"
+        },
+        "span": {
+          "$ref": "#/$defs/SourceSpan"
+        }
+      }
+    },
+    "FeedbackItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "check"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "properties": {
+              "annotation": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "required": [
+        "action",
+        "target",
+        "finding_kinds",
+        "location_count",
+        "effective_disposition",
+        "annotation"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/FeedbackAction"
+        },
+        "target": {
+          "$ref": "#/$defs/NullableRepoPath"
+        },
+        "finding_kinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "The kinds represented by this item, sorted in FindingKind declaration order.",
+          "x-amiss-order": [
+            "FindingKind declaration order"
+          ],
+          "items": {
+            "$ref": "#/$defs/FindingKind"
+          }
+        },
+        "location_count": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        },
+        "effective_disposition": {
+          "enum": [
+            "warn",
+            "fail"
+          ]
+        },
+        "annotation": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FeedbackAnnotation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "AvailableFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "items",
+        "existing_count"
+      ],
+      "properties": {
+        "status": {
+          "const": "available"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "description": "Grouped PR feedback: fixes before checks; within each action, targeted repository paths in raw-byte order are followed by at most one untargeted item.",
+          "x-amiss-order": [
+            "action: fix then check",
+            "within each action: targeted RepoPath raw-byte order",
+            "within each action: untargeted"
+          ],
+          "items": {
+            "$ref": "#/$defs/FeedbackItem"
+          }
+        },
+        "existing_count": {
+          "$ref": "#/$defs/SafeUInt"
+        }
+      }
+    },
+    "UnavailableFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "const": "unavailable"
+        }
+      }
+    },
+    "Feedback": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AvailableFeedback"
+        },
+        {
+          "$ref": "#/$defs/UnavailableFeedback"
+        }
+      ]
+    },
     "ReferenceFindingScope": {
       "type": "object",
       "additionalProperties": false,
@@ -4115,7 +4262,6 @@
         "documents",
         "references",
         "findings",
-        "human_details_truncated",
         "governed_claims",
         "unattested_claims"
       ],
@@ -4131,9 +4277,6 @@
         },
         "findings": {
           "$ref": "#/$defs/FindingCounts"
-        },
-        "human_details_truncated": {
-          "$ref": "#/$defs/SafeUInt"
         },
         "governed_claims": {
           "const": 0
@@ -4188,6 +4331,7 @@
         "engine",
         "evaluation",
         "controls",
+        "feedback",
         "result",
         "summary",
         "documents",
@@ -4210,6 +4354,9 @@
         },
         "controls": {
           "$ref": "#/$defs/Controls"
+        },
+        "feedback": {
+          "$ref": "#/$defs/Feedback"
         },
         "result": {
           "$ref": "#/$defs/Result"

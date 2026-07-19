@@ -14,6 +14,7 @@ use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, Unsupp
 use crate::evaluate::{
     Attribution, DocumentInput, DocumentSide, FACT_SCHEMA, Finding, LocationSide,
 };
+use crate::feedback;
 use crate::{Impact, observe};
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
@@ -656,6 +657,73 @@ fn finding_value(
                 .map_or(Value::Null, waiver_application_value),
         ),
     ])
+}
+
+fn feedback_value(projected: feedback::Feedback) -> Value {
+    let items = projected
+        .items
+        .into_iter()
+        .map(|item| {
+            let annotation = item.annotation.map_or(Value::Null, |annotation| {
+                object(vec![
+                    ("path", string(&annotation.path)),
+                    (
+                        "span",
+                        object(vec![
+                            (
+                                "start_byte",
+                                integer(u64::try_from(annotation.span.0).unwrap_or(u64::MAX)),
+                            ),
+                            (
+                                "end_byte",
+                                integer(u64::try_from(annotation.span.1).unwrap_or(u64::MAX)),
+                            ),
+                            ("start_line", integer(annotation.display.start_line)),
+                            ("start_column", integer(annotation.display.start_column)),
+                            ("end_line", integer(annotation.display.end_line)),
+                            ("end_column", integer(annotation.display.end_column)),
+                        ]),
+                    ),
+                ])
+            });
+            object(vec![
+                ("action", string(item.action.as_str())),
+                ("target", nullable_path(item.target.as_ref())),
+                (
+                    "finding_kinds",
+                    Value::Array(
+                        item.finding_kinds
+                            .into_iter()
+                            .map(|kind| string(kind.as_str()))
+                            .collect(),
+                    ),
+                ),
+                ("location_count", integer(item.location_count)),
+                (
+                    "effective_disposition",
+                    string(item.effective_disposition.as_str()),
+                ),
+                ("annotation", annotation),
+            ])
+        })
+        .collect();
+    object(vec![
+        ("status", string("available")),
+        ("items", Value::Array(items)),
+        ("existing_count", integer(projected.existing_count)),
+    ])
+}
+
+fn unavailable_feedback_value() -> Value {
+    object(vec![("status", string("unavailable"))])
+}
+
+fn run_feedback_value(complete: bool, findings: &[Finding], comparisons: &[Comparison]) -> Value {
+    if complete {
+        feedback_value(feedback::project(findings, comparisons))
+    } else {
+        unavailable_feedback_value()
+    }
 }
 
 fn tree_identity_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
@@ -1428,6 +1496,7 @@ pub fn construct(
     }
     let governed_errors: Vec<Value> = error_details.iter().map(error_row_value).collect();
     let (complete, status, exit_code) = run_result(&findings, &governed_errors);
+    let feedback = run_feedback_value(complete, &findings, comparisons);
     let finding_count = u64::try_from(finding_rows.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, comparisons, &findings, finding_count);
 
@@ -1447,6 +1516,7 @@ pub fn construct(
                 u64::try_from(governed_errors.len()).unwrap_or(u64::MAX),
             ),
         ),
+        ("feedback", feedback),
         (
             "summary",
             object(vec![
@@ -1454,10 +1524,6 @@ pub fn construct(
                 ("documents", counts.documents),
                 ("references", counts.references),
                 ("findings", counts.findings),
-                (
-                    "human_details_truncated",
-                    integer(finding_count.saturating_sub(200)),
-                ),
                 ("governed_claims", integer(0)),
                 ("unattested_claims", integer(0)),
             ]),
@@ -1749,6 +1815,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
                 ("error_count", integer(error_count)),
             ]),
         ),
+        ("feedback", unavailable_feedback_value()),
         (
             "summary",
             object(vec![
@@ -1756,7 +1823,6 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
                 ("documents", counts.documents),
                 ("references", counts.references),
                 ("findings", findings_with_errors),
-                ("human_details_truncated", integer(0)),
                 ("governed_claims", integer(0)),
                 ("unattested_claims", integer(0)),
             ]),

@@ -2,8 +2,8 @@
 
 Amiss meets coding agents in two directions. The reactive one is the gate: a pull
 request fails, and everything the agent needs travels with the failure. Annotations
-carry each finding's fixed description and the normalized target path. The job summary
-lists every failing kind once with its sentence. Each report row explains itself. Even a
+point to introduced Fixes; grouped Checks and Existing inventory stay in the job summary
+and report. The exact finding and error rows still carry their fixed descriptions. Even a
 rejected invocation teaches, printing the closed grammar on stderr, so an agent with no
 book at hand can construct a working command from the refusal alone.
 

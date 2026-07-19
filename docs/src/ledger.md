@@ -5,15 +5,13 @@ is where the counts live. One row is one scan: a public repository, a base and c
 commit pair, the observe profile, a release build. Every number is read out of the run's
 machine report or out of `git diff` over the same commit pair, never remembered.
 
-Three column definitions are fixed before the numbers accumulate. Advisory rows are
-findings whose effective disposition is `warn`; records are excluded because nothing asks
-a person to look at them. Changed documentation lines are the added plus removed lines
-`git diff --numstat` reports for Markdown files between the row's two commits. Reviewer
-burden divides advisory rows by changed documentation lines and scales to one hundred.
-The burden column is recorded, not gated: the [roadmap](roadmap.md) picks a threshold
-only after ten rows exist on repositories that are not this one, and a row with fewer
-than one hundred changed lines states its ratio without counting toward that choice,
-because a small denominator makes the ratio noise.
+These scans predate the grouped PR-feedback contract, so their row-level numbers remain
+historical evidence rather than a product threshold. Advisory rows are findings whose
+effective disposition was `warn`; records are excluded. Changed documentation lines are
+the added plus removed lines `git diff --numstat` reports for Markdown files between the
+row's two commits. The final numeric column is the old advisory-row density per hundred
+changed lines. It is retained to reproduce the study, not interpreted as reviewer effort
+or used as a gate; small denominators make it especially noisy.
 
 ## July 2026
 
@@ -23,7 +21,7 @@ Two bases bend that convention: ripgrep tags rarely, so its base is the 150th an
 of its head, and alacritty tags on release branches, so its base is the latest stable
 tag's merge point with master.
 
-| Repository | Range | References | Missing | Advisory | Doc lines | Per hundred | Rejection class |
+| Repository | Range | References | Missing | Advisory | Doc lines | Historical density | Rejection class |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | helix | `5cda70e86637..f6f3eb1fe4a7` | 3,249 | 1 | 47 | 2,166 | 2.2 | none |
 | ripgrep | `a6e0be3c909c..227381db0ee8` | 766 | 0 | 6 | 214 | 2.8 | none |
@@ -43,7 +41,7 @@ community pull request
 already in flight with the identical one-character fix, which is independent confirmation
 of the finding rather than a missed contribution. ripgrep and just were spotless on
 missing references; just's single advisory row sits on a nine-line change, the
-small-denominator case the burden rule sets aside.
+small-denominator case that shows why the historical ratio is not a product rule.
 
 The three rows with a named rejection class map the adoption boundary, and none of their
 missing counts is a resolver bug. mdBook's 36 all live inside its own link-handling test suite, deliberately
@@ -71,6 +69,5 @@ tree yields either zero or the genuinely broken.
 
 A row enters this page only from a recorded run: the machine report kept, the commit
 pair stated, every column computed from those two artifacts, on a repository that is not
-this one. The validation phase's exit criterion counts these rows; it needs ten or more
-repositories, a false-missing count that stays at zero, and a burden threshold chosen
-from the accumulated column rather than from taste.
+this one. The validation phase uses the ledger to retain the ten-repository adoption and
+false-missing evidence; focused PR feedback is now a separately tested product invariant.
