@@ -230,21 +230,25 @@ fn attributed(
         },
         Attribution::Resolved => Decision::Ignore,
         Attribution::NotApplicable => match side {
-            LocationSide::Candidate | LocationSide::Control => Decision::Item {
-                action: Action::Fix,
-                subject,
-                target,
-            },
+            LocationSide::Candidate | LocationSide::Control | LocationSide::Global => {
+                Decision::Item {
+                    action: Action::Fix,
+                    subject,
+                    target,
+                }
+            }
             LocationSide::Base => Decision::Ignore,
         },
     }
 }
 
 fn subject(finding: &Finding, candidate: Option<&Candidate<'_>>) -> (Subject, Option<RepoPath>) {
-    let target = if finding.location.side == LocationSide::Control {
-        finding.location.path.clone()
-    } else {
-        candidate.and_then(|item| item.observation.intent.repository_path.clone())
+    let target = match finding.location.side {
+        LocationSide::Control => finding.location.path.clone(),
+        LocationSide::Global => None,
+        LocationSide::Base | LocationSide::Candidate => {
+            candidate.and_then(|item| item.observation.intent.repository_path.clone())
+        }
     };
     target.map_or((Subject::Untargeted, None), |path| {
         (Subject::RepositoryPath(path.clone()), Some(path))

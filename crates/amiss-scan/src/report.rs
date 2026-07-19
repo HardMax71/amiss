@@ -15,7 +15,7 @@ use crate::evaluate::{
     Attribution, DocumentInput, DocumentSide, FACT_SCHEMA, Finding, LocationSide,
 };
 use crate::feedback;
-use crate::{Impact, observe};
+use crate::{Impact, SpanDisplay, observe};
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection";
@@ -181,20 +181,20 @@ fn object(members: Vec<(&str, Value)>) -> Value {
     )
 }
 
-fn span_value(observation: &Observation) -> Value {
+fn source_span_value(span: (usize, usize), display: SpanDisplay) -> Value {
     object(vec![
         (
             "start_byte",
-            integer(u64::try_from(observation.span.0).unwrap_or(u64::MAX)),
+            integer(u64::try_from(span.0).unwrap_or(u64::MAX)),
         ),
         (
             "end_byte",
-            integer(u64::try_from(observation.span.1).unwrap_or(u64::MAX)),
+            integer(u64::try_from(span.1).unwrap_or(u64::MAX)),
         ),
-        ("start_line", integer(observation.display.start_line)),
-        ("start_column", integer(observation.display.start_column)),
-        ("end_line", integer(observation.display.end_line)),
-        ("end_column", integer(observation.display.end_column)),
+        ("start_line", integer(display.start_line)),
+        ("start_column", integer(display.start_column)),
+        ("end_line", integer(display.end_line)),
+        ("end_column", integer(display.end_column)),
     ])
 }
 
@@ -216,7 +216,10 @@ fn occurrence_value(engine: &EngineProvenance, observation: &Observation) -> Val
         ("adapter_id", string(observation.adapter.adapter_id())),
         ("document", observation.document.to_value()),
         ("source_construct", string(observation.construct.as_str())),
-        ("source_span", span_value(observation)),
+        (
+            "source_span",
+            source_span_value(observation.span, observation.display),
+        ),
         ("block_kind", string(observation.block_kind.as_str())),
         (
             "source_projection_digest",
@@ -617,6 +620,7 @@ fn finding_value(
                         LocationSide::Base => "base",
                         LocationSide::Candidate => "candidate",
                         LocationSide::Control => "control",
+                        LocationSide::Global => "global",
                     }),
                 ),
                 ("path", nullable_path(finding.location.path.as_ref())),
@@ -669,20 +673,7 @@ fn feedback_value(projected: feedback::Feedback) -> Value {
                     ("path", string(&annotation.path)),
                     (
                         "span",
-                        object(vec![
-                            (
-                                "start_byte",
-                                integer(u64::try_from(annotation.span.0).unwrap_or(u64::MAX)),
-                            ),
-                            (
-                                "end_byte",
-                                integer(u64::try_from(annotation.span.1).unwrap_or(u64::MAX)),
-                            ),
-                            ("start_line", integer(annotation.display.start_line)),
-                            ("start_column", integer(annotation.display.start_column)),
-                            ("end_line", integer(annotation.display.end_line)),
-                            ("end_column", integer(annotation.display.end_column)),
-                        ]),
+                        source_span_value(annotation.span, annotation.display),
                     ),
                 ])
             });
@@ -798,29 +789,13 @@ fn trace_value(finding: &Finding, _enforce: bool) -> Vec<Value> {
 
 fn location_span_value(finding: &Finding) -> Value {
     finding.location.span.map_or(Value::Null, |span| {
-        let display = finding
-            .location
-            .display
-            .unwrap_or(crate::scan::SpanDisplay {
-                start_line: 1,
-                start_column: 1,
-                end_line: 1,
-                end_column: 1,
-            });
-        object(vec![
-            (
-                "start_byte",
-                integer(u64::try_from(span.0).unwrap_or(u64::MAX)),
-            ),
-            (
-                "end_byte",
-                integer(u64::try_from(span.1).unwrap_or(u64::MAX)),
-            ),
-            ("start_line", integer(display.start_line)),
-            ("start_column", integer(display.start_column)),
-            ("end_line", integer(display.end_line)),
-            ("end_column", integer(display.end_column)),
-        ])
+        let display = finding.location.display.unwrap_or(SpanDisplay {
+            start_line: 1,
+            start_column: 1,
+            end_line: 1,
+            end_column: 1,
+        });
+        source_span_value(span, display)
     })
 }
 
