@@ -10,9 +10,9 @@ repository.workspace = true
 bench = false
 
 [dependencies]
-amiss-git = { path = "../amiss-git", version = "0.6.2" }
-amiss-md = { path = "../amiss-md", version = "0.6.2" }
-amiss-wire = { path = "../amiss-wire", version = "0.6.2" }
+amiss-git = { path = "../amiss-git", version = "0.7.0" }
+amiss-md = { path = "../amiss-md", version = "0.7.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.7.0" }
 strum.workspace = true
 
 [dev-dependencies]
