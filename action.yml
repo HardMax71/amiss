@@ -8,7 +8,7 @@ branding:
 
 inputs:
   profile:
-    description: observe (report only) or enforce (blocking findings fail the run)
+    description: observe (findings do not block) or enforce (blocking findings fail the run)
     default: enforce
   base:
     description: >-
@@ -63,7 +63,7 @@ runs:
         esac
         manifest="${ACTION_PATH}/release-manifest.json"
         if [ ! -f "$manifest" ]; then
-          echo "::error title=amiss::this ref carries no release manifest; use a published action ref such as v0 or action/vX.Y.Z"
+          echo "::error title=amiss::this ref carries no release manifest; use a published action ref such as v0 or vX.Y.Z"
           exit 2
         fi
         row="$(jq -c --arg name "amiss-${platform}" \
@@ -99,6 +99,7 @@ runs:
         INPUT_CANDIDATE: ${{ inputs.candidate }}
         INPUT_REPO: ${{ inputs.repo }}
         PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
         MG_BASE: ${{ github.event.merge_group.base_sha }}
         MG_HEAD: ${{ github.event.merge_group.head_sha }}
         PUSH_BEFORE: ${{ github.event.before }}
@@ -115,6 +116,7 @@ runs:
         if [ -z "$candidate" ]; then
           case "$EVENT_NAME" in
             merge_group) candidate="$MG_HEAD" ;;
+            pull_request_target) candidate="$PR_HEAD" ;;
             *) candidate="$HEAD_SHA" ;;
           esac
         fi
@@ -176,12 +178,10 @@ runs:
         WATCHDOG_SECONDS: ${{ inputs.watchdog-seconds }}
       run: |
         set -uo pipefail
-        case "$WATCHDOG_SECONDS" in
-          '' | *[!0-9]* | 0)
-            echo "::error title=amiss::watchdog-seconds must be a positive integer, got '${WATCHDOG_SECONDS}'"
-            exit 2
-            ;;
-        esac
+        if [[ ! "$WATCHDOG_SECONDS" =~ ^[0-9]*[1-9][0-9]*$ ]]; then
+          echo "::error title=amiss::watchdog-seconds must be a positive integer, got '${WATCHDOG_SECONDS}'"
+          exit 2
+        fi
         report="${RUNNER_TEMP}/amiss-report.json"
         fired="${RUNNER_TEMP}/amiss-watchdog-fired"
         rm -f "$fired"
@@ -211,7 +211,11 @@ runs:
         fi
         {
           printf 'exit-class=%s\n' "$status"
-          printf 'report=%s\n' "$report"
+          if [ -s "$report" ]; then
+            printf 'report=%s\n' "$report"
+          else
+            printf 'report=\n'
+          fi
         } >> "$GITHUB_OUTPUT"
         if [ -s "$report" ]; then
           jq -r '
