@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/HardMax71/amiss/compare/v0.6.0...v0.6.1) - 2026-07-19
+
+### Changes
+
+- Bump jsonschema from 0.46.10 to 0.47.0 in the cargo group
+- smoke exact action before promotion
+- address launch-readiness review
+- close launch-readiness gaps
+
 ## [0.6.0](https://github.com/HardMax71/amiss/compare/v0.5.1...v0.6.0) - 2026-07-18
 
 ### Changes
