@@ -60,10 +60,10 @@ generator, and they produced no rejection class at all: every nonzero count ther
 real break. bat's twelve are pre-existing and live in four translated READMEs whose
 relative links carry the wrong prefix, `doc/LICENSE-MIT` for a root file and a doubled
 `doc/doc/` for siblings, and each renders as a 404 on GitHub today. alacritty's one is
-the same shape as helix's: a commit moved the escape-sequence docs into the manpage and
-`docs/features.md` still links the deleted `escape_support.md`. fd and hyperfine were
-spotless. On this evidence the rejection classes are a docs-site phenomenon; a plain
-tree yields either zero or the genuinely broken.
+pre-existing in the recorded range: an earlier commit moved the escape-sequence docs
+into the manpage and `docs/features.md` still links the deleted `escape_support.md`. fd
+and hyperfine were spotless. On this evidence the rejection classes are a docs-site
+phenomenon; a plain tree yields either zero or the genuinely broken.
 
 ## What a row must be
 
