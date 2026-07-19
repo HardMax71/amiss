@@ -57,7 +57,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "amiss"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-bootstrap"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-fixtures"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "flate2",
  "sha1-checked",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-git"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "amiss-fixtures",
  "amiss-wire",
@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-md"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "amiss-wire",
  "markdown",
@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-scan"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-wire"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "divan",
  "sha2",
