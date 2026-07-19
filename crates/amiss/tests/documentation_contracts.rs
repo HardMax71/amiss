@@ -669,6 +669,9 @@ fn release_smokes_every_runtime_before_promoting_the_major_ref() {
     assert!(
         smoke_action.contains("os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]")
     );
+    assert!(smoke_action.contains("ref: action/${{ github.ref_name }}"));
+    assert!(smoke_action.contains("uses: ./action-under-test"));
+    assert!(smoke_action.contains("uses: ./\n"));
     assert!(publish_release.contains("needs: [publish-action, smoke-action]"));
     assert!(publish_release.contains("group: action-major-promotion"));
     assert!(publish_release.contains(
