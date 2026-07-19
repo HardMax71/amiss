@@ -1,9 +1,9 @@
 # The scan ledger
 
-The validation phase runs on counted scans of other people's repositories, and this page
-is where the counts live. One row is one scan: a public repository, a base and candidate
-commit pair, the observe profile, a release build. Every number is read out of the run's
-machine report or out of `git diff` over the same commit pair, never remembered.
+The completed validation phase used counted scans of other people's repositories, and
+this page retains the counts. One row is one scan: a public repository, a base and
+candidate commit pair, the observe profile, a release build. Every number is read out of
+the run's machine report or out of `git diff` over the same commit pair, never remembered.
 
 These scans predate the grouped PR-feedback contract, so their row-level numbers remain
 historical evidence rather than a product threshold. Advisory rows are findings whose
@@ -69,5 +69,5 @@ tree yields either zero or the genuinely broken.
 
 A row enters this page only from a recorded run: the machine report kept, the commit
 pair stated, every column computed from those two artifacts, on a repository that is not
-this one. The validation phase uses the ledger to retain the ten-repository adoption and
+this one. The validation phase used the ledger to retain the ten-repository adoption and
 false-missing evidence; focused PR feedback is now a separately tested product invariant.
