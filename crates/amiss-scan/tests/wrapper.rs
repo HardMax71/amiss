@@ -299,6 +299,13 @@ fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
     value
 }
 
+fn assert_global_location(finding: &serde_json::Value) {
+    assert_eq!(
+        finding["location"],
+        serde_json::json!({"side": "global", "path": null, "span": null})
+    );
+}
+
 #[test]
 fn valid_active_debt_is_tolerated_with_full_provenance() {
     let fx = fixture("see [gone](missing.md)\n");
@@ -430,6 +437,18 @@ fn an_expired_debt_item_fails_without_application() {
         expired["candidate_fact"]["evidence"]["exception"]["kind"],
         "debt"
     );
+    assert_global_location(expired);
+    let feedback = &report["feedback"];
+    assert_eq!(feedback["status"], "available");
+    let item = feedback["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["finding_kinds"] == serde_json::json!(["debt-expired"]))
+        .expect("the global defect remains actionable without a repository target");
+    assert_eq!(item["action"], "fix");
+    assert!(item["target"].is_null());
+    assert!(item["annotation"].is_null());
     let structural = report["findings"]
         .as_array()
         .unwrap()
@@ -471,6 +490,7 @@ fn a_changed_fact_is_debt_worsened() {
         worsened["key_input"]["scope"]["rule_id"],
         "debt/acme/legacy-guide-link/fact"
     );
+    assert_global_location(worsened);
     assert_eq!(report["summary"]["findings"]["debt_tolerated"], 0);
 }
 
@@ -602,6 +622,14 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
     assert_eq!(report["result"]["status"], "fail");
     assert_eq!(report["exit_code"], 1);
     assert_eq!(report["summary"]["findings"]["waived"], 0);
+    for finding in report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "waiver-invalid")
+    {
+        assert_global_location(finding);
+    }
     let rules: Vec<String> = report["findings"]
         .as_array()
         .unwrap()
@@ -640,6 +668,14 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
     setup.time = Some(time_input(&fx, true));
     setup.waiver = Some(waiver_input(&expired));
     let report = payload(&fx, &setup);
+    for finding in report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "waiver-invalid")
+    {
+        assert_global_location(finding);
+    }
     let rules: Vec<String> = report["findings"]
         .as_array()
         .unwrap()

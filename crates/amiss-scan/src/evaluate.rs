@@ -67,6 +67,7 @@ pub enum LocationSide {
     Base,
     Candidate,
     Control,
+    Global,
 }
 
 /// One policy-trace step. Adjacent steps chain exactly: each `before` equals
@@ -1148,6 +1149,11 @@ fn control_row(
     ]);
     let fact_digest = hj(FACT_DOMAIN, &fact);
     let configured = kind.built_in_disposition(enforce);
+    let side = if control_path.is_some() {
+        LocationSide::Control
+    } else {
+        LocationSide::Global
+    };
     Finding {
         kind,
         key_input: key_value,
@@ -1158,7 +1164,7 @@ fn control_row(
         member_count: 1,
         observation_ids: Vec::new(),
         location: Location {
-            side: LocationSide::Control,
+            side,
             path: control_path,
             span: None,
             display: None,
