@@ -25,7 +25,7 @@ inputs:
     description: sha1 or sha256
     default: sha1
   annotations:
-    description: emit findings and errors as file annotations
+    description: emit candidate-located displayed Fixes and scan errors as file annotations
     default: "true"
   watchdog-seconds:
     description: wall-clock seconds the scan may take before it is ended with no result
@@ -219,19 +219,38 @@ runs:
         } >> "$GITHUB_OUTPUT"
         if [ -s "$report" ]; then
           jq -r '
-            (.payload.result
-             | "amiss \(.status): \(.finding_count) findings, \(.error_count) errors, exit class \(.exit_code)"),
+            def html: gsub("&"; "&amp;") | gsub("<"; "&lt;")
+              | gsub(">"; "&gt;") | gsub("\""; "&quot;");
+            def target:
+              if type == "string" then "<code>" + (tojson | html) + "</code>"
+              elif type == "object" and .bytes_hex != null then
+                "<code>bytes " + (.bytes_hex | html) + "</code>"
+              else "an unresolved destination"
+              end;
             def told($text): ($text // "") as $d
               | if $d == "" then "" else ": " + $d end;
             (.payload as $p
-             | ($p.errors | group_by(.code)
-                | map("- `\(.[0].code)`\(if length > 1 then " x\(length)" else "" end)"
-                      + told(.[0].description)))
-               + ($p.findings | map(select(.effective_disposition != "record")) | group_by(.kind)
-                  | map((map(.aggregation.member_count // 1) | add) as $n
-                        | "- `\(.[0].kind)`\(if $n > 1 then " x\($n)" else "" end)"
-                          + told(.[0].description)))
-             | if length > 0 then "", .[] else empty end)
+             | if $p.feedback.status == "available" then
+                 ($p.feedback.items | map(select(.action == "fix")) | length) as $fixes
+                 | ($p.feedback.items | map(select(.action == "check")) | length) as $checks
+                 | ["amiss \($p.result.status): \($fixes) Fix, \($checks) Check, \($p.feedback.existing_count) Existing, exit class \($p.result.exit_code)",
+                    (if ($p.feedback.items | length) > 0 then "" else empty end),
+                    ($p.feedback.items[:10][]
+                     | "- **\(if .action == "fix" then "Fix" else "Check" end)** "
+                       + (.target | target)
+                       + " — \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
+                    (($p.feedback.items | length) - 10
+                     | if . > 0 then
+                         "- \(.) more item\(if . == 1 then "" else "s" end) in report."
+                       else empty end)][]
+               else
+                 ($p.errors | group_by(.code)) as $errors
+                 | ["amiss \($p.result.status): scan failed, \($p.result.error_count) errors, exit class \($p.result.exit_code)",
+                    (if ($errors | length) > 0 then "" else empty end),
+                    ($errors[]
+                     | "- `\(.[0].code)`\(if length > 1 then " x\(length)" else "" end)"
+                       + told(.[0].description))][]
+               end)
           ' "$report" | tee -a "$GITHUB_STEP_SUMMARY"
         else
           echo "amiss produced no report, exit class ${status}"
@@ -241,7 +260,7 @@ runs:
     # repository-controlled, so every value is escaped per the command
     # grammar before it reaches stdout. A path only bytes can spell has no
     # file property; its hex is stated in the message. Each report row carries
-    # its own description sentence, so this step holds no text of its own.
+    # its own typed feedback, so this step holds no finding text of its own.
     - id: annotate
       shell: bash
       env:
@@ -257,27 +276,29 @@ runs:
           def p: d | gsub(":"; "%3A") | gsub(","; "%2C");
           def why($text): ($text // "") as $m
             | if $m == "" then "" else "; " + ($m|d) end;
-          (.payload.errors[]
-           | "::error title=amiss \(.code|d)::\(.code) in phase \(.phase)"
-             + (if (.path | type) == "string" then " at \(.path|d)"
-                elif .path_bytes_hex != null then " at bytes \(.path_bytes_hex)"
-                else "" end)
-             + (if .resource != null then
-                  " \(.resource|d) \(.configured_limit)/\(.observed_lower_bound)"
-                else "" end)
-             + why(.description)),
-          (.payload.findings[]
-           | select(.effective_disposition == "fail" or .effective_disposition == "warn")
-           | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
-           | (.key_input.scope.normalized_target_intent.path // null) as $target
-           | (if ($target | type) == "string" then " target \($target|d)" else "" end) as $named
-           | (if (.location.path | type) == "string" and .location.span != null then
-               "::\($level) file=\(.location.path|p),line=\(.location.span.start_line),endLine=\(.location.span.end_line),col=\(.location.span.start_column),endColumn=\(.location.span.end_column),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
-             elif (.location.path | type) == "string" then
-               "::\($level) file=\(.location.path|p),title=amiss \(.kind|d)::\(.kind), \(.attribution)"
+          (.payload as $p
+           | if $p.feedback.status == "available" then
+               $p.feedback.items[:10][]
+               | select(.action == "fix" and .annotation != null)
+               | (if .effective_disposition == "fail" then "error" else "warning" end) as $level
+               | (if (.target | type) == "string" then " target \(.target|d)"
+                  elif (.target | type) == "object" and .target.bytes_hex != null then
+                    " target bytes \(.target.bytes_hex)"
+                  else "" end) as $target
+               | "::\($level) file=\(.annotation.path|p),line=\(.annotation.span.start_line),endLine=\(.annotation.span.end_line),col=\(.annotation.span.start_column),endColumn=\(.annotation.span.end_column),title=amiss Fix::Fix"
+                 + $target
+                 + "; \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"
              else
-               "::\($level) title=amiss \(.kind|d)::\(.kind) at bytes \(.location.path.bytes_hex // "-"), \(.attribution)"
-             end) + $named + why(.description))
+               $p.errors[:10][]
+               | "::error title=amiss \(.code|d)::\(.code) in phase \(.phase)"
+                 + (if (.path | type) == "string" then " at \(.path|d)"
+                    elif .path_bytes_hex != null then " at bytes \(.path_bytes_hex)"
+                    else "" end)
+                 + (if .resource != null then
+                      " \(.resource|d) \(.configured_limit)/\(.observed_lower_bound)"
+                    else "" end)
+                 + why(.description)
+             end)
         ' "$REPORT"
 
     - id: verdict

@@ -15,7 +15,7 @@ input starts with a label naming its purpose, so a digest computed for one conte
 replayed as a digest for another.
 
 Inside the payload: which trees were compared and how; the result block with `status`,
-`complete`, and `exit_code`; the summary counts; a `documents` array with one row per
+`complete`, and `exit_code`; the PR-facing `feedback` projection; the summary counts; a `documents` array with one row per
 discovered document, its classification, and whether its content was available; the
 `findings` array; and the `errors` array of analysis errors the run kept.
 
@@ -29,6 +29,14 @@ policy steps that set its final disposition, and the digests of the facts undern
 The `key_input` that produced the finding's identity is included too, so an external
 system can recompute any finding's identity from the report alone.
 
+`feedback` is the smaller review surface derived by the engine from those exact findings.
+Related introduced problems become one `fix` per target, changed targets under unchanged
+prose become one `check`, and `existing_count` counts grouped pre-existing subjects without
+turning them into items. Each item retains its affected-location count and contributing
+finding kinds. A Fix may carry one candidate-side text-path annotation; Checks never do.
+The report retains every item. An incomplete comparison instead emits exactly
+`{"status":"unavailable"}`, so scan failure cannot look like zero feedback.
+
 The envelope, down to its top-level keys:
 
 ```json
@@ -41,6 +49,7 @@ The envelope, down to its top-level keys:
     "evaluation": {},
     "controls": {},
     "result": { "status": "fail", "complete": true, "exit_code": 1 },
+    "feedback": { "status": "available", "items": [], "existing_count": 0 },
     "summary": {},
     "documents": [],
     "observations": [],
@@ -76,10 +85,10 @@ second source to act on a report. The sentences live in one place,
 [`FindingKind::meaning` and `AnalysisErrorCode::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
 the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
 and the shipped example are checked against that source in CI. The human format prints
-the same facts in the same order, replaces every byte outside printable ASCII with a
+the result plus at most ten grouped feedback items, replaces every byte outside printable ASCII with a
 `\uXXXX` escape so a hostile filename cannot inject terminal control codes or a forged CI
-command into a log, stops after two hundred findings, and prints each distinct
-description once as a `note` line rather than two hundred times. The JSON is never
+command into a log, and states any overflow explicitly. It keeps raw totals and prints
+descriptions only for errors; finding kinds and their descriptions stay in JSON. The JSON is never
 cut short: a serialized report that would cross the 64 MiB `machine-json-bytes` ceiling
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).

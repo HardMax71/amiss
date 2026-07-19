@@ -25,7 +25,7 @@ inputs:
     description: sha1 or sha256
     default: sha1
   annotations:
-    description: emit findings and errors as file annotations
+    description: emit candidate-located displayed Fixes and scan errors as file annotations
     default: "true"
   watchdog-seconds:
     description: wall-clock seconds the scan may take before it is ended with no result

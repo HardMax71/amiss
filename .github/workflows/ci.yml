@@ -107,6 +107,7 @@ jobs:
           echo "exit class ${EXIT_CLASS}"
           jq -e '.schema == "amiss/scanner-report-envelope"' "$REPORT" > /dev/null
           jq -e '.payload.schema == "amiss/scanner-report-payload"' "$REPORT" > /dev/null
+          jq -e '.payload.feedback.status == "available"' "$REPORT" > /dev/null
           jq -e '.payload.evaluation.forge == "github"' "$REPORT" > /dev/null
           jq -e '.payload.documents | length > 0' "$REPORT" > /dev/null
       # The staged-index lane in hosted CI: the checkout's clean index against

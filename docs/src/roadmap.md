@@ -33,10 +33,10 @@ collecting impressions. The work in this phase, with its instruments:
   maintainer would reject.
 - A false `explicit-target-missing` on a supported reference is a resolver bug, not a
   statistic: it gets a pinned test, and the accepted count of such bugs is zero.
-- Reviewer burden gets a defined metric before it gets a threshold: advisory rows per
-  hundred changed documentation lines, recorded per scan in the
-  [ledger](ledger.md). Ten scans are recorded, five of them on denominators past the
-  small-line rule; the gate threshold gets chosen from that column.
+- **PR feedback stays focused.** Related findings are grouped by the target that broke
+  or changed. Fixes come first; Checks stay in the summary; Existing findings never use
+  PR annotations; scan failures are separate. A PR shows at most ten items, with any
+  overflow kept in the full report.
 - The event matrix needs recorded runs, not assumptions. The self-scan exercises push,
   pull-request, shallow-checkout, and staged-index paths in hosted CI: the pull-request
   lane checks out at the consumer default depth of two, and every run also scans the
@@ -51,7 +51,7 @@ collecting impressions. The work in this phase, with its instruments:
 
 This phase exits when every bullet above is either closed or has its recorded numbers:
 the MDX bound decided, the ledger at ten or more repositories, zero open false-missing
-bugs, the reviewer-burden threshold chosen from data, and the event matrix covered.
+bugs, the focused-feedback contract pinned by tests, and the event matrix covered.
 
 ## Next: provider-verified controls
 
@@ -107,7 +107,7 @@ scanner avoids, the same problems that killed the ledger design in
 [Provenance](provenance.md).
 
 No claim kind becomes a milestone without design-partner demand, a proof-strength model,
-measured review burden, and experiments covering persistence and concurrent branches.
+evidence that reviewers find it useful, and experiments covering persistence and concurrent branches.
 Until then these are design vocabulary, not advertised capability.
 
 The permanent boundaries stay in [What Amiss is not](non-goals.md): no semantic truth

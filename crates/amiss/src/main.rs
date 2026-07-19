@@ -379,26 +379,44 @@ macro_rules! say {
 }
 
 /// The human projection: a non-wire convenience over the same payload that
-/// cannot change facts, ordering, totals, or exit. It prints the result, all
-/// retained analysis errors with a crossed resource and its two numbers, the
-/// first two hundred findings in canonical order with the normalized target
-/// path where the finding carries one, one fixed note per distinct error
-/// code and finding kind, and exact totals; every repository-derived scalar
-/// passes through `human-atom`, and no source excerpt, raw destination, or
-/// query value appears.
+/// cannot change facts, ordering, totals, or exit. It prints at most ten
+/// engine-grouped feedback items, retained analysis errors, their meanings,
+/// and the exact raw totals.
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let mut out = Channel::new();
     let envelope = View::of(Some(&built.envelope));
     let payload = envelope.view("payload");
     let result = payload.view("result");
-    say!(
-        out,
-        "amiss: {} (findings {}, errors {}, exit {})",
-        built.status,
-        result.number("finding_count"),
-        result.number("error_count"),
-        built.exit_code
-    );
+    let feedback = payload.view("feedback");
+    let items = feedback.rows("items");
+    let available = feedback.text("status") == "available";
+    if available {
+        let fixes = items
+            .iter()
+            .filter(|item| item.text("action") == "fix")
+            .count();
+        let checks = items
+            .iter()
+            .filter(|item| item.text("action") == "check")
+            .count();
+        say!(
+            out,
+            "amiss: {} (fix {}, check {}, existing {}, errors {}, exit {})",
+            built.status,
+            fixes,
+            checks,
+            feedback.number("existing_count"),
+            result.number("error_count"),
+            built.exit_code
+        );
+    } else {
+        say!(
+            out,
+            "amiss: scan failed (errors {}, exit {})",
+            result.number("error_count"),
+            built.exit_code
+        );
+    }
     if explain_scope {
         explain(&mut out, &payload);
     }
@@ -425,54 +443,42 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
             );
         }
     }
-    for finding in payload.rows("findings").iter().take(200) {
-        let target = finding
-            .view("key_input")
-            .view("scope")
-            .view("normalized_target_intent")
-            .atom_or_dash("path");
-        let target = if target == "-" {
-            String::new()
+    for item in items.iter().take(10) {
+        let action = if item.text("action") == "fix" {
+            "Fix"
         } else {
-            format!(" target {target}")
+            "Check"
         };
         say!(
             out,
-            "{} {} {} {} x{}{}",
-            finding.text("effective_disposition"),
-            finding.text("kind"),
-            finding.text("attribution"),
-            finding.view("location").atom_or_dash("path"),
-            finding.view("aggregation").number("member_count").max(1),
-            target
+            "{} target {} affected places {}",
+            action,
+            item.atom_or_dash("target"),
+            item.number("location_count")
         );
+    }
+    let overflow = items.len().saturating_sub(10);
+    if overflow > 0 {
+        say!(out, "feedback overflow: {overflow} more in the full report");
     }
     notes(&mut out, &payload);
     totals(&mut out, &payload);
 }
 
-/// One `note` line per distinct error code and finding kind: the row
-/// descriptions the payload already carries, deduplicated in first-encounter
-/// order, so two hundred findings of one kind explain themselves once.
+/// One `note` line per error code used by this run.
 fn notes(out: &mut Channel, payload: &View) {
     let mut seen: BTreeSet<String> = BTreeSet::new();
-    for (rows, name_field) in [("errors", "code"), ("findings", "kind")] {
-        for row in payload.rows(rows) {
-            let name = row.text(name_field);
-            let description = row.text("description");
-            if !name.is_empty() && !description.is_empty() && seen.insert(name.clone()) {
-                say!(out, "note {name}: {description}");
-            }
+    for row in payload.rows("errors") {
+        let name = row.text("code");
+        let description = row.text("description");
+        if !name.is_empty() && !description.is_empty() && seen.insert(name.clone()) {
+            say!(out, "note {name}: {description}");
         }
     }
 }
 
 fn totals(out: &mut Channel, payload: &View) {
     let summary = payload.view("summary");
-    let truncated = summary.number("human_details_truncated");
-    if truncated > 0 {
-        say!(out, "details truncated: {truncated}");
-    }
     let documents = summary.view("documents");
     say!(
         out,

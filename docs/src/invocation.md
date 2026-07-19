@@ -62,10 +62,11 @@ human format the flag adds deterministic scope lines to the normal result. JSON 
 unchanged by the flag. This behavior is pinned by the
 [CLI test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/cli.rs).
 `--format json` emits the exact report described in [The report](report.md); `human` prints
-the same facts readably, capped at the first two hundred findings. Under the detail lines,
-`human` also prints one fixed `note` line per distinct finding kind and error code present,
-the same sentences listed in [Profiles and findings](profiles.md) and
-[Limits and refusals](limits.md), so a log can be acted on without the book open.
+the same facts as a focused list of at most ten grouped Fix and Check items. Each item names
+only its target and affected-place count; the full findings and their kinds remain in JSON.
+Under the detail lines, `human` also prints one fixed `note` line per distinct error code,
+using the same sentences listed in [Limits and refusals](limits.md), so a failed scan can be
+acted on without the book open.
 
 Exit codes are three classes, not detail. Exit 0: the run completed and nothing blocks. Exit
 1: the run completed and at least one finding blocks. Exit 2: something prevented a

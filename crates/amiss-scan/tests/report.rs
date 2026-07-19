@@ -5,7 +5,7 @@ use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::correlate::{Observation, Side, correlate};
 use amiss_scan::observe::occurrence_id;
 use amiss_scan::report::{
-    CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
+    Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
 };
 use amiss_scan::resolve::TargetCache;
 use amiss_scan::{
@@ -116,40 +116,14 @@ fn snapshot(
     )
 }
 
-#[test]
-fn a_complete_report_validates_against_the_schema() {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
-    fs::create_dir_all(root.join("docs")).unwrap();
-    fs::write(
-        root.join("docs/guide.md"),
-        "# Guide\n\n[home](../README) and [gone](missing.md)\n",
-    )
-    .unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "base"]);
-    let base_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
-    fs::write(
-        root.join("docs/guide.md"),
-        "# Guide\n\n[home](../README) and [gone](missing.md) and <https://example.com/x>\n",
-    )
-    .unwrap();
-    fs::write(root.join("notes.mdx"), "hello {1 + 1}\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "candidate"]);
-    let candidate_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn report_between(root: &Path, base_commit: &str, candidate_commit: &str) -> Built {
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
-    let (base_identity, base_discovery, base_side) =
-        snapshot(&repo, &mut git_resources, &base_commit);
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let (base_identity, base_discovery, base_side) = snapshot(&repo, &mut resources, base_commit);
     let (candidate_identity, candidate_discovery, candidate_side) =
-        snapshot(&repo, &mut git_resources, &candidate_commit);
+        snapshot(&repo, &mut resources, candidate_commit);
     let comparisons = correlate(&base_side, &candidate_side).unwrap();
-
     let setup = Setup {
         engine: engine(),
         enforce: false,
@@ -163,7 +137,82 @@ fn a_complete_report_validates_against_the_schema() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, &comparisons);
+    construct(&setup, &base_discovery, &candidate_discovery, &comparisons)
+}
+
+#[expect(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test assertion helper"
+)]
+fn assert_grouped_feedback(payload: &serde_json::Value) {
+    let feedback = &payload["feedback"];
+    assert_eq!(feedback["status"], "available");
+    assert_eq!(feedback["existing_count"], 1);
+    let items = feedback["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["action"], "fix");
+    assert_eq!(items[0]["target"], "docs/new-missing.md");
+    assert_eq!(
+        items[0]["finding_kinds"],
+        serde_json::json!(["explicit-target-missing"])
+    );
+    assert_eq!(items[0]["location_count"], 2);
+    assert_eq!(items[0]["annotation"]["path"], "docs/fix-one.md");
+    assert_eq!(items[1]["action"], "fix");
+    assert_eq!(items[1]["target"], "src/target.rs");
+    assert_eq!(
+        items[1]["finding_kinds"],
+        serde_json::json!(["explicit-target-missing", "explicit-target-type-mismatch"])
+    );
+    assert_eq!(items[1]["location_count"], 2);
+    assert_eq!(items[2]["action"], "check");
+    assert_eq!(items[2]["target"], "docs/target.md");
+    assert_eq!(items[2]["location_count"], 2);
+    assert!(items[2]["annotation"].is_null());
+}
+
+#[test]
+fn a_complete_report_validates_against_the_schema() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README"), "See [the guide](docs/guide.md).\n").unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README) and [gone](missing.md)\n",
+    )
+    .unwrap();
+    fs::write(root.join("docs/target.md"), "# Before\n").unwrap();
+    fs::write(root.join("docs/watch-one.md"), "[target](target.md)\n").unwrap();
+    fs::write(root.join("docs/watch-two.md"), "[target](target.md)\n").unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("src/target.rs"), "fn target() {}\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("docs/target.md"), "# After\n").unwrap();
+    fs::write(root.join("docs/fix-one.md"), "[missing](new-missing.md)\n").unwrap();
+    fs::write(root.join("docs/fix-two.md"), "[missing](new-missing.md)\n").unwrap();
+    fs::write(root.join("docs/external.md"), "<https://example.com/x>\n").unwrap();
+    fs::write(
+        root.join("docs/mixed-line.md"),
+        "[line](../src/target.rs#L999)\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs/mixed-tree.md"),
+        "[tree](../src/target.rs/)\n",
+    )
+    .unwrap();
+    fs::write(root.join("notes.mdx"), "hello {1 + 1}\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let built = report_between(root, &base_commit, &candidate_commit);
 
     assert_eq!(built.status, "pass", "observe profile never fails");
     assert_eq!(built.exit_code, 0);
@@ -199,13 +248,17 @@ fn a_complete_report_validates_against_the_schema() {
     );
     assert_eq!(
         payload["summary"]["references"]["missing"].as_u64(),
-        Some(1)
+        Some(4)
     );
     assert_eq!(
         payload["summary"]["references"]["external_out_of_scope"].as_u64(),
         Some(1)
     );
-    assert_eq!(payload["summary"]["documents"]["scanned"].as_u64(), Some(3));
+    assert_eq!(
+        payload["summary"]["documents"]["scanned"].as_u64(),
+        Some(11)
+    );
+    assert_grouped_feedback(payload);
     let kinds: Vec<&str> = payload["findings"]
         .as_array()
         .unwrap()
@@ -218,6 +271,48 @@ fn a_complete_report_validates_against_the_schema() {
         kinds.contains(&"unlinked-document"),
         "notes.mdx has no links"
     );
+}
+
+#[test]
+fn invalid_references_split_new_existing_and_ambiguous_feedback() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docs/existing.md"), "[x](../../escape)\n").unwrap();
+    fs::write(
+        root.join("docs/ambiguous.md"),
+        "base wording [x](../../shared)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("docs/new.md"), "[x](../../new)\n").unwrap();
+    fs::write(
+        root.join("docs/ambiguous.md"),
+        "first wording [x](../../shared)\n\nsecond wording [x](../../shared)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let built = report_between(root, &base, &candidate);
+    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let feedback = &wire["payload"]["feedback"];
+    assert_eq!(feedback["existing_count"], 1);
+    let items = feedback["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["action"], "fix");
+    assert!(items[0]["target"].is_null());
+    assert_eq!(items[0]["location_count"], 1);
+    assert_eq!(items[0]["annotation"]["path"], "docs/new.md");
+    assert_eq!(items[1]["action"], "check");
+    assert!(items[1]["target"].is_null());
+    assert_eq!(items[1]["location_count"], 2);
+    assert!(items[1]["annotation"].is_null());
 }
 
 fn bare_setup(errors_retained: u64) -> Setup {
@@ -323,6 +418,10 @@ fn error_overflow_retains_the_lowest_keys_and_the_sentinel() {
     assert_eq!(sentinel["configured_limit"], 3);
     assert_eq!(sentinel["observed_lower_bound"], 4);
     assert_eq!(wire["payload"]["result"]["error_count"], 3);
+    assert_eq!(
+        wire["payload"]["feedback"],
+        serde_json::json!({"status": "unavailable"})
+    );
     assert_eq!(built.exit_code, 2);
 }
 

@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::report::{
-    AnalysisErrorCode, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, PAYLOAD_SCHEMA,
-    invocation_failure_wire,
+    AnalysisErrorCode, Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind,
+    PAYLOAD_SCHEMA, invocation_failure_wire,
 };
 
 #[expect(clippy::panic, reason = "test navigation helper")]
@@ -74,6 +74,15 @@ fn builds_the_fatal_incomplete_envelope() {
         strings(member(member(payload, "controls"), "reasons")),
         vec!["not-parsed"]
     );
+    let feedback = member(payload, "feedback");
+    assert_eq!(
+        member(feedback, "status"),
+        &Value::String("unavailable".to_owned())
+    );
+    let Value::Object(feedback_members) = feedback else {
+        panic!("feedback is not an object");
+    };
+    assert_eq!(feedback_members.len(), 1);
 
     let Value::Array(errors) = member(payload, "errors") else {
         panic!("errors is not an array");
@@ -176,4 +185,15 @@ fn refuses_inputs_outside_the_invocation_phase() {
     assert!(invocation_failure_wire(&engine(), &BTreeSet::new()).is_none());
     let git: BTreeSet<AnalysisErrorCode> = BTreeSet::from([AnalysisErrorCode::GitObjectMissing]);
     assert!(invocation_failure_wire(&engine(), &git).is_none());
+}
+
+#[test]
+fn removed_references_are_recorded_facts() {
+    let kind = FindingKind::ExplicitReferenceRemoved;
+    assert_eq!(kind.built_in_disposition(false), Disposition::Record);
+    assert_eq!(kind.built_in_disposition(true), Disposition::Record);
+    assert_eq!(
+        kind.meaning(),
+        "a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong"
+    );
 }

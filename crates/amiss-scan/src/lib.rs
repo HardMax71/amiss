@@ -3,6 +3,7 @@ pub mod correlate;
 pub mod discovery;
 pub mod document;
 pub mod evaluate;
+mod feedback;
 pub mod lfs;
 pub mod observe;
 pub mod pipeline;

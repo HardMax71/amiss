@@ -2,7 +2,7 @@
 
 The short form is the published GitHub adapter. It carries the engine inside the selected
 action tree, derives both commits from the triggering event, and turns findings into file
-annotations on the pull request:
+feedback on the pull request:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -13,9 +13,11 @@ annotations on the pull request:
     profile: observe
 ```
 
-The published first run uses `observe`: findings are reported and annotated without blocking,
-while an incomplete or untrusted run still fails. Triage the initial report, adopt any repository
-policy it needs, then change the input to `profile: enforce` to make blocking findings fail.
+The published first run uses `observe`: introduced problems appear as Fixes without blocking,
+changed targets appear as summary-only Checks, and pre-existing problems remain Existing
+inventory. An incomplete or untrusted run still fails. Triage the initial report, adopt any
+repository policy it needs, then change the input to `profile: enforce` to make blocking
+findings fail.
 
 The moving major ref follows the engine's semver major: `v0` for the 0.x series, `v1`
 from 1.0.0 on, so one series can never rewrite another's ref. A conventional `vX.Y.Z`
@@ -107,10 +109,10 @@ adapter currently maps another forge's authenticated run context into the reques
 [Project status](status.md) for that trust boundary; using the open identity fields alone
 does not turn caller-supplied JSON into provider authority.
 
-When a run blocks, read the JSON, not the human printout. The printout stops at two hundred
-findings, so a repository with hundreds of harmless records can fill the screen and still
-not show the row that blocked. The blocking rows are in the report's `errors` array and in
-the findings whose `effective_disposition` is `fail`.
+When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
+repair evidence. The human and Action views stop at ten items and state the overflow. The
+blocking rows remain the report's `errors` and findings whose `effective_disposition` is
+`fail`.
 
 The same check runs before a commit exists. The repository publishes a
 [pre-commit](https://pre-commit.com) hook that scans the staged index against `HEAD`
@@ -125,18 +127,20 @@ repos:
 ```
 
 The action's `report` output names that JSON file, so a later step or a tool reads it
-without rerunning anything. One line lists every actionable row with its location and
-target:
+without rerunning anything. One line lists every grouped PR item with its target and
+affected-place count:
 
 ```sh
-jq -r '.payload.findings[]
-  | select(.effective_disposition != "record")
-  | [.effective_disposition, .kind,
-     ((.location.path | strings) // "-"),
-     ((.key_input.scope.normalized_target_intent.path | strings) // "-")]
+jq -r '.payload.feedback
+  | select(.status == "available")
+  | .items[]
+  | [.action, .effective_disposition,
+     ((.target | strings) // "-"), .location_count]
   | @tsv' amiss-report.json
 ```
 
-An annotation is emitted for every actionable row and every error. GitHub's interface
-displays at most ten of each level per step; the complete set is always in the report, and
-the job summary lists each failing kind once with its count and description.
+The Action shows at most ten Fix and Check items combined, in engine order, with one overflow
+line. Only a displayed Fix with a candidate text location becomes a file annotation; Checks
+and Existing inventory stay in the summary and report. If the scan failed, feedback is
+unavailable and at most ten retained errors are annotated instead. The complete grouped and
+raw sets always remain in the report.
