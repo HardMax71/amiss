@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-git"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "amiss-wire",
  "crc32fast",
@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-md"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "amiss-wire",
  "markdown",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-scan"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "amiss-git",
  "amiss-md",
@@ -61,7 +61,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-wire"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "sha2",
  "strum",
