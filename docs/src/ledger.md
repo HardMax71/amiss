@@ -2,8 +2,9 @@
 
 The completed validation phase used counted scans of other people's repositories, and
 this page retains the counts. One row is one scan: a public repository, a base and
-candidate commit pair, the observe profile, a release build. Every number is read out of
-the run's machine report or out of `git diff` over the same commit pair, never remembered.
+candidate commit pair, the observe profile, a release build. Raw values come from the
+run's machine report or `git diff` over the same commit pair; historical density is
+derived and rejection class is assigned from those recorded artifacts, never remembered.
 
 These scans predate the grouped PR-feedback contract, so their row-level numbers remain
 historical evidence rather than a product threshold. Advisory rows are findings whose
@@ -68,6 +69,7 @@ phenomenon; a plain tree yields either zero or the genuinely broken.
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
-pair stated, every column computed from those two artifacts, on a repository that is not
-this one. The validation phase used the ledger to retain the ten-repository adoption and
-false-missing evidence; focused PR feedback is now a separately tested product invariant.
+pair stated, every raw value sourced from and every derived or classified column traceable
+to those two artifacts, on a repository that is not this one. The validation phase used
+the ledger to retain the ten-repository adoption and false-missing evidence; focused PR
+feedback is now a separately tested product invariant.
