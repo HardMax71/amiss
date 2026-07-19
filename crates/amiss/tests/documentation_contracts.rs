@@ -681,6 +681,15 @@ fn release_smokes_every_runtime_before_promoting_the_major_ref() {
     assert!(publish_release.contains("git commit-tree \"$exact_tree\" -p \"$current\""));
     assert!(publish_release.contains("for attempt in 1 2 3 4 5; do"));
     assert!(publish_release.contains("steps.promote.outputs.major-is-latest"));
+    assert!(publish_release.contains("release(tagName: $tag)"));
+    assert!(publish_release.contains("${TAG} has no GitHub release"));
+    assert!(publish_release.contains(".data.repository.release.databaseId"));
+    assert!(publish_release.contains(".data.repository.release.isDraft"));
+    assert!(publish_release.contains(".data.repository.release.isPrerelease"));
+    assert!(
+        !publish_release.contains("releases/tags/${TAG}"),
+        "draft releases are not visible through the REST lookup by tag"
+    );
 }
 
 #[test]
