@@ -622,7 +622,9 @@ fn run_action_jq(filter: &str, payload: &serde_json::Value) -> String {
         "jq rejected the Action filter: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    String::from_utf8(output.stdout).expect("jq emits UTF-8")
+    String::from_utf8(output.stdout)
+        .expect("jq emits UTF-8")
+        .replace("\r\n", "\n")
 }
 
 fn action_filters(runtime: &str) -> (&str, &str) {
