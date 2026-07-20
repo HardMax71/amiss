@@ -17,6 +17,7 @@ use amiss_bootstrap::supervise::{
 use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
@@ -363,6 +364,42 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     );
 }
 
+/// The statement keeps a coherent digest chain while claiming another
+/// repository, so only the direct repository binding can refuse it.
+#[test]
+fn a_statement_issued_for_another_repository_is_refused() {
+    let (wire, mut expectations) = sealed_report();
+    let foreign = rewrite(&wire, |payload| {
+        let controls = member_mut(payload, "controls");
+        let trusted = member_mut(controls, "trusted_time_source");
+        {
+            let statement = member_mut(trusted, "statement");
+            let repository = member_mut(statement, "repository");
+            set_member(repository, "name", Value::String("other".to_owned()));
+        }
+        let digest = hj(
+            "amiss/scanner-trusted-time-statement",
+            member(trusted, "statement").unwrap(),
+        )
+        .to_string();
+        set_member(trusted, "statement_digest", Value::String(digest));
+    });
+    let rewritten = parse(&foreign).unwrap();
+    let trusted = member(member(&rewritten, "payload").unwrap(), "controls")
+        .and_then(|controls| member(controls, "trusted_time_source"))
+        .unwrap();
+    let Value::String(digest) = member(trusted, "statement_digest").unwrap().clone() else {
+        panic!("statement digest is text")
+    };
+    if let Some(sealed) = expectations.sealed.as_mut() {
+        sealed.trusted_time_digest = digest;
+    }
+    assert_eq!(
+        accept(&foreign, &expectations),
+        Err(AcceptanceDefect::SealedControls)
+    );
+}
+
 const FLOOR_DIGEST: &str =
     "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
@@ -392,6 +429,12 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
         profile: "observe".to_owned(),
         candidate_ref: "refs/heads/feature/docs".to_owned(),
         target_ref: "refs/heads/main".to_owned(),
+        repository: RepositoryIdentity::new(
+            "git.example.internal".to_owned(),
+            "group/subgroup".to_owned(),
+            "widget".to_owned(),
+        )
+        .unwrap(),
         provider: "gitlab".to_owned(),
         provider_run_id: "pipeline/42".to_owned(),
         provider_run_attempt: 2,
