@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.7.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.8.0" }
 crc32fast = "1"
 flate2 = "1"
 fs_at = "0.2"
