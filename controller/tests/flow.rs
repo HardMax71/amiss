@@ -12,9 +12,9 @@ use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
     CheckConclusion, Controller, ControllerError, ControllerEvaluationId, DeliveryClaim,
     DeliveryId, DeliveryIdentity, DeliveryLedger, Evaluation, HandleOutcome, IntegrationId,
-    ProviderAdapter, ProviderError, ProviderErrorKind, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication,
-    RunFailure, RunIdentity, RunRequest, Runner, RunnerOutcome, UntrustedDelivery,
+    OidPair, ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, RunFailure, RunIdentity,
+    RunRefs, RunRequest, Runner, RunnerOutcome, UntrustedDelivery,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -150,7 +150,7 @@ impl ProviderAdapter for FakeAdapter {
             .lock()
             .unwrap()
             .pop_front()
-            .unwrap_or_else(|| Err(ProviderError::new(ProviderErrorKind::Unavailable)))
+            .unwrap_or(Err(ProviderError::Unavailable))
     }
 
     fn publish(
@@ -232,15 +232,21 @@ fn run_with_resolution(
 ) -> RunIdentity {
     RunIdentity::new(
         change,
-        forge,
-        BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-        BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-        BranchRef::new(default_branch_ref.to_owned()).unwrap(),
+        RunRefs {
+            forge,
+            candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
+            target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+            default_branch: BranchRef::new(default_branch_ref.to_owned()).unwrap(),
+        },
         ObjectFormat::Sha1,
-        oid('a'),
-        oid(candidate_commit),
-        oid('c'),
-        oid(candidate_tree),
+        OidPair {
+            base: oid('a'),
+            candidate: oid(candidate_commit),
+        },
+        OidPair {
+            base: oid('c'),
+            candidate: oid(candidate_tree),
+        },
     )
     .unwrap()
 }
@@ -296,10 +302,10 @@ fn successful_flow_binds_run_rechecks_and_publishes() {
     );
     assert_eq!(adapter.authentication_count.load(Ordering::Relaxed), 1);
     assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 2);
-    assert_eq!(controller.runner().requests.len(), 1);
-    assert_eq!(controller.runner().requests[0].run, run);
+    assert_eq!(controller.runner.requests.len(), 1);
+    assert_eq!(controller.runner.requests[0].run, run);
     assert_eq!(
-        controller.runner().requests[0].provider_run,
+        controller.runner.requests[0].provider_run,
         authenticated.provider_run
     );
     let publications = adapter.publications();
@@ -330,7 +336,7 @@ fn completed_delivery_is_a_duplicate_without_another_run() {
         controller.handle(input(&provider)).unwrap(),
         HandleOutcome::Duplicate
     );
-    assert_eq!(controller.runner().requests.len(), 1);
+    assert_eq!(controller.runner.requests.len(), 1);
     assert_eq!(adapter.publications().len(), 1);
 }
 
@@ -342,7 +348,7 @@ fn incomplete_claim_resumes_after_a_transient_refresh_failure() {
     let adapter = Arc::new(FakeAdapter::new(
         delivery(&provider, change, 'b'),
         [
-            Err(ProviderError::new(ProviderErrorKind::Unavailable)),
+            Err(ProviderError::Unavailable),
             Ok(snapshot(ChangeState::Active, run.clone())),
             Ok(snapshot(ChangeState::Active, run.clone())),
         ],
@@ -358,7 +364,7 @@ fn incomplete_claim_resumes_after_a_transient_refresh_failure() {
         Ok(HandleOutcome::Published(CheckConclusion::Pass))
     ));
     assert_eq!(
-        controller.runner().requests[0].evaluation_id.as_str(),
+        controller.runner.requests[0].evaluation_id.as_str(),
         "evaluation-01"
     );
 }
@@ -372,7 +378,7 @@ fn resumed_delivery_cannot_follow_the_changes_new_head() {
     let adapter = Arc::new(FakeAdapter::new(
         delivery(&provider, change, 'b'),
         [
-            Err(ProviderError::new(ProviderErrorKind::Unavailable)),
+            Err(ProviderError::Unavailable),
             Ok(snapshot(ChangeState::Active, moved)),
         ],
     ));
@@ -386,7 +392,7 @@ fn resumed_delivery_cannot_follow_the_changes_new_head() {
         controller.handle(input(&provider)),
         Err(ControllerError::WrongProviderRun)
     ));
-    assert!(controller.runner().requests.is_empty());
+    assert!(controller.runner.requests.is_empty());
     assert!(adapter.publications().is_empty());
 }
 
@@ -404,7 +410,7 @@ fn authenticated_provider_must_match_the_routed_instance() {
         controller.handle(input(&expected)),
         Err(ControllerError::WrongAuthenticatedProvider)
     ));
-    assert!(controller.runner().requests.is_empty());
+    assert!(controller.runner.requests.is_empty());
 }
 
 #[test]
@@ -424,7 +430,7 @@ fn refresh_cannot_substitute_another_repository() {
         controller.handle(input(&provider)),
         Err(ControllerError::WrongChangeIdentity)
     ));
-    assert!(controller.runner().requests.is_empty());
+    assert!(controller.runner.requests.is_empty());
 }
 
 #[test]
@@ -583,15 +589,21 @@ fn run_identity_rejects_oids_from_another_object_format() {
     let change = locator(&provider, repository("amiss"));
     let invalid = RunIdentity::new(
         change,
-        ForgeDialect::Gitea,
-        BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-        BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-        BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        RunRefs {
+            forge: ForgeDialect::Gitea,
+            candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
+            target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+            default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        },
         ObjectFormat::Sha256,
-        oid('a'),
-        oid('b'),
-        oid('c'),
-        oid('d'),
+        OidPair {
+            base: oid('a'),
+            candidate: oid('b'),
+        },
+        OidPair {
+            base: oid('c'),
+            candidate: oid('d'),
+        },
     );
 
     assert!(invalid.is_none());

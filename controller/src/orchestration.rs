@@ -16,106 +16,60 @@ pub enum ChangeState {
     AuthorizationRevoked,
 }
 
+/// The refs one run resolves against.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunRefs {
+    pub forge: ForgeDialect,
+    pub candidate: BranchRef,
+    pub target: BranchRef,
+    pub default_branch: BranchRef,
+}
+
+/// One base and candidate pair of object ids.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OidPair {
+    pub base: Oid,
+    pub candidate: Oid,
+}
+
+impl OidPair {
+    fn well_formed(&self, object_format: ObjectFormat) -> bool {
+        [&self.base, &self.candidate]
+            .into_iter()
+            .all(|oid| Oid::new(object_format, oid.as_str().to_owned()).is_some())
+    }
+}
+
+/// The exact identity one evaluation runs as. Everything here is data; the
+/// binding laws live in `validate_change` and the runner recheck.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunIdentity {
-    change: ChangeLocator,
-    forge: ForgeDialect,
-    target_ref: BranchRef,
-    candidate_ref: BranchRef,
-    default_branch_ref: BranchRef,
-    object_format: ObjectFormat,
-    base_commit: Oid,
-    candidate_commit: Oid,
-    base_tree: Oid,
-    candidate_tree: Oid,
+    pub change: ChangeLocator,
+    pub refs: RunRefs,
+    pub object_format: ObjectFormat,
+    pub commits: OidPair,
+    pub trees: OidPair,
 }
 
 impl RunIdentity {
-    #[must_use]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the constructor makes every exact run-binding field explicit"
-    )]
+    /// None unless every oid is well formed for the object format.
     pub fn new(
         change: ChangeLocator,
-        forge: ForgeDialect,
-        target_ref: BranchRef,
-        candidate_ref: BranchRef,
-        default_branch_ref: BranchRef,
+        refs: RunRefs,
         object_format: ObjectFormat,
-        base_commit: Oid,
-        candidate_commit: Oid,
-        base_tree: Oid,
-        candidate_tree: Oid,
+        commits: OidPair,
+        trees: OidPair,
     ) -> Option<Self> {
-        let valid = [&base_commit, &candidate_commit, &base_tree, &candidate_tree]
-            .into_iter()
-            .all(|oid| Oid::new(object_format, oid.as_str().to_owned()).is_some());
-        if !valid {
+        if !commits.well_formed(object_format) || !trees.well_formed(object_format) {
             return None;
         }
         Some(Self {
             change,
-            forge,
-            target_ref,
-            candidate_ref,
-            default_branch_ref,
+            refs,
             object_format,
-            base_commit,
-            candidate_commit,
-            base_tree,
-            candidate_tree,
+            commits,
+            trees,
         })
-    }
-
-    #[must_use]
-    pub const fn change(&self) -> &ChangeLocator {
-        &self.change
-    }
-
-    #[must_use]
-    pub const fn forge(&self) -> ForgeDialect {
-        self.forge
-    }
-
-    #[must_use]
-    pub const fn target_ref(&self) -> &BranchRef {
-        &self.target_ref
-    }
-
-    #[must_use]
-    pub const fn candidate_ref(&self) -> &BranchRef {
-        &self.candidate_ref
-    }
-
-    #[must_use]
-    pub const fn default_branch_ref(&self) -> &BranchRef {
-        &self.default_branch_ref
-    }
-
-    #[must_use]
-    pub const fn object_format(&self) -> ObjectFormat {
-        self.object_format
-    }
-
-    #[must_use]
-    pub const fn base_commit(&self) -> &Oid {
-        &self.base_commit
-    }
-
-    #[must_use]
-    pub const fn candidate_commit(&self) -> &Oid {
-        &self.candidate_commit
-    }
-
-    #[must_use]
-    pub const fn base_tree(&self) -> &Oid {
-        &self.base_tree
-    }
-
-    #[must_use]
-    pub const fn candidate_tree(&self) -> &Oid {
-        &self.candidate_tree
     }
 }
 
@@ -261,9 +215,9 @@ pub enum HandleOutcome {
 }
 
 pub struct Controller<L, R> {
-    registry: AdapterRegistry,
-    ledger: L,
-    runner: R,
+    pub registry: AdapterRegistry,
+    pub ledger: L,
+    pub runner: R,
 }
 
 impl<L, R> Controller<L, R>
@@ -271,7 +225,6 @@ where
     L: DeliveryLedger,
     R: Runner,
 {
-    #[must_use]
     pub const fn new(registry: AdapterRegistry, ledger: L, runner: R) -> Self {
         Self {
             registry,
@@ -340,27 +293,17 @@ where
             .map_err(ControllerError::Ledger)?;
         Ok(HandleOutcome::Published(publication.conclusion))
     }
-
-    #[must_use]
-    pub const fn ledger(&self) -> &L {
-        &self.ledger
-    }
-
-    #[must_use]
-    pub const fn runner(&self) -> &R {
-        &self.runner
-    }
 }
 
 fn validate_change<E>(
     delivery: &AuthenticatedDelivery,
     snapshot: &ChangeSnapshot,
 ) -> Result<(), ControllerError<E>> {
-    if snapshot.run.change() != &delivery.change {
+    if snapshot.run.change != delivery.change {
         return Err(ControllerError::WrongChangeIdentity);
     }
-    if snapshot.run.object_format() != delivery.provider_run.object_format()
-        || snapshot.run.candidate_commit() != delivery.provider_run.candidate_commit()
+    if snapshot.run.object_format != delivery.provider_run.object_format
+        || snapshot.run.commits.candidate != delivery.provider_run.candidate_commit
     {
         return Err(ControllerError::WrongProviderRun);
     }
@@ -404,25 +347,21 @@ fn runner_conclusion(
     outcome: Option<RunnerOutcome>,
 ) -> (CheckConclusion, Option<Vec<u8>>) {
     match outcome {
-        Some(RunnerOutcome::Complete {
-            identity,
-            evaluation: _,
-            report: _,
-        }) if identity_without_trees(&identity) != identity_without_trees(expected) => (
-            CheckConclusion::Unavailable(RunFailure::WrongIdentity),
-            None,
-        ),
         Some(RunnerOutcome::Complete { identity, .. })
-            if identity.base_tree() != expected.base_tree()
-                || identity.candidate_tree() != expected.candidate_tree() =>
+            if identity.change != expected.change
+                || identity.refs != expected.refs
+                || identity.object_format != expected.object_format
+                || identity.commits != expected.commits =>
         {
+            (
+                CheckConclusion::Unavailable(RunFailure::WrongIdentity),
+                None,
+            )
+        }
+        Some(RunnerOutcome::Complete { identity, .. }) if identity.trees != expected.trees => {
             (CheckConclusion::Unavailable(RunFailure::WrongTree), None)
         }
-        Some(RunnerOutcome::Complete {
-            evaluation: _,
-            report,
-            ..
-        }) if report.is_empty() => (
+        Some(RunnerOutcome::Complete { report, .. }) if report.is_empty() => (
             CheckConclusion::Unavailable(RunFailure::MissingOutput),
             None,
         ),
@@ -456,28 +395,4 @@ fn runner_conclusion(
             (CheckConclusion::Unavailable(RunFailure::Unavailable), None)
         }
     }
-}
-
-fn identity_without_trees(
-    identity: &RunIdentity,
-) -> (
-    &ChangeLocator,
-    ForgeDialect,
-    &BranchRef,
-    &BranchRef,
-    &BranchRef,
-    ObjectFormat,
-    &Oid,
-    &Oid,
-) {
-    (
-        identity.change(),
-        identity.forge(),
-        identity.target_ref(),
-        identity.candidate_ref(),
-        identity.default_branch_ref(),
-        identity.object_format(),
-        identity.base_commit(),
-        identity.candidate_commit(),
-    )
 }

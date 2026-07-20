@@ -31,37 +31,20 @@ pub struct AuthenticatedDelivery {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ProviderErrorKind {
+pub enum ProviderError {
     Authentication,
     AuthorizationRevoked,
     Unavailable,
     InvalidResponse,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProviderError {
-    kind: ProviderErrorKind,
-}
-
-impl ProviderError {
-    #[must_use]
-    pub const fn new(kind: ProviderErrorKind) -> Self {
-        Self { kind }
-    }
-
-    #[must_use]
-    pub const fn kind(&self) -> ProviderErrorKind {
-        self.kind
-    }
-}
-
 impl fmt::Display for ProviderError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self.kind {
-            ProviderErrorKind::Authentication => "provider delivery authentication failed",
-            ProviderErrorKind::AuthorizationRevoked => "provider authorization was revoked",
-            ProviderErrorKind::Unavailable => "provider is unavailable",
-            ProviderErrorKind::InvalidResponse => "provider returned an invalid response",
+        formatter.write_str(match self {
+            Self::Authentication => "provider delivery authentication failed",
+            Self::AuthorizationRevoked => "provider authorization was revoked",
+            Self::Unavailable => "provider is unavailable",
+            Self::InvalidResponse => "provider returned an invalid response",
         })
     }
 }
@@ -122,7 +105,6 @@ pub struct AdapterRegistry {
 }
 
 impl AdapterRegistry {
-    #[must_use]
     pub const fn new() -> Self {
         Self {
             adapters: BTreeMap::new(),
@@ -142,7 +124,6 @@ impl AdapterRegistry {
         Ok(())
     }
 
-    #[must_use]
     pub fn get(&self, namespace: &ProviderNamespace) -> Option<&dyn ProviderAdapter> {
         self.adapters.get(namespace).map(AsRef::as_ref)
     }
