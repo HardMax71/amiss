@@ -1,8 +1,8 @@
 # Running it in CI
 
-The short form is the published GitHub adapter. It carries the engine inside the selected
-action tree, derives both commits from the triggering event, and turns findings into file
-feedback on the pull request:
+The short form is the published GitHub convenience Action. It carries the engine inside the
+selected action tree, derives both commits from the triggering event, and turns findings into
+file feedback on the pull request. It is not the provider-authenticated controller lane:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -49,8 +49,9 @@ the same way, to a
 [manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs)
 that stores an open build-source identity instead of assuming `github.com`; the
 [release workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml)
-is a checkable example of that input. The report and request formats are forge-neutral
-even though this repository currently ships only the GitHub event adapter.
+is a checkable example of that input. The report and request formats are forge-neutral. This
+repository currently ships only the GitHub convenience event wrapper, not a concrete
+provider-authenticated adapter.
 
 The long form invokes the engine directly. It is useful outside GitHub Actions or when a
 workflow needs to construct the exact evaluation itself, but it is not the repository's
@@ -104,10 +105,24 @@ prefer the composite Action's derivation or pass the exact two commits explicitl
 a pure function of the two snapshots and invocation, so there is no baseline cache to warm
 or restore between runs.
 
-This adapter does not yet acquire provider-authenticated external controls, and no public
-adapter currently maps another forge's authenticated run context into the request wire. See
-[Project status](status.md) for that trust boundary; using the open identity fields alone
-does not turn caller-supplied JSON into provider authority.
+The Action invokes the public command, so its branch is the candidate/source ref used for URL
+resolution and its report target ref is null. It does not acquire provider-authenticated
+external controls, invoke the sealed bootstrap path, or publish through an independently
+authenticated integration. Using the open identity fields alone does not turn caller-supplied
+JSON into provider authority.
+
+The repository now contains two internal foundations for a future required-check lane. For
+commit-pair materialization, the sealed bootstrap accepts a canonical
+evaluation/snapshot/controls request triplet, verifies its constraint and trusted-time bindings,
+and frames its exact bytes to a verified engine over stdin. The separate nested Rust controller
+defines the provider-neutral sequence of raw-delivery authentication, durable replay claim,
+authoritative state refresh, an exact run binding the repository, URL dialect, candidate, target
+and default-branch refs, base and candidate commits, and both trees, final authoritative refresh,
+fail-closed publication, and durable completion. Neither foundation supplies the surrounding
+transport: there is no HTTP server, concrete GitHub, GitLab, or Gitea-family adapter, credential
+source, durable database, repository acquisition worker, deployable service, or provider check
+publisher. There is therefore no configuration snippet for that lane yet. See
+[Project status](status.md) for the exact boundary.
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
 repair evidence. The human and Action views stop at ten items and state the overflow. The

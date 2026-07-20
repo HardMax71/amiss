@@ -1,14 +1,18 @@
 # AGENTS.md
 
-Amiss is a Rust workspace: an engine that checks documentation against the repository
-tree it describes. The book under `docs/` is the reference; `CONTRIBUTING.md` states the
-acceptance bar.
+Amiss contains an offline Rust workspace whose engine checks documentation against the
+repository tree it describes, plus a separate nested Rust workspace under `controller/` for
+provider-facing orchestration contracts. The book under `docs/` is the reference;
+`CONTRIBUTING.md` states the acceptance bar.
 
 ## Build and test
 
 ```sh
-cargo nextest run --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo nextest run --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+
+cargo nextest run --manifest-path controller/Cargo.toml --locked
+cargo clippy --manifest-path controller/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
 The toolchain is pinned by `rust-toolchain.toml`. Hooks run through prek: formatting and
@@ -31,8 +35,12 @@ green and remote green are the same thing.
   projection.
 - New function twins move the similarity baseline in `.pre-commit-config.yaml`; bump it
   in the same change, or better, deduplicate.
-- The engine spawns nothing and reads only the repository. Shared test scaffolding goes
-  in `amiss-fixtures`.
+- The scanner's repository I/O stays inside the repository, and it spawns nothing. Its
+  private sealed entry additionally reads only the closed request frame from stdin. Shared
+  test scaffolding goes in `amiss-fixtures`.
+- `controller/` is a separate, unpublished Rust workspace. Provider transport, storage,
+  credential, and runtime dependencies stay there; never add them to the offline root
+  workspace or its lockfile.
 
 ## Checking your own change
 

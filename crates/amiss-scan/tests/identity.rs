@@ -44,6 +44,7 @@ fn setup(candidate: CandidateBlock) -> Setup {
         repository: None,
         forge: None,
         candidate_ref: None,
+        target_ref: None,
         default_branch_ref: None,
         base: snapshot('1', '2'),
         candidate,
@@ -65,7 +66,8 @@ fn the_commit_candidate_identity_fixture_matches_the_runtime_preimage() {
         "docs".to_owned(),
     );
     setup.forge = Some(ForgeDialect::Gitlab);
-    setup.candidate_ref = Some("refs/heads/main".to_owned());
+    setup.candidate_ref = Some("refs/heads/amiss-controller".to_owned());
+    setup.target_ref = Some("refs/heads/main".to_owned());
     setup.default_branch_ref = Some("refs/heads/main".to_owned());
 
     let published = fixture_digest(

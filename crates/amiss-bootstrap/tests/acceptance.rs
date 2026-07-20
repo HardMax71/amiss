@@ -1,4 +1,6 @@
 #![expect(
+    clippy::expect_used,
+    clippy::panic,
     clippy::unwrap_used,
     reason = "integration harness over asserted fixture shapes"
 )]
@@ -9,9 +11,14 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 
 use amiss_bootstrap::supervise::{
-    AcceptanceDefect, Defect, Expectations, Supervised, accept, settle, supervise,
+    AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
+    Supervised, accept, settle, supervise,
 };
+use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
+use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::report::PAYLOAD_SCHEMA;
+use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
 /// The frozen dossier examples: the indented readable envelope and its exact
 /// one-line `JCS(envelope) || LF` canonicalization.
@@ -30,6 +37,7 @@ fn foreign_expectations() -> Expectations {
             .to_owned(),
         base_commit: "0000000000000000000000000000000000000000".to_owned(),
         candidate_commit: None,
+        sealed: None,
     }
 }
 
@@ -192,6 +200,7 @@ fn accepted_report() -> (Vec<u8>, Expectations) {
             engine_digest,
             base_commit,
             candidate_commit,
+            sealed: None,
         },
     )
 }
@@ -276,4 +285,292 @@ fn schema_labels_are_part_of_the_acceptance_law() {
         Err(AcceptanceDefect::Shape),
         "a different payload label cannot pass under the report digest domain"
     );
+}
+
+#[test]
+fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
+    let (wire, expectations) = sealed_report();
+    assert_eq!(accept(&wire, &expectations), Ok(0));
+
+    let wrong_ref = rewrite(&wire, |payload| {
+        let evaluation = member_mut(payload, "evaluation");
+        set_member(
+            evaluation,
+            "target_ref",
+            Value::String("refs/heads/other".to_owned()),
+        );
+    });
+    assert_eq!(
+        accept(&wrong_ref, &expectations),
+        Err(AcceptanceDefect::SealedIdentity)
+    );
+
+    let wrong_provider = rewrite(&wire, |payload| {
+        let controls = member_mut(payload, "controls");
+        let trusted = member_mut(controls, "trusted_time_source");
+        let statement = member_mut(trusted, "statement");
+        set_member(statement, "provider", Value::String("github".to_owned()));
+    });
+    assert_eq!(
+        accept(&wrong_provider, &expectations),
+        Err(AcceptanceDefect::SealedControls)
+    );
+
+    let wrong_profile = rewrite(&wire, |payload| {
+        let controls = member_mut(payload, "controls");
+        set_member(controls, "profile", Value::String("enforce".to_owned()));
+    });
+    assert_eq!(
+        accept(&wrong_profile, &expectations),
+        Err(AcceptanceDefect::SealedControls)
+    );
+
+    let dropped_floor = rewrite(&wire, |payload| {
+        let controls = member_mut(payload, "controls");
+        let floor = member_mut(controls, "organization_floor");
+        set_member(floor, "status", Value::String("none".to_owned()));
+    });
+    assert_eq!(
+        accept(&dropped_floor, &expectations),
+        Err(AcceptanceDefect::SealedControls)
+    );
+
+    let changed_descriptor = rewrite(&wire, |payload| {
+        let controls = member_mut(payload, "controls");
+        let constraint = member_mut(controls, "execution_constraint");
+        let descriptor = member_mut(constraint, "descriptor");
+        set_member(
+            descriptor,
+            "required_status_name",
+            Value::String("amiss / changed".to_owned()),
+        );
+    });
+    assert_eq!(
+        accept(&changed_descriptor, &expectations),
+        Err(AcceptanceDefect::SealedControls)
+    );
+
+    let unavailable_hybrid = rewrite(&wire, |payload| {
+        insert_member(
+            member_mut(payload, "evaluation"),
+            "status",
+            Value::String("unavailable".to_owned()),
+        );
+    });
+    assert_eq!(
+        accept(&unavailable_hybrid, &expectations),
+        Err(AcceptanceDefect::SealedIdentity)
+    );
+}
+
+const FLOOR_DIGEST: &str =
+    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+fn sealed_report() -> (Vec<u8>, Expectations) {
+    let (wire, mut expectations) = accepted_report();
+    let descriptor = parse(&dossier_example("scanner-execution-constraint.json")).unwrap();
+    let constraint_digest = ExecutionConstraintDescriptor::parse(&canonical(&descriptor))
+        .unwrap()
+        .digest
+        .to_string();
+    let mut envelope = parse(&wire).unwrap();
+    let payload = member_mut(&mut envelope, "payload");
+    let evaluation = member_mut(payload, "evaluation");
+    let candidate_identity_digest = seal_evaluation(evaluation);
+    let (statement, time_digest) = sealed_statement(evaluation, &candidate_identity_digest);
+    seal_controls(
+        member_mut(payload, "controls"),
+        descriptor,
+        &constraint_digest,
+        statement,
+        &time_digest,
+    );
+    refresh_digest(&mut envelope);
+    let mut wire = canonical(&envelope);
+    wire.push(b'\n');
+    expectations.sealed = Some(SealedExpectations {
+        profile: "observe".to_owned(),
+        candidate_ref: "refs/heads/feature/docs".to_owned(),
+        target_ref: "refs/heads/main".to_owned(),
+        provider: "gitlab".to_owned(),
+        provider_run_id: "pipeline/42".to_owned(),
+        provider_run_attempt: 2,
+        candidate_identity_digest,
+        organization_floor: Some(SealedControlExpectation {
+            digest: FLOOR_DIGEST.to_owned(),
+            trust_source: "organization-policy".to_owned(),
+        }),
+        debt_snapshot: None,
+        waiver_bundle: None,
+        execution_constraint: SealedControlExpectation {
+            digest: constraint_digest,
+            trust_source: "external-required-check".to_owned(),
+        },
+        trusted_time_digest: time_digest,
+    });
+    (wire, expectations)
+}
+
+fn seal_evaluation(evaluation: &mut Value) -> String {
+    set_member(
+        evaluation,
+        "candidate_ref",
+        Value::String("refs/heads/feature/docs".to_owned()),
+    );
+    set_member(
+        evaluation,
+        "target_ref",
+        Value::String("refs/heads/main".to_owned()),
+    );
+    set_member(evaluation, "trusted_time", Value::Bool(true));
+    set_member(
+        evaluation,
+        "evaluation_instant",
+        Value::String("2026-07-12T10:00:00Z".to_owned()),
+    );
+    let Value::Object(members) = evaluation.clone() else {
+        panic!("evaluation is an object");
+    };
+    let mut identity: Vec<(String, Value)> = members
+        .into_iter()
+        .filter(|(name, _value)| name != "evaluation_instant" && name != "trusted_time")
+        .collect();
+    identity.push((
+        "schema".to_owned(),
+        Value::String(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
+    ));
+    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::Object(identity)).to_string()
+}
+
+fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String) {
+    let statement = object(vec![
+        (
+            "schema",
+            Value::String("amiss/scanner-trusted-time-statement".to_owned()),
+        ),
+        (
+            "controller",
+            Value::String("external-required-check-clock".to_owned()),
+        ),
+        ("provider", Value::String("gitlab".to_owned())),
+        (
+            "repository",
+            member(evaluation, "repository").unwrap().clone(),
+        ),
+        ("ref", Value::String("refs/heads/main".to_owned())),
+        (
+            "candidate_identity_digest",
+            Value::String(identity_digest.to_owned()),
+        ),
+        ("provider_run_id", Value::String("pipeline/42".to_owned())),
+        ("provider_run_attempt", Value::Integer(2)),
+        (
+            "evaluation_instant",
+            Value::String("2026-07-12T10:00:00Z".to_owned()),
+        ),
+        (
+            "valid_until",
+            Value::String("2026-07-12T10:09:00Z".to_owned()),
+        ),
+    ]);
+    let digest = TrustedTimeStatement::parse(&canonical(&statement))
+        .unwrap()
+        .digest
+        .to_string();
+    (statement, digest)
+}
+
+fn seal_controls(
+    controls: &mut Value,
+    descriptor: Value,
+    constraint_digest: &str,
+    statement: Value,
+    time_digest: &str,
+) {
+    set_member(
+        controls,
+        "organization_floor",
+        object(vec![
+            ("status", Value::String("verified".to_owned())),
+            ("digest", Value::String(FLOOR_DIGEST.to_owned())),
+            (
+                "trust_source",
+                Value::String("organization-policy".to_owned()),
+            ),
+        ]),
+    );
+    set_member(
+        controls,
+        "execution_constraint",
+        object(vec![
+            ("status", Value::String("verified".to_owned())),
+            (
+                "descriptor_digest",
+                Value::String(constraint_digest.to_owned()),
+            ),
+            ("descriptor", descriptor),
+            (
+                "trust_source",
+                Value::String("external-required-check".to_owned()),
+            ),
+        ]),
+    );
+    set_member(
+        controls,
+        "trusted_time_source",
+        object(vec![
+            ("status", Value::String("verified".to_owned())),
+            (
+                "trust_source",
+                Value::String("external-required-check".to_owned()),
+            ),
+            ("statement_digest", Value::String(time_digest.to_owned())),
+            ("statement", statement),
+        ]),
+    );
+}
+
+fn rewrite(wire: &[u8], edit: impl FnOnce(&mut Value)) -> Vec<u8> {
+    let mut envelope = parse(wire).unwrap();
+    edit(member_mut(&mut envelope, "payload"));
+    refresh_digest(&mut envelope);
+    let mut rewritten = canonical(&envelope);
+    rewritten.push(b'\n');
+    rewritten
+}
+
+fn refresh_digest(envelope: &mut Value) {
+    let digest = hj(PAYLOAD_SCHEMA, member(envelope, "payload").unwrap()).to_string();
+    set_member(envelope, "payload_digest", Value::String(digest));
+}
+
+fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
+    let Value::Object(members) = value else {
+        panic!("value is an object");
+    };
+    &mut members
+        .iter_mut()
+        .find(|(name, _value)| name == key)
+        .expect("member exists")
+        .1
+}
+
+fn set_member(value: &mut Value, key: &str, replacement: Value) {
+    *member_mut(value, key) = replacement;
+}
+
+fn insert_member(value: &mut Value, key: &str, member: Value) {
+    let Value::Object(members) = value else {
+        panic!("value is an object");
+    };
+    assert!(members.iter().all(|(name, _value)| name != key));
+    members.push((key.to_owned(), member));
+}
+
+fn object(rows: Vec<(&str, Value)>) -> Value {
+    Value::Object(
+        rows.into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    )
 }

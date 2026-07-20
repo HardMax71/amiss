@@ -68,6 +68,7 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
         repository: Some(identity("acme", "docs")),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
+        target_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor,
         debt: None,
@@ -169,7 +170,7 @@ fn a_mismatched_floor_makes_controls_unavailable_with_real_identities() {
     let (repo, base, candidate) = two_commits(root);
 
     let mut setup = shell(Some(floor_input(EMPTY_ARRAYS)));
-    setup.candidate_ref = Some("refs/heads/dev".to_owned());
+    setup.target_ref = Some("refs/heads/dev".to_owned());
     let report = payload(&setup, &repo, &base, &candidate);
 
     assert_eq!(report["exit_code"], 2);

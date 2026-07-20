@@ -1,6 +1,8 @@
 # Architecture
 
-Six shipped crates, and trust flows in one direction; a seventh exists only for tests.
+The offline root workspace has six production crates, and trust flows in one direction; a
+seventh exists only for tests. An unpublished provider-controller foundation lives in a
+separate nested Rust workspace.
 
 ```dot process
 digraph amiss {
@@ -26,8 +28,9 @@ digraph amiss {
 }
 ```
 
-`amiss-wire` is the foundation: strict JSON with canonical output, the digest rules, the
-report format, and every machine contract. Nothing in it knows what a repository is.
+The graph above is the root workspace. `amiss-wire` is its foundation: strict JSON with
+canonical output, the digest rules, the report format, and every machine contract. Nothing in
+it knows what a repository is.
 
 `amiss-git` reads Git storage behind the never-follow-links boundary: loose objects, packs,
 deltas, and the index, each under a parser that rejects malformed input and a published
@@ -43,15 +46,28 @@ moves any of those moves the manifest, and review sees the diff.
 base-versus-candidate comparison, policy, and report construction. It is a library that
 does no I/O beyond the store handed to it.
 
-`amiss` is the binary: the closed command grammar, the in-process run, the two output
-formats. `amiss-bootstrap` validates a pinned action tree as data and launches a verified
-engine. It is the production crate allowed to start a process, and the process it starts is
-the binary it just verified. The bootstrap path exists but is not integrated into the
+`amiss` is the binary: the closed public command grammar, the in-process run, the two output
+formats, and a private sealed entry reserved for the bootstrap. `amiss-bootstrap` validates a
+pinned action tree and externally supplied constraint as data, validates three canonical
+requests, and launches the verified engine with a cleared environment and a closed stdin
+frame. It is the root production crate allowed to start a process, and the process it starts
+is the binary it just verified. The sealed path exists but is not integrated into the
 published convenience Action; [Project status](status.md) keeps that distinction explicit.
 A seventh crate, `amiss-fixtures`, exists only for tests: it writes hostile Git bytes
 straight into test repositories so the same fixtures exist on every platform.
 
-Inside a run, the stages form a line:
+The nested [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
+is outside that graph and outside the root lockfile. Its unpublished `amiss-controller` crate
+currently depends only on `amiss-wire`. It defines transport-neutral traits and identities for
+this sequence: authenticate an untouched delivery, claim its replay key durably, refresh exact
+provider change state, hand a repository/dialect/ref/commit/tree identity to a runner, refresh again,
+publish only a still-current result, then record durable completion. `ProviderAdapter`,
+`DeliveryLedger`, and `Runner` are boundaries, not implementations. No HTTP transport,
+provider SDK, credential source, database, repository acquisition worker, bootstrap runner,
+or deployable service exists in that workspace yet, so there is no arrow from it into the
+supported delivery graph.
+
+Inside an engine run, the stages form a line:
 
 ```dot process
 digraph pipeline {

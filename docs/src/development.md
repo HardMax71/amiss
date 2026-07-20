@@ -9,15 +9,25 @@ same two hook stages, so passing locally and passing remotely are the same thing
 hook table itself has a bug.
 
 ```sh
-cargo nextest run --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo nextest run --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+
+cargo nextest run --manifest-path controller/Cargo.toml --locked
+cargo clippy --manifest-path controller/Cargo.toml --all-targets --locked -- -D warnings
 ```
+
+The first pair checks the offline scanner workspace. The unpublished provider-controller
+foundation under `controller/` is a separate nested Rust workspace with its own lockfile and
+dependency policy, so the second pair checks it explicitly. The separation is a trust boundary:
+provider transport and storage dependencies belong in that nested workspace, never in the root
+engine workspace whose dependency bans keep networking and async runtimes out. The prek hooks
+and CI run both sets.
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
 [weekly mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
-publishes a non-gating measurement of that property; it does not currently certify a global
-mutation threshold.
+publishes a non-gating measurement of that property for the root scanner workspace; it does
+not currently cover `controller/` or certify a global mutation threshold.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the

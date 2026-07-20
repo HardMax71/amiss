@@ -7,6 +7,10 @@ use amiss::invocation::{self, CandidateSelector, Code, Invocation, Outcome, Outp
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
+use amiss_wire::requests::{
+    CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
+    RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA, SnapshotRequest,
+};
 
 /// Self-restriction, in safe Rust only: no child processes (the contract's
 /// zero repository-process budget), no core dumps (the address space holds
@@ -55,6 +59,9 @@ fn main() -> ExitCode {
     apply_sandbox();
     let mut reserve = FatalSerializer::new();
     let argv: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();
+    if argv.as_slice() == [std::ffi::OsString::from(SEALED_ENGINE_ARGUMENT)] {
+        return run_sealed(&mut reserve);
+    }
     let failure = ExitCode::from(ExitClass::Failure.code());
     match invocation::parse(&argv) {
         Outcome::MalformedOutputSelection => {
@@ -94,6 +101,129 @@ fn main() -> ExitCode {
         }
         Outcome::Accepted(invocation) => run(&invocation, &mut reserve),
     }
+}
+
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
+    use amiss_scan::pipeline::{SetupShell, commit_pair};
+
+    let failure = ExitCode::from(ExitClass::Failure.code());
+    let Some(engine) = engine_provenance() else {
+        eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
+        return failure;
+    };
+    let Ok(streams) = RequestStreams::read_from(&mut std::io::stdin().lock()) else {
+        eprintln!("amiss: {}", AnalysisErrorCode::RequestUnreadable.as_str());
+        return failure;
+    };
+    let parsed = (
+        EvaluationRequest::parse(&streams.evaluation),
+        SnapshotRequest::parse(&streams.snapshot),
+        ControlsRequest::parse(&streams.controls),
+    );
+    let (Ok(evaluation), Ok(snapshot), Ok(controls)) = parsed else {
+        eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_str());
+        return failure;
+    };
+    let canonical = evaluation.canonical_bytes().ok().as_deref() == Some(&streams.evaluation)
+        && snapshot.canonical_bytes().ok().as_deref() == Some(&streams.snapshot)
+        && controls.canonical_bytes().ok().as_deref() == Some(&streams.controls);
+    if !canonical || evaluation.mode != snapshot.materialization {
+        eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_str());
+        return failure;
+    }
+    let control_result = amiss_scan::request::controls(&controls);
+    let (inputs, external_defect) = match control_result {
+        Ok(inputs) => (inputs, None),
+        Err(detail) => (amiss_scan::request::ControlInputs::default(), Some(detail)),
+    };
+    let repo =
+        match amiss_git::Repository::open(std::path::Path::new("."), evaluation.object_format) {
+            Ok(repository) => repository,
+            Err(_defect) => {
+                eprintln!(
+                    "amiss: {}",
+                    AnalysisErrorCode::GitRepositoryUnavailable.as_str()
+                );
+                return failure;
+            }
+        };
+    let forge = sealed_forge(&evaluation);
+    let requests = amiss_scan::report::RequestDigests {
+        evaluation: Some(hb(EVALUATION_REQUEST_SCHEMA, &streams.evaluation)),
+        snapshot: Some(hb(SNAPSHOT_REQUEST_SCHEMA, &streams.snapshot)),
+        controls: Some(hb(CONTROLS_REQUEST_SCHEMA, &streams.controls)),
+    };
+    let shell = SetupShell {
+        engine,
+        enforce: matches!(evaluation.profile, amiss_wire::controls::Profile::Enforce),
+        repository: evaluation.repository.clone(),
+        forge: evaluation.forge,
+        candidate_ref: evaluation
+            .candidate_ref
+            .as_ref()
+            .map(|reference| reference.as_str().to_owned()),
+        target_ref: evaluation
+            .target_ref
+            .as_ref()
+            .map(|reference| reference.as_str().to_owned()),
+        default_branch_ref: evaluation
+            .default_branch_ref
+            .as_ref()
+            .map(|reference| reference.as_str().to_owned()),
+        floor: inputs.floor,
+        debt: inputs.debt,
+        waiver: inputs.waiver,
+        time: inputs.time,
+        constraint: inputs.constraint,
+        requests,
+        external_defect: external_defect.map(|detail| ("invalid-external-control", detail)),
+        errors_retained: 64,
+    };
+    let built = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
+        (RequestMode::CommitPair, Some(candidate)) => commit_pair(
+            &repo,
+            &shell.engine,
+            forge.as_ref(),
+            &shell,
+            &evaluation.base_commit,
+            candidate,
+        ),
+        (RequestMode::Index, None) => amiss_scan::pipeline::staged_index(
+            &repo,
+            &shell.engine,
+            forge.as_ref(),
+            &shell,
+            &evaluation.base_commit,
+        ),
+        (RequestMode::CommitPair, None) | (RequestMode::Index, Some(_)) => return failure,
+    };
+    emit(reserve, &built.envelope);
+    exit_class(built.exit_code)
+}
+
+fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::ForgeContext> {
+    let (Some(identity), Some(dialect)) = (&evaluation.repository, evaluation.forge) else {
+        return None;
+    };
+    Some(amiss_scan::resolve::ForgeContext {
+        host: identity.host.clone(),
+        dialect,
+        owner: identity.owner.clone(),
+        repository: identity.name.clone(),
+        candidate_ref: evaluation
+            .candidate_ref
+            .as_ref()
+            .map_or_else(String::new, |reference| reference.as_str().to_owned()),
+        default_ref: evaluation
+            .default_branch_ref
+            .as_ref()
+            .map_or_else(String::new, |reference| reference.as_str().to_owned()),
+        candidate_oid: evaluation
+            .candidate_commit
+            .as_ref()
+            .map(|oid| oid.as_str().to_owned()),
+    })
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
@@ -164,6 +294,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             .identity
             .as_ref()
             .map(|identity| identity.ref_name.as_str().to_owned()),
+        target_ref: None,
         default_branch_ref: invocation
             .identity
             .as_ref()
@@ -231,6 +362,7 @@ fn fatal(
         repository: None,
         forge: None,
         candidate_ref: None,
+        target_ref: None,
         default_branch_ref: None,
         base: identity(&invocation.base),
         candidate,

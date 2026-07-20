@@ -509,7 +509,7 @@ impl TrustSource {
 pub fn verify_floor(
     input: &FloorInput,
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
-    candidate_ref: Option<&str>,
+    target_ref: Option<&str>,
     enforce: bool,
 ) -> Result<(), ErrorDetail> {
     let mismatch = ErrorDetail {
@@ -525,7 +525,7 @@ pub fn verify_floor(
     if floor.repository != *identity {
         return Err(mismatch);
     }
-    if candidate_ref != Some(floor.ref_name.as_str()) {
+    if target_ref != Some(floor.ref_name.as_str()) {
         return Err(mismatch);
     }
     let minimum_enforce = matches!(
@@ -582,9 +582,9 @@ fn identity_matches(
     control: &amiss_wire::model::RepositoryIdentity,
     control_ref: &amiss_wire::model::BranchRef,
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
-    candidate_ref: Option<&str>,
+    target_ref: Option<&str>,
 ) -> bool {
-    repository == Some(control) && candidate_ref == Some(control_ref.as_str())
+    repository == Some(control) && target_ref == Some(control_ref.as_str())
 }
 
 /// The statement's evaluation bindings: repository, ref, candidate identity,
@@ -597,7 +597,7 @@ fn identity_matches(
 pub fn verify_time(
     input: &TimeInput,
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
-    candidate_ref: Option<&str>,
+    target_ref: Option<&str>,
     candidate_identity: &Digest,
 ) -> Result<(), ErrorDetail> {
     let statement = &input.statement;
@@ -605,7 +605,7 @@ pub fn verify_time(
         &statement.repository,
         &statement.ref_name,
         repository,
-        candidate_ref,
+        target_ref,
     ) && statement.candidate_identity_digest == *candidate_identity
         && statement.provider == input.provider
         && statement.provider_run_id == input.provider_run_id
@@ -632,7 +632,7 @@ pub fn verify_time(
 pub fn verify_debt(
     input: &DebtInput,
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
-    candidate_ref: Option<&str>,
+    target_ref: Option<&str>,
     floor: Option<&FloorInput>,
     instant: &amiss_wire::model::UtcInstant,
     item_limit: u64,
@@ -657,7 +657,7 @@ pub fn verify_debt(
         &snapshot.repository,
         &snapshot.ref_name,
         repository,
-        candidate_ref,
+        target_ref,
     ) && snapshot.organization_floor_digest == floor.floor.digest
         && snapshot.created_at <= *instant
         && snapshot.items.iter().all(|item| {
@@ -681,7 +681,7 @@ pub fn verify_debt(
 pub fn verify_waiver(
     input: &WaiverInput,
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
-    candidate_ref: Option<&str>,
+    target_ref: Option<&str>,
     floor: Option<&FloorInput>,
     instant: &amiss_wire::model::UtcInstant,
     item_limit: u64,
@@ -702,12 +702,8 @@ pub fn verify_waiver(
     let Some(floor) = floor else {
         return Err(binding_mismatch_row());
     };
-    let bound = identity_matches(
-        &bundle.repository,
-        &bundle.ref_name,
-        repository,
-        candidate_ref,
-    ) && bundle.organization_floor_digest == floor.floor.digest
+    let bound = identity_matches(&bundle.repository, &bundle.ref_name, repository, target_ref)
+        && bundle.organization_floor_digest == floor.floor.digest
         && bundle.created_at <= *instant;
     if bound {
         Ok(())

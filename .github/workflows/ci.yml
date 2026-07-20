@@ -33,7 +33,8 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: gates-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+            controller/target
+          key: gates-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'controller/Cargo.lock') }}
           restore-keys: gates-
       - run: prek run --all-files
       - run: prek run --all-files --hook-stage pre-push

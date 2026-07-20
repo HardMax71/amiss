@@ -7,6 +7,7 @@ use amiss_wire::report::{
     IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block, error_row_value,
     sandbox_descriptor,
 };
+pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 use amiss_wire::resolution::Resolution;
 
 use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
@@ -122,6 +123,7 @@ pub struct Setup {
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
     pub candidate_ref: Option<String>,
+    pub target_ref: Option<String>,
     pub default_branch_ref: Option<String>,
     pub base: SnapshotIdentity,
     pub candidate: CandidateBlock,
@@ -906,7 +908,8 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
                 ])
             }),
         ),
-        ("ref", nullable(setup.candidate_ref.as_deref())),
+        ("candidate_ref", nullable(setup.candidate_ref.as_deref())),
+        ("target_ref", nullable(setup.target_ref.as_deref())),
         (
             "default_branch_ref",
             nullable(setup.default_branch_ref.as_deref()),
@@ -924,18 +927,12 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
 
 /// The rolling candidate identity. The selected forge is resolution-significant,
 /// so it is bound alongside the repository and snapshots.
-pub const CANDIDATE_IDENTITY_DOMAIN: &str = "amiss/scanner-candidate-identity";
-
 fn candidate_identity_value(setup: &Setup) -> Value {
-    let mut rows = vec![("schema", string(CANDIDATE_IDENTITY_DOMAIN))];
-    rows.extend(identity_rows(setup));
-    rows.push((
-        "forge",
-        setup
-            .forge
-            .map_or(Value::Null, |dialect| string(dialect.as_str())),
-    ));
-    object(rows)
+    identity_value(
+        setup,
+        vec![("schema", string(CANDIDATE_IDENTITY_DOMAIN))],
+        Vec::new(),
+    )
 }
 
 /// The candidate-identity digest a trusted-time statement must carry: `HJ`
@@ -946,14 +943,28 @@ pub fn candidate_identity_digest(setup: &Setup) -> Digest {
 }
 
 fn evaluation_value(setup: &Setup) -> Value {
-    let mut rows = identity_rows(setup);
-    rows.push((
-        "evaluation_instant",
-        setup.policy.time.as_ref().map_or(Value::Null, |time| {
-            string(time.statement.evaluation_instant.as_str())
-        }),
-    ));
-    rows.push(("trusted_time", Value::Bool(setup.policy.time.is_some())));
+    identity_value(
+        setup,
+        Vec::new(),
+        vec![
+            (
+                "evaluation_instant",
+                setup.policy.time.as_ref().map_or(Value::Null, |time| {
+                    string(time.statement.evaluation_instant.as_str())
+                }),
+            ),
+            ("trusted_time", Value::Bool(setup.policy.time.is_some())),
+        ],
+    )
+}
+
+fn identity_value(
+    setup: &Setup,
+    mut rows: Vec<(&'static str, Value)>,
+    before_forge: Vec<(&'static str, Value)>,
+) -> Value {
+    rows.extend(identity_rows(setup));
+    rows.extend(before_forge);
     rows.push((
         "forge",
         setup

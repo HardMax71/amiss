@@ -1,14 +1,23 @@
+use std::io::{Read, Write};
+
 use crate::controls::{
     Profile, decode_provider_id, decode_provider_run_id, decode_repository, root,
 };
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
-use crate::json::Value;
+use crate::json::{Value, canonical};
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 pub const EVALUATION_REQUEST_SCHEMA: &str = "amiss/scanner-evaluation-request";
 pub const SNAPSHOT_REQUEST_SCHEMA: &str = "amiss/scanner-snapshot-request";
 pub const CONTROLS_REQUEST_SCHEMA: &str = "amiss/scanner-controls-request";
+pub const CANDIDATE_IDENTITY_DOMAIN: &str = "amiss/scanner-candidate-identity";
+
+/// The one non-public engine entry point the trusted bootstrap invokes. The
+/// ordinary command grammar never recognizes this argument.
+pub const SEALED_ENGINE_ARGUMENT: &str = "__amiss-sealed-request-v1";
+
+const SEALED_FRAME_MAGIC: &[u8; 8] = b"AMISSRQ1";
 
 /// Every request stream is one complete bounded byte capture from byte zero
 /// through EOF; its diagnostic digest exists exactly when EOF was obtained
@@ -45,7 +54,8 @@ pub struct EvaluationRequest {
     pub object_format: ObjectFormat,
     pub repository: Option<RepositoryIdentity>,
     pub forge: Option<ForgeDialect>,
-    pub ref_name: Option<BranchRef>,
+    pub candidate_ref: Option<BranchRef>,
+    pub target_ref: Option<BranchRef>,
     pub default_branch_ref: Option<BranchRef>,
     pub base_commit: Oid,
     pub candidate_commit: Option<Oid>,
@@ -86,10 +96,15 @@ impl EvaluationRequest {
         let forge = de::nullable(obj.take("forge")?)
             .map(|value| decode_forge(&forge_path, value))
             .transpose()?;
-        let ref_path = obj.field("ref");
-        let ref_name = match de::nullable(obj.take("ref")?) {
+        let candidate_ref_path = obj.field("candidate_ref");
+        let candidate_ref = match de::nullable(obj.take("candidate_ref")?) {
             None => None,
-            Some(value) => Some(decode_ref(&ref_path, value)?),
+            Some(value) => Some(decode_ref(&candidate_ref_path, value)?),
+        };
+        let target_ref_path = obj.field("target_ref");
+        let target_ref = match de::nullable(obj.take("target_ref")?) {
+            None => None,
+            Some(value) => Some(decode_ref(&target_ref_path, value)?),
         };
         let default_path = obj.field("default_branch_ref");
         let default_branch_ref = match de::nullable(obj.take("default_branch_ref")?) {
@@ -118,7 +133,15 @@ impl EvaluationRequest {
         if !consistent {
             return fail(&candidate_path, ErrorKind::Inconsistent);
         }
-        if forge.is_some() && repository.is_none()
+        let identity_fields = [
+            repository.is_some(),
+            candidate_ref.is_some(),
+            target_ref.is_some(),
+            default_branch_ref.is_some(),
+        ];
+        if !identity_fields.iter().all(|present| *present)
+            && identity_fields.iter().any(|present| *present)
+            || forge.is_some() && repository.is_none()
             || matches!(forge, Some(ForgeDialect::Github | ForgeDialect::Gitea))
                 && repository
                     .as_ref()
@@ -132,11 +155,63 @@ impl EvaluationRequest {
             object_format,
             repository,
             forge,
-            ref_name,
+            candidate_ref,
+            target_ref,
             default_branch_ref,
             base_commit,
             candidate_commit,
         })
+    }
+
+    /// Builds an explicit-commit evaluation with no forge identity. Callers
+    /// may then fill the public identity fields before serialization.
+    #[must_use]
+    pub fn commit_pair(
+        profile: Profile,
+        object_format: ObjectFormat,
+        base_commit: Oid,
+        candidate_commit: Oid,
+    ) -> Self {
+        Self::without_identity(profile, object_format, base_commit, Some(candidate_commit))
+    }
+
+    /// Builds a staged-index evaluation with no forge identity.
+    #[must_use]
+    pub fn index(profile: Profile, object_format: ObjectFormat, base_commit: Oid) -> Self {
+        Self::without_identity(profile, object_format, base_commit, None)
+    }
+
+    fn without_identity(
+        profile: Profile,
+        object_format: ObjectFormat,
+        base_commit: Oid,
+        candidate_commit: Option<Oid>,
+    ) -> Self {
+        Self {
+            profile,
+            mode: if candidate_commit.is_some() {
+                RequestMode::CommitPair
+            } else {
+                RequestMode::Index
+            },
+            object_format,
+            repository: None,
+            forge: None,
+            candidate_ref: None,
+            target_ref: None,
+            default_branch_ref: None,
+            base_commit,
+            candidate_commit,
+        }
+    }
+
+    /// Serializes one valid request to its unique canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// The constructed fields violate the same laws [`Self::parse`] enforces.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
+        checked_canonical(&evaluation_value(self), Self::parse)
     }
 }
 
@@ -160,6 +235,20 @@ pub struct SnapshotRequest {
 }
 
 impl SnapshotRequest {
+    #[must_use]
+    pub const fn git_objects() -> Self {
+        Self {
+            materialization: RequestMode::CommitPair,
+        }
+    }
+
+    #[must_use]
+    pub const fn index() -> Self {
+        Self {
+            materialization: RequestMode::Index,
+        }
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
@@ -189,6 +278,15 @@ impl SnapshotRequest {
         }
         obj.finish()?;
         Ok(Self { materialization })
+    }
+
+    /// Serializes one valid request to its unique canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// The constructed fields violate the same laws [`Self::parse`] enforces.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
+        checked_canonical(&snapshot_value(*self), Self::parse)
     }
 }
 
@@ -283,6 +381,250 @@ impl ControlsRequest {
             execution_constraint,
         })
     }
+
+    /// Serializes one valid request to its unique canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// The constructed fields violate the same laws [`Self::parse`] enforces.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
+        if self
+            .trusted_time
+            .as_ref()
+            .is_some_and(|time| i64::try_from(time.provider_run_attempt).is_err())
+        {
+            return fail(
+                "$.trusted_time.provider_run_attempt",
+                ErrorKind::InvalidValue,
+            );
+        }
+        checked_canonical(&controls_value(self), Self::parse)
+    }
+}
+
+/// The three exact streams carried through the bootstrap-to-engine pipe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequestStreams {
+    pub evaluation: Vec<u8>,
+    pub snapshot: Vec<u8>,
+    pub controls: Vec<u8>,
+}
+
+impl RequestStreams {
+    /// Writes the closed frame: magic, then three big-endian lengths and
+    /// their exact request bytes in evaluation/snapshot/controls order.
+    ///
+    /// # Errors
+    ///
+    /// A stream exceeds the request ceiling or the destination cannot be
+    /// written completely.
+    pub fn write_to(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        writer.write_all(SEALED_FRAME_MAGIC)?;
+        for bytes in [&self.evaluation, &self.snapshot, &self.controls] {
+            let length = u64::try_from(bytes.len())
+                .map_err(|_defect| invalid_frame("request length is not representable"))?;
+            if length > REQUEST_STREAM_BYTES {
+                return Err(invalid_frame("request exceeds the stream ceiling"));
+            }
+            writer.write_all(&length.to_be_bytes())?;
+            writer.write_all(bytes)?;
+        }
+        Ok(())
+    }
+
+    /// Reads one complete closed request frame and refuses trailing bytes.
+    ///
+    /// # Errors
+    ///
+    /// The source is truncated, malformed, oversized, has trailing bytes,
+    /// or otherwise cannot be read completely.
+    pub fn read_from(reader: &mut impl Read) -> std::io::Result<Self> {
+        let mut magic = [0_u8; 8];
+        reader.read_exact(&mut magic)?;
+        if &magic != SEALED_FRAME_MAGIC {
+            return Err(invalid_frame("wrong sealed request frame"));
+        }
+        let evaluation = read_stream(reader)?;
+        let snapshot = read_stream(reader)?;
+        let controls = read_stream(reader)?;
+        let mut trailing = [0_u8; 1];
+        if reader.read(&mut trailing)? != 0 {
+            return Err(invalid_frame("trailing sealed request bytes"));
+        }
+        Ok(Self {
+            evaluation,
+            snapshot,
+            controls,
+        })
+    }
+}
+
+fn read_stream(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
+    let mut encoded = [0_u8; 8];
+    reader.read_exact(&mut encoded)?;
+    let length = u64::from_be_bytes(encoded);
+    if length > REQUEST_STREAM_BYTES {
+        return Err(invalid_frame("request exceeds the stream ceiling"));
+    }
+    let capacity = usize::try_from(length)
+        .map_err(|_defect| invalid_frame("request length is not representable"))?;
+    let mut bytes = vec![0_u8; capacity];
+    reader.read_exact(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn invalid_frame(message: &'static str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, message)
+}
+
+fn checked_canonical<T>(
+    value: &Value,
+    parse: impl FnOnce(&[u8]) -> Result<T, Error>,
+) -> Result<Vec<u8>, Error> {
+    let bytes = canonical(value);
+    let _parsed = parse(&bytes)?;
+    Ok(bytes)
+}
+
+fn text(value: &str) -> Value {
+    Value::String(value.to_owned())
+}
+
+fn optional_text(value: Option<&str>) -> Value {
+    value.map_or(Value::Null, text)
+}
+
+fn object(rows: Vec<(&str, Value)>) -> Value {
+    Value::Object(
+        rows.into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    )
+}
+
+fn repository_value(identity: &RepositoryIdentity) -> Value {
+    object(vec![
+        ("host", text(&identity.host)),
+        ("owner", text(&identity.owner)),
+        ("name", text(&identity.name)),
+    ])
+}
+
+fn evaluation_value(request: &EvaluationRequest) -> Value {
+    object(vec![
+        ("schema", text(EVALUATION_REQUEST_SCHEMA)),
+        (
+            "profile",
+            text(match request.profile {
+                Profile::Observe => "observe",
+                Profile::Enforce => "enforce",
+            }),
+        ),
+        ("mode", text(request.mode.as_str())),
+        ("object_format", text(request.object_format.as_str())),
+        (
+            "repository",
+            request
+                .repository
+                .as_ref()
+                .map_or(Value::Null, repository_value),
+        ),
+        (
+            "forge",
+            request
+                .forge
+                .map_or(Value::Null, |forge| text(forge.as_str())),
+        ),
+        (
+            "candidate_ref",
+            optional_text(request.candidate_ref.as_ref().map(BranchRef::as_str)),
+        ),
+        (
+            "target_ref",
+            optional_text(request.target_ref.as_ref().map(BranchRef::as_str)),
+        ),
+        (
+            "default_branch_ref",
+            optional_text(request.default_branch_ref.as_ref().map(BranchRef::as_str)),
+        ),
+        ("base_commit_oid", text(request.base_commit.as_str())),
+        (
+            "candidate_commit_oid",
+            optional_text(request.candidate_commit.as_ref().map(Oid::as_str)),
+        ),
+    ])
+}
+
+fn snapshot_value(request: SnapshotRequest) -> Value {
+    object(vec![
+        ("schema", text(SNAPSHOT_REQUEST_SCHEMA)),
+        (
+            "materialization",
+            text(match request.materialization {
+                RequestMode::CommitPair => "git-objects",
+                RequestMode::Index => "index",
+            }),
+        ),
+        (
+            "repository_handle",
+            Value::Integer(REPOSITORY_HANDLE_ORDINAL),
+        ),
+        ("pre_acquired", Value::Bool(true)),
+    ])
+}
+
+fn supplied_value(control: &SuppliedControl) -> Value {
+    let mut rows = supplied_rows(&control.value, control.expected_digest);
+    rows.push(("trust_source", text(control.trust_source.as_str())));
+    object(rows)
+}
+
+fn supplied_time_value(time: &SuppliedTime) -> Value {
+    let mut rows = supplied_rows(&time.value, time.expected_digest);
+    rows.extend([
+        ("provider", text(&time.provider)),
+        ("provider_run_id", text(&time.provider_run_id)),
+        (
+            "provider_run_attempt",
+            Value::Integer(i64::try_from(time.provider_run_attempt).unwrap_or(i64::MAX)),
+        ),
+    ]);
+    object(rows)
+}
+
+fn supplied_rows(value: &Value, expected_digest: Digest) -> Vec<(&'static str, Value)> {
+    vec![
+        ("value", value.clone()),
+        ("expected_digest", text(&expected_digest.to_string())),
+    ]
+}
+
+fn controls_value(request: &ControlsRequest) -> Value {
+    let mut rows = Vec::with_capacity(6);
+    for (name, control) in [
+        ("organization_floor", request.organization_floor.as_ref()),
+        ("debt_snapshot", request.debt_snapshot.as_ref()),
+        ("waiver_bundle", request.waiver_bundle.as_ref()),
+    ] {
+        rows.push((name, optional_supplied(control)));
+    }
+    rows.push((
+        "trusted_time",
+        request
+            .trusted_time
+            .as_ref()
+            .map_or(Value::Null, supplied_time_value),
+    ));
+    rows.push((
+        "execution_constraint",
+        optional_supplied(request.execution_constraint.as_ref()),
+    ));
+    rows.push(("schema", text(CONTROLS_REQUEST_SCHEMA)));
+    object(rows)
+}
+
+fn optional_supplied(control: Option<&SuppliedControl>) -> Value {
+    control.map_or(Value::Null, supplied_value)
 }
 
 fn embedded_value(path: &str, value: Value) -> Result<Value, Error> {

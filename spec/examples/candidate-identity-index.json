@@ -4,7 +4,8 @@
   "event_kind": "local-index",
   "finality": "local-nonfinal",
   "repository": null,
-  "ref": null,
+  "candidate_ref": null,
+  "target_ref": null,
   "default_branch_ref": null,
   "base": {
     "kind": "git-commit",

@@ -33,29 +33,43 @@ execution constraint.
 Every control identity, and the release manifest's, uses one open repository grammar: a
 caller-canonical host, a slash-joined owner when the forge supports nested groups, and a
 repository name. That admits enterprise and self-hosted instances without making them
-impersonate a public host. The
+impersonate a public host. In the evaluation request, `candidate_ref` is the candidate or
+source branch used to recognize same-repository links; `target_ref` is the protected branch to
+which the organization floor, trusted time, debt snapshot, and waiver bundle bind. They are
+equal for an ordinary branch update but may differ for a pull or merge request.
+`default_branch_ref` remains URL-resolution context and does not stand in for the protected
+target. The
 [organization-floor](https://github.com/HardMax71/amiss/blob/main/spec/organization-floor.schema.json),
 [debt-snapshot](https://github.com/HardMax71/amiss/blob/main/spec/debt-snapshot.schema.json), and
 [waiver-bundle](https://github.com/HardMax71/amiss/blob/main/spec/waiver-bundle.schema.json) schemas, the
 [control parsers](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls.rs), and their
 [open-forge contract tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/tests/controls.rs) pin that grammar and
-the exact repository/ref binding. The execution constraint additionally pins the action
-tree, release manifest, platform, status, and bootstrap in its
+the exact repository/target-ref binding. The execution constraint additionally pins the action
+tree, release manifest, platform, declared required-status name, and bootstrap in its
 [dedicated parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls/execution_constraint.rs).
+A status name is data, not proof of which provider integration published it; source-bound
+enforcement remains an adapter responsibility.
 
 Trusted time binds more than a timestamp. Its
 [current parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls/trusted_time.rs) requires the repository
-and ref, a provider namespace, an opaque bounded provider run ID and positive attempt, and
-the candidate-identity digest. That candidate identity includes the selected forge as well
-as the repository and snapshots, so changing the URL dialect cannot replay a statement for
-the same Git trees. The controls request must repeat the same provider/run tuple, and the
+and protected target ref, a provider namespace, an opaque bounded provider run ID and positive
+attempt, and the candidate-identity digest. That candidate identity includes both candidate and
+target refs, the selected URL dialect, the repository, and the snapshots, so changing any of
+those cannot replay a statement for the same Git trees. The controls request must repeat the
+same provider/run tuple, and the
 [verification gate](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) compares it byte-for-byte before
 using the time.
 
-These are binding rules, not authentication. An adapter still has to acquire the request
-and statement from a provider-controlled channel. Debt must reproduce its adoption tree,
-and a waiver item for another candidate tree is simply not selected. The commit and
-staged-index paths share one
+These are binding rules, not authentication. The separate controller foundation defines the
+required order: an adapter authenticates an untouched provider delivery, a durable ledger
+claims its replay identity, the adapter refreshes authoritative state, and only then may a
+runner construct the requests for that exact repository, URL dialect, candidate, target and
+default-branch refs, commits, and trees. It refreshes again before publication. No concrete
+adapter, durable ledger, runner, or publisher implements that contract today. The request's
+`forge` value remains only the URL
+dialect used by link resolution and is separate from the controller's provider namespace and
+instance identity. Debt must reproduce its adoption tree, and a waiver item for another
+candidate tree is simply not selected. The commit and staged-index paths share one
 [trusted-time, debt, and waiver pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 
 Debt and waiver require verified trusted time and a complete Git candidate. An item
@@ -85,18 +99,25 @@ The machine-facing evaluation and controls requests are closed by the
 intentional: before 1.0 the shipped schema, parser, examples, and report form one rolling
 contract and move together.
 
-In the public command and GitHub composite Action, all five external controls are absent. The
-report records `status: "none"` separately for organization floor, debt snapshot, waiver
-bundle, execution constraint, and trusted time; its sandbox assurance is `self-asserted`.
-There is no aggregate `provider_verified` field. The exact projection is built in the
+In the public command and GitHub composite Action, all five external controls are absent and no
+protected target ref is authenticated. The report records `status: "none"` separately for
+organization floor, debt snapshot, waiver bundle, execution constraint, and trusted time; its
+sandbox assurance is `self-asserted`. There is no aggregate `provider_verified` field. The
+exact projection is built in the
 [report writer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/report.rs).
 
-Strict request parsers and the five control semantics exist as internal library surfaces,
-but authenticated provider acquisition and public CLI/bootstrap wiring do not. The public
-[CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) supplies
-each value as `None`. Until the delivery lane in [Project status](status.md) is complete, the
-honest reading of a local or convenience-adapter report is: these findings, under this
-repository policy, with no outside authority consulted.
+The sealed bootstrap path can now carry all five controls to the engine. Its report acceptance
+binds the requested profile; exact organization-floor, debt-snapshot, and waiver-bundle
+presence, digest, and trust source; the execution-constraint digest, trust source, and
+recomputed descriptor semantics; the trusted-time digest, provider run, instant, and recomputed
+statement semantics; and the candidate identity and honest sandbox projection. The public
+[CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) still supplies
+each value as `None`. A report control row with `status: "verified"` means the engine verified
+the supplied value's digest and identity relationships. It does not prove that a provider
+authenticated or supplied the value: neither the report nor its enum authenticates its own
+source. Until the delivery lane in [Project status](status.md) is complete, the honest reading
+of a local or convenience-Action report is: these findings, under this repository policy, with
+no outside authority consulted.
 
 The control-plane finding family closes the loop from the other side. When a candidate
 weakens its own policy file or drops required coverage, the comparison raises

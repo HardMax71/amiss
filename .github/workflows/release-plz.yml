@@ -62,10 +62,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      # release-plz updates the root workspace lockfile, but fuzz is an
-      # intentionally separate workspace. Commit its path-package IDs to the
-      # release PR too, so locked CI verifies the repository instead of fixing
-      # an incomplete release checkout in place.
+      # release-plz updates the root workspace lockfile, but the controller and
+      # fuzz are intentionally separate workspaces. Commit their path-package
+      # IDs to the release PR too, so locked CI verifies the repository instead
+      # of fixing an incomplete release checkout in place.
       - name: Refresh generated release files in the release PR
         shell: bash
         env:
@@ -83,6 +83,8 @@ jobs:
           # let only this runner's remote-tracking ref follow that rewrite.
           git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
           git switch --force-create "$branch" "origin/$branch"
+          cargo update --workspace --manifest-path controller/Cargo.toml
+          cargo test --manifest-path controller/Cargo.toml --locked
           cargo update --workspace --manifest-path fuzz/Cargo.toml
           cargo test --manifest-path fuzz/Cargo.toml --locked --release
 
@@ -99,19 +101,20 @@ jobs:
           grep -Fxq "      uses: HardMax71/amiss@action/v${version}" action.yml
 
           if [[ -n "$(git status --short --untracked-files=all -- . \
-            ':(exclude)fuzz/Cargo.lock' ':(exclude)action.yml')" ]]; then
+            ':(exclude)controller/Cargo.lock' ':(exclude)fuzz/Cargo.lock' \
+            ':(exclude)action.yml')" ]]; then
             echo "Refreshing release-generated files changed an unexpected path"
             git status --short
             exit 1
           fi
-          if git diff --quiet -- fuzz/Cargo.lock action.yml; then
+          if git diff --quiet -- controller/Cargo.lock fuzz/Cargo.lock action.yml; then
             echo "The release-generated files are already current"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fuzz/Cargo.lock action.yml
+          git add controller/Cargo.lock fuzz/Cargo.lock action.yml
           git commit -m "chore: refresh release-generated files"
 
           # Authenticate for this push only; do not persist the token in the

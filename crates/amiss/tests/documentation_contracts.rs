@@ -16,13 +16,15 @@ use amiss_wire::controls::{
     OrganizationFloor, ResourceName, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::manifest::ReleaseManifest;
-use amiss_wire::model::ForgeDialect;
+use amiss_wire::model::{BranchRef, ForgeDialect};
 use amiss_wire::report::{
     AnalysisErrorCode, ENVELOPE_SCHEMA, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind,
     MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, PRIVATE_TEMPORARY_STORAGE_BYTES,
 };
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
 use sha2::{Digest as _, Sha256};
+
+const BRANCH_REF_SCHEMA_PATTERN: &str = r"^refs/heads/(?!/)(?![\s\S]*\.\.)(?![\s\S]*@\{)(?![\s\S]*[~^:?*\[\\\u0000-\u001f\u007f ])(?!\.)(?![\s\S]*/\.)(?![^/]*\.lock(?:/|$))(?![\s\S]*/[^/]*\.lock(?:/|$))(?![\s\S]*//)(?![\s\S]*/$)(?![\s\S]*\.$).+$";
 
 fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -106,6 +108,66 @@ fn schema_enum(schema: &serde_json::Value, name: &str) -> Vec<String> {
                 .to_owned()
         })
         .collect()
+}
+
+fn check_schema_bounds(
+    value: &serde_json::Value,
+    schema: &Path,
+    branch_count: &mut usize,
+    attempt_count: &mut usize,
+) {
+    match value {
+        serde_json::Value::Object(members) => {
+            if let Some(pattern) = members.get("pattern").and_then(serde_json::Value::as_str)
+                && pattern.starts_with("^refs/heads/")
+            {
+                assert_eq!(
+                    pattern,
+                    BRANCH_REF_SCHEMA_PATTERN,
+                    "{} has a weaker branch-ref grammar",
+                    schema.display(),
+                );
+                assert_eq!(
+                    members.get("minLength").and_then(serde_json::Value::as_u64),
+                    Some(12),
+                    "{} has the wrong branch-ref minimum",
+                    schema.display(),
+                );
+                assert_eq!(
+                    members.get("maxLength").and_then(serde_json::Value::as_u64),
+                    Some(266),
+                    "{} has the wrong branch-ref maximum",
+                    schema.display(),
+                );
+                *branch_count = (*branch_count).saturating_add(1);
+            }
+            if let Some(attempt) = members.get("provider_run_attempt")
+                && attempt.get("type").and_then(serde_json::Value::as_str) == Some("integer")
+            {
+                let safe_max = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER)
+                    .expect("the JSON safe-integer maximum is positive");
+                assert_eq!(
+                    attempt.get("maximum").and_then(serde_json::Value::as_u64),
+                    Some(safe_max),
+                    "{} advertises a provider attempt its strict JSON reader rejects",
+                    schema.display(),
+                );
+                *attempt_count = (*attempt_count).saturating_add(1);
+            }
+            for member in members.values() {
+                check_schema_bounds(member, schema, branch_count, attempt_count);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                check_schema_bounds(item, schema, branch_count, attempt_count);
+            }
+        }
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => {}
+    }
 }
 
 fn documented_contract(document: &str, name: &str) -> String {
@@ -454,6 +516,60 @@ fn documented_enum_sources_match_the_active_report_schema() {
         schema_enum(&schema, "ForgeDialect"),
         "the runtime forge dialects drifted from the report schema"
     );
+}
+
+#[test]
+fn public_schemas_share_the_branch_ref_and_integer_bounds() {
+    let mut branch_patterns = 0_usize;
+    let mut provider_attempts = 0_usize;
+    for (_name, schema_path, _example_path) in public_schema_examples() {
+        let schema: serde_json::Value =
+            serde_json::from_slice(&fs::read(&schema_path).expect("public schema is readable"))
+                .expect("public schema is JSON");
+        check_schema_bounds(
+            &schema,
+            &schema_path,
+            &mut branch_patterns,
+            &mut provider_attempts,
+        );
+    }
+    assert!(
+        branch_patterns >= 12,
+        "every branch-ref schema projection is checked; found {branch_patterns}"
+    );
+    assert!(
+        provider_attempts >= 4,
+        "every provider-run-attempt schema projection is checked; found {provider_attempts}"
+    );
+
+    let branch_schema = serde_json::json!({
+        "type": "string",
+        "minLength": 12,
+        "maxLength": 266,
+        "pattern": BRANCH_REF_SCHEMA_PATTERN,
+    });
+    let branch_validator =
+        jsonschema::validator_for(&branch_schema).expect("branch-ref schema compiles");
+    for reference in ["refs/heads/main", "refs/heads/topic/docs"] {
+        assert!(
+            BranchRef::new(reference.to_owned()).is_some()
+                && branch_validator.is_valid(&serde_json::json!(reference)),
+            "the Rust and schema branch-ref grammars must accept {reference}",
+        );
+    }
+    for reference in [
+        "refs/heads//topic",
+        "refs/heads/topic/",
+        "refs/heads/.topic",
+        "refs/heads/topic.lock",
+        "refs/heads/topic..next",
+    ] {
+        assert!(
+            BranchRef::new(reference.to_owned()).is_none()
+                && !branch_validator.is_valid(&serde_json::json!(reference)),
+            "the Rust and schema branch-ref grammars must reject {reference}",
+        );
+    }
 }
 
 #[test]

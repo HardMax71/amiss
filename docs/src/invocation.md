@@ -39,6 +39,15 @@ branch while another candidate is under test is recognized but remains
 `unsupported-version-scope`. Without the identity group, forge links remain external URLs
 and are skipped, and the report says so.
 
+This public `--ref` is the candidate or source ref; it is not the protected target branch and
+does not authorize external controls. The direct command has no `--target-ref` option and emits
+a null report target. The internal evaluation request used by the sealed bootstrap carries
+`candidate_ref` and `target_ref` separately, and the branch-scoped control gates match the
+latter.
+`--default-branch-ref` is still URL-resolution context, not an implicit target. Consequently a
+human CLI invocation cannot create a provider-authenticated run merely by spelling provider
+identity fields.
+
 The identity's spelling is strict. The host is any spelling without a slash: Amiss never
 resolves it, and it is matched byte for byte against the URLs in your documents, so pass
 the lowercase form your links actually use. The owner is one or more slash-joined
@@ -56,6 +65,9 @@ dialects and any other host selects none, in which case absolute links to that h
 foreign and the report's `evaluation.forge` is null. An explicit flag always beats the
 table, which is how a self-hosted instance gets its grammar. The github and gitea dialects
 refuse a nested owner they could never match.
+This dialect selection is independent of the provider-controller adapter registry: recognizing
+a GitLab or Gitea-family URL does not mean that an authenticated adapter for that provider
+exists.
 
 `--explain-scope` does not create a separate early-exit command. The scan still runs, and in
 human format the flag adds deterministic scope lines to the normal result. JSON output is

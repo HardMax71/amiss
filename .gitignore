@@ -1,4 +1,5 @@
 /target
+controller/target/
 fuzz/target/
 fuzz/corpus/
 fuzz/artifacts/

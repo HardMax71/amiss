@@ -48,7 +48,7 @@ paths and messages.
 
 Two delivery paths need different trust descriptions. The root
 [Action dispatcher](https://github.com/HardMax71/amiss/blob/main/action.yml) makes conventional source release tags usable by delegating to the same version's immutable
-[`action/vX.Y.Z` runtime](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml). That immutable second ref is part of a source-tag or source-commit pin; users that require one complete tree can pin the generated runtime tag or commit directly. The runtime is a GitHub event adapter. It verifies
+[`action/vX.Y.Z` runtime](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml). That immutable second ref is part of a source-tag or source-commit pin; users that require one complete tree can pin the generated runtime tag or commit directly. The runtime is a GitHub convenience event wrapper. It verifies
 the selected engine's digest against the release manifest carried in the same action tree,
 then launches the engine directly. That detects an inconsistent tree, but the manifest is
 not an independently acquired trust anchor, and this lane does not use bootstrap's
@@ -62,11 +62,43 @@ format-level `github.com` assumption but does not authenticate the supplied iden
 
 The separately executable
 [`amiss-bootstrap`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs)
-implements the stronger mechanism: validate an action tree and execution constraint as
-data, launch the selected engine with a cleared environment and fixed arguments, and enforce
-a 120-second wall-clock timeout. The request and control formats can bind an open forge
-identity plus a provider/run namespace, but they cannot authenticate their own source.
-Provider-authenticated request acquisition, adapters beyond the current GitHub event path,
-and integration of the wrapper into the public required-check lane remain future work. The
-JavaScript launcher is pinned manifest data and refuses if invoked directly; the current
-composite Action does not invoke it.
+implements the stronger local handoff. It bounded-captures a canonical request triplet for
+commit-pair materialization; requires a complete repository, URL-dialect, candidate-ref,
+target-ref, and default-ref identity; matches the embedded execution constraint and trusted-time
+provider/run tuple; verifies that both commit objects were acquired before launch; and validates
+the action tree and runtime closure. It then starts only the verified engine, in the supplied
+repository, with a cleared environment and one private argument. A magic value, three bounded
+lengths, and the exact request bytes travel in evaluation/snapshot/controls order over stdin.
+Arbitrary engine arguments are not part of this path.
+
+After the run, bootstrap acceptance rejects an unavailable hybrid and binds the engine, profile,
+commits, candidate and protected target refs, and candidate identity recomputed from the report.
+It requires exact organization-floor, debt-snapshot, and waiver-bundle presence, digest, and
+trust source; binds the provider run and trusted instant; and checks the execution-constraint and
+trusted-time digests against their recomputed semantics. Constraint trust source is bound too.
+Acceptance also requires the report to retain `self-asserted` sandbox assurance, `local-process`
+enforcement, and no sandbox verification. Clearing the environment,
+fixing the executable and input, validating runtime closure, and enforcing the 120-second
+watchdog are meaningful controls; they are not an OCI sandbox or microVM and must not be
+reported as a provider-verified sandbox. The accepted engine envelope is republished unchanged,
+so it does not gain an authenticated signature merely by passing through bootstrap.
+
+Provider authentication belongs outside both executables. The separate
+[`amiss-controller`](https://github.com/HardMax71/amiss/tree/main/controller) foundation models
+an untouched delivery whose headers and body remain untrusted until a registered adapter
+authenticates them. Its orchestration then claims a provider-instance/integration/delivery key
+through a durable-ledger trait, refreshes authoritative change state, passes the exact
+repository, URL dialect, candidate, target and default-branch refs, commits, and trees to a
+runner, refreshes again, and publishes only if that identity is still current and authorized. A
+changed identity becomes
+superseded; closure, revocation, missing output, timeout, tampered runtime, wrong identity, and
+wrong tree are fail-closed conclusions rather than passes.
+
+Those are transport-neutral contracts only. There is no concrete provider adapter, webhook
+listener, signature verifier, API client, credential source, durable ledger, repository or
+action-tree acquisition worker, runner connection to bootstrap, deployable controller, or
+provider check publisher. No authenticated integration exists for GitHub, GitLab, Gitea-family
+providers, or their self-hosted instances. The engine's `forge` field still selects only a link
+URL dialect.
+The JavaScript launcher is pinned manifest data and refuses if invoked directly; the current
+composite Action does not invoke bootstrap or the controller.

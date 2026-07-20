@@ -33,7 +33,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 
 ## The project
 
-- [Architecture](https://hardmax71.github.io/amiss/architecture.html): how the crates divide the pipeline
+- [Architecture](https://hardmax71.github.io/amiss/architecture.html): how the offline crates and separate controller foundation divide the trust flow
 - [Edge cases and divergences](https://hardmax71.github.io/amiss/divergences.html): the exact-wording edge cases and known parser differences
 - [What Amiss is not](https://hardmax71.github.io/amiss/non-goals.html): the non-goals held deliberately
 - [Amiss and link checkers](https://hardmax71.github.io/amiss/comparison.html): what lychee does well, what only two-snapshot comparison can see, and when to run both

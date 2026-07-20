@@ -58,6 +58,7 @@ fn shell(enforce: bool) -> SetupShell {
         }),
         forge: Some(ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
+        target_ref: None,
         default_branch_ref: Some("refs/heads/main".to_owned()),
         floor: None,
         debt: None,

@@ -12,10 +12,10 @@ reference stops resolving, or when the file behind it changed while the prose ar
 not. It reads structure, not meaning: it will not tell you whether a sentence is true, and it
 does not guess.
 
-It keeps no state, executes nothing, never touches the network, and never writes; identical
-inputs through the same engine binary produce byte-identical reports. A reference that does not
-resolve fails the run under `enforce`; a file changing under an unchanged paragraph is always
-a signal for a human, never a machine verdict.
+The scanner engine keeps no state, executes nothing, never touches the network, and never
+writes; identical inputs through the same engine binary produce byte-identical reports. A
+reference that does not resolve fails the run under `enforce`; a file changing under an
+unchanged paragraph is always a signal for a human, never a machine verdict.
 
 ```sh
 cargo install amiss

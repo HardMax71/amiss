@@ -141,7 +141,7 @@ fn floor_gate(
         crate::policy::verify_floor(
             floor,
             setup_shell.repository.as_ref(),
-            setup_shell.candidate_ref.as_deref(),
+            setup_shell.target_ref.as_deref(),
             setup_shell.enforce,
         )
         .err()
@@ -887,6 +887,7 @@ pub struct SetupShell {
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
     pub candidate_ref: Option<String>,
+    pub target_ref: Option<String>,
     pub default_branch_ref: Option<String>,
     pub floor: Option<crate::policy::FloorInput>,
     pub debt: Option<crate::policy::DebtInput>,
@@ -913,6 +914,7 @@ impl SetupShell {
             repository: self.repository.clone(),
             forge: self.forge,
             candidate_ref: self.candidate_ref.clone(),
+            target_ref: self.target_ref.clone(),
             default_branch_ref: self.default_branch_ref.clone(),
             base,
             candidate,
