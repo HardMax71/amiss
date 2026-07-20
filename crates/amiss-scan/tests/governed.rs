@@ -209,6 +209,7 @@ fn setup() -> Setup {
         repository: None,
         forge: None,
         candidate_ref: None,
+        target_ref: None,
         default_branch_ref: None,
         base,
         candidate: CandidateBlock::Commit(candidate),

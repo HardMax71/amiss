@@ -9,9 +9,11 @@ not, these bytes changed or did not, this paragraph moved or did not. Judgment s
 people.
 
 It is not a link checker in the usual sense. Live-URL checkers query the network and decay
-with it; Amiss never touches the network and only ever speaks about one repository's own
-files at two exact commits. It is not a style linter either: it has no opinion on headings,
-tone, or wording, and no rule engine to hold one.
+with it; the scanner engine never touches the network and only ever speaks about one
+repository's own files in two exact snapshots: a base commit and either a candidate commit or
+the staged index. A future provider controller may acquire the exact repository state before
+invoking that engine, but it does not make live URLs an evaluation input. Amiss is not a style
+linter either: it has no opinion on headings, tone, or wording, and no rule engine to hold one.
 
 It is not a documentation-coupling system with memory. Tools in that family, [Fiberplane's
 drift](https://github.com/fiberplane/drift), [Swimm](https://swimm.io), and the ledger design this project itself rejected, record what they blessed

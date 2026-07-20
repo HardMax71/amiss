@@ -12,9 +12,15 @@ pinned, hooks run through prek, and a change passes locally exactly when it
 passes in CI:
 
 ```sh
-cargo nextest run --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo nextest run --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+
+cargo nextest run --manifest-path controller/Cargo.toml --locked
+cargo clippy --manifest-path controller/Cargo.toml --all-targets --locked -- -D warnings
 ```
+
+The second pair covers the separate provider-controller workspace; the root workspace remains
+the offline scanner and does not take provider transport, storage, or runtime dependencies.
 
 A change is acceptable when it keeps every gate green, adds tests for the
 behavior it adds or changes, and stays inside the boundaries described in

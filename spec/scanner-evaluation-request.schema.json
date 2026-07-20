@@ -12,7 +12,8 @@
     "object_format",
     "repository",
     "forge",
-    "ref",
+    "candidate_ref",
+    "target_ref",
     "default_branch_ref",
     "base_commit_oid",
     "candidate_commit_oid"
@@ -38,7 +39,12 @@
       "description": "The same-repository URL dialect selected by the authenticated caller. Null means no forge URL grammar applies.",
       "enum": ["github", "gitlab", "gitea", null]
     },
-    "ref": {
+    "candidate_ref": {
+      "description": "The candidate branch used when recognizing same-repository forge URLs. It may differ from the protected target branch for pull requests.",
+      "oneOf": [{ "$ref": "#/$defs/ExactBranchRef" }, { "type": "null" }]
+    },
+    "target_ref": {
+      "description": "The protected target branch to which external controls bind.",
       "oneOf": [{ "$ref": "#/$defs/ExactBranchRef" }, { "type": "null" }]
     },
     "default_branch_ref": {
@@ -52,6 +58,26 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": { "repository": { "type": "object" } },
+        "required": ["repository"]
+      },
+      "then": {
+        "properties": {
+          "candidate_ref": { "$ref": "#/$defs/ExactBranchRef" },
+          "target_ref": { "$ref": "#/$defs/ExactBranchRef" },
+          "default_branch_ref": { "$ref": "#/$defs/ExactBranchRef" }
+        }
+      },
+      "else": {
+        "properties": {
+          "candidate_ref": { "type": "null" },
+          "target_ref": { "type": "null" },
+          "default_branch_ref": { "type": "null" }
+        }
+      }
+    },
     {
       "if": {
         "properties": { "repository": { "type": "null" } },
@@ -168,7 +194,7 @@
       "type": "string",
       "minLength": 12,
       "maxLength": 266,
-      "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+      "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
     },
     "GitOid": {
       "oneOf": [

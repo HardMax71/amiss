@@ -15,7 +15,7 @@ entry conditions live in the [Roadmap](roadmap.md).
 | References | Relative repository paths and same-repository GitHub, GitLab, and Gitea-family URLs are resolved under their declared dialect. Numeric line fragments select and compare an exact inclusive byte range; unsupported and external shapes remain visible in the report. | [Resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs) |
 | Policy | `.amiss/scanner-policy.json` may expand discovery and raise the disposition of missing targets, target-type mismatches, and invalid references. It cannot downgrade or suppress a finding. | [Policy application](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) |
 | Reports | Machine output uses the rolling pre-1.0 report envelope and payload contract. Exact findings remain the evidence surface; engine-grouped Fix, Check, and Existing feedback is its review projection. The compatibility marker remains `experimental`. | [Current schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report.schema.json) |
-| GitHub adapter | A source-tag dispatcher selects the same version's immutable runtime tree. The runtime derives snapshots from supported GitHub events, verifies the selected engine against its manifest, shows at most ten grouped items, and annotates only displayed Fixes. It is one delivery adapter, not the identity model. | [Dispatcher](https://github.com/HardMax71/amiss/blob/main/action.yml) and [runtime](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml) |
+| GitHub convenience Action | A source-tag dispatcher selects the same version's immutable runtime tree. The runtime derives snapshots from supported GitHub events, verifies the selected engine against its manifest, shows at most ten grouped items, and annotates only displayed Fixes. It is not a provider-authenticated controller adapter or an independent trust boundary. | [Dispatcher](https://github.com/HardMax71/amiss/blob/main/action.yml) and [runtime](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml) |
 
 Repository form is deliberately closed too. The reader accepts a primary non-bare checkout
 whose `.git` entry is a real directory. Bare repositories and linked worktrees represented
@@ -32,32 +32,57 @@ boundary behavior is described in [Discovery](discovery.md) and [Resolution](res
 
 ## Built, but not a supported delivery lane
 
-The repository contains strict parsers for evaluation, snapshot, and external-control
-requests, plus evaluation logic for organization floors, adoption debt, waivers, trusted
-time, and execution constraints. The library entry point accepts those values; the public
-CLI supplies all five as absent. The current evaluation and controls requests carry open
-forge identity; trusted time additionally carries a provider namespace and opaque provider
-run identity. Compare the
+The repository contains strict parsers and canonical writers for evaluation, snapshot, and
+external-control requests, plus evaluation logic for organization floors, adoption debt,
+waivers, trusted time, and execution constraints. The evaluation identity separates the
+candidate ref used for same-repository URL resolution from the protected target ref used by
+the branch-scoped floor, trusted-time, debt, and waiver gates. The public command still
+supplies all five controls as absent and has no target-ref option; its repository and
+candidate-ref fields remain caller assertions. The
+`forge` field selects a URL dialect, not an authenticated provider. Compare the
 [request schemas](https://github.com/HardMax71/amiss/blob/main/spec/scanner-evaluation-request.schema.json),
 [strict parsers](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/requests.rs),
 [pipeline shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline.rs), and
 [CLI wiring](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs).
 
-`amiss-bootstrap` can validate an action tree and execution constraint, launch a verified
-engine with a cleared environment, supervise it, and validate its report. It is built by the
-release workflow, but the published composite Action currently launches `amiss` directly;
-provider-authenticated request acquisition and bootstrap integration are therefore not a
-supported required-check lane. The distinction is visible in the
+`amiss-bootstrap` now has a sealed engine path. It bounded-captures the three request files,
+requires their canonical forms, a complete repository/dialect/ref identity, and coherent
+commit-pair materialization, matches the embedded execution constraint and trusted-time
+provider/run tuple, checks that both requested commits were pre-acquired, validates the action
+tree and runtime closure, and then sends only a closed evaluation/snapshot/controls frame over
+stdin to the verified engine. The child receives the repository as its fixed working directory,
+a cleared environment, one private engine argument, and no caller-selected engine command.
+Report acceptance rejects an unavailable hybrid and
+binds the requested profile, both commits, candidate and target refs, candidate identity,
+provider run and trusted instant, the exact presence, digest, and trust source of the organization
+floor, debt snapshot, and waiver bundle, and the execution constraint's digest, trust source,
+and recomputed semantics. It likewise recomputes the trusted-time statement's semantic digest and
+requires the sandbox provenance to remain self-asserted. The path is built by the release
+workflow, but the published composite Action still launches `amiss` directly; nothing public
+acquires these inputs from an authenticated provider. The distinction is visible in the
 [bootstrap entry point](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs),
 [release assembly](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml), and
-[Action execution](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml). Release manifests use the same open repository
-identity, and the [manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs) receives the
-build host explicitly instead of assuming a public forge. Provider-authenticated acquisition
-adapters for GitHub or other forges remain unsupported.
+[Action execution](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml).
+
+The separate nested Rust workspace under
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) is also implemented only
+as a transport-neutral foundation. It defines opaque provider, instance, integration, delivery,
+change, run, and evaluation identities, including the exact repository, URL dialect, candidate,
+target and default-branch refs, commits, and trees; traits for provider adapters, a durable
+replay ledger, and a runner boundary; and an orchestration sequence of authentication, durable claim,
+authoritative refresh, exact run, final authoritative refresh, fail-closed publication, and durable
+completion. It deliberately has no provider enum. It also has no concrete GitHub, GitLab, or
+Gitea-family adapter, HTTP listener, provider SDK, signature algorithm, credential store,
+database, repository acquisition worker, deployable binary, or provider status publisher.
+Those absences make it an internal contract, not a supported delivery lane.
 
 Local and convenience-Action reports consequently describe repository policy with no
 external authority consulted. Each external control has status `none`, and the sandbox
-assurance is `self-asserted`; there is no aggregate `provider_verified` report field. See
+assurance is `self-asserted`; there is no aggregate `provider_verified` report field. Even on
+the sealed internal path, a control row marked `verified` means that the engine accepted its
+digest and identity bindings. The report does not prove who acquired that control, and neither
+the bootstrap nor controller signs or augments the engine's report with provider evidence. No
+provider-authenticated required-check lane or provider-verified sandbox is supported. See
 [Controls and policy](controls.md) for the exact interpretation.
 
 ## Keeping this page honest

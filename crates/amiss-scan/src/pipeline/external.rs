@@ -52,12 +52,12 @@ pub(super) fn external_gate(
     candidate_tree: Option<amiss_wire::model::TreeIdentity>,
 ) -> Result<ExternalVerified, (&'static str, ErrorDetail)> {
     let repository = setup_shell.repository.as_ref();
-    let candidate_ref = setup_shell.candidate_ref.as_deref();
+    let target_ref = setup_shell.target_ref.as_deref();
     let time = match &setup_shell.time {
         None => None,
         Some(input) => {
             let identity = crate::report::candidate_identity_digest(provisional);
-            crate::policy::verify_time(input, repository, candidate_ref, &identity)
+            crate::policy::verify_time(input, repository, target_ref, &identity)
                 .map_err(|row| ("invalid-external-control", row))?;
             Some(crate::policy::TimeContext {
                 statement: input.statement.clone(),
@@ -99,7 +99,7 @@ pub(super) fn external_gate(
             crate::policy::verify_debt(
                 input,
                 repository,
-                candidate_ref,
+                target_ref,
                 verified_floor,
                 &context.statement.evaluation_instant,
                 scan_limits.debt_items,
@@ -119,7 +119,7 @@ pub(super) fn external_gate(
             crate::policy::verify_waiver(
                 input,
                 repository,
-                candidate_ref,
+                target_ref,
                 verified_floor,
                 &context.statement.evaluation_instant,
                 scan_limits.waiver_items,

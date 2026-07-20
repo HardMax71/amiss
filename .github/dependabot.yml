@@ -21,6 +21,15 @@ updates:
     groups:
       fuzz-cargo:
         patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /controller
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      controller-cargo:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

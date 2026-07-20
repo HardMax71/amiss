@@ -48,25 +48,54 @@ inspectable; version-specific history stays in the
 
 ## Now: provider-verified controls
 
-The validation phase is closed. The parsers, control semantics, and bootstrap supervision
-already exist as library surfaces; [Project status](status.md) records their exact
-maturity. What remains is integration and an independent trust boundary:
+The validation phase is closed, and the first provider-neutral foundation has landed. The
+rolling evaluation contract now distinguishes the candidate or source ref used for URL
+resolution from the protected target ref used by branch-scoped policy controls. For commit-pair
+materialization, the bootstrap accepts a canonical evaluation/snapshot/controls request triplet,
+validates its required constraint and trusted-time bindings, and carries the exact bytes to its
+verified engine in a closed stdin frame. The separate, unpublished Rust workspace under
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines opaque provider
+identities, an adapter registry, a durable delivery-ledger boundary, an exact run identity
+covering the repository, URL dialect, candidate, target and default-branch refs, commits, and
+trees, a runner boundary, and fail-closed publication orchestration.
 
-- acquire and authenticate provider-created evaluation and control requests;
-- implement provider adapters that translate independently authenticated run context
-  into the forge-neutral request contract; the GitHub composite Action is a convenience
-  adapter, and GitLab, Gitea-family, and other authenticated adapters are unsupported;
-- feed the authenticated request into the engine instead of the all-absent control shell
-  the CLI constructs today;
-- include and invoke `amiss-bootstrap` in the protected required-check path;
-- define trust anchors, freshness, revocation, and replay behavior;
-- cover wrong identity, wrong tree, expiry, replay, missing output, timeout, and
-  tampered runtime closure in end-to-end negative tests.
+That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
+GitHub, GitLab, or Gitea-family adapter, signature implementation, credential acquisition,
+durable ledger implementation, repository or action-tree acquisition worker, deployable
+service, or provider check publisher. The GitHub composite Action remains a convenience event
+wrapper that launches the engine directly. No current path produces a provider-verified
+sandbox or turns an engine report into independently authenticated evidence.
 
-The lane is ready when the verifier is acquired independently of the action tree it
-checks, every authorization binds the exact repository and tree, and a report
-distinguishes verified provenance from local self-assertion without relying on
-repository-controlled input.
+The intended adapter sequence is deliberately provider-neutral:
+
+1. authenticate the untouched provider delivery, including its headers and body, without
+   trusting a body field before authentication;
+2. atomically claim or resume its provider-instance, integration, and delivery identity in a
+   durable replay ledger;
+3. refresh authoritative provider state and bind the exact repository, change, URL dialect,
+   candidate, protected target and default-branch refs, base and candidate commits, and both
+   trees;
+4. acquire those objects and an independently trusted action tree, construct the canonical
+   requests, and invoke the sealed bootstrap path without passing provider credentials to the
+   engine;
+5. refresh provider state again and publish only if the authorization remains active and the
+   exact run identity is still current; otherwise publish an unavailable or superseded result;
+6. durably complete the delivery only after idempotent publication succeeds.
+
+What remains is to implement and deploy that sequence: choose trust anchors and rotation,
+freshness, revocation, and replay windows; build each provider adapter against capabilities the
+provider actually offers; connect the controller runner to repository acquisition and
+`amiss-bootstrap`; publish a source-bound required check; and cover wrong provider, repository,
+change, ref, commit, tree, expiry, replay, revocation, missing output, timeout, and tampered
+runtime closure in end-to-end negative tests. Link dialect support in the engine's `forge`
+field is not evidence that an authenticated adapter exists.
+
+The lane is ready only when the verifier and authorization are acquired independently of the
+repository and action tree under review, every authorization and published result bind the
+exact provider instance, integration, repository, URL dialect, source, target and default-branch
+refs, commits, and trees, and a consumer can distinguish provider-authenticated evidence from
+the engine report's local assertions without trusting repository-controlled input. This phase
+stays in Now until at least one provider satisfies that complete path.
 
 ## Reference-coverage candidates
 

@@ -33,6 +33,7 @@ fn bare_shell() -> SetupShell {
         repository: None,
         forge: None,
         candidate_ref: None,
+        target_ref: None,
         default_branch_ref: None,
         floor: None,
         debt: None,

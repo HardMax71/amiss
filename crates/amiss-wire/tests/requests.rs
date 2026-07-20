@@ -7,10 +7,10 @@ use std::fs;
 use std::path::Path;
 
 use amiss_wire::controls::{OrganizationFloor, Profile, TrustedTimeStatement};
-use amiss_wire::model::{ForgeDialect, ObjectFormat};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat};
 use amiss_wire::requests::{
-    ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL, RequestMode, RequestTrust,
-    SnapshotRequest,
+    ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL, RequestMode, RequestStreams,
+    RequestTrust, SnapshotRequest,
 };
 
 fn request_example(name: &str) -> Vec<u8> {
@@ -39,6 +39,14 @@ fn the_request_examples_parse_to_what_they_say() {
     assert_eq!(repository.owner, "platform/security");
     assert_eq!(repository.name, "docs");
     assert_eq!(evaluation.forge, Some(ForgeDialect::Gitlab));
+    assert_eq!(
+        evaluation.candidate_ref.as_ref().map(BranchRef::as_str),
+        Some("refs/heads/amiss-controller")
+    );
+    assert_eq!(
+        evaluation.target_ref.as_ref().map(BranchRef::as_str),
+        Some("refs/heads/main")
+    );
     assert_eq!(
         evaluation.base_commit.as_str(),
         "8d7f2c31a09b64e5dd10fcab7e93245160c8ba72"
@@ -138,7 +146,16 @@ fn the_forge_and_provider_run_are_closed_and_coherent() {
     );
     assert!(
         EvaluationRequest::parse(no_repository.as_bytes()).is_err(),
-        "a forge dialect without a repository identity has no subject"
+        "an identity group cannot retain refs after losing its repository"
+    );
+
+    let no_target = evaluation.replace(
+        r#""target_ref": "refs/heads/main""#,
+        r#""target_ref": null"#,
+    );
+    assert!(
+        EvaluationRequest::parse(no_target.as_bytes()).is_err(),
+        "the protected target is mandatory whenever an identity is present"
     );
 
     let github_nested = evaluation.replace(r#""forge": "gitlab""#, r#""forge": "github""#);
@@ -159,6 +176,51 @@ fn the_forge_and_provider_run_are_closed_and_coherent() {
     assert!(
         ControlsRequest::parse(uppercase_provider.as_bytes()).is_err(),
         "the provider ID is canonical lowercase"
+    );
+}
+
+#[test]
+fn request_writers_are_canonical_and_the_sealed_frame_is_exact() {
+    let evaluation =
+        EvaluationRequest::parse(&request_example("scanner-evaluation-request.json")).unwrap();
+    let snapshot =
+        SnapshotRequest::parse(&request_example("scanner-snapshot-request.json")).unwrap();
+    let controls =
+        ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
+    let streams = RequestStreams {
+        evaluation: evaluation.canonical_bytes().unwrap(),
+        snapshot: snapshot.canonical_bytes().unwrap(),
+        controls: controls.canonical_bytes().unwrap(),
+    };
+    for bytes in [&streams.evaluation, &streams.snapshot, &streams.controls] {
+        assert_eq!(
+            amiss_wire::json::canonical(&amiss_wire::json::parse(bytes).unwrap()),
+            *bytes
+        );
+    }
+
+    let mut frame = Vec::new();
+    streams.write_to(&mut frame).unwrap();
+    assert_eq!(
+        RequestStreams::read_from(&mut frame.as_slice()).unwrap(),
+        streams
+    );
+
+    frame.push(0);
+    assert!(
+        RequestStreams::read_from(&mut frame.as_slice()).is_err(),
+        "a fourth stream cannot hide after the closed frame"
+    );
+
+    let mut overflow = controls;
+    overflow
+        .trusted_time
+        .as_mut()
+        .expect("the request example carries trusted time")
+        .provider_run_attempt = u64::try_from(i64::MAX).unwrap().saturating_add(1);
+    assert!(
+        overflow.canonical_bytes().is_err(),
+        "the writer refuses an attempt the JSON integer contract cannot represent"
     );
 }
 

@@ -19,6 +19,15 @@ Inside the payload: which trees were compared and how; the result block with `st
 discovered document, its classification, and whether its content was available; the
 `findings` array; and the `errors` array of analysis errors the run kept.
 
+The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
+source branch used for same-repository URL resolution; the target ref is the protected branch
+to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,
+and the direct CLI currently leaves the target null. Both values enter the candidate-identity
+preimage. They describe the exact inputs the engine evaluated; their presence does not prove who
+selected or authenticated them.
+The current sealed commit-pair path still reports `explicit-commit-pair` and
+`explicit-replay`; no provider adapter supplies a provider event kind or finality today.
+
 A repository path anywhere in the payload has exactly one spelling. Valid UTF-8 bytes
 travel as a plain string; anything else travels as `{"bytes_hex": "..."}` naming the raw
 bytes as lowercase hex. A writer never uses the object form for bytes that decode as
@@ -92,6 +101,21 @@ descriptions only for errors; finding kinds and their descriptions stay in JSON.
 cut short: a serialized report that would cross the 64 MiB `machine-json-bytes` ceiling
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).
+
+The report is evidence of engine evaluation, not a self-authenticating provider attestation. A
+control row with `status: "verified"` means that the engine accepted the supplied digest and
+repository, target-ref, tree, time, or run relationships required for that control. A caller
+that can supply the request can still make those assertions; the enum does not identify or
+authenticate the caller. The sealed bootstrap additionally checks the requested identities and
+digests against the returned envelope, but republishes the accepted bytes unchanged. The
+provider-controller foundation likewise defines orchestration and publication boundaries but
+does not yet sign a report or implement a provider-published check. Independent provider
+evidence therefore does not exist in the current report contract.
+
+Sandbox provenance is separate again. The present writer reports `self-asserted` assurance,
+`local-process` enforcement, and null verification. The sealed bootstrap requires that honest
+projection. Runtime-closure validation, a cleared environment, fixed input, and a watchdog do
+not satisfy the report schema's provider-verified OCI or microVM mechanisms.
 
 The machine contract is the
 [current report schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report.schema.json), its

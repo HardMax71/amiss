@@ -6,6 +6,16 @@ There is no working-directory mode, no branch-name resolution, and no fetching. 
 object is not in the local object store, the run refuses; see
 [Limits and refusals](limits.md).
 
+Branch refs describe identity and link scope; they never select either snapshot. The rolling
+request and report contracts carry `candidate_ref`, the candidate or source branch whose links
+are being evaluated, separately from `target_ref`, the protected branch to which branch-scoped
+controls bind. A direct branch update normally uses the same value for both. A
+pull or merge request may use a feature branch as the candidate and the protected base branch
+as the target.
+The default-branch ref is a third fact used for URL resolution and is not inferred to be the
+target. The public CLI exposes only its existing candidate `--ref` claim; the complete split is
+currently reachable only through the internal request/bootstrap surface.
+
 In staged-index mode the identity covers the complete logical stage-zero index, including
 skip-worktree entries. The digest chain has three steps: hash the sorted
 [index projection](https://github.com/HardMax71/amiss/blob/main/spec/examples/index-projection.json),
@@ -15,10 +25,28 @@ over that projection, then bind the result into the staged
 [candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity-index.json).
 A commit-pair run uses the corresponding
 [commit candidate identity](https://github.com/HardMax71/amiss/blob/main/spec/examples/candidate-identity.json).
+Both refs are part of that identity preimage, alongside the repository, selected URL dialect,
+base, and candidate, so a trusted-time statement bound to one source/target relationship cannot
+be replayed for another.
 These JSON files are digest preimages, not accepted request documents, and the
 [identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs)
 validates each against its report-schema definition and reproduces the full chain through
 the production builders.
+
+The provider-controller foundation uses a stricter orchestration identity containing the
+provider instance, repository and change, URL dialect, candidate, target and default-branch refs,
+object format, base and candidate commits, and both tree IDs. An adapter is expected to obtain
+that tuple from refreshed provider state,
+not from repository-controlled request JSON. The current controller defines that boundary but
+does not implement a provider adapter or repository acquisition worker. On the sealed path,
+bootstrap refuses unless both requested commits already exist locally, then the engine reads and
+rehashes their objects normally; no component fetches from inside the engine.
+
+The snapshot request's `repository_handle: 3` is a stable protocol ordinal, not a claim that
+the operating system passed file descriptor 3. In the current safe-Rust subprocess path the
+bootstrap maps that logical handle to the fixed repository working directory before launch, and
+the engine opens only that directory. A future isolation backend may map the same ordinal to a
+different pre-opened mechanism without changing the request wire.
 
 Amiss reads [Git](https://git-scm.com)'s storage itself instead of asking the `git` command. Loose objects,
 packfiles, deltas, and the index file are parsed by the engine, and the parsers reject

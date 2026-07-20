@@ -1,9 +1,11 @@
 use std::process::{Child, ExitStatus};
 use std::time::{Duration, Instant};
 
+use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
+use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
 /// The exact acceptance defect, most specific first in evaluation order. The
 /// trusted wrapper publishes success only when acceptance returns no defect.
@@ -21,6 +23,10 @@ pub enum AcceptanceDefect {
     BaseIdentity,
     /// The evaluated candidate identity differs from the one requested.
     CandidateIdentity,
+    /// The report does not bind the sealed refs and candidate identity.
+    SealedIdentity,
+    /// The report does not carry the exact sealed controls and provider run.
+    SealedControls,
     /// The completeness flag disagrees with the exit class.
     Completeness,
     /// The finding count differs from the findings array length.
@@ -36,6 +42,33 @@ pub struct Expectations {
     pub engine_digest: String,
     pub base_commit: String,
     pub candidate_commit: Option<String>,
+    pub sealed: Option<SealedExpectations>,
+}
+
+/// The independently captured provider and control context a sealed report
+/// must reproduce before the bootstrap will publish it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SealedExpectations {
+    pub profile: String,
+    pub candidate_ref: String,
+    pub target_ref: String,
+    pub provider: String,
+    pub provider_run_id: String,
+    pub provider_run_attempt: u64,
+    pub candidate_identity_digest: String,
+    pub organization_floor: Option<SealedControlExpectation>,
+    pub debt_snapshot: Option<SealedControlExpectation>,
+    pub waiver_bundle: Option<SealedControlExpectation>,
+    pub execution_constraint: SealedControlExpectation,
+    pub trusted_time_digest: String,
+}
+
+/// One exact externally authenticated control projection expected in the
+/// report after the engine verifies its embedded semantic digest.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SealedControlExpectation {
+    pub digest: String,
+    pub trust_source: String,
 }
 
 fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
@@ -93,18 +126,23 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
     }
     let evaluation = member(payload, "evaluation").ok_or(AcceptanceDefect::Shape)?;
     let resolved = text(evaluation, "status") != Some("unavailable");
+    if expectations.sealed.is_some() && !resolved {
+        return Err(AcceptanceDefect::SealedIdentity);
+    }
     if resolved {
         let base = member(evaluation, "base").ok_or(AcceptanceDefect::Shape)?;
         if text(base, "commit_oid") != Some(expectations.base_commit.as_str()) {
             return Err(AcceptanceDefect::BaseIdentity);
         }
         let candidate = member(evaluation, "candidate").ok_or(AcceptanceDefect::Shape)?;
-        if let (Some(expected), Some("git-commit")) = (
-            expectations.candidate_commit.as_deref(),
-            text(candidate, "kind"),
-        ) && text(candidate, "commit_oid") != Some(expected)
+        if let Some(expected) = expectations.candidate_commit.as_deref()
+            && (text(candidate, "kind") != Some("git-commit")
+                || text(candidate, "commit_oid") != Some(expected))
         {
             return Err(AcceptanceDefect::CandidateIdentity);
+        }
+        if let Some(sealed) = &expectations.sealed {
+            accept_sealed(payload, evaluation, sealed)?;
         }
     }
     let result = member(payload, "result").ok_or(AcceptanceDefect::Shape)?;
@@ -128,6 +166,113 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
         return Err(AcceptanceDefect::FindingCount);
     }
     Ok(exit_code)
+}
+
+fn accept_sealed(
+    payload: &Value,
+    evaluation: &Value,
+    expected: &SealedExpectations,
+) -> Result<(), AcceptanceDefect> {
+    if text(evaluation, "candidate_ref") != Some(expected.candidate_ref.as_str())
+        || text(evaluation, "target_ref") != Some(expected.target_ref.as_str())
+        || member(evaluation, "trusted_time") != Some(&Value::Bool(true))
+    {
+        return Err(AcceptanceDefect::SealedIdentity);
+    }
+    let Value::Object(evaluation_members) = evaluation else {
+        return Err(AcceptanceDefect::Shape);
+    };
+    let mut identity_members: Vec<(String, Value)> = evaluation_members
+        .iter()
+        .filter(|(name, _value)| name != "evaluation_instant" && name != "trusted_time")
+        .cloned()
+        .collect();
+    identity_members.push((
+        "schema".to_owned(),
+        Value::String(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
+    ));
+    let identity = Value::Object(identity_members);
+    let identity_digest = hj(CANDIDATE_IDENTITY_DOMAIN, &identity).to_string();
+    if identity_digest != expected.candidate_identity_digest {
+        return Err(AcceptanceDefect::SealedIdentity);
+    }
+
+    let controls = member(payload, "controls").ok_or(AcceptanceDefect::SealedControls)?;
+    if text(controls, "profile") != Some(expected.profile.as_str()) {
+        return Err(AcceptanceDefect::SealedControls);
+    }
+    accept_optional_control(
+        controls,
+        "organization_floor",
+        expected.organization_floor.as_ref(),
+    )?;
+    accept_optional_control(controls, "debt_snapshot", expected.debt_snapshot.as_ref())?;
+    accept_optional_control(controls, "waiver_bundle", expected.waiver_bundle.as_ref())?;
+    let constraint =
+        member(controls, "execution_constraint").ok_or(AcceptanceDefect::SealedControls)?;
+    let descriptor = member(constraint, "descriptor").ok_or(AcceptanceDefect::SealedControls)?;
+    let descriptor = ExecutionConstraintDescriptor::parse(&canonical(descriptor))
+        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    if text(constraint, "status") != Some("verified")
+        || text(constraint, "descriptor_digest")
+            != Some(expected.execution_constraint.digest.as_str())
+        || text(constraint, "trust_source")
+            != Some(expected.execution_constraint.trust_source.as_str())
+        || descriptor.digest.to_string() != expected.execution_constraint.digest
+    {
+        return Err(AcceptanceDefect::SealedControls);
+    }
+    let trusted =
+        member(controls, "trusted_time_source").ok_or(AcceptanceDefect::SealedControls)?;
+    let statement = member(trusted, "statement").ok_or(AcceptanceDefect::SealedControls)?;
+    let statement = TrustedTimeStatement::parse(&canonical(statement))
+        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    if text(trusted, "status") != Some("verified")
+        || text(trusted, "trust_source") != Some("external-required-check")
+        || text(trusted, "statement_digest") != Some(expected.trusted_time_digest.as_str())
+        || statement.digest.to_string() != expected.trusted_time_digest
+        || statement.provider != expected.provider
+        || statement.provider_run_id != expected.provider_run_id
+        || statement.provider_run_attempt != expected.provider_run_attempt
+        || statement.ref_name.as_str() != expected.target_ref
+        || statement.candidate_identity_digest.to_string() != identity_digest
+        || text(evaluation, "evaluation_instant") != Some(statement.evaluation_instant.as_str())
+    {
+        return Err(AcceptanceDefect::SealedControls);
+    }
+    let sandbox = member(controls, "sandbox").ok_or(AcceptanceDefect::SealedControls)?;
+    if text(sandbox, "assurance") != Some("self-asserted")
+        || text(sandbox, "enforcement_source") != Some("local-process")
+        || member(sandbox, "verification") != Some(&Value::Null)
+    {
+        return Err(AcceptanceDefect::SealedControls);
+    }
+    Ok(())
+}
+
+fn accept_optional_control(
+    controls: &Value,
+    name: &str,
+    expected: Option<&SealedControlExpectation>,
+) -> Result<(), AcceptanceDefect> {
+    let control = member(controls, name).ok_or(AcceptanceDefect::SealedControls)?;
+    let accepted = match expected {
+        Some(expected) => {
+            text(control, "status") == Some("verified")
+                && text(control, "digest") == Some(expected.digest.as_str())
+                && text(control, "trust_source") == Some(expected.trust_source.as_str())
+        }
+        None => {
+            text(control, "status") == Some("none")
+                && member(control, "digest") == Some(&Value::Null)
+                && text(control, "trust_source") == Some("none")
+        }
+    };
+    if accepted {
+        Ok(())
+    } else {
+        Err(AcceptanceDefect::SealedControls)
+    }
 }
 
 /// The watchdog outcome for one spawned engine process.

@@ -1,0 +1,50 @@
+[package]
+name = "amiss-controller"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "Provider-neutral orchestration contracts for Amiss runs"
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/HardMax71/amiss"
+publish = false
+
+[workspace]
+resolver = "3"
+
+[dependencies]
+amiss-wire = { path = "../crates/amiss-wire" }
+
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"
+as_conversions = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+wildcard_enum_match_arm = "deny"
+mem_forget = "deny"
+dbg_macro = "deny"
+
+[profile.release]
+overflow-checks = true
+panic = "unwind"

@@ -8,7 +8,8 @@
     "owner": "platform/security",
     "name": "docs"
   },
-  "ref": "refs/heads/main",
+  "candidate_ref": "refs/heads/amiss-controller",
+  "target_ref": "refs/heads/main",
   "default_branch_ref": "refs/heads/main",
   "base": {
     "kind": "git-commit",

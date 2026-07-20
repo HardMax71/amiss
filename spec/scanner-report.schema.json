@@ -1166,7 +1166,8 @@
         "finality",
         "repository",
         "forge",
-        "ref",
+        "candidate_ref",
+        "target_ref",
         "default_branch_ref",
         "base",
         "candidate",
@@ -1222,23 +1223,32 @@
             }
           ]
         },
-        "ref": {
+        "candidate_ref": {
           "type": [
             "string",
             "null"
           ],
-          "minLength": 1,
+          "minLength": 12,
           "maxLength": 266,
-          "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
+        },
+        "target_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 12,
+          "maxLength": 266,
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
         },
         "default_branch_ref": {
           "type": [
             "string",
             "null"
           ],
-          "minLength": 1,
+          "minLength": 12,
           "maxLength": 266,
-          "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
         },
         "base": {
           "oneOf": [
@@ -1289,7 +1299,8 @@
         "event_kind",
         "finality",
         "repository",
-        "ref",
+        "candidate_ref",
+        "target_ref",
         "default_branch_ref",
         "base",
         "candidate",
@@ -1336,23 +1347,32 @@
             }
           ]
         },
-        "ref": {
+        "candidate_ref": {
           "type": [
             "string",
             "null"
           ],
-          "minLength": 1,
+          "minLength": 12,
           "maxLength": 266,
-          "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
+        },
+        "target_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 12,
+          "maxLength": 266,
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
         },
         "default_branch_ref": {
           "type": [
             "string",
             "null"
           ],
-          "minLength": 1,
+          "minLength": 12,
           "maxLength": 266,
-          "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
         },
         "base": {
           "$ref": "#/$defs/GitSnapshot"
@@ -1695,7 +1715,7 @@
           "type": "string",
           "minLength": 12,
           "maxLength": 266,
-          "pattern": "^refs/heads/[^\\\\\\u0000-\\u001f\\u007f ]+$"
+          "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
         },
         "candidate_identity_digest": {
           "$ref": "#/$defs/Digest"

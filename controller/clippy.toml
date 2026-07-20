@@ -1,0 +1,15 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+
+disallowed-types = [
+  { path = "std::any::Any", reason = "type erasure defeats the explicit trust-state model" },
+]
+
+disallowed-methods = [
+  { path = "std::ffi::OsStr::to_string_lossy", reason = "a mangled identifier is worse than a refused one" },
+  { path = "std::path::Path::to_string_lossy", reason = "a mangled path is worse than a refused one" },
+]

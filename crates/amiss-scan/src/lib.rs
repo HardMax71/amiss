@@ -9,6 +9,7 @@ pub mod observe;
 pub mod pipeline;
 pub mod policy;
 pub mod report;
+pub mod request;
 pub mod resolve;
 pub mod resources;
 pub mod scan;

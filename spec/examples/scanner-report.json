@@ -215,7 +215,8 @@
       "index_only_materialized_paths": 0,
       "materialization": "git-objects",
       "mode": "commit-pair",
-      "ref": "refs/heads/main",
+      "candidate_ref": "refs/heads/main",
+      "target_ref": null,
       "repository": {
         "host": "git.example.internal",
         "name": "widget",
@@ -1130,6 +1131,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:6dce0a7fd7b3f8d109ad7e8d90efaba83488f7095141219fd22386803e9d6f52",
+  "payload_digest": "sha256:f44c2b720ef6fa72c3959cc15b98dfd32cf16bbf8a45d6d8b0b40ab49fab17e2",
   "schema": "amiss/scanner-report-envelope"
 }
