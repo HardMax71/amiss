@@ -54,31 +54,29 @@ impl std::error::Error for ProviderError {}
 pub trait ProviderAdapter: Send + Sync {
     fn namespace(&self) -> &ProviderNamespace;
 
+    /// No body field is trusted before authentication succeeds.
+    ///
     /// # Errors
     ///
-    /// Returns an authentication or provider error without treating any body
-    /// field as trusted input before provider authentication succeeds.
+    /// The delivery cannot be authenticated.
     fn authenticate(
         &self,
         delivery: UntrustedDelivery<'_>,
     ) -> Result<AuthenticatedDelivery, ProviderError>;
 
-    /// Resolves the authenticated delivery's exact provider run ID and
-    /// attempt, including whether that run has since been superseded. It must
-    /// never substitute the change's current head for the event-bound
+    /// Must never substitute the change's current head for the event-bound
     /// candidate.
     ///
     /// # Errors
     ///
-    /// Returns an error when that exact authoritative run state cannot be
-    /// obtained.
+    /// The exact authoritative run state cannot be obtained.
     fn refresh(&self, delivery: &AuthenticatedDelivery) -> Result<ChangeSnapshot, ProviderError>;
 
+    /// Idempotent by the publication's controller evaluation ID.
+    ///
     /// # Errors
     ///
-    /// Updates the exact provider check idempotently by the publication's
-    /// controller evaluation ID. Returns an error when that update cannot be
-    /// confirmed.
+    /// The update cannot be confirmed.
     fn publish(
         &self,
         delivery: &AuthenticatedDelivery,

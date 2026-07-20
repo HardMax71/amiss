@@ -198,14 +198,7 @@ fn capture_requests(
             return Err("request-mode-mismatch");
         }
     };
-    if evaluation.repository.is_none()
-        || evaluation.forge.is_none()
-        || evaluation.candidate_ref.is_none()
-        || evaluation.target_ref.is_none()
-        || evaluation.default_branch_ref.is_none()
-    {
-        return Err("evaluation-identity-absent");
-    }
+    let repository = sealed_identity(&evaluation)?;
     let supplied_constraint = controls
         .execution_constraint
         .as_ref()
@@ -245,6 +238,7 @@ fn capture_requests(
             .target_ref
             .as_ref()
             .map_or_else(String::new, |reference| reference.as_str().to_owned()),
+        repository,
         provider: supplied_time.provider.clone(),
         provider_run_id: supplied_time.provider_run_id.clone(),
         provider_run_attempt: supplied_time.provider_run_attempt,
@@ -265,6 +259,22 @@ fn capture_requests(
         evaluation,
         expected,
     })
+}
+
+fn sealed_identity(
+    evaluation: &EvaluationRequest,
+) -> Result<amiss_wire::model::RepositoryIdentity, &'static str> {
+    let Some(repository) = evaluation.repository.clone() else {
+        return Err("evaluation-identity-absent");
+    };
+    if evaluation.forge.is_none()
+        || evaluation.candidate_ref.is_none()
+        || evaluation.target_ref.is_none()
+        || evaluation.default_branch_ref.is_none()
+    {
+        return Err("evaluation-identity-absent");
+    }
+    Ok(repository)
 }
 
 fn control_expectation(

@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
@@ -52,6 +53,7 @@ pub struct SealedExpectations {
     pub profile: String,
     pub candidate_ref: String,
     pub target_ref: String,
+    pub repository: RepositoryIdentity,
     pub provider: String,
     pub provider_run_id: String,
     pub provider_run_attempt: u64,
@@ -234,6 +236,7 @@ fn accept_sealed(
         || statement.provider != expected.provider
         || statement.provider_run_id != expected.provider_run_id
         || statement.provider_run_attempt != expected.provider_run_attempt
+        || statement.repository != expected.repository
         || statement.ref_name.as_str() != expected.target_ref
         || statement.candidate_identity_digest.to_string() != identity_digest
         || text(evaluation, "evaluation_instant") != Some(statement.evaluation_instant.as_str())

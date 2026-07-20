@@ -88,8 +88,8 @@ impl ProviderRunAttempt {
     }
 }
 
-/// The provider run and attempt bound to the candidate commit authenticated
-/// from the delivery, before any authoritative refresh.
+/// A provider run pinned to the delivery-authenticated candidate commit
+/// before any refresh can substitute a newer head.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProviderRunIdentity {
     pub run_id: ProviderRunId,
