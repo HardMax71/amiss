@@ -43,7 +43,7 @@ runs:
   using: composite
   steps:
     - id: amiss
-      uses: HardMax71/amiss@action/v0.7.0
+      uses: HardMax71/amiss@action/v0.8.0
       with:
         profile: ${{ inputs.profile }}
         base: ${{ inputs.base }}
