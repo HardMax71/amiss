@@ -2,27 +2,29 @@ use std::fmt;
 
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
+fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<String> {
+    let bytes = raw.as_bytes();
+    (!bytes.is_empty() && bytes.len() <= maximum && bytes.iter().all(|byte| valid(*byte)))
+        .then_some(raw)
+}
+
+/// The registry key for one provider family, in a lowercase DNS-label
+/// grammar so it can never collide by case or whitespace.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProviderNamespace(String);
 
 impl ProviderNamespace {
-    #[must_use]
     pub fn new(raw: String) -> Option<Self> {
-        let mut bytes = raw.bytes();
-        let first = bytes.next()?;
-        if raw.len() > 64 || !first.is_ascii_lowercase() && !first.is_ascii_digit() {
+        let first = *raw.as_bytes().first()?;
+        if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
             return None;
         }
-        if bytes.all(|byte| {
+        bounded(raw, 64, |byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-        }) {
-            Some(Self(raw))
-        } else {
-            None
-        }
+        })
+        .map(Self)
     }
 
-    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -34,57 +36,45 @@ impl fmt::Display for ProviderNamespace {
     }
 }
 
-fn opaque_id_valid(raw: &str, maximum: usize) -> bool {
-    let bytes = raw.as_bytes();
-    !bytes.is_empty()
-        && bytes.len() <= maximum
-        && bytes.iter().all(|byte| {
+/// One provider-issued opaque identifier: bounded printable bytes the
+/// controller stores and compares but never interprets. Which role a value
+/// plays is said by the field that holds it, not by a wrapper type.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OpaqueId(String);
+
+pub type ProviderInstance = OpaqueId;
+pub type IntegrationId = OpaqueId;
+pub type DeliveryId = OpaqueId;
+pub type ChangeId = OpaqueId;
+pub type ProviderRunId = OpaqueId;
+pub type ControllerEvaluationId = OpaqueId;
+
+impl OpaqueId {
+    pub fn new(raw: String) -> Option<Self> {
+        bounded(raw, 256, |byte| {
             byte.is_ascii_alphanumeric()
                 || matches!(byte, b'.' | b'_' | b':' | b'/' | b'@' | b'+' | b'-')
         })
+        .map(Self)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
-macro_rules! opaque_id {
-    ($name:ident, $maximum:expr) => {
-        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-        pub struct $name(String);
-
-        impl $name {
-            #[must_use]
-            pub fn new(raw: String) -> Option<Self> {
-                if opaque_id_valid(&raw, $maximum) {
-                    Some(Self(raw))
-                } else {
-                    None
-                }
-            }
-
-            #[must_use]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str(self.as_str())
-            }
-        }
-    };
+impl fmt::Display for OpaqueId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
 }
 
-opaque_id!(ProviderInstance, 255);
-opaque_id!(IntegrationId, 128);
-opaque_id!(DeliveryId, 256);
-opaque_id!(ChangeId, 256);
-opaque_id!(ProviderRunId, 128);
-opaque_id!(ControllerEvaluationId, 128);
-
+/// A provider run attempt: one-based and inside the exact-integer range
+/// every JSON consumer can carry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProviderRunAttempt(u64);
 
 impl ProviderRunAttempt {
-    #[must_use]
     pub const fn new(raw: u64) -> Option<Self> {
         if raw == 0 || raw > 9_007_199_254_740_991 {
             None
@@ -93,24 +83,23 @@ impl ProviderRunAttempt {
         }
     }
 
-    #[must_use]
     pub const fn get(self) -> u64 {
         self.0
     }
 }
 
+/// The provider run and attempt bound to the candidate commit authenticated
+/// from the delivery, before any authoritative refresh.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProviderRunIdentity {
-    run_id: ProviderRunId,
-    attempt: ProviderRunAttempt,
-    object_format: ObjectFormat,
-    candidate_commit: Oid,
+    pub run_id: ProviderRunId,
+    pub attempt: ProviderRunAttempt,
+    pub object_format: ObjectFormat,
+    pub candidate_commit: Oid,
 }
 
 impl ProviderRunIdentity {
-    /// Binds the provider run and attempt to the candidate commit authenticated
-    /// from the delivery before an authoritative refresh is attempted.
-    #[must_use]
+    /// None unless the candidate commit is well formed for the object format.
     pub fn new(
         run_id: ProviderRunId,
         attempt: ProviderRunAttempt,
@@ -124,26 +113,6 @@ impl ProviderRunIdentity {
             object_format,
             candidate_commit,
         })
-    }
-
-    #[must_use]
-    pub const fn run_id(&self) -> &ProviderRunId {
-        &self.run_id
-    }
-
-    #[must_use]
-    pub const fn attempt(&self) -> ProviderRunAttempt {
-        self.attempt
-    }
-
-    #[must_use]
-    pub const fn object_format(&self) -> ObjectFormat {
-        self.object_format
-    }
-
-    #[must_use]
-    pub const fn candidate_commit(&self) -> &Oid {
-        &self.candidate_commit
     }
 }
 

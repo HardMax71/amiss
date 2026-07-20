@@ -13,6 +13,8 @@ fn opaque_delivery_ids_reject_ambiguous_bytes() {
     assert!(DeliveryId::new("0123-abcd:1".to_owned()).is_some());
     assert!(DeliveryId::new(" delivery".to_owned()).is_none());
     assert!(DeliveryId::new("line\nbreak".to_owned()).is_none());
+    assert!(DeliveryId::new("a".repeat(256)).is_some());
+    assert!(DeliveryId::new("a".repeat(257)).is_none());
 }
 
 #[test]
