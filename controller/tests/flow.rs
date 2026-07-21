@@ -11,10 +11,11 @@ use std::sync::{Arc, Mutex};
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
     CheckConclusion, Controller, ControllerError, ControllerEvaluationId, DeliveryClaim,
-    DeliveryId, DeliveryIdentity, DeliveryLedger, Evaluation, HandleOutcome, IntegrationId,
-    OidPair, ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, RunFailure, RunIdentity,
-    RunRefs, RunRequest, Runner, RunnerOutcome, UntrustedDelivery,
+    DeliveryId, DeliveryIdentity, DeliveryLease, DeliveryLedger, Evaluation, HandleOutcome,
+    IntegrationId, LeaseCompletion, LeaseFence, LeaseRenewal, OidPair, ProviderAdapter,
+    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
+    ProviderRunId, ProviderRunIdentity, Publication, RunFailure, RunIdentity, RunRefs, RunRequest,
+    Runner, RunnerOutcome, StageOutcome, StagedPublication, UntrustedDelivery,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -32,7 +33,9 @@ impl std::error::Error for LedgerError {}
 
 #[derive(Clone)]
 struct LedgerRow {
-    evaluation_id: ControllerEvaluationId,
+    binding: AuthenticatedDelivery,
+    lease: DeliveryLease,
+    staged: Option<StagedPublication>,
     complete: bool,
 }
 
@@ -44,38 +47,135 @@ struct MemoryLedger {
 impl DeliveryLedger for MemoryLedger {
     type Error = LedgerError;
 
-    fn claim(&mut self, delivery: &DeliveryIdentity) -> Result<DeliveryClaim, Self::Error> {
-        if let Some(row) = self.rows.get(delivery) {
+    fn claim(&mut self, delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error> {
+        if let Some(row) = self.rows.get(&delivery.identity) {
+            if row.binding != *delivery {
+                return Ok(DeliveryClaim::BindingConflict);
+            }
             return if row.complete {
-                Ok(DeliveryClaim::Duplicate)
+                Ok(DeliveryClaim::Duplicate {
+                    evaluation_id: row.lease.evaluation_id.clone(),
+                })
+            } else if let Some(staged) = &row.staged {
+                Ok(DeliveryClaim::Publish(staged.clone()))
             } else {
-                Ok(DeliveryClaim::Execute(row.evaluation_id.clone()))
+                Ok(DeliveryClaim::Execute(row.lease.clone()))
             };
         }
         let evaluation_id = ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap();
+        let lease = DeliveryLease {
+            evaluation_id,
+            fence: LeaseFence::new(1).unwrap(),
+            expires_at_unix_millis: i64::MAX,
+        };
         self.rows.insert(
-            delivery.clone(),
+            delivery.identity.clone(),
             LedgerRow {
-                evaluation_id: evaluation_id.clone(),
+                binding: delivery.clone(),
+                lease: lease.clone(),
+                staged: None,
                 complete: false,
             },
         );
-        Ok(DeliveryClaim::Execute(evaluation_id))
+        Ok(DeliveryClaim::Execute(lease))
+    }
+
+    fn renew(
+        &mut self,
+        delivery: &AuthenticatedDelivery,
+        lease: &DeliveryLease,
+    ) -> Result<LeaseRenewal, Self::Error> {
+        let Some(row) = self.rows.get(&delivery.identity) else {
+            return Ok(LeaseRenewal::Lost);
+        };
+        if row.binding == *delivery && row.lease == *lease && row.staged.is_none() && !row.complete
+        {
+            Ok(LeaseRenewal::Renewed(lease.clone()))
+        } else {
+            Ok(LeaseRenewal::Lost)
+        }
     }
 
     fn complete(
         &mut self,
-        delivery: &DeliveryIdentity,
-        evaluation_id: &ControllerEvaluationId,
-    ) -> Result<(), Self::Error> {
-        let Some(row) = self.rows.get_mut(delivery) else {
-            return Err(LedgerError);
+        delivery: &AuthenticatedDelivery,
+        staged: &StagedPublication,
+    ) -> Result<LeaseCompletion, Self::Error> {
+        let Some(row) = self.rows.get_mut(&delivery.identity) else {
+            return Ok(LeaseCompletion::Lost);
         };
-        if row.evaluation_id != *evaluation_id {
-            return Err(LedgerError);
+        if row.binding != *delivery || row.staged.as_ref() != Some(staged) {
+            return Ok(LeaseCompletion::Lost);
         }
         row.complete = true;
-        Ok(())
+        Ok(LeaseCompletion::Completed)
+    }
+
+    fn stage(
+        &mut self,
+        delivery: &AuthenticatedDelivery,
+        lease: &DeliveryLease,
+        publication: &Publication,
+    ) -> Result<StageOutcome, Self::Error> {
+        let Some(row) = self.rows.get_mut(&delivery.identity) else {
+            return Ok(StageOutcome::Lost);
+        };
+        if row.binding != *delivery || row.lease != *lease || row.complete {
+            return Ok(StageOutcome::Lost);
+        }
+        let staged = StagedPublication {
+            evaluation_id: lease.evaluation_id.clone(),
+            fence: lease.fence,
+            publication: Box::new(publication.clone()),
+        };
+        match &row.staged {
+            Some(existing) if *existing == staged => Ok(StageOutcome::Staged(existing.clone())),
+            Some(_) => Ok(StageOutcome::Lost),
+            None => {
+                row.staged = Some(staged.clone());
+                Ok(StageOutcome::Staged(staged))
+            }
+        }
+    }
+}
+
+struct ScriptedLedger {
+    claim: Option<DeliveryClaim>,
+    renewals: VecDeque<LeaseRenewal>,
+    stage: Option<StageOutcome>,
+    completion: LeaseCompletion,
+}
+
+impl DeliveryLedger for ScriptedLedger {
+    type Error = LedgerError;
+
+    fn claim(&mut self, _delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error> {
+        self.claim.take().ok_or(LedgerError)
+    }
+
+    fn renew(
+        &mut self,
+        _delivery: &AuthenticatedDelivery,
+        _lease: &DeliveryLease,
+    ) -> Result<LeaseRenewal, Self::Error> {
+        self.renewals.pop_front().ok_or(LedgerError)
+    }
+
+    fn complete(
+        &mut self,
+        _delivery: &AuthenticatedDelivery,
+        _staged: &StagedPublication,
+    ) -> Result<LeaseCompletion, Self::Error> {
+        Ok(self.completion)
+    }
+
+    fn stage(
+        &mut self,
+        _delivery: &AuthenticatedDelivery,
+        _lease: &DeliveryLease,
+        _publication: &Publication,
+    ) -> Result<StageOutcome, Self::Error> {
+        self.stage.take().ok_or(LedgerError)
     }
 }
 
@@ -107,6 +207,7 @@ struct FakeAdapter {
     authenticated: AuthenticatedDelivery,
     refreshes: Mutex<VecDeque<Result<ChangeSnapshot, ProviderError>>>,
     publications: Mutex<Vec<Publication>>,
+    publish_results: Mutex<VecDeque<Result<(), ProviderError>>>,
     authentication_count: AtomicUsize,
     refresh_count: AtomicUsize,
 }
@@ -121,6 +222,7 @@ impl FakeAdapter {
             authenticated,
             refreshes: Mutex::new(refreshes.into_iter().collect()),
             publications: Mutex::new(Vec::new()),
+            publish_results: Mutex::new(VecDeque::new()),
             authentication_count: AtomicUsize::new(0),
             refresh_count: AtomicUsize::new(0),
         }
@@ -128,6 +230,14 @@ impl FakeAdapter {
 
     fn publications(&self) -> Vec<Publication> {
         self.publications.lock().unwrap().clone()
+    }
+
+    fn with_publish_results(
+        self,
+        results: impl IntoIterator<Item = Result<(), ProviderError>>,
+    ) -> Self {
+        *self.publish_results.lock().unwrap() = results.into_iter().collect();
+        self
     }
 }
 
@@ -159,7 +269,11 @@ impl ProviderAdapter for FakeAdapter {
         publication: &Publication,
     ) -> Result<(), ProviderError> {
         self.publications.lock().unwrap().push(publication.clone());
-        Ok(())
+        self.publish_results
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(()))
     }
 }
 
@@ -276,9 +390,25 @@ fn controller(
     adapter: Arc<FakeAdapter>,
     outcome: RunnerOutcome,
 ) -> Controller<MemoryLedger, FakeRunner> {
+    controller_with_ledger(adapter, MemoryLedger::default(), outcome)
+}
+
+fn controller_with_ledger<L: DeliveryLedger>(
+    adapter: Arc<FakeAdapter>,
+    ledger: L,
+    outcome: RunnerOutcome,
+) -> Controller<L, FakeRunner> {
     let mut registry = AdapterRegistry::new();
     registry.register(adapter).unwrap();
-    Controller::new(registry, MemoryLedger::default(), FakeRunner::new(outcome))
+    Controller::new(registry, ledger, FakeRunner::new(outcome))
+}
+
+fn lease() -> DeliveryLease {
+    DeliveryLease {
+        evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        fence: LeaseFence::new(1).unwrap(),
+        expires_at_unix_millis: 1_800_000_100_000,
+    }
 }
 
 #[test]
@@ -332,12 +462,254 @@ fn completed_delivery_is_a_duplicate_without_another_run() {
         controller.handle(input(&provider)),
         Ok(HandleOutcome::Published(CheckConclusion::Pass))
     ));
-    assert_eq!(
+    assert!(matches!(
         controller.handle(input(&provider)).unwrap(),
-        HandleOutcome::Duplicate
-    );
+        HandleOutcome::Duplicate { evaluation_id }
+            if evaluation_id.as_str() == "evaluation-01"
+    ));
     assert_eq!(controller.runner.requests.len(), 1);
     assert_eq!(adapter.publications().len(), 1);
+}
+
+#[test]
+fn a_staged_publication_retries_without_another_run() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let adapter = Arc::new(
+        FakeAdapter::new(
+            delivery(&provider, change, 'b'),
+            [
+                Ok(snapshot(ChangeState::Active, run.clone())),
+                Ok(snapshot(ChangeState::Active, run.clone())),
+            ],
+        )
+        .with_publish_results([Err(ProviderError::Unavailable), Ok(())]),
+    );
+    let mut controller = controller(Arc::clone(&adapter), complete(&run));
+
+    assert!(matches!(
+        controller.handle(input(&provider)),
+        Err(ControllerError::Publish(ProviderError::Unavailable))
+    ));
+    let first = adapter.publications();
+    assert_eq!(first.len(), 1);
+
+    assert_eq!(
+        controller.handle(input(&provider)).unwrap(),
+        HandleOutcome::Published(CheckConclusion::Pass)
+    );
+    let retried = adapter.publications();
+    assert_eq!(retried.len(), 2);
+    assert_eq!(retried.first(), retried.get(1));
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 2);
+    assert_eq!(controller.runner.requests.len(), 1);
+
+    assert!(matches!(
+        controller.handle(input(&provider)).unwrap(),
+        HandleOutcome::Duplicate { .. }
+    ));
+    assert_eq!(adapter.publications().len(), 2);
+}
+
+#[test]
+fn a_live_lease_is_an_expected_in_progress_outcome() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let adapter = Arc::new(FakeAdapter::new(delivery(&provider, change, 'b'), []));
+    let expected_lease = lease();
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::Busy {
+            evaluation_id: expected_lease.evaluation_id.clone(),
+            retry_at_unix_millis: expected_lease.expires_at_unix_millis,
+        }),
+        renewals: VecDeque::new(),
+        stage: None,
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+    assert_eq!(
+        controller.handle(input(&provider)).unwrap(),
+        HandleOutcome::InProgress {
+            evaluation_id: expected_lease.evaluation_id,
+            retry_at_unix_millis: expected_lease.expires_at_unix_millis,
+        }
+    );
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 0);
+    assert!(controller.runner.requests.is_empty());
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
+fn a_conflicting_delivery_binding_fails_before_refresh() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let adapter = Arc::new(FakeAdapter::new(delivery(&provider, change, 'b'), []));
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::BindingConflict),
+        renewals: VecDeque::new(),
+        stage: None,
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+    assert!(matches!(
+        controller.handle(input(&provider)),
+        Err(ControllerError::DeliveryBindingConflict)
+    ));
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 0);
+    assert!(controller.runner.requests.is_empty());
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
+fn a_lost_fence_discards_runner_output_before_publication() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let adapter = Arc::new(FakeAdapter::new(
+        delivery(&provider, change, 'b'),
+        [Ok(snapshot(ChangeState::Active, run.clone()))],
+    ));
+    let expected_lease = lease();
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::Execute(expected_lease.clone())),
+        renewals: VecDeque::from([LeaseRenewal::Renewed(expected_lease), LeaseRenewal::Lost]),
+        stage: None,
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+    assert!(matches!(
+        controller.handle(input(&provider)),
+        Err(ControllerError::LeaseLost)
+    ));
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 1);
+    assert_eq!(controller.runner.requests.len(), 1);
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
+fn a_publication_must_be_staged_under_the_live_fence() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let adapter = Arc::new(FakeAdapter::new(
+        delivery(&provider, change, 'b'),
+        [
+            Ok(snapshot(ChangeState::Active, run.clone())),
+            Ok(snapshot(ChangeState::Active, run.clone())),
+        ],
+    ));
+    let expected = lease();
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::Execute(expected.clone())),
+        renewals: VecDeque::from([
+            LeaseRenewal::Renewed(expected.clone()),
+            LeaseRenewal::Renewed(expected.clone()),
+            LeaseRenewal::Renewed(expected),
+        ]),
+        stage: Some(StageOutcome::Lost),
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+    assert!(matches!(
+        controller.handle(input(&provider)),
+        Err(ControllerError::LeaseLost)
+    ));
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 2);
+    assert_eq!(controller.runner.requests.len(), 1);
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
+fn a_lost_completion_record_is_distinct_after_publication() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let authenticated = delivery(&provider, change, 'b');
+    let adapter = Arc::new(FakeAdapter::new(
+        authenticated.clone(),
+        [
+            Ok(snapshot(ChangeState::Active, run.clone())),
+            Ok(snapshot(ChangeState::Active, run.clone())),
+        ],
+    ));
+    let expected = lease();
+    let staged = StagedPublication {
+        evaluation_id: expected.evaluation_id.clone(),
+        fence: expected.fence,
+        publication: Box::new(Publication {
+            provider_run: authenticated.provider_run,
+            evaluation_id: expected.evaluation_id.clone(),
+            run: run.clone(),
+            conclusion: CheckConclusion::Pass,
+            report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        }),
+    };
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::Execute(expected.clone())),
+        renewals: VecDeque::from([
+            LeaseRenewal::Renewed(expected.clone()),
+            LeaseRenewal::Renewed(expected.clone()),
+            LeaseRenewal::Renewed(expected),
+        ]),
+        stage: Some(StageOutcome::Staged(staged)),
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+    assert!(matches!(
+        controller.handle(input(&provider)),
+        Err(ControllerError::CompletionLost)
+    ));
+    assert_eq!(adapter.publications().len(), 1);
+}
+
+#[test]
+fn a_ledger_cannot_change_the_lease_during_renewal() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let expected = lease();
+    let changed_evaluation = DeliveryLease {
+        evaluation_id: ControllerEvaluationId::new("evaluation-02".to_owned()).unwrap(),
+        ..expected.clone()
+    };
+    let changed_fence = DeliveryLease {
+        fence: LeaseFence::new(2).unwrap(),
+        ..expected.clone()
+    };
+    let shortened = DeliveryLease {
+        expires_at_unix_millis: expected.expires_at_unix_millis - 1,
+        ..expected.clone()
+    };
+
+    for changed in [changed_evaluation, changed_fence, shortened] {
+        let adapter = Arc::new(FakeAdapter::new(
+            delivery(&provider, change.clone(), 'b'),
+            [Ok(snapshot(ChangeState::Active, run.clone()))],
+        ));
+        let ledger = ScriptedLedger {
+            claim: Some(DeliveryClaim::Execute(expected.clone())),
+            renewals: VecDeque::from([LeaseRenewal::Renewed(changed)]),
+            stage: None,
+            completion: LeaseCompletion::Lost,
+        };
+        let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+        assert!(matches!(
+            controller.handle(input(&provider)),
+            Err(ControllerError::LeaseLost)
+        ));
+        assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 1);
+        assert!(controller.runner.requests.is_empty());
+        assert!(adapter.publications().is_empty());
+    }
 }
 
 #[test]

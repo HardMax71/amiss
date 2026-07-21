@@ -87,18 +87,34 @@ Provider authentication belongs outside both executables. The separate
 [`amiss-controller`](https://github.com/HardMax71/amiss/tree/main/controller) foundation models
 an untouched delivery whose headers and body remain untrusted until a registered adapter
 authenticates them. Its orchestration then claims a provider-instance/integration/delivery key
-through a durable-ledger trait, refreshes authoritative change state, passes the exact
+through a durable ledger, refreshes authoritative change state, passes the exact
 repository, URL dialect, candidate, target and default-branch refs, commits, and trees to a
 runner, refreshes again, and publishes only if that identity is still current and authorized. A
 changed identity becomes
 superseded; closure, revocation, missing output, timeout, tampered runtime, wrong identity, and
 wrong tree are fail-closed conclusions rather than passes.
 
-Those are transport-neutral contracts only. There is no concrete provider adapter, webhook
-listener, signature verifier, API client, credential source, durable ledger, repository or
-action-tree acquisition worker, runner connection to bootstrap, deployable controller, or
-provider check publisher. No authenticated integration exists for GitHub, GitLab, Gitea-family
-providers, or their self-hosted instances. The engine's `forge` field still selects only a link
-URL dialect.
+The ledger contract requires an exact binding from its opaque four-part delivery key to the
+authenticated repository, change, and provider run. One evaluation ID must survive retries;
+live ownership has a deadline; every expired reclaim must advance a monotonic fence; and stale
+owners must be unable to renew or complete. No implementation exists, and Amiss will not embed
+SQL or a database to supply one. A future non-database mechanism still has to prove atomic
+claim, recovery, retention, and fail-closed corrupt-state behavior.
+
+The controller requires one atomic operation to verify the live fence and durably stage the exact
+publication before the external call. A reclaim that wins that race rejects stale staging; staging
+that wins makes claims return the immutable value until completion instead of granting another
+execution lease. Completion atomically moves that exact staged value to the terminal duplicate
+state, so a concurrent claim can observe only the staged or terminal state. A failed or
+ambiguously acknowledged provider update can therefore be retried without producing a different
+conclusion. The provider update must still be exactly idempotent by the authenticated delivery
+and evaluation ID. These are trait laws only until a durable non-database ledger and a publisher
+implement them.
+
+There is still no concrete provider adapter, webhook listener, signature verifier, API client,
+credential source, repository or action-tree acquisition worker, runner connection to bootstrap,
+deployable controller, or provider check publisher. No authenticated integration exists for
+GitHub, GitLab, Gitea-family providers, or their self-hosted instances. The engine's `forge`
+field still selects only a link URL dialect.
 The JavaScript launcher is pinned manifest data and refuses if invoked directly; the current
 composite Action does not invoke bootstrap or the controller.

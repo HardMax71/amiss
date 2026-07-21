@@ -65,8 +65,11 @@ required order: an adapter authenticates an untouched provider delivery, a durab
 claims its replay identity, the adapter refreshes authoritative state, and only then may a
 runner construct the requests for that exact repository, URL dialect, candidate, target and
 default-branch refs, commits, and trees. It refreshes again before publication. No concrete
-adapter, durable ledger, runner, or publisher implements that contract today. The request's
-`forge` value remains only the URL
+adapter, durable ledger, runner, or publisher implements the surrounding provider path today.
+The storage-neutral ledger contract specifies exact binding, a stable evaluation ID, expiring
+leases, monotonic fences, atomic publication staging, retry of the frozen value, and atomic
+winning completion without embedding SQL or a database. The contract neither authenticates provider
+input nor turns controls into provider authority. The request's `forge` value remains only the URL
 dialect used by link resolution and is separate from the controller's provider namespace and
 instance identity. Debt must reproduce its adoption tree, and a waiver item for another
 candidate tree is simply not selected. The commit and staged-index paths share one
