@@ -65,7 +65,8 @@ pub trait ProviderAdapter: Send + Sync {
     ) -> Result<AuthenticatedDelivery, ProviderError>;
 
     /// Must never substitute the change's current head for the event-bound
-    /// candidate.
+    /// candidate. Implementations must bound this call below the configured
+    /// lease window; unlike supervised runner work, refresh has no heartbeat.
     ///
     /// # Errors
     ///

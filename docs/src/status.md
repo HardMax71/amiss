@@ -69,9 +69,10 @@ The separate nested Rust workspace under
 as a transport-neutral foundation. It defines opaque provider, instance, integration, delivery,
 change, run, and evaluation identities, including the exact repository, URL dialect, candidate,
 target and default-branch refs, commits, and trees; traits for provider adapters, a durable
-replay ledger, and a runner boundary; and an orchestration sequence of authentication, durable claim,
-authoritative refresh, exact run, final authoritative refresh, fail-closed publication, and durable
-completion. It deliberately has no provider enum. It also has no concrete GitHub, GitLab, or
+replay ledger, and a runner boundary with cooperative lease renewal; and an orchestration sequence
+of authentication, durable claim, authoritative refresh, exact run with fail-closed heartbeats,
+final authoritative refresh, fail-closed publication, and durable completion. It deliberately has
+no provider enum. It also has no concrete GitHub, GitLab, or
 Gitea-family adapter, HTTP listener, provider SDK, signature algorithm, credential store,
 durable ledger implementation, repository acquisition worker, bootstrap runner, deployable
 binary, publication transport, or provider status publisher. The ledger trait specifies exact

@@ -12,10 +12,11 @@ use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
     CheckConclusion, Controller, ControllerError, ControllerEvaluationId, DeliveryClaim,
     DeliveryId, DeliveryIdentity, DeliveryLease, DeliveryLedger, Evaluation, HandleOutcome,
-    IntegrationId, LeaseCompletion, LeaseFence, LeaseRenewal, OidPair, ProviderAdapter,
-    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, Publication, RunFailure, RunIdentity, RunRefs, RunRequest,
-    Runner, RunnerOutcome, StageOutcome, StagedPublication, UntrustedDelivery,
+    HeartbeatOutcome, IntegrationId, LeaseCompletion, LeaseFence, LeaseRenewal, OidPair,
+    ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, RunFailure, RunHeartbeat,
+    RunIdentity, RunRefs, RunRequest, Runner, RunnerOutcome, StageOutcome, StagedPublication,
+    UntrustedDelivery,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -42,6 +43,7 @@ struct LedgerRow {
 #[derive(Default)]
 struct MemoryLedger {
     rows: BTreeMap<DeliveryIdentity, LedgerRow>,
+    renewal_count: usize,
 }
 
 impl DeliveryLedger for MemoryLedger {
@@ -62,12 +64,7 @@ impl DeliveryLedger for MemoryLedger {
                 Ok(DeliveryClaim::Execute(row.lease.clone()))
             };
         }
-        let evaluation_id = ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap();
-        let lease = DeliveryLease {
-            evaluation_id,
-            fence: LeaseFence::new(1).unwrap(),
-            expires_at_unix_millis: i64::MAX,
-        };
+        let lease = lease();
         self.rows.insert(
             delivery.identity.clone(),
             LedgerRow {
@@ -85,12 +82,14 @@ impl DeliveryLedger for MemoryLedger {
         delivery: &AuthenticatedDelivery,
         lease: &DeliveryLease,
     ) -> Result<LeaseRenewal, Self::Error> {
-        let Some(row) = self.rows.get(&delivery.identity) else {
+        self.renewal_count = self.renewal_count.saturating_add(1);
+        let Some(row) = self.rows.get_mut(&delivery.identity) else {
             return Ok(LeaseRenewal::Lost);
         };
         if row.binding == *delivery && row.lease == *lease && row.staged.is_none() && !row.complete
         {
-            Ok(LeaseRenewal::Renewed(lease.clone()))
+            row.lease.expires_at_unix_millis = row.lease.expires_at_unix_millis.saturating_add(1);
+            Ok(LeaseRenewal::Renewed(row.lease.clone()))
         } else {
             Ok(LeaseRenewal::Lost)
         }
@@ -141,7 +140,7 @@ impl DeliveryLedger for MemoryLedger {
 
 struct ScriptedLedger {
     claim: Option<DeliveryClaim>,
-    renewals: VecDeque<LeaseRenewal>,
+    renewals: VecDeque<Result<LeaseRenewal, LedgerError>>,
     stage: Option<StageOutcome>,
     completion: LeaseCompletion,
 }
@@ -158,7 +157,10 @@ impl DeliveryLedger for ScriptedLedger {
         _delivery: &AuthenticatedDelivery,
         _lease: &DeliveryLease,
     ) -> Result<LeaseRenewal, Self::Error> {
-        self.renewals.pop_front().ok_or(LedgerError)
+        match self.renewals.pop_front() {
+            Some(result) => result,
+            None => Err(LedgerError),
+        }
     }
 
     fn complete(
@@ -182,6 +184,8 @@ impl DeliveryLedger for ScriptedLedger {
 struct FakeRunner {
     outcomes: VecDeque<RunnerOutcome>,
     requests: Vec<RunRequest>,
+    heartbeat_renewals: usize,
+    heartbeat_deadlines: Vec<i64>,
 }
 
 impl FakeRunner {
@@ -189,13 +193,25 @@ impl FakeRunner {
         Self {
             outcomes: VecDeque::from([outcome]),
             requests: Vec::new(),
+            heartbeat_renewals: 0,
+            heartbeat_deadlines: Vec::new(),
         }
     }
 }
 
 impl Runner for FakeRunner {
-    fn run(&mut self, request: &RunRequest) -> RunnerOutcome {
+    fn run(&mut self, request: &RunRequest, heartbeat: &mut dyn RunHeartbeat) -> RunnerOutcome {
         self.requests.push(request.clone());
+        self.heartbeat_deadlines
+            .push(heartbeat.expires_at_unix_millis());
+        for _ in 0..self.heartbeat_renewals {
+            match heartbeat.renew() {
+                HeartbeatOutcome::Renewed {
+                    expires_at_unix_millis,
+                } => self.heartbeat_deadlines.push(expires_at_unix_millis),
+                HeartbeatOutcome::Stop => return RunnerOutcome::Unavailable,
+            }
+        }
         self.outcomes
             .pop_front()
             .unwrap_or(RunnerOutcome::Unavailable)
@@ -411,6 +427,12 @@ fn lease() -> DeliveryLease {
     }
 }
 
+fn renewal_script(
+    outcomes: impl IntoIterator<Item = LeaseRenewal>,
+) -> VecDeque<Result<LeaseRenewal, LedgerError>> {
+    outcomes.into_iter().map(Ok).collect()
+}
+
 #[test]
 fn successful_flow_binds_run_rechecks_and_publishes() {
     let provider = provider();
@@ -425,6 +447,7 @@ fn successful_flow_binds_run_rechecks_and_publishes() {
         ],
     ));
     let mut controller = controller(Arc::clone(&adapter), complete(&run));
+    controller.runner.heartbeat_renewals = 2;
 
     assert_eq!(
         controller.handle(input(&provider)).unwrap(),
@@ -433,6 +456,11 @@ fn successful_flow_binds_run_rechecks_and_publishes() {
     assert_eq!(adapter.authentication_count.load(Ordering::Relaxed), 1);
     assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 2);
     assert_eq!(controller.runner.requests.len(), 1);
+    assert_eq!(controller.ledger.renewal_count, 5);
+    assert_eq!(
+        controller.runner.heartbeat_deadlines,
+        vec![1_800_000_100_001, 1_800_000_100_002, 1_800_000_100_003,]
+    );
     assert_eq!(controller.runner.requests[0].run, run);
     assert_eq!(
         controller.runner.requests[0].provider_run,
@@ -566,30 +594,45 @@ fn a_conflicting_delivery_binding_fails_before_refresh() {
 }
 
 #[test]
-fn a_lost_fence_discards_runner_output_before_publication() {
+fn renewal_failure_during_or_after_a_run_stops_before_publication() {
     let provider = provider();
     let change = locator(&provider, repository("amiss"));
     let run = run(change.clone(), 'b', 'd');
-    let adapter = Arc::new(FakeAdapter::new(
-        delivery(&provider, change, 'b'),
-        [Ok(snapshot(ChangeState::Active, run.clone()))],
-    ));
     let expected_lease = lease();
-    let ledger = ScriptedLedger {
-        claim: Some(DeliveryClaim::Execute(expected_lease.clone())),
-        renewals: VecDeque::from([LeaseRenewal::Renewed(expected_lease), LeaseRenewal::Lost]),
-        stage: None,
-        completion: LeaseCompletion::Lost,
+    let changed_fence = DeliveryLease {
+        fence: LeaseFence::new(2).unwrap(),
+        ..expected_lease.clone()
     };
-    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    for (heartbeat_renewals, failure) in [
+        (0, Ok(LeaseRenewal::Lost)),
+        (1, Ok(LeaseRenewal::Lost)),
+        (1, Err(LedgerError)),
+        (1, Ok(LeaseRenewal::Renewed(changed_fence))),
+    ] {
+        let expect_ledger_error = failure.is_err();
+        let adapter = Arc::new(FakeAdapter::new(
+            delivery(&provider, change.clone(), 'b'),
+            [Ok(snapshot(ChangeState::Active, run.clone()))],
+        ));
+        let ledger = ScriptedLedger {
+            claim: Some(DeliveryClaim::Execute(expected_lease.clone())),
+            renewals: VecDeque::from([Ok(LeaseRenewal::Renewed(expected_lease.clone())), failure]),
+            stage: None,
+            completion: LeaseCompletion::Lost,
+        };
+        let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+        controller.runner.heartbeat_renewals = heartbeat_renewals;
 
-    assert!(matches!(
-        controller.handle(input(&provider)),
-        Err(ControllerError::LeaseLost)
-    ));
-    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 1);
-    assert_eq!(controller.runner.requests.len(), 1);
-    assert!(adapter.publications().is_empty());
+        let result = controller.handle(input(&provider));
+        if expect_ledger_error {
+            assert!(matches!(result, Err(ControllerError::Ledger(LedgerError))));
+        } else {
+            assert!(matches!(result, Err(ControllerError::LeaseLost)));
+        }
+        assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 1);
+        assert_eq!(controller.runner.requests.len(), 1);
+        assert!(adapter.publications().is_empty());
+    }
 }
 
 #[test]
@@ -607,7 +650,7 @@ fn a_publication_must_be_staged_under_the_live_fence() {
     let expected = lease();
     let ledger = ScriptedLedger {
         claim: Some(DeliveryClaim::Execute(expected.clone())),
-        renewals: VecDeque::from([
+        renewals: renewal_script([
             LeaseRenewal::Renewed(expected.clone()),
             LeaseRenewal::Renewed(expected.clone()),
             LeaseRenewal::Renewed(expected),
@@ -653,7 +696,7 @@ fn a_lost_completion_record_is_distinct_after_publication() {
     };
     let ledger = ScriptedLedger {
         claim: Some(DeliveryClaim::Execute(expected.clone())),
-        renewals: VecDeque::from([
+        renewals: renewal_script([
             LeaseRenewal::Renewed(expected.clone()),
             LeaseRenewal::Renewed(expected.clone()),
             LeaseRenewal::Renewed(expected),
@@ -696,7 +739,7 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
         ));
         let ledger = ScriptedLedger {
             claim: Some(DeliveryClaim::Execute(expected.clone())),
-            renewals: VecDeque::from([LeaseRenewal::Renewed(changed)]),
+            renewals: renewal_script([LeaseRenewal::Renewed(changed)]),
             stage: None,
             completion: LeaseCompletion::Lost,
         };

@@ -11,9 +11,9 @@ pub use identity::{
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,
-    DeliveryLease, DeliveryLedger, Evaluation, HandleOutcome, LeaseCompletion, LeaseFence,
-    LeaseRenewal, OidPair, Publication, RunFailure, RunIdentity, RunRefs, RunRequest, Runner,
-    RunnerOutcome, StageOutcome, StagedPublication,
+    DeliveryLease, DeliveryLedger, Evaluation, HandleOutcome, HeartbeatOutcome, LeaseCompletion,
+    LeaseFence, LeaseRenewal, OidPair, Publication, RunFailure, RunHeartbeat, RunIdentity, RunRefs,
+    RunRequest, Runner, RunnerOutcome, StageOutcome, StagedPublication,
 };
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, DeliveryHeader, ProviderAdapter, ProviderError,

@@ -117,8 +117,9 @@ evaluation/snapshot/controls request triplet, verifies its constraint and truste
 and frames its exact bytes to a verified engine over stdin. The separate nested Rust controller
 defines the provider-neutral sequence of raw-delivery authentication, durable replay claim,
 authoritative state refresh, an exact run binding the repository, URL dialect, candidate, target
-and default-branch refs, base and candidate commits, and both trees, final authoritative refresh,
-fail-closed publication, and durable completion. Neither foundation supplies the surrounding
+and default-branch refs, base and candidate commits, and both trees, cooperative lease heartbeats
+during long supervised work, final authoritative refresh, fail-closed publication, and durable
+completion. Neither foundation supplies the surrounding
 transport: there is no HTTP server, concrete GitHub, GitLab, or Gitea-family adapter, credential
 source, durable ledger implementation, repository acquisition worker, bootstrap runner,
 deployable service, publication transport, or provider check publisher. Amiss will not embed

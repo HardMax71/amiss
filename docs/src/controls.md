@@ -64,8 +64,9 @@ These are binding rules, not authentication. The separate controller foundation 
 required order: an adapter authenticates an untouched provider delivery, a durable ledger
 claims its replay identity, the adapter refreshes authoritative state, and only then may a
 runner construct the requests for that exact repository, URL dialect, candidate, target and
-default-branch refs, commits, and trees. It refreshes again before publication. No concrete
-adapter, durable ledger, runner, or publisher implements the surrounding provider path today.
+default-branch refs, commits, and trees. Long runner work renews through a controller-backed
+heartbeat and stops if ownership cannot be proven. It refreshes again before publication. No
+concrete adapter, durable ledger, runner, or publisher implements the surrounding provider path today.
 The storage-neutral ledger contract specifies exact binding, a stable evaluation ID, expiring
 leases, monotonic fences, atomic publication staging, retry of the frozen value, and atomic
 winning completion without embedding SQL or a database. The contract neither authenticates provider
