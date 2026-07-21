@@ -163,7 +163,8 @@ the record must expose either the saved value or the done state, never a new exe
 | A saved result does not match the authenticated delivery | Reject it before provider I/O. |
 | Another claim is live | Report in progress and do no work. |
 | Lease renewal cannot prove ownership | Stop, discard runner output, and do not publish it. |
-| A valid refresh reports closure, revocation, supersession, or a changed full run | Save and publish the matching unavailable or `Superseded` result, never the old pass or block. |
+| A valid refresh for the same delivery reports closure or revocation | Save and publish the matching unavailable result, never the old pass or block. |
+| A valid refresh for the same delivery reports supersession or changes its URL dialect, refs, base commit, or trees | Save and publish `Superseded`, never the old pass or block. |
 | A refresh returns another repository, change, object format, or event candidate | Reject it without saving or publishing a result. |
 | Runner output is missing, timed out, too large, tampered with, or bound to the wrong identity or tree | Save and publish the matching unavailable result without a report. |
 | Atomic stage loses the fence race | Make no publication call. |
