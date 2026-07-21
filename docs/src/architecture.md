@@ -58,18 +58,11 @@ straight into test repositories so the same fixtures exist on every platform.
 
 The nested [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
 is outside that graph and outside the root lockfile. Its unpublished `amiss-controller` crate
-depends only on `amiss-wire`. It defines transport-neutral traits and identities for
-this sequence: authenticate an untouched delivery, claim its replay key durably, refresh exact
-provider change state, hand a repository/dialect/ref/commit/tree identity and lease heartbeat to a
-runner, refresh again, publish only a still-current result, then record durable completion. A long
-run renews cooperatively and stops if ownership cannot be proven. `ProviderAdapter`,
-`DeliveryLedger`, and `Runner` remain provider-neutral boundaries. The ledger contract requires
-exact delivery/run binding, stable evaluation IDs, expiring leases, monotonic fences, and
-fail-closed stale ownership. It also requires atomic staging before external I/O and an atomic
-staged-to-terminal transition so retries cannot rerun and race a different result. The boundary
-has no implementation.
-SQL and database backends are outside the design; future replay coordination must meet the
-contract through a non-database mechanism.
+depends only on `amiss-wire`. `ProviderAdapter`, `DeliveryLedger`, and `Runner` are
+transport-neutral boundaries for provider access, durable retry coordination, and trusted
+execution. [Controller delivery](controller.md) defines their flow and record contract. The
+orchestrator exists, but those traits have no concrete implementations. Future coordination must
+use a non-database mechanism.
 
 No HTTP transport, provider SDK, credential source, repository acquisition worker, bootstrap
 runner, durable ledger, provider publisher, or deployable service exists in that workspace yet.
