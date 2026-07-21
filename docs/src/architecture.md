@@ -60,8 +60,9 @@ The nested [`controller/`](https://github.com/HardMax71/amiss/tree/main/controll
 is outside that graph and outside the root lockfile. Its unpublished `amiss-controller` crate
 depends only on `amiss-wire`. It defines transport-neutral traits and identities for
 this sequence: authenticate an untouched delivery, claim its replay key durably, refresh exact
-provider change state, hand a repository/dialect/ref/commit/tree identity to a runner, refresh again,
-publish only a still-current result, then record durable completion. `ProviderAdapter`,
+provider change state, hand a repository/dialect/ref/commit/tree identity and lease heartbeat to a
+runner, refresh again, publish only a still-current result, then record durable completion. A long
+run renews cooperatively and stops if ownership cannot be proven. `ProviderAdapter`,
 `DeliveryLedger`, and `Runner` remain provider-neutral boundaries. The ledger contract requires
 exact delivery/run binding, stable evaluation IDs, expiring leases, monotonic fences, and
 fail-closed stale ownership. It also requires atomic staging before external I/O and an atomic

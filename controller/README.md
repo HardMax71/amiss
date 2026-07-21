@@ -5,15 +5,16 @@ workspace stays offline and keeps its networking dependency bans.
 
 The implemented core is transport-neutral: a registered provider adapter
 authenticates an untouched delivery, the delivery ledger claims its replay key,
-the adapter refreshes authoritative change state, the runner receives an exact
-repository/dialect/ref/commit/tree request, state is refreshed again, and only then is a
-result published for the original candidate. A provider run ID and positive
-attempt remain distinct from the controller evaluation ID. Incomplete delivery
-leases resume with that same evaluation ID; only a durably completed delivery
-is treated as a duplicate. Refreshes resolve the authenticated provider run and
-attempt, not the change's latest head; the authenticated candidate commit is checked
-again before a runner or publisher can receive it. The URL dialect, candidate, target,
-and default-branch refs are part of the rechecked run identity rather than runner guesses.
+the adapter refreshes authoritative change state, and the runner receives an exact
+repository/dialect/ref/commit/tree request plus a controller-backed lease heartbeat. Long
+supervised work renews before its current deadline and stops without usable output when
+ownership cannot be proven. State is refreshed again before a result is published for the
+original candidate. A provider run ID and positive attempt remain distinct from the controller
+evaluation ID. Incomplete delivery leases resume with that same evaluation ID; only a durably
+completed delivery is treated as a duplicate. Refreshes resolve the authenticated provider run
+and attempt, not the change's latest head; the authenticated candidate commit is checked again
+before a runner or publisher can receive it. The URL dialect, candidate, target, and
+default-branch refs are part of the rechecked run identity rather than runner guesses.
 
 The ledger contract is storage-neutral. It requires the exact authenticated
 delivery binding, one stable evaluation ID across retries, time-bounded leases,

@@ -120,11 +120,33 @@ pub enum RunnerOutcome {
     Unavailable,
 }
 
+#[must_use]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeartbeatOutcome {
+    /// Ownership is proven through this advisory deadline.
+    Renewed { expires_at_unix_millis: i64 },
+    /// Ownership cannot be proven and supervised work must terminate.
+    Stop,
+}
+
+/// Cooperative lease renewal for one supervised run.
+pub trait RunHeartbeat {
+    /// The current advisory deadline; only a ledger renewal decides ownership.
+    fn expires_at_unix_millis(&self) -> i64;
+
+    /// Extends the live lease. The returned deadline is the only proven window;
+    /// `Stop` means the runner must terminate and discard its output. The
+    /// controller retains the exact failure.
+    fn renew(&mut self) -> HeartbeatOutcome;
+}
+
 pub trait Runner {
     /// Runs the exact acquired identity. `Complete` is reserved for a report
     /// whose engine, exit class, and request bindings the trusted runner has
     /// already accepted; the controller independently rechecks the identity.
-    fn run(&mut self, request: &RunRequest) -> RunnerOutcome;
+    /// Work that may cross the heartbeat deadline must renew before it does;
+    /// a `Stop` response terminates the run immediately.
+    fn run(&mut self, request: &RunRequest, heartbeat: &mut dyn RunHeartbeat) -> RunnerOutcome;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -186,14 +208,14 @@ pub enum LeaseCompletion {
 pub trait DeliveryLedger {
     type Error: std::error::Error + Send + Sync + 'static;
 
-    /// # Errors
-    ///
     /// Atomically creates, resumes, or fences a durable lease. Every reclaim
     /// keeps the first evaluation ID and advances the fence. A live lease held
     /// by another ledger owner returns `Busy`; a frozen result returns
     /// `Publish`; `Duplicate` is reserved for a terminal, durably completed
     /// delivery. Reusing one delivery key for a different authenticated change
     /// or provider run returns `BindingConflict`.
+    ///
+    /// # Errors
     ///
     /// Returns an error when that guarantee cannot be established.
     fn claim(&mut self, delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error>;
@@ -411,7 +433,17 @@ where
             run: initial.run.clone(),
         };
         let runner_outcome = match initial.state {
-            ChangeState::Active => Some(self.runner.run(&request)),
+            ChangeState::Active => {
+                let mut heartbeat = LedgerHeartbeat {
+                    ledger: &mut self.ledger,
+                    delivery: &delivery,
+                    lease: &mut lease,
+                    failure: None,
+                };
+                let outcome = self.runner.run(&request, &mut heartbeat);
+                heartbeat.finish()?;
+                Some(outcome)
+            }
             ChangeState::Superseded | ChangeState::Closed | ChangeState::AuthorizationRevoked => {
                 None
             }
@@ -425,6 +457,47 @@ where
         let publication = publication(&request, &initial, &fresh, runner_outcome);
         let staged = stage_publication(&mut self.ledger, &delivery, &lease, &publication)?;
         publish_staged(adapter, &mut self.ledger, &delivery, &staged)
+    }
+}
+
+struct LedgerHeartbeat<'a, L: DeliveryLedger> {
+    ledger: &'a mut L,
+    delivery: &'a AuthenticatedDelivery,
+    lease: &'a mut DeliveryLease,
+    failure: Option<ControllerError<L::Error>>,
+}
+
+impl<L: DeliveryLedger> LedgerHeartbeat<'_, L> {
+    fn finish(self) -> Result<(), ControllerError<L::Error>> {
+        match self.failure {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+}
+
+impl<L: DeliveryLedger> RunHeartbeat for LedgerHeartbeat<'_, L> {
+    fn expires_at_unix_millis(&self) -> i64 {
+        self.lease.expires_at_unix_millis
+    }
+
+    fn renew(&mut self) -> HeartbeatOutcome {
+        if self.failure.is_some() {
+            return HeartbeatOutcome::Stop;
+        }
+        match renew_lease(self.ledger, self.delivery, self.lease) {
+            Ok(lease) => {
+                let expires_at_unix_millis = lease.expires_at_unix_millis;
+                *self.lease = lease;
+                HeartbeatOutcome::Renewed {
+                    expires_at_unix_millis,
+                }
+            }
+            Err(error) => {
+                self.failure = Some(error);
+                HeartbeatOutcome::Stop
+            }
+        }
     }
 }
 

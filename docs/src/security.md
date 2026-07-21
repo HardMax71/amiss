@@ -87,10 +87,12 @@ Provider authentication belongs outside both executables. The separate
 [`amiss-controller`](https://github.com/HardMax71/amiss/tree/main/controller) foundation models
 an untouched delivery whose headers and body remain untrusted until a registered adapter
 authenticates them. Its orchestration then claims a provider-instance/integration/delivery key
-through a durable ledger, refreshes authoritative change state, passes the exact
+through a durable ledger, refreshes authoritative change state, and passes the exact
 repository, URL dialect, candidate, target and default-branch refs, commits, and trees to a
-runner, refreshes again, and publishes only if that identity is still current and authorized. A
-changed identity becomes
+runner with a controller-backed lease heartbeat. Supervised work that may reach the current
+deadline must renew first; inability to prove ownership stops the run and discards its output.
+The controller renews again after the run, refreshes provider state, and publishes only if that
+identity is still current and authorized. A changed identity becomes
 superseded; closure, revocation, missing output, timeout, tampered runtime, wrong identity, and
 wrong tree are fail-closed conclusions rather than passes.
 
@@ -100,6 +102,10 @@ live ownership has a deadline; every expired reclaim must advance a monotonic fe
 owners must be unable to renew or complete. No implementation exists, and Amiss will not embed
 SQL or a database to supply one. A future non-database mechanism still has to prove atomic
 claim, recovery, retention, and fail-closed corrupt-state behavior.
+
+Provider refresh calls do not receive the runner heartbeat, so concrete adapters must impose
+timeouts comfortably below the configured lease window. The staged, source-idempotent publication
+path makes a bounded publication retry safe after an ambiguous provider acknowledgement.
 
 The controller requires one atomic operation to verify the live fence and durably stage the exact
 publication before the external call. A reclaim that wins that race rejects stale staging; staging
