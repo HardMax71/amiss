@@ -66,20 +66,15 @@ acquires these inputs from an authenticated provider. The distinction is visible
 
 The separate nested Rust workspace under
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) is also implemented only
-as a transport-neutral foundation. It defines opaque provider, instance, integration, delivery,
-change, run, and evaluation identities, including the exact repository, URL dialect, candidate,
-target and default-branch refs, commits, and trees; traits for provider adapters, a durable
-replay ledger, and a runner boundary with cooperative lease renewal; and an orchestration sequence
-of authentication, durable claim, authoritative refresh, exact run with fail-closed heartbeats,
-final authoritative refresh, fail-closed publication, and durable completion. It deliberately has
-no provider enum. It also has no concrete GitHub, GitLab, or
+as a transport-neutral foundation. It defines provider-neutral identities and the adapter,
+durable-record, runner, and orchestration boundaries described in
+[Controller delivery](controller.md). It deliberately has no provider enum and no concrete GitHub,
+GitLab, or
 Gitea-family adapter, HTTP listener, provider SDK, signature algorithm, credential store,
 durable ledger implementation, repository acquisition worker, bootstrap runner, deployable
-binary, publication transport, or provider status publisher. The ledger trait specifies exact
-binding, stable evaluation IDs, expiring leases, monotonic fences, atomic publication staging,
-retry of the frozen value, and atomic winning completion, but no backend implements it. Amiss will not
-embed SQL or a database for this purpose. These absences make the workspace an internal
-foundation, not a supported delivery lane.
+binary, publication transport, or provider status publisher. Amiss will not embed SQL or a
+database for this purpose. These absences make the workspace an internal foundation, not a
+supported delivery lane.
 
 Local and convenience-Action reports consequently describe repository policy with no
 external authority consulted. Each external control has status `none`, and the sandbox

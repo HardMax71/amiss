@@ -55,21 +55,9 @@ materialization, the bootstrap accepts a canonical evaluation/snapshot/controls 
 validates its required constraint and trusted-time bindings, and carries the exact bytes to its
 verified engine in a closed stdin frame. The separate, unpublished Rust workspace under
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines opaque provider
-identities, an adapter registry, a durable delivery-ledger boundary, an exact run identity
-covering the repository, URL dialect, candidate, target and default-branch refs, commits, and
-trees, a runner boundary, and fail-closed publication orchestration.
-
-The delivery-ledger boundary now makes exclusive ownership explicit. A claim binds the exact
-authenticated delivery to its repository, change, and provider run; retries retain one
-evaluation ID, a live owner reports a retry deadline, expiry must advance a monotonic fence,
-and stale owners cannot renew or complete the lease. Long supervised work receives a
-controller-backed heartbeat, renews before its current deadline, and stops when ownership cannot
-be proven. One atomic operation must verify the live fence and stage the exact publication before
-external I/O: reclaim rejects a stale stage, while a successful stage makes every retry until
-completion receive that immutable publication rather than another execution lease. Completion
-atomically moves the exact staged value to the terminal duplicate state; a concurrent claim can
-observe only one of those states. No implementation ships yet. The eventual mechanism must satisfy
-those laws without embedding SQL or a database in Amiss.
+identities and the provider-neutral contracts documented in
+[Controller delivery](controller.md). That is the full delivery, ownership, retry, and publication
+mechanism. Its traits, orchestrator, and focused tests exist; the concrete parts around them do not.
 
 That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
 GitHub, GitLab, or Gitea-family adapter, signature implementation, credential acquisition,
@@ -79,33 +67,14 @@ Action remains a convenience event wrapper that launches the engine directly. No
 produces a provider-verified sandbox or turns an engine report into independently authenticated
 evidence.
 
-The intended adapter sequence is deliberately provider-neutral:
-
-1. authenticate the untouched provider delivery, including its headers and body, without
-   trusting a body field before authentication;
-2. atomically claim or resume its provider-instance, integration, and delivery identity in a
-   durable replay ledger;
-3. refresh authoritative provider state and bind the exact repository, change, URL dialect,
-   candidate, protected target and default-branch refs, base and candidate commits, and both
-   trees;
-4. acquire those objects and an independently trusted action tree, construct the canonical
-   requests, and invoke the sealed bootstrap path while heartbeating the live delivery lease and
-   without passing provider credentials to the engine;
-5. refresh provider state again, freeze the exact result under the live delivery fence, and
-   publish only if the authorization remains active and the exact run identity is still current;
-   otherwise freeze and publish an unavailable or superseded result;
-6. durably complete the staged delivery only after publication succeeds idempotently under the
-   authenticated delivery and evaluation ID; a retry republishes the same staged value rather
-   than running again.
-
-What remains is to implement and deploy that sequence: choose trust anchors and rotation,
-freshness, revocation, and replay-retention windows; select a non-database mechanism for atomic
-lease ownership, exact publication staging, and durable completion; build each provider adapter
-against capabilities the provider actually offers; connect the controller runner to repository
-acquisition and `amiss-bootstrap` with bounded polling, heartbeat cadence, and cancellation;
-bound provider refreshes below the lease window; implement an exactly idempotent source-bound
-required check; and cover wrong provider, repository, change, ref, commit, tree, expiry, replay,
-revocation, missing output, timeout, and tampered runtime closure in end-to-end negative tests.
+What remains is to implement and deploy that flow: choose trust anchors and rotation,
+freshness, revocation, and replay-retention windows; select a durable non-database mechanism that
+meets the delivery contract; build each provider adapter against capabilities the provider
+actually offers; connect the controller runner to repository acquisition and `amiss-bootstrap`
+with bounded polling, heartbeat cadence, and cancellation; bound provider refreshes below the
+lease window; make repeated publication of the same source-bound required check safe; and cover
+wrong provider, repository, change, ref, commit, tree, expiry, replay, revocation, missing output,
+timeout, and tampered runtime closure in end-to-end negative tests.
 Link dialect support in the engine's `forge` field is not evidence that an authenticated adapter
 exists.
 

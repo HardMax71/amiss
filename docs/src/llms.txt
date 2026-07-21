@@ -30,6 +30,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 
 - [Security model](https://hardmax71.github.io/amiss/security.html): the zero-capability sandbox posture and hostile-input handling
 - [Controls and policy](https://hardmax71.github.io/amiss/controls.html): repository policy, organization floors, debt, waivers, and trusted time
+- [Controller delivery](https://hardmax71.github.io/amiss/controller.html): authenticated delivery, temporary ownership, saved results, retries, and the current implementation boundary
 
 ## The project
 

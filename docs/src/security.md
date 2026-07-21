@@ -86,36 +86,11 @@ so it does not gain an authenticated signature merely by passing through bootstr
 Provider authentication belongs outside both executables. The separate
 [`amiss-controller`](https://github.com/HardMax71/amiss/tree/main/controller) foundation models
 an untouched delivery whose headers and body remain untrusted until a registered adapter
-authenticates them. Its orchestration then claims a provider-instance/integration/delivery key
-through a durable ledger, refreshes authoritative change state, and passes the exact
-repository, URL dialect, candidate, target and default-branch refs, commits, and trees to a
-runner with a controller-backed lease heartbeat. Supervised work that may reach the current
-deadline must renew first; inability to prove ownership stops the run and discards its output.
-The controller renews again after the run, refreshes provider state, and publishes only if that
-identity is still current and authorized. A changed identity becomes
-superseded; closure, revocation, missing output, timeout, tampered runtime, wrong identity, and
-wrong tree are fail-closed conclusions rather than passes.
-
-The ledger contract requires an exact binding from its opaque four-part delivery key to the
-authenticated repository, change, and provider run. One evaluation ID must survive retries;
-live ownership has a deadline; every expired reclaim must advance a monotonic fence; and stale
-owners must be unable to renew or complete. No implementation exists, and Amiss will not embed
-SQL or a database to supply one. A future non-database mechanism still has to prove atomic
-claim, recovery, retention, and fail-closed corrupt-state behavior.
-
-Provider refresh calls do not receive the runner heartbeat, so concrete adapters must impose
-timeouts comfortably below the configured lease window. The staged, source-idempotent publication
-path makes a bounded publication retry safe after an ambiguous provider acknowledgement.
-
-The controller requires one atomic operation to verify the live fence and durably stage the exact
-publication before the external call. A reclaim that wins that race rejects stale staging; staging
-that wins makes claims return the immutable value until completion instead of granting another
-execution lease. Completion atomically moves that exact staged value to the terminal duplicate
-state, so a concurrent claim can observe only the staged or terminal state. A failed or
-ambiguously acknowledged provider update can therefore be retried without producing a different
-conclusion. The provider update must still be exactly idempotent by the authenticated delivery
-and evaluation ID. These are trait laws only until a durable non-database ledger and a publisher
-implement them.
+authenticates them. It stops and discards output when ownership cannot be proven, and it refreshes
+provider state before accepting a result as current. Closure, revocation, and runner failures such
+as missing output, timeout, tampered runtime, or an output bound to the wrong identity or tree
+remain fail-closed conclusions rather than passes. [Controller delivery](controller.md) defines
+the complete flow, durable record, race, and retry rules.
 
 There is still no concrete provider adapter, webhook listener, signature verifier, API client,
 credential source, repository or action-tree acquisition worker, runner connection to bootstrap,

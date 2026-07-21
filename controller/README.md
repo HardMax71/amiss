@@ -3,28 +3,12 @@
 This nested Rust workspace owns the provider-facing trust boundary. The root
 workspace stays offline and keeps its networking dependency bans.
 
-The implemented core is transport-neutral: a registered provider adapter
-authenticates an untouched delivery, the delivery ledger claims its replay key,
-the adapter refreshes authoritative change state, and the runner receives an exact
-repository/dialect/ref/commit/tree request plus a controller-backed lease heartbeat. Long
-supervised work renews before its current deadline and stops without usable output when
-ownership cannot be proven. State is refreshed again before a result is published for the
-original candidate. A provider run ID and positive attempt remain distinct from the controller
-evaluation ID. Incomplete delivery leases resume with that same evaluation ID; only a durably
-completed delivery is treated as a duplicate. Refreshes resolve the authenticated provider run
-and attempt, not the change's latest head; the authenticated candidate commit is checked again
-before a runner or publisher can receive it. The URL dialect, candidate, target, and
-default-branch refs are part of the rechecked run identity rather than runner guesses.
-
-The ledger contract is storage-neutral. It requires the exact authenticated
-delivery binding, one stable evaluation ID across retries, time-bounded leases,
-monotonic fences, and fail-closed stale renewal and completion. Before external
-I/O, one atomic operation verifies the live fence and freezes the exact publication;
-a retry receives that same staged value instead of another execution lease. Completion
-atomically moves that staged value to the terminal duplicate state. Publisher idempotence
-is scoped by the authenticated delivery and controller evaluation ID. It deliberately ships
-no SQL or database backend. A future integration must satisfy those laws through a non-database
-mechanism without leaking storage into the offline root workspace.
+The implemented core is transport-neutral. `ProviderAdapter`, `DeliveryLedger`, and `Runner`
+separate authentication and provider access, durable retry coordination, and trusted execution.
+[Controller delivery](../docs/src/controller.md) documents the full flow, logical record,
+heartbeats, races, and retry rules. The contract deliberately ships no SQL or database backend;
+a future integration must satisfy it through a non-database mechanism without leaking storage
+into the offline root workspace.
 
 No HTTP server, provider SDK, credential store, acquisition worker, bootstrap
 runner, durable ledger implementation, provider check publisher, publication
