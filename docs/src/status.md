@@ -73,8 +73,12 @@ replay ledger, and a runner boundary; and an orchestration sequence of authentic
 authoritative refresh, exact run, final authoritative refresh, fail-closed publication, and durable
 completion. It deliberately has no provider enum. It also has no concrete GitHub, GitLab, or
 Gitea-family adapter, HTTP listener, provider SDK, signature algorithm, credential store,
-database, repository acquisition worker, deployable binary, or provider status publisher.
-Those absences make it an internal contract, not a supported delivery lane.
+durable ledger implementation, repository acquisition worker, bootstrap runner, deployable
+binary, publication transport, or provider status publisher. The ledger trait specifies exact
+binding, stable evaluation IDs, expiring leases, monotonic fences, atomic publication staging,
+retry of the frozen value, and atomic winning completion, but no backend implements it. Amiss will not
+embed SQL or a database for this purpose. These absences make the workspace an internal
+foundation, not a supported delivery lane.
 
 Local and convenience-Action reports consequently describe repository policy with no
 external authority consulted. Each external control has status `none`, and the sandbox

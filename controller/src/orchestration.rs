@@ -1,4 +1,5 @@
 use std::fmt;
+use std::num::NonZeroU64;
 
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -126,10 +127,60 @@ pub trait Runner {
     fn run(&mut self, request: &RunRequest) -> RunnerOutcome;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LeaseFence(NonZeroU64);
+
+impl LeaseFence {
+    pub const fn new(raw: u64) -> Option<Self> {
+        match NonZeroU64::new(raw) {
+            Some(fence) => Some(Self(fence)),
+            None => None,
+        }
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeliveryLease {
+    pub evaluation_id: ControllerEvaluationId,
+    pub fence: LeaseFence,
+    /// Advisory deadline; only the ledger transaction decides ownership.
+    pub expires_at_unix_millis: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DeliveryClaim {
-    Execute(ControllerEvaluationId),
-    Duplicate,
+    Execute(DeliveryLease),
+    Publish(StagedPublication),
+    Busy {
+        evaluation_id: ControllerEvaluationId,
+        retry_at_unix_millis: i64,
+    },
+    Duplicate {
+        evaluation_id: ControllerEvaluationId,
+    },
+    BindingConflict,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LeaseRenewal {
+    Renewed(DeliveryLease),
+    Lost,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StageOutcome {
+    Staged(StagedPublication),
+    Lost,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LeaseCompletion {
+    Completed,
+    Lost,
 }
 
 pub trait DeliveryLedger {
@@ -137,25 +188,61 @@ pub trait DeliveryLedger {
 
     /// # Errors
     ///
-    /// Atomically creates or resumes a durable lease. An incomplete delivery
-    /// must return `Execute` with the same evaluation ID after a retry;
-    /// `Duplicate` is reserved for a terminal, durably completed delivery.
+    /// Atomically creates, resumes, or fences a durable lease. Every reclaim
+    /// keeps the first evaluation ID and advances the fence. A live lease held
+    /// by another ledger owner returns `Busy`; a frozen result returns
+    /// `Publish`; `Duplicate` is reserved for a terminal, durably completed
+    /// delivery. Reusing one delivery key for a different authenticated change
+    /// or provider run returns `BindingConflict`.
     ///
     /// Returns an error when that guarantee cannot be established.
-    fn claim(&mut self, delivery: &DeliveryIdentity) -> Result<DeliveryClaim, Self::Error>;
+    fn claim(&mut self, delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error>;
 
-    /// Marks a published evaluation terminal under the claimed delivery key.
+    /// Extends one live lease without changing its evaluation ID or fence or
+    /// moving its advisory deadline backward.
     ///
     /// # Errors
     ///
-    /// Returns an error unless completion is durably recorded. Publication is
-    /// idempotent by evaluation ID so a caller may safely resume after this
-    /// operation fails.
+    /// Returns an error when durable ownership cannot be checked. Missing,
+    /// expired, staged, completed, or superseded leases return `Lost`.
+    fn renew(
+        &mut self,
+        delivery: &AuthenticatedDelivery,
+        lease: &DeliveryLease,
+    ) -> Result<LeaseRenewal, Self::Error>;
+
+    /// Atomically checks the live fence and freezes the exact publication before
+    /// external I/O. If staging wins a race with reclaim, every claim until
+    /// completion returns that immutable publication and renewal returns `Lost`.
+    /// If reclaim wins, this stale stage returns `Lost`. Repeating the same stage
+    /// after an ambiguous acknowledgement returns the exact staged value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when durable staging cannot be checked. Missing,
+    /// expired, completed, or superseded leases return `Lost`.
+    fn stage(
+        &mut self,
+        delivery: &AuthenticatedDelivery,
+        lease: &DeliveryLease,
+        publication: &Publication,
+    ) -> Result<StageOutcome, Self::Error>;
+
+    /// Atomically moves the exact staged evaluation to its terminal state.
+    /// Concurrent claims observe either `Publish` before the transition or
+    /// `Duplicate` after it, never `Execute` or `Busy` in between.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the durable decision cannot be made. Missing,
+    /// unstaged, or conflicting publications return `Lost`. Repeating completion
+    /// for the same staged value is `Completed` so a caller may safely resume
+    /// after an ambiguous commit acknowledgement.
     fn complete(
         &mut self,
-        delivery: &DeliveryIdentity,
-        evaluation_id: &ControllerEvaluationId,
-    ) -> Result<(), Self::Error>;
+        delivery: &AuthenticatedDelivery,
+        staged: &StagedPublication,
+    ) -> Result<LeaseCompletion, Self::Error>;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -175,6 +262,13 @@ pub struct Publication {
     pub report: Option<Vec<u8>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StagedPublication {
+    pub evaluation_id: ControllerEvaluationId,
+    pub fence: LeaseFence,
+    pub publication: Box<Publication>,
+}
+
 #[derive(Debug)]
 pub enum ControllerError<E> {
     UnknownProvider,
@@ -182,7 +276,11 @@ pub enum ControllerError<E> {
     WrongAuthenticatedProvider,
     WrongChangeIdentity,
     WrongProviderRun,
+    DeliveryBindingConflict,
+    LeaseLost,
+    CompletionLost,
     Ledger(E),
+    Completion(E),
     Publish(ProviderError),
 }
 
@@ -200,7 +298,20 @@ impl<E: fmt::Display> fmt::Display for ControllerError<E> {
             Self::WrongProviderRun => {
                 formatter.write_str("provider refresh changed the authenticated provider run")
             }
+            Self::DeliveryBindingConflict => {
+                formatter.write_str("delivery key was rebound to another authenticated run")
+            }
+            Self::LeaseLost => formatter.write_str("delivery lease is no longer authoritative"),
+            Self::CompletionLost => {
+                formatter.write_str("published result lost its staged completion record")
+            }
             Self::Ledger(error) => write!(formatter, "delivery ledger operation failed: {error}"),
+            Self::Completion(error) => {
+                write!(
+                    formatter,
+                    "published result could not be completed: {error}"
+                )
+            }
             Self::Publish(error) => write!(formatter, "provider publication failed: {error}"),
         }
     }
@@ -208,9 +319,15 @@ impl<E: fmt::Display> fmt::Display for ControllerError<E> {
 
 impl<E> std::error::Error for ControllerError<E> where E: std::error::Error + Send + Sync + 'static {}
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HandleOutcome {
-    Duplicate,
+    InProgress {
+        evaluation_id: ControllerEvaluationId,
+        retry_at_unix_millis: i64,
+    },
+    Duplicate {
+        evaluation_id: ControllerEvaluationId,
+    },
     Published(CheckConclusion),
 }
 
@@ -256,22 +373,41 @@ where
         {
             return Err(ControllerError::WrongAuthenticatedProvider);
         }
-        let evaluation_id = match self
+        let mut lease = match self
             .ledger
-            .claim(&delivery.identity)
+            .claim(&delivery)
             .map_err(ControllerError::Ledger)?
         {
-            DeliveryClaim::Duplicate => return Ok(HandleOutcome::Duplicate),
-            DeliveryClaim::Execute(evaluation_id) => evaluation_id,
+            DeliveryClaim::Execute(lease) => lease,
+            DeliveryClaim::Publish(staged) => {
+                validate_staged(&delivery, &staged)?;
+                return publish_staged(adapter, &mut self.ledger, &delivery, &staged);
+            }
+            DeliveryClaim::Busy {
+                evaluation_id,
+                retry_at_unix_millis,
+            } => {
+                return Ok(HandleOutcome::InProgress {
+                    evaluation_id,
+                    retry_at_unix_millis,
+                });
+            }
+            DeliveryClaim::Duplicate { evaluation_id } => {
+                return Ok(HandleOutcome::Duplicate { evaluation_id });
+            }
+            DeliveryClaim::BindingConflict => {
+                return Err(ControllerError::DeliveryBindingConflict);
+            }
         };
         let initial = adapter
             .refresh(&delivery)
             .map_err(ControllerError::Provider)?;
         validate_change(&delivery, &initial)?;
+        lease = renew_lease(&mut self.ledger, &delivery, &lease)?;
         let request = RunRequest {
             delivery: delivery.identity.clone(),
             provider_run: delivery.provider_run.clone(),
-            evaluation_id: evaluation_id.clone(),
+            evaluation_id: lease.evaluation_id.clone(),
             run: initial.run.clone(),
         };
         let runner_outcome = match initial.state {
@@ -280,30 +416,112 @@ where
                 None
             }
         };
+        lease = renew_lease(&mut self.ledger, &delivery, &lease)?;
         let fresh = adapter
             .refresh(&delivery)
             .map_err(ControllerError::Provider)?;
         validate_change(&delivery, &fresh)?;
+        lease = renew_lease(&mut self.ledger, &delivery, &lease)?;
         let publication = publication(&request, &initial, &fresh, runner_outcome);
-        adapter
-            .publish(&delivery, &publication)
-            .map_err(ControllerError::Publish)?;
-        self.ledger
-            .complete(&delivery.identity, &evaluation_id)
-            .map_err(ControllerError::Ledger)?;
-        Ok(HandleOutcome::Published(publication.conclusion))
+        let staged = stage_publication(&mut self.ledger, &delivery, &lease, &publication)?;
+        publish_staged(adapter, &mut self.ledger, &delivery, &staged)
     }
+}
+
+fn renew_lease<L: DeliveryLedger>(
+    ledger: &mut L,
+    delivery: &AuthenticatedDelivery,
+    lease: &DeliveryLease,
+) -> Result<DeliveryLease, ControllerError<L::Error>> {
+    let renewal = ledger
+        .renew(delivery, lease)
+        .map_err(ControllerError::Ledger)?;
+    let LeaseRenewal::Renewed(renewed) = renewal else {
+        return Err(ControllerError::LeaseLost);
+    };
+    if renewed.evaluation_id != lease.evaluation_id
+        || renewed.fence != lease.fence
+        || renewed.expires_at_unix_millis < lease.expires_at_unix_millis
+    {
+        return Err(ControllerError::LeaseLost);
+    }
+    Ok(renewed)
+}
+
+fn stage_publication<L: DeliveryLedger>(
+    ledger: &mut L,
+    delivery: &AuthenticatedDelivery,
+    lease: &DeliveryLease,
+    publication: &Publication,
+) -> Result<StagedPublication, ControllerError<L::Error>> {
+    let outcome = ledger
+        .stage(delivery, lease, publication)
+        .map_err(ControllerError::Ledger)?;
+    match outcome {
+        StageOutcome::Staged(staged) if staged.publication.as_ref() == publication => {
+            validate_staged_lease(lease, staged)
+        }
+        StageOutcome::Staged(_) | StageOutcome::Lost => Err(ControllerError::LeaseLost),
+    }
+}
+
+fn validate_staged_lease<E>(
+    lease: &DeliveryLease,
+    staged: StagedPublication,
+) -> Result<StagedPublication, ControllerError<E>> {
+    if staged.evaluation_id != lease.evaluation_id || staged.fence != lease.fence {
+        return Err(ControllerError::LeaseLost);
+    }
+    Ok(staged)
+}
+
+fn publish_staged<L: DeliveryLedger>(
+    adapter: &dyn crate::ProviderAdapter,
+    ledger: &mut L,
+    delivery: &AuthenticatedDelivery,
+    staged: &StagedPublication,
+) -> Result<HandleOutcome, ControllerError<L::Error>> {
+    adapter
+        .publish(delivery, &staged.publication)
+        .map_err(ControllerError::Publish)?;
+    match ledger
+        .complete(delivery, staged)
+        .map_err(ControllerError::Completion)?
+    {
+        LeaseCompletion::Completed => Ok(HandleOutcome::Published(staged.publication.conclusion)),
+        LeaseCompletion::Lost => Err(ControllerError::CompletionLost),
+    }
+}
+
+fn validate_staged<E>(
+    delivery: &AuthenticatedDelivery,
+    staged: &StagedPublication,
+) -> Result<(), ControllerError<E>> {
+    if staged.publication.evaluation_id != staged.evaluation_id {
+        return Err(ControllerError::LeaseLost);
+    }
+    if staged.publication.provider_run != delivery.provider_run {
+        return Err(ControllerError::WrongProviderRun);
+    }
+    validate_run(delivery, &staged.publication.run)
 }
 
 fn validate_change<E>(
     delivery: &AuthenticatedDelivery,
     snapshot: &ChangeSnapshot,
 ) -> Result<(), ControllerError<E>> {
-    if snapshot.run.change != delivery.change {
+    validate_run(delivery, &snapshot.run)
+}
+
+fn validate_run<E>(
+    delivery: &AuthenticatedDelivery,
+    run: &RunIdentity,
+) -> Result<(), ControllerError<E>> {
+    if run.change != delivery.change {
         return Err(ControllerError::WrongChangeIdentity);
     }
-    if snapshot.run.object_format != delivery.provider_run.object_format
-        || snapshot.run.commits.candidate != delivery.provider_run.candidate_commit
+    if run.object_format != delivery.provider_run.object_format
+        || run.commits.candidate != delivery.provider_run.candidate_commit
     {
         return Err(ControllerError::WrongProviderRun);
     }

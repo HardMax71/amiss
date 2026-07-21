@@ -72,7 +72,9 @@ pub trait ProviderAdapter: Send + Sync {
     /// The exact authoritative run state cannot be obtained.
     fn refresh(&self, delivery: &AuthenticatedDelivery) -> Result<ChangeSnapshot, ProviderError>;
 
-    /// Idempotent by the publication's controller evaluation ID.
+    /// A staged publication may be delivered more than once. Repeating it is
+    /// idempotent by authenticated delivery and controller evaluation ID; a
+    /// different publication under that source-bound key must fail closed.
     ///
     /// # Errors
     ///

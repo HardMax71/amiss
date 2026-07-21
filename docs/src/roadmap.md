@@ -59,12 +59,23 @@ identities, an adapter registry, a durable delivery-ledger boundary, an exact ru
 covering the repository, URL dialect, candidate, target and default-branch refs, commits, and
 trees, a runner boundary, and fail-closed publication orchestration.
 
+The delivery-ledger boundary now makes exclusive ownership explicit. A claim binds the exact
+authenticated delivery to its repository, change, and provider run; retries retain one
+evaluation ID, a live owner reports a retry deadline, expiry must advance a monotonic fence,
+and stale owners cannot renew or complete the lease. One atomic operation must verify the live
+fence and stage the exact publication before external I/O: reclaim rejects a stale stage, while a
+successful stage makes every retry until completion receive that immutable publication rather
+than another execution lease. Completion atomically moves the exact staged value to the terminal
+duplicate state; a concurrent claim can observe only one of those states. No implementation ships
+yet. The eventual mechanism must satisfy those laws without embedding SQL or a database in Amiss.
+
 That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
 GitHub, GitLab, or Gitea-family adapter, signature implementation, credential acquisition,
-durable ledger implementation, repository or action-tree acquisition worker, deployable
-service, or provider check publisher. The GitHub composite Action remains a convenience event
-wrapper that launches the engine directly. No current path produces a provider-verified
-sandbox or turns an engine report into independently authenticated evidence.
+durable ledger implementation, repository or action-tree acquisition worker, bootstrap runner,
+deployable service, publication transport, or provider check publisher. The GitHub composite
+Action remains a convenience event wrapper that launches the engine directly. No current path
+produces a provider-verified sandbox or turns an engine report into independently authenticated
+evidence.
 
 The intended adapter sequence is deliberately provider-neutral:
 
@@ -78,17 +89,21 @@ The intended adapter sequence is deliberately provider-neutral:
 4. acquire those objects and an independently trusted action tree, construct the canonical
    requests, and invoke the sealed bootstrap path without passing provider credentials to the
    engine;
-5. refresh provider state again and publish only if the authorization remains active and the
-   exact run identity is still current; otherwise publish an unavailable or superseded result;
-6. durably complete the delivery only after idempotent publication succeeds.
+5. refresh provider state again, freeze the exact result under the live delivery fence, and
+   publish only if the authorization remains active and the exact run identity is still current;
+   otherwise freeze and publish an unavailable or superseded result;
+6. durably complete the staged delivery only after publication succeeds idempotently under the
+   authenticated delivery and evaluation ID; a retry republishes the same staged value rather
+   than running again.
 
 What remains is to implement and deploy that sequence: choose trust anchors and rotation,
-freshness, revocation, and replay windows; build each provider adapter against capabilities the
-provider actually offers; connect the controller runner to repository acquisition and
-`amiss-bootstrap`; publish a source-bound required check; and cover wrong provider, repository,
-change, ref, commit, tree, expiry, replay, revocation, missing output, timeout, and tampered
-runtime closure in end-to-end negative tests. Link dialect support in the engine's `forge`
-field is not evidence that an authenticated adapter exists.
+freshness, revocation, and replay-retention windows; select a non-database mechanism for atomic
+lease ownership, exact publication staging, and durable completion; build each provider adapter
+against capabilities the provider actually offers; connect the controller runner to repository
+acquisition and `amiss-bootstrap`; implement an exactly idempotent source-bound required check;
+and cover wrong provider, repository, change, ref, commit, tree, expiry, replay, revocation,
+missing output, timeout, and tampered runtime closure in end-to-end negative tests. Link dialect
+support in the engine's `forge` field is not evidence that an authenticated adapter exists.
 
 The lane is ready only when the verifier and authorization are acquired independently of the
 repository and action tree under review, every authorization and published result bind the
