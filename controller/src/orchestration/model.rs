@@ -115,6 +115,7 @@ pub enum RunnerOutcome {
         report: Vec<u8>,
     },
     MissingOutput,
+    OversizedOutput,
     TimedOut,
     TamperedRuntime,
     Unavailable,
