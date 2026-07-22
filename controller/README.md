@@ -22,10 +22,24 @@ results remain. A row uses one state path and at most one report path; completio
 report. It deliberately uses no SQL or database and does not add storage to the offline root
 workspace.
 
+`run_bootstrap` is the concrete provider-neutral execution primitive. It re-verifies the exact
+repository and action commit-tree roots, derives the sealed job from the `RunRequest`, checks the
+bootstrap bytes against the plan's pinned digest, and prepares a private run directory under a
+caller-supplied scratch directory. The controller creates and retains the report and result file
+handles; replacing their path names cannot replace what it later reads. The child receives a
+cleared environment and closed standard streams. Pinned ProcessKit 2.2.5 provides one
+cross-platform process-tree boundary. Every terminal path hard-kills that tree and confirms the
+group is empty before the retained outputs are read. Supervision enforces a wall limit of at most
+120 seconds and renews ledger ownership halfway through each controller-derived relative lease
+window, capped at five seconds. The report is bounded by the machine report ceiling, and a small
+result record written last distinguishes completion from missing, malformed, oversized, timed-out,
+signalled, or tampered execution.
+
 No HTTP server, authenticated payload decoder, concrete provider adapter, API client, credential
-store, acquisition worker, bootstrap runner, provider check publisher, publication transport, or
-deployment packaging is implemented yet. A signature verifier alone does not prove current
-authorization or acquire an exact repository tree. Exact publisher idempotence remains a contract
+store, acquisition worker, provider check publisher, publication transport, or deployment
+packaging is implemented yet. A signature verifier alone does not prove current authorization or
+acquire an exact repository tree, and no current path feeds authenticated provider state and
+independently acquired trees into the runner. Exact publisher idempotence remains a contract
 requirement, not a working guarantee without those implementations. They will use the existing
 boundaries; this workspace does not claim that any provider is currently enforceable.
 

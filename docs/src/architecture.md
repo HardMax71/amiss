@@ -62,13 +62,17 @@ keeps its provider and storage dependencies out of the scanner. `ProviderAdapter
 `DeliveryLedger`, and `Runner` are transport-neutral boundaries for provider access, durable retry
 coordination, and trusted execution. [Controller delivery](controller.md) defines their flow and
 record contract. The orchestrator, bounded ingress gate, provider signature verifiers, and a local
-file implementation of `DeliveryLedger` exist; the provider adapter and runner boundaries still
-have no concrete implementations.
+file implementation of `DeliveryLedger` exist. The concrete provider-neutral bootstrap runner
+re-verifies exact acquired roots, derives the sealed job, checks and privately copies the pinned
+bootstrap, and supervises the closed process under a wall limit and ledger heartbeat. It creates
+the output files, retains their open handles, and uses ProcessKit's cross-platform process-tree
+boundary. Every terminal path hard-kills the group and confirms it is empty before the retained
+outputs are read. The provider adapter boundary still has no concrete implementation.
 
 No HTTP transport, authenticated payload decoder, provider API client, credential source,
-repository acquisition worker, bootstrap runner, provider publisher, or deployable service exists
-in that workspace yet. There is therefore still no arrow from the controller into the supported
-delivery graph.
+repository acquisition worker, provider publisher, or deployable service exists in that workspace
+yet. Nothing joins authenticated provider state and independently acquired trees to the runner, so
+there is still no arrow from the controller into the supported delivery graph.
 
 Inside an engine run, the stages form a line:
 

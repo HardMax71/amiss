@@ -90,13 +90,13 @@ fn classify(
     request: &RunRequest,
     exit_code: i32,
     result: Option<&[u8]>,
-    stdout: &[u8],
+    report: &[u8],
 ) -> RunnerOutcome {
     classify_bootstrap_result(
         request,
         BootstrapTermination::Exited(exit_code),
-        result,
-        stdout,
+        result.map(<[u8]>::to_vec),
+        report.to_vec(),
     )
 }
 
@@ -215,13 +215,13 @@ fn timeout_dominates_every_process_observation() {
         classify_bootstrap_result(
             &request,
             BootstrapTermination::TimedOut,
-            Some(result_bytes(BootstrapResult::Pass)),
-            b"report",
+            Some(result_bytes(BootstrapResult::Pass).to_vec()),
+            b"report".to_vec(),
         ),
         RunnerOutcome::TimedOut
     );
     assert_eq!(
-        classify_bootstrap_result(&request, BootstrapTermination::TimedOut, None, b"",),
+        classify_bootstrap_result(&request, BootstrapTermination::TimedOut, None, Vec::new(),),
         RunnerOutcome::TimedOut
     );
 }
@@ -240,8 +240,8 @@ fn stopped_signalled_and_unspawned_processes_are_unavailable() {
             classify_bootstrap_result(
                 &request,
                 termination,
-                Some(result_bytes(BootstrapResult::Pass)),
-                b"report",
+                Some(result_bytes(BootstrapResult::Pass).to_vec()),
+                b"report".to_vec(),
             ),
             RunnerOutcome::Unavailable
         );

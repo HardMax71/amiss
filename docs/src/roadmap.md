@@ -92,23 +92,32 @@ publication contract. The durable record is complete as described in the Done se
 workspace also contains the traits, orchestrator, bounded ingress gate, rotating key ring, and
 GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers. The wire library can
 produce canonical execution constraints and trusted-time statements instead of only parsing them.
+The provider-neutral runner re-verifies acquired repository and action roots, derives the sealed
+job from the frozen run, checks the pinned bootstrap, prepares private files, clears the child's
+environment and standard streams, and supervises one cross-platform ProcessKit process tree. The
+controller retains the output handles, enforces a wall limit and relative ledger lease windows,
+proves the tree empty before reading, bounds the report, and classifies the result record fail
+closed.
 
 That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
 GitHub, GitLab, or Gitea-family adapter, authenticated payload decoder, provider API client or
-credential source, repository or action-tree acquisition worker, bootstrap runner, deployable
-service, publication transport, or provider check publisher. The signature implementations are
-not wired to a listener or authoritative provider refresh. The GitHub composite Action remains a
-convenience event wrapper that launches the engine directly. No current path produces a provider-
-verified sandbox or turns an engine report into independently authenticated evidence.
+credential source, repository or action-tree acquisition worker, deployable service, publication
+transport, or provider check publisher. The signature implementations are not wired to a listener
+or authoritative provider refresh, and authenticated state and network acquisition are not wired
+to the runner. The GitHub composite Action remains a convenience event wrapper that launches the
+engine directly. No current path produces a provider-verified sandbox or turns an engine report
+into independently authenticated evidence.
 
 What remains is to put that library boundary behind a bounded HTTP receiver; build each provider
 adapter against capabilities the provider actually offers; obtain API credentials independently
-of the repository; connect exact repository and action-tree acquisition to `amiss-bootstrap` with
-bounded polling, heartbeat cadence, whole-process-group cancellation, and a stable machine failure
-channel; bound provider refreshes below the lease window; and make repeated publication of the
-same source-bound required check safe. End-to-end negative tests must still cover wrong provider,
-repository, change, ref, commit, tree, expiry, replay, revocation, missing output, timeout, and
-tampered runtime closure. A route loader must select the replay-only policy for GitHub and
+of the repository; implement network acquisition that returns the exact repository and action
+roots expected by the frozen run; feed those roots into the existing supervised bootstrap step;
+bound provider refreshes below the lease window; and make repeated publication of the same
+source-bound required check safe. The runner already has focused negative coverage for wrong roots,
+bootstrap tampering, missing and malformed output, oversize, timeout, heartbeat loss, and live
+descendants. End-to-end provider-lane tests must still carry those cases through authentication,
+acquisition, execution, and publication, alongside wrong provider, repository, change, ref,
+expiry, replay, and revocation. A route loader must select the replay-only policy for GitHub and
 Gitea-family signatures, which expose no authenticated attempt time, and a bounded freshness rule
 for GitLab Standard Webhooks, which authenticates its timestamp. Replay-only would be invalid
 GitLab configuration.

@@ -57,9 +57,9 @@ binds the requested profile, both commits, candidate and target refs, candidate 
 provider run and trusted instant, the exact presence, digest, and trust source of the organization
 floor, debt snapshot, and waiver bundle, and the execution constraint's digest, trust source,
 and recomputed semantics. It likewise recomputes the trusted-time statement's semantic digest and
-requires the sandbox provenance to remain self-asserted. The wire crate now exposes checked
-constructors and canonical writers for the execution constraint and trusted-time statement, so a
-future controller need not reproduce those encoders. The path is built by the release workflow,
+requires the sandbox provenance to remain self-asserted. The wire crate exposes checked
+constructors and canonical writers for the execution constraint and trusted-time statement, and
+the controller uses them when it derives a sealed job. The path is built by the release workflow,
 but the published composite Action still launches `amiss` directly; nothing public
 acquires these inputs from an authenticated provider. The distinction is visible in the
 [bootstrap entry point](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs),
@@ -83,11 +83,27 @@ The same workspace has a [bounded ingress contract](https://github.com/HardMax71
 and separate GitHub, GitLab Standard Webhooks, and Gitea-family HMAC verifiers with rotating,
 revocable in-memory anchors. A future GitLab route must require its authenticated timestamp to be
 fresh. GitHub and Gitea-family routes instead key replay protection by the exact signed body and
-use permanent completion markers. No adapter or route loader enforces these pairings yet. The
-workspace deliberately has no provider enum and no concrete provider adapter,
+use permanent completion markers. No adapter or route loader enforces these pairings yet.
+
+The provider-neutral
+[`run_bootstrap`](https://github.com/HardMax71/amiss/blob/main/controller/src/bootstrap_runner.rs)
+primitive re-verifies acquired repository and action commit-tree roots, derives the sealed job
+from the frozen run, checks and privately copies the pinned bootstrap, and starts it with a cleared
+environment and closed standard streams. The controller creates and retains the output handles;
+pinned ProcessKit, driven by a current-thread Tokio runtime, supervises one cross-platform process
+tree. The runner renews ownership within each controller-derived relative lease window, enforces at
+most 120 seconds, and hard-kills and drains the tree on every terminal path before reading output.
+Its private report is bounded, and the final result record makes missing, malformed, oversized,
+timed-out, signalled, and tampered runs fail closed. Focused tests include wrong roots and bootstrap
+bytes, a cleared environment, replaced output paths, timeout and heartbeat races, and descendants
+left behind by an exited leader.
+
+The workspace deliberately has no provider enum and no concrete provider adapter,
 HTTP listener, authenticated payload decoder, provider API client, credential store, repository
-acquisition worker, bootstrap runner, deployable binary, publication transport, or provider
-status publisher. These absences make it an internal foundation, not a supported delivery lane.
+acquisition worker, deployable binary, publication transport, or provider status publisher. No
+current path joins provider authentication, authoritative refresh, network acquisition, the
+runner, and publication. These absences make it an internal foundation, not a supported delivery
+lane.
 
 Local and convenience-Action reports consequently describe repository policy with no
 external authority consulted. Each external control has status `none`, and the sandbox

@@ -92,6 +92,23 @@ as missing output, timeout, tampered runtime, or an output bound to the wrong id
 remain fail-closed conclusions rather than passes. [Controller delivery](controller.md) defines
 the complete flow, durable record, race, and retry rules.
 
+Its concrete provider-neutral runner begins only after acquisition. It independently re-verifies
+the exact repository and action commit-tree roots against the run, derives the sealed job from that
+same run, and matches the bootstrap bytes to the pinned digest before making a private copy. The
+child receives a cleared environment, closed standard streams, and private request and output
+paths. The controller creates and retains both output handles, so replacing their path names cannot
+change what it reads. The report is bounded by the machine-report ceiling and the fixed result
+record is written last. Missing or malformed output, a mismatched exit, excessive output, timeout,
+signal, heartbeat loss, and runtime tampering cannot become a pass.
+
+Pinned ProcessKit provides one cross-platform process-tree boundary. On normal exit, timeout, or
+cancellation, the runner hard-kills the group and requires ProcessKit to report it empty before
+reading output. The runner renews before launch and halfway through each controller-derived
+relative lease window, capped at five seconds, and cancels the tree on heartbeat refusal. Its wall
+limit is no greater than 120 seconds. A leader that exits cleanly cannot leave its descendants
+behind. These rules close ordinary descendant and lease-loss races; they do not claim that a
+synchronous host kernel operation can be interrupted if that operation itself stops returning.
+
 The concrete file record requires a pre-created private local directory outside the repository and
 action tree. A future service must own that directory and set its operating-system permissions or
 access-control list: anyone who can read or change it is inside the trust boundary. Its checksums
@@ -117,8 +134,8 @@ header sequence, and body, and its fields cannot be rewritten by an adapter. Ing
 GitLab proof under a replay-only route, so its signed timestamp must be checked for freshness.
 There is still no concrete provider adapter,
 route loader, webhook listener, authenticated payload decoder, API client, credential source,
-repository or action-tree acquisition worker, runner connection to bootstrap, deployable
-controller, or provider check publisher. No authenticated integration exists for any provider or
+repository or action-tree acquisition worker, deployable controller, or provider check publisher.
+No authenticated integration joins those pieces to the bootstrap runner for any provider or
 self-hosted instance. The engine's `forge` field still selects only a link URL dialect.
 The JavaScript launcher is pinned manifest data and refuses if invoked directly; the current
 composite Action does not invoke bootstrap or the controller.

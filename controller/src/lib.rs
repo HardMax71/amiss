@@ -3,6 +3,7 @@
 mod acquisition;
 mod bootstrap_job;
 mod bootstrap_result;
+mod bootstrap_runner;
 mod clock;
 mod file_ledger;
 mod identity;
@@ -18,6 +19,7 @@ pub use bootstrap_job::{
     PolicyControls, bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
+pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
 pub use clock::{ControllerClock, SystemClock};
 pub use file_ledger::{FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError};
 pub use identity::{
