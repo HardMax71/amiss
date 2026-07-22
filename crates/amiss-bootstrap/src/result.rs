@@ -45,6 +45,20 @@ pub const fn result_bytes(result: BootstrapResult) -> &'static [u8] {
     }
 }
 
+/// Returns the required process exit code for one result record.
+#[must_use]
+pub const fn result_exit_code(result: BootstrapResult) -> i32 {
+    match result {
+        BootstrapResult::Pass => 0,
+        BootstrapResult::Block => 1,
+        BootstrapResult::MissingOutput
+        | BootstrapResult::Timeout
+        | BootstrapResult::OversizedOutput
+        | BootstrapResult::TamperedRuntime
+        | BootstrapResult::Unavailable => 2,
+    }
+}
+
 /// Parses one exact result record. Whitespace and unknown versions are not
 /// accepted.
 #[must_use]

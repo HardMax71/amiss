@@ -1,11 +1,11 @@
-use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, parse_result};
+use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, parse_result, result_exit_code};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use crate::{Evaluation, RunRequest, RunnerOutcome};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BootstrapTermination {
-    Exited,
+    Exited(i32),
     TimedOut,
     HeartbeatStopped,
     Signalled,
@@ -18,7 +18,6 @@ pub enum BootstrapTermination {
 pub fn classify_bootstrap_result(
     request: &RunRequest,
     termination: BootstrapTermination,
-    exit_code: Option<i32>,
     result: Option<&[u8]>,
     stdout: &[u8],
 ) -> RunnerOutcome {
@@ -27,13 +26,15 @@ pub fn classify_bootstrap_result(
         BootstrapTermination::HeartbeatStopped
         | BootstrapTermination::Signalled
         | BootstrapTermination::SpawnUnavailable => RunnerOutcome::Unavailable,
-        BootstrapTermination::Exited => classify_exit(request, exit_code, result, stdout),
+        BootstrapTermination::Exited(exit_code) => {
+            classify_exit(request, exit_code, result, stdout)
+        }
     }
 }
 
 fn classify_exit(
     request: &RunRequest,
-    exit_code: Option<i32>,
+    exit_code: i32,
     result: Option<&[u8]>,
     stdout: &[u8],
 ) -> RunnerOutcome {
@@ -50,25 +51,14 @@ fn classify_exit(
 
 fn classify_record(
     request: &RunRequest,
-    exit_code: Option<i32>,
+    exit_code: i32,
     result: BootstrapResult,
     stdout: &[u8],
 ) -> RunnerOutcome {
-    match exit_code {
-        Some(code) if code == result_exit_code(result) => accepted_record(request, result, stdout),
-        None | Some(_) => RunnerOutcome::TamperedRuntime,
-    }
-}
-
-const fn result_exit_code(result: BootstrapResult) -> i32 {
-    match result {
-        BootstrapResult::Pass => 0,
-        BootstrapResult::Block => 1,
-        BootstrapResult::MissingOutput
-        | BootstrapResult::Timeout
-        | BootstrapResult::OversizedOutput
-        | BootstrapResult::TamperedRuntime
-        | BootstrapResult::Unavailable => 2,
+    if exit_code == result_exit_code(result) {
+        accepted_record(request, result, stdout)
+    } else {
+        RunnerOutcome::TamperedRuntime
     }
 }
 
