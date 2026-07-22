@@ -8,10 +8,11 @@ use std::path::Path;
 
 use amiss_wire::controls::{OrganizationFloor, Profile, TrustedTimeStatement};
 use amiss_wire::de::ErrorKind;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat};
+use amiss_wire::digest::hj;
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
-    ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL, RequestMode, RequestStreams,
-    RequestTrust, SnapshotRequest,
+    CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL,
+    RequestMode, RequestStreams, RequestTrust, SnapshotRequest, commit_candidate_identity_digest,
 };
 
 fn request_example(name: &str) -> Vec<u8> {
@@ -21,6 +22,10 @@ fn request_example(name: &str) -> Vec<u8> {
             .join(name),
     )
     .expect("the specification ships this request example")
+}
+
+fn oid(value: char) -> Oid {
+    Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).expect("the test oid matches SHA-1")
 }
 
 /// The examples are executable contract fixtures, not illustrations copied out
@@ -53,10 +58,7 @@ fn the_request_examples_parse_to_what_they_say() {
         "8d7f2c31a09b64e5dd10fcab7e93245160c8ba72"
     );
     assert_eq!(
-        evaluation
-            .candidate_commit
-            .as_ref()
-            .map(amiss_wire::model::Oid::as_str),
+        evaluation.candidate_commit.as_ref().map(Oid::as_str),
         Some("3e19afc65b2704d8ce8b1f09a4de6273550d914b"),
         "a commit-pair run names both sides"
     );
@@ -92,6 +94,35 @@ fn the_request_examples_parse_to_what_they_say() {
             && controls.waiver_bundle.is_none()
             && controls.execution_constraint.is_none(),
         "an absent control is absent, never a default"
+    );
+}
+
+#[test]
+fn commit_identity_construction_matches_the_published_preimage() {
+    let mut evaluation =
+        EvaluationRequest::commit_pair(Profile::Enforce, ObjectFormat::Sha1, oid('1'), oid('3'));
+    evaluation.repository = amiss_wire::model::RepositoryIdentity::new(
+        "gitlab.example.internal".to_owned(),
+        "platform/security".to_owned(),
+        "docs".to_owned(),
+    );
+    evaluation.forge = Some(ForgeDialect::Gitlab);
+    evaluation.candidate_ref = BranchRef::new("refs/heads/amiss-controller".to_owned());
+    evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
+    evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+
+    let published = amiss_wire::json::parse(&request_example("candidate-identity.json"))
+        .expect("the candidate identity example is strict JSON");
+    assert_eq!(
+        commit_candidate_identity_digest(&evaluation, &oid('2'), &oid('4')),
+        Some(hj(CANDIDATE_IDENTITY_DOMAIN, &published))
+    );
+
+    let index = EvaluationRequest::index(Profile::Enforce, ObjectFormat::Sha1, oid('1'));
+    assert_eq!(
+        commit_candidate_identity_digest(&index, &oid('2'), &oid('4')),
+        None,
+        "an index request cannot be relabeled as a commit-pair identity"
     );
 }
 

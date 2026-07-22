@@ -5,7 +5,7 @@ use crate::controls::{
     Profile, decode_provider_id, decode_provider_run_id, decode_repository, root,
 };
 use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::Digest;
+use crate::digest::{Digest, hj};
 use crate::json::{Value, canonical};
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -214,6 +214,82 @@ impl EvaluationRequest {
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
         checked_canonical(&evaluation_value(self), Self::parse)
     }
+}
+
+/// Computes the commit-pair candidate identity carried by a complete report.
+/// The tree IDs come from independent acquisition because the evaluation
+/// request deliberately names only commits.
+#[must_use]
+pub fn commit_candidate_identity_digest(
+    evaluation: &EvaluationRequest,
+    base_tree: &Oid,
+    candidate_tree: &Oid,
+) -> Option<Digest> {
+    let _canonical = evaluation.canonical_bytes().ok()?;
+    let candidate_commit = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
+        (RequestMode::CommitPair, Some(candidate)) => candidate,
+        (RequestMode::CommitPair | RequestMode::Index, None | Some(_)) => return None,
+    };
+    let format = evaluation.object_format;
+    Oid::new(format, base_tree.as_str().to_owned())?;
+    Oid::new(format, candidate_tree.as_str().to_owned())?;
+    let value = object(vec![
+        ("schema", text(CANDIDATE_IDENTITY_DOMAIN)),
+        ("mode", text("commit-pair")),
+        ("event_kind", text("explicit-commit-pair")),
+        ("finality", text("explicit-replay")),
+        (
+            "repository",
+            evaluation
+                .repository
+                .as_ref()
+                .map_or(Value::Null, repository),
+        ),
+        (
+            "candidate_ref",
+            optional_text(evaluation.candidate_ref.as_ref().map(BranchRef::as_str)),
+        ),
+        (
+            "target_ref",
+            optional_text(evaluation.target_ref.as_ref().map(BranchRef::as_str)),
+        ),
+        (
+            "default_branch_ref",
+            optional_text(
+                evaluation
+                    .default_branch_ref
+                    .as_ref()
+                    .map(BranchRef::as_str),
+            ),
+        ),
+        (
+            "base",
+            commit_snapshot_value(format, &evaluation.base_commit, base_tree),
+        ),
+        (
+            "candidate",
+            commit_snapshot_value(format, candidate_commit, candidate_tree),
+        ),
+        ("materialization", text("git-objects")),
+        ("skip_worktree_paths", Value::Integer(0)),
+        ("index_only_materialized_paths", Value::Integer(0)),
+        (
+            "forge",
+            evaluation
+                .forge
+                .map_or(Value::Null, |forge| text(forge.as_str())),
+        ),
+    ]);
+    Some(hj(CANDIDATE_IDENTITY_DOMAIN, &value))
+}
+
+fn commit_snapshot_value(object_format: ObjectFormat, commit: &Oid, tree: &Oid) -> Value {
+    object(vec![
+        ("kind", text("git-commit")),
+        ("object_format", text(object_format.as_str())),
+        ("commit_oid", text(commit.as_str())),
+        ("tree_oid", text(tree.as_str())),
+    ])
 }
 
 fn decode_forge(path: &str, value: Value) -> Result<ForgeDialect, Error> {
