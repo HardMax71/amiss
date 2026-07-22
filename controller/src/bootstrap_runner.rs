@@ -284,7 +284,10 @@ async fn stop_tree(group: &ProcessGroup) -> bool {
     group.kill_all().is_ok()
         && tokio::time::timeout(PROCESS_DRAIN_TIMEOUT, async {
             loop {
-                if group.members().is_ok_and(|members| members.is_empty()) {
+                if group
+                    .stats()
+                    .is_ok_and(|stats| stats.active_process_count == 0)
+                {
                     return true;
                 }
                 tokio::time::sleep(PROCESS_DRAIN_POLL).await;

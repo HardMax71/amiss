@@ -89,7 +89,7 @@ fn control_identity<T, E>(
     digest: impl FnOnce(&T) -> Digest,
     error: BootstrapJobError,
 ) -> Result<ControlIdentity, BootstrapJobError> {
-    (u64::try_from(control.bytes.len()).ok() <= Some(REQUEST_STREAM_BYTES))
+    within_stream_ceiling(control.bytes.len())
         .then_some(())
         .ok_or(error)?;
     parse(&control.bytes)
@@ -176,6 +176,21 @@ pub(super) fn request(
         trusted_time: Some(trusted_time),
         execution_constraint: Some(execution_constraint),
     })
+}
+
+pub(super) fn canonical_request(request: &ControlsRequest) -> Result<Vec<u8>, BootstrapJobError> {
+    request
+        .canonical_bytes()
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)
+        .and_then(|bytes| {
+            within_stream_ceiling(bytes.len())
+                .then_some(bytes)
+                .ok_or(BootstrapJobError::RequestEncoding)
+        })
+}
+
+fn within_stream_ceiling(length: usize) -> bool {
+    u64::try_from(length).is_ok_and(|length| length <= REQUEST_STREAM_BYTES)
 }
 
 fn bound_control<E>(

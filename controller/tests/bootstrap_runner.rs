@@ -121,13 +121,22 @@ impl Harness {
     }
 
     fn run(&self, wall_timeout: Duration, heartbeat: &mut Heartbeat) -> RunnerOutcome {
+        self.run_in(self.scratch.path(), wall_timeout, heartbeat)
+    }
+
+    fn run_in(
+        &self,
+        scratch: &std::path::Path,
+        wall_timeout: Duration,
+        heartbeat: &mut Heartbeat,
+    ) -> RunnerOutcome {
         run_bootstrap(
             &self.request,
             BootstrapRun {
                 executable: &self.executable,
                 repository: self.repository.root(),
                 action_repository: self.action.root(),
-                scratch: self.scratch.path(),
+                scratch,
                 evaluation_instant: &self.evaluation_instant,
                 valid_until: &self.valid_until,
                 wall_timeout,
@@ -332,6 +341,21 @@ fn a_changed_bootstrap_is_rejected_before_launch() {
 fn bootstrap_receives_no_inherited_environment() {
     let (harness, outcome, _heartbeat) = run("runner-environment");
     assert!(matches!(outcome, RunnerOutcome::Complete { .. }));
+    assert!(harness.started());
+}
+
+#[test]
+fn equivalent_scratch_path_spelling_is_accepted() {
+    let harness = Harness::new("runner-pass", None);
+    let component = harness.scratch.path().join("component");
+    std::fs::create_dir(&component).unwrap();
+    let scratch = component.join("..");
+    let mut heartbeat = Heartbeat::renewing();
+
+    assert!(matches!(
+        harness.run_in(&scratch, Duration::from_secs(2), &mut heartbeat),
+        RunnerOutcome::Complete { .. }
+    ));
     assert!(harness.started());
 }
 
