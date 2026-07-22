@@ -81,13 +81,22 @@ pub struct ExecutionConstraintInput {
 
 fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
     let raw = de::string(path, value)?;
+    if valid_required_status_name(&raw) {
+        Ok(raw)
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
+}
+
+#[must_use]
+pub fn valid_required_status_name(raw: &str) -> bool {
     let bytes = raw.as_bytes();
     let interior = |byte: &u8| {
         byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'.' | b'_' | b'/' | b'-')
     };
     let edge =
         |byte: &u8| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'/' | b'-');
-    let valid = match (bytes.first(), bytes.last()) {
+    match (bytes.first(), bytes.last()) {
         (Some(first), Some(last)) => {
             bytes.len() <= 160
                 && first.is_ascii_alphanumeric()
@@ -95,11 +104,6 @@ fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
                 && bytes.iter().all(interior)
         }
         _ => false,
-    };
-    if valid {
-        Ok(raw)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
     }
 }
 
