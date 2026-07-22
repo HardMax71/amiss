@@ -27,8 +27,8 @@ issue time, and the replay identity. That proof also binds the controller-select
 time, exact header sequence, and exact body. Its fields are private; an adapter can join decoded
 provider facts to a successful proof, but cannot relabel its trust set, remove its signed time, or
 move it to another request. The controller checks that binding, applies the route's signed-time
-rule, and creates the delivery key. None of those steps trusts a decoded body field before the
-signature succeeds.
+rule, chooses the replay lifetime, and creates the delivery key. None of those steps trusts a
+decoded body field before the signature succeeds.
 
 The replay key depends on what the provider actually signs:
 
@@ -59,6 +59,14 @@ time selected against controller-owned receipt time. Overlapping windows permit 
 removing an anchor revokes it. GitLab `whsec_` tokens have a strict, secret-safe constructor.
 Exact-body replay IDs do not include the matching anchor, so rotating a key cannot turn the same
 signed delivery into new work.
+
+The controller also fixes one `ReplayWindow`: the largest signed age any route may accept and the
+largest ingress queue age. A route may require a shorter signed age but cannot exceed that fixed
+ceiling. An authenticated message ID and signed issue time receive an inclusive replay end computed
+from the issue time plus both fixed ceilings. Exact-body and other replay-only requests are marked
+permanent because they carry no authenticated time from which safe deletion can be derived. This
+choice reaches the ledger as part of `AcceptedDelivery` rather than being derived from payload
+fields, and the file record rejects a bounded delivery from a different replay window.
 
 These verifiers establish webhook origin and integrity, not current authorization or an exact
 repository snapshot. A concrete adapter must still decode the authenticated body and refresh the
@@ -105,7 +113,8 @@ prescription for how bytes are stored.
 | --- | --- | --- |
 | Delivery key | Provider namespace, provider instance, integration ID, delivery ID | Names one authenticated provider delivery. |
 | Fixed binding | Repository, change, provider run ID and attempt, object format, event candidate commit | Reusing the key with a different binding fails before refresh, run, or publication. |
-| Evaluation ID | Opaque controller-created ID | Created on the first claim and kept through retries and reclaims. |
+| Replay lifetime | Permanent, or an inclusive replay end based on authenticated time | Decided by trusted ingress and stored with the fixed binding. Only an ended bounded lifetime can permit deletion. |
+| Evaluation ID | Opaque controller-created ID with fresh random bytes | Created on the first claim and kept through retries and reclaims. A later row cannot reuse it. |
 | Temporary ownership | Evaluation ID, lease deadline, fence | Grants permission to evaluate; the record, not a worker's clock, decides whether it is still live. |
 | Saved result | Evaluation ID, fence, provider run, full run identity, conclusion, optional report | Frozen as one exact value before provider I/O. |
 | State | New, running, result saved, done | Each change happens atomically: fully or not at all. |
@@ -117,23 +126,39 @@ GitHub and Gitea-family requests. It is never an unsigned convenience header.
 ### The file record
 
 `FileLedger` maps the authenticated delivery identity to a fixed lowercase digest. Provider text
-never becomes a path. Each delivery has up to three kinds of file under one controller-owned
-root:
+never becomes a path. One controller-owned root contains fixed metadata and locks plus bounded row
+files:
 
 ```text
-<delivery-key>.lock
+.amiss-root.state
+.amiss-maintenance.lock
+.amiss-admission.lock
+.amiss-clock.lock
+.amiss-row-00.lock ... .amiss-row-ff.lock  (created only when used)
 <delivery-key>.state
-<delivery-key>.report-<report-digest>
+<delivery-key>.report                     (only while a result needs it)
 ```
 
-The lock file has a stable name and is never replaced while it is in use. An exclusive operating-
-system file lock covers the complete read, check, change, and save sequence, so separate controller
-processes cannot both win one transition. The state file is a versioned, length-delimited,
-checksummed frame containing canonical JSON and is capped at 128 KiB. A report is kept separately,
-bounded by the machine-report byte ceiling, and named by its digest. Saving writes and syncs the
-report before atomically replacing the state that names it. Large report bytes therefore do not
-make every state change large, and a stopped write cannot expose a state that points at a report
-which was never saved.
+The maintenance lock is shared by ordinary row work and exclusive during cleanup. The admission
+lock serializes the count-and-create step for a new identity, and the clock lock serializes durable
+high-water updates. The first byte of the delivery digest selects one of 256 stable row-lock files;
+a shard collision may serialize unrelated rows but cannot let two processes win one transition.
+These fixed names avoid one permanent lock file per delivery.
+
+Root metadata is itself a versioned, checksummed frame. It fixes the maximum record count and the
+signed-age and queue ceilings for every process using that root, and stores the highest trusted
+controller time the ledger has seen. Opening the same root with a different record cap or replay
+window fails. New identities are counted and admitted atomically; once the cap is full they fail
+before a state file is created, while an existing row can still renew, save, publish, and complete.
+Operators must size the cap to include permanent replay markers.
+
+The state file is a versioned, length-delimited, checksummed frame containing canonical JSON and is
+capped at 128 KiB. A report is kept separately at one fixed path, bounded by the machine-report byte
+ceiling, while its digest and length remain in the saved state. Saving removes any dead report,
+writes and syncs the new report, then atomically replaces the state that names it. Completion first
+saves `done`, then removes the report. A stop between those steps can leave an unreferenced report,
+but cannot expose a saved state whose report was never written. Retrying completion and cleanup
+both remove that dead file.
 
 The implementation uses Rust's standard `File::lock` and the `atomicwrites` crate, leaving the
 operating-system calls behind those maintained boundaries. Replacement first syncs the new file.
@@ -150,13 +175,30 @@ directory is inside the controller trust boundary. The checksums detect damage, 
 writer. Shared and network filesystems are not supported.
 
 Malformed, oversized, non-regular, unknown-field, non-canonical, or digest-mismatched saved data
-fails closed, as does a missing report named by a saved state. `FileLedger` has no retention
-cleanup: lock files, done records, and report blobs remain. Cleanup needs a separate design that
-coordinates the stable locks and preserves replay state. It must not expire a GitHub or
-Gitea-family done record from local age alone: those signatures authenticate no request time, so
-forgetting the record would let the same captured body become new work. A safe retention rule needs
-an outside authenticated replay horizon. The per-file ceilings do not bound the number of
-deliveries or total root size, so a future service must monitor and cap its private volume.
+fails closed, as does a missing report named by a saved state. Opening a root runs cleanup, and the
+same operation is public for later maintenance. Under the exclusive maintenance lock it advances
+and saves the high-water clock, validates the complete root, then removes unreferenced reports,
+recognized atomic-write leftovers, and bounded `done` rows strictly after their inclusive
+replay end. It never removes running or saved work, even after that time, and never
+ages out a permanent `done` row. Unknown root entries and unsafe temporary-directory shapes fail
+closed instead of being deleted.
+
+| Saved state | Cleanup rule |
+| --- | --- |
+| `running` | Keep it, even after a bounded replay end, because a worker may still own or reclaim it. |
+| `staged` (result saved) | Keep the state and its valid report until publication can finish. |
+| `done`, permanent | Keep the small state marker; it is the replay defense. |
+| `done`, bounded | Keep it through the inclusive replay end, then remove it. |
+
+Persisting the high-water clock before deletion means a local clock rollback cannot make an ended
+delivery look fresh. A claim for a bounded delivery whose row is gone but lifetime has ended returns
+`Expired`. Completion after deletion returns `Lost`, because the exact saved digest is gone; only a
+retained exact `done` marker can return repeat-safe `Completed`. A new record receives a fresh
+random evaluation suffix, so deletion cannot make a stale publication retry match a later row.
+Together, the record cap, fixed lock set, per-file ceilings, and one report path per row bound the
+named durable state. Known crash leftovers are removed on the next open or cleanup. Permanent
+replay rows deliberately consume capacity until an operator changes trust policy outside this
+record; cleanup must not guess an age for signatures that contain no trusted time.
 
 The public Rust boundary has four operations. This abridged excerpt omits documentation and type
 bounds; the [ledger module](https://github.com/HardMax71/amiss/blob/main/controller/src/orchestration/ledger.rs)
@@ -166,17 +208,17 @@ is authoritative.
 pub trait DeliveryLedger {
     type Error;
 
-    fn claim(&mut self, delivery: &AuthenticatedDelivery)
+    fn claim(&mut self, delivery: &AcceptedDelivery)
         -> Result<DeliveryClaim, Self::Error>;
-    fn renew(&mut self, delivery: &AuthenticatedDelivery, lease: &DeliveryLease)
+    fn renew(&mut self, delivery: &AcceptedDelivery, lease: &DeliveryLease)
         -> Result<LeaseRenewal, Self::Error>;
     fn stage(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         lease: &DeliveryLease,
         publication: &Publication,
     ) -> Result<StageOutcome, Self::Error>;
-    fn complete(&mut self, delivery: &AuthenticatedDelivery, staged: &StagedPublication)
+    fn complete(&mut self, delivery: &AcceptedDelivery, staged: &StagedPublication)
         -> Result<LeaseCompletion, Self::Error>;
 }
 ```
@@ -190,6 +232,11 @@ pub trait DeliveryLedger {
 | `Busy` | Another live claim currently owns the work. | Return the evaluation ID and retry time; do no provider or runner work. |
 | `Duplicate` | The saved result was published and marked done. | Do nothing. |
 | `BindingConflict` | The same delivery key was reused for different authenticated work. | Reject it before any provider refresh, run, or publication. |
+
+`FileLedger` can also reject a new identity with `Full`, reject an already ended bounded delivery
+with `Expired`, or reject a root whose saved cap or replay window differs from the configured one.
+These are fail-closed admission results, not reasons to evict live, saved, or permanent replay
+rows.
 
 ## Four states
 
@@ -252,9 +299,11 @@ under that key must fail closed.
 | After publication, while completion is unclear | `Publish` or `Duplicate` | Repeat the same update if needed, then complete the exact saved value. |
 | After completion | `Duplicate` | Do nothing. |
 
-`complete` accepts only the exact saved value and is repeatable for that value. A completion error
-after the provider accepted an update is kept distinct from an error before publication. On retry,
-the record must expose either the saved value or the done state, never a new execution lease.
+`complete` accepts only the exact saved value and is repeatable for that value while its done marker
+exists. A completion error after the provider accepted an update is kept distinct from an error
+before publication. On retry, the record must expose either the saved value or the done state,
+never a new execution lease. Once cleanup safely removes an ended bounded marker, later completion
+is honestly `Lost` rather than guessed from missing evidence.
 
 ## Failure behavior
 
@@ -291,7 +340,10 @@ ring, `DeliveryLedger`, orchestrator, and `FileLedger`. Focused tests cover limi
 stale and future time, exact-body replay identity, malformed and duplicate headers, body and
 signed-field tampering, wrong keys, rotation, expiry, and revocation by anchor removal. The file
 record separately covers cross-process ownership, reclaim, exact staged-result recovery,
-corruption checks, and permanent done markers without a database.
+corruption checks, and permanent done markers without a database. Further cases pin full-root
+admission while existing work finishes, capacity released by a bounded completion, fixed lock
+growth under rejected identities, replay-window mismatch, the inclusive cleanup end, clock
+rollback, retention of running and staged work, and strict handling of root and temporary files.
 
 There is still no HTTP transport, authenticated event decoder, concrete `ProviderAdapter`, API
 credential source or client, repository and action-tree acquisition worker, real bootstrap

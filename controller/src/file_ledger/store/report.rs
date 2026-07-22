@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
-use super::{Row, atomic_write, read_bounded};
+use super::{Row, atomic_write, read_bounded, reject_non_file};
 use crate::file_ledger::FileLedgerError;
 use crate::file_ledger::format::{self, ReportRef};
 
@@ -49,8 +49,26 @@ impl Row {
         Ok(Some(bytes))
     }
 
+    pub(in crate::file_ledger) fn remove_report(&self) -> Result<(), FileLedgerError> {
+        let path = self.fixed_report_path();
+        reject_non_file(&path)?;
+        std::fs::remove_file(path)
+            .or_else(|error| {
+                if error.kind() == io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            })
+            .map_err(Into::into)
+    }
+
     fn report_path(&self, reference: &ReportRef) -> Result<PathBuf, FileLedgerError> {
-        let digest = format::digest_hex(reference.digest())?;
-        Ok(self.root.join(format!("{}.report-{digest}", self.key)))
+        format::digest_hex(reference.digest())?;
+        Ok(self.fixed_report_path())
+    }
+
+    fn fixed_report_path(&self) -> PathBuf {
+        self.root.join(format!("{}.report", self.key))
     }
 }

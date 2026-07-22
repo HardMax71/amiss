@@ -5,7 +5,8 @@ use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
     Controller, ControllerClock, DeliveryId, DeliveryIdentity, DeliveryLedger, IngressLimits,
     IngressPolicy, IntegrationId, OidPair, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunnerOutcome,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs,
+    RunnerOutcome,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -129,7 +130,7 @@ impl ControllerClock for FixedClock {
 fn ingress() -> IngressPolicy {
     IngressPolicy::new(
         IngressLimits::new(1_024, 32, 8_192).unwrap(),
-        Duration::from_secs(30),
+        ReplayWindow::new(Duration::from_mins(5), Duration::from_secs(30)).unwrap(),
         Duration::from_secs(5),
     )
     .unwrap()

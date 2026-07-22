@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use amiss_controller::{IngressError, IngressLimits, IngressPolicy, SignedTimePolicy};
+use amiss_controller::{
+    IngressError, IngressLimits, IngressPolicy, ReplayWindow, SignedTimePolicy,
+};
 
 use super::support::{BODY, FixedClock, GITHUB_HEADERS, policy, raw, route};
 
@@ -8,7 +10,8 @@ use super::support::{BODY, FixedClock, GITHUB_HEADERS, policy, raw, route};
 fn limits_are_checked_before_trusted_time() {
     let route = route(SignedTimePolicy::ReplayOnly);
     let limits = IngressLimits::new(BODY.len(), GITHUB_HEADERS.len(), 128).unwrap();
-    let policy = IngressPolicy::new(limits, Duration::from_millis(100), Duration::ZERO).unwrap();
+    let replay = ReplayWindow::new(Duration::from_secs(1), Duration::from_millis(100)).unwrap();
+    let policy = IngressPolicy::new(limits, replay, Duration::ZERO).unwrap();
     assert!(
         policy
             .pre_auth(
@@ -71,9 +74,11 @@ fn receipt_window_boundaries_are_inclusive() {
 fn invalid_policy_values_fail_closed() {
     assert!(IngressLimits::new(0, 1, 1).is_none());
     let limits = IngressLimits::new(1, 1, 1).unwrap();
-    assert!(IngressPolicy::new(limits, Duration::ZERO, Duration::ZERO).is_none());
-    assert!(IngressPolicy::new(limits, Duration::MAX, Duration::ZERO).is_none());
-    assert!(IngressPolicy::new(limits, Duration::from_millis(1), Duration::MAX).is_none());
+    assert!(ReplayWindow::new(Duration::ZERO, Duration::from_millis(1)).is_none());
+    assert!(ReplayWindow::new(Duration::from_millis(1), Duration::ZERO).is_none());
+    assert!(ReplayWindow::new(Duration::MAX, Duration::from_millis(1)).is_none());
+    let replay = ReplayWindow::new(Duration::from_millis(1), Duration::from_millis(1)).unwrap();
+    assert!(IngressPolicy::new(limits, replay, Duration::MAX).is_none());
 
     let policy = policy(Duration::from_millis(100), Duration::from_millis(10));
     for max_age in [Duration::ZERO, Duration::MAX] {
@@ -86,4 +91,13 @@ fn invalid_policy_values_fail_closed() {
             Err(IngressError::Policy)
         );
     }
+
+    let route = route(SignedTimePolicy::Required(Duration::from_secs(101)));
+    assert_eq!(
+        policy.pre_auth(
+            raw(&route, 1_000, GITHUB_HEADERS, BODY),
+            &FixedClock(Some(1_000)),
+        ),
+        Err(IngressError::Policy)
+    );
 }

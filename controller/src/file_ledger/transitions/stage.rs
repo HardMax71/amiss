@@ -28,11 +28,12 @@ impl FileLedger {
         {
             return Ok(StageOutcome::Lost);
         }
-        let now = self.now(Some(&record))?;
+        let now = self.now(row, Some(&record))?;
         if now >= expires_at_unix_millis {
             return Ok(StageOutcome::Lost);
         }
         let stored = StoredPublication::new(publication)?;
+        row.remove_report()?;
         row.save_report(publication.report.as_deref(), stored.report())?;
         record.advance(now)?;
         record.state = State::Staged {

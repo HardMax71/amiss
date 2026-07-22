@@ -34,14 +34,18 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
         reopened.claim(&delivery).unwrap(),
         DeliveryClaim::Publish(frozen.clone())
     );
+    let report_path = ledger_file(directory.path(), ".report").unwrap();
     assert_eq!(
         reopened.complete(&delivery, &frozen).unwrap(),
         LeaseCompletion::Completed
     );
+    assert!(!report_path.exists());
+    fs::write(&report_path, b"orphaned report").unwrap();
     assert_eq!(
         reopened.complete(&delivery, &frozen).unwrap(),
         LeaseCompletion::Completed
     );
+    assert!(!report_path.exists());
     drop(reopened);
 
     let mut after_restart = open(directory.path(), &clock);
@@ -78,7 +82,7 @@ fn corrupt_state_or_report_fails_closed() {
         .stage(&delivery, &lease, &publication)
         .unwrap();
     fs::write(
-        ledger_file(report_directory.path(), ".report-").unwrap(),
+        ledger_file(report_directory.path(), ".report").unwrap(),
         b"tampered",
     )
     .unwrap();
@@ -98,7 +102,7 @@ fn a_missing_staged_report_is_corrupt() {
     ledger
         .stage(&delivery, &lease, &publication(&delivery, &lease))
         .unwrap();
-    fs::remove_file(ledger_file(directory.path(), ".report-").unwrap()).unwrap();
+    fs::remove_file(ledger_file(directory.path(), ".report").unwrap()).unwrap();
 
     assert!(matches!(
         ledger.claim(&delivery),

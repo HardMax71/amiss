@@ -72,13 +72,19 @@ as a transport-neutral foundation. It defines provider-neutral identities and th
 durable-record, runner, and orchestration boundaries described in
 [Controller delivery](controller.md). Its provider-neutral
 [`FileLedger`](https://github.com/HardMax71/amiss/blob/main/controller/src/file_ledger.rs) gives
-that boundary a cross-process, durable local file record without SQL or a database. The same
-workspace now has a [bounded ingress contract](https://github.com/HardMax71/amiss/blob/main/controller/src/ingress/policy.rs)
+that boundary a cross-process, durable local file record without SQL or a database. The root has a
+fixed record cap, fixed maintenance, admission, and clock locks, at most 256 row-lock shards, and
+one state and report path per admitted delivery. Checksummed root metadata fixes the replay window
+and keeps a high-water clock. Cleanup removes dead files and only bounded completed rows after their
+authenticated lifetime ends; it retains running work, saved results, and permanent exact-body
+replay markers. A full root rejects new identities rather than evicting them.
+
+The same workspace has a [bounded ingress contract](https://github.com/HardMax71/amiss/blob/main/controller/src/ingress/policy.rs)
 and separate GitHub, GitLab Standard Webhooks, and Gitea-family HMAC verifiers with rotating,
 revocable in-memory anchors. A future GitLab route must require its authenticated timestamp to be
 fresh. GitHub and Gitea-family routes instead key replay protection by the exact signed body and
-cannot safely discard done records from local age alone. No adapter or route loader enforces these
-pairings yet. The workspace deliberately has no provider enum and no concrete provider adapter,
+use permanent completion markers. No adapter or route loader enforces these pairings yet. The
+workspace deliberately has no provider enum and no concrete provider adapter,
 HTTP listener, authenticated payload decoder, provider API client, credential store, repository
 acquisition worker, bootstrap runner, deployable binary, publication transport, or provider
 status publisher. These absences make it an internal foundation, not a supported delivery lane.

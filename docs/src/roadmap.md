@@ -46,10 +46,40 @@ inspectable; version-specific history stays in the
 
 </details>
 
+<details>
+<summary>Done: delivery record</summary>
+
+- [`DeliveryLedger`](controller.md) fixes the four-state claim, lease, saved-result, and
+  completion contract. An expired owner cannot save or publish, an exact saved result survives a
+  retry, and a retained exact completion marker is repeatable without granting new work.
+- Trusted ingress gives every accepted delivery a replay lifetime. Exact-body and replay-only
+  requests are permanent. A request with an authenticated ID and issue time gets a fixed end from
+  the controller's signed-age and queue ceilings; a route may narrow freshness but cannot extend
+  that stored lifetime.
+- `FileLedger` implements the contract with ordinary files, cross-process file locks, and atomic
+  replacement, without SQL or a database. Root metadata fixes the record cap and replay window and
+  preserves a high-water clock. Reopening the root with different limits or damaged data fails
+  closed.
+- The root has one maintenance lock, one new-record lock, one clock lock, and at most 256 lazily
+  created row-lock shards. New identities are admitted under the configured record cap, while work
+  already inside the cap can finish. A fresh random evaluation suffix prevents an old retry from
+  matching a later row after safe deletion.
+- A row has one bounded state file and, only while needed, one bounded report file. Saving the
+  result writes the report before the state that names it; completion saves `done` before removing
+  the report. Opening the root and explicit cleanup remove dead reports and known atomic-write
+  leftovers.
+- Cleanup removes only completed rows whose authenticated replay lifetime has ended. Permanent
+  completion markers, running work, and saved results remain. The persisted high-water clock keeps
+  a local clock rollback from reopening expired work. Focused tests pin the inclusive end, rollback,
+  permanent retention, preservation of running and saved work, fixed lock growth, full-root
+  behavior, and cleanup's fail-closed root scan.
+
+</details>
+
 ## Now: provider-verified controls
 
-The validation phase is closed, and the first provider-neutral foundation has landed. The
-rolling evaluation contract now distinguishes the candidate or source ref used for URL
+The validation and delivery-record phases are closed, and the provider-neutral foundation has
+landed. The rolling evaluation contract now distinguishes the candidate or source ref used for URL
 resolution from the protected target ref used by branch-scoped policy controls. For commit-pair
 materialization, the bootstrap accepts a canonical evaluation/snapshot/controls request triplet,
 validates its required constraint and trusted-time bindings, and carries the exact bytes to its
@@ -57,10 +87,10 @@ verified engine in a closed stdin frame. The separate, unpublished Rust workspac
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines opaque provider
 identities and the provider-neutral contracts documented in
 [Controller delivery](controller.md). That page defines the full delivery, ownership, retry, and
-publication contract. Its traits, orchestrator, durable local file record, bounded ingress gate,
-rotating key ring, and GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers now
-exist. The wire library can also produce canonical execution constraints and trusted-time
-statements instead of only parsing them.
+publication contract. The durable record is complete as described in the Done section above. The
+workspace also contains the traits, orchestrator, bounded ingress gate, rotating key ring, and
+GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers. The wire library can
+produce canonical execution constraints and trusted-time statements instead of only parsing them.
 
 That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
 GitHub, GitLab, or Gitea-family adapter, authenticated payload decoder, provider API client or
@@ -77,11 +107,10 @@ bounded polling, heartbeat cadence, whole-process-group cancellation, and a stab
 channel; bound provider refreshes below the lease window; and make repeated publication of the
 same source-bound required check safe. End-to-end negative tests must still cover wrong provider,
 repository, change, ref, commit, tree, expiry, replay, revocation, missing output, timeout, and
-tampered runtime closure. GitHub and Gitea-family signatures expose no authenticated delivery-
-attempt timestamp, so their replay-only routes require permanent done records; cleanup cannot be
-guessed from a local age threshold. The GitLab Standard Webhooks form authenticates its timestamp,
-so a GitLab route must require a bounded freshness window; replay-only would be invalid
-configuration.
+tampered runtime closure. A route loader must select the replay-only policy for GitHub and
+Gitea-family signatures, which expose no authenticated attempt time, and a bounded freshness rule
+for GitLab Standard Webhooks, which authenticates its timestamp. Replay-only would be invalid
+GitLab configuration.
 Link dialect support in the engine's `forge` field is not evidence that an authenticated adapter
 exists.
 

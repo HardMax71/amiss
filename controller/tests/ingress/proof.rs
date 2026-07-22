@@ -134,8 +134,12 @@ fn replay_identity_is_normalized_only_after_verification() {
         )
         .unwrap();
     assert_eq!(
-        signed.identity.delivery.as_str(),
+        signed.delivery().identity.delivery.as_str(),
         "f5e5f430-f57b-4e6e-9fac-d9128cd7232f"
+    );
+    assert_eq!(
+        signed.replay_keep_through_unix_millis(),
+        Some(GITLAB_NOW + 300_000)
     );
 
     let exact_route = route(SignedTimePolicy::ReplayOnly);
@@ -156,9 +160,10 @@ fn replay_identity_is_normalized_only_after_verification() {
         )
         .unwrap();
     assert_eq!(
-        exact.identity.delivery.as_str(),
+        exact.delivery().identity.delivery.as_str(),
         "body:sha256:70625f14c886c25b874c1bf13658987108dd149896764fc6707b06164e83a233"
     );
+    assert_eq!(exact.replay_keep_through_unix_millis(), None);
 }
 
 #[test]

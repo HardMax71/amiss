@@ -3,8 +3,12 @@
     reason = "fixed test fixtures and joined test threads must fail loudly"
 )]
 
+#[path = "file_ledger/capacity.rs"]
+mod capacity;
 #[path = "file_ledger/claims.rs"]
 mod claims;
+#[path = "file_ledger/cleanup.rs"]
+mod cleanup;
 #[path = "file_ledger/locking.rs"]
 mod locking;
 #[path = "file_ledger/persistence.rs"]

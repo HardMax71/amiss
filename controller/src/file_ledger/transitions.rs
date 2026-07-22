@@ -1,6 +1,7 @@
 use crate::{
-    AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim, DeliveryLease, DeliveryLedger,
-    LeaseCompletion, LeaseFence, LeaseRenewal, Publication, StageOutcome, StagedPublication,
+    AcceptedDelivery, AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim, DeliveryLease,
+    DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, Publication, StageOutcome,
+    StagedPublication,
 };
 
 use super::format::{self, State, StoredPublication};
@@ -10,9 +11,12 @@ use super::{FileLedger, FileLedgerError};
 impl DeliveryLedger for FileLedger {
     type Error = FileLedgerError;
 
-    fn claim(&mut self, delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error> {
+    fn claim(&mut self, delivery: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error> {
         let row = self.row(delivery)?;
         let Some(record) = row.load()? else {
+            if self.accepted_expired(&row, delivery)? {
+                return Err(FileLedgerError::Expired);
+            }
             return self.claim_new(&row, delivery);
         };
         if !record.matches(delivery) {
@@ -27,13 +31,16 @@ impl DeliveryLedger for FileLedger {
                 fence,
                 &publication,
             )?)),
-            State::Done { .. } => Ok(DeliveryClaim::Duplicate { evaluation_id }),
+            State::Done { .. } => {
+                row.remove_report()?;
+                Ok(DeliveryClaim::Duplicate { evaluation_id })
+            }
         }
     }
 
     fn renew(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         lease: &DeliveryLease,
     ) -> Result<LeaseRenewal, Self::Error> {
         let row = self.row(delivery)?;
@@ -59,7 +66,7 @@ impl DeliveryLedger for FileLedger {
         {
             return Ok(LeaseRenewal::Lost);
         }
-        let now = self.now(Some(&record))?;
+        let now = self.now(&row, Some(&record))?;
         if now >= expires_at_unix_millis {
             return Ok(LeaseRenewal::Lost);
         }
@@ -80,7 +87,7 @@ impl DeliveryLedger for FileLedger {
 
     fn stage(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         lease: &DeliveryLease,
         publication: &Publication,
     ) -> Result<StageOutcome, Self::Error> {
@@ -89,7 +96,8 @@ impl DeliveryLedger for FileLedger {
             return Ok(StageOutcome::Lost);
         };
         let evaluation_id = record.evaluation_id()?;
-        if !record.matches(delivery) || !publication_matches(delivery, &evaluation_id, publication)
+        if !record.matches(delivery)
+            || !publication_matches(delivery.delivery(), &evaluation_id, publication)
         {
             return Ok(StageOutcome::Lost);
         }
@@ -107,48 +115,59 @@ impl DeliveryLedger for FileLedger {
 
     fn complete(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         staged_publication: &StagedPublication,
     ) -> Result<LeaseCompletion, Self::Error> {
         let row = self.row(delivery)?;
         let Some(mut record) = row.load()? else {
+            self.now(&row, None)?;
             return Ok(LeaseCompletion::Lost);
         };
-        let evaluation_id = record.evaluation_id()?;
-        if !record.matches(delivery) || staged_publication.evaluation_id != evaluation_id {
-            return Ok(LeaseCompletion::Lost);
+        complete_record(&row, delivery, staged_publication, &mut record)
+    }
+}
+
+fn complete_record(
+    row: &Row,
+    delivery: &AcceptedDelivery,
+    staged_publication: &StagedPublication,
+    record: &mut format::Record,
+) -> Result<LeaseCompletion, FileLedgerError> {
+    let evaluation_id = record.evaluation_id()?;
+    if !record.matches(delivery) || staged_publication.evaluation_id != evaluation_id {
+        return Ok(LeaseCompletion::Lost);
+    }
+    let requested = match StoredPublication::new(&staged_publication.publication) {
+        Ok(publication) => publication,
+        Err(FileLedgerError::ReportTooLarge) => return Ok(LeaseCompletion::Lost),
+        Err(error) => return Err(error),
+    };
+    let requested_digest =
+        format::staged_digest(&evaluation_id, staged_publication.fence.get(), &requested)?;
+    match record.state.clone() {
+        State::Done {
+            fence,
+            staged_digest,
+        } if fence == staged_publication.fence.get() && staged_digest == requested_digest => {
+            row.remove_report()?;
+            Ok(LeaseCompletion::Completed)
         }
-        let requested = match StoredPublication::new(&staged_publication.publication) {
-            Ok(publication) => publication,
-            Err(FileLedgerError::ReportTooLarge) => return Ok(LeaseCompletion::Lost),
-            Err(error) => return Err(error),
-        };
-        let requested_digest =
-            format::staged_digest(&evaluation_id, staged_publication.fence.get(), &requested)?;
-        match record.state.clone() {
-            State::Done {
+        State::Done { .. } | State::Running { .. } => Ok(LeaseCompletion::Lost),
+        State::Staged { fence, publication } => {
+            if fence != staged_publication.fence.get()
+                || format::staged_digest(&evaluation_id, fence, &publication)? != requested_digest
+                || staged(row, evaluation_id, fence, &publication)? != *staged_publication
+            {
+                return Ok(LeaseCompletion::Lost);
+            }
+            record.advance(record.last_seen_unix_millis)?;
+            record.state = State::Done {
                 fence,
-                staged_digest,
-            } if fence == staged_publication.fence.get() && staged_digest == requested_digest => {
-                Ok(LeaseCompletion::Completed)
-            }
-            State::Done { .. } | State::Running { .. } => Ok(LeaseCompletion::Lost),
-            State::Staged { fence, publication } => {
-                if fence != staged_publication.fence.get()
-                    || format::staged_digest(&evaluation_id, fence, &publication)?
-                        != requested_digest
-                    || staged(&row, evaluation_id, fence, &publication)? != *staged_publication
-                {
-                    return Ok(LeaseCompletion::Lost);
-                }
-                record.advance(record.last_seen_unix_millis)?;
-                record.state = State::Done {
-                    fence,
-                    staged_digest: requested_digest,
-                };
-                row.save(&record)?;
-                Ok(LeaseCompletion::Completed)
-            }
+                staged_digest: requested_digest,
+            };
+            row.save(record)?;
+            row.remove_report()?;
+            Ok(LeaseCompletion::Completed)
         }
     }
 }

@@ -131,19 +131,20 @@ where
         let verified = adapter
             .authenticate(checked)
             .map_err(ControllerError::Provider)?;
-        let delivery = self
+        let accepted = self
             .ingress
             .post_auth(checked, verified)
             .map_err(ControllerError::Ingress)?;
+        let delivery = accepted.delivery();
         let mut lease = match self
             .ledger
-            .claim(&delivery)
+            .claim(&accepted)
             .map_err(ControllerError::Ledger)?
         {
             DeliveryClaim::Execute(lease) => lease,
             DeliveryClaim::Publish(staged) => {
-                validate_staged(&delivery, &staged)?;
-                return publish_staged(adapter, &mut self.ledger, &delivery, &staged);
+                validate_staged(delivery, &staged)?;
+                return publish_staged(adapter, &mut self.ledger, &accepted, &staged);
             }
             DeliveryClaim::Busy {
                 evaluation_id,
@@ -162,10 +163,10 @@ where
             }
         };
         let initial = adapter
-            .refresh(&delivery)
+            .refresh(delivery)
             .map_err(ControllerError::Provider)?;
-        validate_change(&delivery, &initial)?;
-        lease = renew_lease(&mut self.ledger, &delivery, &lease)?;
+        validate_change(delivery, &initial)?;
+        lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
         let request = RunRequest {
             delivery: delivery.identity.clone(),
             provider_run: delivery.provider_run.clone(),
@@ -174,7 +175,7 @@ where
         };
         let runner_outcome = match initial.state {
             ChangeState::Active => {
-                let mut heartbeat = LedgerHeartbeat::new(&mut self.ledger, &delivery, &mut lease);
+                let mut heartbeat = LedgerHeartbeat::new(&mut self.ledger, &accepted, &mut lease);
                 let outcome = self.runner.run(&request, &mut heartbeat);
                 heartbeat.finish()?;
                 Some(outcome)
@@ -183,14 +184,14 @@ where
                 None
             }
         };
-        lease = renew_lease(&mut self.ledger, &delivery, &lease)?;
+        lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
         let fresh = adapter
-            .refresh(&delivery)
+            .refresh(delivery)
             .map_err(ControllerError::Provider)?;
-        validate_change(&delivery, &fresh)?;
-        lease = renew_lease(&mut self.ledger, &delivery, &lease)?;
+        validate_change(delivery, &fresh)?;
+        lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
         let publication = publication(&request, &initial, &fresh, runner_outcome);
-        let staged = stage_publication(&mut self.ledger, &delivery, &lease, &publication)?;
-        publish_staged(adapter, &mut self.ledger, &delivery, &staged)
+        let staged = stage_publication(&mut self.ledger, &accepted, &lease, &publication)?;
+        publish_staged(adapter, &mut self.ledger, &accepted, &staged)
     }
 }

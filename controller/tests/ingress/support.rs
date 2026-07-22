@@ -4,8 +4,8 @@ use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, ControllerClock, DeliveryHeader, DeliveryId,
     DeliveryIdentity, DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressLimits, IngressPolicy,
     IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, SignedTimePolicy, TrustSetId,
-    UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
+    TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
 };
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -133,7 +133,7 @@ pub(crate) fn gitlab_verified(
 pub(crate) fn policy(max_queue_age: Duration, future_skew: Duration) -> IngressPolicy {
     IngressPolicy::new(
         IngressLimits::new(1_024, 16, 2_048).unwrap(),
-        max_queue_age,
+        ReplayWindow::new(Duration::from_secs(100), max_queue_age).unwrap(),
         future_skew,
     )
     .unwrap()
