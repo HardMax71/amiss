@@ -268,11 +268,13 @@ A claim against live work may return `Busy` without changing state. A different 
 binding returns `BindingConflict`. A stale renewal or stage returns `Lost`; the controller does
 not turn uncertainty into ownership.
 
-The deadline is a scheduling hint, not proof. Long runner work receives a heartbeat and must renew
-before it may cross the current deadline. Renewal must preserve the evaluation ID and fence and
-must not move the deadline backward. If renewal is lost, malformed, or cannot be checked, the
-heartbeat returns `Stop`, the exact error is retained, and the runner's output is discarded. This
-is cooperative stopping, not preemptive cancellation.
+The stored deadline is a scheduling hint, not proof. Renewal must preserve the evaluation ID and
+fence and must not move that deadline backward. After each renewal, the controller subtracts its
+own current time and returns only the positive time left. The concrete runner renews before launch
+and halfway through each returned window, capped at five seconds between checks. A zero window or
+a lost, malformed, or uncheckable renewal returns `Stop`; the runner then cancels its ProcessKit
+tree and discards the output. The heartbeat boundary is cooperative, while this runner turns its
+refusal into process cancellation.
 
 Provider refresh calls have no heartbeat. A concrete adapter must therefore give each refresh a
 timeout comfortably shorter than the lease window. The controller also renews after the runner
@@ -326,19 +328,48 @@ is honestly `Lost` rather than guessed from missing evidence.
 
 The trusted runner promises that a completed engine result already passed its engine, exit-class,
 and request checks. The controller independently checks the returned identity, nonempty output,
-and size. It does not parse or authenticate the engine report itself.
+and size. It does not authenticate the engine report itself.
 
-`amiss-wire` can now construct and canonically write the execution-constraint and trusted-time
-statements a future controller job would need, through the same strict parsers that consume them.
-That closes an encoding gap but does not create a runner: acquisition, commit-pair identity
-construction, process-group supervision, and a stable bootstrap failure channel still have to be
-joined.
+## Supervised bootstrap run
+
+`run_bootstrap` implements the provider-neutral execution step once exact repository and action
+trees have been acquired. It first reopens both repositories and verifies the requested commits
+and trees. It derives the sealed bootstrap job from the `RunRequest` and trusted instants rather
+than accepting a separately assembled job, so a caller cannot pair one run with another run's
+control files. It also reads the selected bootstrap under a fixed byte ceiling and matches its
+digest to the frozen execution plan before copying it into a fresh private scratch directory.
+
+The directory holds only the copied bootstrap, canonical request files, report, and final result
+record. The controller creates both output files and retains their open handles. The bootstrap may
+write through the fixed path names, but the controller never reopens those names; replacing a name
+therefore cannot replace the object that will be read. The child starts with a cleared environment
+and closed stdin, stdout, and stderr. The report is bounded by `MACHINE_JSON_BYTES`; the small
+result record is written last, so a missing record cannot be confused with a completed report.
+Exit status and that record are checked together. Missing or malformed records, oversized reports,
+timeout, signals, heartbeat loss, and runtime tampering are distinct fail-closed runner outcomes.
+
+Supervision uses pinned ProcessKit 2.2.5 with Tokio through one cross-platform path. ProcessKit
+selects the host's process-tree boundary. The controller enforces a positive wall limit no greater
+than 120 seconds and renews the ledger before launch and halfway through each newly proven lease
+window, capped at five seconds between checks. After every terminal path it hard-kills the group
+and waits up to two seconds for ProcessKit to report it empty before reading either output. Failure
+to prove that drain is unavailable, not completion. This also covers a clean leader exit, so a
+surviving descendant cannot escape merely by letting its parent finish. A heartbeat refusal
+cancels the same tree and discards its output. These bounds cover ordinary supervised execution;
+they do not promise recovery from a host kernel call that itself never returns.
+
+Focused tests cover wrong commits and trees, a wrong bootstrap digest, the cleared child
+environment, timeout and heartbeat races, descendants that remain alive after their leader exits,
+path replacement, and missing, malformed, and oversized output. This is still only the execution
+step. No current component acquires those trees from a provider-authenticated source or calls the
+runner from a working provider lane.
 
 ## What exists now
 
 The nested workspace now contains the provider-neutral identities, bounded ingress gate, adapter
 registry, GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers, rotating key
-ring, `DeliveryLedger`, orchestrator, and `FileLedger`. Focused tests cover limits, wrong routes,
+ring, `DeliveryLedger`, orchestrator, `FileLedger`, and the supervised bootstrap runner. Focused
+tests cover limits, wrong routes,
 stale and future time, exact-body replay identity, malformed and duplicate headers, body and
 signed-field tampering, wrong keys, rotation, expiry, and revocation by anchor removal. The file
 record separately covers cross-process ownership, reclaim, exact staged-result recovery,
@@ -348,11 +379,12 @@ growth under rejected identities, replay-window mismatch, the inclusive cleanup 
 rollback, retention of running and staged work, and strict handling of root and temporary files.
 
 There is still no HTTP transport, authenticated event decoder, concrete `ProviderAdapter`, API
-credential source or client, repository and action-tree acquisition worker, real bootstrap
-runner or hard cancellation, provider publisher, deployable service, or end-to-end provider
-lane. No adapter or route loader yet enforces the required verifier-to-time-policy pairing. The
-signature types are library parts, not a supported GitHub, GitLab, or Gitea-family integration.
-The engine's `forge` field still chooses only a URL dialect.
+credential source or client, repository and action-tree acquisition worker, provider publisher,
+deployable service, or end-to-end provider lane. No adapter or route loader yet enforces the
+required verifier-to-time-policy pairing, and nothing joins authenticated provider state and
+network acquisition to the runner. The signature and runner types are library parts, not a
+supported GitHub, GitLab, or Gitea-family integration. The engine's `forge` field still chooses
+only a URL dialect.
 
 [Project status](status.md) records this boundary. [Roadmap](roadmap.md) lists the work needed to
 turn the contract into a provider-verified lane, while [Security model](security.md) defines the

@@ -18,8 +18,8 @@ pub enum BootstrapTermination {
 pub fn classify_bootstrap_result(
     request: &RunRequest,
     termination: BootstrapTermination,
-    result: Option<&[u8]>,
-    stdout: &[u8],
+    result: Option<Vec<u8>>,
+    report: Vec<u8>,
 ) -> RunnerOutcome {
     match termination {
         BootstrapTermination::TimedOut => RunnerOutcome::TimedOut,
@@ -27,7 +27,7 @@ pub fn classify_bootstrap_result(
         | BootstrapTermination::Signalled
         | BootstrapTermination::SpawnUnavailable => RunnerOutcome::Unavailable,
         BootstrapTermination::Exited(exit_code) => {
-            classify_exit(request, exit_code, result, stdout)
+            classify_exit(request, exit_code, result, report)
         }
     }
 }
@@ -35,17 +35,19 @@ pub fn classify_bootstrap_result(
 fn classify_exit(
     request: &RunRequest,
     exit_code: i32,
-    result: Option<&[u8]>,
-    stdout: &[u8],
+    result: Option<Vec<u8>>,
+    report: Vec<u8>,
 ) -> RunnerOutcome {
     match result {
-        None | Some([]) => RunnerOutcome::MissingOutput,
+        None => RunnerOutcome::MissingOutput,
+        Some(bytes) if bytes.is_empty() => RunnerOutcome::MissingOutput,
         Some(bytes) if u64::try_from(bytes.len()).map_or(true, |size| size > RESULT_BYTES) => {
             RunnerOutcome::TamperedRuntime
         }
-        Some(bytes) => parse_result(bytes).map_or(RunnerOutcome::TamperedRuntime, |result| {
-            classify_record(request, exit_code, result, stdout)
-        }),
+        Some(bytes) => match parse_result(&bytes) {
+            Some(result) => classify_record(request, exit_code, result, report),
+            None => RunnerOutcome::TamperedRuntime,
+        },
     }
 }
 
@@ -53,19 +55,23 @@ fn classify_record(
     request: &RunRequest,
     exit_code: i32,
     result: BootstrapResult,
-    stdout: &[u8],
+    report: Vec<u8>,
 ) -> RunnerOutcome {
     if exit_code == result_exit_code(result) {
-        accepted_record(request, result, stdout)
+        accepted_record(request, result, report)
     } else {
         RunnerOutcome::TamperedRuntime
     }
 }
 
-fn accepted_record(request: &RunRequest, result: BootstrapResult, stdout: &[u8]) -> RunnerOutcome {
+fn accepted_record(
+    request: &RunRequest,
+    result: BootstrapResult,
+    report: Vec<u8>,
+) -> RunnerOutcome {
     match result {
-        BootstrapResult::Pass => complete(request, Evaluation::Pass, stdout),
-        BootstrapResult::Block => complete(request, Evaluation::Block, stdout),
+        BootstrapResult::Pass => complete(request, Evaluation::Pass, report),
+        BootstrapResult::Block => complete(request, Evaluation::Block, report),
         BootstrapResult::MissingOutput => RunnerOutcome::MissingOutput,
         BootstrapResult::Timeout => RunnerOutcome::TimedOut,
         BootstrapResult::OversizedOutput => RunnerOutcome::OversizedOutput,
@@ -74,16 +80,16 @@ fn accepted_record(request: &RunRequest, result: BootstrapResult, stdout: &[u8])
     }
 }
 
-fn complete(request: &RunRequest, evaluation: Evaluation, stdout: &[u8]) -> RunnerOutcome {
+fn complete(request: &RunRequest, evaluation: Evaluation, report: Vec<u8>) -> RunnerOutcome {
     match (
-        stdout.is_empty(),
-        u64::try_from(stdout.len()).is_ok_and(|size| size <= MACHINE_JSON_BYTES),
+        report.is_empty(),
+        u64::try_from(report.len()).is_ok_and(|size| size <= MACHINE_JSON_BYTES),
     ) {
         (true, true) => RunnerOutcome::MissingOutput,
         (false, true) => RunnerOutcome::Complete {
             identity: Box::new(request.run.clone()),
             evaluation,
-            report: stdout.to_vec(),
+            report,
         },
         (true | false, false) => RunnerOutcome::OversizedOutput,
     }
