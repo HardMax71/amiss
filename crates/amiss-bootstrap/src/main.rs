@@ -141,29 +141,10 @@ fn execute(args: &Args) -> Execution<Accepted> {
     run_engine(args, &validated, sealed)
 }
 
-const fn reason(refusal: Refusal) -> &'static str {
+const fn validation_failure(refusal: Refusal) -> Failure {
     match refusal {
-        Refusal::UnsupportedPlatform => "unsupported-platform",
-        Refusal::ActionTree => "action-tree-mismatch",
-        Refusal::ActionMetadata => "action-metadata-invalid",
-        Refusal::PathNotRegularBlob => "path-not-regular-blob",
-        Refusal::ManifestUnreadable => "manifest-unreadable",
-        Refusal::ManifestDigest => "manifest-digest-mismatch",
-        Refusal::DependencyLock => "dependency-lock-mismatch",
-        Refusal::ArtifactSelection => "artifact-selection-failed",
-        Refusal::RuntimeClosure => "runtime-closure-mismatch",
-        Refusal::EngineDigest => "engine-digest-mismatch",
-        Refusal::PlatformBinding => "platform-binding-mismatch",
-        Refusal::BootstrapDigest => "bootstrap-digest-mismatch",
-    }
-}
-
-fn validation_failure(refusal: Refusal) -> Failure {
-    let diagnostic = reason(refusal);
-    if refusal == Refusal::UnsupportedPlatform {
-        unavailable(diagnostic)
-    } else {
-        tampered(diagnostic)
+        Refusal::Unavailable(diagnostic) => unavailable(diagnostic),
+        Refusal::Tampered(diagnostic) => tampered(diagnostic),
     }
 }
 
