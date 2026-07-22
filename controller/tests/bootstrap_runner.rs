@@ -6,7 +6,7 @@
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
@@ -25,6 +25,8 @@ use amiss_wire::model::{
 
 const PASS_REPORT: &[u8] = b"{\"runner\":\"pass\"}\n";
 const BLOCK_REPORT: &[u8] = b"{\"runner\":\"block\"}\n";
+const RESOURCE_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
+const RESOURCE_RELEASE_POLL: Duration = Duration::from_millis(10);
 
 struct Heartbeat {
     calls: u64,
@@ -158,11 +160,21 @@ impl Harness {
     }
 
     fn descendant_resources_released(&self) -> bool {
-        OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(self.repository.root().join("runner-lock"))
-            .is_ok_and(|lock| lock.try_lock().is_ok())
+        let started = Instant::now();
+        loop {
+            let released = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(self.repository.root().join("runner-lock"))
+                .is_ok_and(|lock| lock.try_lock().is_ok());
+            if released {
+                return true;
+            }
+            if started.elapsed() >= RESOURCE_RELEASE_TIMEOUT {
+                return false;
+            }
+            std::thread::sleep(RESOURCE_RELEASE_POLL);
+        }
     }
 }
 

@@ -383,9 +383,22 @@ fn read_at_most(file: &mut impl Read, limit: u64) -> std::io::Result<Vec<u8>> {
         let chunk = chunk
             .get(..read)
             .ok_or_else(|| std::io::Error::other("bootstrap read count"))?;
-        bytes
-            .try_reserve_exact(read)
-            .map_err(std::io::Error::other)?;
+        reserve_bounded(&mut bytes, read, limit)?;
         bytes.extend_from_slice(chunk);
     }
+}
+
+fn reserve_bounded(bytes: &mut Vec<u8>, additional: usize, limit: u64) -> std::io::Result<()> {
+    let needed = bytes.len().saturating_add(additional);
+    if needed <= bytes.capacity() {
+        return Ok(());
+    }
+    let bound = usize::try_from(limit).unwrap_or(usize::MAX);
+    let target = bytes.capacity().saturating_mul(2).max(needed).min(bound);
+    if target < needed {
+        return Err(std::io::Error::other("bootstrap read capacity"));
+    }
+    bytes
+        .try_reserve_exact(target.saturating_sub(bytes.len()))
+        .map_err(std::io::Error::other)
 }
