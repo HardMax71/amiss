@@ -15,10 +15,11 @@ amiss-bootstrap exec --action-repository P --repository P --constraint F \
 
 `--scratch` is a controller-owned absolute directory for the private verified engine copy; the
 bootstrap never discovers it through ambient environment variables. `--report` and `--result`
-are required. They must name distinct absolute paths that do not exist. Bootstrap creates files
-without replacing existing files. An accepted report is written and flushed to `--report` first;
-the short, versioned `pass` or `block` record is then written to `--result` as its commit marker.
-Failed evaluations publish only their result record. A report without its result marker is ignored.
-A malformed command creates neither file, and standard output carries no report bytes.
+are required. They must be distinct, controller-created empty regular files named `report` and
+`result` directly inside `--scratch`. Bootstrap opens those files without replacing them. An
+accepted report is written and flushed to `--report` first; the short, versioned `pass` or `block`
+record is then written to `--result` as its commit marker. Failed evaluations leave the report
+empty and publish only their result record. A report without its result marker is ignored. An
+invalid invocation leaves both files untouched, and standard output carries no report bytes.
 
 Part of [Amiss](https://hardmax71.github.io/amiss/).

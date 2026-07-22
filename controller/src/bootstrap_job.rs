@@ -43,7 +43,9 @@ impl fmt::Display for BootstrapJobError {
             Self::ControlBinding => "an external control names another run",
             Self::ExecutionConstraint => "the execution constraint is invalid",
             Self::TrustedTime => "the trusted time is invalid",
-            Self::RequestEncoding => "the sealed requests cannot be encoded",
+            Self::RequestEncoding => {
+                "the sealed requests cannot be encoded within the stream ceiling"
+            }
         })
     }
 }
@@ -119,7 +121,8 @@ pub struct BootstrapJob {
 /// # Errors
 ///
 /// The run is internally inconsistent, a control is malformed or names
-/// another run, trusted time is invalid, or canonical encoding fails.
+/// another run, trusted time is invalid, or a canonical request is invalid or
+/// exceeds its stream ceiling.
 pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, BootstrapJobError> {
     let checked_plan = validated_plan(&input.run.plan)?;
     (binding(&checked_plan) == input.run.check)
@@ -187,9 +190,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         snapshot: SnapshotRequest::git_objects()
             .canonical_bytes()
             .map_err(|_defect| BootstrapJobError::RequestEncoding)?,
-        controls: controls
-            .canonical_bytes()
-            .map_err(|_defect| BootstrapJobError::RequestEncoding)?,
+        controls: controls::canonical_request(&controls)?,
     };
     Ok(BootstrapJob {
         streams,

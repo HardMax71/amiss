@@ -20,9 +20,12 @@ use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
 };
 use amiss_wire::requests::{
-    ControlsRequest, EvaluationRequest, RequestTrust, SnapshotRequest,
+    ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestTrust, SnapshotRequest,
     commit_candidate_identity_digest,
 };
+
+const LARGE_INVENTORY_ENTRIES: usize = 4_093;
+const MAX_PATH_BYTES: usize = 4_096;
 
 fn example(name: &str) -> Vec<u8> {
     fs::read(
@@ -31,6 +34,40 @@ fn example(name: &str) -> Vec<u8> {
             .join(name),
     )
     .unwrap()
+}
+
+fn inventory_path(index: usize, length: usize) -> String {
+    let prefix = format!("inventory/{index:04}/");
+    format!(
+        "{prefix}{}",
+        "a".repeat(length.checked_sub(prefix.len()).unwrap())
+    )
+}
+
+fn maximal_floor() -> Vec<u8> {
+    let inventory = (0..LARGE_INVENTORY_ENTRIES)
+        .map(|index| format!("\"{}\"", inventory_path(index, MAX_PATH_BYTES)))
+        .collect::<Vec<_>>()
+        .join(",");
+    let source = String::from_utf8(example("organization-floor.json"))
+        .unwrap()
+        .replacen("\"README.md\"", &inventory, 1);
+    json::canonical(&json::parse(source.as_bytes()).unwrap())
+}
+
+fn near_ceiling_floor() -> Vec<u8> {
+    let ceiling = usize::try_from(REQUEST_STREAM_BYTES).unwrap();
+    let maximal = maximal_floor();
+    let excess = maximal.len().checked_sub(ceiling - 1).unwrap();
+    let last = LARGE_INVENTORY_ENTRIES - 1;
+    let maximal_path = inventory_path(last, MAX_PATH_BYTES);
+    let shorter_path = inventory_path(last, MAX_PATH_BYTES.checked_sub(excess).unwrap());
+    let floor = String::from_utf8(maximal)
+        .unwrap()
+        .replacen(&maximal_path, &shorter_path, 1)
+        .into_bytes();
+    assert_eq!(floor.len(), ceiling - 1);
+    floor
 }
 
 fn oid(value: char) -> Oid {
@@ -215,6 +252,29 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         })
         .unwrap_err(),
         BootstrapJobError::TrustedTime
+    );
+}
+
+#[test]
+fn job_construction_rejects_an_aggregate_controls_stream_above_the_ceiling() {
+    let floor = near_ceiling_floor();
+    let run = run_request(PolicyControls {
+        organization_floor: Some(AcquiredControl {
+            bytes: floor,
+            trust_source: RequestTrust::OrganizationPolicy,
+        }),
+        debt_snapshot: None,
+        waiver_bundle: None,
+    });
+
+    assert_eq!(
+        bootstrap_job(BootstrapJobInput {
+            run: &run,
+            evaluation_instant: instant("2026-07-12T10:00:00Z"),
+            valid_until: instant("2026-07-12T10:05:00Z"),
+        })
+        .unwrap_err(),
+        BootstrapJobError::RequestEncoding
     );
 }
 

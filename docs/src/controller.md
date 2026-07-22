@@ -116,7 +116,7 @@ prescription for how bytes are stored.
 | Replay lifetime | Permanent, or an inclusive replay end based on authenticated time | Decided by trusted ingress and stored with the fixed binding. Only an ended bounded lifetime can permit deletion. |
 | Evaluation ID | Opaque controller-created ID with fresh random bytes | Created on the first claim and kept through retries and reclaims. A later row cannot reuse it. |
 | Temporary ownership | Evaluation ID, lease deadline, fence | Grants permission to evaluate; the record, not a worker's clock, decides whether it is still live. |
-| Saved result | Evaluation ID, fence, provider run, full run identity, conclusion, optional report | Frozen as one exact value before provider I/O. |
+| Saved result | Evaluation ID, check-plan binding, fence, provider run, full run identity, conclusion, optional report | Frozen as one exact value before provider I/O. |
 | State | New, running, result saved, done | Each change happens atomically: fully or not at all. |
 
 Here, “delivery ID” means the replay identity accepted by ingress. It is the signed GitLab
@@ -154,12 +154,15 @@ and complete.
 Operators must size the cap to include permanent replay markers.
 
 The state file is a versioned, length-delimited, checksummed frame containing canonical JSON and is
-capped at 128 KiB. A report is kept separately at one fixed path, bounded by the machine-report byte
-ceiling, while its digest and length remain in the saved state. Saving removes any dead report,
-writes and syncs the new report, then atomically replaces the state that names it. Completion first
-saves `done`, then removes the report. A stop between those steps can leave an unreferenced report,
-but cannot expose a saved state whose report was never written. Retrying completion and cleanup
-both remove that dead file.
+capped at 128 KiB. The reader accepts only its current row schema. The older v2 schema contains no
+check-plan binding, so it is rejected instead of attaching a caller-supplied policy to old work; a
+future schema change needs an explicit migration that preserves every stored authorization field.
+A report is kept separately at one fixed path, bounded by the machine-report byte ceiling, while
+its digest and length remain in the saved state. Saving removes any dead report, writes and syncs
+the new report, then atomically replaces the state that names it. Completion first saves `done`,
+then removes the report. A stop between those steps can leave an unreferenced report, but cannot
+expose a saved state whose report was never written. Retrying completion and cleanup both remove
+that dead file.
 
 The implementation uses Rust's standard `File::lock` and the `atomicwrites` crate, leaving the
 operating-system calls behind those maintained boundaries. Replacement first syncs the new file.
@@ -345,8 +348,9 @@ write through the fixed path names, but the controller never reopens those names
 therefore cannot replace the object that will be read. The child starts with a cleared environment
 and closed stdin, stdout, and stderr. The report is bounded by `MACHINE_JSON_BYTES`; the small
 result record is written last, so a missing record cannot be confused with a completed report.
-Exit status and that record are checked together. Missing or malformed records, oversized reports,
-timeout, signals, heartbeat loss, and runtime tampering are distinct fail-closed runner outcomes.
+Exit status and that record are checked together. Missing output, oversized reports, timeout, and
+runtime tampering retain distinct fail-closed outcomes. Signals, heartbeat loss, and spawn failure
+all fail closed as `Unavailable`.
 
 Supervision uses pinned ProcessKit 2.2.5 with Tokio through one cross-platform path. ProcessKit
 selects the host's process-tree boundary. The controller enforces a positive wall limit no greater

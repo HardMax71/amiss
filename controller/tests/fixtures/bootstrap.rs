@@ -120,7 +120,11 @@ fn valid_layout(args: &RunnerArgs) -> bool {
         && input(&args.controls, directory, "controls.json")
         && output(&args.report, directory, "report")
         && output(&args.result, directory, "result")
-        && env::current_dir().is_ok_and(|current| current == directory)
+        && env::current_dir().is_ok_and(|current| same_directory(&current, directory))
+}
+
+fn same_directory(left: &Path, right: &Path) -> bool {
+    same_file::is_same_file(left, right).unwrap_or(false)
 }
 
 fn regular_directory(path: &Path) -> bool {
