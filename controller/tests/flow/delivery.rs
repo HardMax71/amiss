@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use amiss_controller::{
     ChangeState, CheckConclusion, ControllerError, HandleOutcome, ProviderError, check_binding,
@@ -34,8 +35,11 @@ fn successful_flow_binds_run_rechecks_and_publishes() {
     assert_eq!(controller.runner.requests.len(), 1);
     assert_eq!(controller.ledger.renewal_count, 5);
     assert_eq!(
-        controller.runner.heartbeat_deadlines,
-        vec![1_800_000_100_001, 1_800_000_100_002, 1_800_000_100_003,]
+        controller.runner.heartbeat_windows,
+        vec![
+            Duration::from_millis(100_002),
+            Duration::from_millis(100_003),
+        ]
     );
     assert_eq!(controller.runner.requests[0].run, run);
     assert_eq!(

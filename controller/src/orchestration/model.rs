@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 
@@ -124,20 +125,17 @@ pub enum RunnerOutcome {
 #[must_use]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeartbeatOutcome {
-    /// Ownership is proven through this advisory deadline.
-    Renewed { expires_at_unix_millis: i64 },
+    /// Ownership is proven for this remaining window.
+    Renewed { renew_within: Duration },
     /// Ownership cannot be proven and supervised work must terminate.
     Stop,
 }
 
 /// Cooperative lease renewal for one supervised run.
 pub trait RunHeartbeat {
-    /// The current advisory deadline; only a ledger renewal decides ownership.
-    fn expires_at_unix_millis(&self) -> i64;
-
-    /// Extends the live lease. The returned deadline is the only proven window;
-    /// `Stop` means the runner must terminate and discard its output. The
-    /// controller retains the exact failure.
+    /// Extends the live lease. A runner calls this before launch and again
+    /// within every returned window. `Stop` means it must terminate and
+    /// discard its output; the controller retains the exact failure.
     fn renew(&mut self) -> HeartbeatOutcome;
 }
 
@@ -145,7 +143,7 @@ pub trait Runner {
     /// Runs the exact acquired identity. `Complete` is reserved for a report
     /// whose engine, exit class, and request bindings the trusted runner has
     /// already accepted; the controller independently rechecks the identity.
-    /// Work that may cross the heartbeat deadline must renew before it does;
+    /// Work starts only after a renewal and renews within every proven window;
     /// a `Stop` response terminates the run immediately.
     fn run(&mut self, request: &RunRequest, heartbeat: &mut dyn RunHeartbeat) -> RunnerOutcome;
 }
