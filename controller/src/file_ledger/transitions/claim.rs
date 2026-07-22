@@ -1,4 +1,4 @@
-use crate::{AcceptedDelivery, ControllerEvaluationId, DeliveryClaim};
+use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim};
 
 use super::make_lease;
 use crate::file_ledger::format::{Record, State};
@@ -10,12 +10,14 @@ impl FileLedger {
         &self,
         row: &Row,
         delivery: &AcceptedDelivery,
+        check: &CheckBinding,
     ) -> Result<DeliveryClaim, FileLedgerError> {
         let now = self.now(row, None)?;
         let evaluation_id = Self::new_evaluation_id(&delivery.delivery().identity)?;
         let expires_at_unix_millis = self.deadline(now)?;
         let record = Record::running(
             delivery,
+            check,
             &evaluation_id,
             self.owner,
             now,
@@ -24,6 +26,7 @@ impl FileLedger {
         row.save_new(&record)?;
         Ok(DeliveryClaim::Execute(make_lease(
             evaluation_id,
+            check.clone(),
             1,
             expires_at_unix_millis,
         )?))
@@ -34,6 +37,7 @@ impl FileLedger {
         row: &Row,
         mut record: Record,
         evaluation_id: ControllerEvaluationId,
+        check: &CheckBinding,
     ) -> Result<DeliveryClaim, FileLedgerError> {
         let State::Running {
             owner,
@@ -48,6 +52,7 @@ impl FileLedger {
             if owner == self.owner {
                 return Ok(DeliveryClaim::Execute(make_lease(
                     evaluation_id,
+                    check.clone(),
                     fence,
                     expires_at_unix_millis,
                 )?));
@@ -68,6 +73,7 @@ impl FileLedger {
         row.save(&record)?;
         Ok(DeliveryClaim::Execute(make_lease(
             evaluation_id,
+            check.clone(),
             fence,
             expires_at_unix_millis,
         )?))

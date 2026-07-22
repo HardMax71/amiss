@@ -6,14 +6,15 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use amiss_controller::{
-    AcceptedDelivery, AuthenticatedDelivery, ChangeId, ChangeLocator, CheckConclusion,
-    ControllerClock, DeliveryClaim, DeliveryHeader, DeliveryId, DeliveryIdentity, DeliveryLease,
-    DeliveryRoute, FileLedger, FileLedgerConfig, GitLabWebhook, IngressLimits, IngressPolicy,
-    IntegrationId, OidPair, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, ReplayWindow, RunIdentity,
-    RunRefs, SignedTimePolicy, StageOutcome, StagedPublication, UntrustedDelivery, WebhookKey,
-    WebhookKeyring,
+    AcceptedDelivery, AuthenticatedDelivery, ChangeId, ChangeLocator, CheckBinding,
+    CheckConclusion, ControllerClock, DeliveryClaim, DeliveryHeader, DeliveryId, DeliveryIdentity,
+    DeliveryLease, DeliveryRoute, FileLedger, FileLedgerConfig, GitLabWebhook, IngressLimits,
+    IngressPolicy, IntegrationId, OidPair, OpaqueId, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication,
+    ReplayWindow, RunIdentity, RunRefs, SignedTimePolicy, StageOutcome, StagedPublication,
+    UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
+use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use base64::Engine as _;
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -62,6 +63,14 @@ pub(super) fn config(max_records: u64) -> FileLedgerConfig {
 
 pub(super) fn replay_window() -> ReplayWindow {
     ReplayWindow::new(Duration::from_mins(1), Duration::from_secs(10)).unwrap()
+}
+
+pub(super) fn check_binding() -> CheckBinding {
+    CheckBinding {
+        plan_digest: hb("amiss/test-check-plan", b"plan"),
+        required_status_name: "amiss/enforce".to_owned(),
+        execution_constraint_digest: hb("amiss/test-execution-constraint", b"constraint"),
+    }
 }
 
 fn provider() -> ProviderIdentity {
@@ -211,6 +220,7 @@ pub(super) fn publication(delivery: &AcceptedDelivery, lease: &DeliveryLease) ->
     Publication {
         provider_run: delivery.provider_run.clone(),
         evaluation_id: lease.evaluation_id.clone(),
+        check: lease.check.clone(),
         run: run_identity(delivery),
         conclusion: CheckConclusion::Pass,
         report: Some(vec![0, 1, 2, 0xfe, 0xff]),

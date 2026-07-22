@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use crate::{
     AdapterRegistry, ControllerClock, ControllerEvaluationId, IngressError, IngressPolicy,
-    ProviderError, SystemClock, UntrustedDelivery,
+    PlanError, PlanRegistry, ProviderError, ResolvedPlan, SystemClock, UntrustedDelivery,
+    resolve_plan,
 };
 
 use self::helpers::{
@@ -19,6 +20,7 @@ use super::publication::publication;
 #[derive(Debug)]
 pub enum ControllerError<E> {
     UnknownProvider,
+    Plan(PlanError),
     Ingress(IngressError),
     Provider(ProviderError),
     WrongChangeIdentity,
@@ -35,6 +37,7 @@ impl<E: fmt::Display> fmt::Display for ControllerError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownProvider => formatter.write_str("no adapter handles the provider"),
+            Self::Plan(error) => write!(formatter, "check plan selection failed: {error}"),
             Self::Ingress(error) => write!(formatter, "provider ingress failed: {error}"),
             Self::Provider(error) => write!(formatter, "provider operation failed: {error}"),
             Self::WrongChangeIdentity => {
@@ -44,7 +47,7 @@ impl<E: fmt::Display> fmt::Display for ControllerError<E> {
                 formatter.write_str("provider refresh changed the authenticated provider run")
             }
             Self::DeliveryBindingConflict => {
-                formatter.write_str("delivery key was rebound to another authenticated run")
+                formatter.write_str("delivery key was rebound to another run or check plan")
             }
             Self::LeaseLost => formatter.write_str("delivery lease is no longer authoritative"),
             Self::CompletionLost => {
@@ -78,6 +81,7 @@ pub enum HandleOutcome {
 
 pub struct Controller<L, R> {
     pub registry: AdapterRegistry,
+    pub plans: PlanRegistry,
     pub ledger: L,
     pub runner: R,
     ingress: IngressPolicy,
@@ -89,12 +93,26 @@ where
     L: DeliveryLedger,
     R: Runner,
 {
-    pub fn new(registry: AdapterRegistry, ledger: L, runner: R, ingress: IngressPolicy) -> Self {
-        Self::new_with_clock(registry, ledger, runner, ingress, Arc::new(SystemClock))
+    pub fn new(
+        registry: AdapterRegistry,
+        plans: PlanRegistry,
+        ledger: L,
+        runner: R,
+        ingress: IngressPolicy,
+    ) -> Self {
+        Self::new_with_clock(
+            registry,
+            plans,
+            ledger,
+            runner,
+            ingress,
+            Arc::new(SystemClock),
+        )
     }
 
     pub fn new_with_clock(
         registry: AdapterRegistry,
+        plans: PlanRegistry,
         ledger: L,
         runner: R,
         ingress: IngressPolicy,
@@ -102,6 +120,7 @@ where
     ) -> Self {
         Self {
             registry,
+            plans,
             ledger,
             runner,
             ingress,
@@ -136,14 +155,17 @@ where
             .post_auth(checked, verified)
             .map_err(ControllerError::Ingress)?;
         let delivery = accepted.delivery();
+        let ResolvedPlan { plan, check } =
+            resolve_plan(&self.plans, delivery).map_err(ControllerError::Plan)?;
         let mut lease = match self
             .ledger
-            .claim(&accepted)
+            .claim(&accepted, &check)
             .map_err(ControllerError::Ledger)?
         {
-            DeliveryClaim::Execute(lease) => lease,
+            DeliveryClaim::Execute(lease) if lease.check == check => lease,
+            DeliveryClaim::Execute(_) => return Err(ControllerError::LeaseLost),
             DeliveryClaim::Publish(staged) => {
-                validate_staged(delivery, &staged)?;
+                validate_staged(delivery, &check, &staged)?;
                 return publish_staged(adapter, &mut self.ledger, &accepted, &staged);
             }
             DeliveryClaim::Busy {
@@ -171,6 +193,8 @@ where
             delivery: delivery.identity.clone(),
             provider_run: delivery.provider_run.clone(),
             evaluation_id: lease.evaluation_id.clone(),
+            check,
+            plan,
             run: initial.run.clone(),
         };
         let runner_outcome = match initial.state {

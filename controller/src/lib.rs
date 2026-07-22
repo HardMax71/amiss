@@ -32,7 +32,7 @@ pub use orchestration::{
     LeaseFence, LeaseRenewal, OidPair, Publication, RunFailure, RunHeartbeat, RunIdentity, RunRefs,
     RunRequest, Runner, RunnerOutcome, StageOutcome, StagedPublication,
 };
-pub use plans::{PlanError, PlanRegistry, PlanScope, register_plan, resolve_plan};
+pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan, resolve_plan};
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ProviderAdapter, ProviderError, RegistryError,
 };

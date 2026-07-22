@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use amiss_controller::{
-    ChangeState, CheckConclusion, ControllerError, HandleOutcome, ProviderError,
+    ChangeState, CheckConclusion, ControllerError, HandleOutcome, ProviderError, check_binding,
 };
 
 use crate::support::{
@@ -41,6 +41,14 @@ fn successful_flow_binds_run_rechecks_and_publishes() {
     assert_eq!(
         controller.runner.requests[0].provider_run,
         authenticated.provider_run
+    );
+    let request = &controller.runner.requests[0];
+    assert_eq!(request.check, check_binding(&request.plan).unwrap());
+    assert!(
+        controller
+            .plans
+            .values()
+            .any(|plan| Arc::ptr_eq(plan, &request.plan))
     );
     let publications = adapter.publications();
     assert_eq!(publications.len(), 1);

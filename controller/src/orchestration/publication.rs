@@ -31,6 +31,7 @@ pub(super) fn publication(
     Publication {
         provider_run: request.provider_run.clone(),
         evaluation_id: request.evaluation_id.clone(),
+        check: request.check.clone(),
         run: initial.run.clone(),
         conclusion,
         report,

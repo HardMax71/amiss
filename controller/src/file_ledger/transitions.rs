@@ -1,7 +1,7 @@
 use crate::{
-    AcceptedDelivery, AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim, DeliveryLease,
-    DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, Publication, StageOutcome,
-    StagedPublication,
+    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim,
+    DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, Publication,
+    StageOutcome, StagedPublication,
 };
 
 use super::format::{self, State, StoredPublication};
@@ -11,20 +11,24 @@ use super::{FileLedger, FileLedgerError};
 impl DeliveryLedger for FileLedger {
     type Error = FileLedgerError;
 
-    fn claim(&mut self, delivery: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error> {
+    fn claim(
+        &mut self,
+        delivery: &AcceptedDelivery,
+        check: &CheckBinding,
+    ) -> Result<DeliveryClaim, Self::Error> {
         let row = self.row(delivery)?;
         let Some(record) = row.load()? else {
             if self.accepted_expired(&row, delivery)? {
                 return Err(FileLedgerError::Expired);
             }
-            return self.claim_new(&row, delivery);
+            return self.claim_new(&row, delivery, check);
         };
-        if !record.matches(delivery) {
+        if !record.matches(delivery, check) {
             return Ok(DeliveryClaim::BindingConflict);
         }
         let evaluation_id = record.evaluation_id()?;
         match record.state.clone() {
-            State::Running { .. } => self.claim_running(&row, record, evaluation_id),
+            State::Running { .. } => self.claim_running(&row, record, evaluation_id, check),
             State::Staged { fence, publication } => Ok(DeliveryClaim::Publish(staged(
                 &row,
                 evaluation_id,
@@ -47,7 +51,7 @@ impl DeliveryLedger for FileLedger {
         let Some(mut record) = row.load()? else {
             return Ok(LeaseRenewal::Lost);
         };
-        if !record.matches(delivery) {
+        if !record.matches(delivery, &lease.check) {
             return Ok(LeaseRenewal::Lost);
         }
         let State::Running {
@@ -80,6 +84,7 @@ impl DeliveryLedger for FileLedger {
         row.save(&record)?;
         Ok(LeaseRenewal::Renewed(make_lease(
             evaluation_id,
+            lease.check.clone(),
             fence,
             renewed_deadline,
         )?))
@@ -96,7 +101,8 @@ impl DeliveryLedger for FileLedger {
             return Ok(StageOutcome::Lost);
         };
         let evaluation_id = record.evaluation_id()?;
-        if !record.matches(delivery)
+        if !record.matches(delivery, &lease.check)
+            || publication.check != lease.check
             || !publication_matches(delivery.delivery(), &evaluation_id, publication)
         {
             return Ok(StageOutcome::Lost);
@@ -134,7 +140,9 @@ fn complete_record(
     record: &mut format::Record,
 ) -> Result<LeaseCompletion, FileLedgerError> {
     let evaluation_id = record.evaluation_id()?;
-    if !record.matches(delivery) || staged_publication.evaluation_id != evaluation_id {
+    if !record.matches(delivery, &staged_publication.publication.check)
+        || staged_publication.evaluation_id != evaluation_id
+    {
         return Ok(LeaseCompletion::Lost);
     }
     let requested = match StoredPublication::new(&staged_publication.publication) {
@@ -195,11 +203,13 @@ fn restage(
 
 fn make_lease(
     evaluation_id: ControllerEvaluationId,
+    check: CheckBinding,
     fence: u64,
     expires_at_unix_millis: i64,
 ) -> Result<DeliveryLease, FileLedgerError> {
     Ok(DeliveryLease {
         evaluation_id,
+        check,
         fence: LeaseFence::new(fence).ok_or(FileLedgerError::Corrupt)?,
         expires_at_unix_millis,
     })

@@ -5,12 +5,14 @@
 
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use amiss_controller::{
     AcquiredControl, BootstrapJobError, BootstrapJobInput, ChangeId, ChangeLocator, CheckPlan,
     ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId, OidPair, PolicyControls,
     ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
-    ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, bootstrap_job, check_plan,
+    ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, bootstrap_job, check_binding,
+    check_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, TrustedTimeStatement};
 use amiss_wire::json;
@@ -51,8 +53,9 @@ fn provider() -> ProviderIdentity {
     }
 }
 
-fn run_request() -> RunRequest {
+fn run_request(policy: PolicyControls) -> RunRequest {
     let provider = provider();
+    let plan = Arc::new(plan(policy));
     let change = ChangeLocator {
         provider: provider.clone(),
         repository: repository(),
@@ -72,6 +75,8 @@ fn run_request() -> RunRequest {
         )
         .unwrap(),
         evaluation_id: ControllerEvaluationId::new("evaluation/11".to_owned()).unwrap(),
+        check: check_binding(&plan).unwrap(),
+        plan,
         run: RunIdentity::new(
             change,
             RunRefs {
@@ -120,11 +125,9 @@ fn plan(policy: PolicyControls) -> CheckPlan {
 
 #[test]
 fn job_construction_binds_the_complete_authenticated_run() {
-    let run = run_request();
-    let plan = plan(policy());
+    let run = run_request(policy());
     let job = bootstrap_job(BootstrapJobInput {
         run: &run,
-        plan: &plan,
         evaluation_instant: instant("2026-07-12T10:00:00Z"),
         valid_until: instant("2026-07-12T10:05:00Z"),
     })
@@ -168,13 +171,11 @@ fn job_construction_binds_the_complete_authenticated_run() {
 
 #[test]
 fn job_construction_rejects_mismatched_run_control_and_time() {
-    let empty_plan = plan(PolicyControls::default());
-    let mut run = run_request();
+    let mut run = run_request(PolicyControls::default());
     run.provider_run.candidate_commit = oid('5');
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            plan: &empty_plan,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
         })
@@ -182,7 +183,6 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         BootstrapJobError::RunIdentity
     );
 
-    let run = run_request();
     let wrong_floor = String::from_utf8(example("organization-floor.json"))
         .unwrap()
         .replace(r#""name": "docs""#, r#""name": "other""#)
@@ -195,11 +195,10 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         debt_snapshot: None,
         waiver_bundle: None,
     };
-    let wrong_plan = plan(wrong_policy);
+    let run = run_request(wrong_policy);
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            plan: &wrong_plan,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
         })
@@ -207,10 +206,10 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         BootstrapJobError::ControlBinding
     );
 
+    let run = run_request(PolicyControls::default());
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            plan: &empty_plan,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:20:00Z"),
         })
@@ -231,13 +230,27 @@ fn a_changed_constraint_needs_a_new_semantic_digest() {
 
 #[test]
 fn a_validated_plan_cannot_be_changed_in_place() {
-    let run = run_request();
-    let mut plan = plan(PolicyControls::default());
-    plan.profile = Profile::Observe;
+    let mut run = run_request(PolicyControls::default());
+    Arc::make_mut(&mut run.plan).profile = Profile::Observe;
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            plan: &plan,
+            evaluation_instant: instant("2026-07-12T10:00:00Z"),
+            valid_until: instant("2026-07-12T10:05:00Z"),
+        })
+        .unwrap_err(),
+        BootstrapJobError::CheckPlan
+    );
+}
+
+#[test]
+fn a_job_cannot_escape_the_ledger_frozen_plan_binding() {
+    let mut run = run_request(PolicyControls::default());
+    run.check.plan_digest = amiss_wire::digest::hb("amiss/test-plan", b"other");
+
+    assert_eq!(
+        bootstrap_job(BootstrapJobInput {
+            run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
         })

@@ -15,6 +15,12 @@ pub struct PlanScope {
 
 pub type PlanRegistry = BTreeMap<PlanScope, Arc<CheckPlan>>;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedPlan {
+    pub plan: Arc<CheckPlan>,
+    pub check: crate::CheckBinding,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlanError {
     Duplicate,
@@ -63,7 +69,7 @@ pub fn register_plan(
 pub fn resolve_plan(
     registry: &PlanRegistry,
     delivery: &AuthenticatedDelivery,
-) -> Result<Arc<CheckPlan>, PlanError> {
+) -> Result<ResolvedPlan, PlanError> {
     let scope = PlanScope {
         provider: delivery.identity.provider.clone(),
         integration: delivery.identity.integration.clone(),
@@ -74,7 +80,10 @@ pub fn resolve_plan(
         .ok_or(PlanError::Missing)
         .and_then(|plan| {
             check_binding(plan)
-                .map(|_binding| Arc::clone(plan))
+                .map(|check| ResolvedPlan {
+                    plan: Arc::clone(plan),
+                    check,
+                })
                 .map_err(|_defect| PlanError::Invalid)
         })
 }

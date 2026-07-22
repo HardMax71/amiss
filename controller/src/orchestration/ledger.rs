@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 
-use crate::{AcceptedDelivery, ControllerEvaluationId, ProviderRunIdentity};
+use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, ProviderRunIdentity};
 
 use super::model::{RunFailure, RunIdentity};
 
@@ -23,6 +23,7 @@ impl LeaseFence {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeliveryLease {
     pub evaluation_id: ControllerEvaluationId,
+    pub check: CheckBinding,
     pub fence: LeaseFence,
     /// Advisory deadline; only the ledger transaction decides ownership.
     pub expires_at_unix_millis: i64,
@@ -67,16 +68,20 @@ pub trait DeliveryLedger {
     /// keeps the first evaluation ID and advances the fence. A live lease held
     /// by another ledger owner returns `Busy`; a frozen result returns
     /// `Publish`; `Duplicate` is reserved for a terminal, durably completed
-    /// delivery. Reusing one delivery key for a different authenticated change
-    /// or provider run returns `BindingConflict`.
+    /// delivery. Reusing one delivery key for a different authenticated change,
+    /// provider run, or check plan returns `BindingConflict`.
     ///
     /// # Errors
     ///
     /// Returns an error when that guarantee cannot be established.
-    fn claim(&mut self, delivery: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error>;
+    fn claim(
+        &mut self,
+        delivery: &AcceptedDelivery,
+        check: &CheckBinding,
+    ) -> Result<DeliveryClaim, Self::Error>;
 
-    /// Extends one live lease without changing its evaluation ID or fence or
-    /// moving its advisory deadline backward.
+    /// Extends one live lease without changing its evaluation, check, or fence
+    /// and without moving its advisory deadline backward.
     ///
     /// # Errors
     ///
@@ -134,6 +139,7 @@ pub enum CheckConclusion {
 pub struct Publication {
     pub provider_run: ProviderRunIdentity,
     pub evaluation_id: ControllerEvaluationId,
+    pub check: CheckBinding,
     pub run: RunIdentity,
     pub conclusion: CheckConclusion,
     pub report: Option<Vec<u8>>,

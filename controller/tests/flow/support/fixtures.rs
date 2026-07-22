@@ -3,11 +3,13 @@ use std::time::Duration;
 
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
-    Controller, ControllerClock, DeliveryId, DeliveryIdentity, DeliveryLedger, IngressLimits,
-    IngressPolicy, IntegrationId, OidPair, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs,
-    RunnerOutcome,
+    CheckBinding, CheckPlan, Controller, ControllerClock, DeliveryId, DeliveryIdentity,
+    DeliveryLedger, IngressLimits, IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope,
+    PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
+    ProviderRunId, ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome,
+    check_binding, check_plan, register_plan,
 };
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::{FakeAdapter, FakeRunner, MemoryLedger};
@@ -119,6 +121,18 @@ pub(crate) fn complete(run: &RunIdentity) -> RunnerOutcome {
     }
 }
 
+pub(crate) fn plan() -> CheckPlan {
+    let execution = ExecutionConstraintDescriptor::parse(include_bytes!(
+        "../../../../spec/examples/scanner-execution-constraint.json"
+    ))
+    .unwrap();
+    check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap()
+}
+
+pub(crate) fn binding() -> CheckBinding {
+    check_binding(&plan()).unwrap()
+}
+
 struct FixedClock;
 
 impl ControllerClock for FixedClock {
@@ -148,10 +162,18 @@ pub(crate) fn controller_with_ledger<L: DeliveryLedger>(
     ledger: L,
     outcome: RunnerOutcome,
 ) -> Controller<L, FakeRunner> {
+    let scope = PlanScope {
+        provider: adapter.authenticated.identity.provider.clone(),
+        integration: adapter.authenticated.identity.integration.clone(),
+        repository: adapter.authenticated.change.repository.clone(),
+    };
+    let mut plans = PlanRegistry::new();
+    register_plan(&mut plans, scope, Arc::new(plan())).unwrap();
     let mut registry = AdapterRegistry::new();
     registry.register(adapter).unwrap();
     Controller::new_with_clock(
         registry,
+        plans,
         ledger,
         FakeRunner::new(outcome),
         ingress(),
