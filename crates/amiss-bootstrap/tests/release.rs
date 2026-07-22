@@ -290,7 +290,10 @@ fn the_shipped_launcher_refuses_instead_of_passing() {
 fn a_bootstrap_whose_bytes_differ_refuses_before_anything_else() {
     let release = release(|_root| {});
     let outcome = attempt(&release, b"a different bootstrap binary");
-    assert_eq!(outcome.err(), Some(Refusal::BootstrapDigest));
+    assert_eq!(
+        outcome.err(),
+        Some(Refusal::Tampered("bootstrap-digest-mismatch"))
+    );
 }
 
 /// A file that is a symlink, which only a privileged Windows process can
@@ -308,7 +311,7 @@ fn a_symlinked_engine_path_refuses() {
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
         outcome.err(),
-        Some(Refusal::PathNotRegularBlob),
+        Some(Refusal::Tampered("path-not-regular-blob")),
         "a symlink at the artifact path is never followed"
     );
 }
@@ -395,7 +398,7 @@ fn a_manifest_that_omits_the_action_row_is_refused() {
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
         outcome.err(),
-        Some(Refusal::ActionMetadata),
+        Some(Refusal::Tampered("action-metadata-invalid")),
         "an unpinned action definition is a refusal, not a runnable file"
     );
 }
@@ -428,7 +431,7 @@ fn a_manifest_that_omits_the_launcher_row_is_refused() {
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
         outcome.err(),
-        Some(Refusal::ManifestUnreadable),
+        Some(Refusal::Tampered("manifest-unreadable")),
         "a manifest whose closure omits the launcher is not a manifest"
     );
 }
@@ -439,7 +442,10 @@ fn a_tampered_runtime_file_refuses_on_its_checksum() {
         fs::write(root.join("dist/launcher.js"), b"// swapped after staging\n").unwrap();
     });
     let outcome = attempt(&release, BOOTSTRAP);
-    assert_eq!(outcome.err(), Some(Refusal::RuntimeClosure));
+    assert_eq!(
+        outcome.err(),
+        Some(Refusal::Tampered("runtime-closure-mismatch"))
+    );
 }
 
 #[test]
@@ -447,7 +453,10 @@ fn a_manifest_from_another_tree_refuses_on_its_digest() {
     let mut release = release(|_root| {});
     release.manifest_digest = hb("amiss/scanner-release-manifest", b"another tree");
     let outcome = attempt(&release, BOOTSTRAP);
-    assert_eq!(outcome.err(), Some(Refusal::ManifestDigest));
+    assert_eq!(
+        outcome.err(),
+        Some(Refusal::Tampered("manifest-digest-mismatch"))
+    );
 }
 
 #[test]
@@ -524,7 +533,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
         outcome.err(),
-        Some(Refusal::PlatformBinding),
+        Some(Refusal::Tampered("platform-binding-mismatch")),
         "the target comes from the executable header, not the manifest label"
     );
 }
@@ -548,7 +557,7 @@ fn a_constraint_whose_commit_or_tree_does_not_match_refuses_on_the_action_tree()
     with_wrong_tree.tree = "b".repeat(40);
     assert_eq!(
         attempt(&with_wrong_tree, BOOTSTRAP).err(),
-        Some(Refusal::ActionTree),
+        Some(Refusal::Tampered("action-tree-mismatch")),
         "the commit is real, but its tree is not the one the constraint pinned"
     );
 
@@ -556,7 +565,7 @@ fn a_constraint_whose_commit_or_tree_does_not_match_refuses_on_the_action_tree()
     with_absent_commit.commit = "c".repeat(40);
     assert_eq!(
         attempt(&with_absent_commit, BOOTSTRAP).err(),
-        Some(Refusal::ActionTree),
+        Some(Refusal::Tampered("action-tree-mismatch")),
         "the constraint pins a commit the action repository does not hold"
     );
 }
@@ -579,7 +588,7 @@ fn a_tampered_lockfile_refuses_on_its_recorded_digest() {
     });
     assert_eq!(
         attempt(&release, BOOTSTRAP).err(),
-        Some(Refusal::DependencyLock),
+        Some(Refusal::Tampered("dependency-lock-mismatch")),
         "the tree's lock bytes do not recompute to the manifest's digest"
     );
 }
@@ -595,7 +604,7 @@ fn a_release_missing_its_lockfile_refuses_on_the_path() {
     });
     assert_eq!(
         attempt(&release, BOOTSTRAP).err(),
-        Some(Refusal::PathNotRegularBlob),
+        Some(Refusal::Tampered("path-not-regular-blob")),
         "a lockfile the manifest records and the tree lacks is not a lockfile"
     );
 }
