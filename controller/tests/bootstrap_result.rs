@@ -88,14 +88,13 @@ fn request() -> RunRequest {
 
 fn classify(
     request: &RunRequest,
-    exit_code: Option<i32>,
+    exit_code: i32,
     result: Option<&[u8]>,
     stdout: &[u8],
 ) -> RunnerOutcome {
     classify_bootstrap_result(
         request,
-        BootstrapTermination::Exited,
-        exit_code,
+        BootstrapTermination::Exited(exit_code),
         result,
         stdout,
     )
@@ -112,12 +111,7 @@ fn pass_and_block_preserve_the_authenticated_run_and_report() {
 
     for (result, exit_code, evaluation) in cases {
         assert_eq!(
-            classify(
-                &request,
-                Some(exit_code),
-                Some(result_bytes(result)),
-                report,
-            ),
+            classify(&request, exit_code, Some(result_bytes(result)), report,),
             RunnerOutcome::Complete {
                 identity: Box::new(request.run.clone()),
                 evaluation,
@@ -146,14 +140,14 @@ fn explicit_failures_map_to_the_closed_runner_outcomes() {
 
     for (result, expected) in cases {
         assert_eq!(
-            classify(&request, Some(2), Some(result_bytes(result)), b"ignored",),
+            classify(&request, 2, Some(result_bytes(result)), b"ignored",),
             expected
         );
     }
 }
 
 #[test]
-fn every_result_rejects_a_missing_or_wrong_exit_code() {
+fn every_result_rejects_a_wrong_exit_code() {
     let request = request();
     let cases = [
         (BootstrapResult::Pass, 0),
@@ -166,9 +160,9 @@ fn every_result_rejects_a_missing_or_wrong_exit_code() {
     ];
 
     for (result, expected_exit) in cases {
-        for exit_code in [None, Some(-1), Some(0), Some(1), Some(2)]
+        for exit_code in [-1, 0, 1, 2]
             .into_iter()
-            .filter(|exit_code| *exit_code != Some(expected_exit))
+            .filter(|exit_code| *exit_code != expected_exit)
         {
             assert_eq!(
                 classify(&request, exit_code, Some(result_bytes(result)), b"report",),
@@ -194,7 +188,7 @@ fn absent_empty_malformed_and_oversized_records_fail_closed() {
     ];
 
     for (result, expected) in cases {
-        assert_eq!(classify(&request, Some(0), result, b"report"), expected);
+        assert_eq!(classify(&request, 0, result, b"report"), expected);
     }
 }
 
@@ -203,13 +197,13 @@ fn reports_must_be_nonempty_and_within_the_machine_limit() {
     let request = request();
     let pass = Some(result_bytes(BootstrapResult::Pass));
     assert_eq!(
-        classify(&request, Some(0), pass, b""),
+        classify(&request, 0, pass, b""),
         RunnerOutcome::MissingOutput
     );
 
     let oversized = vec![b'x'; usize::try_from(MACHINE_JSON_BYTES).unwrap() + 1];
     assert_eq!(
-        classify(&request, Some(0), pass, &oversized),
+        classify(&request, 0, pass, &oversized),
         RunnerOutcome::OversizedOutput
     );
 }
@@ -221,14 +215,13 @@ fn timeout_dominates_every_process_observation() {
         classify_bootstrap_result(
             &request,
             BootstrapTermination::TimedOut,
-            Some(0),
             Some(result_bytes(BootstrapResult::Pass)),
             b"report",
         ),
         RunnerOutcome::TimedOut
     );
     assert_eq!(
-        classify_bootstrap_result(&request, BootstrapTermination::TimedOut, None, None, b"",),
+        classify_bootstrap_result(&request, BootstrapTermination::TimedOut, None, b"",),
         RunnerOutcome::TimedOut
     );
 }
@@ -247,7 +240,6 @@ fn stopped_signalled_and_unspawned_processes_are_unavailable() {
             classify_bootstrap_result(
                 &request,
                 termination,
-                Some(0),
                 Some(result_bytes(BootstrapResult::Pass)),
                 b"report",
             ),

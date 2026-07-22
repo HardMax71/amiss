@@ -1,34 +1,50 @@
-use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, parse_result, result_bytes};
+use amiss_bootstrap::result::{
+    BootstrapResult, RESULT_BYTES, parse_result, result_bytes, result_exit_code,
+};
 
-const RECORDS: [(BootstrapResult, &[u8]); 7] = [
-    (BootstrapResult::Pass, b"amiss/bootstrap-result-v1 pass\n"),
-    (BootstrapResult::Block, b"amiss/bootstrap-result-v1 block\n"),
+const RECORDS: [(BootstrapResult, &[u8], i32); 7] = [
+    (
+        BootstrapResult::Pass,
+        b"amiss/bootstrap-result-v1 pass\n",
+        0,
+    ),
+    (
+        BootstrapResult::Block,
+        b"amiss/bootstrap-result-v1 block\n",
+        1,
+    ),
     (
         BootstrapResult::MissingOutput,
         b"amiss/bootstrap-result-v1 missing-output\n",
+        2,
     ),
     (
         BootstrapResult::Timeout,
         b"amiss/bootstrap-result-v1 timeout\n",
+        2,
     ),
     (
         BootstrapResult::OversizedOutput,
         b"amiss/bootstrap-result-v1 oversized-output\n",
+        2,
     ),
     (
         BootstrapResult::TamperedRuntime,
         b"amiss/bootstrap-result-v1 tampered-runtime\n",
+        2,
     ),
     (
         BootstrapResult::Unavailable,
         b"amiss/bootstrap-result-v1 unavailable\n",
+        2,
     ),
 ];
 
 #[test]
 fn every_result_has_one_exact_bounded_record() {
-    for (result, record) in RECORDS {
+    for (result, record, exit_code) in RECORDS {
         assert_eq!(result_bytes(result), record);
+        assert_eq!(result_exit_code(result), exit_code);
         assert_eq!(parse_result(record), Some(result));
         assert!(record.is_ascii());
         assert_eq!(record.last(), Some(&b'\n'));
