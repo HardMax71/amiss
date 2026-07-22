@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod acquisition;
 mod bootstrap_job;
 mod clock;
 mod file_ledger;
@@ -10,6 +11,7 @@ mod plans;
 mod provider;
 mod webhook;
 
+pub use acquisition::{AcquireError, AcquiredRoots, verify_acquired};
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,
     PolicyControls, bootstrap_job, check_binding, check_plan,
