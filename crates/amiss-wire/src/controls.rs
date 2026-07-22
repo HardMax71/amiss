@@ -20,9 +20,12 @@ use crate::resolution::{
 mod execution_constraint;
 /// Trusted-time statement grammar, digest, and bounded-lifetime parser.
 mod trusted_time;
+pub(crate) mod value;
 
-pub use execution_constraint::{ConstraintPlatform, ExecutionConstraintDescriptor};
-pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeStatement};
+pub use execution_constraint::{
+    ConstraintPlatform, ExecutionConstraintDescriptor, ExecutionConstraintInput,
+};
+pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeInput, TrustedTimeStatement};
 
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
 

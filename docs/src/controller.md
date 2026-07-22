@@ -4,12 +4,65 @@ Provider deliveries are repeated, workers overlap, and a process can stop at any
 publication. The controller therefore needs a small durable record that answers two questions:
 who may evaluate this delivery now, and which exact result must a retry publish?
 
-In code, `DeliveryLedger` is the coordination interface for that record. It is a behavior
-contract, not a storage format. Amiss ships no durable implementation, SQL, or database. A future
-implementation must provide the operations on this page through a non-database mechanism. This
-record is also separate from [the scan ledger](ledger.md), which records project research, and
-from the repository-owned review memory rejected in [Provenance](provenance.md). The scanner
-itself remains offline and stateless.
+In code, [`DeliveryLedger`](https://github.com/HardMax71/amiss/blob/main/controller/src/orchestration/ledger.rs)
+is the coordination interface for that record. It is a behavior contract rather than a required
+storage format. [`FileLedger`](https://github.com/HardMax71/amiss/blob/main/controller/src/file_ledger.rs)
+is its first durable implementation; it uses ordinary files, not SQL or a database. This record is
+separate from [the scan ledger](ledger.md), which records project research, and from the
+repository-owned review memory rejected in [Provenance](provenance.md). The scanner itself remains
+offline and stateless.
+
+## Before the record
+
+The contract takes each route from controller-owned configuration, never from the request body.
+It fixes the provider instance, the accepted trust-anchor set, and its signed-time rule. Before an
+adapter sees a delivery, [`IngressPolicy`](https://github.com/HardMax71/amiss/blob/main/controller/src/ingress/policy.rs)
+caps the exact body, header count, and total header bytes and checks the controller-recorded
+receipt time against a short queue window. Only an `IngressCheck` that passed those checks can
+enter `ProviderAdapter::authenticate`.
+
+Each verifier consumes the `IngressCheck` itself. Authentication returns the provider facts and a
+small proof: which configured anchor matched, which trust set it belonged to, an optional signed
+issue time, and the replay identity. That proof also binds the controller-selected route, receipt
+time, exact header sequence, and exact body. Its fields are private; an adapter can join decoded
+provider facts to a successful proof, but cannot relabel its trust set, remove its signed time, or
+move it to another request. The controller checks that binding, applies the route's signed-time
+rule, and creates the delivery key. None of those steps trusts a decoded body field before the
+signature succeeds.
+
+The replay key depends on what the provider actually signs:
+
+| Provider input | What is authenticated | Replay key | Time rule |
+| --- | --- | --- | --- |
+| GitHub `X-Hub-Signature-256` | HMAC-SHA256 over the exact body | Domain-separated digest of the exact body | Replay-only; there is no signed delivery-attempt timestamp header. |
+| Gitea-family `X-Gitea-Signature` | HMAC-SHA256 over the exact body | Domain-separated digest of the exact body | Replay-only; there is no signed delivery-attempt timestamp header. |
+| GitLab Standard Webhooks | HMAC-SHA256 over `webhook-id.webhook-timestamp.body` | Signed `webhook-id` | `SignedTimePolicy::Required(max_age)`; replay-only is not a valid GitLab route. |
+
+This follows the providers' published contracts: [GitHub signs the payload body](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries),
+[Gitea signs the raw body](https://docs.gitea.com/usage/repository/webhooks), and
+[GitLab's signing token follows Standard Webhooks](https://docs.gitlab.com/user/project/integrations/webhooks/).
+The matching library code is split into the
+[GitHub](https://github.com/HardMax71/amiss/blob/main/controller/src/webhook/github.rs),
+[Gitea-family](https://github.com/HardMax71/amiss/blob/main/controller/src/webhook/gitea.rs), and
+[GitLab](https://github.com/HardMax71/amiss/blob/main/controller/src/webhook/gitlab.rs) verifiers.
+GitLab's legacy plaintext `X-Gitlab-Token` is deliberately unsupported. `GitLabWebhook`
+authenticates the timestamp but does not choose the route policy. Ingress rejects that proof under
+a replay-only route, so the signed timestamp cannot be silently discarded. A GitHub or Gitea
+delivery header is useful for logs, but using it as the
+durable key would let a captured signed body bypass replay protection by changing an unsigned
+header.
+
+`WebhookKeyring` holds one through eight HMAC keys in zeroizing, redacted memory. Anchor IDs and
+secret bytes must be unique. The ring owns the trust-set ID carried into its proof, so an adapter
+does not relabel a successful match by hand. Each key has an inclusive start and exclusive end
+time selected against controller-owned receipt time. Overlapping windows permit rotation;
+removing an anchor revokes it. GitLab `whsec_` tokens have a strict, secret-safe constructor.
+Exact-body replay IDs do not include the matching anchor, so rotating a key cannot turn the same
+signed delivery into new work.
+
+These verifiers establish webhook origin and integrity, not current authorization or an exact
+repository snapshot. A concrete adapter must still decode the authenticated body and refresh the
+provider through a controller-owned API credential. None exists yet.
 
 ## The full flow
 
@@ -23,7 +76,8 @@ digraph controller_delivery {
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
   raw      [label = "raw delivery"];
-  auth     [label = "authenticate"];
+  gate     [label = "bounds + receipt time"];
+  auth     [label = "authenticate\n+ replay identity"];
   claim    [label = "claim"];
   first    [label = "first refresh\n+ renew"];
   run      [label = "run if active\n+ heartbeat\n+ renew"];
@@ -31,7 +85,7 @@ digraph controller_delivery {
   stage    [label = "save exact result"];
   publish  [label = "publish"];
   complete [label = "mark done"];
-  raw -> auth -> claim -> first -> run -> second -> stage -> publish -> complete;
+  raw -> gate -> auth -> claim -> first -> run -> second -> stage -> publish -> complete;
   claim -> publish [label = "saved retry\ncheck binding"];
 }
 ```
@@ -56,8 +110,56 @@ prescription for how bytes are stored.
 | Saved result | Evaluation ID, fence, provider run, full run identity, conclusion, optional report | Frozen as one exact value before provider I/O. |
 | State | New, running, result saved, done | Each change happens atomically: fully or not at all. |
 
+Here, “delivery ID” means the replay identity accepted by ingress. It is the signed GitLab
+message ID where that contract exists, and the controller's digest of the exact signed body for
+GitHub and Gitea-family requests. It is never an unsigned convenience header.
+
+### The file record
+
+`FileLedger` maps the authenticated delivery identity to a fixed lowercase digest. Provider text
+never becomes a path. Each delivery has up to three kinds of file under one controller-owned
+root:
+
+```text
+<delivery-key>.lock
+<delivery-key>.state
+<delivery-key>.report-<report-digest>
+```
+
+The lock file has a stable name and is never replaced while it is in use. An exclusive operating-
+system file lock covers the complete read, check, change, and save sequence, so separate controller
+processes cannot both win one transition. The state file is a versioned, length-delimited,
+checksummed frame containing canonical JSON and is capped at 128 KiB. A report is kept separately,
+bounded by the machine-report byte ceiling, and named by its digest. Saving writes and syncs the
+report before atomically replacing the state that names it. Large report bytes therefore do not
+make every state change large, and a stopped write cannot expose a state that points at a report
+which was never saved.
+
+The implementation uses Rust's standard `File::lock` and the `atomicwrites` crate, leaving the
+operating-system calls behind those maintained boundaries. Replacement first syncs the new file.
+On Unix the crate replaces the destination and syncs its parent directory; on Windows it uses
+`MoveFileExW` with replace-existing and write-through flags. `FileLedger` therefore has one
+cross-platform contract on supported local filesystems: the current path contains either the old
+complete bytes or the new complete bytes. A stopped write may leave a temporary file, but cannot
+make partial bytes current.
+
+The root must already exist as a real, private local directory outside the repository and action
+tree. `FileLedger` rejects a missing root or a root symlink. A future service using it must own the
+directory and set its permissions or access-control list. Anyone who can read or change that
+directory is inside the controller trust boundary. The checksums detect damage, not a malicious
+writer. Shared and network filesystems are not supported.
+
+Malformed, oversized, non-regular, unknown-field, non-canonical, or digest-mismatched saved data
+fails closed, as does a missing report named by a saved state. `FileLedger` has no retention
+cleanup: lock files, done records, and report blobs remain. Cleanup needs a separate design that
+coordinates the stable locks and preserves replay state. It must not expire a GitHub or
+Gitea-family done record from local age alone: those signatures authenticate no request time, so
+forgetting the record would let the same captured body become new work. A safe retention rule needs
+an outside authenticated replay horizon. The per-file ceilings do not bound the number of
+deliveries or total root size, so a future service must monitor and cap its private volume.
+
 The public Rust boundary has four operations. This abridged excerpt omits documentation and type
-bounds; the [source contract](https://github.com/HardMax71/amiss/blob/main/controller/src/orchestration.rs)
+bounds; the [ledger module](https://github.com/HardMax71/amiss/blob/main/controller/src/orchestration/ledger.rs)
 is authoritative.
 
 ```rust
@@ -158,7 +260,7 @@ the record must expose either the saved value or the done state, never a new exe
 
 | Condition | Required behavior |
 | --- | --- |
-| Authentication fails or the provider route is wrong | Reject the delivery before claiming it. |
+| Raw ceilings, receipt time, signature, anchor window, route, trust set, or required signed request time fails | Reject the delivery before claiming it. |
 | The key has a different authenticated binding | Reject it before provider or runner work. |
 | A saved result does not match the authenticated delivery | Reject it before provider I/O. |
 | Another claim is live | Report in progress and do no work. |
@@ -175,19 +277,28 @@ The trusted runner promises that a completed engine result already passed its en
 and request checks. The controller independently checks the returned identity, nonempty output,
 and size. It does not parse or authenticate the engine report itself.
 
+`amiss-wire` can now construct and canonically write the execution-constraint and trusted-time
+statements a future controller job would need, through the same strict parsers that consume them.
+That closes an encoding gap but does not create a runner: acquisition, commit-pair identity
+construction, process-group supervision, and a stable bootstrap failure channel still have to be
+joined.
+
 ## What exists now
 
-The provider-neutral identities, adapter registry, `ProviderAdapter`, `DeliveryLedger`, `Runner`,
-orchestrator, and focused flow tests exist in the nested Rust workspace. The in-memory and scripted
-records used by tests are test fakes, not production implementations: they do not establish
-durability, reclaim, crash recovery, corruption handling, or retention.
+The nested workspace now contains the provider-neutral identities, bounded ingress gate, adapter
+registry, GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers, rotating key
+ring, `DeliveryLedger`, orchestrator, and `FileLedger`. Focused tests cover limits, wrong routes,
+stale and future time, exact-body replay identity, malformed and duplicate headers, body and
+signed-field tampering, wrong keys, rotation, expiry, and revocation by anchor removal. The file
+record separately covers cross-process ownership, reclaim, exact staged-result recovery,
+corruption checks, and permanent done markers without a database.
 
-There is no webhook or HTTP transport, provider adapter or signature verifier, provider SDK or
-credential source, repository and action-tree acquisition worker, durable non-database record,
-real bootstrap runner or hard cancellation, provider publisher, deployable service, or end-to-end
-provider lane. GitHub, GitLab, Gitea-family providers, and their self-hosted instances are all
-unsupported today. The engine's `forge` field chooses a URL dialect; it is not authenticated
-provider support.
+There is still no HTTP transport, authenticated event decoder, concrete `ProviderAdapter`, API
+credential source or client, repository and action-tree acquisition worker, real bootstrap
+runner or hard cancellation, provider publisher, deployable service, or end-to-end provider
+lane. No adapter or route loader yet enforces the required verifier-to-time-policy pairing. The
+signature types are library parts, not a supported GitHub, GitLab, or Gitea-family integration.
+The engine's `forge` field still chooses only a URL dialect.
 
 [Project status](status.md) records this boundary. [Roadmap](roadmap.md) lists the work needed to
 turn the contract into a provider-verified lane, while [Security model](security.md) defines the

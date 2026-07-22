@@ -57,8 +57,10 @@ binds the requested profile, both commits, candidate and target refs, candidate 
 provider run and trusted instant, the exact presence, digest, and trust source of the organization
 floor, debt snapshot, and waiver bundle, and the execution constraint's digest, trust source,
 and recomputed semantics. It likewise recomputes the trusted-time statement's semantic digest and
-requires the sandbox provenance to remain self-asserted. The path is built by the release
-workflow, but the published composite Action still launches `amiss` directly; nothing public
+requires the sandbox provenance to remain self-asserted. The wire crate now exposes checked
+constructors and canonical writers for the execution constraint and trusted-time statement, so a
+future controller need not reproduce those encoders. The path is built by the release workflow,
+but the published composite Action still launches `amiss` directly; nothing public
 acquires these inputs from an authenticated provider. The distinction is visible in the
 [bootstrap entry point](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs),
 [release assembly](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml), and
@@ -68,13 +70,18 @@ The separate nested Rust workspace under
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) is also implemented only
 as a transport-neutral foundation. It defines provider-neutral identities and the adapter,
 durable-record, runner, and orchestration boundaries described in
-[Controller delivery](controller.md). It deliberately has no provider enum and no concrete GitHub,
-GitLab, or
-Gitea-family adapter, HTTP listener, provider SDK, signature algorithm, credential store,
-durable ledger implementation, repository acquisition worker, bootstrap runner, deployable
-binary, publication transport, or provider status publisher. Amiss will not embed SQL or a
-database for this purpose. These absences make the workspace an internal foundation, not a
-supported delivery lane.
+[Controller delivery](controller.md). Its provider-neutral
+[`FileLedger`](https://github.com/HardMax71/amiss/blob/main/controller/src/file_ledger.rs) gives
+that boundary a cross-process, durable local file record without SQL or a database. The same
+workspace now has a [bounded ingress contract](https://github.com/HardMax71/amiss/blob/main/controller/src/ingress/policy.rs)
+and separate GitHub, GitLab Standard Webhooks, and Gitea-family HMAC verifiers with rotating,
+revocable in-memory anchors. A future GitLab route must require its authenticated timestamp to be
+fresh. GitHub and Gitea-family routes instead key replay protection by the exact signed body and
+cannot safely discard done records from local age alone. No adapter or route loader enforces these
+pairings yet. The workspace deliberately has no provider enum and no concrete provider adapter,
+HTTP listener, authenticated payload decoder, provider API client, credential store, repository
+acquisition worker, bootstrap runner, deployable binary, publication transport, or provider
+status publisher. These absences make it an internal foundation, not a supported delivery lane.
 
 Local and convenience-Action reports consequently describe repository policy with no
 external authority consulted. Each external control has status `none`, and the sandbox

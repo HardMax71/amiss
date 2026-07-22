@@ -115,9 +115,11 @@ The repository now contains two internal foundations for a future required-check
 commit-pair materialization, the sealed bootstrap accepts a canonical
 evaluation/snapshot/controls request triplet, verifies its constraint and trusted-time bindings,
 and frames its exact bytes to a verified engine over stdin. The separate nested Rust controller
-defines provider-neutral delivery and retry contracts; [Controller delivery](controller.md)
-documents that mechanism. Neither foundation supplies a supported provider transport or
-integration, so there is no configuration snippet for that lane yet. See
+defines provider-neutral delivery and retry contracts, implements their local file record, and
+contains bounded GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers;
+[Controller delivery](controller.md) documents that mechanism. Neither foundation supplies a
+supported provider transport or integration, so there is no configuration snippet for that lane
+yet. See
 [Project status](status.md) for the exact boundary.
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for

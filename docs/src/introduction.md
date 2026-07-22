@@ -31,9 +31,9 @@ it cannot handle is worse than no checker, because its green result claims more 
 checked. So everything Amiss cannot read or follow becomes a visible row in the report, and
 a document it cannot decode at all fails the run rather than dropping out of it.
 
-Amiss keeps no state. There is no baseline file, no cache, no database, and nothing committed
-to your repository. Run it twice on the same commits with the same engine binary and you get
-byte-identical reports. Repository policy may expand discovery and raise three structural
+The scanner keeps no state. There is no baseline file, no cache, no database, and nothing
+committed to your repository. Run it twice on the same commits with the same engine binary and
+you get byte-identical reports. Repository policy may expand discovery and raise three structural
 finding kinds, but it cannot downgrade a disposition or suppress a finding. How the project
 arrived at that stance is told in [Provenance](provenance.md), and the exact policy boundary
 is in [Controls and policy](controls.md).

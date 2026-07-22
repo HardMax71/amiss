@@ -58,15 +58,17 @@ straight into test repositories so the same fixtures exist on every platform.
 
 The nested [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
 is outside that graph and outside the root lockfile. Its unpublished `amiss-controller` crate
-depends only on `amiss-wire`. `ProviderAdapter`, `DeliveryLedger`, and `Runner` are
-transport-neutral boundaries for provider access, durable retry coordination, and trusted
-execution. [Controller delivery](controller.md) defines their flow and record contract. The
-orchestrator exists, but those traits have no concrete implementations. Future coordination must
-use a non-database mechanism.
+keeps its provider and storage dependencies out of the scanner. `ProviderAdapter`,
+`DeliveryLedger`, and `Runner` are transport-neutral boundaries for provider access, durable retry
+coordination, and trusted execution. [Controller delivery](controller.md) defines their flow and
+record contract. The orchestrator, bounded ingress gate, provider signature verifiers, and a local
+file implementation of `DeliveryLedger` exist; the provider adapter and runner boundaries still
+have no concrete implementations.
 
-No HTTP transport, provider SDK, credential source, repository acquisition worker, bootstrap
-runner, durable ledger, provider publisher, or deployable service exists in that workspace yet.
-There is therefore still no arrow from the controller into the supported delivery graph.
+No HTTP transport, authenticated payload decoder, provider API client, credential source,
+repository acquisition worker, bootstrap runner, provider publisher, or deployable service exists
+in that workspace yet. There is therefore still no arrow from the controller into the supported
+delivery graph.
 
 Inside an engine run, the stages form a line:
 

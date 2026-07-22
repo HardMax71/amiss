@@ -21,7 +21,8 @@ foundation under `controller/` is a separate nested Rust workspace with its own 
 dependency policy, so the second pair checks it explicitly. The separation is a trust boundary:
 provider transport and storage dependencies belong in that nested workspace, never in the root
 engine workspace whose dependency bans keep networking and async runtimes out. The prek hooks
-and CI run both sets.
+and Linux CI run both sets. The macOS and Windows jobs also run the controller tests, including
+the cross-process file record and provider signature vectors.
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The

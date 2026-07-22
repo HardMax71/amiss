@@ -1,13 +1,24 @@
 #![forbid(unsafe_code)]
 
+mod clock;
+mod file_ledger;
 mod identity;
+mod ingress;
 mod orchestration;
 mod provider;
+mod webhook;
 
+pub use clock::{ControllerClock, SystemClock};
+pub use file_ledger::{FileLedger, FileLedgerError};
 pub use identity::{
     ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
     OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
     ProviderRunId, ProviderRunIdentity,
+};
+pub use ingress::{
+    DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits, IngressPolicy,
+    ReplayIdentity, SignedTimePolicy, TrustAnchorId, TrustSetId, UntrustedDelivery,
+    VerifiedDelivery,
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,
@@ -16,6 +27,9 @@ pub use orchestration::{
     RunRequest, Runner, RunnerOutcome, StageOutcome, StagedPublication,
 };
 pub use provider::{
-    AdapterRegistry, AuthenticatedDelivery, DeliveryHeader, ProviderAdapter, ProviderError,
-    RegistryError, UntrustedDelivery,
+    AdapterRegistry, AuthenticatedDelivery, ProviderAdapter, ProviderError, RegistryError,
+};
+pub use webhook::{
+    GitHubWebhook, GitLabWebhook, GiteaWebhook, WebhookError, WebhookKey, WebhookKeyring,
+    WebhookKeyringError, WebhookProof,
 };
