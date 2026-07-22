@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, reason = "integration process fixture")]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use amiss_bootstrap::result::{BootstrapResult, parse_result};
@@ -31,17 +31,24 @@ fn invoke(root: &Path, constraint: &Path, report: &Path, result: &Path) -> Outpu
         .unwrap()
 }
 
+fn output_files(root: &Path) -> (PathBuf, PathBuf) {
+    let report = root.join("report");
+    let result = root.join("result");
+    std::fs::write(&report, b"").unwrap();
+    std::fs::write(&result, b"").unwrap();
+    (report, result)
+}
+
 #[test]
 fn a_missing_constraint_records_unavailable() {
     let root = tempfile::tempdir().unwrap();
-    let report = root.path().join("report");
-    let result = root.path().join("result");
+    let (report, result) = output_files(root.path());
 
     let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
 
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
-    assert!(!report.exists());
+    assert!(std::fs::read(report).unwrap().is_empty());
     assert_eq!(
         parse_result(&std::fs::read(result).unwrap()),
         Some(BootstrapResult::Unavailable)
@@ -52,15 +59,14 @@ fn a_missing_constraint_records_unavailable() {
 fn a_malformed_constraint_records_tampered_runtime() {
     let root = tempfile::tempdir().unwrap();
     let constraint = root.path().join("constraint");
-    let report = root.path().join("report");
-    let result = root.path().join("result");
+    let (report, result) = output_files(root.path());
     std::fs::write(&constraint, b"not a constraint").unwrap();
 
     let output = invoke(root.path(), &constraint, &report, &result);
 
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
-    assert!(!report.exists());
+    assert!(std::fs::read(report).unwrap().is_empty());
     assert_eq!(
         parse_result(&std::fs::read(result).unwrap()),
         Some(BootstrapResult::TamperedRuntime)
@@ -72,12 +78,13 @@ fn an_existing_result_is_never_replaced() {
     let root = tempfile::tempdir().unwrap();
     let report = root.path().join("report");
     let result = root.path().join("result");
+    std::fs::write(&report, b"").unwrap();
     std::fs::write(&result, b"controller-owned").unwrap();
 
     let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
 
     assert_eq!(output.status.code(), Some(2));
-    assert!(!report.exists());
+    assert!(std::fs::read(report).unwrap().is_empty());
     assert_eq!(std::fs::read(result).unwrap(), b"controller-owned");
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
 }
@@ -88,28 +95,42 @@ fn an_existing_report_is_never_replaced() {
     let report = root.path().join("report");
     let result = root.path().join("result");
     std::fs::write(&report, b"controller-owned").unwrap();
+    std::fs::write(&result, b"").unwrap();
 
     let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
 
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(std::fs::read(report).unwrap(), b"controller-owned");
-    assert!(!result.exists());
+    assert!(std::fs::read(result).unwrap().is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
 }
 
 #[test]
-fn report_and_result_must_be_distinct() {
+fn output_files_have_fixed_names() {
     let root = tempfile::tempdir().unwrap();
-    let output_path = root.path().join("output");
+    let report = root.path().join("first");
+    let result = root.path().join("second");
+    std::fs::write(&report, b"").unwrap();
+    std::fs::write(&result, b"").unwrap();
 
-    let output = invoke(
-        root.path(),
-        &root.path().join("missing"),
-        &output_path,
-        &output_path,
-    );
+    let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
 
     assert_eq!(output.status.code(), Some(2));
-    assert!(!output_path.exists());
+    assert!(std::fs::read(report).unwrap().is_empty());
+    assert!(std::fs::read(result).unwrap().is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
+}
+
+#[test]
+fn output_files_must_be_created_by_the_controller() {
+    let root = tempfile::tempdir().unwrap();
+    let report = root.path().join("report");
+    let result = root.path().join("result");
+
+    let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(!report.exists());
+    assert!(!result.exists());
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
 }
