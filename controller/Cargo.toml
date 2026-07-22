@@ -12,6 +12,7 @@ publish = false
 resolver = "3"
 
 [dependencies]
+amiss-bootstrap = { path = "../crates/amiss-bootstrap" }
 amiss-git = { path = "../crates/amiss-git" }
 amiss-wire = { path = "../crates/amiss-wire" }
 atomicwrites = "0.4.4"
