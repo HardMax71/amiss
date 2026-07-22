@@ -9,14 +9,14 @@ const UNAVAILABLE: &[u8] = b"amiss/bootstrap-result-v1 unavailable\n";
 /// Maximum size of one bootstrap result record.
 pub const RESULT_BYTES: u64 = 64;
 
-const RECORDS: [(BootstrapResult, &[u8]); 7] = [
-    (BootstrapResult::Pass, PASS),
-    (BootstrapResult::Block, BLOCK),
-    (BootstrapResult::MissingOutput, MISSING_OUTPUT),
-    (BootstrapResult::Timeout, TIMEOUT),
-    (BootstrapResult::OversizedOutput, OVERSIZED_OUTPUT),
-    (BootstrapResult::TamperedRuntime, TAMPERED_RUNTIME),
-    (BootstrapResult::Unavailable, UNAVAILABLE),
+const RECORDS: [(BootstrapResult, &[u8], i32); 7] = [
+    (BootstrapResult::Pass, PASS, 0),
+    (BootstrapResult::Block, BLOCK, 1),
+    (BootstrapResult::MissingOutput, MISSING_OUTPUT, 2),
+    (BootstrapResult::Timeout, TIMEOUT, 2),
+    (BootstrapResult::OversizedOutput, OVERSIZED_OUTPUT, 2),
+    (BootstrapResult::TamperedRuntime, TAMPERED_RUNTIME, 2),
+    (BootstrapResult::Unavailable, UNAVAILABLE, 2),
 ];
 
 /// The closed outcome written by one trusted bootstrap process.
@@ -33,30 +33,23 @@ pub enum BootstrapResult {
 
 /// Returns the exact versioned record for one result.
 #[must_use]
-pub const fn result_bytes(result: BootstrapResult) -> &'static [u8] {
-    match result {
-        BootstrapResult::Pass => PASS,
-        BootstrapResult::Block => BLOCK,
-        BootstrapResult::MissingOutput => MISSING_OUTPUT,
-        BootstrapResult::Timeout => TIMEOUT,
-        BootstrapResult::OversizedOutput => OVERSIZED_OUTPUT,
-        BootstrapResult::TamperedRuntime => TAMPERED_RUNTIME,
-        BootstrapResult::Unavailable => UNAVAILABLE,
-    }
+pub fn result_bytes(result: BootstrapResult) -> &'static [u8] {
+    record(result).0
 }
 
 /// Returns the required process exit code for one result record.
 #[must_use]
-pub const fn result_exit_code(result: BootstrapResult) -> i32 {
-    match result {
-        BootstrapResult::Pass => 0,
-        BootstrapResult::Block => 1,
-        BootstrapResult::MissingOutput
-        | BootstrapResult::Timeout
-        | BootstrapResult::OversizedOutput
-        | BootstrapResult::TamperedRuntime
-        | BootstrapResult::Unavailable => 2,
-    }
+pub fn result_exit_code(result: BootstrapResult) -> i32 {
+    record(result).1
+}
+
+fn record(result: BootstrapResult) -> (&'static [u8], i32) {
+    RECORDS
+        .iter()
+        .find_map(|(candidate, bytes, exit_code)| {
+            (*candidate == result).then_some((*bytes, *exit_code))
+        })
+        .unwrap_or((UNAVAILABLE, 2))
 }
 
 /// Parses one exact result record. Whitespace and unknown versions are not
@@ -65,5 +58,5 @@ pub const fn result_exit_code(result: BootstrapResult) -> i32 {
 pub fn parse_result(bytes: &[u8]) -> Option<BootstrapResult> {
     RECORDS
         .iter()
-        .find_map(|(result, record)| (*record == bytes).then_some(*result))
+        .find_map(|(result, record, _)| (*record == bytes).then_some(*result))
 }

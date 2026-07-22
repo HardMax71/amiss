@@ -75,33 +75,26 @@ fn a_malformed_constraint_records_tampered_runtime() {
 
 #[test]
 fn an_existing_result_is_never_replaced() {
-    let root = tempfile::tempdir().unwrap();
-    let report = root.path().join("report");
-    let result = root.path().join("result");
-    std::fs::write(&report, b"").unwrap();
-    std::fs::write(&result, b"controller-owned").unwrap();
-
-    let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
-
-    assert_eq!(output.status.code(), Some(2));
-    assert!(std::fs::read(report).unwrap().is_empty());
-    assert_eq!(std::fs::read(result).unwrap(), b"controller-owned");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
+    existing_output_is_never_replaced(b"", b"controller-owned");
 }
 
 #[test]
 fn an_existing_report_is_never_replaced() {
+    existing_output_is_never_replaced(b"controller-owned", b"");
+}
+
+fn existing_output_is_never_replaced(report_bytes: &[u8], result_bytes: &[u8]) {
     let root = tempfile::tempdir().unwrap();
     let report = root.path().join("report");
     let result = root.path().join("result");
-    std::fs::write(&report, b"controller-owned").unwrap();
-    std::fs::write(&result, b"").unwrap();
+    std::fs::write(&report, report_bytes).unwrap();
+    std::fs::write(&result, result_bytes).unwrap();
 
     let output = invoke(root.path(), &root.path().join("missing"), &report, &result);
 
     assert_eq!(output.status.code(), Some(2));
-    assert_eq!(std::fs::read(report).unwrap(), b"controller-owned");
-    assert!(std::fs::read(result).unwrap().is_empty());
+    assert_eq!(std::fs::read(report).unwrap(), report_bytes);
+    assert_eq!(std::fs::read(result).unwrap(), result_bytes);
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
 }
 
