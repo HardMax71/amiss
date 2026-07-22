@@ -55,6 +55,7 @@ fn revoked_authorization_overrides_a_successful_runner() {
 fn missing_timeout_and_tampered_results_all_fail_closed() {
     let cases = [
         (RunnerOutcome::MissingOutput, RunFailure::MissingOutput),
+        (RunnerOutcome::OversizedOutput, RunFailure::OversizedOutput),
         (RunnerOutcome::TimedOut, RunFailure::Timeout),
         (RunnerOutcome::TamperedRuntime, RunFailure::TamperedRuntime),
     ];

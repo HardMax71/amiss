@@ -82,6 +82,10 @@ fn runner_conclusion(
             CheckConclusion::Unavailable(RunFailure::MissingOutput),
             None,
         ),
+        Some(RunnerOutcome::OversizedOutput) => (
+            CheckConclusion::Unavailable(RunFailure::OversizedOutput),
+            None,
+        ),
         Some(RunnerOutcome::TimedOut) => (CheckConclusion::Unavailable(RunFailure::Timeout), None),
         Some(RunnerOutcome::TamperedRuntime) => (
             CheckConclusion::Unavailable(RunFailure::TamperedRuntime),
