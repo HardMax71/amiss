@@ -1,10 +1,12 @@
 use std::env;
 use std::ffi::OsString;
+use std::fs::OpenOptions;
 use std::io::{Read as _, Write as _};
 use std::path::PathBuf;
 use std::process::{ExitCode, Stdio};
 use std::time::Duration;
 
+use amiss_bootstrap::result::{BootstrapResult, result_bytes};
 use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
     Supervised, settle, supervise,
@@ -38,59 +40,105 @@ const PRIVATE_ENGINE_NAME: &str = "engine";
 /// `PATH`, and never downloads, installs, or discovers anything.
 ///
 /// `amiss-bootstrap exec --action-repository P --repository P --constraint F
-/// --evaluation-request F --snapshot-request F --controls-request F`
+/// --evaluation-request F --snapshot-request F --controls-request F --result F`
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
-    let failure = ExitCode::from(2);
     let Some(parsed) = parse_args(&argv) else {
         eprintln!("amiss-bootstrap: invalid-invocation");
-        return failure;
+        return ExitCode::from(2);
     };
-    let Ok(constraint_bytes) = read_bounded(&parsed.constraint) else {
-        eprintln!("amiss-bootstrap: constraint-unreadable");
-        return failure;
-    };
-    let Ok(constraint) = ExecutionConstraintDescriptor::parse(&constraint_bytes) else {
-        eprintln!("amiss-bootstrap: constraint-invalid");
-        return failure;
-    };
-    let Ok(own_path) = env::current_exe() else {
-        eprintln!("amiss-bootstrap: self-unreadable");
-        return failure;
-    };
-    let Ok(own_bytes) = std::fs::read(&own_path) else {
-        eprintln!("amiss-bootstrap: self-unreadable");
-        return failure;
-    };
-    let Ok(action) = Repository::open(&parsed.action_repository, constraint.action_object_format)
-    else {
-        eprintln!("amiss-bootstrap: action-tree-unavailable");
-        return failure;
-    };
-
-    let mut resources = GitResources::new(GitLimits::CONTRACT);
-    let validated = match validate(&action, &mut resources, &constraint, &own_bytes) {
-        Ok(validated) => validated,
-        Err(refusal) => {
-            eprintln!("amiss-bootstrap: {}", reason(refusal));
-            return failure;
-        }
-    };
-
-    let sealed = match capture_requests(&parsed, &constraint) {
-        Ok(sealed) => sealed,
-        Err(reason) => {
-            eprintln!("amiss-bootstrap: {reason}");
-            return failure;
-        }
-    };
-    if pre_acquired(&parsed.repository, &sealed.evaluation).is_err() {
-        eprintln!("amiss-bootstrap: repository-not-pre-acquired");
-        return failure;
+    let completion = execute(&parsed)
+        .and_then(publish)
+        .unwrap_or_else(failed_completion);
+    if let Some(diagnostic) = completion.diagnostic {
+        eprintln!("amiss-bootstrap: {diagnostic}");
     }
+    if write_result(&parsed.result, completion.result).is_err() {
+        eprintln!("amiss-bootstrap: result-unavailable");
+        return ExitCode::from(2);
+    }
+    completion.exit
+}
 
-    run_engine(&parsed, &validated, sealed)
+#[derive(Clone, Copy)]
+struct Failure {
+    result: BootstrapResult,
+    diagnostic: &'static str,
+}
+
+struct Accepted {
+    wire: Vec<u8>,
+    class: u8,
+    result: BootstrapResult,
+}
+
+struct Completion {
+    result: BootstrapResult,
+    exit: ExitCode,
+    diagnostic: Option<&'static str>,
+}
+
+type Execution<T> = Result<T, Failure>;
+
+#[derive(Clone, Copy)]
+enum ReadDefect {
+    Unavailable,
+    Oversized,
+}
+
+const fn unavailable(diagnostic: &'static str) -> Failure {
+    Failure {
+        result: BootstrapResult::Unavailable,
+        diagnostic,
+    }
+}
+
+const fn tampered(diagnostic: &'static str) -> Failure {
+    Failure {
+        result: BootstrapResult::TamperedRuntime,
+        diagnostic,
+    }
+}
+
+const fn input_failure(
+    defect: ReadDefect,
+    unavailable_diagnostic: &'static str,
+    invalid_diagnostic: &'static str,
+) -> Failure {
+    match defect {
+        ReadDefect::Unavailable => unavailable(unavailable_diagnostic),
+        ReadDefect::Oversized => tampered(invalid_diagnostic),
+    }
+}
+
+fn failed_completion(failure: Failure) -> Completion {
+    Completion {
+        result: failure.result,
+        exit: ExitCode::from(2),
+        diagnostic: Some(failure.diagnostic),
+    }
+}
+
+fn execute(args: &Args) -> Execution<Accepted> {
+    let constraint_bytes = read_input(
+        &args.constraint,
+        "constraint-unreadable",
+        "constraint-invalid",
+    )?;
+    let constraint = ExecutionConstraintDescriptor::parse(&constraint_bytes)
+        .map_err(|_defect| tampered("constraint-invalid"))?;
+    let own_path = env::current_exe().map_err(|_defect| unavailable("self-unreadable"))?;
+    let own_bytes = std::fs::read(own_path).map_err(|_defect| unavailable("self-unreadable"))?;
+    let action = Repository::open(&args.action_repository, constraint.action_object_format)
+        .map_err(|_defect| unavailable("action-tree-unavailable"))?;
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let validated =
+        validate(&action, &mut resources, &constraint, &own_bytes).map_err(validation_failure)?;
+    let sealed = capture_requests(args, &constraint)?;
+    pre_acquired(&args.repository, &sealed.evaluation)
+        .map_err(|()| unavailable("repository-not-pre-acquired"))?;
+    run_engine(args, &validated, sealed)
 }
 
 const fn reason(refusal: Refusal) -> &'static str {
@@ -110,6 +158,15 @@ const fn reason(refusal: Refusal) -> &'static str {
     }
 }
 
+fn validation_failure(refusal: Refusal) -> Failure {
+    let diagnostic = reason(refusal);
+    if refusal == Refusal::UnsupportedPlatform {
+        unavailable(diagnostic)
+    } else {
+        tampered(diagnostic)
+    }
+}
+
 struct Args {
     action_repository: PathBuf,
     repository: PathBuf,
@@ -117,6 +174,7 @@ struct Args {
     evaluation_request: PathBuf,
     snapshot_request: PathBuf,
     controls_request: PathBuf,
+    result: PathBuf,
 }
 
 fn parse_args(argv: &[OsString]) -> Option<Args> {
@@ -126,6 +184,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     let mut evaluation_request: Option<PathBuf> = None;
     let mut snapshot_request: Option<PathBuf> = None;
     let mut controls_request: Option<PathBuf> = None;
+    let mut result: Option<PathBuf> = None;
     let mut items = argv.iter();
     if items.next()? != "exec" {
         return None;
@@ -139,12 +198,19 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
             "--evaluation-request" => &mut evaluation_request,
             "--snapshot-request" => &mut snapshot_request,
             "--controls-request" => &mut controls_request,
+            "--result" => &mut result,
             _ => return None,
         };
         if slot.is_some() {
             return None;
         }
         *slot = Some(PathBuf::from(value));
+    }
+    let result = result?;
+    let absent = std::fs::symlink_metadata(&result)
+        .is_err_and(|defect| defect.kind() == std::io::ErrorKind::NotFound);
+    if !result.is_absolute() || !absent {
+        return None;
     }
     Some(Args {
         action_repository: action_repository?,
@@ -153,6 +219,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         evaluation_request: evaluation_request?,
         snapshot_request: snapshot_request?,
         controls_request: controls_request?,
+        result,
     })
 }
 
@@ -166,27 +233,20 @@ struct SealedRun {
 fn capture_requests(
     args: &Args,
     constraint: &ExecutionConstraintDescriptor,
-) -> Result<SealedRun, &'static str> {
-    let streams = RequestStreams {
-        evaluation: read_bounded(&args.evaluation_request)
-            .map_err(|_defect| "evaluation-request-unreadable")?,
-        snapshot: read_bounded(&args.snapshot_request)
-            .map_err(|_defect| "snapshot-request-unreadable")?,
-        controls: read_bounded(&args.controls_request)
-            .map_err(|_defect| "controls-request-unreadable")?,
-    };
+) -> Execution<SealedRun> {
+    let streams = request_streams(args)?;
     let evaluation = EvaluationRequest::parse(&streams.evaluation)
-        .map_err(|_defect| "evaluation-request-invalid")?;
-    let snapshot =
-        SnapshotRequest::parse(&streams.snapshot).map_err(|_defect| "snapshot-request-invalid")?;
-    let controls =
-        ControlsRequest::parse(&streams.controls).map_err(|_defect| "controls-request-invalid")?;
+        .map_err(|_defect| tampered("evaluation-request-invalid"))?;
+    let snapshot = SnapshotRequest::parse(&streams.snapshot)
+        .map_err(|_defect| tampered("snapshot-request-invalid"))?;
+    let controls = ControlsRequest::parse(&streams.controls)
+        .map_err(|_defect| tampered("controls-request-invalid"))?;
     let canonical_requests = evaluation.canonical_bytes().ok().as_deref()
         == Some(streams.evaluation.as_slice())
         && snapshot.canonical_bytes().ok().as_deref() == Some(streams.snapshot.as_slice())
         && controls.canonical_bytes().ok().as_deref() == Some(streams.controls.as_slice());
     if !canonical_requests {
-        return Err("request-noncanonical");
+        return Err(tampered("request-noncanonical"));
     }
     let candidate = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
         (RequestMode::CommitPair, Some(candidate))
@@ -195,34 +255,34 @@ fn capture_requests(
             candidate.clone()
         }
         (RequestMode::CommitPair | RequestMode::Index, None | Some(_)) => {
-            return Err("request-mode-mismatch");
+            return Err(tampered("request-mode-mismatch"));
         }
     };
-    let repository = sealed_identity(&evaluation)?;
+    let repository = sealed_identity(&evaluation).map_err(tampered)?;
     let supplied_constraint = controls
         .execution_constraint
         .as_ref()
-        .ok_or("execution-constraint-absent")?;
+        .ok_or_else(|| tampered("execution-constraint-absent"))?;
     let embedded_constraint =
         ExecutionConstraintDescriptor::parse(&canonical(&supplied_constraint.value))
-            .map_err(|_defect| "execution-constraint-invalid")?;
+            .map_err(|_defect| tampered("execution-constraint-invalid"))?;
     if embedded_constraint.digest != supplied_constraint.expected_digest
         || embedded_constraint != *constraint
     {
-        return Err("execution-constraint-mismatch");
+        return Err(tampered("execution-constraint-mismatch"));
     }
     let supplied_time = controls
         .trusted_time
         .as_ref()
-        .ok_or("trusted-time-absent")?;
+        .ok_or_else(|| tampered("trusted-time-absent"))?;
     let statement = TrustedTimeStatement::parse(&canonical(&supplied_time.value))
-        .map_err(|_defect| "trusted-time-invalid")?;
+        .map_err(|_defect| tampered("trusted-time-invalid"))?;
     if statement.digest != supplied_time.expected_digest
         || statement.provider != supplied_time.provider
         || statement.provider_run_id != supplied_time.provider_run_id
         || statement.provider_run_attempt != supplied_time.provider_run_attempt
     {
-        return Err("trusted-time-mismatch");
+        return Err(tampered("trusted-time-mismatch"));
     }
     let expected = SealedExpectations {
         profile: match evaluation.profile {
@@ -261,6 +321,27 @@ fn capture_requests(
     })
 }
 
+fn request_streams(args: &Args) -> Execution<RequestStreams> {
+    let streams = RequestStreams {
+        evaluation: read_input(
+            &args.evaluation_request,
+            "evaluation-request-unreadable",
+            "evaluation-request-invalid",
+        )?,
+        snapshot: read_input(
+            &args.snapshot_request,
+            "snapshot-request-unreadable",
+            "snapshot-request-invalid",
+        )?,
+        controls: read_input(
+            &args.controls_request,
+            "controls-request-unreadable",
+            "controls-request-invalid",
+        )?,
+    };
+    Ok(streams)
+}
+
 fn sealed_identity(
     evaluation: &EvaluationRequest,
 ) -> Result<amiss_wire::model::RepositoryIdentity, &'static str> {
@@ -286,15 +367,25 @@ fn control_expectation(
     })
 }
 
-fn read_bounded(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
-    let file = std::fs::File::open(path)?;
+fn read_bounded(path: &std::path::Path) -> Result<Vec<u8>, ReadDefect> {
+    let file = std::fs::File::open(path).map_err(|_defect| ReadDefect::Unavailable)?;
     let mut bytes = Vec::new();
     file.take(REQUEST_STREAM_BYTES.saturating_add(1))
-        .read_to_end(&mut bytes)?;
+        .read_to_end(&mut bytes)
+        .map_err(|_defect| ReadDefect::Unavailable)?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > REQUEST_STREAM_BYTES {
-        return Err(std::io::Error::other("request stream too large"));
+        return Err(ReadDefect::Oversized);
     }
     Ok(bytes)
+}
+
+fn read_input(
+    path: &std::path::Path,
+    unavailable_diagnostic: &'static str,
+    invalid_diagnostic: &'static str,
+) -> Execution<Vec<u8>> {
+    read_bounded(path)
+        .map_err(|defect| input_failure(defect, unavailable_diagnostic, invalid_diagnostic))
 }
 
 fn pre_acquired(path: &std::path::Path, evaluation: &EvaluationRequest) -> Result<(), ()> {
@@ -310,13 +401,14 @@ fn pre_acquired(path: &std::path::Path, evaluation: &EvaluationRequest) -> Resul
     Ok(())
 }
 
-/// Writes the verified engine bytes into a private directory, launches them
-/// with an empty environment, holds them to the wall ceiling, and republishes
-/// only an accepted envelope. The bytes come from the validated tree, never
+/// Writes the verified engine bytes into a private directory and launches them
+/// with an empty environment. The bytes come from the validated tree, never
 /// from a worktree file, a `PATH` lookup, or the action's launcher.
-#[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
-fn run_engine(args: &Args, validated: &amiss_bootstrap::Validated, sealed: SealedRun) -> ExitCode {
-    let failure = ExitCode::from(2);
+fn run_engine(
+    args: &Args,
+    validated: &amiss_bootstrap::Validated,
+    sealed: SealedRun,
+) -> Execution<Accepted> {
     let expectations = Expectations {
         engine_digest: validated.engine_digest.to_string(),
         base_commit: sealed.evaluation.base_commit.as_str().to_owned(),
@@ -328,39 +420,36 @@ fn run_engine(args: &Args, validated: &amiss_bootstrap::Validated, sealed: Seale
         sealed: Some(sealed.expected.clone()),
     };
 
-    let Ok(private) = tempfile::TempDir::new() else {
-        eprintln!("amiss-bootstrap: private-storage-unavailable");
-        return failure;
-    };
+    let private =
+        tempfile::TempDir::new().map_err(|_defect| unavailable("private-storage-unavailable"))?;
     let engine = private.path().join(PRIVATE_ENGINE_NAME);
-    if std::fs::write(&engine, &validated.binary).is_err() || executable_bit(&engine).is_err() {
-        eprintln!("amiss-bootstrap: private-storage-unavailable");
-        return failure;
-    }
+    std::fs::write(&engine, &validated.binary)
+        .map_err(|_defect| unavailable("private-storage-unavailable"))?;
+    executable_bit(&engine).map_err(|_defect| unavailable("private-storage-unavailable"))?;
 
-    let launched = std::process::Command::new(&engine)
+    let mut child = std::process::Command::new(&engine)
         .arg(SEALED_ENGINE_ARGUMENT)
         .current_dir(&args.repository)
         .env_clear()
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        .spawn();
-    let Ok(mut child) = launched else {
-        eprintln!("amiss-bootstrap: engine-launch-failed");
-        return failure;
+        .spawn()
+        .map_err(|_defect| unavailable("engine-launch-failed"))?;
+    let (outcome, wire) = collect(&mut child, sealed.streams)
+        .map_err(|_defect| unavailable("engine-collection-failed"))?;
+    let class = settle(&outcome, &wire, &expectations)
+        .map_err(|defect| settlement_failure(defect, wire.is_empty()))?;
+    let (class, result) = match class {
+        0 => (0, BootstrapResult::Pass),
+        1 => (1, BootstrapResult::Block),
+        _ => return Err(tampered("report-exit-class")),
     };
-    let Ok((outcome, wire)) = collect(&mut child, sealed.streams) else {
-        eprintln!("amiss-bootstrap: engine-launch-failed");
-        return failure;
-    };
-    match settle(&outcome, &wire, &expectations) {
-        Ok(class) => publish(&wire, class),
-        Err(defect) => {
-            eprintln!("amiss-bootstrap: {}", refused(defect));
-            failure
-        }
-    }
+    Ok(Accepted {
+        wire,
+        class,
+        result,
+    })
 }
 
 /// Drains the engine's stdout while the watchdog runs. A supervisor that only
@@ -410,14 +499,48 @@ fn collect(
     Ok((outcome, wire))
 }
 
-/// The accepted envelope is republished byte for byte, and the wrapper exits
-/// with the class the engine claimed and was held to.
-fn publish(wire: &[u8], class: i64) -> ExitCode {
+/// Republishes the accepted envelope before exposing its result record.
+fn publish(accepted: Accepted) -> Execution<Completion> {
+    let Accepted {
+        wire,
+        class,
+        result,
+    } = accepted;
     let mut out = std::io::stdout().lock();
-    if out.write_all(wire).is_err() || out.flush().is_err() {
-        return ExitCode::from(2);
+    out.write_all(&wire)
+        .and_then(|()| out.flush())
+        .map_err(|_defect| unavailable("report-publish-failed"))?;
+    Ok(Completion {
+        result,
+        exit: ExitCode::from(class),
+        diagnostic: None,
+    })
+}
+
+fn write_result(path: &std::path::Path, result: BootstrapResult) -> std::io::Result<()> {
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    file.write_all(result_bytes(result))?;
+    file.flush()
+}
+
+const fn settlement_failure(defect: Defect, empty: bool) -> Failure {
+    match defect {
+        Defect::Killed => Failure {
+            result: BootstrapResult::Timeout,
+            diagnostic: "evaluator-watchdog-kill",
+        },
+        Defect::Signalled => unavailable("evaluator-signalled"),
+        Defect::Oversize => Failure {
+            result: BootstrapResult::OversizedOutput,
+            diagnostic: "report-over-wire-ceiling",
+        },
+        Defect::ExitMismatch => tampered("evaluator-exit-mismatch"),
+        Defect::Acceptance(_defect) if empty => Failure {
+            result: BootstrapResult::MissingOutput,
+            diagnostic: "report-missing",
+        },
+        Defect::Acceptance(defect) => tampered(refused(Defect::Acceptance(defect))),
     }
-    u8::try_from(class).map_or(ExitCode::from(2), ExitCode::from)
 }
 
 const fn refused(defect: Defect) -> &'static str {
