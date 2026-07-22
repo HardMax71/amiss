@@ -1,7 +1,7 @@
-use crate::{AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim};
+use crate::{AcceptedDelivery, ControllerEvaluationId, DeliveryClaim};
 
 use super::make_lease;
-use crate::file_ledger::format::{self, Record, State};
+use crate::file_ledger::format::{Record, State};
 use crate::file_ledger::store::Row;
 use crate::file_ledger::{FileLedger, FileLedgerError};
 
@@ -9,10 +9,10 @@ impl FileLedger {
     pub(super) fn claim_new(
         &self,
         row: &Row,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
     ) -> Result<DeliveryClaim, FileLedgerError> {
-        let now = self.now(None)?;
-        let evaluation_id = format::evaluation_id(&delivery.identity)?;
+        let now = self.now(row, None)?;
+        let evaluation_id = Self::new_evaluation_id(&delivery.delivery().identity)?;
         let expires_at_unix_millis = self.deadline(now)?;
         let record = Record::running(
             delivery,
@@ -21,7 +21,7 @@ impl FileLedger {
             now,
             expires_at_unix_millis,
         );
-        row.save(&record)?;
+        row.save_new(&record)?;
         Ok(DeliveryClaim::Execute(make_lease(
             evaluation_id,
             1,
@@ -43,7 +43,7 @@ impl FileLedger {
         else {
             return Err(FileLedgerError::Corrupt);
         };
-        let now = self.now(Some(&record))?;
+        let now = self.now(row, Some(&record))?;
         if now < expires_at_unix_millis {
             if owner == self.owner {
                 return Ok(DeliveryClaim::Execute(make_lease(

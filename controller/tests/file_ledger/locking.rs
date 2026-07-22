@@ -4,28 +4,34 @@ use std::thread;
 use amiss_controller::{DeliveryClaim, DeliveryLedger};
 use tempfile::TempDir;
 
-use super::support::{FIXTURE_EVALUATION, FIXTURE_KEY, TestClock, delivery, executed, open};
+use super::support::{FIXTURE_KEY, TestClock, delivery, executed, open};
 
 #[test]
-fn delivery_identity_has_a_stable_evaluation_and_disk_key() {
+fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
     let directory = TempDir::new().unwrap();
     let clock = Arc::new(TestClock::new(1_000));
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery("42")).unwrap()).unwrap();
 
-    assert_eq!(lease.evaluation_id.as_str(), FIXTURE_EVALUATION);
+    let evaluation_prefix = format!("eval:{FIXTURE_KEY}:");
+    let evaluation_nonce = lease
+        .evaluation_id
+        .as_str()
+        .strip_prefix(&evaluation_prefix)
+        .unwrap();
+    assert_eq!(evaluation_nonce.len(), 32);
+    assert!(
+        evaluation_nonce
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    );
     assert_eq!(FIXTURE_KEY.len(), 64);
     assert!(
         FIXTURE_KEY
             .bytes()
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
     );
-    assert!(
-        directory
-            .path()
-            .join(format!("{FIXTURE_KEY}.lock"))
-            .is_file()
-    );
+    assert!(directory.path().join(".amiss-row-0b.lock").is_file());
     assert!(
         directory
             .path()

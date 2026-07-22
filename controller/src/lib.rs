@@ -9,16 +9,16 @@ mod provider;
 mod webhook;
 
 pub use clock::{ControllerClock, SystemClock};
-pub use file_ledger::{FileLedger, FileLedgerError};
+pub use file_ledger::{FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError};
 pub use identity::{
     ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
     OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
     ProviderRunId, ProviderRunIdentity,
 };
 pub use ingress::{
-    DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits, IngressPolicy,
-    ReplayIdentity, SignedTimePolicy, TrustAnchorId, TrustSetId, UntrustedDelivery,
-    VerifiedDelivery,
+    AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,
+    IngressPolicy, ReplayIdentity, ReplayWindow, SignedTimePolicy, TrustAnchorId, TrustSetId,
+    UntrustedDelivery, VerifiedDelivery,
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,

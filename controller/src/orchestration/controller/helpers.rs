@@ -1,4 +1,4 @@
-use crate::{AuthenticatedDelivery, ProviderAdapter};
+use crate::{AcceptedDelivery, AuthenticatedDelivery, ProviderAdapter};
 
 use super::{ControllerError, HandleOutcome};
 use crate::orchestration::ledger::{
@@ -9,7 +9,7 @@ use crate::orchestration::model::{ChangeSnapshot, HeartbeatOutcome, RunHeartbeat
 
 pub(super) struct LedgerHeartbeat<'a, L: DeliveryLedger> {
     ledger: &'a mut L,
-    delivery: &'a AuthenticatedDelivery,
+    delivery: &'a AcceptedDelivery,
     lease: &'a mut DeliveryLease,
     failure: Option<ControllerError<L::Error>>,
 }
@@ -17,7 +17,7 @@ pub(super) struct LedgerHeartbeat<'a, L: DeliveryLedger> {
 impl<'a, L: DeliveryLedger> LedgerHeartbeat<'a, L> {
     pub(super) fn new(
         ledger: &'a mut L,
-        delivery: &'a AuthenticatedDelivery,
+        delivery: &'a AcceptedDelivery,
         lease: &'a mut DeliveryLease,
     ) -> Self {
         Self {
@@ -63,7 +63,7 @@ impl<L: DeliveryLedger> RunHeartbeat for LedgerHeartbeat<'_, L> {
 
 pub(super) fn renew_lease<L: DeliveryLedger>(
     ledger: &mut L,
-    delivery: &AuthenticatedDelivery,
+    delivery: &AcceptedDelivery,
     lease: &DeliveryLease,
 ) -> Result<DeliveryLease, ControllerError<L::Error>> {
     let renewal = ledger
@@ -83,7 +83,7 @@ pub(super) fn renew_lease<L: DeliveryLedger>(
 
 pub(super) fn stage_publication<L: DeliveryLedger>(
     ledger: &mut L,
-    delivery: &AuthenticatedDelivery,
+    delivery: &AcceptedDelivery,
     lease: &DeliveryLease,
     publication: &Publication,
 ) -> Result<StagedPublication, ControllerError<L::Error>> {
@@ -111,11 +111,11 @@ fn validate_staged_lease<E>(
 pub(super) fn publish_staged<L: DeliveryLedger>(
     adapter: &dyn ProviderAdapter,
     ledger: &mut L,
-    delivery: &AuthenticatedDelivery,
+    delivery: &AcceptedDelivery,
     staged: &StagedPublication,
 ) -> Result<HandleOutcome, ControllerError<L::Error>> {
     adapter
-        .publish(delivery, &staged.publication)
+        .publish(delivery.delivery(), &staged.publication)
         .map_err(ControllerError::Publish)?;
     match ledger
         .complete(delivery, staged)

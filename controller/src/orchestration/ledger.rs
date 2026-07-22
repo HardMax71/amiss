@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 
-use crate::{AuthenticatedDelivery, ControllerEvaluationId, ProviderRunIdentity};
+use crate::{AcceptedDelivery, ControllerEvaluationId, ProviderRunIdentity};
 
 use super::model::{RunFailure, RunIdentity};
 
@@ -73,7 +73,7 @@ pub trait DeliveryLedger {
     /// # Errors
     ///
     /// Returns an error when that guarantee cannot be established.
-    fn claim(&mut self, delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error>;
+    fn claim(&mut self, delivery: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error>;
 
     /// Extends one live lease without changing its evaluation ID or fence or
     /// moving its advisory deadline backward.
@@ -84,7 +84,7 @@ pub trait DeliveryLedger {
     /// expired, staged, completed, or superseded leases return `Lost`.
     fn renew(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         lease: &DeliveryLease,
     ) -> Result<LeaseRenewal, Self::Error>;
 
@@ -100,7 +100,7 @@ pub trait DeliveryLedger {
     /// expired, completed, or superseded leases return `Lost`.
     fn stage(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         lease: &DeliveryLease,
         publication: &Publication,
     ) -> Result<StageOutcome, Self::Error>;
@@ -117,7 +117,7 @@ pub trait DeliveryLedger {
     /// after an ambiguous commit acknowledgement.
     fn complete(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         staged: &StagedPublication,
     ) -> Result<LeaseCompletion, Self::Error>;
 }

@@ -7,7 +7,7 @@ use amiss_controller::{
 };
 use tempfile::TempDir;
 
-use super::support::{LEASE, TestClock, delivery, executed, open, publication};
+use super::support::{MAX_RECORDS, TestClock, config, delivery, executed, open, publication};
 
 #[test]
 fn a_live_claim_resumes_for_its_owner_and_is_busy_for_another() {
@@ -41,7 +41,7 @@ fn the_record_root_must_already_be_a_directory() {
     let clock_source: Arc<dyn ControllerClock> = clock.clone();
 
     assert!(matches!(
-        FileLedger::open_with_clock(&missing, LEASE, clock_source),
+        FileLedger::open_with_clock(&missing, config(MAX_RECORDS), clock_source),
         Err(FileLedgerError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound
     ));
 
@@ -49,7 +49,7 @@ fn the_record_root_must_already_be_a_directory() {
     fs::write(&file, b"not a directory").unwrap();
     let clock_source: Arc<dyn ControllerClock> = clock;
     assert!(matches!(
-        FileLedger::open_with_clock(file, LEASE, clock_source),
+        FileLedger::open_with_clock(file, config(MAX_RECORDS), clock_source),
         Err(FileLedgerError::Corrupt)
     ));
 }

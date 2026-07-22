@@ -96,10 +96,18 @@ The concrete file record requires a pre-created private local directory outside 
 action tree. A future service must own that directory and set its operating-system permissions or
 access-control list: anyone who can read or change it is inside the trust boundary. Its checksums
 detect damage; they do not authenticate a writer. Shared and network filesystems are unsupported.
-The current code has no retention cleanup or total-volume ceiling. A future service must monitor
-and cap that private volume. It must not expire GitHub or Gitea-family done rows from local age
-alone: their exact-body signatures authenticate no delivery-attempt time, and forgetting a row
-would reopen replay for the captured body.
+The root metadata fixes its maximum record count and replay window and keeps a high-water clock.
+Admission under one fixed lock prevents concurrent processes from crossing the record cap; one
+maintenance lock, one clock lock, and at most 256 row-lock shards keep lock-file growth fixed. A
+full root rejects a new identity without evicting work already admitted.
+
+Cleanup runs when the root opens and is available explicitly. Under the exclusive maintenance
+lock it saves the high-water clock, validates the root, then removes dead report and atomic-write
+files and completed rows whose authenticated replay end has passed. It never removes
+running or saved work. GitHub and Gitea-family exact-body deliveries remain permanent because their
+signatures authenticate no attempt time; forgetting those rows would reopen replay for a captured
+body. A local clock rollback cannot revive a bounded delivery after deletion. Operators must size
+the fixed record cap for permanent replay rows rather than treating cleanup as eviction policy.
 
 The controller library now bounds raw ingress and verifies GitHub, GitLab Standard Webhooks, and
 Gitea-family HMAC signatures against rotating, redacted anchors. GitHub and Gitea replay identity

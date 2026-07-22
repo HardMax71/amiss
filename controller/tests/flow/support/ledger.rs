@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim, DeliveryIdentity, DeliveryLease,
-    DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, Publication, StageOutcome,
-    StagedPublication,
+    AcceptedDelivery, AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim,
+    DeliveryIdentity, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal,
+    Publication, StageOutcome, StagedPublication,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +41,8 @@ impl MemoryLedger {
 impl DeliveryLedger for MemoryLedger {
     type Error = LedgerError;
 
-    fn claim(&mut self, delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error> {
+    fn claim(&mut self, accepted: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error> {
+        let delivery = accepted.delivery();
         if let Some(row) = self.rows.get(&delivery.identity) {
             if row.binding != *delivery {
                 return Ok(DeliveryClaim::BindingConflict);
@@ -71,9 +72,10 @@ impl DeliveryLedger for MemoryLedger {
 
     fn renew(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        accepted: &AcceptedDelivery,
         lease: &DeliveryLease,
     ) -> Result<LeaseRenewal, Self::Error> {
+        let delivery = accepted.delivery();
         self.renewal_count = self.renewal_count.saturating_add(1);
         let Some(row) = self.rows.get_mut(&delivery.identity) else {
             return Ok(LeaseRenewal::Lost);
@@ -89,9 +91,10 @@ impl DeliveryLedger for MemoryLedger {
 
     fn complete(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        accepted: &AcceptedDelivery,
         staged: &StagedPublication,
     ) -> Result<LeaseCompletion, Self::Error> {
+        let delivery = accepted.delivery();
         let Some(row) = self.rows.get_mut(&delivery.identity) else {
             return Ok(LeaseCompletion::Lost);
         };
@@ -104,10 +107,11 @@ impl DeliveryLedger for MemoryLedger {
 
     fn stage(
         &mut self,
-        delivery: &AuthenticatedDelivery,
+        accepted: &AcceptedDelivery,
         lease: &DeliveryLease,
         publication: &Publication,
     ) -> Result<StageOutcome, Self::Error> {
+        let delivery = accepted.delivery();
         let Some(row) = self.rows.get_mut(&delivery.identity) else {
             return Ok(StageOutcome::Lost);
         };
@@ -140,13 +144,13 @@ pub(crate) struct ScriptedLedger {
 impl DeliveryLedger for ScriptedLedger {
     type Error = LedgerError;
 
-    fn claim(&mut self, _delivery: &AuthenticatedDelivery) -> Result<DeliveryClaim, Self::Error> {
+    fn claim(&mut self, _delivery: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error> {
         self.claim.take().ok_or(LedgerError)
     }
 
     fn renew(
         &mut self,
-        _delivery: &AuthenticatedDelivery,
+        _delivery: &AcceptedDelivery,
         _lease: &DeliveryLease,
     ) -> Result<LeaseRenewal, Self::Error> {
         match self.renewals.pop_front() {
@@ -157,7 +161,7 @@ impl DeliveryLedger for ScriptedLedger {
 
     fn complete(
         &mut self,
-        _delivery: &AuthenticatedDelivery,
+        _delivery: &AcceptedDelivery,
         _staged: &StagedPublication,
     ) -> Result<LeaseCompletion, Self::Error> {
         Ok(self.completion)
@@ -165,7 +169,7 @@ impl DeliveryLedger for ScriptedLedger {
 
     fn stage(
         &mut self,
-        _delivery: &AuthenticatedDelivery,
+        _delivery: &AcceptedDelivery,
         _lease: &DeliveryLease,
         _publication: &Publication,
     ) -> Result<StageOutcome, Self::Error> {

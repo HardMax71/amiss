@@ -26,9 +26,14 @@ pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLe
 
 pub(super) fn evaluation_id(
     identity: &DeliveryIdentity,
+    nonce: &[u8; 16],
 ) -> Result<ControllerEvaluationId, FileLedgerError> {
-    ControllerEvaluationId::new(format!("eval:{}", delivery_key(identity)?))
-        .ok_or(FileLedgerError::Corrupt)
+    ControllerEvaluationId::new(format!(
+        "eval:{}:{}",
+        delivery_key(identity)?,
+        hex::encode(nonce)
+    ))
+    .ok_or(FileLedgerError::Corrupt)
 }
 
 pub(super) fn staged_digest(

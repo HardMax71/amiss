@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use amiss_controller::{
     ControllerClock, DeliveryHeader, DeliveryRoute, IngressCheck, IngressLimits, IngressPolicy,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, SignedTimePolicy, TrustAnchorId,
-    TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy,
+    TrustAnchorId, TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 
 pub(crate) const NOW: i64 = 1_744_578_123_000;
@@ -76,7 +76,8 @@ fn check<'a>(
     received_at_unix_millis: i64,
 ) -> IngressCheck<'a> {
     let limits = IngressLimits::new(2 * 1_024 * 1_024, 512, 2 * 1_024 * 1_024).unwrap();
-    let policy = IngressPolicy::new(limits, Duration::from_mins(1), Duration::ZERO).unwrap();
+    let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
+    let policy = IngressPolicy::new(limits, replay, Duration::ZERO).unwrap();
     policy
         .pre_auth(
             UntrustedDelivery {

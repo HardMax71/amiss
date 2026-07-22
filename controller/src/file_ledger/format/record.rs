@@ -1,14 +1,13 @@
 use amiss_wire::digest::Digest;
 use serde::{Deserialize, Serialize};
 
-use crate::{AuthenticatedDelivery, ControllerEvaluationId};
+use crate::{AcceptedDelivery, ControllerEvaluationId};
 
-use super::evaluation_id;
-use super::model::StoredDelivery;
+use super::model::{StoredDelivery, StoredReplayKeep};
 use super::publication::StoredPublication;
 use crate::file_ledger::FileLedgerError;
 
-const RECORD_SCHEMA: &str = "amiss/controller-file-record-v1";
+const RECORD_SCHEMA: &str = "amiss/controller-file-record-v2";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,13 +16,14 @@ pub(in crate::file_ledger) struct Record {
     pub(in crate::file_ledger) generation: u64,
     pub(in crate::file_ledger) last_seen_unix_millis: i64,
     binding: StoredDelivery,
+    replay_keep: StoredReplayKeep,
     evaluation_id: String,
     pub(in crate::file_ledger) state: State,
 }
 
 impl Record {
     pub(in crate::file_ledger) fn running(
-        delivery: &AuthenticatedDelivery,
+        delivery: &AcceptedDelivery,
         evaluation_id: &ControllerEvaluationId,
         owner: [u8; 16],
         now: i64,
@@ -33,7 +33,8 @@ impl Record {
             schema: RECORD_SCHEMA.to_owned(),
             generation: 1,
             last_seen_unix_millis: now,
-            binding: StoredDelivery::new(delivery),
+            binding: StoredDelivery::new(delivery.delivery()),
+            replay_keep: StoredReplayKeep::new(delivery.replay_keep()),
             evaluation_id: evaluation_id.as_str().to_owned(),
             state: State::Running {
                 owner,
@@ -43,8 +44,13 @@ impl Record {
         }
     }
 
-    pub(in crate::file_ledger) fn matches(&self, delivery: &AuthenticatedDelivery) -> bool {
-        self.binding == StoredDelivery::new(delivery)
+    pub(in crate::file_ledger) fn matches(&self, delivery: &AcceptedDelivery) -> bool {
+        self.binding == StoredDelivery::new(delivery.delivery())
+            && self.replay_keep == StoredReplayKeep::new(delivery.replay_keep())
+    }
+
+    pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {
+        Ok(super::delivery_key(&self.binding.materialize()?.identity)? == key)
     }
 
     pub(in crate::file_ledger) fn evaluation_id(
@@ -67,9 +73,8 @@ impl Record {
             return Err(FileLedgerError::Corrupt);
         }
         let delivery = self.binding.materialize()?;
-        if delivery.identity.provider != delivery.change.provider
-            || self.evaluation_id()? != evaluation_id(&delivery.identity)?
-        {
+        self.replay_keep.validate()?;
+        if delivery.identity.provider != delivery.change.provider {
             return Err(FileLedgerError::Corrupt);
         }
         match &self.state {
@@ -112,6 +117,10 @@ impl Record {
             }
         }
         Ok(())
+    }
+
+    pub(in crate::file_ledger) const fn is_done_and_expired(&self, now: i64) -> bool {
+        matches!(self.state, State::Done { .. }) && self.replay_keep.expired_at(now)
     }
 }
 

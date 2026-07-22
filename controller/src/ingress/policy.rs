@@ -4,9 +4,10 @@ use std::time::Duration;
 use amiss_wire::digest::hb;
 
 use super::{
-    ReplayIdentity, RequestBinding, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
+    AcceptedDelivery, ReplayIdentity, ReplayWindow, RequestBinding, SignedTimePolicy,
+    UntrustedDelivery, VerifiedDelivery,
 };
-use crate::{AuthenticatedDelivery, ControllerClock, DeliveryId};
+use crate::{ControllerClock, DeliveryId};
 
 const EXACT_BODY_DOMAIN: &str = "amiss/controller-exact-delivery-v1";
 
@@ -66,19 +67,19 @@ impl IngressLimits {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IngressPolicy {
     limits: IngressLimits,
-    max_queue_age_millis: i64,
+    replay_window: ReplayWindow,
     future_skew_millis: i64,
 }
 
 impl IngressPolicy {
     pub fn new(
         limits: IngressLimits,
-        max_queue_age: Duration,
+        replay_window: ReplayWindow,
         future_skew: Duration,
     ) -> Option<Self> {
         Some(Self {
             limits,
-            max_queue_age_millis: positive_millis(max_queue_age)?,
+            replay_window,
             future_skew_millis: nonnegative_millis(future_skew)?,
         })
     }
@@ -100,7 +101,11 @@ impl IngressPolicy {
         let signed_max_age_millis = match delivery.route.signed_time {
             SignedTimePolicy::ReplayOnly => None,
             SignedTimePolicy::Required(max_age) => {
-                Some(positive_millis(max_age).ok_or(IngressError::Policy)?)
+                let max_age = positive_millis(max_age).ok_or(IngressError::Policy)?;
+                if max_age > self.replay_window.max_signed_age_millis() {
+                    return Err(IngressError::Policy);
+                }
+                Some(max_age)
             }
         };
         let now = clock
@@ -110,7 +115,7 @@ impl IngressPolicy {
         check_window(
             delivery.received_at_unix_millis,
             now,
-            self.max_queue_age_millis,
+            self.replay_window.max_queue_age_millis(),
             self.future_skew_millis,
         )?;
         let request = RequestBinding::new(&delivery).ok_or(IngressError::Limits)?;
@@ -134,7 +139,7 @@ impl IngressPolicy {
         &self,
         check: IngressCheck<'_>,
         verified: VerifiedDelivery,
-    ) -> Result<AuthenticatedDelivery, IngressError> {
+    ) -> Result<AcceptedDelivery, IngressError> {
         if verified.request != check.request {
             return Err(IngressError::Request);
         }
@@ -144,17 +149,17 @@ impl IngressPolicy {
         {
             return Err(IngressError::Route);
         }
-        self.check_signed_time(&check, verified.issued_at_unix_millis)?;
-        normalize_delivery(verified, check.delivery.body)
+        let issued_at = self.check_signed_time(&check, verified.issued_at_unix_millis)?;
+        normalize_delivery(verified, check.delivery.body, issued_at, self.replay_window)
     }
 
     fn check_signed_time(
         &self,
         check: &IngressCheck<'_>,
         issued_at: Option<i64>,
-    ) -> Result<(), IngressError> {
+    ) -> Result<Option<i64>, IngressError> {
         let max_age = match (check.signed_max_age_millis, issued_at) {
-            (None, None) => return Ok(()),
+            (None, None) => return Ok(None),
             (None, Some(_)) => return Err(IngressError::Policy),
             (Some(_), None) => return Err(IngressError::Freshness),
             (Some(max_age), Some(_)) => max_age,
@@ -168,7 +173,8 @@ impl IngressPolicy {
             check.delivery.received_at_unix_millis,
             max_age,
             self.future_skew_millis,
-        )
+        )?;
+        Ok(Some(issued_at))
     }
 }
 
@@ -221,13 +227,33 @@ impl std::error::Error for IngressError {}
 fn normalize_delivery(
     verified: VerifiedDelivery,
     body: &[u8],
-) -> Result<AuthenticatedDelivery, IngressError> {
+    issued_at: Option<i64>,
+    replay_window: ReplayWindow,
+) -> Result<AcceptedDelivery, IngressError> {
     let mut delivery = verified.delivery;
-    delivery.identity.delivery = match verified.replay {
-        ReplayIdentity::Authenticated(delivery_id) => delivery_id,
-        ReplayIdentity::ExactBody => exact_body_id(body)?,
-    };
-    Ok(delivery)
+    match verified.replay {
+        ReplayIdentity::Authenticated(delivery_id) => {
+            delivery.identity.delivery = delivery_id;
+            match issued_at {
+                Some(issued_at) => {
+                    let unix_millis = issued_at
+                        .checked_add(replay_window.max_signed_age_millis())
+                        .and_then(|value| value.checked_add(replay_window.max_queue_age_millis()))
+                        .ok_or(IngressError::Replay)?;
+                    Ok(AcceptedDelivery::keep_through(
+                        delivery,
+                        unix_millis,
+                        replay_window,
+                    ))
+                }
+                None => Ok(AcceptedDelivery::permanent(delivery)),
+            }
+        }
+        ReplayIdentity::ExactBody => {
+            delivery.identity.delivery = exact_body_id(body)?;
+            Ok(AcceptedDelivery::permanent(delivery))
+        }
+    }
 }
 
 fn exact_body_id(body: &[u8]) -> Result<DeliveryId, IngressError> {
@@ -254,7 +280,7 @@ fn check_window(
         .ok_or(IngressError::Freshness)
 }
 
-fn positive_millis(duration: Duration) -> Option<i64> {
+pub(super) fn positive_millis(duration: Duration) -> Option<i64> {
     nonnegative_millis(duration).filter(|value| *value > 0)
 }
 
