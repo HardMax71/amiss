@@ -222,26 +222,17 @@ fn malformed(result: &Path) -> ExitCode {
 }
 
 fn oversized(report: &Path, result: &Path) -> ExitCode {
-    let Ok(mut output) = OpenOptions::new().write(true).open(report) else {
+    let Ok(output) = OpenOptions::new().write(true).open(report) else {
         return ExitCode::from(2);
     };
-    let block = [b'x'; 8_192];
-    let mut remaining = MACHINE_JSON_BYTES.saturating_add(2);
-    while remaining > 0 {
-        let count = remaining.min(u64::try_from(block.len()).unwrap_or(u64::MAX));
-        let Ok(count) = usize::try_from(count) else {
-            return ExitCode::from(2);
-        };
-        let Some(bytes) = block.get(..count) else {
-            return ExitCode::from(2);
-        };
-        if output.write_all(bytes).is_err() {
-            return ExitCode::from(2);
-        }
-        remaining = remaining.saturating_sub(u64::try_from(count).unwrap_or(u64::MAX));
-    }
-    if output.flush().is_err() || write_output(result, result_bytes(BootstrapResult::Pass)).is_err()
+    if output
+        .set_len(MACHINE_JSON_BYTES.saturating_add(2))
+        .is_err()
     {
+        return ExitCode::from(2);
+    }
+    drop(output);
+    if write_output(result, result_bytes(BootstrapResult::Pass)).is_err() {
         return ExitCode::from(2);
     }
     ExitCode::SUCCESS
