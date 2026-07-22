@@ -1,13 +1,13 @@
 use amiss_wire::digest::Digest;
 use serde::{Deserialize, Serialize};
 
-use crate::{AcceptedDelivery, ControllerEvaluationId};
+use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};
 
-use super::model::{StoredDelivery, StoredReplayKeep};
+use super::model::{StoredCheck, StoredDelivery, StoredReplayKeep, materialize_check, store_check};
 use super::publication::StoredPublication;
 use crate::file_ledger::FileLedgerError;
 
-const RECORD_SCHEMA: &str = "amiss/controller-file-record-v2";
+const RECORD_SCHEMA: &str = "amiss/controller-file-record-v3";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,6 +17,7 @@ pub(in crate::file_ledger) struct Record {
     pub(in crate::file_ledger) last_seen_unix_millis: i64,
     binding: StoredDelivery,
     replay_keep: StoredReplayKeep,
+    check: StoredCheck,
     evaluation_id: String,
     pub(in crate::file_ledger) state: State,
 }
@@ -24,6 +25,7 @@ pub(in crate::file_ledger) struct Record {
 impl Record {
     pub(in crate::file_ledger) fn running(
         delivery: &AcceptedDelivery,
+        check: &CheckBinding,
         evaluation_id: &ControllerEvaluationId,
         owner: [u8; 16],
         now: i64,
@@ -35,6 +37,7 @@ impl Record {
             last_seen_unix_millis: now,
             binding: StoredDelivery::new(delivery.delivery()),
             replay_keep: StoredReplayKeep::new(delivery.replay_keep()),
+            check: store_check(check),
             evaluation_id: evaluation_id.as_str().to_owned(),
             state: State::Running {
                 owner,
@@ -44,9 +47,14 @@ impl Record {
         }
     }
 
-    pub(in crate::file_ledger) fn matches(&self, delivery: &AcceptedDelivery) -> bool {
+    pub(in crate::file_ledger) fn matches(
+        &self,
+        delivery: &AcceptedDelivery,
+        check: &CheckBinding,
+    ) -> bool {
         self.binding == StoredDelivery::new(delivery.delivery())
             && self.replay_keep == StoredReplayKeep::new(delivery.replay_keep())
+            && self.check == store_check(check)
     }
 
     pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {
@@ -74,6 +82,7 @@ impl Record {
         }
         let delivery = self.binding.materialize()?;
         self.replay_keep.validate()?;
+        let check = materialize_check(&self.check)?;
         if delivery.identity.provider != delivery.change.provider {
             return Err(FileLedgerError::Corrupt);
         }
@@ -100,6 +109,7 @@ impl Record {
                     || publication.run.change != delivery.change
                     || publication.run.object_format != delivery.provider_run.object_format
                     || publication.run.commits.candidate != delivery.provider_run.candidate_commit
+                    || publication.check != check
                 {
                     return Err(FileLedgerError::Corrupt);
                 }

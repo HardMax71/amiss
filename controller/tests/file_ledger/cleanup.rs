@@ -9,8 +9,8 @@ use amiss_controller::{
 use tempfile::TempDir;
 
 use super::support::{
-    BOUNDED_ISSUED_AT, BOUNDED_KEEP_THROUGH, FIXTURE_KEY, TestClock, bounded_delivery, delivery,
-    executed, is_delivery_file, open, publication, staged,
+    BOUNDED_ISSUED_AT, BOUNDED_KEEP_THROUGH, FIXTURE_KEY, TestClock, bounded_delivery,
+    check_binding, delivery, executed, is_delivery_file, open, publication, staged,
 };
 
 #[test]
@@ -35,7 +35,7 @@ fn permanent_completion_survives_cleanup() {
     assert!(!report_path.exists());
     assert_eq!(count_record_files(directory.path(), ".state"), 1);
     assert!(matches!(
-        ledger.claim(&delivery).unwrap(),
+        ledger.claim(&delivery, &check_binding()).unwrap(),
         DeliveryClaim::Duplicate { evaluation_id }
             if evaluation_id == finished.evaluation_id
     ));
@@ -52,7 +52,7 @@ fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
     clock.set(BOUNDED_KEEP_THROUGH);
     assert_eq!(ledger.cleanup().unwrap(), FileLedgerCleanup::default());
     assert!(matches!(
-        ledger.claim(&delivery).unwrap(),
+        ledger.claim(&delivery, &check_binding()).unwrap(),
         DeliveryClaim::Duplicate { evaluation_id }
             if evaluation_id == finished.evaluation_id
     ));
@@ -70,7 +70,7 @@ fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
 
     clock.set(BOUNDED_ISSUED_AT);
     assert!(matches!(
-        ledger.claim(&delivery),
+        ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Expired)
     ));
     assert_eq!(
@@ -88,14 +88,14 @@ fn an_expired_unseen_delivery_stays_expired_after_clock_rollback() {
 
     clock.set(BOUNDED_KEEP_THROUGH + 1);
     assert!(matches!(
-        ledger.claim(&delivery),
+        ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Expired)
     ));
     clock.set(BOUNDED_ISSUED_AT);
     drop(ledger);
     let mut ledger = open(directory.path(), &clock);
     assert!(matches!(
-        ledger.claim(&delivery),
+        ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Expired)
     ));
     assert_eq!(count_record_files(directory.path(), ".state"), 0);
@@ -108,8 +108,8 @@ fn expired_running_and_staged_work_is_never_pruned() {
     let running = bounded_delivery("bounded-running", "41");
     let staged_delivery = bounded_delivery("bounded-staged", "42");
     let mut ledger = open(directory.path(), &clock);
-    let _running_lease = executed(ledger.claim(&running).unwrap()).unwrap();
-    let staged_lease = executed(ledger.claim(&staged_delivery).unwrap()).unwrap();
+    let _running_lease = executed(ledger.claim(&running, &check_binding()).unwrap()).unwrap();
+    let staged_lease = executed(ledger.claim(&staged_delivery, &check_binding()).unwrap()).unwrap();
     let frozen = staged(
         ledger
             .stage(
@@ -126,7 +126,7 @@ fn expired_running_and_staged_work_is_never_pruned() {
     assert_eq!(count_record_files(directory.path(), ".state"), 2);
     assert_eq!(count_record_files(directory.path(), ".report"), 1);
     assert_eq!(
-        ledger.claim(&staged_delivery).unwrap(),
+        ledger.claim(&staged_delivery, &check_binding()).unwrap(),
         DeliveryClaim::Publish(frozen)
     );
 }
@@ -194,7 +194,9 @@ fn corrupt_root_metadata_and_a_renamed_valid_record_fail_closed() {
 
     let record_directory = TempDir::new().unwrap();
     let mut record_ledger = open(record_directory.path(), &clock);
-    record_ledger.claim(&delivery("42")).unwrap();
+    record_ledger
+        .claim(&delivery("42"), &check_binding())
+        .unwrap();
     let state = record_directory.path().join(format!("{FIXTURE_KEY}.state"));
     let renamed = record_directory
         .path()
@@ -224,7 +226,7 @@ fn symlinks_in_the_record_namespace_fail_closed() {
 }
 
 fn finish(ledger: &mut FileLedger, delivery: &AcceptedDelivery) -> StagedPublication {
-    let lease = executed(ledger.claim(delivery).unwrap()).unwrap();
+    let lease = executed(ledger.claim(delivery, &check_binding()).unwrap()).unwrap();
     let frozen = staged(
         ledger
             .stage(delivery, &lease, &publication(delivery, &lease))

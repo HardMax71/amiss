@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use amiss_controller::{DeliveryClaim, DeliveryLedger, FileLedgerError};
 use tempfile::TempDir;
 
-use super::support::{MAX_RECORDS, TestClock, delivery_with_id, open_with_max};
+use super::support::{MAX_RECORDS, TestClock, check_binding, delivery_with_id, open_with_max};
 
 const OWNER_TEST_NAME: &str =
     "process_locking::concurrent_first_claims_choose_one_owner_across_processes";
@@ -158,7 +158,7 @@ fn run_child() {
         "parent process did not open the start gate"
     );
 
-    let claim = ledger.claim(&delivery_with_id(&delivery_id, "42"));
+    let claim = ledger.claim(&delivery_with_id(&delivery_id, "42"), &check_binding());
     let outcome = if matches!(&claim, Err(FileLedgerError::Full)) {
         Some(FULL)
     } else {

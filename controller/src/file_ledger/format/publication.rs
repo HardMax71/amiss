@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ControllerEvaluationId, Publication};
 
-use super::model::{StoredConclusion, StoredProviderRun, StoredRun};
+use super::model::{
+    StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check, store_check,
+};
 use crate::file_ledger::FileLedgerError;
 
 const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
@@ -14,6 +16,7 @@ const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
 pub(in crate::file_ledger) struct StoredPublication {
     provider_run: StoredProviderRun,
     evaluation_id: String,
+    check: StoredCheck,
     run: StoredRun,
     conclusion: StoredConclusion,
     report: StoredReport,
@@ -25,6 +28,7 @@ impl StoredPublication {
         Ok(Self {
             provider_run: StoredProviderRun::new(&publication.provider_run),
             evaluation_id: publication.evaluation_id.as_str().to_owned(),
+            check: store_check(&publication.check),
             run: StoredRun::new(&publication.run),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
@@ -56,6 +60,7 @@ impl StoredPublication {
             provider_run: self.provider_run.materialize()?,
             evaluation_id: ControllerEvaluationId::new(self.evaluation_id.clone())
                 .ok_or(FileLedgerError::Corrupt)?,
+            check: materialize_check(&self.check)?,
             run: self.run.materialize()?,
             conclusion: self.conclusion.materialize(),
             report: None,

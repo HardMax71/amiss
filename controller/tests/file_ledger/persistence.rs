@@ -11,7 +11,9 @@ use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde_json::{Map, Value};
 use tempfile::TempDir;
 
-use super::support::{TestClock, delivery, executed, ledger_file, open, publication, staged};
+use super::support::{
+    TestClock, check_binding, delivery, executed, ledger_file, open, publication, staged,
+};
 
 #[test]
 fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
@@ -19,7 +21,7 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
     let clock = Arc::new(TestClock::new(1_000));
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery).unwrap()).unwrap();
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     let publication = publication(&delivery, &lease);
     let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
 
@@ -31,7 +33,7 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
 
     let mut reopened = open(directory.path(), &clock);
     assert_eq!(
-        reopened.claim(&delivery).unwrap(),
+        reopened.claim(&delivery, &check_binding()).unwrap(),
         DeliveryClaim::Publish(frozen.clone())
     );
     let report_path = ledger_file(directory.path(), ".report").unwrap();
@@ -50,7 +52,7 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
 
     let mut after_restart = open(directory.path(), &clock);
     assert_eq!(
-        after_restart.claim(&delivery).unwrap(),
+        after_restart.claim(&delivery, &check_binding()).unwrap(),
         DeliveryClaim::Duplicate {
             evaluation_id: lease.evaluation_id
         }
@@ -63,20 +65,20 @@ fn corrupt_state_or_report_fails_closed() {
     let delivery = delivery("42");
     let state_directory = TempDir::new().unwrap();
     let mut state_ledger = open(state_directory.path(), &clock);
-    state_ledger.claim(&delivery).unwrap();
+    state_ledger.claim(&delivery, &check_binding()).unwrap();
     fs::write(
         ledger_file(state_directory.path(), ".state").unwrap(),
         b"truncated",
     )
     .unwrap();
     assert!(matches!(
-        state_ledger.claim(&delivery),
+        state_ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
 
     let report_directory = TempDir::new().unwrap();
     let mut report_ledger = open(report_directory.path(), &clock);
-    let lease = executed(report_ledger.claim(&delivery).unwrap()).unwrap();
+    let lease = executed(report_ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     let publication = publication(&delivery, &lease);
     report_ledger
         .stage(&delivery, &lease, &publication)
@@ -87,7 +89,7 @@ fn corrupt_state_or_report_fails_closed() {
     )
     .unwrap();
     assert!(matches!(
-        report_ledger.claim(&delivery),
+        report_ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
 }
@@ -98,14 +100,14 @@ fn a_missing_staged_report_is_corrupt() {
     let clock = Arc::new(TestClock::new(1_000));
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery).unwrap()).unwrap();
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     ledger
         .stage(&delivery, &lease, &publication(&delivery, &lease))
         .unwrap();
     fs::remove_file(ledger_file(directory.path(), ".report").unwrap()).unwrap();
 
     assert!(matches!(
-        ledger.claim(&delivery),
+        ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
 }
@@ -116,7 +118,7 @@ fn oversized_conflicting_completion_is_lost() {
     let clock = Arc::new(TestClock::new(1_000));
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery).unwrap()).unwrap();
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     let publication = publication(&delivery, &lease);
     let mut conflicting = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
     let oversized = usize::try_from(MACHINE_JSON_BYTES).unwrap() + 1;
@@ -134,7 +136,7 @@ fn impossible_but_checksummed_states_fail_closed() {
     let delivery = delivery("42");
     let expiry_directory = TempDir::new().unwrap();
     let mut expiry_ledger = open(expiry_directory.path(), &clock);
-    expiry_ledger.claim(&delivery).unwrap();
+    expiry_ledger.claim(&delivery, &check_binding()).unwrap();
     rewrite_state(expiry_directory.path(), |record| {
         let last_seen = record
             .get("last_seen_unix_millis")
@@ -147,13 +149,13 @@ fn impossible_but_checksummed_states_fail_closed() {
             .insert("expires_at_unix_millis".to_owned(), last_seen.into());
     });
     assert!(matches!(
-        expiry_ledger.claim(&delivery),
+        expiry_ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
 
     let fence_directory = TempDir::new().unwrap();
     let mut fence_ledger = open(fence_directory.path(), &clock);
-    fence_ledger.claim(&delivery).unwrap();
+    fence_ledger.claim(&delivery, &check_binding()).unwrap();
     rewrite_state(fence_directory.path(), |record| {
         let generation = record.get("generation").and_then(Value::as_u64).unwrap();
         record
@@ -163,7 +165,55 @@ fn impossible_but_checksummed_states_fail_closed() {
             .insert("fence".to_owned(), (generation + 1).into());
     });
     assert!(matches!(
-        fence_ledger.claim(&delivery),
+        fence_ledger.claim(&delivery, &check_binding()),
+        Err(FileLedgerError::Corrupt)
+    ));
+}
+
+#[test]
+fn malformed_record_and_publication_check_bindings_fail_closed() {
+    let clock = Arc::new(TestClock::new(1_000));
+    let delivery = delivery("42");
+
+    let record_directory = TempDir::new().unwrap();
+    let mut record_ledger = open(record_directory.path(), &clock);
+    record_ledger.claim(&delivery, &check_binding()).unwrap();
+    rewrite_state(record_directory.path(), |record| {
+        *record
+            .get_mut("check")
+            .and_then(Value::as_object_mut)
+            .and_then(|check| check.get_mut("required_status_name"))
+            .unwrap() = " invalid".into();
+    });
+    assert!(matches!(
+        record_ledger.claim(&delivery, &check_binding()),
+        Err(FileLedgerError::Corrupt)
+    ));
+
+    let publication_directory = TempDir::new().unwrap();
+    let mut publication_ledger = open(publication_directory.path(), &clock);
+    let lease = executed(
+        publication_ledger
+            .claim(&delivery, &check_binding())
+            .unwrap(),
+    )
+    .unwrap();
+    publication_ledger
+        .stage(&delivery, &lease, &publication(&delivery, &lease))
+        .unwrap();
+    rewrite_state(publication_directory.path(), |record| {
+        *record
+            .get_mut("state")
+            .and_then(Value::as_object_mut)
+            .and_then(|state| state.get_mut("publication"))
+            .and_then(Value::as_object_mut)
+            .and_then(|publication| publication.get_mut("check"))
+            .and_then(Value::as_object_mut)
+            .and_then(|check| check.get_mut("required_status_name"))
+            .unwrap() = "invalid ".into();
+    });
+    assert!(matches!(
+        publication_ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
 }

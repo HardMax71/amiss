@@ -20,7 +20,7 @@ pub(crate) struct FakeAdapter {
     namespace: ProviderNamespace,
     route: DeliveryRoute,
     verifier: GitHubWebhook,
-    authenticated: AuthenticatedDelivery,
+    pub(crate) authenticated: AuthenticatedDelivery,
     refreshes: Mutex<VecDeque<Result<ChangeSnapshot, ProviderError>>>,
     publications: Mutex<Vec<Publication>>,
     publish_results: Mutex<VecDeque<Result<(), ProviderError>>>,

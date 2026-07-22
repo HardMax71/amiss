@@ -98,16 +98,11 @@ pub fn check_plan(
 ///
 /// The public plan fields no longer reproduce the frozen digest.
 pub fn check_binding(plan: &CheckPlan) -> Result<CheckBinding, BootstrapJobError> {
-    validated_plan(plan).map(|checked| CheckBinding {
-        plan_digest: checked.digest,
-        required_status_name: checked.execution.required_status_name,
-        execution_constraint_digest: checked.execution.digest,
-    })
+    validated_plan(plan).map(|checked| binding(&checked))
 }
 
 pub struct BootstrapJobInput<'a> {
     pub run: &'a RunRequest,
-    pub plan: &'a CheckPlan,
     pub evaluation_instant: UtcInstant,
     pub valid_until: UtcInstant,
 }
@@ -126,7 +121,10 @@ pub struct BootstrapJob {
 /// The run is internally inconsistent, a control is malformed or names
 /// another run, trusted time is invalid, or canonical encoding fails.
 pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, BootstrapJobError> {
-    let checked_plan = validated_plan(input.plan)?;
+    let checked_plan = validated_plan(&input.run.plan)?;
+    (binding(&checked_plan) == input.run.check)
+        .then_some(())
+        .ok_or(BootstrapJobError::CheckPlan)?;
     let run = &input.run.run;
     (input.run.delivery.provider == run.change.provider
         && input.run.provider_run.object_format == run.object_format
@@ -197,6 +195,14 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         streams,
         constraint,
     })
+}
+
+fn binding(plan: &CheckPlan) -> CheckBinding {
+    CheckBinding {
+        plan_digest: plan.digest,
+        required_status_name: plan.execution.required_status_name.clone(),
+        execution_constraint_digest: plan.execution.digest,
+    }
 }
 
 fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJobError> {

@@ -1,4 +1,4 @@
-use crate::{AcceptedDelivery, AuthenticatedDelivery, ProviderAdapter};
+use crate::{AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ProviderAdapter};
 
 use super::{ControllerError, HandleOutcome};
 use crate::orchestration::ledger::{
@@ -73,6 +73,7 @@ pub(super) fn renew_lease<L: DeliveryLedger>(
         return Err(ControllerError::LeaseLost);
     };
     if renewed.evaluation_id != lease.evaluation_id
+        || renewed.check != lease.check
         || renewed.fence != lease.fence
         || renewed.expires_at_unix_millis < lease.expires_at_unix_millis
     {
@@ -102,7 +103,10 @@ fn validate_staged_lease<E>(
     lease: &DeliveryLease,
     staged: StagedPublication,
 ) -> Result<StagedPublication, ControllerError<E>> {
-    if staged.evaluation_id != lease.evaluation_id || staged.fence != lease.fence {
+    if staged.evaluation_id != lease.evaluation_id
+        || staged.fence != lease.fence
+        || staged.publication.check != lease.check
+    {
         return Err(ControllerError::LeaseLost);
     }
     Ok(staged)
@@ -128,6 +132,7 @@ pub(super) fn publish_staged<L: DeliveryLedger>(
 
 pub(super) fn validate_staged<E>(
     delivery: &AuthenticatedDelivery,
+    check: &CheckBinding,
     staged: &StagedPublication,
 ) -> Result<(), ControllerError<E>> {
     if staged.publication.evaluation_id != staged.evaluation_id {
@@ -135,6 +140,9 @@ pub(super) fn validate_staged<E>(
     }
     if staged.publication.provider_run != delivery.provider_run {
         return Err(ControllerError::WrongProviderRun);
+    }
+    if staged.publication.check != *check {
+        return Err(ControllerError::DeliveryBindingConflict);
     }
     validate_run(delivery, &staged.publication.run)
 }

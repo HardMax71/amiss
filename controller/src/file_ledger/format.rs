@@ -16,7 +16,7 @@ use super::FileLedgerError;
 pub(super) use self::frame::{MAX_RECORD_BYTES, decode, encode};
 
 const KEY_DOMAIN: &str = "amiss/controller-delivery-key-v1";
-const STAGED_DOMAIN: &str = "amiss/controller-staged-publication-v1";
+const STAGED_DOMAIN: &str = "amiss/controller-staged-publication-v2";
 
 pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLedgerError> {
     let bytes = serde_json::to_vec(&StoredDeliveryKey::new(identity))

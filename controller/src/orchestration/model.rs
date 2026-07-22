@@ -1,6 +1,11 @@
+use std::sync::Arc;
+
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 
-use crate::{ChangeLocator, ControllerEvaluationId, DeliveryIdentity, ProviderRunIdentity};
+use crate::{
+    ChangeLocator, CheckBinding, CheckPlan, ControllerEvaluationId, DeliveryIdentity,
+    ProviderRunIdentity,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChangeState {
@@ -78,6 +83,8 @@ pub struct RunRequest {
     pub delivery: DeliveryIdentity,
     pub provider_run: ProviderRunIdentity,
     pub evaluation_id: ControllerEvaluationId,
+    pub check: CheckBinding,
+    pub plan: Arc<CheckPlan>,
     pub run: RunIdentity,
 }
 

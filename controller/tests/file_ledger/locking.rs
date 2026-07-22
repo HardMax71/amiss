@@ -4,14 +4,14 @@ use std::thread;
 use amiss_controller::{DeliveryClaim, DeliveryLedger};
 use tempfile::TempDir;
 
-use super::support::{FIXTURE_KEY, TestClock, delivery, executed, open};
+use super::support::{FIXTURE_KEY, TestClock, check_binding, delivery, executed, open};
 
 #[test]
 fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
     let directory = TempDir::new().unwrap();
     let clock = Arc::new(TestClock::new(1_000));
     let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery("42")).unwrap()).unwrap();
+    let lease = executed(ledger.claim(&delivery("42"), &check_binding()).unwrap()).unwrap();
 
     let evaluation_prefix = format!("eval:{FIXTURE_KEY}:");
     let evaluation_nonce = lease
@@ -54,11 +54,11 @@ fn concurrent_first_claims_choose_one_owner() {
 
     let first_thread = thread::spawn(move || {
         first_barrier.wait();
-        first.claim(&first_delivery)
+        first.claim(&first_delivery, &check_binding())
     });
     let second_thread = thread::spawn(move || {
         second_barrier.wait();
-        second.claim(&second_delivery)
+        second.claim(&second_delivery, &check_binding())
     });
     let claims = [
         first_thread.join().unwrap().unwrap(),

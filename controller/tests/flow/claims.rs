@@ -3,8 +3,10 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use amiss_controller::{
-    ControllerError, DeliveryClaim, HandleOutcome, IngressError, LeaseCompletion, ProviderInstance,
+    ControllerError, DeliveryClaim, HandleOutcome, IngressError, LeaseCompletion, ProviderError,
+    ProviderInstance, check_plan,
 };
+use amiss_wire::controls::Profile;
 
 use crate::support::{
     FakeAdapter, ScriptedLedger, complete, controller, controller_with_ledger, delivery, lease,
@@ -77,6 +79,34 @@ fn a_conflicting_delivery_binding_fails_before_refresh() {
         Err(ControllerError::DeliveryBindingConflict)
     ));
     assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 0);
+    assert!(controller.runner.requests.is_empty());
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
+fn a_replay_cannot_switch_to_a_new_check_plan() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let adapter = Arc::new(FakeAdapter::new(
+        delivery(&provider, change, 'b'),
+        [Err(ProviderError::Unavailable)],
+    ));
+    let mut controller = controller(Arc::clone(&adapter), complete(&run));
+
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::Provider(ProviderError::Unavailable))
+    ));
+    let current = controller.plans.values().next().unwrap().as_ref().clone();
+    let changed = check_plan(Profile::Observe, current.policy, current.execution).unwrap();
+    *controller.plans.values_mut().next().unwrap() = Arc::new(changed);
+
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::DeliveryBindingConflict)
+    ));
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 1);
     assert!(controller.runner.requests.is_empty());
     assert!(adapter.publications().is_empty());
 }

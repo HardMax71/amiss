@@ -12,7 +12,7 @@ use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, CheckPlan, DeliveryId, DeliveryIdentity,
     IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls, ProviderIdentity,
     ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
-    check_plan, register_plan, resolve_plan,
+    check_binding, check_plan, register_plan, resolve_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
@@ -87,7 +87,9 @@ fn plans_resolve_only_from_the_complete_authenticated_scope() {
     let mut registry: PlanRegistry = BTreeMap::new();
     let selected = Arc::new(plan());
     register_plan(&mut registry, scope(), Arc::clone(&selected)).unwrap();
-    assert_eq!(resolve_plan(&registry, &delivery()).unwrap(), selected);
+    let resolved = resolve_plan(&registry, &delivery()).unwrap();
+    assert_eq!(resolved.plan, selected);
+    assert_eq!(resolved.check, check_binding(&selected).unwrap());
     assert_eq!(
         register_plan(&mut registry, scope(), Arc::new(plan())).unwrap_err(),
         PlanError::Duplicate

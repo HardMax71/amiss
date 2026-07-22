@@ -109,6 +109,7 @@ fn a_lost_completion_record_is_distinct_after_publication() {
         publication: Box::new(Publication {
             provider_run: authenticated.provider_run,
             evaluation_id: expected.evaluation_id.clone(),
+            check: expected.check.clone(),
             run: run.clone(),
             conclusion: CheckConclusion::Pass,
             report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
@@ -151,8 +152,14 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
         expires_at_unix_millis: expected.expires_at_unix_millis - 1,
         ..expected.clone()
     };
+    let mut other_check = expected.check.clone();
+    other_check.required_status_name = "amiss / another check".to_owned();
+    let changed_check = DeliveryLease {
+        check: other_check,
+        ..expected.clone()
+    };
 
-    for changed in [changed_evaluation, changed_fence, shortened] {
+    for changed in [changed_evaluation, changed_fence, shortened, changed_check] {
         let adapter = Arc::new(FakeAdapter::new(
             delivery(&provider, change.clone(), 'b'),
             [Ok(snapshot(ChangeState::Active, run.clone()))],

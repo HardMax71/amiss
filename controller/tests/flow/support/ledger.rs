@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 
 use amiss_controller::{
-    AcceptedDelivery, AuthenticatedDelivery, ControllerEvaluationId, DeliveryClaim,
+    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim,
     DeliveryIdentity, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal,
     Publication, StageOutcome, StagedPublication,
 };
@@ -41,10 +41,14 @@ impl MemoryLedger {
 impl DeliveryLedger for MemoryLedger {
     type Error = LedgerError;
 
-    fn claim(&mut self, accepted: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error> {
+    fn claim(
+        &mut self,
+        accepted: &AcceptedDelivery,
+        check: &CheckBinding,
+    ) -> Result<DeliveryClaim, Self::Error> {
         let delivery = accepted.delivery();
         if let Some(row) = self.rows.get(&delivery.identity) {
-            if row.binding != *delivery {
+            if row.binding != *delivery || row.lease.check != *check {
                 return Ok(DeliveryClaim::BindingConflict);
             }
             return if row.complete {
@@ -57,7 +61,7 @@ impl DeliveryLedger for MemoryLedger {
                 Ok(DeliveryClaim::Execute(row.lease.clone()))
             };
         }
-        let lease = lease();
+        let lease = lease_with(check.clone());
         self.rows.insert(
             delivery.identity.clone(),
             LedgerRow {
@@ -144,7 +148,11 @@ pub(crate) struct ScriptedLedger {
 impl DeliveryLedger for ScriptedLedger {
     type Error = LedgerError;
 
-    fn claim(&mut self, _delivery: &AcceptedDelivery) -> Result<DeliveryClaim, Self::Error> {
+    fn claim(
+        &mut self,
+        _delivery: &AcceptedDelivery,
+        _check: &CheckBinding,
+    ) -> Result<DeliveryClaim, Self::Error> {
         self.claim.take().ok_or(LedgerError)
     }
 
@@ -178,8 +186,13 @@ impl DeliveryLedger for ScriptedLedger {
 }
 
 pub(crate) fn lease() -> DeliveryLease {
+    lease_with(super::fixtures::binding())
+}
+
+fn lease_with(check: CheckBinding) -> DeliveryLease {
     DeliveryLease {
         evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        check,
         fence: LeaseFence::new(1).unwrap(),
         expires_at_unix_millis: 1_800_000_100_000,
     }
