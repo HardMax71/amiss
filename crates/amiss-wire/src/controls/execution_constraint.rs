@@ -1,8 +1,9 @@
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
-use crate::json::Value;
+use crate::json::{Value, canonical};
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
+use super::value::{object, repository, text};
 use super::{decode_digest, decode_repo_path, decode_repository, root};
 
 const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
@@ -63,6 +64,21 @@ pub struct ExecutionConstraintDescriptor {
     pub bootstrap_digest: Digest,
 }
 
+/// The controller-owned fields of an execution constraint. The schema and
+/// bootstrap contract are fixed by the wire type, and the digest is derived.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExecutionConstraintInput {
+    pub action_repository: RepositoryIdentity,
+    pub action_object_format: ObjectFormat,
+    pub action_commit_oid: Oid,
+    pub action_tree_oid: Oid,
+    pub manifest_path: RepoPathText,
+    pub release_manifest_digest: Digest,
+    pub selected_platform: ConstraintPlatform,
+    pub required_status_name: String,
+    pub bootstrap_digest: Digest,
+}
+
 fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
     let raw = de::string(path, value)?;
     let bytes = raw.as_bytes();
@@ -88,6 +104,19 @@ fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
 }
 
 impl ExecutionConstraintDescriptor {
+    /// Builds a descriptor through the same grammar, consistency, and digest
+    /// rules used for untrusted wire bytes. Construction does not authenticate
+    /// the action repository, tree, manifest, or bootstrap; the controller must
+    /// acquire those values independently of the repository-controlled run.
+    ///
+    /// # Errors
+    ///
+    /// A field violates [`Self::parse`], including an object ID that does not
+    /// match `action_object_format` or an invalid required status name.
+    pub fn new(input: ExecutionConstraintInput) -> Result<Self, Error> {
+        Self::parse(&canonical(&execution_constraint_value(input)))
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
@@ -161,4 +190,65 @@ impl ExecutionConstraintDescriptor {
             bootstrap_digest,
         })
     }
+
+    /// Serializes one valid descriptor to its unique canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// A public field was changed into a value [`Self::parse`] rejects, or
+    /// changed without replacing the derived `digest`.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
+        let bytes = canonical(&execution_constraint_value(self.into()));
+        let parsed = Self::parse(&bytes)?;
+        if parsed.digest != self.digest {
+            return fail("$.digest", ErrorKind::DigestMismatch);
+        }
+        Ok(bytes)
+    }
+}
+
+impl From<&ExecutionConstraintDescriptor> for ExecutionConstraintInput {
+    fn from(descriptor: &ExecutionConstraintDescriptor) -> Self {
+        Self {
+            action_repository: descriptor.action_repository.clone(),
+            action_object_format: descriptor.action_object_format,
+            action_commit_oid: descriptor.action_commit_oid.clone(),
+            action_tree_oid: descriptor.action_tree_oid.clone(),
+            manifest_path: descriptor.manifest_path.clone(),
+            release_manifest_digest: descriptor.release_manifest_digest,
+            selected_platform: descriptor.selected_platform,
+            required_status_name: descriptor.required_status_name.clone(),
+            bootstrap_digest: descriptor.bootstrap_digest,
+        }
+    }
+}
+
+fn execution_constraint_value(input: ExecutionConstraintInput) -> Value {
+    let ExecutionConstraintInput {
+        action_repository,
+        action_object_format,
+        action_commit_oid,
+        action_tree_oid,
+        manifest_path,
+        release_manifest_digest,
+        selected_platform,
+        required_status_name,
+        bootstrap_digest,
+    } = input;
+    object(vec![
+        ("schema", text(EXECUTION_CONSTRAINT_SCHEMA)),
+        ("action_repository", repository(&action_repository)),
+        ("action_object_format", text(action_object_format.as_str())),
+        ("action_commit_oid", text(action_commit_oid.as_str())),
+        ("action_tree_oid", text(action_tree_oid.as_str())),
+        ("manifest_path", text(manifest_path.as_str())),
+        (
+            "release_manifest_digest",
+            text(&release_manifest_digest.to_string()),
+        ),
+        ("selected_platform", text(selected_platform.as_str())),
+        ("required_status_name", Value::String(required_status_name)),
+        ("bootstrap_contract", text(ACTION_BOOTSTRAP_CONTRACT)),
+        ("bootstrap_digest", text(&bootstrap_digest.to_string())),
+    ])
 }

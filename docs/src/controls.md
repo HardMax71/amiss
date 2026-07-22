@@ -62,11 +62,13 @@ using the time.
 
 These are binding rules, not authentication. The separate controller must authenticate provider
 input before constructing requests for the exact run. Its provider-neutral sequence and durable
-retry contract are documented in [Controller delivery](controller.md); no concrete adapter,
-record, runner, or publisher implements that path today. The request's `forge` value remains only
-the URL dialect used by link resolution and is separate from the controller's provider namespace
-and instance identity. Debt must reproduce its adoption tree, and a waiver item for another
-candidate tree is simply not selected. The commit and staged-index paths share one
+retry contract are documented in [Controller delivery](controller.md). The controller library can
+bound ingress and verify supported webhook signature forms, while the wire library can now
+construct the canonical trusted-time and execution-constraint values. No concrete adapter,
+acquisition worker, runner, or publisher joins those parts today. The request's `forge` value
+remains only the URL dialect used by link resolution and is separate from the controller's
+provider namespace and instance identity. Debt must reproduce its adoption tree, and a waiver item
+for another candidate tree is simply not selected. The commit and staged-index paths share one
 [trusted-time, debt, and waiver pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 
 Debt and waiver require verified trusted time and a complete Git candidate. An item

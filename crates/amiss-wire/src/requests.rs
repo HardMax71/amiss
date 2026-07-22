@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 
+use crate::controls::value::{object, positive_safe_integer, repository, text};
 use crate::controls::{
     Profile, decode_provider_id, decode_provider_run_id, decode_repository, root,
 };
@@ -388,17 +389,7 @@ impl ControlsRequest {
     ///
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        if self
-            .trusted_time
-            .as_ref()
-            .is_some_and(|time| i64::try_from(time.provider_run_attempt).is_err())
-        {
-            return fail(
-                "$.trusted_time.provider_run_attempt",
-                ErrorKind::InvalidValue,
-            );
-        }
-        checked_canonical(&controls_value(self), Self::parse)
+        checked_canonical(&controls_value(self)?, Self::parse)
     }
 }
 
@@ -486,28 +477,8 @@ fn checked_canonical<T>(
     Ok(bytes)
 }
 
-fn text(value: &str) -> Value {
-    Value::String(value.to_owned())
-}
-
 fn optional_text(value: Option<&str>) -> Value {
     value.map_or(Value::Null, text)
-}
-
-fn object(rows: Vec<(&str, Value)>) -> Value {
-    Value::Object(
-        rows.into_iter()
-            .map(|(name, value)| (name.to_owned(), value))
-            .collect(),
-    )
-}
-
-fn repository_value(identity: &RepositoryIdentity) -> Value {
-    object(vec![
-        ("host", text(&identity.host)),
-        ("owner", text(&identity.owner)),
-        ("name", text(&identity.name)),
-    ])
 }
 
 fn evaluation_value(request: &EvaluationRequest) -> Value {
@@ -524,10 +495,7 @@ fn evaluation_value(request: &EvaluationRequest) -> Value {
         ("object_format", text(request.object_format.as_str())),
         (
             "repository",
-            request
-                .repository
-                .as_ref()
-                .map_or(Value::Null, repository_value),
+            request.repository.as_ref().map_or(Value::Null, repository),
         ),
         (
             "forge",
@@ -579,17 +547,20 @@ fn supplied_value(control: &SuppliedControl) -> Value {
     object(rows)
 }
 
-fn supplied_time_value(time: &SuppliedTime) -> Value {
+fn supplied_time_value(time: &SuppliedTime) -> Result<Value, Error> {
     let mut rows = supplied_rows(&time.value, time.expected_digest);
     rows.extend([
         ("provider", text(&time.provider)),
         ("provider_run_id", text(&time.provider_run_id)),
         (
             "provider_run_attempt",
-            Value::Integer(i64::try_from(time.provider_run_attempt).unwrap_or(i64::MAX)),
+            positive_safe_integer(
+                "$.trusted_time.provider_run_attempt",
+                time.provider_run_attempt,
+            )?,
         ),
     ]);
-    object(rows)
+    Ok(object(rows))
 }
 
 fn supplied_rows(value: &Value, expected_digest: Digest) -> Vec<(&'static str, Value)> {
@@ -599,7 +570,7 @@ fn supplied_rows(value: &Value, expected_digest: Digest) -> Vec<(&'static str, V
     ]
 }
 
-fn controls_value(request: &ControlsRequest) -> Value {
+fn controls_value(request: &ControlsRequest) -> Result<Value, Error> {
     let mut rows = Vec::with_capacity(6);
     for (name, control) in [
         ("organization_floor", request.organization_floor.as_ref()),
@@ -608,19 +579,19 @@ fn controls_value(request: &ControlsRequest) -> Value {
     ] {
         rows.push((name, optional_supplied(control)));
     }
-    rows.push((
-        "trusted_time",
-        request
-            .trusted_time
-            .as_ref()
-            .map_or(Value::Null, supplied_time_value),
-    ));
+    let trusted_time = request
+        .trusted_time
+        .as_ref()
+        .map(supplied_time_value)
+        .transpose()?
+        .unwrap_or(Value::Null);
+    rows.push(("trusted_time", trusted_time));
     rows.push((
         "execution_constraint",
         optional_supplied(request.execution_constraint.as_ref()),
     ));
     rows.push(("schema", text(CONTROLS_REQUEST_SCHEMA)));
-    object(rows)
+    Ok(object(rows))
 }
 
 fn optional_supplied(control: Option<&SuppliedControl>) -> Value {

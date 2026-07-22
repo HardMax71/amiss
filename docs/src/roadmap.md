@@ -56,25 +56,32 @@ validates its required constraint and trusted-time bindings, and carries the exa
 verified engine in a closed stdin frame. The separate, unpublished Rust workspace under
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines opaque provider
 identities and the provider-neutral contracts documented in
-[Controller delivery](controller.md). That is the full delivery, ownership, retry, and publication
-mechanism. Its traits, orchestrator, and focused tests exist; the concrete parts around them do not.
+[Controller delivery](controller.md). That page defines the full delivery, ownership, retry, and
+publication contract. Its traits, orchestrator, durable local file record, bounded ingress gate,
+rotating key ring, and GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers now
+exist. The wire library can also produce canonical execution constraints and trusted-time
+statements instead of only parsing them.
 
 That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
-GitHub, GitLab, or Gitea-family adapter, signature implementation, credential acquisition,
-durable ledger implementation, repository or action-tree acquisition worker, bootstrap runner,
-deployable service, publication transport, or provider check publisher. The GitHub composite
-Action remains a convenience event wrapper that launches the engine directly. No current path
-produces a provider-verified sandbox or turns an engine report into independently authenticated
-evidence.
+GitHub, GitLab, or Gitea-family adapter, authenticated payload decoder, provider API client or
+credential source, repository or action-tree acquisition worker, bootstrap runner, deployable
+service, publication transport, or provider check publisher. The signature implementations are
+not wired to a listener or authoritative provider refresh. The GitHub composite Action remains a
+convenience event wrapper that launches the engine directly. No current path produces a provider-
+verified sandbox or turns an engine report into independently authenticated evidence.
 
-What remains is to implement and deploy that flow: choose trust anchors and rotation,
-freshness, revocation, and replay-retention windows; select a durable non-database mechanism that
-meets the delivery contract; build each provider adapter against capabilities the provider
-actually offers; connect the controller runner to repository acquisition and `amiss-bootstrap`
-with bounded polling, heartbeat cadence, and cancellation; bound provider refreshes below the
-lease window; make repeated publication of the same source-bound required check safe; and cover
-wrong provider, repository, change, ref, commit, tree, expiry, replay, revocation, missing output,
-timeout, and tampered runtime closure in end-to-end negative tests.
+What remains is to put that library boundary behind a bounded HTTP receiver; build each provider
+adapter against capabilities the provider actually offers; obtain API credentials independently
+of the repository; connect exact repository and action-tree acquisition to `amiss-bootstrap` with
+bounded polling, heartbeat cadence, whole-process-group cancellation, and a stable machine failure
+channel; bound provider refreshes below the lease window; and make repeated publication of the
+same source-bound required check safe. End-to-end negative tests must still cover wrong provider,
+repository, change, ref, commit, tree, expiry, replay, revocation, missing output, timeout, and
+tampered runtime closure. GitHub and Gitea-family signatures expose no authenticated delivery-
+attempt timestamp, so their replay-only routes require permanent done records; cleanup cannot be
+guessed from a local age threshold. The GitLab Standard Webhooks form authenticates its timestamp,
+so a GitLab route must require a bounded freshness window; replay-only would be invalid
+configuration.
 Link dialect support in the engine's `forge` field is not evidence that an authenticated adapter
 exists.
 

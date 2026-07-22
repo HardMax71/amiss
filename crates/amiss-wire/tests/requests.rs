@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 
 use amiss_wire::controls::{OrganizationFloor, Profile, TrustedTimeStatement};
+use amiss_wire::de::ErrorKind;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL, RequestMode, RequestStreams,
@@ -212,16 +213,17 @@ fn request_writers_are_canonical_and_the_sealed_frame_is_exact() {
         "a fourth stream cannot hide after the closed frame"
     );
 
-    let mut overflow = controls;
-    overflow
-        .trusted_time
-        .as_mut()
-        .expect("the request example carries trusted time")
-        .provider_run_attempt = u64::try_from(i64::MAX).unwrap().saturating_add(1);
-    assert!(
-        overflow.canonical_bytes().is_err(),
-        "the writer refuses an attempt the JSON integer contract cannot represent"
-    );
+    for attempt in [0, 9_007_199_254_740_992, u64::MAX] {
+        let mut invalid = controls.clone();
+        invalid
+            .trusted_time
+            .as_mut()
+            .expect("the request example carries trusted time")
+            .provider_run_attempt = attempt;
+        let error = invalid.canonical_bytes().unwrap_err();
+        assert_eq!(error.path, "$.trusted_time.provider_run_attempt");
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+    }
 }
 
 /// The candidate commit is null exactly when the mode is `index`. Both ways of

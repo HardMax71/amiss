@@ -92,10 +92,25 @@ as missing output, timeout, tampered runtime, or an output bound to the wrong id
 remain fail-closed conclusions rather than passes. [Controller delivery](controller.md) defines
 the complete flow, durable record, race, and retry rules.
 
-There is still no concrete provider adapter, webhook listener, signature verifier, API client,
-credential source, repository or action-tree acquisition worker, runner connection to bootstrap,
-deployable controller, or provider check publisher. No authenticated integration exists for
-GitHub, GitLab, Gitea-family providers, or their self-hosted instances. The engine's `forge`
-field still selects only a link URL dialect.
+The concrete file record requires a pre-created private local directory outside the repository and
+action tree. A future service must own that directory and set its operating-system permissions or
+access-control list: anyone who can read or change it is inside the trust boundary. Its checksums
+detect damage; they do not authenticate a writer. Shared and network filesystems are unsupported.
+The current code has no retention cleanup or total-volume ceiling. A future service must monitor
+and cap that private volume. It must not expire GitHub or Gitea-family done rows from local age
+alone: their exact-body signatures authenticate no delivery-attempt time, and forgetting a row
+would reopen replay for the captured body.
+
+The controller library now bounds raw ingress and verifies GitHub, GitLab Standard Webhooks, and
+Gitea-family HMAC signatures against rotating, redacted anchors. GitHub and Gitea replay identity
+comes from the exact signed body rather than their unsigned delivery headers; GitLab binds its
+signed ID and timestamp. A verifier proof is tied to the exact controller route, receipt time,
+header sequence, and body, and its fields cannot be rewritten by an adapter. Ingress rejects a
+GitLab proof under a replay-only route, so its signed timestamp must be checked for freshness.
+There is still no concrete provider adapter,
+route loader, webhook listener, authenticated payload decoder, API client, credential source,
+repository or action-tree acquisition worker, runner connection to bootstrap, deployable
+controller, or provider check publisher. No authenticated integration exists for any provider or
+self-hosted instance. The engine's `forge` field still selects only a link URL dialect.
 The JavaScript launcher is pinned manifest data and refuses if invoked directly; the current
 composite Action does not invoke bootstrap or the controller.
