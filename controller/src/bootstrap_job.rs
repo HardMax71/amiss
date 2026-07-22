@@ -58,6 +58,13 @@ pub struct CheckPlan {
     pub execution: ExecutionConstraintDescriptor,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckBinding {
+    pub plan_digest: Digest,
+    pub required_status_name: String,
+    pub execution_constraint_digest: Digest,
+}
+
 /// Freezes the controller-owned policy and required-check target reused by
 /// every claim for one authenticated delivery.
 ///
@@ -85,6 +92,19 @@ pub fn check_plan(
     })
 }
 
+/// Projects the small retry-safe binding persisted by the delivery record.
+///
+/// # Errors
+///
+/// The public plan fields no longer reproduce the frozen digest.
+pub fn check_binding(plan: &CheckPlan) -> Result<CheckBinding, BootstrapJobError> {
+    validated_plan(plan).map(|checked| CheckBinding {
+        plan_digest: checked.digest,
+        required_status_name: checked.execution.required_status_name,
+        execution_constraint_digest: checked.execution.digest,
+    })
+}
+
 pub struct BootstrapJobInput<'a> {
     pub run: &'a RunRequest,
     pub plan: &'a CheckPlan,
@@ -106,14 +126,7 @@ pub struct BootstrapJob {
 /// The run is internally inconsistent, a control is malformed or names
 /// another run, trusted time is invalid, or canonical encoding fails.
 pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, BootstrapJobError> {
-    let checked_plan = check_plan(
-        input.plan.profile,
-        input.plan.policy.clone(),
-        input.plan.execution.clone(),
-    )?;
-    (checked_plan.digest == input.plan.digest)
-        .then_some(())
-        .ok_or(BootstrapJobError::CheckPlan)?;
+    let checked_plan = validated_plan(input.plan)?;
     let run = &input.run.run;
     (input.run.delivery.provider == run.change.provider
         && input.run.provider_run.object_format == run.object_format
@@ -122,7 +135,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         .ok_or(BootstrapJobError::RunIdentity)?;
 
     let mut evaluation = EvaluationRequest::commit_pair(
-        input.plan.profile,
+        checked_plan.profile,
         run.object_format,
         run.commits.base.clone(),
         run.commits.candidate.clone(),
@@ -153,20 +166,19 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     let statement_value =
         json::parse(&statement_bytes).map_err(|_defect| BootstrapJobError::TrustedTime)?;
 
-    let constraint = input
-        .plan
+    let constraint = checked_plan
         .execution
         .canonical_bytes()
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let constraint_value =
         json::parse(&constraint).map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let controls = controls::request(
-        &input.plan.policy,
+        &checked_plan.policy,
         run,
         supplied_time(input.run, &statement, statement_value),
         SuppliedControl {
             value: constraint_value,
-            expected_digest: input.plan.execution.digest,
+            expected_digest: checked_plan.execution.digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
     )?;
@@ -185,6 +197,13 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         streams,
         constraint,
     })
+}
+
+fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJobError> {
+    let checked = check_plan(plan.profile, plan.policy.clone(), plan.execution.clone())?;
+    (checked.digest == plan.digest)
+        .then_some(checked)
+        .ok_or(BootstrapJobError::CheckPlan)
 }
 
 fn plan_value(
