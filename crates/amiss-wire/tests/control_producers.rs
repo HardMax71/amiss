@@ -8,7 +8,7 @@ use std::path::Path;
 
 use amiss_wire::controls::{
     ConstraintPlatform, ExecutionConstraintDescriptor, ExecutionConstraintInput, TrustedTimeInput,
-    TrustedTimeStatement,
+    TrustedTimeStatement, valid_required_status_name,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
@@ -128,6 +128,16 @@ fn execution_constraint_writer_rejects_a_stale_digest() {
     let error = descriptor.canonical_bytes().unwrap_err();
     assert_eq!(error.path, "$.digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
+}
+
+#[test]
+fn required_status_names_share_one_public_grammar() {
+    for valid in ["a", "amiss / documentation assurance", "docs.check_1"] {
+        assert!(valid_required_status_name(valid), "{valid}");
+    }
+    for invalid in ["", " amiss", "amiss ", "amiss:docs", &"a".repeat(161)] {
+        assert!(!valid_required_status_name(invalid), "{invalid}");
+    }
 }
 
 #[test]

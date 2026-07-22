@@ -24,6 +24,7 @@ pub(crate) mod value;
 
 pub use execution_constraint::{
     ConstraintPlatform, ExecutionConstraintDescriptor, ExecutionConstraintInput,
+    valid_required_status_name,
 };
 pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeInput, TrustedTimeStatement};
 
