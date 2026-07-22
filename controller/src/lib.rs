@@ -10,7 +10,8 @@ mod provider;
 mod webhook;
 
 pub use bootstrap_job::{
-    AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, PolicyControls,
+    AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckPlan, PolicyControls,
+    bootstrap_job, check_plan,
 };
 pub use clock::{ControllerClock, SystemClock};
 pub use file_ledger::{FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError};
