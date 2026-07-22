@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod bootstrap_job;
 mod clock;
 mod file_ledger;
 mod identity;
@@ -8,6 +9,9 @@ mod orchestration;
 mod provider;
 mod webhook;
 
+pub use bootstrap_job::{
+    AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, PolicyControls,
+};
 pub use clock::{ControllerClock, SystemClock};
 pub use file_ledger::{FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError};
 pub use identity::{
