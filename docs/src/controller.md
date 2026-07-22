@@ -145,11 +145,12 @@ high-water updates. The first byte of the delivery digest selects one of 256 sta
 a shard collision may serialize unrelated rows but cannot let two processes win one transition.
 These fixed names avoid one permanent lock file per delivery.
 
-Root metadata is itself a versioned, checksummed frame. It fixes the maximum record count and the
-signed-age and queue ceilings for every process using that root, and stores the highest trusted
-controller time the ledger has seen. Opening the same root with a different record cap or replay
-window fails. New identities are counted and admitted atomically; once the cap is full they fail
-before a state file is created, while an existing row can still renew, save, publish, and complete.
+Root metadata is itself a versioned, checksummed frame. It fixes the lease duration, maximum record
+count, and signed-age and queue ceilings for every process using that root, and stores the highest
+trusted controller time the ledger has seen. Opening the same root with a different lease, record
+cap, or replay window fails. New identities are counted and admitted atomically; once the cap is
+full they fail before a state file is created, while an existing row can still renew, save, publish,
+and complete.
 Operators must size the cap to include permanent replay markers.
 
 The state file is a versioned, length-delimited, checksummed frame containing canonical JSON and is
@@ -234,7 +235,8 @@ pub trait DeliveryLedger {
 | `BindingConflict` | The same delivery key was reused for different authenticated work. | Reject it before any provider refresh, run, or publication. |
 
 `FileLedger` can also reject a new identity with `Full`, reject an already ended bounded delivery
-with `Expired`, or reject a root whose saved cap or replay window differs from the configured one.
+with `Expired`, or reject a root whose saved lease duration, cap, or replay window differs from the
+configured one.
 These are fail-closed admission results, not reasons to evict live, saved, or permanent replay
 rows.
 

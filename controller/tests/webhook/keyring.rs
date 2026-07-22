@@ -1,5 +1,5 @@
 use amiss_controller::{
-    GitHubWebhook, WebhookError, WebhookKey, WebhookKeyring, WebhookKeyringError,
+    GitHubWebhook, IngressError, WebhookError, WebhookKey, WebhookKeyring, WebhookKeyringError,
 };
 
 use super::support::{NOW, anchor, header, key, replay_check, ring, trust_set};
@@ -79,35 +79,37 @@ fn debug_output_redacts_secret_material() {
 }
 
 #[test]
-fn replacing_the_keyring_revokes_an_omitted_anchor() {
+fn replacing_the_keyring_revokes_an_omitted_anchor() -> Result<(), IngressError> {
     let old = GitHubWebhook::new(ring("old", OLD_SECRET));
     let headers = [header("x-hub-signature-256", OLD_SIGNATURE)];
-    assert!(old.verify(replay_check(&headers, BODY, NOW)).is_ok());
+    assert!(old.verify(replay_check(&headers, BODY, NOW)?).is_ok());
 
     let replacement = GitHubWebhook::new(ring("replacement", b"replacement-webhook-secret-2026"));
     assert_eq!(
-        replacement.verify(replay_check(&headers, BODY, NOW)),
+        replacement.verify(replay_check(&headers, BODY, NOW)?),
         Err(WebhookError::Authentication)
     );
+    Ok(())
 }
 
 #[test]
-fn rejects_an_inactive_set() {
+fn rejects_an_inactive_set() -> Result<(), IngressError> {
     let future =
         WebhookKeyring::new(trust_set(), vec![key("future", OLD_SECRET, NOW + 1, None)]).unwrap();
     let headers = [header("x-hub-signature-256", OLD_SIGNATURE)];
     assert_eq!(
-        GitHubWebhook::new(future).verify(replay_check(&headers, BODY, NOW)),
+        GitHubWebhook::new(future).verify(replay_check(&headers, BODY, NOW)?),
         Err(WebhookError::NoActiveAnchor)
     );
+    Ok(())
 }
 
 #[test]
-fn bounds_and_validates_the_complete_header_block() {
+fn bounds_and_validates_the_complete_header_block() -> Result<(), IngressError> {
     let verifier = GitHubWebhook::new(ring("active", OLD_SECRET));
     let too_many = vec![header("x-noop", b"value"); 129];
     assert_eq!(
-        verifier.verify(replay_check(&too_many, BODY, NOW)),
+        verifier.verify(replay_check(&too_many, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
 
@@ -117,7 +119,7 @@ fn bounds_and_validates_the_complete_header_block() {
         header("x-hub-signature-256", OLD_SIGNATURE),
     ];
     assert_eq!(
-        verifier.verify(replay_check(&oversized_headers, BODY, NOW)),
+        verifier.verify(replay_check(&oversized_headers, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
     let invalid_name = [
@@ -125,7 +127,7 @@ fn bounds_and_validates_the_complete_header_block() {
         header("x-hub-signature-256", OLD_SIGNATURE),
     ];
     assert_eq!(
-        verifier.verify(replay_check(&invalid_name, BODY, NOW)),
+        verifier.verify(replay_check(&invalid_name, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
     let invalid_value = [
@@ -133,7 +135,8 @@ fn bounds_and_validates_the_complete_header_block() {
         header("x-hub-signature-256", OLD_SIGNATURE),
     ];
     assert_eq!(
-        verifier.verify(replay_check(&invalid_value, BODY, NOW)),
+        verifier.verify(replay_check(&invalid_value, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
+    Ok(())
 }

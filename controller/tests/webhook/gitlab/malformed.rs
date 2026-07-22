@@ -1,4 +1,6 @@
-use amiss_controller::{GitLabWebhook, WebhookError, WebhookKey, WebhookKeyringError};
+use amiss_controller::{
+    GitLabWebhook, IngressError, WebhookError, WebhookKey, WebhookKeyringError,
+};
 use secrecy::SecretString;
 
 use super::{BODY, ID, SECRET, SIGNATURE, TIMESTAMP, headers};
@@ -26,17 +28,18 @@ fn rejects_malformed_standard_webhooks_tokens() {
 }
 
 #[test]
-fn legacy_plaintext_token_is_not_an_authentication_path() {
+fn legacy_plaintext_token_is_not_an_authentication_path() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     let headers = [header("x-gitlab-token", SECRET)];
     assert_eq!(
-        verifier.verify(signed_check(&headers, BODY, NOW)),
+        verifier.verify(signed_check(&headers, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
+    Ok(())
 }
 
 #[test]
-fn requires_exactly_one_of_each_signed_header() {
+fn requires_exactly_one_of_each_signed_header() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     let duplicate = [
         header("webhook-id", ID),
@@ -45,7 +48,7 @@ fn requires_exactly_one_of_each_signed_header() {
         header("webhook-signature", SIGNATURE),
     ];
     assert_eq!(
-        verifier.verify(signed_check(&duplicate, BODY, NOW)),
+        verifier.verify(signed_check(&duplicate, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
 
@@ -54,13 +57,14 @@ fn requires_exactly_one_of_each_signed_header() {
         header("webhook-timestamp", TIMESTAMP),
     ];
     assert_eq!(
-        verifier.verify(signed_check(&missing, BODY, NOW)),
+        verifier.verify(signed_check(&missing, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
+    Ok(())
 }
 
 #[test]
-fn rejects_ambiguous_ids_and_noncanonical_timestamps() {
+fn rejects_ambiguous_ids_and_noncanonical_timestamps() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     let dotted = [
         header("webhook-id", b"left.right"),
@@ -79,21 +83,22 @@ fn rejects_ambiguous_ids_and_noncanonical_timestamps() {
     ];
 
     assert_eq!(
-        verifier.verify(signed_check(&dotted, BODY, NOW)),
+        verifier.verify(signed_check(&dotted, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
     assert_eq!(
-        verifier.verify(signed_check(&leading_zero, BODY, NOW)),
+        verifier.verify(signed_check(&leading_zero, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
     assert_eq!(
-        verifier.verify(signed_check(&overflow, BODY, NOW)),
+        verifier.verify(signed_check(&overflow, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
+    Ok(())
 }
 
 #[test]
-fn bounds_and_strictly_decodes_signature_entries() {
+fn bounds_and_strictly_decodes_signature_entries() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     for malformed in [
         b"v2,eoSaLtOFqb9PT8wdg5hLQ8m9BxoPEp7HLufb1Anqlzg=".as_slice(),
@@ -104,7 +109,7 @@ fn bounds_and_strictly_decodes_signature_entries() {
         assert_eq!(
             {
                 let headers = headers(malformed);
-                verifier.verify(signed_check(&headers, BODY, NOW))
+                verifier.verify(signed_check(&headers, BODY, NOW)?)
             },
             Err(WebhookError::Headers)
         );
@@ -117,7 +122,7 @@ fn bounds_and_strictly_decodes_signature_entries() {
     );
     let duplicate_headers = headers(duplicate.as_bytes());
     assert_eq!(
-        verifier.verify(signed_check(&duplicate_headers, BODY, NOW)),
+        verifier.verify(signed_check(&duplicate_headers, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
 
@@ -126,7 +131,8 @@ fn bounds_and_strictly_decodes_signature_entries() {
         .join(" ");
     let too_many_headers = headers(too_many.as_bytes());
     assert_eq!(
-        verifier.verify(signed_check(&too_many_headers, BODY, NOW)),
+        verifier.verify(signed_check(&too_many_headers, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
+    Ok(())
 }

@@ -12,7 +12,8 @@ use tempfile::TempDir;
 
 use super::support::{
     BOUNDED_ISSUED_AT, BOUNDED_KEEP_THROUGH, LEASE, TestClock, bounded_delivery, config,
-    delivery_with_id, executed, is_delivery_file, open_with_max, publication, staged,
+    delivery_with_id, executed, is_delivery_file, open_with_max, publication, replay_window,
+    staged,
 };
 
 #[test]
@@ -78,8 +79,18 @@ fn pruning_a_bounded_completion_frees_capacity_for_a_new_identity() {
 
 #[test]
 fn immutable_root_limits_must_match_on_reopen() {
-    let maximum_directory = TempDir::new().unwrap();
+    let lease_directory = TempDir::new().unwrap();
     let clock = Arc::new(TestClock::new(1_000));
+    drop(open_with_max(lease_directory.path(), &clock, 1));
+    let longer_lease = LEASE.checked_add(Duration::from_millis(1)).unwrap();
+    let different_lease = FileLedgerConfig::new(longer_lease, 1, replay_window()).unwrap();
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(matches!(
+        FileLedger::open_with_clock(lease_directory.path(), different_lease, clock_source),
+        Err(FileLedgerError::Configuration)
+    ));
+
+    let maximum_directory = TempDir::new().unwrap();
     drop(open_with_max(maximum_directory.path(), &clock, 1));
     let clock_source: Arc<dyn ControllerClock> = clock.clone();
     assert!(matches!(

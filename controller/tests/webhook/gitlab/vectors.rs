@@ -1,11 +1,11 @@
-use amiss_controller::{GitLabWebhook, ReplayIdentity, WebhookError, WebhookKeyring};
+use amiss_controller::{GitLabWebhook, IngressError, ReplayIdentity, WebhookError, WebhookKeyring};
 use secrecy::SecretString;
 
 use super::{BODY, ID, NEW_SECRET, NEW_SIGNATURE, SECRET, SIGNATURE, TIMESTAMP, headers};
 use crate::support::{NOW, anchor, header, key, ring, signed_check, trust_set};
 
 #[test]
-fn accepts_a_standard_webhooks_vector() {
+fn accepts_a_standard_webhooks_vector() -> Result<(), IngressError> {
     let key = amiss_controller::WebhookKey::from_standard_token(
         anchor("gitlab-current"),
         SecretString::from("whsec_MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="),
@@ -15,7 +15,7 @@ fn accepts_a_standard_webhooks_vector() {
     .unwrap();
     let verifier = GitLabWebhook::new(WebhookKeyring::new(trust_set(), vec![key]).unwrap());
     let headers = headers(SIGNATURE);
-    let proof = verifier.verify(signed_check(&headers, BODY, NOW)).unwrap();
+    let proof = verifier.verify(signed_check(&headers, BODY, NOW)?).unwrap();
 
     assert_eq!(proof.trust_set(), &trust_set());
     assert_eq!(proof.anchor(), &anchor("gitlab-current"));
@@ -27,10 +27,11 @@ fn accepts_a_standard_webhooks_vector() {
         )
     );
     assert_eq!(proof.issued_at_unix_millis(), Some(NOW));
+    Ok(())
 }
 
 #[test]
-fn accepts_multiple_rotation_signatures_and_reports_the_newest_key() {
+fn accepts_multiple_rotation_signatures_and_reports_the_newest_key() -> Result<(), IngressError> {
     let keys = WebhookKeyring::new(
         trust_set(),
         vec![
@@ -49,26 +50,28 @@ fn accepts_multiple_rotation_signatures_and_reports_the_newest_key() {
     let headers = headers(signatures.as_bytes());
     assert_eq!(
         verifier
-            .verify(signed_check(&headers, BODY, NOW))
+            .verify(signed_check(&headers, BODY, NOW)?)
             .unwrap()
             .anchor(),
         &anchor("current")
     );
+    Ok(())
 }
 
 #[test]
-fn authenticates_raw_bytes_without_decoding_an_event() {
+fn authenticates_raw_bytes_without_decoding_an_event() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     let signature = b"v1,YvjfiRRw3NtVOi9qkGYp0ufalxqO3NH1BJKWe/sz5Y4=";
     let headers = headers(signature);
     let proof = verifier
-        .verify(signed_check(&headers, b"not json", NOW))
+        .verify(signed_check(&headers, b"not json", NOW)?)
         .unwrap();
     assert_eq!(proof.anchor(), &anchor("gitlab-current"));
+    Ok(())
 }
 
 #[test]
-fn every_signed_component_is_bound() {
+fn every_signed_component_is_bound() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     let changed_id = [
         header("webhook-id", b"f5e5f430-f57b-4e6e-9fac-d9128cd7232e"),
@@ -82,28 +85,30 @@ fn every_signed_component_is_bound() {
     ];
 
     assert_eq!(
-        verifier.verify(signed_check(&changed_id, BODY, NOW)),
+        verifier.verify(signed_check(&changed_id, BODY, NOW)?),
         Err(WebhookError::Authentication)
     );
     assert_eq!(
-        verifier.verify(signed_check(&changed_time, BODY, NOW)),
+        verifier.verify(signed_check(&changed_time, BODY, NOW)?),
         Err(WebhookError::Authentication)
     );
     assert_eq!(
         {
             let headers = headers(SIGNATURE);
-            verifier.verify(signed_check(&headers, b"{}", NOW))
+            verifier.verify(signed_check(&headers, b"{}", NOW)?)
         },
         Err(WebhookError::Authentication)
     );
+    Ok(())
 }
 
 #[test]
-fn rejects_a_signature_from_an_unconfigured_secret() {
+fn rejects_a_signature_from_an_unconfigured_secret() -> Result<(), IngressError> {
     let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
     let headers = headers(NEW_SIGNATURE);
     assert_eq!(
-        verifier.verify(signed_check(&headers, BODY, NOW)),
+        verifier.verify(signed_check(&headers, BODY, NOW)?),
         Err(WebhookError::Authentication)
     );
+    Ok(())
 }

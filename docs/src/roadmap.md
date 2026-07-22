@@ -50,8 +50,9 @@ inspectable; version-specific history stays in the
 <summary>Done: delivery record</summary>
 
 - [`DeliveryLedger`](controller.md) fixes the four-state claim, lease, saved-result, and
-  completion contract. An expired owner cannot save or publish, an exact saved result survives a
-  retry, and a retained exact completion marker is repeatable without granting new work.
+  completion contract. An expired owner cannot save a new result, an exact result saved before
+  expiry remains publishable on retry, and a retained exact completion marker is repeatable without
+  granting new work.
 - Trusted ingress gives every accepted delivery a replay lifetime. Exact-body and replay-only
   requests are permanent. A request with an authenticated ID and issue time gets a fixed end from
   the controller's signed-age and queue ceilings; a route may narrow freshness but cannot extend

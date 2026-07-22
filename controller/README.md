@@ -13,13 +13,14 @@ permanent completion markers because their signatures contain no trusted attempt
 durable retry coordination, and trusted execution.
 [Controller delivery](../docs/src/controller.md) documents the full flow, logical record,
 heartbeats, races, and retry rules. `FileLedger` implements the record with operating-system file
-locks and cross-platform atomic file replacement. Checksummed root metadata fixes the record cap
-and replay window and keeps a high-water clock. One maintenance lock, one admission lock, one clock
-lock, and at most 256 row-lock shards bound lock growth. New identities stop at the cap; existing
-work can finish. Cleanup removes dead files and only bounded completed rows whose authenticated
-lifetime has ended. Permanent completion markers, running work, and saved results remain. A row
-uses one state path and at most one report path; completion removes the report. It deliberately
-uses no SQL or database and does not add storage to the offline root workspace.
+locks and cross-platform atomic file replacement. Checksummed root metadata fixes the lease
+duration, record cap, and replay window and keeps a high-water clock. One maintenance lock, one
+admission lock, one clock lock, and at most 256 row-lock shards bound lock growth. New identities
+stop at the cap; existing work can finish. Cleanup removes dead files and only bounded completed
+rows whose authenticated lifetime has ended. Permanent completion markers, running work, and saved
+results remain. A row uses one state path and at most one report path; completion removes the
+report. It deliberately uses no SQL or database and does not add storage to the offline root
+workspace.
 
 No HTTP server, authenticated payload decoder, concrete provider adapter, API client, credential
 store, acquisition worker, bootstrap runner, provider check publisher, publication transport, or
