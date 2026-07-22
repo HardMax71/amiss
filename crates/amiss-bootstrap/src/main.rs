@@ -1,6 +1,6 @@
 use std::env;
-use std::ffi::OsString;
-use std::fs::OpenOptions;
+use std::ffi::{OsStr, OsString};
+use std::fs::{File, OpenOptions};
 use std::io::{Read as _, Write as _};
 use std::path::PathBuf;
 use std::process::{ExitCode, Stdio};
@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use amiss_bootstrap::result::{BootstrapResult, result_bytes};
 use amiss_bootstrap::supervise::{
-    AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
-    Supervised, settle, supervise,
+    Defect, Expectations, SealedControlExpectation, SealedExpectations, Supervised, settle,
+    supervise,
 };
 use amiss_bootstrap::{Refusal, validate};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
@@ -45,17 +45,19 @@ const PRIVATE_ENGINE_NAME: &str = "engine";
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
-    let Some(parsed) = parse_args(&argv) else {
+    let Some((parsed, mut output)) = parse_args(&argv)
+        .and_then(|parsed| open_output(&parsed).ok().map(|output| (parsed, output)))
+    else {
         eprintln!("amiss-bootstrap: invalid-invocation");
         return ExitCode::from(2);
     };
     let completion = execute(&parsed)
-        .and_then(|accepted| publish(&parsed.report, accepted))
+        .and_then(|accepted| publish(&mut output.report, accepted))
         .unwrap_or_else(failed_completion);
     if let Some(diagnostic) = completion.diagnostic {
         eprintln!("amiss-bootstrap: {diagnostic}");
     }
-    if write_new(&parsed.result, result_bytes(completion.result)).is_err() {
+    if write_output(&mut output.result, result_bytes(completion.result)).is_err() {
         eprintln!("amiss-bootstrap: result-unavailable");
         return ExitCode::from(2);
     }
@@ -202,7 +204,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     }
     let report = report?;
     let result = result?;
-    if report == result || !new_absolute_path(&report) || !new_absolute_path(&result) {
+    if !output_path(&report, &scratch, "report") || !output_path(&result, &scratch, "result") {
         return None;
     }
     Some(Args {
@@ -218,10 +220,33 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     })
 }
 
-fn new_absolute_path(path: &std::path::Path) -> bool {
+fn output_path(path: &std::path::Path, scratch: &std::path::Path, name: &str) -> bool {
     path.is_absolute()
+        && path.parent() == Some(scratch)
+        && path.file_name() == Some(OsStr::new(name))
         && std::fs::symlink_metadata(path)
-            .is_err_and(|defect| defect.kind() == std::io::ErrorKind::NotFound)
+            .is_ok_and(|metadata| metadata.file_type().is_file() && metadata.len() == 0)
+}
+
+struct OutputFiles {
+    report: File,
+    result: File,
+}
+
+fn open_output(args: &Args) -> std::io::Result<OutputFiles> {
+    Ok(OutputFiles {
+        report: open_output_file(&args.report)?,
+        result: open_output_file(&args.result)?,
+    })
+}
+
+fn open_output_file(path: &std::path::Path) -> std::io::Result<File> {
+    let file = OpenOptions::new().write(true).open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.len() != 0 {
+        return Err(std::io::Error::other("invalid output file"));
+    }
+    Ok(file)
 }
 
 #[derive(Clone)]
@@ -369,7 +394,7 @@ fn control_expectation(
 }
 
 fn read_bounded(path: &std::path::Path) -> Result<Vec<u8>, ReadDefect> {
-    let file = std::fs::File::open(path).map_err(|_defect| ReadDefect::Unavailable)?;
+    let file = File::open(path).map_err(|_defect| ReadDefect::Unavailable)?;
     let mut bytes = Vec::new();
     file.take(REQUEST_STREAM_BYTES.saturating_add(1))
         .read_to_end(&mut bytes)
@@ -501,13 +526,13 @@ fn collect(
 }
 
 /// Publishes the accepted envelope before exposing its result record.
-fn publish(path: &std::path::Path, accepted: Accepted) -> Execution<Completion> {
+fn publish(report: &mut File, accepted: Accepted) -> Execution<Completion> {
     let Accepted {
         wire,
         class,
         result,
     } = accepted;
-    write_new(path, &wire).map_err(|_defect| unavailable("report-publish-failed"))?;
+    write_output(report, &wire).map_err(|_defect| unavailable("report-publish-failed"))?;
     Ok(Completion {
         result,
         exit: ExitCode::from(class),
@@ -515,15 +540,9 @@ fn publish(path: &std::path::Path, accepted: Accepted) -> Execution<Completion> 
     })
 }
 
-fn write_new(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
-    let written = file.write_all(bytes).and_then(|()| file.flush());
-    if let Err(defect) = written {
-        drop(file);
-        let _removed = std::fs::remove_file(path);
-        return Err(defect);
-    }
-    Ok(())
+fn write_output(file: &mut File, bytes: &[u8]) -> std::io::Result<()> {
+    file.write_all(bytes)?;
+    file.flush()
 }
 
 const fn settlement_failure(defect: Defect, empty: bool) -> Failure {
@@ -542,26 +561,7 @@ const fn settlement_failure(defect: Defect, empty: bool) -> Failure {
             result: BootstrapResult::MissingOutput,
             diagnostic: "report-missing",
         },
-        Defect::Acceptance(defect) => tampered(refused(Defect::Acceptance(defect))),
-    }
-}
-
-const fn refused(defect: Defect) -> &'static str {
-    match defect {
-        Defect::Killed => "evaluator-watchdog-kill",
-        Defect::Signalled => "evaluator-signalled",
-        Defect::Oversize => "report-over-wire-ceiling",
-        Defect::ExitMismatch => "evaluator-exit-mismatch",
-        Defect::Acceptance(AcceptanceDefect::Shape) => "report-shape",
-        Defect::Acceptance(AcceptanceDefect::Noncanonical) => "report-noncanonical",
-        Defect::Acceptance(AcceptanceDefect::PayloadDigest) => "report-payload-digest",
-        Defect::Acceptance(AcceptanceDefect::Engine) => "report-engine-mismatch",
-        Defect::Acceptance(AcceptanceDefect::BaseIdentity) => "report-base-mismatch",
-        Defect::Acceptance(AcceptanceDefect::CandidateIdentity) => "report-candidate-mismatch",
-        Defect::Acceptance(AcceptanceDefect::SealedIdentity) => "report-request-mismatch",
-        Defect::Acceptance(AcceptanceDefect::SealedControls) => "report-controls-mismatch",
-        Defect::Acceptance(AcceptanceDefect::Completeness) => "report-completeness",
-        Defect::Acceptance(AcceptanceDefect::FindingCount) => "report-finding-count",
+        Defect::Acceptance(_defect) => tampered("report-rejected"),
     }
 }
 
