@@ -40,7 +40,8 @@ const PRIVATE_ENGINE_NAME: &str = "engine";
 /// `PATH`, and never downloads, installs, or discovers anything.
 ///
 /// `amiss-bootstrap exec --action-repository P --repository P --constraint F
-/// --evaluation-request F --snapshot-request F --controls-request F --result F`
+/// --evaluation-request F --snapshot-request F --controls-request F --scratch P
+/// --report F --result F`
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
@@ -49,12 +50,12 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     let completion = execute(&parsed)
-        .and_then(publish)
+        .and_then(|accepted| publish(&parsed.report, accepted))
         .unwrap_or_else(failed_completion);
     if let Some(diagnostic) = completion.diagnostic {
         eprintln!("amiss-bootstrap: {diagnostic}");
     }
-    if write_result(&parsed.result, completion.result).is_err() {
+    if write_new(&parsed.result, result_bytes(completion.result)).is_err() {
         eprintln!("amiss-bootstrap: result-unavailable");
         return ExitCode::from(2);
     }
@@ -155,6 +156,8 @@ struct Args {
     evaluation_request: PathBuf,
     snapshot_request: PathBuf,
     controls_request: PathBuf,
+    scratch: PathBuf,
+    report: PathBuf,
     result: PathBuf,
 }
 
@@ -165,6 +168,8 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     let mut evaluation_request: Option<PathBuf> = None;
     let mut snapshot_request: Option<PathBuf> = None;
     let mut controls_request: Option<PathBuf> = None;
+    let mut scratch: Option<PathBuf> = None;
+    let mut report: Option<PathBuf> = None;
     let mut result: Option<PathBuf> = None;
     let mut items = argv.iter();
     if items.next()? != "exec" {
@@ -179,6 +184,8 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
             "--evaluation-request" => &mut evaluation_request,
             "--snapshot-request" => &mut snapshot_request,
             "--controls-request" => &mut controls_request,
+            "--scratch" => &mut scratch,
+            "--report" => &mut report,
             "--result" => &mut result,
             _ => return None,
         };
@@ -187,10 +194,15 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         }
         *slot = Some(PathBuf::from(value));
     }
+    let scratch = scratch?;
+    if !scratch.is_absolute()
+        || !std::fs::symlink_metadata(&scratch).is_ok_and(|metadata| metadata.file_type().is_dir())
+    {
+        return None;
+    }
+    let report = report?;
     let result = result?;
-    let absent = std::fs::symlink_metadata(&result)
-        .is_err_and(|defect| defect.kind() == std::io::ErrorKind::NotFound);
-    if !result.is_absolute() || !absent {
+    if report == result || !new_absolute_path(&report) || !new_absolute_path(&result) {
         return None;
     }
     Some(Args {
@@ -200,8 +212,16 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         evaluation_request: evaluation_request?,
         snapshot_request: snapshot_request?,
         controls_request: controls_request?,
+        scratch,
+        report,
         result,
     })
+}
+
+fn new_absolute_path(path: &std::path::Path) -> bool {
+    path.is_absolute()
+        && std::fs::symlink_metadata(path)
+            .is_err_and(|defect| defect.kind() == std::io::ErrorKind::NotFound)
 }
 
 #[derive(Clone)]
@@ -401,8 +421,8 @@ fn run_engine(
         sealed: Some(sealed.expected.clone()),
     };
 
-    let private =
-        tempfile::TempDir::new().map_err(|_defect| unavailable("private-storage-unavailable"))?;
+    let private = tempfile::TempDir::new_in(&args.scratch)
+        .map_err(|_defect| unavailable("private-storage-unavailable"))?;
     let engine = private.path().join(PRIVATE_ENGINE_NAME);
     std::fs::write(&engine, &validated.binary)
         .map_err(|_defect| unavailable("private-storage-unavailable"))?;
@@ -480,17 +500,14 @@ fn collect(
     Ok((outcome, wire))
 }
 
-/// Republishes the accepted envelope before exposing its result record.
-fn publish(accepted: Accepted) -> Execution<Completion> {
+/// Publishes the accepted envelope before exposing its result record.
+fn publish(path: &std::path::Path, accepted: Accepted) -> Execution<Completion> {
     let Accepted {
         wire,
         class,
         result,
     } = accepted;
-    let mut out = std::io::stdout().lock();
-    out.write_all(&wire)
-        .and_then(|()| out.flush())
-        .map_err(|_defect| unavailable("report-publish-failed"))?;
+    write_new(path, &wire).map_err(|_defect| unavailable("report-publish-failed"))?;
     Ok(Completion {
         result,
         exit: ExitCode::from(class),
@@ -498,10 +515,15 @@ fn publish(accepted: Accepted) -> Execution<Completion> {
     })
 }
 
-fn write_result(path: &std::path::Path, result: BootstrapResult) -> std::io::Result<()> {
+fn write_new(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
-    file.write_all(result_bytes(result))?;
-    file.flush()
+    let written = file.write_all(bytes).and_then(|()| file.flush());
+    if let Err(defect) = written {
+        drop(file);
+        let _removed = std::fs::remove_file(path);
+        return Err(defect);
+    }
+    Ok(())
 }
 
 const fn settlement_failure(defect: Defect, empty: bool) -> Failure {
