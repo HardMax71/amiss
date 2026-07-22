@@ -1,6 +1,7 @@
 use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, WaiverBundle};
 use amiss_wire::digest::Digest;
 use amiss_wire::json;
+use amiss_wire::model::{BranchRef, RepositoryIdentity};
 use amiss_wire::requests::{
     ControlsRequest, REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl, SuppliedTime,
 };
@@ -32,6 +33,13 @@ pub(super) struct PolicyIdentity {
     pub(super) organization_floor: Option<ControlIdentity>,
     pub(super) debt_snapshot: Option<ControlIdentity>,
     pub(super) waiver_bundle: Option<ControlIdentity>,
+}
+
+struct ControlBinding {
+    digest: Digest,
+    repository: RepositoryIdentity,
+    ref_name: BranchRef,
+    organization_floor_digest: Option<Digest>,
 }
 
 pub(super) fn identity(policy: &PolicyControls) -> Result<PolicyIdentity, BootstrapJobError> {
@@ -101,7 +109,22 @@ pub(super) fn request(
     let organization_floor = policy
         .organization_floor
         .as_ref()
-        .map(|control| floor(control, run))
+        .map(|control| {
+            bound_control(
+                control,
+                run,
+                None,
+                |bytes| {
+                    OrganizationFloor::parse(bytes).map(|floor| ControlBinding {
+                        digest: floor.digest,
+                        repository: floor.repository,
+                        ref_name: floor.ref_name,
+                        organization_floor_digest: None,
+                    })
+                },
+                BootstrapJobError::OrganizationFloor,
+            )
+        })
         .transpose()?;
     let floor_digest = organization_floor
         .as_ref()
@@ -109,12 +132,42 @@ pub(super) fn request(
     let debt_snapshot = policy
         .debt_snapshot
         .as_ref()
-        .map(|control| debt(control, run, floor_digest))
+        .map(|control| {
+            bound_control(
+                control,
+                run,
+                floor_digest,
+                |bytes| {
+                    DebtSnapshot::parse(bytes).map(|snapshot| ControlBinding {
+                        digest: snapshot.digest,
+                        repository: snapshot.repository,
+                        ref_name: snapshot.ref_name,
+                        organization_floor_digest: Some(snapshot.organization_floor_digest),
+                    })
+                },
+                BootstrapJobError::DebtSnapshot,
+            )
+        })
         .transpose()?;
     let waiver_bundle = policy
         .waiver_bundle
         .as_ref()
-        .map(|control| waiver(control, run, floor_digest))
+        .map(|control| {
+            bound_control(
+                control,
+                run,
+                floor_digest,
+                |bytes| {
+                    WaiverBundle::parse(bytes).map(|bundle| ControlBinding {
+                        digest: bundle.digest,
+                        repository: bundle.repository,
+                        ref_name: bundle.ref_name,
+                        organization_floor_digest: Some(bundle.organization_floor_digest),
+                    })
+                },
+                BootstrapJobError::WaiverBundle,
+            )
+        })
         .transpose()?;
     Ok(ControlsRequest {
         organization_floor,
@@ -125,57 +178,23 @@ pub(super) fn request(
     })
 }
 
-fn floor(
+fn bound_control<E>(
     control: &AcquiredControl,
     run: &RunIdentity,
-) -> Result<SuppliedControl, BootstrapJobError> {
-    let floor = OrganizationFloor::parse(&control.bytes)
-        .map_err(|_defect| BootstrapJobError::OrganizationFloor)?;
-    (floor.repository == run.change.repository && floor.ref_name == run.refs.target)
-        .then_some(())
-        .ok_or(BootstrapJobError::ControlBinding)?;
-    supplied(control, floor.digest, BootstrapJobError::OrganizationFloor)
-}
-
-fn debt(
-    control: &AcquiredControl,
-    run: &RunIdentity,
-    floor_digest: Option<Digest>,
-) -> Result<SuppliedControl, BootstrapJobError> {
-    let snapshot =
-        DebtSnapshot::parse(&control.bytes).map_err(|_defect| BootstrapJobError::DebtSnapshot)?;
-    (snapshot.repository == run.change.repository
-        && snapshot.ref_name == run.refs.target
-        && Some(snapshot.organization_floor_digest) == floor_digest)
-        .then_some(())
-        .ok_or(BootstrapJobError::ControlBinding)?;
-    supplied(control, snapshot.digest, BootstrapJobError::DebtSnapshot)
-}
-
-fn waiver(
-    control: &AcquiredControl,
-    run: &RunIdentity,
-    floor_digest: Option<Digest>,
-) -> Result<SuppliedControl, BootstrapJobError> {
-    let bundle =
-        WaiverBundle::parse(&control.bytes).map_err(|_defect| BootstrapJobError::WaiverBundle)?;
-    (bundle.repository == run.change.repository
-        && bundle.ref_name == run.refs.target
-        && Some(bundle.organization_floor_digest) == floor_digest)
-        .then_some(())
-        .ok_or(BootstrapJobError::ControlBinding)?;
-    supplied(control, bundle.digest, BootstrapJobError::WaiverBundle)
-}
-
-fn supplied(
-    control: &AcquiredControl,
-    digest: Digest,
+    organization_floor_digest: Option<Digest>,
+    parse: impl FnOnce(&[u8]) -> Result<ControlBinding, E>,
     error: BootstrapJobError,
 ) -> Result<SuppliedControl, BootstrapJobError> {
+    let binding = parse(&control.bytes).map_err(|_defect| error)?;
+    (binding.repository == run.change.repository
+        && binding.ref_name == run.refs.target
+        && binding.organization_floor_digest == organization_floor_digest)
+        .then_some(())
+        .ok_or(BootstrapJobError::ControlBinding)?;
     let value = json::parse(&control.bytes).map_err(|_defect| error)?;
     Ok(SuppliedControl {
         value,
-        expected_digest: digest,
+        expected_digest: binding.digest,
         trust_source: control.trust_source,
     })
 }

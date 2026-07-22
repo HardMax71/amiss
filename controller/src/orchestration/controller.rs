@@ -100,14 +100,8 @@ where
         runner: R,
         ingress: IngressPolicy,
     ) -> Self {
-        Self::new_with_clock(
-            registry,
-            plans,
-            ledger,
-            runner,
-            ingress,
-            Arc::new(SystemClock),
-        )
+        let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+        Self::new_with_clock(registry, plans, ledger, runner, ingress, clock)
     }
 
     pub fn new_with_clock(

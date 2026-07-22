@@ -265,7 +265,8 @@ async fn contained_process(
     cancelled: CancellationToken,
 ) -> std::io::Result<BootstrapTermination> {
     let group = ProcessGroup::new().map_err(std::io::Error::other)?;
-    let termination = match group.start(&command(run, prepared, cancelled)).await {
+    let command = command(run, prepared).cancel_on(cancelled);
+    let termination = match group.start(&command).await {
         Ok(process) => process
             .wait()
             .await
@@ -293,38 +294,30 @@ async fn stop_tree(group: &ProcessGroup) -> bool {
         .unwrap_or(false)
 }
 
-fn command(
-    run: &BootstrapRun<'_>,
-    prepared: &PreparedRun,
-    cancelled: CancellationToken,
-) -> Command {
-    Command::new(&prepared.executable)
-        .arg("exec")
-        .arg("--action-repository")
-        .arg(run.action_repository)
-        .arg("--repository")
-        .arg(run.repository)
-        .arg("--constraint")
-        .arg(&prepared.constraint)
-        .arg("--evaluation-request")
-        .arg(&prepared.evaluation)
-        .arg("--snapshot-request")
-        .arg(&prepared.snapshot)
-        .arg("--controls-request")
-        .arg(&prepared.controls)
-        .arg("--scratch")
-        .arg(prepared.directory.path())
-        .arg("--report")
-        .arg(&prepared.report.path)
-        .arg("--result")
-        .arg(&prepared.result.path)
+fn command(run: &BootstrapRun<'_>, prepared: &PreparedRun) -> Command {
+    let arguments: [(&str, &Path); 9] = [
+        ("--action-repository", run.action_repository),
+        ("--repository", run.repository),
+        ("--constraint", &prepared.constraint),
+        ("--evaluation-request", &prepared.evaluation),
+        ("--snapshot-request", &prepared.snapshot),
+        ("--controls-request", &prepared.controls),
+        ("--scratch", prepared.directory.path()),
+        ("--report", &prepared.report.path),
+        ("--result", &prepared.result.path),
+    ];
+    arguments
+        .into_iter()
+        .fold(
+            Command::new(&prepared.executable).arg("exec"),
+            |command, (flag, value)| command.arg(flag).arg(value),
+        )
         .current_dir(prepared.directory.path())
         .env_clear()
         .stdin(Stdin::empty())
         .stdout(StdioMode::Null)
         .stderr(StdioMode::Null)
         .timeout(run.wall_timeout)
-        .cancel_on(cancelled)
 }
 
 fn process_failure(error: &ProcessError) -> BootstrapTermination {
