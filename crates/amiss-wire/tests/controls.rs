@@ -476,6 +476,26 @@ fn instants_are_strictly_gregorian() {
 }
 
 #[test]
+fn instants_round_trip_unix_seconds() {
+    for value in [
+        "0000-01-01T00:00:00Z",
+        "1969-12-31T23:59:59Z",
+        "1970-01-01T00:00:00Z",
+        "2000-02-29T12:34:56Z",
+        "2026-07-22T10:00:00Z",
+        "9999-12-31T23:59:59Z",
+    ] {
+        let instant = UtcInstant::new(value.to_owned()).unwrap();
+        assert_eq!(
+            UtcInstant::from_epoch_seconds(instant.epoch_seconds()),
+            Some(instant)
+        );
+    }
+    assert!(UtcInstant::from_epoch_seconds(-62_167_219_201).is_none());
+    assert!(UtcInstant::from_epoch_seconds(253_402_300_800).is_none());
+}
+
+#[test]
 fn structural_resolution_facts_accept_both_missing_reasons() {
     let path_missing = parse_debt_fact_case(
         "explicit-target-missing",
