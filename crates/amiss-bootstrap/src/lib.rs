@@ -1,4 +1,5 @@
 pub mod build;
+pub mod result;
 pub mod supervise;
 
 use amiss_git::{GitResources, ObjectKind, Repository};
