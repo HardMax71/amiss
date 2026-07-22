@@ -199,7 +199,12 @@ where
         };
         let runner_outcome = match initial.state {
             ChangeState::Active => {
-                let mut heartbeat = LedgerHeartbeat::new(&mut self.ledger, &accepted, &mut lease);
+                let mut heartbeat = LedgerHeartbeat::new(
+                    &mut self.ledger,
+                    &accepted,
+                    &mut lease,
+                    self.clock.as_ref(),
+                );
                 let outcome = self.runner.run(&request, &mut heartbeat);
                 heartbeat.finish()?;
                 Some(outcome)

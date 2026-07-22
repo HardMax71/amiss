@@ -56,6 +56,39 @@ fn renewal_failure_during_or_after_a_run_stops_before_publication() {
 }
 
 #[test]
+fn a_renewed_lease_without_time_left_stops_the_run() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let expired = DeliveryLease {
+        expires_at_unix_millis: 1_800_000_000_000,
+        ..lease()
+    };
+    let adapter = Arc::new(FakeAdapter::new(
+        delivery(&provider, change, 'b'),
+        [Ok(snapshot(ChangeState::Active, run.clone()))],
+    ));
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::Execute(expired.clone())),
+        renewals: renewal_script([
+            LeaseRenewal::Renewed(expired.clone()),
+            LeaseRenewal::Renewed(expired),
+        ]),
+        stage: None,
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    controller.runner.heartbeat_renewals = 1;
+
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::LeaseLost)
+    ));
+    assert_eq!(controller.runner.requests.len(), 1);
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
 fn a_publication_must_be_staged_under_the_live_fence() {
     let provider = provider();
     let change = locator(&provider, repository("amiss"));

@@ -1,4 +1,8 @@
-use crate::{AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ProviderAdapter};
+use std::time::Duration;
+
+use crate::{
+    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerClock, ProviderAdapter,
+};
 
 use super::{ControllerError, HandleOutcome};
 use crate::orchestration::ledger::{
@@ -11,6 +15,7 @@ pub(super) struct LedgerHeartbeat<'a, L: DeliveryLedger> {
     ledger: &'a mut L,
     delivery: &'a AcceptedDelivery,
     lease: &'a mut DeliveryLease,
+    clock: &'a dyn ControllerClock,
     failure: Option<ControllerError<L::Error>>,
 }
 
@@ -19,11 +24,13 @@ impl<'a, L: DeliveryLedger> LedgerHeartbeat<'a, L> {
         ledger: &'a mut L,
         delivery: &'a AcceptedDelivery,
         lease: &'a mut DeliveryLease,
+        clock: &'a dyn ControllerClock,
     ) -> Self {
         Self {
             ledger,
             delivery,
             lease,
+            clock,
             failure: None,
         }
     }
@@ -37,21 +44,19 @@ impl<'a, L: DeliveryLedger> LedgerHeartbeat<'a, L> {
 }
 
 impl<L: DeliveryLedger> RunHeartbeat for LedgerHeartbeat<'_, L> {
-    fn expires_at_unix_millis(&self) -> i64 {
-        self.lease.expires_at_unix_millis
-    }
-
     fn renew(&mut self) -> HeartbeatOutcome {
         if self.failure.is_some() {
             return HeartbeatOutcome::Stop;
         }
-        match renew_lease(self.ledger, self.delivery, self.lease) {
-            Ok(lease) => {
-                let expires_at_unix_millis = lease.expires_at_unix_millis;
+        let renewed = renew_lease(self.ledger, self.delivery, self.lease).and_then(|lease| {
+            let renew_within =
+                renewal_window(&lease, self.clock).ok_or(ControllerError::LeaseLost)?;
+            Ok((lease, renew_within))
+        });
+        match renewed {
+            Ok((lease, renew_within)) => {
                 *self.lease = lease;
-                HeartbeatOutcome::Renewed {
-                    expires_at_unix_millis,
-                }
+                HeartbeatOutcome::Renewed { renew_within }
             }
             Err(error) => {
                 self.failure = Some(error);
@@ -59,6 +64,13 @@ impl<L: DeliveryLedger> RunHeartbeat for LedgerHeartbeat<'_, L> {
             }
         }
     }
+}
+
+fn renewal_window(lease: &DeliveryLease, clock: &dyn ControllerClock) -> Option<Duration> {
+    let now = clock.now_unix_millis()?;
+    let millis = u64::try_from(lease.expires_at_unix_millis.checked_sub(now)?).ok()?;
+    let remaining = Duration::from_millis(millis);
+    (!remaining.is_zero()).then_some(remaining)
 }
 
 pub(super) fn renew_lease<L: DeliveryLedger>(
