@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, ControllerClock, DeliveryHeader, DeliveryId,
-    DeliveryIdentity, DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressLimits, IngressPolicy,
-    IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    DeliveryIdentity, DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressError, IngressLimits,
+    IngressPolicy, IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
     TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
 };
@@ -130,11 +130,12 @@ pub(crate) fn gitlab_verified(
         .bind(delivery(provider))
 }
 
-pub(crate) fn policy(max_queue_age: Duration, future_skew: Duration) -> IngressPolicy {
-    IngressPolicy::new(
-        IngressLimits::new(1_024, 16, 2_048).unwrap(),
-        ReplayWindow::new(Duration::from_secs(100), max_queue_age).unwrap(),
-        future_skew,
-    )
-    .unwrap()
+pub(crate) fn policy(
+    max_queue_age: Duration,
+    future_skew: Duration,
+) -> Result<IngressPolicy, IngressError> {
+    let limits = IngressLimits::new(1_024, 16, 2_048).ok_or(IngressError::Policy)?;
+    let replay =
+        ReplayWindow::new(Duration::from_secs(100), max_queue_age).ok_or(IngressError::Policy)?;
+    IngressPolicy::new(limits, replay, future_skew).ok_or(IngressError::Policy)
 }

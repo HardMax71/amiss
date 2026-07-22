@@ -7,11 +7,13 @@ use amiss_controller::{
 use super::support::{BODY, FixedClock, GITHUB_HEADERS, policy, raw, route};
 
 #[test]
-fn limits_are_checked_before_trusted_time() {
+fn limits_are_checked_before_trusted_time() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::ReplayOnly);
-    let limits = IngressLimits::new(BODY.len(), GITHUB_HEADERS.len(), 128).unwrap();
-    let replay = ReplayWindow::new(Duration::from_secs(1), Duration::from_millis(100)).unwrap();
-    let policy = IngressPolicy::new(limits, replay, Duration::ZERO).unwrap();
+    let limits =
+        IngressLimits::new(BODY.len(), GITHUB_HEADERS.len(), 128).ok_or(IngressError::Policy)?;
+    let replay = ReplayWindow::new(Duration::from_secs(1), Duration::from_millis(100))
+        .ok_or(IngressError::Policy)?;
+    let policy = IngressPolicy::new(limits, replay, Duration::ZERO).ok_or(IngressError::Policy)?;
     assert!(
         policy
             .pre_auth(
@@ -30,7 +32,10 @@ fn limits_are_checked_before_trusted_time() {
         Err(IngressError::Limits)
     );
 
-    let header = GITHUB_HEADERS.first().copied().unwrap();
+    let header = GITHUB_HEADERS
+        .first()
+        .copied()
+        .ok_or(IngressError::Policy)?;
     let too_many = [header, header];
     assert_eq!(
         policy.pre_auth(
@@ -39,12 +44,13 @@ fn limits_are_checked_before_trusted_time() {
         ),
         Err(IngressError::Limits)
     );
+    Ok(())
 }
 
 #[test]
-fn receipt_window_boundaries_are_inclusive() {
+fn receipt_window_boundaries_are_inclusive() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::ReplayOnly);
-    let policy = policy(Duration::from_millis(100), Duration::from_millis(10));
+    let policy = policy(Duration::from_millis(100), Duration::from_millis(10))?;
     let clock = FixedClock(Some(1_000));
 
     for accepted in [900, 1_000, 1_010] {
@@ -68,19 +74,21 @@ fn receipt_window_boundaries_are_inclusive() {
         policy.pre_auth(raw(&route, -1, GITHUB_HEADERS, BODY), &clock),
         Err(IngressError::Clock)
     );
+    Ok(())
 }
 
 #[test]
-fn invalid_policy_values_fail_closed() {
+fn invalid_policy_values_fail_closed() -> Result<(), IngressError> {
     assert!(IngressLimits::new(0, 1, 1).is_none());
-    let limits = IngressLimits::new(1, 1, 1).unwrap();
+    let limits = IngressLimits::new(1, 1, 1).ok_or(IngressError::Policy)?;
     assert!(ReplayWindow::new(Duration::ZERO, Duration::from_millis(1)).is_none());
     assert!(ReplayWindow::new(Duration::from_millis(1), Duration::ZERO).is_none());
     assert!(ReplayWindow::new(Duration::MAX, Duration::from_millis(1)).is_none());
-    let replay = ReplayWindow::new(Duration::from_millis(1), Duration::from_millis(1)).unwrap();
+    let replay = ReplayWindow::new(Duration::from_millis(1), Duration::from_millis(1))
+        .ok_or(IngressError::Policy)?;
     assert!(IngressPolicy::new(limits, replay, Duration::MAX).is_none());
 
-    let policy = policy(Duration::from_millis(100), Duration::from_millis(10));
+    let policy = policy(Duration::from_millis(100), Duration::from_millis(10))?;
     for max_age in [Duration::ZERO, Duration::MAX] {
         let route = route(SignedTimePolicy::Required(max_age));
         assert_eq!(
@@ -100,4 +108,5 @@ fn invalid_policy_values_fail_closed() {
         ),
         Err(IngressError::Policy)
     );
+    Ok(())
 }

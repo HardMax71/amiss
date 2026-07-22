@@ -10,9 +10,9 @@ use super::support::{
 };
 
 #[test]
-fn required_signed_time_boundaries_are_inclusive() {
+fn required_signed_time_boundaries_are_inclusive() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::Required(Duration::from_secs(100)));
-    let policy = policy(Duration::from_secs(200), Duration::from_secs(10));
+    let policy = policy(Duration::from_secs(200), Duration::from_secs(10))?;
 
     for received_at in [GITLAB_NOW - 10_000, GITLAB_NOW, GITLAB_NOW + 100_000] {
         let check = policy
@@ -38,45 +38,46 @@ fn required_signed_time_boundaries_are_inclusive() {
             Err(IngressError::Freshness)
         );
     }
+    Ok(())
 }
 
 #[test]
-fn a_required_time_cannot_be_missing() {
-    let route = route(SignedTimePolicy::Required(Duration::from_secs(100)));
-    let policy = policy(Duration::from_secs(200), Duration::from_secs(10));
+fn signed_time_cannot_be_missing_or_downgraded() -> Result<(), IngressError> {
+    let policy = policy(Duration::from_secs(200), Duration::from_secs(10))?;
+
+    let required_route = route(SignedTimePolicy::Required(Duration::from_secs(100)));
     let check = policy
         .pre_auth(
-            raw(&route, GITLAB_NOW, GITHUB_HEADERS, BODY),
+            raw(&required_route, GITLAB_NOW, GITHUB_HEADERS, BODY),
             &FixedClock(Some(GITLAB_NOW)),
         )
         .unwrap();
-    let verified = github_verified(check, &route.provider, route.trust_set.clone());
-
+    let verified = github_verified(
+        check,
+        &required_route.provider,
+        required_route.trust_set.clone(),
+    );
     assert_eq!(
         policy.post_auth(check, verified),
         Err(IngressError::Freshness)
     );
-}
 
-#[test]
-fn a_signed_time_cannot_be_downgraded_to_replay_only() {
-    let route = route(SignedTimePolicy::ReplayOnly);
-    let policy = policy(Duration::from_secs(200), Duration::from_secs(10));
+    let replay_route = route(SignedTimePolicy::ReplayOnly);
     let check = policy
         .pre_auth(
-            raw(&route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
+            raw(&replay_route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
             &FixedClock(Some(GITLAB_NOW)),
         )
         .unwrap();
-    let verified = gitlab_verified(check, &route.provider);
-
+    let verified = gitlab_verified(check, &replay_route.provider);
     assert_eq!(policy.post_auth(check, verified), Err(IngressError::Policy));
+    Ok(())
 }
 
 #[test]
-fn replay_lifetime_uses_the_fixed_window_ceiling() {
+fn replay_lifetime_uses_the_fixed_window_ceiling() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::Required(Duration::from_secs(1)));
-    let policy = policy(Duration::from_secs(200), Duration::from_secs(10));
+    let policy = policy(Duration::from_secs(200), Duration::from_secs(10))?;
     let check = policy
         .pre_auth(
             raw(&route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
@@ -91,6 +92,7 @@ fn replay_lifetime_uses_the_fixed_window_ceiling() {
         accepted.replay_keep_through_unix_millis(),
         Some(GITLAB_NOW + 300_000)
     );
+    Ok(())
 }
 
 #[test]

@@ -16,8 +16,6 @@ use crate::{
     SystemClock,
 };
 
-const OWNER_BYTES: usize = 16;
-
 #[derive(Debug)]
 pub enum FileLedgerError {
     Configuration,
@@ -120,7 +118,7 @@ impl From<io::Error> for FileLedgerError {
 pub struct FileLedger {
     store: Store,
     lease_millis: i64,
-    owner: [u8; OWNER_BYTES],
+    owner: [u8; 16],
     clock: Arc<dyn ControllerClock>,
 }
 
@@ -150,12 +148,10 @@ impl FileLedger {
             .now_unix_millis()
             .filter(|now| *now >= 0)
             .ok_or(FileLedgerError::Clock)?;
-        let mut owner = [0_u8; OWNER_BYTES];
-        getrandom::fill(&mut owner).map_err(|_| FileLedgerError::Random)?;
         let ledger = Self {
             store: Store::open(root.as_ref(), config, now)?,
             lease_millis,
-            owner,
+            owner: random_id()?,
             clock,
         };
         ledger.cleanup()?;
@@ -175,9 +171,7 @@ impl FileLedger {
     fn new_evaluation_id(
         identity: &DeliveryIdentity,
     ) -> Result<ControllerEvaluationId, FileLedgerError> {
-        let mut nonce = [0_u8; OWNER_BYTES];
-        getrandom::fill(&mut nonce).map_err(|_| FileLedgerError::Random)?;
-        format::evaluation_id(identity, &nonce)
+        format::evaluation_id(identity, &random_id()?)
     }
 
     fn deadline(&self, now: i64) -> Result<i64, FileLedgerError> {
@@ -218,4 +212,10 @@ impl FileLedger {
             .ok_or(FileLedgerError::Clock)?;
         self.store.cleanup(now)
     }
+}
+
+fn random_id() -> Result<[u8; 16], FileLedgerError> {
+    let high = u128::from(getrandom::u64().map_err(|_| FileLedgerError::Random)?);
+    let low = u128::from(getrandom::u64().map_err(|_| FileLedgerError::Random)?);
+    Ok(((high << u64::BITS) | low).to_be_bytes())
 }

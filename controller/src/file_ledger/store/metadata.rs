@@ -15,6 +15,7 @@ pub(super) const MAX_METADATA_BYTES: u64 = 4_096;
 #[serde(deny_unknown_fields)]
 pub(super) struct RootMetadata {
     schema: String,
+    lease_millis: i64,
     max_records: u64,
     max_signed_age_millis: i64,
     max_queue_age_millis: i64,
@@ -26,6 +27,7 @@ impl RootMetadata {
         let replay_window = config.replay_window();
         Self {
             schema: METADATA_SCHEMA.to_owned(),
+            lease_millis: config.lease_millis,
             max_records: config.max_records(),
             max_signed_age_millis: replay_window.max_signed_age_millis(),
             max_queue_age_millis: replay_window.max_queue_age_millis(),
@@ -35,7 +37,8 @@ impl RootMetadata {
 
     pub(super) fn matches(&self, config: FileLedgerConfig) -> bool {
         let replay_window = config.replay_window();
-        self.max_records == config.max_records()
+        self.lease_millis == config.lease_millis
+            && self.max_records == config.max_records()
             && self.max_signed_age_millis == replay_window.max_signed_age_millis()
             && self.max_queue_age_millis == replay_window.max_queue_age_millis()
     }
@@ -54,6 +57,7 @@ impl RootMetadata {
 
     fn validate(&self) -> Result<(), FileLedgerError> {
         if self.schema != METADATA_SCHEMA
+            || self.lease_millis <= 0
             || self.max_records == 0
             || self.max_signed_age_millis <= 0
             || self.max_queue_age_millis <= 0

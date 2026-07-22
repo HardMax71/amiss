@@ -74,10 +74,10 @@ durable-record, runner, and orchestration boundaries described in
 [`FileLedger`](https://github.com/HardMax71/amiss/blob/main/controller/src/file_ledger.rs) gives
 that boundary a cross-process, durable local file record without SQL or a database. The root has a
 fixed record cap, fixed maintenance, admission, and clock locks, at most 256 row-lock shards, and
-one state and report path per admitted delivery. Checksummed root metadata fixes the replay window
-and keeps a high-water clock. Cleanup removes dead files and only bounded completed rows after their
-authenticated lifetime ends; it retains running work, saved results, and permanent exact-body
-replay markers. A full root rejects new identities rather than evicting them.
+one state and report path per admitted delivery. Checksummed root metadata fixes the lease duration
+and replay window and keeps a high-water clock. Cleanup removes dead files and only bounded
+completed rows after their authenticated lifetime ends; it retains running work, saved results, and
+permanent exact-body replay markers. A full root rejects new identities rather than evicting them.
 
 The same workspace has a [bounded ingress contract](https://github.com/HardMax71/amiss/blob/main/controller/src/ingress/policy.rs)
 and separate GitHub, GitLab Standard Webhooks, and Gitea-family HMAC verifiers with rotating,

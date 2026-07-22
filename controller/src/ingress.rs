@@ -64,8 +64,7 @@ pub enum ReplayIdentity {
     ExactBody,
 }
 
-/// Fixed ceilings used to decide when an authenticated delivery can no longer
-/// enter the ledger as new work.
+/// Fixed replay ceilings for signed deliveries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ReplayWindow {
     max_signed_age_millis: i64,

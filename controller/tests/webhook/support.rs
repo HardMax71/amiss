@@ -2,9 +2,9 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use amiss_controller::{
-    ControllerClock, DeliveryHeader, DeliveryRoute, IngressCheck, IngressLimits, IngressPolicy,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy,
-    TrustAnchorId, TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    ControllerClock, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,
+    IngressPolicy, ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow,
+    SignedTimePolicy, TrustAnchorId, TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 
 pub(crate) const NOW: i64 = 1_744_578_123_000;
@@ -57,7 +57,7 @@ pub(crate) fn replay_check<'a>(
     headers: &'a [DeliveryHeader<'a>],
     body: &'a [u8],
     received_at_unix_millis: i64,
-) -> IngressCheck<'a> {
+) -> Result<IngressCheck<'a>, IngressError> {
     check(&REPLAY_ROUTE, headers, body, received_at_unix_millis)
 }
 
@@ -65,7 +65,7 @@ pub(crate) fn signed_check<'a>(
     headers: &'a [DeliveryHeader<'a>],
     body: &'a [u8],
     received_at_unix_millis: i64,
-) -> IngressCheck<'a> {
+) -> Result<IngressCheck<'a>, IngressError> {
     check(&SIGNED_ROUTE, headers, body, received_at_unix_millis)
 }
 
@@ -74,21 +74,21 @@ fn check<'a>(
     headers: &'a [DeliveryHeader<'a>],
     body: &'a [u8],
     received_at_unix_millis: i64,
-) -> IngressCheck<'a> {
-    let limits = IngressLimits::new(2 * 1_024 * 1_024, 512, 2 * 1_024 * 1_024).unwrap();
-    let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
-    let policy = IngressPolicy::new(limits, replay, Duration::ZERO).unwrap();
-    policy
-        .pre_auth(
-            UntrustedDelivery {
-                route,
-                received_at_unix_millis,
-                headers,
-                body,
-            },
-            &FixedClock(received_at_unix_millis),
-        )
-        .unwrap()
+) -> Result<IngressCheck<'a>, IngressError> {
+    let limits = IngressLimits::new(2 * 1_024 * 1_024, 512, 2 * 1_024 * 1_024)
+        .ok_or(IngressError::Policy)?;
+    let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1))
+        .ok_or(IngressError::Policy)?;
+    let policy = IngressPolicy::new(limits, replay, Duration::ZERO).ok_or(IngressError::Policy)?;
+    policy.pre_auth(
+        UntrustedDelivery {
+            route,
+            received_at_unix_millis,
+            headers,
+            body,
+        },
+        &FixedClock(received_at_unix_millis),
+    )
 }
 
 fn route(signed_time: SignedTimePolicy) -> DeliveryRoute {

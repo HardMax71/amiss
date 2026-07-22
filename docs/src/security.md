@@ -96,10 +96,10 @@ The concrete file record requires a pre-created private local directory outside 
 action tree. A future service must own that directory and set its operating-system permissions or
 access-control list: anyone who can read or change it is inside the trust boundary. Its checksums
 detect damage; they do not authenticate a writer. Shared and network filesystems are unsupported.
-The root metadata fixes its maximum record count and replay window and keeps a high-water clock.
-Admission under one fixed lock prevents concurrent processes from crossing the record cap; one
-maintenance lock, one clock lock, and at most 256 row-lock shards keep lock-file growth fixed. A
-full root rejects a new identity without evicting work already admitted.
+The root metadata fixes its lease duration, maximum record count, and replay window and keeps a
+high-water clock. Admission under one fixed lock prevents concurrent processes from crossing the
+record cap; one maintenance lock, one clock lock, and at most 256 row-lock shards keep lock-file
+growth fixed. A full root rejects a new identity without evicting work already admitted.
 
 Cleanup runs when the root opens and is available explicitly. Under the exclusive maintenance
 lock it saves the high-water clock, validates the root, then removes dead report and atomic-write

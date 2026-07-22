@@ -8,9 +8,9 @@ use super::support::{
 };
 
 #[test]
-fn route_and_trust_set_must_match_after_authentication() {
+fn route_and_trust_set_must_match_after_authentication() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::ReplayOnly);
-    let policy = policy(Duration::from_secs(1), Duration::ZERO);
+    let policy = policy(Duration::from_secs(1), Duration::ZERO)?;
     let check = policy
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
@@ -32,12 +32,13 @@ fn route_and_trust_set_must_match_after_authentication() {
         policy.post_auth(check, wrong_provider),
         Err(IngressError::Route)
     );
+    Ok(())
 }
 
 #[test]
-fn proof_is_bound_to_every_raw_request_byte() {
+fn proof_is_bound_to_every_raw_request_byte() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::ReplayOnly);
-    let policy = policy(Duration::from_secs(1), Duration::ZERO);
+    let policy = policy(Duration::from_secs(1), Duration::ZERO)?;
     let signed = policy
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
@@ -89,14 +90,15 @@ fn proof_is_bound_to_every_raw_request_byte() {
         policy.post_auth(changed_receipt, proof),
         Err(IngressError::Request)
     );
+    Ok(())
 }
 
 #[test]
-fn identical_bytes_on_another_route_do_not_share_a_proof() {
+fn identical_bytes_on_another_route_do_not_share_a_proof() -> Result<(), IngressError> {
     let route_a = route(SignedTimePolicy::ReplayOnly);
     let mut route_b = route(SignedTimePolicy::ReplayOnly);
     route_b.provider = provider("other.example.test");
-    let policy = policy(Duration::from_secs(1), Duration::ZERO);
+    let policy = policy(Duration::from_secs(1), Duration::ZERO)?;
     let check_a = policy
         .pre_auth(
             raw(&route_a, 1_000, GITHUB_HEADERS, BODY),
@@ -115,12 +117,13 @@ fn identical_bytes_on_another_route_do_not_share_a_proof() {
         policy.post_auth(check_b, proof_a),
         Err(IngressError::Request)
     );
+    Ok(())
 }
 
 #[test]
-fn replay_identity_is_normalized_only_after_verification() {
+fn replay_identity_is_normalized_only_after_verification() -> Result<(), IngressError> {
     let signed_route = route(SignedTimePolicy::Required(Duration::from_secs(100)));
-    let policy = policy(Duration::from_secs(200), Duration::from_secs(10));
+    let policy = policy(Duration::from_secs(200), Duration::from_secs(10))?;
     let signed_check = policy
         .pre_auth(
             raw(&signed_route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
@@ -164,10 +167,11 @@ fn replay_identity_is_normalized_only_after_verification() {
         "body:sha256:70625f14c886c25b874c1bf13658987108dd149896764fc6707b06164e83a233"
     );
     assert_eq!(exact.replay_keep_through_unix_millis(), None);
+    Ok(())
 }
 
 #[test]
-fn debug_output_never_contains_raw_credentials_or_body() {
+fn debug_output_never_contains_raw_credentials_or_body() -> Result<(), IngressError> {
     let route = route(SignedTimePolicy::ReplayOnly);
     let secret = b"legacy-credential-must-not-appear";
     let body = b"body-secret-must-not-appear";
@@ -176,7 +180,7 @@ fn debug_output_never_contains_raw_credentials_or_body() {
         value: secret,
     }];
     let request = raw(&route, 1_000, &headers, body);
-    let checked = policy(Duration::from_secs(1), Duration::ZERO)
+    let checked = policy(Duration::from_secs(1), Duration::ZERO)?
         .pre_auth(request, &FixedClock(Some(1_000)))
         .unwrap();
     let rendered = format!("{request:?} {checked:?} {:?}", headers[0]);
@@ -185,7 +189,7 @@ fn debug_output_never_contains_raw_credentials_or_body() {
     assert!(!rendered.contains("legacy-credential"));
     assert!(!rendered.contains("body-secret"));
 
-    let valid = policy(Duration::from_secs(1), Duration::ZERO)
+    let valid = policy(Duration::from_secs(1), Duration::ZERO)?
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
             &FixedClock(Some(1_000)),
@@ -197,4 +201,5 @@ fn debug_output_never_contains_raw_credentials_or_body() {
     let combined = format!("{proof_rendered} {verified_rendered}");
     assert!(!combined.contains("event"));
     assert!(!combined.contains("ac6a6901"));
+    Ok(())
 }
