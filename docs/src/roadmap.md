@@ -77,59 +77,62 @@ inspectable; version-specific history stays in the
 
 </details>
 
-## Now: provider-verified controls
+<details>
+<summary>Done: provider-verified controls foundation</summary>
 
-The validation and delivery-record phases are closed, and the provider-neutral foundation has
-landed. The rolling evaluation contract now distinguishes the candidate or source ref used for URL
-resolution from the protected target ref used by branch-scoped policy controls. For commit-pair
-materialization, the bootstrap accepts a canonical evaluation/snapshot/controls request triplet,
-validates its required constraint and trusted-time bindings, and carries the exact bytes to its
-verified engine in a closed stdin frame. The separate, unpublished Rust workspace under
-[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines opaque provider
-identities and the provider-neutral contracts documented in
-[Controller delivery](controller.md). That page defines the full delivery, ownership, retry, and
-publication contract. The durable record is complete as described in the Done section above. The
-workspace also contains the traits, orchestrator, bounded ingress gate, rotating key ring, and
-GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers. The wire library can
-produce canonical execution constraints and trusted-time statements instead of only parsing them.
-The provider-neutral runner re-verifies acquired repository and action roots, derives the sealed
-job from the frozen run, checks the pinned bootstrap, prepares private files, clears the child's
-environment and standard streams, and supervises one cross-platform ProcessKit process tree. The
-controller retains the output handles, enforces a wall limit and relative ledger lease windows,
-proves the tree empty before reading, bounds the report, and classifies the result record fail
-closed.
+- The rolling evaluation contract separates the source ref used for URL resolution from the
+  protected target ref used for branch controls. A frozen run binds the provider, integration,
+  repository, URL dialect, change, refs, commits, trees, check plan, execution limits, and trusted
+  time without enumerating provider-specific identity types.
+- The bootstrap accepts the canonical evaluation, snapshot, and controls documents, checks their
+  required bindings, and passes their exact bytes to the verified engine in one closed input frame.
+  The wire library also produces canonical execution limits and trusted-time statements.
+- The unpublished [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
+  supplies the provider-neutral traits, orchestrator, bounded ingress gate, rotating key ring, and
+  signature checks for GitHub, GitLab Standard Webhooks, and the Gitea family. These checks are
+  library surfaces, not supported provider integrations.
+- The controller record and runner share one lease contract. The runner renews before its relative
+  lease window closes, and loss of ownership stops the run instead of allowing stale work to
+  publish. [Controller delivery](controller.md) defines the ownership, retry, and publication
+  rules; the durable record is covered by the Done section above.
+- The provider-neutral runner rechecks acquired repository and action roots, derives a sealed job,
+  checks the pinned bootstrap, prepares private inputs, clears inherited environment and streams,
+  and supervises one cross-platform process tree. The controller owns the output handles, applies
+  wall and lease limits, proves the tree empty before reading, bounds the report, and rejects
+  incomplete or malformed results. Focused tests cover wrong roots, bootstrap tampering, bad or
+  missing output, oversize, timeout, heartbeat loss, and live descendants.
 
-That is foundation, not a supported provider lane. The controller has no HTTP server, concrete
-GitHub, GitLab, or Gitea-family adapter, authenticated payload decoder, provider API client or
-credential source, repository or action-tree acquisition worker, deployable service, publication
-transport, or provider check publisher. The signature implementations are not wired to a listener
-or authoritative provider refresh, and authenticated state and network acquisition are not wired
-to the runner. The GitHub composite Action remains a convenience event wrapper that launches the
-engine directly. No current path produces a provider-verified sandbox or turns an engine report
-into independently authenticated evidence.
+</details>
 
-What remains is to put that library boundary behind a bounded HTTP receiver; build each provider
-adapter against capabilities the provider actually offers; obtain API credentials independently
-of the repository; implement network acquisition that returns the exact repository and action
-roots expected by the frozen run; feed those roots into the existing supervised bootstrap step;
-bound provider refreshes below the lease window; and make repeated publication of the same
-source-bound required check safe. The runner already has focused negative coverage for wrong roots,
-bootstrap tampering, missing and malformed output, oversize, timeout, heartbeat loss, and live
-descendants. End-to-end provider-lane tests must still carry those cases through authentication,
-acquisition, execution, and publication, alongside wrong provider, repository, change, ref,
-expiry, replay, and revocation. A route loader must select the replay-only policy for GitHub and
-Gitea-family signatures, which expose no authenticated attempt time, and a bounded freshness rule
-for GitLab Standard Webhooks, which authenticates its timestamp. Replay-only would be invalid
-GitLab configuration.
-Link dialect support in the engine's `forge` field is not evidence that an authenticated adapter
-exists.
+## Now: provider integrations
 
-The lane is ready only when the verifier and authorization are acquired independently of the
-repository and action tree under review, every authorization and published result bind the
-exact provider instance, integration, repository, URL dialect, source, target and default-branch
-refs, commits, and trees, and a consumer can distinguish provider-authenticated evidence from
-the engine report's local assertions without trusting repository-controlled input. This phase
-stays in Now until at least one provider satisfies that complete path.
+The foundation above is complete, but no provider has a supported end-to-end lane. The controller
+has no HTTP server, concrete GitHub, GitLab, or Gitea-family adapter, authenticated payload decoder,
+provider API client or credential source, repository or action-tree acquisition worker, deployable
+service, publication transport, or check publisher. Signature checks are not connected to a
+listener or authoritative key refresh, and authenticated state and network acquisition are not
+connected to the runner. The GitHub composite Action remains a convenience wrapper that launches
+the engine directly; it does not produce provider-verified evidence.
+
+What remains is to place the library behind a bounded HTTP receiver; build adapters from the
+capabilities each provider actually offers; obtain credentials outside the repository; acquire the
+exact repository and action trees named by the frozen run; pass those roots to the supervised
+bootstrap; keep provider refreshes inside the lease window; and safely repeat publication of the
+same source-bound required check. End-to-end tests must carry the existing runner failures through
+authentication, acquisition, execution, and publication, alongside wrong provider, repository,
+change, ref, expiry, replay, and revocation.
+
+Route configuration must use replay-only protection for GitHub and Gitea-family signatures, which
+do not authenticate an attempt time, and a bounded freshness rule for GitLab Standard Webhooks,
+which does. Replay-only would be invalid GitLab configuration. Link dialect support in the engine's
+`forge` field is not evidence that an authenticated adapter exists.
+
+The lane is ready only when the verifier and authorization come from outside the repository and
+action tree under review; every authorization and published result binds the exact provider
+instance, integration, repository, URL dialect, source, target and default-branch refs, commits,
+and trees; and a consumer can distinguish provider-authenticated evidence from the engine report's
+local assertions without trusting repository-controlled input. This phase stays in Now until at
+least one provider satisfies that complete path.
 
 ## Reference-coverage candidates
 
