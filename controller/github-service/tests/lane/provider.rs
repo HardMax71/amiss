@@ -124,6 +124,19 @@ impl FakeGitHub {
     pub(super) fn publications(&self) -> Vec<Publication> {
         self.state.publications.lock().unwrap().clone()
     }
+
+    pub(super) fn flow_trace(&self) -> String {
+        let conclusions: Vec<_> = self
+            .state
+            .publications
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|publication| publication.conclusion)
+            .collect();
+        let refreshes_left = self.state.refreshes.lock().unwrap().len();
+        format!("published {conclusions:?}, scripted refreshes left {refreshes_left}")
+    }
 }
 
 impl GitHubApi for FakeGitHub {
