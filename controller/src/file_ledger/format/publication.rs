@@ -1,4 +1,5 @@
 use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,7 @@ pub(in crate::file_ledger) struct StoredPublication {
     evaluation_id: String,
     check: StoredCheck,
     run: StoredRun,
+    gate_commit: String,
     conclusion: StoredConclusion,
     report: StoredReport,
 }
@@ -30,6 +32,7 @@ impl StoredPublication {
             evaluation_id: publication.evaluation_id.as_str().to_owned(),
             check: store_check(&publication.check),
             run: StoredRun::new(&publication.run),
+            gate_commit: publication.gate_commit.as_str().to_owned(),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
         })
@@ -46,22 +49,23 @@ impl StoredPublication {
         &self,
         report: Option<Vec<u8>>,
     ) -> Result<Publication, FileLedgerError> {
-        self.report.verify(report.as_deref())?;
-        let mut publication = self.materialize_metadata()?;
-        publication.report = report;
-        Ok(publication)
+        self.report.attach(self.materialize_metadata()?, report)
     }
 
     pub(super) fn materialize_metadata(&self) -> Result<Publication, FileLedgerError> {
         if let Some(reference) = self.report() {
             reference.validate()?;
         }
+        let run = self.run.materialize()?;
+        let gate_commit = Oid::new(run.object_format, self.gate_commit.clone())
+            .ok_or(FileLedgerError::Corrupt)?;
         Ok(Publication {
             provider_run: self.provider_run.materialize()?,
             evaluation_id: ControllerEvaluationId::new(self.evaluation_id.clone())
                 .ok_or(FileLedgerError::Corrupt)?,
             check: materialize_check(&self.check)?,
-            run: self.run.materialize()?,
+            run,
+            gate_commit,
             conclusion: self.conclusion.materialize(),
             report: None,
         })
@@ -76,6 +80,16 @@ enum StoredReport {
 }
 
 impl StoredReport {
+    fn attach(
+        &self,
+        mut publication: Publication,
+        report: Option<Vec<u8>>,
+    ) -> Result<Publication, FileLedgerError> {
+        self.verify(report.as_deref())?;
+        publication.report = report;
+        Ok(publication)
+    }
+
     fn new(report: Option<&[u8]>) -> Result<Self, FileLedgerError> {
         match report {
             Some(bytes) => ReportRef::new(bytes).map(|reference| Self::Blob { reference }),

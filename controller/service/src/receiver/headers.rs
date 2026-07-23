@@ -2,7 +2,7 @@ use axum::http::HeaderMap;
 
 use crate::DeliveryHeader;
 
-pub(super) fn normalize(
+pub(crate) fn normalize(
     headers: &HeaderMap,
     max_headers: u64,
     max_header_bytes: u64,

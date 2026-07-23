@@ -22,7 +22,7 @@ use crate::{
 const MAX_HEARTBEAT_WAIT: Duration = Duration::from_secs(5);
 const PROCESS_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 const PROCESS_DRAIN_POLL: Duration = Duration::from_millis(10);
-const BOOTSTRAP_EXECUTABLE_BYTES: u64 = 33_554_432;
+pub const BOOTSTRAP_EXECUTABLE_BYTES: u64 = 33_554_432;
 
 /// The trusted paths, sealed input, and time bounds for one bootstrap process.
 #[derive(Clone, Copy, Debug)]

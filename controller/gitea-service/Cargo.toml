@@ -1,0 +1,70 @@
+[package]
+name = "amiss-controller-gitea-service"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "Deployable Gitea-family provider lane for the Amiss controller"
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/HardMax71/amiss"
+publish = false
+
+[[bin]]
+name = "amiss-controller-gitea"
+path = "src/main.rs"
+
+[[bin]]
+name = "amiss-gitea-service-bootstrap-fixture"
+path = "tests/fixtures/bootstrap.rs"
+test = false
+bench = false
+
+[dependencies]
+amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
+amiss-controller = { path = ".." }
+amiss-controller-git = { path = "../git" }
+amiss-controller-gitea = { path = "../gitea" }
+amiss-controller-service = { path = "../service" }
+amiss-wire = { path = "../../crates/amiss-wire" }
+secrecy = "0.10"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1.53.1", features = ["net", "rt-multi-thread", "signal"] }
+
+[dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
+hex = "0.4"
+hmac = "0.13"
+serde_json = "1"
+sha2 = "0.11"
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"
+as_conversions = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+wildcard_enum_match_arm = "deny"
+mem_forget = "deny"
+dbg_macro = "deny"

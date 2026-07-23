@@ -4,9 +4,9 @@ use crate::{
     VerifiedDelivery,
 };
 
-/// Transient proof returned after a provider signature is verified.
+/// Transient proof returned after a provider-controlled signature is verified.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct WebhookProof {
+pub struct SignedRequestProof {
     trust_set: TrustSetId,
     anchor: TrustAnchorId,
     replay: ReplayIdentity,
@@ -14,8 +14,14 @@ pub struct WebhookProof {
     request: RequestBinding,
 }
 
-impl WebhookProof {
-    pub(super) fn new(
+impl SignedRequestProof {
+    /// Captures the exact checked request after a provider adapter has verified
+    /// a non-webhook signature such as a workload identity token.
+    ///
+    /// The caller is part of the trusted adapter. It must authenticate every
+    /// supplied proof field before constructing this value.
+    #[must_use]
+    pub fn verified(
         check: IngressCheck<'_>,
         trust_set: TrustSetId,
         anchor: TrustAnchorId,
@@ -61,3 +67,5 @@ impl WebhookProof {
         )
     }
 }
+
+pub type WebhookProof = SignedRequestProof;

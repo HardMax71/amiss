@@ -12,17 +12,19 @@ hook table itself has a bug.
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
-cargo nextest run --manifest-path controller/Cargo.toml --locked
-cargo clippy --manifest-path controller/Cargo.toml --all-targets --locked -- -D warnings
+cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
+cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
 ```
 
-The first pair checks the offline scanner workspace. The unpublished provider-controller
-foundation under `controller/` is a separate nested Rust workspace with its own lockfile and
-dependency policy, so the second pair checks it explicitly. The separation is a trust boundary:
-provider transport and storage dependencies belong in that nested workspace, never in the root
-engine workspace whose dependency bans keep networking and async runtimes out. The prek hooks
-and Linux CI run both sets. The macOS and Windows jobs also run the controller tests, including
-the cross-process file record and provider signature vectors.
+The first pair checks the offline scanner workspace. The unpublished provider and service crates
+under `controller/` form a separate nested workspace with their own lockfile and dependency
+policy, so the second pair checks them explicitly. The separation is a trust boundary: HTTP,
+provider API, Git acquisition, credential, storage, and service-runtime dependencies belong in
+that nested workspace, never in the root engine workspace whose dependency bans keep networking
+and async runtimes out. The prek hooks and Linux CI run both sets. The macOS and Windows jobs also
+run the controller tests, including the cross-process file stores, provider authentication,
+worker, and supervised-process cases. The supported service deployments are documented in
+[Provider-verified controls](provider-controls.md).
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The

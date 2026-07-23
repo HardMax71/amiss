@@ -23,7 +23,7 @@ jobs:
       - run: cargo deny check advisories sources
       - run: cargo deny check advisories sources
         working-directory: fuzz
-      - run: cargo deny --manifest-path controller/Cargo.toml --config controller/deny.toml check advisories sources
+      - run: cargo deny --manifest-path controller/Cargo.toml --config controller/deny.toml --workspace check advisories sources
 
   workflow-audit:
     runs-on: ubuntu-latest

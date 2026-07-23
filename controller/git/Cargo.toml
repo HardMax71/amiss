@@ -1,0 +1,53 @@
+[package]
+name = "amiss-controller-git"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+description = "Exact Git acquisition for Amiss provider controllers"
+license = "FSL-1.1-ALv2"
+repository = "https://github.com/HardMax71/amiss"
+publish = false
+
+[dependencies]
+amiss-controller = { path = ".." }
+amiss-wire = { path = "../../crates/amiss-wire" }
+flate2 = "1"
+gix = { version = "0.85", default-features = false, features = [
+  "blocking-http-transport-reqwest-rust-tls",
+  "sha1",
+] }
+gix-pack = { version = "0.72", features = ["sha1"] }
+secrecy = "0.10"
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+disallowed_types = "deny"
+disallowed_methods = "deny"
+as_conversions = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+wildcard_enum_match_arm = "deny"
+mem_forget = "deny"
+dbg_macro = "deny"

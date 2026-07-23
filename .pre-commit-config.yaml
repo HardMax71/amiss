@@ -28,7 +28,7 @@ repos:
         entry: >-
           awk '/#\[test\]|#\[cfg\(test\)\]/{print FILENAME": test code inside implementation";e=1} END{exit e}'
         language: system
-        files: ^(crates/[^/]+|controller)/src/.*\.rs$
+        files: ^(crates/[^/]+|controller(/[^/]+)?)/src/.*\.rs$
       # The README says the engine never runs anything and never shells out to
       # git, and until now the only thing holding that up was everyone
       # remembering. The bootstrap is the one crate that may spawn: launching the
@@ -83,9 +83,9 @@ repos:
         stages: [pre-push]
       - id: controller-clippy
         name: controller cargo clippy
-        entry: cargo clippy --manifest-path controller/Cargo.toml --all-targets --locked -- -D warnings
+        entry: cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
         language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|clippy\.toml|.*\.rs)|crates/amiss-wire/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
+        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|clippy\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: nextest
@@ -96,9 +96,9 @@ repos:
         stages: [pre-push]
       - id: controller-nextest
         name: controller cargo nextest
-        entry: cargo nextest run --manifest-path controller/Cargo.toml --locked
+        entry: cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
         language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*\.rs)|crates/amiss-wire/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
+        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: deny
@@ -110,9 +110,9 @@ repos:
         stages: [pre-push]
       - id: controller-deny
         name: controller cargo deny
-        entry: cargo deny --manifest-path controller/Cargo.toml --config controller/deny.toml check
+        entry: cargo deny --manifest-path controller/Cargo.toml --config controller/deny.toml --workspace check
         language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|deny\.toml)|crates/amiss-wire/Cargo\.toml|rust-toolchain\.toml)$
+        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|deny\.toml)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/Cargo\.toml|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: shear
@@ -126,7 +126,7 @@ repos:
         name: controller cargo shear
         entry: cargo shear --locked controller
         language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*\.rs)|crates/amiss-wire/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
+        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       # Whole functions compared by AST edit distance: threshold 0.85, eight

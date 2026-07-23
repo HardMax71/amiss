@@ -144,6 +144,7 @@ fn a_lost_completion_record_is_distinct_after_publication() {
             evaluation_id: expected.evaluation_id.clone(),
             check: expected.check.clone(),
             run: run.clone(),
+            gate_commit: run.commits.candidate.clone(),
             conclusion: CheckConclusion::Pass,
             report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
         }),

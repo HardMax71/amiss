@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
+use tokio::sync::Semaphore;
 
 use super::admission::{AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission};
 use super::headers;
@@ -16,6 +17,7 @@ pub(super) struct ReceiverState {
     pub(super) max_body_bytes: usize,
     pub(super) max_headers: u64,
     pub(super) max_header_bytes: u64,
+    pub(super) permits: Arc<Semaphore>,
 }
 
 pub(super) async fn health() -> StatusCode {
@@ -35,10 +37,14 @@ pub(super) async fn receive(State(state): State<ReceiverState>, request: Request
     else {
         return StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE;
     };
+    let Ok(permit) = Arc::clone(&state.permits).try_acquire_owned() else {
+        return StatusCode::SERVICE_UNAVAILABLE;
+    };
     let Ok(body) = body::to_bytes(body, state.max_body_bytes).await else {
         return StatusCode::PAYLOAD_TOO_LARGE;
     };
     let outcome = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         dispatch(&state, received_at_unix_millis, &headers, body.as_ref())
     })
     .await;

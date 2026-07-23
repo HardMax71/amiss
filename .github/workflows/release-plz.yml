@@ -84,7 +84,7 @@ jobs:
           git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
           git switch --force-create "$branch" "origin/$branch"
           cargo update --workspace --manifest-path controller/Cargo.toml
-          cargo test --manifest-path controller/Cargo.toml --locked
+          cargo test --manifest-path controller/Cargo.toml --workspace --locked
           cargo update --workspace --manifest-path fuzz/Cargo.toml
           cargo test --manifest-path fuzz/Cargo.toml --locked --release
 

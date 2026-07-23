@@ -78,19 +78,24 @@ inspectable; version-specific history stays in the
 </details>
 
 <details>
-<summary>Done: provider-verified controls foundation</summary>
+<summary>Done: provider-verified controls</summary>
 
 - The rolling evaluation contract separates the source ref used for URL resolution from the
-  protected target ref used for branch controls. A frozen run binds the provider, integration,
-  repository, URL dialect, change, refs, commits, trees, check plan, execution limits, and trusted
-  time without enumerating provider-specific identity types.
+  protected target ref used for branch controls. A frozen controller evaluation binds the
+  provider, integration, repository, URL dialect, change, refs, commits, trees, provider gate,
+  check plan, execution limits, and trusted time without enumerating provider-specific identity
+  types.
 - The bootstrap accepts the canonical evaluation, snapshot, and controls documents, checks their
   required bindings, and passes their exact bytes to the verified engine in one closed input frame.
   The wire library also produces canonical execution limits and trusted-time statements.
 - The unpublished [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
-  supplies the provider-neutral traits, orchestrator, bounded ingress gate, rotating key ring, and
-  signature checks for GitHub, GitLab Standard Webhooks, and the Gitea family. These checks are
-  library surfaces, not supported provider integrations.
+  supplies the provider-neutral traits, orchestrator, bounded ingress gate, rotating key ring,
+  signed-webhook checks, GitLab OIDC checks, and separate provider adapters. Provider differences
+  stay in small crates rather than a closed provider enum.
+- A bounded HTTP receiver authenticates before admission and saves the exact raw delivery before
+  acknowledging it. Its ordinary-file inbox survives restart, enforces row and byte capacity,
+  renews ownership during controller work, retries temporary provider failures, and removes raw
+  bytes only after the delivery ledger has completed. It uses no SQL or database.
 - The controller record and runner share one lease contract. The runner renews before its relative
   lease window closes, and loss of ownership stops the run instead of allowing stale work to
   publish. [Controller delivery](controller.md) defines the ownership, retry, and publication
@@ -101,38 +106,60 @@ inspectable; version-specific history stays in the
   wall and lease limits, proves the tree empty before reading, bounds the report, and rejects
   incomplete or malformed results. Focused tests cover wrong roots, bootstrap tampering, bad or
   missing output, oversize, timeout, heartbeat loss, and live descendants.
+- The source-built GitHub service completes one lane for one repository, App installation, and
+  protected target branch on GitHub.com or a compatible GHES release. Strict JSON loads the App
+  key, rotating webhook secrets, external controls, execution constraint, bootstrap, and separate
+  private state roots. The plaintext listener is deployed behind an operator-owned TLS and
+  connection-limit boundary.
+- The GitHub source accepts signed `opened`, `reopened`, and `synchronize` pull-request events,
+  plus `edited` only for a signed base-branch change. Admission binds the configured repository and
+  target. The App client refreshes exact repository, pull-request, ref, commit, tree, and
+  test-merge facts and requires a strict active status rule whose context is bound to that App.
+  It refreshes again before saving the result.
+- Acquisition uses Git protocol v2 with exact authenticated SHA-1 wants for the repository and
+  pinned action commit. One deadline covers network receipt and validation. Fixed fail-closed
+  limits cap the pack at 2 GiB, objects at 2,000,000, each inflated stream or resolved object at
+  128 MiB, aggregate inflated and resolved bytes at 4 GiB each, and delta depth at 128.
+  `REF_DELTA` is rejected and pack indexing uses one thread.
+- Publication attaches `success`, `failure`, or `cancelled` to GitHub's authoritative test-merge
+  commit. Its summary binds the gate, provider run, refs, commits, trees, plan, execution
+  constraint, report digest, and stable unavailable reason. The evaluation ID reconciles one
+  exact visible retry; an accepted create with a lost reply can still leave a duplicate because
+  GitHub and the local ledger do not share a transaction. A final pull-request refresh turns an
+  out-of-order publication into a no-op when its staged head, base, refs, or gate is no longer
+  current, so stale work cannot write to the newer gate.
+- The source-built GitLab service completes the policy-job lane for one project and protected
+  target branch on GitLab 19.3 or newer with Ultimate. A pipeline execution policy owned outside
+  the checked project injects the job into every enforced merge train. The service authenticates
+  the job's short-lived OIDC token and binds its policy project and commit, job and pipeline,
+  runner, merge request, repository, and exact train-result commit before any provider state is
+  trusted.
+- GitLab refresh requires the configured merge method, the exact two train parents, an active
+  policy job, a protected target branch with no push or bypass path, and merge-train enforcement
+  for all users. The synchronous endpoint lets only the exact saved pass return success; block,
+  unavailable, duplicate, expired, replayed, or changed state keeps the policy job failed.
+- The source-built Gitea-family service completes one lane for Gitea 1.27 or newer and Forgejo 16
+  or newer. It authenticates the native exact-body HMAC, refreshes the pull request, commits,
+  trees, effective branch rule, and reviewer identity, then publishes an approval or request for
+  changes through one dedicated reviewer account.
+- The Gitea-family gate requires one approval restricted to that reviewer, closed direct-push and
+  bypass paths, stale and rejected review blocking, an up-to-date pull request, and administrator
+  enforcement. The adapter checks the distinct Gitea and Forgejo capability shapes without
+  guessing one forge from headers. A wildcard protection rule is supported through effective-rule
+  lookup; one exact rule remains the easier setup to audit.
+- End-to-end and focused tests carry a signed delivery through authentication, durable admission,
+  provider refresh, runner, provider gate, completion, and replay suppression. Negative cases
+  cover wrong provider, repository, target, runner, policy, reviewer, commit, and tree; changed
+  bootstrap or merge rule; expiry and replay; missing output and timeout; malformed or tampered
+  input and state; capacity and restart; lost ownership; ref or gate drift; oversized and
+  malformed packs; `REF_DELTA`; excessive delta depth; and conflicting provider evidence.
+- Provider evidence lives in the App-owned Check Run, protected GitLab policy job, or dedicated
+  Gitea-family review and the matching merge rule. The engine report remains unchanged and
+  self-asserted; it has no provider signature or `provider_verified` field. Each provider page
+  records its commit or tree freshness limit, retry behavior, rotation rules, and full trust
+  boundary.
 
 </details>
-
-## Now: provider integrations
-
-The foundation above is complete, but no provider has a supported end-to-end lane. The controller
-has no HTTP server, concrete GitHub, GitLab, or Gitea-family adapter, authenticated payload decoder,
-provider API client or credential source, repository or action-tree acquisition worker, deployable
-service, publication transport, or check publisher. Signature checks are not connected to a
-listener or authoritative key refresh, and authenticated state and network acquisition are not
-connected to the runner. The GitHub composite Action remains a convenience wrapper that launches
-the engine directly; it does not produce provider-verified evidence.
-
-What remains is to place the library behind a bounded HTTP receiver; build adapters from the
-capabilities each provider actually offers; obtain credentials outside the repository; acquire the
-exact repository and action trees named by the frozen run; pass those roots to the supervised
-bootstrap; keep provider refreshes inside the lease window; and safely repeat publication of the
-same source-bound required check. End-to-end tests must carry the existing runner failures through
-authentication, acquisition, execution, and publication, alongside wrong provider, repository,
-change, ref, expiry, replay, and revocation.
-
-Route configuration must use replay-only protection for GitHub and Gitea-family signatures, which
-do not authenticate an attempt time, and a bounded freshness rule for GitLab Standard Webhooks,
-which does. Replay-only would be invalid GitLab configuration. Link dialect support in the engine's
-`forge` field is not evidence that an authenticated adapter exists.
-
-The lane is ready only when the verifier and authorization come from outside the repository and
-action tree under review; every authorization and published result binds the exact provider
-instance, integration, repository, URL dialect, source, target and default-branch refs, commits,
-and trees; and a consumer can distinguish provider-authenticated evidence from the engine report's
-local assertions without trusting repository-controlled input. This phase stays in Now until at
-least one provider satisfies that complete path.
 
 ## Reference-coverage candidates
 

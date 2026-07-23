@@ -40,11 +40,6 @@ pub(crate) struct LeaseData {
     pub(crate) expires_at_unix_millis: i64,
 }
 
-pub(crate) enum Transition<T> {
-    Applied(T),
-    Lost,
-}
-
 impl Record {
     pub(crate) fn pending(delivery: StoredDelivery) -> Result<Self, InboxError> {
         Ok(Self {
@@ -106,87 +101,69 @@ impl Record {
         }
     }
 
-    pub(crate) fn claim(
+    pub(crate) fn begin_attempt(self) -> Result<Self, InboxError> {
+        let attempts = self.attempts.checked_add(1).ok_or(InboxError::Corrupt)?;
+        let fence = self.fence.checked_add(1).ok_or(InboxError::Corrupt)?;
+        Ok(Self {
+            attempts,
+            fence,
+            ..self
+        })
+    }
+
+    pub(crate) fn lease(
         self,
         owner: &str,
         now: i64,
         lease_millis: i64,
     ) -> Result<(Self, LeaseData), InboxError> {
         let expires_at_unix_millis = now.checked_add(lease_millis).ok_or(InboxError::Clock)?;
-        let attempts = self.attempts.checked_add(1).ok_or(InboxError::Corrupt)?;
-        let fence = self.fence.checked_add(1).ok_or(InboxError::Corrupt)?;
-        let generation = self.generation.checked_add(1).ok_or(InboxError::Corrupt)?;
-        let record = Self {
-            generation,
-            attempts,
-            fence,
-            state: State::Claimed {
-                owner: owner.to_owned(),
-                expires_at_unix_millis,
-            },
-            ..self
-        };
-        let lease = LeaseData {
-            owner: owner.to_owned(),
-            fence,
-            attempt: attempts,
-            expires_at_unix_millis,
-        };
-        Ok((record, lease))
+        let attempts = self.attempts;
+        let fence = self.fence;
+        self.claimed(owner, expires_at_unix_millis, attempts, fence)
     }
 
-    pub(crate) fn renew(
-        self,
-        owner: &str,
-        fence: u64,
-        now: i64,
-        lease_millis: i64,
-    ) -> Result<Transition<(Self, LeaseData)>, InboxError> {
-        if !self.lease_matches(owner, fence, now) {
-            return Ok(Transition::Lost);
-        }
-        let expires_at_unix_millis = now.checked_add(lease_millis).ok_or(InboxError::Clock)?;
+    pub(crate) fn retry(self, available_at_unix_millis: i64) -> Result<Self, InboxError> {
         let generation = self.generation.checked_add(1).ok_or(InboxError::Corrupt)?;
-        let attempt = self.attempts;
-        let record = Self {
-            generation,
-            state: State::Claimed {
-                owner: owner.to_owned(),
-                expires_at_unix_millis,
-            },
-            ..self
-        };
-        let lease = LeaseData {
-            owner: owner.to_owned(),
-            fence,
-            attempt,
-            expires_at_unix_millis,
-        };
-        Ok(Transition::Applied((record, lease)))
-    }
-
-    pub(crate) fn retry(
-        self,
-        owner: &str,
-        fence: u64,
-        now: i64,
-        available_at_unix_millis: i64,
-    ) -> Result<Transition<Self>, InboxError> {
-        if !self.lease_matches(owner, fence, now) {
-            return Ok(Transition::Lost);
-        }
-        let generation = self.generation.checked_add(1).ok_or(InboxError::Corrupt)?;
-        Ok(Transition::Applied(Self {
+        Ok(Self {
             generation,
             state: State::Pending {
                 available_at_unix_millis,
             },
             ..self
-        }))
+        })
     }
 
     pub(crate) fn lease_is_live(&self, owner: &str, fence: u64, now: i64) -> bool {
         self.lease_matches(owner, fence, now)
+    }
+
+    fn claimed(
+        self,
+        owner: &str,
+        expires_at_unix_millis: i64,
+        attempts: u64,
+        fence: u64,
+    ) -> Result<(Self, LeaseData), InboxError> {
+        let generation = self.generation.checked_add(1).ok_or(InboxError::Corrupt)?;
+        let owner = owner.to_owned();
+        let lease = LeaseData {
+            owner: owner.clone(),
+            fence,
+            attempt: attempts,
+            expires_at_unix_millis,
+        };
+        let record = Self {
+            generation,
+            attempts,
+            fence,
+            state: State::Claimed {
+                owner,
+                expires_at_unix_millis,
+            },
+            ..self
+        };
+        Ok((record, lease))
     }
 
     fn validate_delivery(

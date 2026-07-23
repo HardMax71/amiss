@@ -33,14 +33,16 @@ These JSON files are digest preimages, not accepted request documents, and the
 validates each against its report-schema definition and reproduces the full chain through
 the production builders.
 
-The provider-controller foundation uses a stricter orchestration identity containing the
-provider instance, repository and change, URL dialect, candidate, target and default-branch refs,
-object format, base and candidate commits, and both tree IDs. An adapter is expected to obtain
-that tuple from refreshed provider state,
-not from repository-controlled request JSON. The current controller defines that boundary but
-does not implement a provider adapter or repository acquisition worker. On the sealed path,
-bootstrap refuses unless both requested commits already exist locally, then the engine reads and
-rehashes their objects normally; no component fetches from inside the engine.
+The provider controller uses a stricter orchestration identity containing the provider instance,
+repository and change, URL dialect, candidate, target and default-branch refs, object format, base
+and candidate commits, and both tree IDs. Each
+[provider lane](provider-controls.md) binds that identity from independently authenticated input,
+refreshes the change and protected merge gate through its own credential, and acquires
+authenticated SHA-1 commit wants through the same fixed-budget Git protocol-v2 path before
+launch. Bootstrap refuses unless the acquired roots reproduce the evaluation identity. The
+engine then reads and re-hashes their objects normally; fetching remains outside the engine.
+The provider's Check Run, policy-job result, or dedicated review remains merge evidence rather
+than a third engine snapshot.
 
 The snapshot request's `repository_handle: 3` is a stable protocol ordinal, not a claim that
 the operating system passed file descriptor 3. In the current safe-Rust subprocess path the

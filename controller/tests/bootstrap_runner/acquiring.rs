@@ -18,13 +18,19 @@ impl ControllerClock for FixedClock {
 #[derive(Default)]
 struct AcquiredPaths(Mutex<Vec<PathBuf>>);
 
-struct CloneAcquisition<'a> {
-    repository: &'a Path,
-    action: &'a Path,
-    paths: Arc<AcquiredPaths>,
+enum AcquisitionFixture<'a> {
+    Clone {
+        repository: &'a Path,
+        action: &'a Path,
+        paths: Arc<AcquiredPaths>,
+    },
+    Reject,
+    Wait {
+        observed: Arc<AtomicBool>,
+    },
 }
 
-impl Acquisition for CloneAcquisition<'_> {
+impl Acquisition for AcquisitionFixture<'_> {
     type Error = std::io::Error;
 
     fn acquire(
@@ -32,13 +38,29 @@ impl Acquisition for CloneAcquisition<'_> {
         _request: &RunRequest,
         target: AcquisitionTarget<'_>,
     ) -> Result<(), Self::Error> {
-        self.paths
-            .0
-            .lock()
-            .unwrap()
-            .extend([target.repository.to_path_buf(), target.action.to_path_buf()]);
-        clone_repository(self.repository, target.repository, &target.cancelled)?;
-        clone_repository(self.action, target.action, &target.cancelled)
+        match self {
+            Self::Clone {
+                repository,
+                action,
+                paths,
+            } => {
+                paths
+                    .0
+                    .lock()
+                    .unwrap()
+                    .extend([target.repository.to_path_buf(), target.action.to_path_buf()]);
+                clone_repository(repository, target.repository, &target.cancelled)?;
+                clone_repository(action, target.action, &target.cancelled)
+            }
+            Self::Reject => Err(std::io::Error::other("acquisition rejected")),
+            Self::Wait { observed } => {
+                while !target.cancelled.load(Ordering::Acquire) {
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                observed.store(true, Ordering::Release);
+                Err(std::io::Error::other("acquisition cancelled"))
+            }
+        }
     }
 }
 
@@ -48,40 +70,6 @@ fn clone_repository(source: &Path, target: &Path, cancelled: &AtomicBool) -> std
     }
     let source = path_arg(source);
     git(target, &["clone", "-q", &source, "."]).map(|_output| ())
-}
-
-struct RejectingAcquisition;
-
-impl Acquisition for RejectingAcquisition {
-    type Error = ();
-
-    fn acquire(
-        &mut self,
-        _request: &RunRequest,
-        _target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error> {
-        Err(())
-    }
-}
-
-struct WaitingAcquisition {
-    observed: Arc<AtomicBool>,
-}
-
-impl Acquisition for WaitingAcquisition {
-    type Error = ();
-
-    fn acquire(
-        &mut self,
-        _request: &RunRequest,
-        target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error> {
-        while !target.cancelled.load(Ordering::Acquire) {
-            std::thread::sleep(Duration::from_millis(2));
-        }
-        self.observed.store(true, Ordering::Release);
-        Err(())
-    }
 }
 
 fn acquiring_runner<A: Acquisition>(
@@ -104,7 +92,7 @@ fn acquiring_runner<A: Acquisition>(
 fn uses_private_exact_roots_and_controller_time() {
     let harness = Harness::new("runner-pass", None);
     let paths = Arc::new(AcquiredPaths::default());
-    let acquisition = CloneAcquisition {
+    let acquisition = AcquisitionFixture::Clone {
         repository: harness.repository.root(),
         action: harness.action.root(),
         paths: Arc::clone(&paths),
@@ -127,14 +115,18 @@ fn uses_private_exact_roots_and_controller_time() {
 #[test]
 fn acquisition_and_clock_defects_are_unavailable() {
     let harness = Harness::new("runner-pass", None);
-    let mut rejected = acquiring_runner(&harness, RejectingAcquisition, Some(1_753_219_200_000));
+    let mut rejected = acquiring_runner(
+        &harness,
+        AcquisitionFixture::Reject,
+        Some(1_753_219_200_000),
+    );
     let mut heartbeat = Heartbeat::renewing();
     assert_eq!(
         rejected.run(&harness.request, &mut heartbeat),
         RunnerOutcome::Unavailable
     );
 
-    let acquisition = CloneAcquisition {
+    let acquisition = AcquisitionFixture::Clone {
         repository: harness.repository.root(),
         action: harness.action.root(),
         paths: Arc::new(AcquiredPaths::default()),
@@ -152,7 +144,7 @@ fn heartbeat_loss_cancels_acquisition() {
     let observed = Arc::new(AtomicBool::new(false));
     let mut runner = acquiring_runner(
         &harness,
-        WaitingAcquisition {
+        AcquisitionFixture::Wait {
             observed: Arc::clone(&observed),
         },
         Some(1_753_219_200_000),
@@ -173,7 +165,7 @@ fn invalid_time_bounds_are_rejected() {
     let clock: Arc<dyn ControllerClock> = Arc::new(FixedClock(Some(1_753_219_200_000)));
     let build = |validity| {
         AcquiringRunner::new(
-            RejectingAcquisition,
+            AcquisitionFixture::Reject,
             harness.executable.clone(),
             harness.scratch.path().to_path_buf(),
             Duration::from_secs(2),

@@ -1,8 +1,8 @@
 # Architecture
 
 The offline root workspace has six production crates, and trust flows in one direction; a
-seventh exists only for tests. An unpublished provider-controller foundation lives in a
-separate nested Rust workspace.
+seventh exists only for tests. Unpublished provider-controller crates live in a separate nested
+Rust workspace.
 
 ```dot process
 digraph amiss {
@@ -57,22 +57,18 @@ A seventh crate, `amiss-fixtures`, exists only for tests: it writes hostile Git 
 straight into test repositories so the same fixtures exist on every platform.
 
 The nested [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
-is outside that graph and outside the root lockfile. Its unpublished `amiss-controller` crate
-keeps its provider and storage dependencies out of the scanner. `ProviderAdapter`,
-`DeliveryLedger`, and `Runner` are transport-neutral boundaries for provider access, durable retry
-coordination, and trusted execution. [Controller delivery](controller.md) defines their flow and
-record contract. The orchestrator, bounded ingress gate, provider signature verifiers, and a local
-file implementation of `DeliveryLedger` exist. The concrete provider-neutral bootstrap runner
-re-verifies exact acquired roots, derives the sealed job, checks and privately copies the pinned
-bootstrap, and supervises the closed process under a wall limit and ledger heartbeat. It creates
-the output files, retains their open handles, and uses ProcessKit's cross-platform process-tree
-boundary. Every terminal path hard-kills the group and confirms it is empty before the retained
-outputs are read. The provider adapter boundary still has no concrete implementation.
+is outside that graph and outside the root lockfile. Its unpublished crates keep provider, HTTP,
+storage, credential, Git acquisition, and runtime dependencies out of the scanner.
+`amiss-controller` owns the provider-neutral orchestration and supervised bootstrap contracts;
+`amiss-controller-git` owns bounded protocol-v2 acquisition; and `amiss-controller-service` owns
+the bounded webhook and synchronous evaluation endpoints, durable raw inbox, and worker. Small
+provider crates and service binaries add the GitHub App Check Run, GitLab merge-train policy job,
+and Gitea or Forgejo dedicated-reviewer gates. All durable state uses ordinary files rather than
+SQL or a database.
 
-No HTTP transport, authenticated payload decoder, provider API client, credential source,
-repository acquisition worker, provider publisher, or deployable service exists in that workspace
-yet. Nothing joins authenticated provider state and independently acquired trees to the runner, so
-there is still no arrow from the controller into the supported delivery graph.
+[Controller delivery](controller.md) defines the neutral record and retry rules.
+[Provider-verified controls](provider-controls.md) compares the concrete flows and links each
+provider's setup and trust boundary.
 
 Inside an engine run, the stages form a line:
 

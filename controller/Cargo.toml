@@ -15,7 +15,16 @@ test = false
 bench = false
 
 [workspace]
-members = ["github", "service"]
+members = [
+  "git",
+  "gitea",
+  "gitea-service",
+  "github",
+  "github-service",
+  "gitlab",
+  "gitlab-service",
+  "service",
+]
 resolver = "3"
 
 [dependencies]

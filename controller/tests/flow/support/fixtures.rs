@@ -110,7 +110,12 @@ pub(crate) fn run_with_resolution(
 }
 
 pub(crate) fn snapshot(state: ChangeState, run: RunIdentity) -> ChangeSnapshot {
-    ChangeSnapshot { state, run }
+    let gate_commit = run.commits.candidate.clone();
+    ChangeSnapshot {
+        state,
+        run,
+        gate_commit,
+    }
 }
 
 pub(crate) fn complete(run: &RunIdentity) -> RunnerOutcome {

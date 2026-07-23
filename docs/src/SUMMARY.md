@@ -23,6 +23,10 @@
 
 - [Security model](security.md)
 - [Controls and policy](controls.md)
+- [Provider-verified controls](provider-controls.md)
+  - [GitHub](provider-github.md)
+  - [GitLab](provider-gitlab.md)
+  - [Gitea and Forgejo](provider-gitea.md)
 - [Controller delivery](controller.md)
 - [Licenses and notices](licenses.md)
 

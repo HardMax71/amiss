@@ -145,10 +145,29 @@ fn component_limits_reject_before_copying_or_persisting() {
 #[test]
 fn impossible_limits_are_configuration_errors() {
     let directory = TempDir::new().unwrap();
-    let mut limits = limits();
-    limits.lease_duration = Duration::ZERO;
+    let mut invalid = limits();
+    invalid.lease_duration = Duration::ZERO;
     assert!(matches!(
-        Inbox::open(directory.path(), limits),
+        Inbox::open(directory.path(), invalid),
         Err(InboxError::Configuration)
     ));
+    for limits in [
+        amiss_controller_service::InboxLimits {
+            max_records: 1_025,
+            ..limits()
+        },
+        amiss_controller_service::InboxLimits {
+            max_bytes: 128 * 1_024 * 1_024 + 1,
+            ..limits()
+        },
+        amiss_controller_service::InboxLimits {
+            max_record_bytes: 16 * 1_024 * 1_024 + 1,
+            ..limits()
+        },
+    ] {
+        assert!(matches!(
+            Inbox::open(directory.path(), limits),
+            Err(InboxError::Configuration)
+        ));
+    }
 }
