@@ -33,7 +33,16 @@ digraph gitea_provider {
   final  [label = "refresh gate\nagain"];
   save   [label = "save exact\nresult"];
   review [label = "dedicated reviewer\napproval or rejection"];
-  forge -> tls -> inbox -> first -> fetch -> boot -> final -> save -> review;
+  { rank = same; forge; tls; inbox; }
+  { rank = same; first; fetch; boot; }
+  { rank = same; final; save; review; }
+  forge -> tls -> inbox;
+  first -> fetch -> boot;
+  final -> save -> review;
+  inbox -> first [constraint = false];
+  boot -> final [constraint = false];
+  forge -> first -> final [style = invis];
+
 }
 ```
 

@@ -36,7 +36,16 @@ digraph gitlab_provider {
   final  [label = "refresh gate\nagain"];
   save   [label = "save exact\nresult"];
   result [label = "204 only for pass;\npolicy job succeeds"];
-  policy -> train -> tls -> oidc -> first -> fetch -> boot -> final -> save -> result;
+  { rank = same; policy; train; tls; oidc; }
+  { rank = same; first; fetch; boot; }
+  { rank = same; final; save; result; }
+  policy -> train -> tls -> oidc;
+  first -> fetch -> boot;
+  final -> save -> result;
+  oidc -> first [constraint = false];
+  boot -> final [constraint = false];
+  policy -> first -> final [style = invis];
+
 }
 ```
 

@@ -35,7 +35,16 @@ digraph provider_controls {
   save   [label = "save exact result"];
   check  [label = "App-owned\nCheck Run"];
   done   [label = "mark delivery done"];
-  github -> tls -> gate -> inbox -> claim -> api1 -> fetch -> boot -> api2 -> save -> check -> done;
+  { rank = same; github; tls; gate; inbox; }
+  { rank = same; claim; api1; fetch; boot; }
+  { rank = same; api2; save; check; done; }
+  github -> tls -> gate -> inbox;
+  claim -> api1 -> fetch -> boot;
+  api2 -> save -> check -> done;
+  inbox -> claim [constraint = false];
+  boot -> api2 [constraint = false];
+  github -> claim -> api2 [style = invis];
+
 }
 ```
 
