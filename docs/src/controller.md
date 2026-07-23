@@ -92,7 +92,7 @@ durable record.
 
 ```dot process
 digraph controller_delivery {
-  rankdir = LR;
+  rankdir = TB;
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
   raw      [label = "raw delivery"];
@@ -105,8 +105,16 @@ digraph controller_delivery {
   stage    [label = "save exact result"];
   publish  [label = "publish"];
   complete [label = "mark done"];
-  raw -> gate -> auth -> claim -> first -> run -> second -> stage -> publish -> complete;
-  claim -> publish [label = "saved retry\ncheck binding"];
+  { rank = same; raw; gate; auth; claim; }
+  { rank = same; first; run; second; }
+  { rank = same; stage; publish; complete; }
+  raw -> gate -> auth -> claim;
+  first -> run -> second;
+  stage -> publish -> complete;
+  claim -> first [constraint = false];
+  second -> stage [constraint = false];
+  claim -> publish [label = "saved retry\ncheck binding", constraint = false];
+  raw -> first -> stage [style = invis];
 }
 ```
 
@@ -191,7 +199,7 @@ uses a higher fence.
 
 ```dot process
 digraph delivery_states {
-  rankdir = LR;
+  rankdir = TB;
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
   fresh   [label = "new"];
