@@ -83,7 +83,11 @@ impl Transport {
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        decode_json(response)
+        let status = response.status();
+        if !status.is_success() {
+            return Err(map_status(status));
+        }
+        decode_body(response)
     }
 
     fn url(&self, route: &str) -> Result<Url, ProviderError> {
@@ -95,11 +99,7 @@ impl Transport {
     }
 }
 
-fn decode_json<T: DeserializeOwned>(mut response: Response) -> Result<T, ProviderError> {
-    let status = response.status();
-    if !status.is_success() {
-        return Err(map_status(status));
-    }
+fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
     let declared = response
         .headers()
         .get(CONTENT_LENGTH)
@@ -111,6 +111,14 @@ fn decode_json<T: DeserializeOwned>(mut response: Response) -> Result<T, Provide
                 .ok_or(ProviderError::InvalidResponse)
         })
         .transpose()?;
+    let bytes = bounded_bytes(declared, response)?;
+    serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)
+}
+
+fn bounded_bytes(
+    declared: Option<usize>,
+    reader: impl std::io::Read,
+) -> Result<Vec<u8>, ProviderError> {
     if declared.is_some_and(|bytes| bytes > MAX_RESPONSE_BYTES) {
         return Err(ProviderError::InvalidResponse);
     }
@@ -118,34 +126,48 @@ fn decode_json<T: DeserializeOwned>(mut response: Response) -> Result<T, Provide
         .map_err(|_defect| ProviderError::InvalidResponse)?
         .saturating_add(1);
     let mut bytes = Vec::new();
-    response
-        .by_ref()
+    reader
         .take(limit)
         .read_to_end(&mut bytes)
         .map_err(|_defect| ProviderError::Unavailable)?;
     if bytes.len() > MAX_RESPONSE_BYTES {
         return Err(ProviderError::InvalidResponse);
     }
-    serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)
+    Ok(bytes)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GiteaClientError> {
-    let url = Url::parse(raw).map_err(|_defect| GiteaClientError::Configuration)?;
+    let configuration = GiteaClientError::Configuration;
+    if raw.is_empty() || raw.len() > MAX_API_BASE_BYTES {
+        return Err(configuration("the API base length is out of bounds"));
+    }
+    let url =
+        Url::parse(raw).map_err(|_defect| configuration("the API base is not a valid URL"))?;
+    if url.scheme() != "https" {
+        return Err(configuration("the API base must use https"));
+    }
+    if url.host_str() != Some(provider_instance) {
+        return Err(configuration("the API base names the wrong host"));
+    }
+    if url.port().is_some() {
+        return Err(configuration("the API base must not name a port"));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(configuration("the API base must not carry credentials"));
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        return Err(configuration(
+            "the API base must not carry a query or fragment",
+        ));
+    }
+    if url.path().trim_end_matches('/') != "/api/v1" {
+        return Err(configuration("the API base must mount /api/v1 at the root"));
+    }
     let canonical = format!("https://{provider_instance}/api/v1");
-    let valid = !raw.is_empty()
-        && raw.len() <= MAX_API_BASE_BYTES
-        && (raw == canonical || raw == format!("{canonical}/"))
-        && url.scheme() == "https"
-        && url.host_str() == Some(provider_instance)
-        && url.port().is_none()
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.path().trim_end_matches('/') == "/api/v1"
-        && url.query().is_none()
-        && url.fragment().is_none();
-    valid
-        .then_some(canonical)
-        .ok_or(GiteaClientError::Configuration)
+    if raw != canonical && raw != format!("{canonical}/") {
+        return Err(configuration("the API base is not the canonical form"));
+    }
+    Ok(canonical)
 }
 
 fn map_error(error: &reqwest::Error) -> ProviderError {

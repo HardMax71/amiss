@@ -10,7 +10,7 @@ use amiss_controller::{ProviderError, ProviderInstance, ProviderNamespace};
 use reqwest::StatusCode;
 use secrecy::SecretString;
 
-use super::{Budget, GitLabTimeouts, Transport, body_limit, consume_bytes, response_status};
+use super::{Budget, GitLabTimeouts, Transport, body_limit, consume_bytes, map_status};
 
 const TOKEN: &str = "glpat-never-print-this";
 
@@ -87,23 +87,19 @@ fn time_and_aggregate_body_budgets_are_bounded() {
 
 #[test]
 fn status_mapping_is_fail_closed_and_debug_redacts_the_token() {
-    assert_eq!(response_status(StatusCode::OK), Ok(()));
     for status in [StatusCode::UNAUTHORIZED, StatusCode::FORBIDDEN] {
-        assert_eq!(
-            response_status(status),
-            Err(ProviderError::AuthorizationRevoked)
-        );
+        assert_eq!(map_status(status), ProviderError::AuthorizationRevoked);
     }
     for status in [
         StatusCode::REQUEST_TIMEOUT,
         StatusCode::TOO_MANY_REQUESTS,
         StatusCode::BAD_GATEWAY,
     ] {
-        assert_eq!(response_status(status), Err(ProviderError::Unavailable));
+        assert_eq!(map_status(status), ProviderError::Unavailable);
     }
     assert_eq!(
-        response_status(StatusCode::MOVED_PERMANENTLY),
-        Err(ProviderError::InvalidResponse)
+        map_status(StatusCode::MOVED_PERMANENTLY),
+        ProviderError::InvalidResponse
     );
     let transport = Transport::new(
         provider(),

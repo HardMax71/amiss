@@ -63,16 +63,21 @@ impl GitHubTimeouts {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitHubClientError {
-    Configuration,
+    Configuration(&'static str),
     Client,
 }
 
 impl fmt::Display for GitHubClientError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Configuration => "the GitHub App configuration is invalid",
-            Self::Client => "the GitHub App client could not be created",
-        })
+        match self {
+            Self::Configuration(reason) => {
+                write!(
+                    formatter,
+                    "the GitHub App configuration is invalid: {reason}"
+                )
+            }
+            Self::Client => formatter.write_str("the GitHub App client could not be created"),
+        }
     }
 }
 
@@ -102,15 +107,25 @@ impl GitHubApp {
         timeouts: GitHubTimeouts,
     ) -> Result<Self, GitHubClientError> {
         let private_key = SecretSlice::from(private_key_pem);
-        let valid = provider.namespace.as_str() == "github"
-            && crate::acquisition::github_host(provider.instance.as_str())
-            && app_id > 0
-            && installation_id > 0
-            && (MIN_PRIVATE_KEY_BYTES..=MAX_PRIVATE_KEY_BYTES)
-                .contains(&private_key.expose_secret().len())
-            && valid_required_status_name(&required_status_name);
-        if !valid {
-            return Err(GitHubClientError::Configuration);
+        let configuration = GitHubClientError::Configuration;
+        if provider.namespace.as_str() != "github" {
+            return Err(configuration("the provider namespace must be github"));
+        }
+        if !crate::acquisition::github_host(provider.instance.as_str()) {
+            return Err(configuration("the provider instance is not a GitHub host"));
+        }
+        if app_id == 0 || installation_id == 0 {
+            return Err(configuration(
+                "the App and installation IDs must be positive",
+            ));
+        }
+        if !(MIN_PRIVATE_KEY_BYTES..=MAX_PRIVATE_KEY_BYTES)
+            .contains(&private_key.expose_secret().len())
+        {
+            return Err(configuration("the App private key size is out of bounds"));
+        }
+        if !valid_required_status_name(&required_status_name) {
+            return Err(configuration("the required status name is invalid"));
         }
         let rest = HttpRest::new(
             app_id,

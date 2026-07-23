@@ -21,15 +21,21 @@ fn live_client_rejects_unsafe_transport_and_identity_configuration() {
     assert!(create(provider("compatible-fork"), "https://forge.example/api/v1").is_ok());
     assert_eq!(
         create(provider("gitea"), "http://forge.example/api/v1").err(),
-        Some(GiteaClientError::Configuration)
+        Some(GiteaClientError::Configuration(
+            "the API base must use https"
+        ))
     );
     assert_eq!(
         create(provider("gitea"), "https://elsewhere.example/api/v1").err(),
-        Some(GiteaClientError::Configuration)
+        Some(GiteaClientError::Configuration(
+            "the API base names the wrong host"
+        ))
     );
     assert_eq!(
         create(provider("forgejo"), "https://forge.example:443/api/v1").err(),
-        Some(GiteaClientError::Configuration)
+        Some(GiteaClientError::Configuration(
+            "the API base is not the canonical form"
+        ))
     );
     assert!(create(provider("forgejo"), "https://forge.example/api/v1").is_ok());
 }

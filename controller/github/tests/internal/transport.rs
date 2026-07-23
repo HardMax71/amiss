@@ -29,19 +29,51 @@ fn api_authority_is_derived_from_the_provider_instance() {
         Ok("https://github.example/api/v3".to_owned())
     );
 
-    for (base, instance) in [
-        ("https://attacker.invalid", "github.com"),
-        ("https://github.com", "github.com"),
-        ("https://api.github.com:443", "github.com"),
-        ("https://github.example:8443/api/v3", "github.example"),
-        ("https://api.github.example/api/v3", "github.example"),
-        ("http://api.github.com", "github.com"),
-        ("https://user@api.github.com", "github.com"),
-        ("https://api.github.com?version=3", "github.com"),
+    for (base, instance, reason) in [
+        (
+            "https://attacker.invalid",
+            "github.com",
+            "the API base names the wrong host",
+        ),
+        (
+            "https://github.com",
+            "github.com",
+            "the API base names the wrong host",
+        ),
+        (
+            "https://api.github.com:443",
+            "github.com",
+            "the API base must not name a port",
+        ),
+        (
+            "https://github.example:8443/api/v3",
+            "github.example",
+            "the API base must not name a port",
+        ),
+        (
+            "https://api.github.example/api/v3",
+            "github.example",
+            "the API base names the wrong host",
+        ),
+        (
+            "http://api.github.com",
+            "github.com",
+            "the API base must use https",
+        ),
+        (
+            "https://user@api.github.com",
+            "github.com",
+            "the API base must not carry credentials",
+        ),
+        (
+            "https://api.github.com?version=3",
+            "github.com",
+            "the API base must not carry a query or fragment",
+        ),
     ] {
         assert_eq!(
             validate_api_base(base, instance),
-            Err(GitHubClientError::Configuration)
+            Err(GitHubClientError::Configuration(reason))
         );
     }
 }
