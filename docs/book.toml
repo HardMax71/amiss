@@ -9,5 +9,10 @@ command = "mdbook-graphviz"
 
 [output.html]
 additional-css = ["docs.css"]
+additional-js = ["parts.js"]
 default-theme = "light"
 git-repository-url = "https://github.com/HardMax71/amiss"
+
+[output.html.fold]
+enable = true
+level = 1
