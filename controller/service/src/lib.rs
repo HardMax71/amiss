@@ -6,6 +6,7 @@ mod frame;
 mod hash;
 mod inbox;
 mod limits;
+mod receiver;
 mod record;
 mod store;
 
@@ -16,3 +17,7 @@ pub use inbox::{
     InboxEntry, InboxState, RenewOutcome, RetryOutcome,
 };
 pub use limits::InboxLimits;
+pub use receiver::{
+    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, ReceiverConfig,
+    ReceiverConfigError, router, serve,
+};
