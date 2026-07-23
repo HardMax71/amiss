@@ -16,47 +16,74 @@ file feedback on the pull request. It is not the provider-authenticated controll
 The published first run uses `observe`: introduced problems appear as Fixes without blocking,
 changed targets appear as summary-only Checks, and pre-existing problems remain Existing
 inventory. An incomplete or untrusted run still fails. Triage the initial report, adopt any
-repository policy it needs, then change the input to `profile: enforce` to make blocking
-findings fail.
+repository policy it needs, then switch the input to `profile: enforce`.
 
-The moving major ref follows the engine's semver major: `v0` for the 0.x series, `v1`
-from 1.0.0 on, so one series can never rewrite another's ref. A conventional `vX.Y.Z`
-source tag is an immutable exact pin whose dispatcher delegates to the equally immutable
-`action/vX.Y.Z` runtime tag. Pin `action/vX.Y.Z` directly, or its generated Action commit,
-when policy requires the complete runtime tree in one ref. A source commit pins the dispatcher
-but still makes that immutable second hop.
+## What the Action does
 
-Before running anything, the action verifies the selected binary against the release
-manifest shipped in the same tree. A wall-clock watchdog backstops the engine's
-resource ceilings: 120 seconds unless the `watchdog-seconds` input moves it, and a scan
-that outlives the window is ended so the job fails with no result. The action fails
-the job on exit classes 1 and 2 under the default `enforce` profile and exposes
-`exit-class` and `report` outputs for anything downstream. Its inputs (`profile`,
-`base`, `candidate`, `repo`, `object-format`, `annotations`, `watchdog-seconds`) exist
-for the cases the defaults do not cover.
+Before running anything it verifies the selected binary against the release manifest shipped
+in the same tree. A wall-clock watchdog backstops the engine's resource ceilings, and a scan
+that outlives the window is ended so the job fails with no result, never a verdict. Under the
+default `enforce` profile the job fails on exit classes 1 and 2. The outputs `exit-class` and
+`report` expose the verdict class and the JSON report path for anything downstream.
 
-For pull requests the derived base is the candidate's own first parent, never the
-event payload's base tip; with the default candidate that parent is exactly the base
-GitHub built the test merge from, and the rule holds unchanged when a workflow passes
-its own candidate. The payload races the merge ref GitHub rebuilds lazily after a base
-branch moves, and the first parent is present in any checkout that holds the candidate
-at all.
+| Input | Default | Role |
+| --- | --- | --- |
+| `profile` | `enforce` | `observe` reports without blocking |
+| `base` | derived | full commit ID, overrides the event derivation |
+| `candidate` | derived | full commit ID, overrides the event derivation |
+| `repo` | `.` | repository root inside the workspace |
+| `object-format` | `sha1` | or `sha256` |
+| `annotations` | `true` | displayed Fixes and scan errors become file annotations |
+| `watchdog-seconds` | `120` | wall-clock window before the scan is ended |
 
-The identity host comes from the event's server URL. On GitHub Enterprise Server the
-report therefore claims the instance's own host and recognizes that host's blob and tree
-links, with the github dialect declared explicitly. Release assembly supplies the host
-the same way, to a
+When `base` and `candidate` stay empty, the event supplies them:
+
+| Event | Base | Candidate |
+| --- | --- | --- |
+| `pull_request` | the candidate's own first parent | the merge result |
+| `merge_group` | the group's base commit | the group's head |
+| `push` | the event's `before` | the pushed head |
+
+The first parent is deliberate: the payload's base tip races the merge ref GitHub rebuilds
+lazily after a base branch moves, while the first parent is exactly the base the test merge
+was built from and is present in any checkout that holds the candidate at all. Both commits
+must exist in the checkout: `fetch-depth: 2` covers the normal merge checkout, and a batched
+push or unusual checkout may need `fetch-depth: 0`.
+
+The identity host comes from the event's server URL, so on GitHub Enterprise Server the
+report claims the instance's own host and recognizes that host's blob and tree links, with
+the github dialect declared explicitly. Release assembly supplies the host the same way, to a
 [manifest builder](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/build.rs)
 that stores an open build-source identity instead of assuming `github.com`; the
 [release workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml)
-is a checkable example of that input. The report and request formats are forge-neutral. This
-published workflow surface remains the GitHub convenience event wrapper. A separate,
-source-built [GitHub provider service](provider-github.md) supplies the authenticated lane; it
-is not invoked by this Action.
+is a checkable example of that input. The report and request formats are forge-neutral.
 
-The long form invokes the engine directly. It is useful outside GitHub Actions or when a
-workflow needs to construct the exact evaluation itself, but it is not the repository's
-dogfood path. Amiss's
+## Pinning the Action
+
+```dot process
+digraph pins {
+  rankdir = LR;
+  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  major    [label = "v0\nmoving major ref"];
+  source   [label = "vX.Y.Z\nimmutable source tag"];
+  runtime  [label = "action/vX.Y.Z\nimmutable runtime tree"];
+  major -> source [label = "follows the\nlatest release"];
+  source -> runtime [label = "dispatcher\ndelegates"];
+}
+```
+
+The moving major ref follows the engine's semver major, `v0` for the 0.x series and `v1`
+from 1.0.0 on, so one series can never rewrite another's ref. A `vX.Y.Z` source tag is an
+immutable exact pin whose dispatcher delegates to the equally immutable `action/vX.Y.Z`
+runtime tag; a source commit pins the dispatcher but still makes that second hop. Pin
+`action/vX.Y.Z` directly, or its generated Action commit, when policy requires the complete
+runtime tree in one ref.
+
+## Invoking the engine directly
+
+The long form is useful outside GitHub Actions or when a workflow constructs the exact
+evaluation itself. Amiss's own
 [self-scan workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/ci.yml)
 builds the pull request's engine, assembles a local action tree with its manifest, and runs
 that composite under `--profile enforce`. A minimal adjacent-commit direct invocation is:
@@ -82,67 +109,28 @@ that composite under `--profile enforce`. A minimal adjacent-commit direct invoc
 ```
 
 Replace `<reviewed-version>` with the exact release you reviewed. The leading `=` makes the
-Cargo requirement exact instead of selecting another compatible release. The direct form
-then pins both the released crate and its packaged dependency graph: Cargo checks the
-downloaded crate archive against the SHA-256 checksum in the crates.io index, while
-`--locked` refuses to recompute the packaged lockfile. The placeholder is deliberately
-release-independent: the book does not copy each patch version out of the workspace package
-metadata that release-plz updates.
-As with the Action form, graduate this command to `--profile enforce` after the first report is
-triaged.
+Cargo requirement exact, Cargo checks the crate archive against the crates.io index checksum,
+and `--locked` refuses to recompute the packaged lockfile, so the command pins both the
+released crate and its dependency graph. The placeholder is deliberately release-independent.
+Repository and branch names travel through environment variables because a branch can be
+named anything and text pasted into a shell script becomes code; the owner is lowercased in
+shell because GitHub hands it over with its registered capitals and Amiss refuses anything
+but lowercase. A scan is a pure function of the two snapshots and the invocation, so there is
+no baseline cache to warm between runs. As with the Action, graduate to `--profile enforce`
+once the first report is triaged.
 
-Three details carry weight. Both named commits must exist in the checkout. The Action derives
-pull-request base and merge-result commits, merge-group base and head commits, or push
-`before` and head commits from the event; explicit `base` and `candidate` inputs override
-them. `fetch-depth: 2` is normally enough for the pull-request merge checkout, while a batched
-push or unusual checkout may require `fetch-depth: 0`. The repository and branch names go
-through environment variables instead of being pasted into the script by the workflow
-engine, because a branch can be named anything, and text pasted into a shell script becomes
-code. The owner is lowercased in shell because GitHub hands it over with its original
-capitals while Amiss requires the lowercase form and refuses anything else.
-
-For a direct adjacent-commit scan, `HEAD~1` and `HEAD` work as above. For event-aware runs,
-prefer the composite Action's derivation or pass the exact two commits explicitly. A scan is
-a pure function of the two snapshots and invocation, so there is no baseline cache to warm
-or restore between runs.
-
-The Action invokes the public command, so its branch is the candidate/source ref used for URL
-resolution and its report target ref is null. It does not acquire provider-authenticated
-external controls, invoke the sealed bootstrap path, or publish through an independently
-authenticated integration. Using the open identity fields alone does not turn caller-supplied
-JSON into provider authority.
-
-Separately operated source-built services join the sealed bootstrap and provider-neutral delivery
-record to protected merge gates. GitHub authenticates a pull-request webhook through an App and
-publishes an App-owned Check Run on its authoritative test merge. GitLab authenticates a pipeline
-execution policy job through OIDC and returns success only for the exact passing merge-train
-result. Gitea and Forgejo authenticate pull-request webhooks and publish through one dedicated
-reviewer required by the effective branch rule. These are deployment services, not hosted Amiss
-products or workflow snippets. [Provider-verified controls](provider-controls.md) compares the
-lanes and links their credentials, strict JSON configuration, fixed Git limits, storage, TLS
-boundary, build command, freshness, and rotation rules.
-[Controller delivery](controller.md) documents the shared retry record.
+## Reading a run
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
-repair evidence. The human and Action views stop at ten items and state the overflow. The
-blocking rows remain the report's `errors` and findings whose `effective_disposition` is
-`fail`.
-
-The same check runs before a commit exists. The repository publishes a
-[pre-commit](https://pre-commit.com) hook that scans the staged index against `HEAD`
-with an installed `amiss` binary:
-
-```yaml
-repos:
-  - repo: https://github.com/HardMax71/amiss
-    rev: v0.5.1
-    hooks:
-      - id: amiss
-```
-
-The action's `report` output names that JSON file, so a later step or a tool reads it
-without rerunning anything. One line lists every grouped PR item with its target and
-affected-place count:
+repair evidence. The Action and human views show at most ten Fix and Check items combined, in
+engine order, with one overflow line; only a displayed Fix with a candidate text location
+becomes a file annotation, while Checks and Existing inventory stay in the summary and
+report. If the scan failed, feedback is unavailable and at most ten retained errors are
+annotated instead. The blocking rows remain the report's `errors` and findings whose
+`effective_disposition` is `fail`, and the complete grouped and raw sets always remain in the
+report. The Action's `report` output names that JSON file, so a later step reads it without
+rerunning anything. One line lists every grouped PR item with its target and affected-place
+count:
 
 ```sh
 jq -r '.payload.feedback
@@ -153,8 +141,30 @@ jq -r '.payload.feedback
   | @tsv' amiss-report.json
 ```
 
-The Action shows at most ten Fix and Check items combined, in engine order, with one overflow
-line. Only a displayed Fix with a candidate text location becomes a file annotation; Checks
-and Existing inventory stay in the summary and report. If the scan failed, feedback is
-unavailable and at most ten retained errors are annotated instead. The complete grouped and
-raw sets always remain in the report.
+## What this surface is not
+
+The Action invokes the public command: its branch is the candidate ref used for URL
+resolution, its report target ref is null, and it does not acquire provider-authenticated
+external controls, invoke the sealed bootstrap path, or publish through an independently
+authenticated integration. Caller-supplied identity fields never become provider authority.
+The authenticated lanes are separately operated source-built services: a GitHub App
+publishing an App-owned Check Run on the authoritative test merge, a GitLab pipeline
+execution policy job authenticated through OIDC, and a dedicated Gitea or Forgejo reviewer
+required by the effective branch rule. [Provider-verified controls](provider-controls.md)
+compares those lanes and links their setup, and [Controller delivery](controller.md)
+documents the shared retry record; the GitHub lane's own page is
+[GitHub provider lane](provider-github.md).
+
+## Before a commit exists
+
+The same check runs on the staged index. The repository publishes a
+[pre-commit](https://pre-commit.com) hook that scans the staged state against `HEAD` with an
+installed `amiss` binary:
+
+```yaml
+repos:
+  - repo: https://github.com/HardMax71/amiss
+    rev: v0.5.1
+    hooks:
+      - id: amiss
+```
