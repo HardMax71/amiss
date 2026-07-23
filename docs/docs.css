@@ -100,6 +100,6 @@ html, body, .sidebar, #menu-bar, .menu-title, .content main {
   font-size: 0.75em;
   transition: transform 0.15s;
 }
-.chapter li.part-title[data-expanded="true"] .part-chevron {
+.chapter li.part-title[aria-expanded="true"] .part-chevron {
   transform: rotate(90deg);
 }
