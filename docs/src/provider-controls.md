@@ -19,10 +19,8 @@ authority merely because a CI system supplied it.
 | Forgejo | One required approval restricted to a dedicated reviewer | That reviewer approves or requests changes on the checked pull request | Forgejo 16 or newer |
 
 All current lanes require SHA-1 repositories, Git protocol v2, a root-mounted HTTPS provider, and
-an action repository on the same provider instance. They are source-built services, not hosted
-Amiss products or release binaries. Building the provider workspace requires the pinned Rust
-toolchain and a working C/C++ compiler for its AWS-LC cryptography backend. Compatible forks are
-not implied by the table.
+an action repository on the same provider instance. Compatible forks are not implied by the
+table.
 
 The provider-specific setup and configuration live on separate pages:
 
@@ -34,8 +32,7 @@ The provider-specific setup and configuration live on separate pages:
 
 The provider adapter owns authentication, live-state refresh, and publication. The shared
 controller owns plan selection, replay, leases, the two-refresh race rule, exact acquisition, the
-supervised process, and durable result staging. Adding a provider does not add a provider enum to
-the engine or change the scanner report.
+supervised process, and durable result staging.
 
 ```dot process
 digraph provider_controls {
@@ -59,6 +56,31 @@ body and stores it before returning `202`; a worker authenticates the stored byt
 uses a short-lived OIDC token from the policy job and waits synchronously for the result, because
 the job's own success is the protected evidence.
 
+## One tree, small crates
+
+Each lane is a pair of small crates in the nested workspace under
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller): an adapter that speaks
+one provider's API and a service binary that deploys it. Provider differences end at those
+crates. The shared controller stays provider-neutral, the engine gains no provider enum, and the
+scanner report does not change shape because a forge was added.
+
+The nested workspace is also a dependency boundary. HTTP clients, provider APIs, credentials,
+TLS, and service storage live inside it, with its own lockfile and dependency policy, while the
+engine workspace keeps its bans on networking and async runtimes. Auditing the scanner never
+means auditing a webhook stack.
+
+The lanes are deliberately unpublished: source-built services, not hosted Amiss products,
+release binaries, or registry crates. One commit of this repository pins everything a lane
+trusts at once: the engine, the wire contracts, the bootstrap whose digest the execution
+constraint binds, and the service source. Built at that commit, there is no second repository or
+registry whose version has to agree with the first. The contracts are pre-1.0 and still move
+together, so a version seam between engine and service would sit exactly where skew is most
+dangerous. It also keeps these pages honest: the lane documentation lives beside the lane code,
+and the repository's own scan checks the references between them on every change.
+
+Building the provider workspace requires the pinned Rust toolchain and a working C/C++ compiler
+for its AWS-LC cryptography backend.
+
 ## Shared trust boundary
 
 Run a provider service on a host controlled independently of the checked repository. Keep its API
@@ -75,13 +97,23 @@ permits before reading a body and holds it through durable inbox admission. That
 work. Both endpoint shapes stop an unfinished body after 30 seconds; neither limit replaces the
 proxy's public connection limits.
 
-Shared hard ceilings cap bodies at 8 MiB, header count at 128, aggregate header bytes at 32 KiB,
-ledger rows at 100,000, and in-process endpoint concurrency at 64. Webhook inboxes add ceilings of
-1,024 rows, 128 MiB total, and 16 MiB for one row. A provider service may clamp these lower; the
-GitLab policy-job endpoint, for example, accepts at most a 1 KiB body and 32 headers.
-GitHub and Gitea-family completion rows cannot age out because their signatures contain no trusted
-time. Their provider pages describe the required secret-and-ledger cutover before that finite
-record cap fills.
+The hard ceilings are shared by every lane:
+
+| Ceiling | Value |
+| --- | --- |
+| Request body | 8 MiB |
+| Header count | 128 |
+| Aggregate header bytes | 32 KiB |
+| Ledger rows | 100,000 |
+| In-process endpoint concurrency | 64 |
+| Webhook inbox rows | 1,024 |
+| Webhook inbox total | 128 MiB |
+| One webhook inbox row | 16 MiB |
+
+A provider service may clamp these lower; the GitLab policy-job endpoint, for example, accepts at
+most a 1 KiB body and 32 headers. GitHub and Gitea-family completion rows cannot age out because
+their signatures contain no trusted time. Their provider pages describe the required
+secret-and-ledger cutover before that finite record cap fills.
 
 The service and the provider evidence cannot update in one transaction. A result is saved locally
 before an external provider update or GitLab's synchronous success response. An ambiguous reply
