@@ -26,16 +26,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Branch runs only restore; main saves the pruned caches, so lock bumps
+      # on branches cannot crowd the shared budget and evict small entries.
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            controller/target
-          key: gates-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'controller/Cargo.lock') }}
-          restore-keys: gates-
+          workspaces: |
+            .
+            controller
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: prek run --all-files
       - run: prek run --all-files --hook-stage pre-push
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
@@ -56,15 +54,9 @@ jobs:
           # and the event's before must be in the checkout, so pushes stay 0.
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: self-scan-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: self-scan-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo build --locked --release -p amiss -p amiss-bootstrap
       - shell: bash
         env:
@@ -127,15 +119,10 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            fuzz/target
-          key: fuzz-smoke-${{ hashFiles('rust-toolchain.toml', 'fuzz/Cargo.lock') }}
-          restore-keys: fuzz-smoke-
+          workspaces: fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Verify the committed fuzz lockfile
         run: cargo test --locked --release
         working-directory: fuzz
@@ -158,17 +145,13 @@ jobs:
       - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
         with:
           tool: cargo-nextest@0.9.140
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            controller/target
-            fuzz/target
-          key: platform2-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'controller/Cargo.lock', 'fuzz/Cargo.lock') }}
-          restore-keys: platform2-${{ runner.os }}-
+          workspaces: |
+            .
+            controller
+            fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo nextest run --workspace --locked
       - run: cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
@@ -184,15 +167,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: coverage-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: coverage-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: rustup component add llvm-tools-preview
       - run: cargo llvm-cov nextest --workspace --locked --lcov --output-path lcov.info
       - run: cargo llvm-cov report
