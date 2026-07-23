@@ -39,69 +39,39 @@ and are the ones to trust when the short form reads ambiguous.
 | `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to |
 | `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
 | `--forge` | `github`, `gitlab`, or `gitea` | URL dialect; an explicit flag beats the host table |
-| `--profile` | `observe` or `enforce` | report only, or let blocking findings gate |
+| `--profile` | `observe` or `enforce` | report only, or let blocking findings gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
-| `--format` | `human` or `json` | ten grouped items, or the exact report |
+| `--format` | `human` or `json` | ten grouped items, or the exact report in [The report](report.md) |
 
-`--base` and `--candidate` take full commit IDs, never branch names or short forms. Amiss
-evaluates exactly the trees you name and resolves nothing for you. Use `--index` instead of
-`--candidate` to check what is currently staged against a base commit. An entry marked
-[skip-worktree](https://git-scm.com/docs/git-update-index) is still part of the staged
-state and is read from the index like everything else.
+`--base` and `--candidate` take full commit IDs, never branch names or short forms: Amiss
+evaluates exactly the trees you name and resolves nothing for you, and `--index` checks the
+staged state instead, including entries marked
+[skip-worktree](https://git-scm.com/docs/git-update-index). The identity group is a claim
+Amiss cannot verify, so its spelling is strict: the host is matched byte for byte against
+the URLs in your documents, owner and name must be lowercase with segments nested only for
+GitLab group paths, a workflow passing `github.repository` has to lowercase it first, and a
+wrong spelling is refused rather than rewritten. `--ref` names the candidate branch for URL
+resolution only; it is not a protected target branch, there is no `--target-ref`, the
+report's target stays null, and no spelling of these fields turns a CLI run into a
+provider-authenticated one. A URL for the declared default branch while another candidate
+is under test is recognized but reported as `unsupported-version-scope`, and without the
+identity group forge links stay external URLs and the report says so.
 
-The optional identity group (`--repository`, `--ref`, and `--default-branch-ref`) tells
-Amiss which repository and candidate branch this tree belongs to. With a selected forge
-dialect, a link like `https://github.com/<owner>/<name>/blob/main/src/lib.rs` becomes a
-repository path only when `--ref` is `refs/heads/main`; a URL for the declared default
-branch while another candidate is under test is recognized but remains
-`unsupported-version-scope`. Without the identity group, forge links remain external URLs
-and are skipped, and the report says so.
+`--forge` names the dialect the resolver applies: `github` covers GitHub and GitHub
+Enterprise, `gitlab` the separator form, `gitea` also Forgejo and Codeberg. Without the
+flag, github.com, gitlab.com, and codeberg.org select their own dialects and every other
+host selects none, leaving that host's links foreign and `evaluation.forge` null. An
+explicit flag always beats the table, which is how a self-hosted instance gets its grammar;
+the github and gitea dialects refuse a nested owner they could never match, and recognizing
+a dialect authenticates nothing about how the run was invoked.
 
-This public `--ref` is the candidate or source ref; it is not the protected target branch and
-does not authorize external controls. The direct command has no `--target-ref` option and emits
-a null report target. The internal evaluation request used by the sealed bootstrap carries
-`candidate_ref` and `target_ref` separately, and the branch-scoped control gates match the
-latter.
-`--default-branch-ref` is still URL-resolution context, not an implicit target. Consequently a
-human CLI invocation cannot create a provider-authenticated run merely by spelling provider
-identity fields.
-
-The identity's spelling is strict. The host is any spelling without a slash: Amiss never
-resolves it, and it is matched byte for byte against the URLs in your documents, so pass
-the lowercase form your links actually use. The owner is one or more slash-joined
-segments, nested only for GitLab group paths, and owner and name must be lowercase.
-Forges report them with whatever capitals the owner registered, so a workflow passing
-`github.repository` has to lowercase the value first. Amiss will not do that for you.
-The identity you pass is a claim it cannot verify, a checker that silently rewrites an
-unverifiable claim has started making things up, and so it refuses, and the refusal says
-why.
-
-`--forge` names the URL dialect the resolver applies: `github` for GitHub and GitHub
-Enterprise, `gitlab` for GitLab's separator form, `gitea` for Gitea, Forgejo, and
-Codeberg. Without the flag, github.com, gitlab.com, and codeberg.org select their own
-dialects and any other host selects none, in which case absolute links to that host stay
-foreign and the report's `evaluation.forge` is null. An explicit flag always beats the
-table, which is how a self-hosted instance gets its grammar. The github and gitea dialects
-refuse a nested owner they could never match.
-This dialect selection is independent of the provider-controller lane. Recognizing a forge URL
-does not authenticate it or prove that this ordinary CLI run came through one of the supported
-provider services.
-
-`--explain-scope` does not create a separate early-exit command. The scan still runs, and in
-human format the flag adds deterministic scope lines to the normal result. JSON output is
-unchanged by the flag. This behavior is pinned by the
-[CLI test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/cli.rs).
 `--format json` emits the exact report described in [The report](report.md); `human` prints
-the same facts as a focused list of at most ten grouped Fix and Check items. Each item names
-only its target and affected-place count; the full findings and their kinds remain in JSON.
-Under the detail lines, `human` also prints one fixed `note` line per distinct error code,
-using the same sentences listed in [Limits and refusals](limits.md), so a failed scan can be
-acted on without the book open.
-
-Exit codes are three classes, not detail. Exit 0: the run completed and nothing blocks. Exit
-1: the run completed and at least one finding blocks. Exit 2: something prevented a
-trustworthy result, an unreadable repository, a bad invocation, a crossed limit, an
-undecodable document. Details live in the report; the exit code only tells you which of the
-three worlds you are in. A consumer that closes the pipe early, `head` among them, ends
-the printing and not the verdict: the exit class reports the run, never the state of
-stdout.
+the same facts as at most ten grouped Fix and Check items, each naming only its target and
+affected-place count, with one fixed `note` line per error code using the sentences from
+[Limits and refusals](limits.md), while the full findings remain in JSON. `--explain-scope`
+adds its lines to that human output without changing JSON or creating an early exit,
+behavior pinned by the
+[CLI test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/cli.rs). Exit
+codes are three classes, not detail: 0 means the run completed and nothing blocks, 1 means
+a finding blocks, 2 means nothing trustworthy could be produced. A consumer that closes the
+pipe early, `head` among them, ends the printing and not the verdict.
