@@ -14,6 +14,13 @@ result is the provider evidence required by the train.
 
 ## Flow
 
+The request body contains only the merge request's project-local number, which GitLab calls its
+IID:
+
+```json
+{"merge_request_iid": 42}
+```
+
 ```dot process
 digraph gitlab_provider {
   rankdir = LR;
@@ -31,13 +38,6 @@ digraph gitlab_provider {
   result [label = "204 only for pass;\npolicy job succeeds"];
   policy -> train -> tls -> oidc -> first -> fetch -> boot -> final -> save -> result;
 }
-```
-
-The request body contains only the merge request's project-local number, which GitLab calls its
-IID:
-
-```json
-{"merge_request_iid": 42}
 ```
 
 The bearer token, not that body, supplies the project, pipeline, job, runner, policy origin, exact

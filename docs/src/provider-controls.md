@@ -32,6 +32,11 @@ The provider-specific setup and configuration live on separate pages:
 
 ## Common flow
 
+The provider adapter owns authentication, live-state refresh, and publication. The shared
+controller owns plan selection, replay, leases, the two-refresh race rule, exact acquisition, the
+supervised process, and durable result staging. Adding a provider does not add a provider enum to
+the engine or change the scanner report.
+
 ```dot process
 digraph provider_controls {
   rankdir = LR;
@@ -48,11 +53,6 @@ digraph provider_controls {
   source -> auth -> first -> fetch -> boot -> final -> save -> proof;
 }
 ```
-
-The provider adapter owns authentication, live-state refresh, and publication. The shared
-controller owns plan selection, replay, leases, the two-refresh race rule, exact acquisition, the
-supervised process, and durable result staging. Adding a provider does not add a provider enum to
-the engine or change the scanner report.
 
 GitHub, Gitea, and Forgejo arrive as signed webhooks. A bounded receiver authenticates the exact
 body and stores it before returning `202`; a worker authenticates the stored bytes again. GitLab

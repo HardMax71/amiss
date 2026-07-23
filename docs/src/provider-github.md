@@ -12,6 +12,12 @@ secret, App key, policy files, bootstrap, and state live outside the repository 
 
 ## Flow
 
+The receiver accepts only the configured `POST` path with no query string. It bounds headers
+and body before admission, verifies GitHub's HMAC over the exact body, decodes only supported
+pull-request events, checks the configured repository, target branch, and plan, then saves the raw
+request before returning `202 Accepted`. The worker authenticates the saved bytes again before
+use.
+
 ```dot process
 digraph provider_controls {
   rankdir = LR;
@@ -32,12 +38,6 @@ digraph provider_controls {
   github -> tls -> gate -> inbox -> claim -> api1 -> fetch -> boot -> api2 -> save -> check -> done;
 }
 ```
-
-The receiver accepts only the configured `POST` path with no query string. It bounds headers
-and body before admission, verifies GitHub's HMAC over the exact body, decodes only supported
-pull-request events, checks the configured repository, target branch, and plan, then saves the raw
-request before returning `202 Accepted`. The worker authenticates the saved bytes again before
-use.
 
 The supported pull-request actions are `opened`, `reopened`, and `synchronize`. An `edited`
 event is accepted only when its signed `changes.base.ref.from` field records a base-branch
