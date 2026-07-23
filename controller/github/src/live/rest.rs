@@ -73,11 +73,11 @@ pub(super) trait GitHubRest: Send + Sync {
     ) -> Result<CheckRunRecord, ProviderError>;
 }
 
-pub(super) struct OctocrabRest {
+pub(super) struct HttpRest {
     transport: Transport,
 }
 
-impl OctocrabRest {
+impl HttpRest {
     pub(super) fn new(
         app_id: u64,
         installation_id: u64,
@@ -118,7 +118,7 @@ impl OctocrabRest {
                 page,
             };
             let route = query_route(&route, &query)?;
-            let batch: Vec<BranchRule> = self.transport.get(route, deadline)?;
+            let batch: Vec<BranchRule> = self.transport.get(&route, deadline)?;
             if batch.len() > PAGE_SIZE {
                 return Err(ProviderError::InvalidResponse);
             }
@@ -139,13 +139,13 @@ impl OctocrabRest {
         deadline: OperationDeadline,
     ) -> Result<GitCommitRecord, ProviderError> {
         self.transport.get(
-            format!("/repos/{owner}/{name}/git/commits/{}", path_segment(oid)),
+            &format!("/repos/{owner}/{name}/git/commits/{}", path_segment(oid)),
             deadline,
         )
     }
 }
 
-impl GitHubRest for OctocrabRest {
+impl GitHubRest for HttpRest {
     fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
         self.transport.deadline()
     }
@@ -156,7 +156,7 @@ impl GitHubRest for OctocrabRest {
         deadline: OperationDeadline,
     ) -> Result<PullRequestRecord, ProviderError> {
         self.transport.get(
-            format!(
+            &format!(
                 "/repos/{}/{}/pulls/{}",
                 pull_request.repository_owner, pull_request.repository_name, pull_request.number
             ),
@@ -173,10 +173,10 @@ impl GitHubRest for OctocrabRest {
         let name = pull_request.repository_name;
         let repository: RepositoryRecord = self
             .transport
-            .get(format!("/repos/{owner}/{name}"), deadline)?;
+            .get(&format!("/repos/{owner}/{name}"), deadline)?;
         let authoritative = self.pull_request(pull_request, deadline)?;
         let target: RepositoryCommitRecord = self.transport.get(
-            format!(
+            &format!(
                 "/repos/{owner}/{name}/commits/{}",
                 path_segment(&authoritative.base.sha)
             ),
@@ -251,7 +251,7 @@ impl GitHubRest for OctocrabRest {
                 app_id,
             };
             let route = query_route(&route, &query)?;
-            let response: CheckRunPage = self.transport.get(route, deadline)?;
+            let response: CheckRunPage = self.transport.get(&route, deadline)?;
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
             if response.check_runs.len() > PAGE_SIZE
@@ -283,10 +283,7 @@ impl GitHubRest for OctocrabRest {
             "/repos/{}/{}/check-runs",
             pull_request.repository_owner, pull_request.repository_name
         );
-        let check = check.clone();
-        self.transport.request(deadline, |crab| async move {
-            crab._post(route, Some(&check)).await
-        })
+        self.transport.post(&route, check, deadline)
     }
 }
 

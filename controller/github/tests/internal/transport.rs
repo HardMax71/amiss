@@ -1,30 +1,32 @@
 #![cfg(test)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::io::Cursor;
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
-use bytes::Bytes;
-use http::{HeaderValue, Response, header::CONTENT_LENGTH};
-use http_body_util::Full;
-use serde_json::Value;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
+use secrecy::{ExposeSecret as _, SecretSlice};
+use serde::Deserialize;
 
 use super::{
-    MAX_RESPONSE_BYTES, OperationDeadline, decode_json, execute_on_runtime, map_status,
-    validate_api_base,
+    AppCredential, MAX_RESPONSE_BYTES, OperationDeadline, Transport, app_jwt, bounded_bytes,
+    map_status, mint_status, validate_api_base,
 };
-use crate::GitHubClientError;
+use crate::{GitHubClientError, GitHubTimeouts};
 
 #[test]
 fn api_authority_is_derived_from_the_provider_instance() {
     assert_eq!(
         validate_api_base("https://api.github.com", "github.com"),
-        Ok(())
+        Ok("https://api.github.com".to_owned())
     );
     assert_eq!(
         validate_api_base("https://github.example/api/v3", "github.example"),
-        Ok(())
+        Ok("https://github.example/api/v3".to_owned())
+    );
+    assert_eq!(
+        validate_api_base("https://github.example/api/v3/", "github.example"),
+        Ok("https://github.example/api/v3".to_owned())
     );
 
     for (base, instance) in [
@@ -46,25 +48,17 @@ fn api_authority_is_derived_from_the_provider_instance() {
 
 #[test]
 fn response_bodies_are_bounded_before_json_decoding() {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    let mut declared = Response::new(Full::new(Bytes::from_static(b"{}")));
-    let declared_length = (MAX_RESPONSE_BYTES + 1).to_string();
-    declared.headers_mut().insert(
-        CONTENT_LENGTH,
-        HeaderValue::from_bytes(declared_length.as_bytes()).unwrap(),
-    );
     assert_eq!(
-        runtime.block_on(decode_json::<Value, _>(declared)),
+        bounded_bytes(Some(MAX_RESPONSE_BYTES + 1), Cursor::new(b"{}")),
         Err(ProviderError::InvalidResponse)
     );
-
-    let streamed = Response::new(Full::new(Bytes::from(vec![0; MAX_RESPONSE_BYTES + 1])));
     assert_eq!(
-        runtime.block_on(decode_json::<Value, _>(streamed)),
+        bounded_bytes(None, Cursor::new(vec![0_u8; MAX_RESPONSE_BYTES + 1])),
         Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        bounded_bytes(Some(2), Cursor::new(b"{}".to_vec())),
+        Ok(b"{}".to_vec())
     );
 }
 
@@ -75,51 +69,62 @@ fn provider_statuses_have_stable_failure_classes() {
     assert_eq!(map_status(429), ProviderError::Unavailable);
     assert_eq!(map_status(503), ProviderError::Unavailable);
     assert_eq!(map_status(404), ProviderError::InvalidResponse);
+    assert_eq!(mint_status(401), ProviderError::Authentication);
+    assert_eq!(mint_status(403), ProviderError::Authentication);
+    assert_eq!(mint_status(503), ProviderError::Unavailable);
+    assert_eq!(mint_status(404), ProviderError::InvalidResponse);
 }
 
 #[test]
-fn a_caller_timeout_cancels_a_request_that_has_not_started()
--> Result<(), Box<dyn std::error::Error>> {
-    struct DropSignal(Option<mpsc::SyncSender<()>>);
-
-    impl Drop for DropSignal {
-        fn drop(&mut self) {
-            if let Some(sender) = self.0.take() {
-                let _ignored = sender.send(());
-            }
-        }
-    }
-
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_all()
-        .build()?;
-    let (worker_started, started) = mpsc::sync_channel(0);
-    let (release_worker, release) = mpsc::sync_channel(0);
-    let blocker = runtime.spawn(async move {
-        let _ignored = worker_started.send(());
-        let _ignored = release.recv();
-    });
-    started.recv_timeout(Duration::from_secs(1))?;
-
-    let polled = Arc::new(AtomicBool::new(false));
-    let observed = Arc::clone(&polled);
-    let (dropped, request_dropped) = mpsc::sync_channel(1);
-    let signal = DropSignal(Some(dropped));
-    let request = async move {
-        let _signal = signal;
-        observed.store(true, Ordering::Release);
-        Ok(())
+fn app_jwt_binds_the_app_and_a_bounded_lifetime() {
+    let credential = AppCredential {
+        key: EncodingKey::from_rsa_pem(include_bytes!("../fixtures/private.pem")).unwrap(),
+        app_id: 99,
+        installation_id: 7,
     };
-    let deadline = OperationDeadline::after(Duration::from_millis(25))?;
+    let token = app_jwt(&credential).unwrap();
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_issuer(&["99"]);
+    let decoded = jsonwebtoken::decode::<Claims>(
+        token.expose_secret(),
+        &DecodingKey::from_rsa_pem(include_bytes!("../fixtures/public.pem")).unwrap(),
+        &validation,
+    )
+    .unwrap();
+    assert_eq!(decoded.claims.iss, "99");
+    assert_eq!(decoded.claims.exp - decoded.claims.iat, 600);
+}
 
+#[derive(Deserialize)]
+struct Claims {
+    iat: u64,
+    exp: u64,
+    iss: String,
+}
+
+#[test]
+fn an_expired_deadline_fails_before_any_transport_io() {
+    let timeouts = GitHubTimeouts::new(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    let transport = Transport::new(
+        99,
+        7,
+        SecretSlice::from(include_bytes!("../fixtures/private.pem").to_vec()),
+        "github.com",
+        "https://api.github.com",
+        timeouts,
+    )
+    .unwrap();
+    let deadline = OperationDeadline::after(Duration::ZERO).unwrap();
     assert_eq!(
-        execute_on_runtime(&runtime, request, deadline),
-        Err(ProviderError::Unavailable)
+        transport
+            .get::<serde_json::Value>("/rate_limit", deadline)
+            .err(),
+        Some(ProviderError::Unavailable)
     );
-    release_worker.send(())?;
-    runtime.block_on(blocker)?;
-    request_dropped.recv_timeout(Duration::from_secs(1))?;
-    assert!(!polled.load(Ordering::Acquire));
-    Ok(())
 }

@@ -1,17 +1,13 @@
-use std::future::Future;
-use std::sync::{Arc, mpsc};
-use std::time::Duration;
+use std::io::Read as _;
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bytes::Bytes;
-use http::Response;
-use http::header::{ACCEPT, HeaderName};
-use http_body::Body;
-use http_body_util::BodyExt as _;
-use jsonwebtoken::EncodingKey;
-use octocrab::models::{AppId, InstallationId};
-use octocrab::{Octocrab, OctocrabBuilder};
+use jsonwebtoken::{Algorithm, EncodingKey, Header};
+use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderName, HeaderValue};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
-use tokio::runtime::Runtime;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use amiss_controller::ProviderError;
@@ -26,11 +22,28 @@ const MAX_API_BASE_BYTES: usize = 2_048;
 const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
 const GITHUB_API_VERSION: &str = "2022-11-28";
 const GITHUB_JSON: &str = "application/vnd.github+json";
+const USER_AGENT: &str = "amiss-controller-github";
+const JWT_BACKDATE_SECONDS: u64 = 60;
+const JWT_LIFETIME_SECONDS: u64 = 540;
+const TOKEN_REUSE: Duration = Duration::from_mins(5);
 
 pub(super) struct Transport {
-    runtime: Arc<Runtime>,
-    crab: Arc<Octocrab>,
+    client: Client,
+    api_base: String,
+    app: AppCredential,
+    minted: Mutex<Option<MintedToken>>,
     operation_timeout: Duration,
+}
+
+struct AppCredential {
+    key: EncodingKey,
+    app_id: u64,
+    installation_id: u64,
+}
+
+struct MintedToken {
+    token: SecretString,
+    minted_at: Instant,
 }
 
 impl Transport {
@@ -42,154 +55,166 @@ impl Transport {
         api_base: &str,
         timeouts: GitHubTimeouts,
     ) -> Result<Self, GitHubClientError> {
-        validate_api_base(api_base, provider_instance)?;
+        let api_base = validate_api_base(api_base, provider_instance)?;
         let key = EncodingKey::from_rsa_pem(private_key.expose_secret())
             .map_err(|_defect| GitHubClientError::Configuration)?;
         drop(private_key);
-        let runtime = Arc::new(
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .map_err(|_defect| GitHubClientError::Runtime)?,
-        );
-        let builder = OctocrabBuilder::new()
-            .base_uri(api_base)
-            .map_err(|_defect| GitHubClientError::Configuration)?
-            .set_connect_timeout(Some(timeouts.connect))
-            .set_read_timeout(Some(timeouts.read))
-            .set_write_timeout(Some(timeouts.write))
-            .add_header(ACCEPT, GITHUB_JSON.to_owned())
-            .add_header(
-                HeaderName::from_static("x-github-api-version"),
-                GITHUB_API_VERSION.to_owned(),
-            )
-            .app(AppId(app_id), key);
-        let app = {
-            let _runtime = runtime.enter();
-            builder
-                .build()
-                .map_err(|_defect| GitHubClientError::Client)?
-        };
-        let crab = app
-            .installation(InstallationId(installation_id))
+        let client = Client::builder()
+            .user_agent(USER_AGENT)
+            .connect_timeout(timeouts.connect)
+            .redirect(reqwest::redirect::Policy::none())
+            .https_only(true)
+            .build()
             .map_err(|_defect| GitHubClientError::Client)?;
         Ok(Self {
-            runtime,
-            crab: Arc::new(crab),
+            client,
+            api_base,
+            app: AppCredential {
+                key,
+                app_id,
+                installation_id,
+            },
+            minted: Mutex::new(None),
             operation_timeout: timeouts.operation,
         })
     }
 
     pub(super) fn installation_access_token(&self) -> Result<SecretString, ProviderError> {
-        let crab = Arc::clone(&self.crab);
         let deadline = self.deadline()?;
-        self.execute(
-            async move {
-                crab.installation_token()
-                    .await
-                    .map_err(|error| map_error(&error))
-            },
-            deadline,
-        )
+        self.token(deadline)
     }
 
     pub(super) fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
         OperationDeadline::after(self.operation_timeout)
     }
 
-    pub(super) fn get<T>(
+    pub(super) fn get<T: DeserializeOwned>(
         &self,
-        route: String,
+        route: &str,
         deadline: OperationDeadline,
-    ) -> Result<T, ProviderError>
-    where
-        T: serde::de::DeserializeOwned + Send + 'static,
-    {
-        self.request(deadline, |crab| async move { crab._get(route).await })
+    ) -> Result<T, ProviderError> {
+        self.execute(self.client.get(self.url(route)?), deadline)
     }
 
-    pub(super) fn request<T, B, F, Fut>(
+    pub(super) fn post<T: DeserializeOwned>(
         &self,
+        route: &str,
+        body: &impl Serialize,
         deadline: OperationDeadline,
-        build: F,
-    ) -> Result<T, ProviderError>
-    where
-        T: serde::de::DeserializeOwned + Send + 'static,
-        B: Body<Data = Bytes> + Unpin + Send + 'static,
-        F: FnOnce(Arc<Octocrab>) -> Fut,
-        Fut: Future<Output = Result<Response<B>, octocrab::Error>> + Send + 'static,
-    {
-        let request = build(Arc::clone(&self.crab));
-        self.execute(
-            async move {
-                let response = request.await.map_err(|error| map_error(&error))?;
-                decode_json(response).await
-            },
-            deadline,
-        )
+    ) -> Result<T, ProviderError> {
+        self.execute(self.client.post(self.url(route)?).json(body), deadline)
     }
 
-    fn execute<T, F>(&self, future: F, deadline: OperationDeadline) -> Result<T, ProviderError>
-    where
-        T: Send + 'static,
-        F: Future<Output = Result<T, ProviderError>> + Send + 'static,
-    {
-        execute_on_runtime(self.runtime.as_ref(), future, deadline)
-    }
-}
-
-fn execute_on_runtime<T, F>(
-    runtime: &Runtime,
-    future: F,
-    deadline: OperationDeadline,
-) -> Result<T, ProviderError>
-where
-    T: Send + 'static,
-    F: Future<Output = Result<T, ProviderError>> + Send + 'static,
-{
-    let (sender, receiver) = mpsc::sync_channel(1);
-    let timeout = deadline.remaining()?;
-    let task = runtime.spawn(async move {
-        let result = await_before_deadline(future, deadline).await;
-        let _ignored = sender.send(result);
-    });
-    match receiver.recv_timeout(timeout) {
-        Ok(result) => result,
-        Err(_defect) => {
-            task.abort();
-            Err(ProviderError::Unavailable)
+    fn execute<T: DeserializeOwned>(
+        &self,
+        request: RequestBuilder,
+        deadline: OperationDeadline,
+    ) -> Result<T, ProviderError> {
+        let token = self.token(deadline)?;
+        let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
+            .timeout(deadline.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))?;
+        let status = response.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(map_status(status));
         }
+        decode_body(response)
+    }
+
+    fn token(&self, deadline: OperationDeadline) -> Result<SecretString, ProviderError> {
+        let mut minted = self.minted.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(current) = minted.as_ref()
+            && current.minted_at.elapsed() < TOKEN_REUSE
+        {
+            return Ok(current.token.clone());
+        }
+        let token = self.mint(deadline)?;
+        *minted = Some(MintedToken {
+            token: token.clone(),
+            minted_at: Instant::now(),
+        });
+        Ok(token)
+    }
+
+    fn mint(&self, deadline: OperationDeadline) -> Result<SecretString, ProviderError> {
+        let jwt = app_jwt(&self.app)?;
+        let route = format!(
+            "/app/installations/{}/access_tokens",
+            self.app.installation_id
+        );
+        let request = self.client.post(self.url(&route)?);
+        let response = github_headers(request, &jwt, ProviderError::Authentication)?
+            .timeout(deadline.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))?;
+        let status = response.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(mint_status(status));
+        }
+        let minted: InstallationToken = decode_body(response)?;
+        Ok(SecretString::from(minted.token))
+    }
+
+    fn url(&self, route: &str) -> Result<Url, ProviderError> {
+        if !route.starts_with('/') || route.starts_with("//") {
+            return Err(ProviderError::InvalidResponse);
+        }
+        Url::parse(&format!("{}{route}", self.api_base))
+            .map_err(|_defect| ProviderError::InvalidResponse)
     }
 }
 
-async fn await_before_deadline<T, F>(
-    future: F,
-    deadline: OperationDeadline,
-) -> Result<T, ProviderError>
-where
-    F: Future<Output = Result<T, ProviderError>>,
-{
-    let timeout = deadline.remaining()?;
-    tokio::time::timeout(timeout, async move {
-        deadline.remaining()?;
-        future.await
-    })
-    .await
-    .map_err(|_elapsed| ProviderError::Unavailable)?
+#[derive(Serialize)]
+struct AppClaims {
+    iat: u64,
+    exp: u64,
+    iss: String,
 }
 
-async fn decode_json<T, B>(response: Response<B>) -> Result<T, ProviderError>
-where
-    T: serde::de::DeserializeOwned,
-    B: Body<Data = Bytes> + Unpin,
-{
-    let status = response.status().as_u16();
-    if !(200..300).contains(&status) {
-        return Err(map_status(status));
-    }
+#[derive(Deserialize)]
+struct InstallationToken {
+    token: String,
+}
+
+fn app_jwt(app: &AppCredential) -> Result<SecretString, ProviderError> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_defect| ProviderError::Authentication)?
+        .as_secs();
+    let claims = AppClaims {
+        iat: now.saturating_sub(JWT_BACKDATE_SECONDS),
+        exp: now
+            .checked_add(JWT_LIFETIME_SECONDS)
+            .ok_or(ProviderError::Authentication)?,
+        iss: app.app_id.to_string(),
+    };
+    let jwt = jsonwebtoken::encode(&Header::new(Algorithm::RS256), &claims, &app.key)
+        .map_err(|_defect| ProviderError::Authentication)?;
+    Ok(SecretString::from(jwt))
+}
+
+fn github_headers(
+    request: RequestBuilder,
+    bearer: &SecretString,
+    invalid: ProviderError,
+) -> Result<RequestBuilder, ProviderError> {
+    let mut authorization = HeaderValue::from_str(&format!("Bearer {}", bearer.expose_secret()))
+        .map_err(|_defect| invalid)?;
+    authorization.set_sensitive(true);
+    Ok(request
+        .header(ACCEPT, GITHUB_JSON)
+        .header(
+            HeaderName::from_static("x-github-api-version"),
+            GITHUB_API_VERSION,
+        )
+        .header(AUTHORIZATION, authorization))
+}
+
+fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
     let declared = response
         .headers()
-        .get("content-length")
+        .get(CONTENT_LENGTH)
         .map(|value| {
             value
                 .to_str()
@@ -198,30 +223,37 @@ where
                 .ok_or(ProviderError::InvalidResponse)
         })
         .transpose()?;
-    if declared.is_some_and(|bytes| bytes > MAX_RESPONSE_BYTES) {
-        return Err(ProviderError::InvalidResponse);
-    }
-    let mut body = response.into_body();
-    let mut bytes = Vec::new();
-    while let Some(frame) = body.frame().await {
-        let frame = frame.map_err(|_defect| ProviderError::Unavailable)?;
-        if let Ok(data) = frame.into_data() {
-            if data.len() > MAX_RESPONSE_BYTES.saturating_sub(bytes.len()) {
-                return Err(ProviderError::InvalidResponse);
-            }
-            bytes.extend_from_slice(&data);
-        }
-    }
+    let bytes = bounded_bytes(declared, response)?;
     serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)
 }
 
-fn validate_api_base(raw: &str, provider_instance: &str) -> Result<(), GitHubClientError> {
+fn bounded_bytes(
+    declared: Option<usize>,
+    reader: impl std::io::Read,
+) -> Result<Vec<u8>, ProviderError> {
+    if declared.is_some_and(|bytes| bytes > MAX_RESPONSE_BYTES) {
+        return Err(ProviderError::InvalidResponse);
+    }
+    let limit = u64::try_from(MAX_RESPONSE_BYTES)
+        .map_err(|_defect| ProviderError::InvalidResponse)?
+        .saturating_add(1);
+    let mut bytes = Vec::new();
+    reader
+        .take(limit)
+        .read_to_end(&mut bytes)
+        .map_err(|_defect| ProviderError::Unavailable)?;
+    if bytes.len() > MAX_RESPONSE_BYTES {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(bytes)
+}
+
+fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GitHubClientError> {
     let url = Url::parse(raw).map_err(|_defect| GitHubClientError::Configuration)?;
-    let no_port = raw
-        .parse::<http::Uri>()
-        .ok()
-        .and_then(|uri| uri.authority().map(|authority| authority.port().is_none()))
-        .unwrap_or(false);
+    let explicit_port = raw.split_once("://").is_none_or(|(_scheme, rest)| {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        authority.rsplit('@').next().unwrap_or("").contains(':')
+    });
     let expected_host = if provider_instance == "github.com" {
         "api.github.com"
     } else {
@@ -231,38 +263,25 @@ fn validate_api_base(raw: &str, provider_instance: &str) -> Result<(), GitHubCli
         && raw.len() <= MAX_API_BASE_BYTES
         && url.scheme() == "https"
         && url.host_str() == Some(expected_host)
-        && no_port
+        && !explicit_port
         && url.username().is_empty()
         && url.password().is_none()
         && url.query().is_none()
         && url.fragment().is_none();
-    valid.then_some(()).ok_or(GitHubClientError::Configuration)
+    valid
+        .then(|| raw.trim_end_matches('/').to_owned())
+        .ok_or(GitHubClientError::Configuration)
 }
 
-fn map_error(error: &octocrab::Error) -> ProviderError {
-    if let octocrab::Error::GitHub { source, .. } = error {
-        return map_status(source.status_code.as_u16());
+fn map_error(error: &reqwest::Error) -> ProviderError {
+    if let Some(status) = error.status() {
+        return map_status(status.as_u16());
     }
-    if let octocrab::Error::JWT { .. }
-    | octocrab::Error::Installation { .. }
-    | octocrab::Error::InstallationTokenInvalidAuth { .. } = error
-    {
-        return ProviderError::Authentication;
+    if error.is_builder() || error.is_decode() {
+        ProviderError::InvalidResponse
+    } else {
+        ProviderError::Unavailable
     }
-    if let octocrab::Error::UriParse { .. }
-    | octocrab::Error::Uri { .. }
-    | octocrab::Error::InvalidHeaderValue { .. }
-    | octocrab::Error::Http { .. }
-    | octocrab::Error::InvalidUtf8 { .. }
-    | octocrab::Error::SerdeUrlEncoded { .. }
-    | octocrab::Error::Serde { .. }
-    | octocrab::Error::Json { .. }
-    | octocrab::Error::Graphql { .. }
-    | octocrab::Error::Other { .. } = error
-    {
-        return ProviderError::InvalidResponse;
-    }
-    ProviderError::Unavailable
 }
 
 fn map_status(status: u16) -> ProviderError {
@@ -272,5 +291,14 @@ fn map_status(status: u16) -> ProviderError {
         ProviderError::Unavailable
     } else {
         ProviderError::InvalidResponse
+    }
+}
+
+fn mint_status(status: u16) -> ProviderError {
+    let mapped = map_status(status);
+    if mapped == ProviderError::AuthorizationRevoked {
+        ProviderError::Authentication
+    } else {
+        mapped
     }
 }

@@ -12,24 +12,17 @@ publish = false
 amiss-controller = { path = ".." }
 amiss-controller-git = { path = "../git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
-bytes = "1"
-http = "1"
-http-body = "1"
-http-body-util = "0.1"
 jsonwebtoken = { version = "10.4", default-features = false, features = ["aws_lc_rs", "use_pem"] }
-octocrab = { version = "0.54", default-features = false, features = [
-  "default-client",
-  "jwt-aws-lc-rs",
-  "rustls",
-  "rustls-ring",
-  "timeout",
-] }
 percent-encoding = "2"
+reqwest = { version = "0.13", default-features = false, features = [
+  "blocking",
+  "json",
+  "rustls",
+] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
-tokio = { version = "1", features = ["net", "rt-multi-thread", "time"] }
 url = "2"
 
 [dev-dependencies]
