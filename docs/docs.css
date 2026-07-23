@@ -89,3 +89,17 @@ html, body, .sidebar, #menu-bar, .menu-title, .content main {
 .chapter li.chapter-item { margin: 0; }
 .chapter li.chapter-item a { padding: 0.14rem 0; display: inline-block; }
 .chapter li.chapter-item a.active { font-weight: 600; color: var(--links); }
+
+.chapter li.part-title {
+  cursor: pointer;
+  user-select: none;
+}
+.chapter li.part-title .part-chevron {
+  display: inline-block;
+  margin-left: 0.5em;
+  font-size: 0.75em;
+  transition: transform 0.15s;
+}
+.chapter li.part-title[data-expanded="true"] .part-chevron {
+  transform: rotate(90deg);
+}
