@@ -1,7 +1,10 @@
-use std::fs::{self, File};
+use std::fs;
+use std::path::Path;
 
 use amiss_controller_service::{Inbox, InboxError};
-use fs_at::{LinkEntryType, OpenOptions};
+use cap_fs_ext::DirExt as _;
+use cap_std::ambient_authority;
+use cap_std::fs::Dir;
 use tempfile::TempDir;
 
 use super::support::{incoming, limits, open, row_file};
@@ -50,14 +53,9 @@ fn symlink_roots_and_rows_fail_closed_without_platform_branches() {
     let parent = TempDir::new().unwrap();
     let target_root = parent.path().join("target-root");
     fs::create_dir(&target_root).unwrap();
-    let parent_file = File::open(parent.path()).unwrap();
-    OpenOptions::default()
-        .symlink_at(
-            &parent_file,
-            "linked-root",
-            LinkEntryType::Dir,
-            "target-root",
-        )
+    let parent_dir = Dir::open_ambient_dir(parent.path(), ambient_authority()).unwrap();
+    parent_dir
+        .symlink_dir("target-root", "linked-root")
         .unwrap();
     assert!(matches!(
         Inbox::open(parent.path().join("linked-root"), limits()),
@@ -73,9 +71,9 @@ fn symlink_roots_and_rows_fail_closed_without_platform_branches() {
     fs::remove_file(row).unwrap();
     let target = parent.path().join("target-row");
     fs::write(&target, b"row target").unwrap();
-    let row_root_file = File::open(&row_root).unwrap();
-    OpenOptions::default()
-        .symlink_at(&row_root_file, name, LinkEntryType::File, &target)
+    let row_root_dir = Dir::open_ambient_dir(&row_root, ambient_authority()).unwrap();
+    row_root_dir
+        .symlink_file(Path::new("..").join("target-row"), name)
         .unwrap();
     assert!(matches!(inbox.entries(), Err(InboxError::Corrupt)));
 }

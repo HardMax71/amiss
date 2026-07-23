@@ -205,7 +205,6 @@ dependencies = [
  "cap-fs-ext",
  "cap-std",
  "ctrlc",
- "fs_at",
  "getrandom 0.4.3",
  "hex",
  "hmac",
