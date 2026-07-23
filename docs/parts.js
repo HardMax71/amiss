@@ -16,7 +16,7 @@
   }
 
   function apply(group, expanded) {
-    group.title.setAttribute("data-expanded", expanded ? "true" : "false");
+    group.title.setAttribute("aria-expanded", expanded ? "true" : "false");
     group.members.forEach(function (member) {
       member.style.display = expanded ? "" : "none";
     });
@@ -38,9 +38,18 @@
       chevron.className = "part-chevron";
       chevron.textContent = "❯";
       group.title.appendChild(chevron);
+      group.title.setAttribute("role", "button");
+      group.title.setAttribute("tabindex", "0");
       apply(group, holdsPage);
-      group.title.addEventListener("click", function () {
-        apply(group, group.title.getAttribute("data-expanded") !== "true");
+      function toggle() {
+        apply(group, group.title.getAttribute("aria-expanded") !== "true");
+      }
+      group.title.addEventListener("click", toggle);
+      group.title.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggle();
+        }
       });
     });
     return true;
