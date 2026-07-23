@@ -20,7 +20,6 @@ const RENEWAL_GATE: &str = "runner-renewal-gate";
 const GRANDCHILD_DELAY: Duration = Duration::from_millis(500);
 const GRANDCHILD_READY_TIMEOUT: Duration = Duration::from_secs(2);
 const GRANDCHILD_READY_POLL: Duration = Duration::from_millis(5);
-const COMPLETION_DELAY: Duration = Duration::from_millis(100);
 
 fn main() -> ExitCode {
     let mut invocation = env::args_os().skip(1);
@@ -63,7 +62,6 @@ enum Mode {
     OversizedOutput,
     Timeout,
     ClearedEnvironment,
-    DelayedPass,
     RenewedPass,
     ExitWithChild,
     ReplaceOutputs,
@@ -159,7 +157,6 @@ fn read_mode(path: &Path) -> Option<Mode> {
         "runner-oversized" => Some(Mode::OversizedOutput),
         "runner-hang" => Some(Mode::Timeout),
         "runner-environment" => Some(Mode::ClearedEnvironment),
-        "runner-delayed-pass" => Some(Mode::DelayedPass),
         "runner-renewed-pass" => Some(Mode::RenewedPass),
         "runner-exit-child" => Some(Mode::ExitWithChild),
         "runner-replace-outputs" => Some(Mode::ReplaceOutputs),
@@ -190,15 +187,6 @@ fn run(mode: Mode, args: &RunnerArgs) -> ExitCode {
             BootstrapResult::Pass,
             b"{\"runner\":\"pass\"}\n",
         ),
-        Mode::DelayedPass => {
-            std::thread::sleep(COMPLETION_DELAY);
-            complete(
-                &args.report,
-                &args.result,
-                BootstrapResult::Pass,
-                b"{\"runner\":\"pass\"}\n",
-            )
-        }
         Mode::RenewedPass if renewal_gate(args) => complete(
             &args.report,
             &args.result,
