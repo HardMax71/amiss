@@ -16,6 +16,7 @@ const GRANDCHILD_READY_MARKER: &str = "runner-ready";
 const GRANDCHILD_MARKER: &str = "runner-escaped";
 const GRANDCHILD_LOCK: &str = "runner-lock";
 const REPLACED_MARKER: &str = "runner-replaced";
+const RENEWAL_GATE: &str = "runner-renewal-gate";
 const GRANDCHILD_DELAY: Duration = Duration::from_millis(500);
 const GRANDCHILD_READY_TIMEOUT: Duration = Duration::from_secs(2);
 const GRANDCHILD_READY_POLL: Duration = Duration::from_millis(5);
@@ -63,6 +64,7 @@ enum Mode {
     Timeout,
     ClearedEnvironment,
     DelayedPass,
+    RenewedPass,
     ExitWithChild,
     ReplaceOutputs,
 }
@@ -158,6 +160,7 @@ fn read_mode(path: &Path) -> Option<Mode> {
         "runner-hang" => Some(Mode::Timeout),
         "runner-environment" => Some(Mode::ClearedEnvironment),
         "runner-delayed-pass" => Some(Mode::DelayedPass),
+        "runner-renewed-pass" => Some(Mode::RenewedPass),
         "runner-exit-child" => Some(Mode::ExitWithChild),
         "runner-replace-outputs" => Some(Mode::ReplaceOutputs),
         _ => None,
@@ -196,14 +199,31 @@ fn run(mode: Mode, args: &RunnerArgs) -> ExitCode {
                 b"{\"runner\":\"pass\"}\n",
             )
         }
+        Mode::RenewedPass if renewal_gate(args) => complete(
+            &args.report,
+            &args.result,
+            BootstrapResult::Pass,
+            b"{\"runner\":\"pass\"}\n",
+        ),
         Mode::ExitWithChild => exit_with_child(args),
         Mode::ReplaceOutputs => replace_outputs(args),
-        Mode::MalformedResult | Mode::ClearedEnvironment => malformed(&args.result),
+        Mode::MalformedResult | Mode::ClearedEnvironment | Mode::RenewedPass => {
+            malformed(&args.result)
+        }
     }
 }
 
 fn cleared_environment() -> bool {
     env::var_os("PATH").is_none()
+}
+
+fn renewal_gate(args: &RunnerArgs) -> bool {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(args.repository.join(RENEWAL_GATE))
+        .and_then(|gate| gate.lock())
+        .is_ok()
 }
 
 fn complete(report: &Path, result: &Path, outcome: BootstrapResult, bytes: &[u8]) -> ExitCode {

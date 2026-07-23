@@ -3,7 +3,7 @@
     reason = "integration fixtures construct known-valid controller inputs"
 )]
 
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -25,6 +25,8 @@ use amiss_wire::model::{
 
 const PASS_REPORT: &[u8] = b"{\"runner\":\"pass\"}\n";
 const BLOCK_REPORT: &[u8] = b"{\"runner\":\"block\"}\n";
+const STARTED_MARKER: &str = "runner-started";
+const RENEWAL_GATE: &str = "runner-renewal-gate";
 const RESOURCE_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
 const RESOURCE_RELEASE_POLL: Duration = Duration::from_millis(10);
 
@@ -36,16 +38,12 @@ struct Heartbeat {
     stop_on_call: Option<u64>,
     stop_delay: Duration,
     renew_within: Duration,
+    release_when_present: Option<(PathBuf, File)>,
 }
 
 impl Heartbeat {
     const fn renewing() -> Self {
-        Self {
-            calls: 0,
-            stop_on_call: None,
-            stop_delay: Duration::ZERO,
-            renew_within: Duration::from_millis(200),
-        }
+        Self::renewing_with(Duration::from_millis(200))
     }
 
     const fn renewing_with(renew_within: Duration) -> Self {
@@ -54,24 +52,30 @@ impl Heartbeat {
             stop_on_call: None,
             stop_delay: Duration::ZERO,
             renew_within,
+            release_when_present: None,
         }
     }
 
-    const fn stopping_on(call: u64) -> Self {
+    fn stopping_on(call: u64) -> Self {
         Self {
-            calls: 0,
             stop_on_call: Some(call),
-            stop_delay: Duration::ZERO,
-            renew_within: Duration::from_millis(200),
+            ..Self::renewing()
         }
     }
 
-    const fn stopping_after(call: u64, delay: Duration) -> Self {
+    fn stopping_after(call: u64, delay: Duration) -> Self {
         Self {
-            calls: 0,
             stop_on_call: Some(call),
             stop_delay: delay,
             renew_within: Duration::from_millis(100),
+            ..Self::renewing()
+        }
+    }
+
+    fn releasing_when(path: PathBuf, renew_within: Duration, gate: File) -> Self {
+        Self {
+            release_when_present: Some((path, gate)),
+            ..Self::renewing_with(renew_within)
         }
     }
 }
@@ -79,6 +83,13 @@ impl Heartbeat {
 impl RunHeartbeat for Heartbeat {
     fn renew(&mut self) -> HeartbeatOutcome {
         self.calls = self.calls.saturating_add(1);
+        if let Some((_path, gate)) = self
+            .release_when_present
+            .take_if(|(path, _gate)| path.exists())
+            && gate.unlock().is_err()
+        {
+            return HeartbeatOutcome::Stop;
+        }
         if self.stop_on_call == Some(self.calls) {
             std::thread::sleep(self.stop_delay);
             HeartbeatOutcome::Stop
@@ -151,7 +162,7 @@ impl Harness {
     }
 
     fn started(&self) -> bool {
-        self.repository.root().join("runner-started").exists()
+        self.repository.root().join(STARTED_MARKER).exists()
     }
 
     fn escaped(&self) -> bool {
@@ -376,14 +387,21 @@ fn equivalent_scratch_path_spelling_is_accepted() {
 
 #[test]
 fn short_lease_windows_drive_renewal_before_completion() {
-    let harness = Harness::new("runner-delayed-pass", None);
-    let mut heartbeat = Heartbeat::renewing_with(Duration::from_millis(80));
+    let harness = Harness::new("runner-renewed-pass", None);
+    let gate = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(harness.repository.root().join(RENEWAL_GATE))
+        .unwrap();
+    gate.lock().unwrap();
+    let started = harness.repository.root().join(STARTED_MARKER);
+    let mut heartbeat = Heartbeat::releasing_when(started, Duration::from_millis(80), gate);
 
     assert!(matches!(
         harness.run(Duration::from_secs(2), &mut heartbeat),
         RunnerOutcome::Complete { .. }
     ));
-    assert!(heartbeat.calls >= 2);
     assert!(harness.started());
 }
 
