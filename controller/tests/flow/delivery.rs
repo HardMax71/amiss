@@ -5,6 +5,7 @@ use std::time::Duration;
 use amiss_controller::{
     ChangeState, CheckConclusion, ControllerError, HandleOutcome, ProviderError, check_binding,
 };
+use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::support::{
     FakeAdapter, complete, controller, delivery, locator, provider, repository, run, snapshot,
@@ -176,6 +177,28 @@ fn resumed_delivery_cannot_follow_the_changes_new_head() {
         controller.handle(adapter.input()),
         Err(ControllerError::Provider(_))
     ));
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::WrongProviderRun)
+    ));
+    assert!(controller.runner.requests.is_empty());
+    assert!(adapter.publications().is_empty());
+}
+
+#[test]
+fn gate_commit_must_use_the_refreshed_runs_object_format() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let mut invalid = snapshot(ChangeState::Active, run.clone());
+    invalid.gate_commit =
+        Oid::new(ObjectFormat::Sha256, "e".repeat(64)).expect("valid sha256 fixture");
+    let adapter = Arc::new(FakeAdapter::new(
+        delivery(&provider, change, 'b'),
+        [Ok(invalid)],
+    ));
+    let mut controller = controller(Arc::clone(&adapter), complete(&run));
+
     assert!(matches!(
         controller.handle(adapter.input()),
         Err(ControllerError::WrongProviderRun)

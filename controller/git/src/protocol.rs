@@ -45,6 +45,7 @@ pub(super) fn fetch_exact(fetch: ExactFetch<'_>) -> Result<(), GitFetchError> {
         started,
     )?;
     gix::protocol::indicate_end_of_interaction(&mut transport, false).map_err(fetch_error)?;
+    active(&fetch, started)?;
     create_refs(&repository, &wanted)?;
     if let Some(keep_path) = installed.keep_path {
         std::fs::remove_file(keep_path).map_err(fetch_error)?;

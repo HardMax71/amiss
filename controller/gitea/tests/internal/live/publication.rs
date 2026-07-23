@@ -34,6 +34,44 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 2);
     assert_eq!(state.created[1].event, "REQUEST_CHANGES");
+    drop(state);
+
+    assert_eq!(
+        fixture.client.publish(fixture.pull_request(), &publication),
+        Ok(())
+    );
+    let state = fixture.rest.state.lock().unwrap();
+    assert_eq!(state.created.len(), 2);
+    assert_eq!(state.created[1].event, "REQUEST_CHANGES");
+}
+
+#[test]
+fn inactive_exact_reviews_are_recreated() {
+    for stale in [false, true] {
+        let fixture = Fixture::new("gitea");
+        let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
+        let publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Block);
+        assert_eq!(
+            fixture.client.publish(fixture.pull_request(), &publication),
+            Ok(())
+        );
+        {
+            let mut state = fixture.rest.state.lock().unwrap();
+            let review = state.data.reviews.last_mut().unwrap();
+            review.stale = stale;
+            review.dismissed = !stale;
+        }
+
+        assert_eq!(
+            fixture.client.publish(fixture.pull_request(), &publication),
+            Ok(())
+        );
+        let state = fixture.rest.state.lock().unwrap();
+        assert_eq!(state.created.len(), 2);
+        let review = state.data.reviews.last().unwrap();
+        assert!(!review.stale);
+        assert!(!review.dismissed);
+    }
 }
 
 #[test]

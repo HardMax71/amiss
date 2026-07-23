@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use amiss_wire::controls::STATEMENT_TTL_MAX_SECONDS;
@@ -35,7 +35,7 @@ pub trait Acquisition: Send {
 }
 
 pub struct AcquiringRunner<A> {
-    acquisition: A,
+    acquisition: Arc<Mutex<Option<A>>>,
     executable: PathBuf,
     scratch: PathBuf,
     wall_timeout: Duration,
@@ -59,7 +59,7 @@ impl<A> AcquiringRunner<A> {
         let valid_validity = validity.subsec_nanos() == 0
             && (1..=STATEMENT_TTL_MAX_SECONDS).contains(&validity_seconds);
         (valid_wall_timeout && valid_validity).then_some(Self {
-            acquisition,
+            acquisition: Arc::new(Mutex::new(Some(acquisition))),
             executable,
             scratch,
             wall_timeout,
@@ -69,7 +69,7 @@ impl<A> AcquiringRunner<A> {
     }
 }
 
-impl<A: Acquisition> Runner for AcquiringRunner<A> {
+impl<A: Acquisition + 'static> Runner for AcquiringRunner<A> {
     fn run(&mut self, request: &RunRequest, heartbeat: &mut dyn RunHeartbeat) -> RunnerOutcome {
         let Ok(acquired) = AcquiredRun::new(&self.scratch) else {
             return RunnerOutcome::Unavailable;
@@ -77,17 +77,15 @@ impl<A: Acquisition> Runner for AcquiringRunner<A> {
         let Some(renew_after) = renewal_wait(heartbeat.renew()) else {
             return RunnerOutcome::Unavailable;
         };
-        if acquire(
-            &mut self.acquisition,
-            request,
-            &acquired,
+        let Ok(acquired) = acquire(
+            Arc::clone(&self.acquisition),
+            request.clone(),
+            acquired,
             heartbeat,
             renew_after,
-        )
-        .is_err()
-        {
+        ) else {
             return RunnerOutcome::Unavailable;
-        }
+        };
         let Some((evaluation_instant, valid_until)) =
             trusted_window(self.clock.as_ref(), self.validity_seconds)
         else {
@@ -126,54 +124,64 @@ impl AcquiredRun {
     }
 }
 
-fn acquire<A: Acquisition>(
-    acquisition: &mut A,
-    request: &RunRequest,
-    roots: &AcquiredRun,
+fn acquire<A>(
+    acquisition: Arc<Mutex<Option<A>>>,
+    request: RunRequest,
+    roots: AcquiredRun,
     heartbeat: &mut dyn RunHeartbeat,
     renew_after: Duration,
-) -> Result<(), ()> {
+) -> Result<AcquiredRun, ()>
+where
+    A: Acquisition + 'static,
+{
     let cancelled = Arc::new(AtomicBool::new(false));
     let worker_cancelled = Arc::clone(&cancelled);
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let _worker = std::thread::Builder::new()
+        .name("amiss-acquisition".to_owned())
+        .spawn(move || {
+            let acquired = run_acquisition(&acquisition, &request, &roots, worker_cancelled);
+            let _ignored = sender.send((acquired, roots));
+        })
+        .map_err(|_defect| ())?;
+    await_acquisition(&receiver, &cancelled, heartbeat, renew_after)
+}
+
+fn run_acquisition<A: Acquisition>(
+    slot: &Mutex<Option<A>>,
+    request: &RunRequest,
+    roots: &AcquiredRun,
+    cancelled: Arc<AtomicBool>,
+) -> bool {
+    let Some(mut acquisition) = slot.lock().ok().and_then(|mut slot| slot.take()) else {
+        return false;
+    };
     let target = AcquisitionTarget {
         repository: roots.repository.path(),
         action: roots.action.path(),
-        cancelled: worker_cancelled,
+        cancelled,
     };
-    let (sender, receiver) = mpsc::sync_channel(1);
-    std::thread::scope(|scope| {
-        let worker = std::thread::Builder::new()
-            .name("amiss-acquisition".to_owned())
-            .spawn_scoped(scope, move || {
-                let acquired = acquisition.acquire(request, target).is_ok();
-                let _ignored = sender.send(acquired);
-            })
-            .map_err(|_defect| ())?;
-        let acquired = await_acquisition(&receiver, &cancelled, heartbeat, renew_after);
-        if acquired != Ok(true) {
-            cancelled.store(true, Ordering::Release);
-        }
-        match worker.join() {
-            Ok(()) if acquired == Ok(true) => Ok(()),
-            Ok(()) | Err(_) => Err(()),
-        }
-    })
+    let acquired = acquisition.acquire(request, target).is_ok();
+    slot.lock()
+        .is_ok_and(|mut slot| slot.replace(acquisition).is_none())
+        && acquired
 }
 
 fn await_acquisition(
-    receiver: &mpsc::Receiver<bool>,
+    receiver: &mpsc::Receiver<(bool, AcquiredRun)>,
     cancelled: &AtomicBool,
     heartbeat: &mut dyn RunHeartbeat,
     mut renew_after: Duration,
-) -> Result<bool, ()> {
+) -> Result<AcquiredRun, ()> {
     loop {
         match receiver.recv_timeout(renew_after) {
-            Ok(acquired) => return Ok(acquired),
+            Ok((true, roots)) => return Ok(roots),
+            Ok((false, _roots)) => return Err(()),
             Err(mpsc::RecvTimeoutError::Disconnected) => return Err(()),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 let Some(next) = renewal_wait(heartbeat.renew()) else {
                     cancelled.store(true, Ordering::Release);
-                    return receiver.recv().map(|_ignored| false).map_err(|_defect| ());
+                    return Err(());
                 };
                 renew_after = next;
             }

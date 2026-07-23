@@ -50,6 +50,11 @@ pub(super) fn publication_decision(
     reviews: &[ReviewRecord],
 ) -> Result<PublicationDecision, ProviderError> {
     let expected = expected(publication)?;
+    if reviews.iter().any(|review| {
+        !review.stale && !review.dismissed && matches_expected(review, &expected, config)
+    }) {
+        return Ok(PublicationDecision::Reuse);
+    }
     let latest = reviews
         .iter()
         .filter(|review| {
@@ -63,9 +68,6 @@ pub(super) fn publication_decision(
         })
         .max_by_key(|review| review.id);
     match latest {
-        Some(review) if matches_expected(review, &expected, config) => {
-            Ok(PublicationDecision::Reuse)
-        }
         Some(review)
             if review
                 .body

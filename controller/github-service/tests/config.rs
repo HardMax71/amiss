@@ -139,6 +139,53 @@ fn bootstrap_bytes_must_match_the_loaded_constraint() {
 }
 
 #[test]
+fn action_repository_stays_on_the_github_lane() {
+    for (field, value) in [
+        ("/action_repository/host", json!("elsewhere.example")),
+        ("/action_repository/owner", json!("nested/group")),
+    ] {
+        let fixture = Fixture::new();
+        fixture.save();
+        let constraint = fixture
+            .value
+            .pointer("/plan/execution_constraint_file")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let mut descriptor: Value =
+            serde_json::from_slice(&std::fs::read(constraint).unwrap()).unwrap();
+        *descriptor.pointer_mut(field).unwrap() = value;
+        std::fs::write(constraint, serde_json::to_vec_pretty(&descriptor).unwrap()).unwrap();
+
+        let error = ServiceConfig::load(&fixture.config).err().unwrap();
+        assert_eq!(
+            error.to_string(),
+            "action repository must use this SHA-1 GitHub instance"
+        );
+    }
+
+    let fixture = Fixture::new();
+    fixture.save();
+    let constraint = fixture
+        .value
+        .pointer("/plan/execution_constraint_file")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let mut descriptor: Value =
+        serde_json::from_slice(&std::fs::read(constraint).unwrap()).unwrap();
+    *descriptor.pointer_mut("/action_object_format").unwrap() = json!("sha256");
+    *descriptor.pointer_mut("/action_commit_oid").unwrap() = json!("a".repeat(64));
+    *descriptor.pointer_mut("/action_tree_oid").unwrap() = json!("b".repeat(64));
+    std::fs::write(constraint, serde_json::to_vec_pretty(&descriptor).unwrap()).unwrap();
+    let error = ServiceConfig::load(&fixture.config).err().unwrap();
+    assert_eq!(
+        error.to_string(),
+        "action repository must use this SHA-1 GitHub instance"
+    );
+}
+
+#[test]
 fn writable_roots_must_not_overlap() {
     let mut fixture = Fixture::new();
     let scratch = fixture.value.pointer("/paths/scratch").unwrap().clone();

@@ -134,19 +134,48 @@ impl Transport {
         T: Send + 'static,
         F: Future<Output = Result<T, ProviderError>> + Send + 'static,
     {
-        let (sender, receiver) = mpsc::sync_channel(1);
-        let timeout = deadline.remaining()?;
-        let _task = self.runtime.spawn(async move {
-            let result = tokio::time::timeout(timeout, future)
-                .await
-                .map_err(|_elapsed| ProviderError::Unavailable)
-                .and_then(std::convert::identity);
-            let _ignored = sender.send(result);
-        });
-        receiver
-            .recv_timeout(timeout)
-            .map_err(|_defect| ProviderError::Unavailable)?
+        execute_on_runtime(self.runtime.as_ref(), future, deadline)
     }
+}
+
+fn execute_on_runtime<T, F>(
+    runtime: &Runtime,
+    future: F,
+    deadline: OperationDeadline,
+) -> Result<T, ProviderError>
+where
+    T: Send + 'static,
+    F: Future<Output = Result<T, ProviderError>> + Send + 'static,
+{
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let timeout = deadline.remaining()?;
+    let task = runtime.spawn(async move {
+        let result = await_before_deadline(future, deadline).await;
+        let _ignored = sender.send(result);
+    });
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(_defect) => {
+            task.abort();
+            Err(ProviderError::Unavailable)
+        }
+    }
+}
+
+async fn await_before_deadline<T, F>(
+    future: F,
+    deadline: OperationDeadline,
+) -> Result<T, ProviderError>
+where
+    F: Future<Output = Result<T, ProviderError>>,
+{
+    let timeout = deadline.remaining()?;
+    tokio::time::timeout(timeout, async move {
+        deadline.remaining()?;
+        future.await
+    })
+    .await
+    .map_err(|_elapsed| ProviderError::Unavailable)?
 }
 
 async fn decode_json<T, B>(response: Response<B>) -> Result<T, ProviderError>

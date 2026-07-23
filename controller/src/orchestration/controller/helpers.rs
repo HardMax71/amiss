@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use amiss_wire::model::Oid;
+
 use crate::{
     AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerClock, ProviderAdapter,
 };
@@ -156,14 +158,22 @@ pub(super) fn validate_staged<E>(
     if staged.publication.check != *check {
         return Err(ControllerError::DeliveryBindingConflict);
     }
-    validate_run(delivery, &staged.publication.run)
+    validate_run(delivery, &staged.publication.run)?;
+    validate_gate_commit(&staged.publication.run, &staged.publication.gate_commit)
 }
 
 pub(super) fn validate_change<E>(
     delivery: &AuthenticatedDelivery,
     snapshot: &ChangeSnapshot,
 ) -> Result<(), ControllerError<E>> {
-    validate_run(delivery, &snapshot.run)
+    validate_run(delivery, &snapshot.run)?;
+    validate_gate_commit(&snapshot.run, &snapshot.gate_commit)
+}
+
+fn validate_gate_commit<E>(run: &RunIdentity, gate_commit: &Oid) -> Result<(), ControllerError<E>> {
+    Oid::new(run.object_format, gate_commit.as_str().to_owned())
+        .ok_or(ControllerError::WrongProviderRun)?;
+    Ok(())
 }
 
 fn validate_run<E>(

@@ -253,6 +253,7 @@ fn load_token(path: &Path) -> Result<SecretString, ConfigError> {
 
 fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
     (plan.execution.action_repository.host == provider.instance.as_str()
+        && !plan.execution.action_repository.owner.contains('/')
         && plan.execution.action_object_format == ObjectFormat::Sha1)
         .then_some(())
         .ok_or(ConfigError(

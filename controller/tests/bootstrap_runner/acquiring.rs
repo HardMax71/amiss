@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 use amiss_controller::{AcquiringRunner, Acquisition, AcquisitionTarget, ControllerClock, Runner};
 use amiss_fixtures::path_arg;
@@ -18,19 +18,21 @@ impl ControllerClock for FixedClock {
 #[derive(Default)]
 struct AcquiredPaths(Mutex<Vec<PathBuf>>);
 
-enum AcquisitionFixture<'a> {
+enum AcquisitionFixture {
     Clone {
-        repository: &'a Path,
-        action: &'a Path,
+        repository: PathBuf,
+        action: PathBuf,
         paths: Arc<AcquiredPaths>,
     },
     Reject,
-    Wait {
-        observed: Arc<AtomicBool>,
+    IgnoreCancellation {
+        started: mpsc::SyncSender<()>,
+        release: mpsc::Receiver<()>,
+        finished: mpsc::SyncSender<()>,
     },
 }
 
-impl Acquisition for AcquisitionFixture<'_> {
+impl Acquisition for AcquisitionFixture {
     type Error = std::io::Error;
 
     fn acquire(
@@ -53,11 +55,14 @@ impl Acquisition for AcquisitionFixture<'_> {
                 clone_repository(action, target.action, &target.cancelled)
             }
             Self::Reject => Err(std::io::Error::other("acquisition rejected")),
-            Self::Wait { observed } => {
-                while !target.cancelled.load(Ordering::Acquire) {
-                    std::thread::sleep(Duration::from_millis(2));
-                }
-                observed.store(true, Ordering::Release);
+            Self::IgnoreCancellation {
+                started,
+                release,
+                finished,
+            } => {
+                let _ignored = started.send(());
+                let _ignored = release.recv();
+                let _ignored = finished.send(());
                 Err(std::io::Error::other("acquisition cancelled"))
             }
         }
@@ -93,8 +98,8 @@ fn uses_private_exact_roots_and_controller_time() {
     let harness = Harness::new("runner-pass", None);
     let paths = Arc::new(AcquiredPaths::default());
     let acquisition = AcquisitionFixture::Clone {
-        repository: harness.repository.root(),
-        action: harness.action.root(),
+        repository: harness.repository.root().to_path_buf(),
+        action: harness.action.root().to_path_buf(),
         paths: Arc::clone(&paths),
     };
     let mut runner = acquiring_runner(&harness, acquisition, Some(1_753_219_200_000));
@@ -108,7 +113,7 @@ fn uses_private_exact_roots_and_controller_time() {
             report: PASS_REPORT.to_vec(),
         }
     );
-    assert_eq!(heartbeat.calls, 2);
+    assert!(heartbeat.calls >= 2);
     assert!(paths.0.lock().unwrap().iter().all(|path| !path.exists()));
 }
 
@@ -127,8 +132,8 @@ fn acquisition_and_clock_defects_are_unavailable() {
     );
 
     let acquisition = AcquisitionFixture::Clone {
-        repository: harness.repository.root(),
-        action: harness.action.root(),
+        repository: harness.repository.root().to_path_buf(),
+        action: harness.action.root().to_path_buf(),
         paths: Arc::new(AcquiredPaths::default()),
     };
     let mut no_time = acquiring_runner(&harness, acquisition, None);
@@ -139,24 +144,39 @@ fn acquisition_and_clock_defects_are_unavailable() {
 }
 
 #[test]
-fn heartbeat_loss_cancels_acquisition() {
+fn heartbeat_loss_returns_before_uncooperative_acquisition() {
     let harness = Harness::new("runner-pass", None);
-    let observed = Arc::new(AtomicBool::new(false));
-    let mut runner = acquiring_runner(
+    let (started_sender, started) = mpsc::sync_channel(1);
+    let (release, release_receiver) = mpsc::sync_channel(0);
+    let (finished_sender, finished) = mpsc::sync_channel(1);
+    let runner = acquiring_runner(
         &harness,
-        AcquisitionFixture::Wait {
-            observed: Arc::clone(&observed),
+        AcquisitionFixture::IgnoreCancellation {
+            started: started_sender,
+            release: release_receiver,
+            finished: finished_sender,
         },
         Some(1_753_219_200_000),
     );
-    let mut heartbeat = Heartbeat::stopping_on(2);
+    let request = harness.request.clone();
+    let (outcome_sender, outcome) = mpsc::sync_channel(1);
+    let runner_thread = std::thread::spawn(move || {
+        let mut runner = runner;
+        let mut heartbeat = Heartbeat::stopping_on(2);
+        let result = runner.run(&request, &mut heartbeat);
+        let _ignored = outcome_sender.send((result, heartbeat.calls));
+    });
+
+    started.recv_timeout(Duration::from_secs(2)).unwrap();
+    let returned_while_acquisition_was_blocked = outcome.recv_timeout(Duration::from_secs(2));
+    release.send(()).unwrap();
+    finished.recv_timeout(Duration::from_secs(2)).unwrap();
+    runner_thread.join().unwrap();
 
     assert_eq!(
-        runner.run(&harness.request, &mut heartbeat),
-        RunnerOutcome::Unavailable
+        returned_while_acquisition_was_blocked.unwrap(),
+        (RunnerOutcome::Unavailable, 2)
     );
-    assert_eq!(heartbeat.calls, 2);
-    assert!(observed.load(Ordering::Acquire));
 }
 
 #[test]

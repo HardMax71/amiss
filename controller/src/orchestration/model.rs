@@ -77,7 +77,7 @@ impl RunIdentity {
 pub struct ChangeSnapshot {
     pub state: ChangeState,
     pub run: RunIdentity,
-    /// Provider revision on which this run's required result is enforced.
+    /// Provider revision to which the adapter binds this run's gate.
     pub gate_commit: Oid,
 }
 
