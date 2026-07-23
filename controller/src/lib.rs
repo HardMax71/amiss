@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod acquiring_runner;
 mod acquisition;
 mod bootstrap_job;
 mod bootstrap_result;
@@ -13,6 +14,7 @@ mod plans;
 mod provider;
 mod webhook;
 
+pub use acquiring_runner::{AcquiringRunner, Acquisition, AcquisitionTarget};
 pub use acquisition::{AcquireError, AcquiredRoots, verify_acquired};
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,

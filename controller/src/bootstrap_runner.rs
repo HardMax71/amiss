@@ -238,7 +238,7 @@ fn receive(
     }
 }
 
-fn renewal_wait(outcome: HeartbeatOutcome) -> Option<Duration> {
+pub(crate) fn renewal_wait(outcome: HeartbeatOutcome) -> Option<Duration> {
     match outcome {
         HeartbeatOutcome::Renewed { renew_within } => {
             let wait = renew_within / 2;
