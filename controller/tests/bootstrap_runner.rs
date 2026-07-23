@@ -28,6 +28,9 @@ const BLOCK_REPORT: &[u8] = b"{\"runner\":\"block\"}\n";
 const RESOURCE_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
 const RESOURCE_RELEASE_POLL: Duration = Duration::from_millis(10);
 
+#[path = "bootstrap_runner/acquiring.rs"]
+mod acquiring;
+
 struct Heartbeat {
     calls: u64,
     stop_on_call: Option<u64>,
