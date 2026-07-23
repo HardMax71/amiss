@@ -136,13 +136,8 @@ impl RawConfig {
         .ok_or(ConfigError("route identity is invalid"))?;
         let webhook =
             GitHubWebhook::new(load_webhook_keyring(trust_set, self.github.webhook_keys)?);
-        let api_timeouts = GitHubTimeouts::new(
-            limits.http.connect,
-            limits.http.read,
-            limits.http.write,
-            limits.http.request,
-        )
-        .ok_or(ConfigError("GitHub API timeouts are invalid"))?;
+        let api_timeouts = GitHubTimeouts::new(limits.http.connect, limits.http.request)
+            .ok_or(ConfigError("GitHub API timeouts are invalid"))?;
         let plan_scope = PlanScope {
             provider: scope.provider.clone(),
             integration: scope.integration,
