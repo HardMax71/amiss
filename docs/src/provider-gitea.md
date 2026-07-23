@@ -21,7 +21,7 @@ the raw request before returning `202 Accepted`. The worker verifies the saved b
 
 ```dot process
 digraph gitea_provider {
-  rankdir = LR;
+  rankdir = TB;
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
   forge  [label = "signed pull-request\nevent"];

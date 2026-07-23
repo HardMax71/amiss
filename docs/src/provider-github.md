@@ -20,7 +20,7 @@ use.
 
 ```dot process
 digraph provider_controls {
-  rankdir = LR;
+  rankdir = TB;
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
   github [label = "GitHub\nsigned pull-request event"];

@@ -23,7 +23,7 @@ IID:
 
 ```dot process
 digraph gitlab_provider {
-  rankdir = LR;
+  rankdir = TB;
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
   policy [label = "independent pipeline\nexecution policy"];
