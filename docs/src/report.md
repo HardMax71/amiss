@@ -114,10 +114,10 @@ The [provider lanes](provider-controls.md) leave separate provider evidence: an 
 Run on GitHub's test merge, a protected GitLab policy-job result on a merge-train commit, or a
 dedicated Gitea-family review. GitHub's Check Run and the Gitea-family review carry the staged
 summary and report digest; GitLab's provider-visible evidence is the exact policy job's outcome.
-The controller's saved result binds the plan, execution constraint, gate identity, and report
-digest in every lane, but no provider signs or adds fields to the report. Moving the same report
-bytes away from that gate therefore loses the provider context; there is still no provider
-attestation inside the current report contract.
+The controller's saved result binds the plan, execution constraint, and gate identity in every
+lane. When a report is present, it also binds the report digest. No provider signs or adds fields
+to the report. Moving the same report bytes away from that gate therefore loses the provider
+context; there is still no provider attestation inside the current report contract.
 
 Sandbox provenance is separate again. The present writer reports `self-asserted` assurance,
 `local-process` enforcement, and null verification. The sealed bootstrap requires that honest

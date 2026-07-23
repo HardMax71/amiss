@@ -256,24 +256,18 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
 }
 
 #[test]
-fn job_construction_rejects_an_aggregate_controls_stream_above_the_ceiling() {
+fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
     let floor = near_ceiling_floor();
-    let run = run_request(PolicyControls {
+    let policy = PolicyControls {
         organization_floor: Some(AcquiredControl {
             bytes: floor,
             trust_source: RequestTrust::OrganizationPolicy,
         }),
         debt_snapshot: None,
         waiver_bundle: None,
-    });
-
+    };
     assert_eq!(
-        bootstrap_job(BootstrapJobInput {
-            run: &run,
-            evaluation_instant: instant("2026-07-12T10:00:00Z"),
-            valid_until: instant("2026-07-12T10:05:00Z"),
-        })
-        .unwrap_err(),
+        check_plan(Profile::Enforce, policy, execution()).unwrap_err(),
         BootstrapJobError::RequestEncoding
     );
 }

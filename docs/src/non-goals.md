@@ -11,9 +11,9 @@ people.
 It is not a link checker in the usual sense. Live-URL checkers query the network and decay
 with it; the scanner engine never touches the network and only ever speaks about one
 repository's own files in two exact snapshots: a base commit and either a candidate commit or
-the staged index. The GitHub provider controller can acquire the exact repository state before
-invoking that engine, but it does not make live URLs an evaluation input. Amiss is not a style
-linter either: it has no opinion on headings, tone, or wording, and no rule engine to hold one.
+the staged index. Provider controllers can acquire the exact repository state before invoking
+that engine, but they do not make live URLs an evaluation input. Amiss is not a style linter
+either: it has no opinion on headings, tone, or wording, and no rule engine to hold one.
 
 It is not a documentation-coupling system with memory. Tools in that family, [Fiberplane's
 drift](https://github.com/fiberplane/drift), [Swimm](https://swimm.io), and the ledger design this project itself rejected, record what they blessed

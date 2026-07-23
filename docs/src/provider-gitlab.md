@@ -276,9 +276,10 @@ constraint.
 ```
 
 `project_path` is the lowercase path with its complete nested group prefix. `target_branch` is one
-branch name, not a full ref. `job_name`, `config_url`, and `config_commit` must reproduce the
-policy job's OIDC claims exactly. `config_url` is GitLab's blob URL for the security-policy YAML,
-not the included CI file; copy the exact claim rather than assembling the URL by hand.
+branch name, not a full ref. `job_name` is the exact live GitLab job name. `config_url` and
+`config_commit` must reproduce the policy job's `job_config` OIDC claims exactly. `config_url` is
+GitLab's blob URL for the security-policy YAML, not the included CI file; copy the exact claim
+rather than assembling the URL by hand.
 `integration` is a controller identity for this policy binding; change it when the policy trust
 boundary changes.
 
