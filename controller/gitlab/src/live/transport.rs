@@ -52,11 +52,15 @@ impl Default for GitLabTimeouts {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct GitLabClientError;
+pub struct GitLabClientError(&'static str);
 
 impl fmt::Display for GitLabClientError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("the GitLab client configuration is invalid")
+        write!(
+            formatter,
+            "the GitLab client configuration is invalid: {}",
+            self.0
+        )
     }
 }
 
@@ -100,35 +104,58 @@ impl Transport {
         token: SecretString,
         timeouts: GitLabTimeouts,
     ) -> Result<Self, GitLabClientError> {
-        let mut base = Url::parse(api_base).map_err(|_defect| GitLabClientError)?;
+        if provider.namespace.as_str() != "gitlab" {
+            return Err(GitLabClientError("the provider namespace must be gitlab"));
+        }
+        let mut base = Url::parse(api_base)
+            .map_err(|_defect| GitLabClientError("the API base is not a valid URL"))?;
         if base.path() == "/api/v4" {
             base.set_path("/api/v4/");
         }
-        let valid = provider.namespace.as_str() == "gitlab"
-            && base.scheme() == "https"
-            && base.host_str() == Some(provider.instance.as_str())
-            && base.port().is_none()
-            && base.username().is_empty()
-            && base.password().is_none()
-            && base.query().is_none()
-            && base.fragment().is_none()
-            && base.path() == "/api/v4/"
-            && !token.expose_secret().is_empty()
-            && HeaderValue::from_str(token.expose_secret()).is_ok()
-            && GitLabTimeouts::new(
-                timeouts.connect,
-                timeouts.operation,
-                timeouts.response_bytes,
-            ) == Some(timeouts);
-        if !valid {
-            return Err(GitLabClientError);
+        if base.scheme() != "https" {
+            return Err(GitLabClientError("the API base must use https"));
+        }
+        if base.host_str() != Some(provider.instance.as_str()) {
+            return Err(GitLabClientError("the API base names the wrong host"));
+        }
+        if base.port().is_some() {
+            return Err(GitLabClientError("the API base must not name a port"));
+        }
+        if !base.username().is_empty() || base.password().is_some() {
+            return Err(GitLabClientError("the API base must not carry credentials"));
+        }
+        if base.query().is_some() || base.fragment().is_some() {
+            return Err(GitLabClientError(
+                "the API base must not carry a query or fragment",
+            ));
+        }
+        if base.path() != "/api/v4/" {
+            return Err(GitLabClientError(
+                "the API base must mount /api/v4 at the root",
+            ));
+        }
+        if token.expose_secret().is_empty() {
+            return Err(GitLabClientError("the API token is empty"));
+        }
+        if HeaderValue::from_str(token.expose_secret()).is_err() {
+            return Err(GitLabClientError("the API token is not header-safe"));
+        }
+        if GitLabTimeouts::new(
+            timeouts.connect,
+            timeouts.operation,
+            timeouts.response_bytes,
+        ) != Some(timeouts)
+        {
+            return Err(GitLabClientError(
+                "the transport timeouts are out of bounds",
+            ));
         }
         let client = Client::builder()
             .https_only(true)
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(timeouts.connect)
             .build()
-            .map_err(|_defect| GitLabClientError)?;
+            .map_err(|_defect| GitLabClientError("the HTTPS client could not be created"))?;
         Ok(Self {
             shared: Arc::new(Shared {
                 provider,
@@ -201,11 +228,14 @@ impl Transport {
             .header("PRIVATE-TOKEN", token)
             .timeout(budget.remaining()?)
             .send()
-            .map_err(|error| transport_error(&error))?;
+            .map_err(|error| map_error(&error))?;
         if missing_allowed && response.status() == StatusCode::NOT_FOUND {
             return Ok((None, budget));
         }
-        response_status(response.status())?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(map_status(status));
+        }
         let (bytes, budget) = response_bytes(response, budget)?;
         let value =
             serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)?;
@@ -222,18 +252,16 @@ impl Budget {
     }
 }
 
-fn response_status(status: StatusCode) -> Result<(), ProviderError> {
-    if status.is_success() {
-        Ok(())
-    } else if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
-        Err(ProviderError::AuthorizationRevoked)
+fn map_status(status: StatusCode) -> ProviderError {
+    if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        ProviderError::AuthorizationRevoked
     } else if status == StatusCode::REQUEST_TIMEOUT
         || status == StatusCode::TOO_MANY_REQUESTS
         || status.is_server_error()
     {
-        Err(ProviderError::Unavailable)
+        ProviderError::Unavailable
     } else {
-        Err(ProviderError::InvalidResponse)
+        ProviderError::InvalidResponse
     }
 }
 
@@ -271,7 +299,7 @@ fn consume_bytes(budget: Budget, bytes: usize) -> Result<Budget, ProviderError> 
     })
 }
 
-fn transport_error(error: &reqwest::Error) -> ProviderError {
+fn map_error(error: &reqwest::Error) -> ProviderError {
     if error.is_timeout() || error.is_connect() {
         ProviderError::Unavailable
     } else {

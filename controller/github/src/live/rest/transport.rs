@@ -56,8 +56,9 @@ impl Transport {
         timeouts: GitHubTimeouts,
     ) -> Result<Self, GitHubClientError> {
         let api_base = validate_api_base(api_base, provider_instance)?;
-        let key = EncodingKey::from_rsa_pem(private_key.expose_secret())
-            .map_err(|_defect| GitHubClientError::Configuration)?;
+        let key = EncodingKey::from_rsa_pem(private_key.expose_secret()).map_err(|_defect| {
+            GitHubClientError::Configuration("the App private key is not an RSA PEM")
+        })?;
         drop(private_key);
         let client = Client::builder()
             .user_agent(USER_AGENT)
@@ -249,28 +250,42 @@ fn bounded_bytes(
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GitHubClientError> {
-    let url = Url::parse(raw).map_err(|_defect| GitHubClientError::Configuration)?;
-    let explicit_port = raw.split_once("://").is_none_or(|(_scheme, rest)| {
-        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-        authority.rsplit('@').next().unwrap_or("").contains(':')
-    });
+    let configuration = GitHubClientError::Configuration;
+    if raw.is_empty() || raw.len() > MAX_API_BASE_BYTES {
+        return Err(configuration("the API base length is out of bounds"));
+    }
+    let url =
+        Url::parse(raw).map_err(|_defect| configuration("the API base is not a valid URL"))?;
+    if url.scheme() != "https" {
+        return Err(configuration("the API base must use https"));
+    }
     let expected_host = if provider_instance == "github.com" {
         "api.github.com"
     } else {
         provider_instance
     };
-    let valid = !raw.is_empty()
-        && raw.len() <= MAX_API_BASE_BYTES
-        && url.scheme() == "https"
-        && url.host_str() == Some(expected_host)
-        && !explicit_port
-        && url.username().is_empty()
-        && url.password().is_none()
-        && url.query().is_none()
-        && url.fragment().is_none();
-    valid
-        .then(|| raw.trim_end_matches('/').to_owned())
-        .ok_or(GitHubClientError::Configuration)
+    if url.host_str() != Some(expected_host) {
+        return Err(configuration("the API base names the wrong host"));
+    }
+    if explicit_port(raw) {
+        return Err(configuration("the API base must not name a port"));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(configuration("the API base must not carry credentials"));
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        return Err(configuration(
+            "the API base must not carry a query or fragment",
+        ));
+    }
+    Ok(raw.trim_end_matches('/').to_owned())
+}
+
+fn explicit_port(raw: &str) -> bool {
+    raw.split_once("://").is_none_or(|(_scheme, rest)| {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+        authority.rsplit('@').next().unwrap_or("").contains(':')
+    })
 }
 
 fn map_error(error: &reqwest::Error) -> ProviderError {

@@ -44,16 +44,23 @@ impl GiteaTimeouts {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GiteaClientError {
-    Configuration,
+    Configuration(&'static str),
     Client,
 }
 
 impl fmt::Display for GiteaClientError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Configuration => "the Gitea-family configuration is invalid",
-            Self::Client => "the Gitea-family HTTPS client could not be created",
-        })
+        match self {
+            Self::Configuration(reason) => {
+                write!(
+                    formatter,
+                    "the Gitea-family configuration is invalid: {reason}"
+                )
+            }
+            Self::Client => {
+                formatter.write_str("the Gitea-family HTTPS client could not be created")
+            }
+        }
     }
 }
 
@@ -79,13 +86,20 @@ impl GiteaClient {
         timeouts: GiteaTimeouts,
     ) -> Result<Self, GiteaClientError> {
         let token = SecretString::from(token);
-        let valid = canonical_host(provider.instance.as_str())
-            && DedicatedReviewer::new(reviewer.id, reviewer.login.clone()).as_ref()
-                == Some(&reviewer)
-            && (MIN_TOKEN_BYTES..=MAX_TOKEN_BYTES).contains(&token.expose_secret().len())
-            && valid_required_status_name(&review_name);
-        if !valid {
-            return Err(GiteaClientError::Configuration);
+        let configuration = GiteaClientError::Configuration;
+        if !canonical_host(provider.instance.as_str()) {
+            return Err(configuration(
+                "the provider instance is not a canonical host",
+            ));
+        }
+        if DedicatedReviewer::new(reviewer.id, reviewer.login.clone()).as_ref() != Some(&reviewer) {
+            return Err(configuration("the reviewer identity is not canonical"));
+        }
+        if !(MIN_TOKEN_BYTES..=MAX_TOKEN_BYTES).contains(&token.expose_secret().len()) {
+            return Err(configuration("the reviewer token size is out of bounds"));
+        }
+        if !valid_required_status_name(&review_name) {
+            return Err(configuration("the review label is not a valid status name"));
         }
         let rest = HttpRest::new(provider.instance.as_str(), api_base, token, timeouts)?;
         Ok(Self {
