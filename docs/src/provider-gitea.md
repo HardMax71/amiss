@@ -13,6 +13,12 @@ owns that reviewer account and writes the final review itself.
 
 ## Flow
 
+The receiver accepts only the configured `POST` path with no query string. It bounds headers and
+body, takes a configured delivery permit before reading the body and holds it through durable
+admission, requires exactly one supported family signature header, verifies lowercase
+HMAC-SHA256 over the untouched body, binds the configured repository and target branch, and saves
+the raw request before returning `202 Accepted`. The worker verifies the saved bytes again.
+
 ```dot process
 digraph gitea_provider {
   rankdir = LR;
@@ -30,12 +36,6 @@ digraph gitea_provider {
   forge -> tls -> inbox -> first -> fetch -> boot -> final -> save -> review;
 }
 ```
-
-The receiver accepts only the configured `POST` path with no query string. It bounds headers and
-body, takes a configured delivery permit before reading the body and holds it through durable
-admission, requires exactly one supported family signature header, verifies lowercase
-HMAC-SHA256 over the untouched body, binds the configured repository and target branch, and saves
-the raw request before returning `202 Accepted`. The worker verifies the saved bytes again.
 
 The source accepts `opened`, `reopened`, and `synchronized` pull-request actions. An `edited`
 event is accepted only when its signed change record says that the base ref changed. The unsigned

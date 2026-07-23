@@ -60,6 +60,13 @@ is a checkable example of that input. The report and request formats are forge-n
 
 ## Pinning the Action
 
+The moving major ref follows the engine's semver major, `v0` for the 0.x series and `v1`
+from 1.0.0 on, so one series can never rewrite another's ref. A `vX.Y.Z` source tag is an
+immutable exact pin whose dispatcher delegates to the equally immutable `action/vX.Y.Z`
+runtime tag; a source commit pins the dispatcher but still makes that second hop. Pin
+`action/vX.Y.Z` directly, or its generated Action commit, when policy requires the complete
+runtime tree in one ref.
+
 ```dot process
 digraph pins {
   rankdir = LR;
@@ -72,13 +79,6 @@ digraph pins {
   source -> runtime [label = "dispatcher\ndelegates"];
 }
 ```
-
-The moving major ref follows the engine's semver major, `v0` for the 0.x series and `v1`
-from 1.0.0 on, so one series can never rewrite another's ref. A `vX.Y.Z` source tag is an
-immutable exact pin whose dispatcher delegates to the equally immutable `action/vX.Y.Z`
-runtime tag; a source commit pins the dispatcher but still makes that second hop. Pin
-`action/vX.Y.Z` directly, or its generated Action commit, when policy requires the complete
-runtime tree in one ref.
 
 ## Invoking the engine directly
 
