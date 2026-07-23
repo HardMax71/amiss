@@ -3,10 +3,21 @@
 The toolchain version is pinned in `rust-toolchain.toml`, `unsafe` is forbidden in every
 crate, and the lint table denies panics, lossy casts, wildcard matches, and undocumented
 errors. Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
-warnings denied, the full test suite, `cargo deny`, `cargo shear`, and an exact-count
-[similarity-rs](https://github.com/mizchi/similarity) twin-function ratchet on push. CI runs the
+warnings denied, the full test suite, `cargo deny`, `cargo shear`, and two exact-count
+[similarity-rs](https://github.com/mizchi/similarity) twin-function ratchets on push. The tool
+compares functions within one file, so the first ratchet counts twins inside every file of both
+workspaces, and the second concatenates the deliberately parallel provider files, the three
+transports, the three lane-test harnesses, and the three service runtimes, so their cross-file
+twins stay counted as well. Each baseline is exact rather than a ceiling: a new twin fails as a
+regression, and a cleanup lowers the pinned number in the same change. CI runs the
 same two hook stages, so passing locally and passing remotely are the same thing unless the
 hook table itself has a bug.
+
+Two similarly named files point in opposite directions. `.pre-commit-config.yaml` is the hook
+table this repository runs on itself through prek. `.pre-commit-hooks.yaml` is the hook this
+repository publishes: a consumer's own pre-commit configuration names this repository and reads
+that manifest to discover the `amiss` staged-index check shown in
+[Running it in CI](ci.md).
 
 ```sh
 cargo nextest run --workspace --locked
