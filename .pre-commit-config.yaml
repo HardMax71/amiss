@@ -148,3 +148,25 @@ repos:
         types: [rust]
         pass_filenames: false
         stages: [pre-push]
+      # The pinned similarity-rs compares functions within one file only, so the
+      # deliberate provider twin files are concatenated per trio before scanning.
+      # Cross-file twins in these trios are otherwise invisible to any gate.
+      - id: twin-trio-ratchet
+        name: provider twin trios stay at the baseline
+        entry: >-
+          sh -c 'set -eu;
+          want="similarity-rs 0.5.0"; have="$(similarity-rs --version)";
+          [ "$have" = "$want" ] || { echo "the ratchet pins $want, found $have"; exit 1; };
+          dir="$(mktemp -d)"; trap "rm -rf $dir" EXIT;
+          cat controller/gitea/src/live/rest/transport.rs controller/github/src/live/rest/transport.rs controller/gitlab/src/live/transport.rs > "$dir/transports.rs";
+          cat controller/gitea-service/tests/lane/harness.rs controller/github-service/tests/lane/harness.rs controller/gitlab-service/tests/lane/harness.rs > "$dir/harnesses.rs";
+          cat controller/gitea-service/src/runtime.rs controller/github-service/src/runtime.rs controller/gitlab-service/src/runtime.rs > "$dir/runtimes.rs";
+          pairs="$(similarity-rs "$dir" --threshold 0.85 --min-lines 8 | grep -c "Similarity:" || true)";
+          baseline=30;
+          [ "$pairs" -eq "$baseline" ] ||
+          { echo "provider twin-trio pairs: $pairs, baseline $baseline
+          (concatenate each trio, then similarity-rs --threshold 0.85 --min-lines 8)"; exit 1; }'
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
