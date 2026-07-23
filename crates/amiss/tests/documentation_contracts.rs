@@ -1145,9 +1145,11 @@ fn third_party_material_keeps_its_attribution() {
         assert_eq!(actual, expected);
     }
 
-    let summary =
-        fs::read_to_string(root.join("docs/src/SUMMARY.md")).expect("book summary is readable");
-    assert!(summary.contains("[Licenses and notices](licenses.md)"));
+    let introduction = fs::read_to_string(root.join("docs/src/introduction.md"))
+        .expect("book introduction is readable");
+    assert!(introduction.contains("blob/main/LICENSE.md"));
+    assert!(introduction.contains("blob/main/THIRD_PARTY_NOTICES.md"));
+    assert!(introduction.contains("fonts/GUST-FONT-LICENSE.txt"));
 }
 
 #[test]
