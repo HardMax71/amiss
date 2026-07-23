@@ -50,6 +50,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-controller-github"
+version = "0.1.0"
+dependencies = [
+ "amiss-controller",
+ "amiss-wire",
+ "hex",
+ "hmac",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "amiss-fixtures"
 version = "0.8.0"
 dependencies = [
