@@ -25,6 +25,24 @@ amiss check --repo <path> --object-format <sha1|sha256>
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
 
+The table gives each flag in one line; the paragraphs after it carry the exact semantics
+and are the ones to trust when the short form reads ambiguous.
+
+| Flag | Value | Role |
+| --- | --- | --- |
+| `--repo` | path | the repository checkout to read |
+| `--object-format` | `sha1` or `sha256` | the repository's object format |
+| `--base` | full commit ID | the state the comparison starts from |
+| `--candidate` | full commit ID | the state under review; exclusive with `--index` |
+| `--index` | none | checks the staged state against the base instead |
+| `--repository` | `<host>/<owner>/<name>`, lowercase | unverified identity claim for same-repository URLs |
+| `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to |
+| `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
+| `--forge` | `github`, `gitlab`, or `gitea` | URL dialect; an explicit flag beats the host table |
+| `--profile` | `observe` or `enforce` | report only, or let blocking findings gate |
+| `--explain-scope` | none | adds deterministic scope lines to human output |
+| `--format` | `human` or `json` | ten grouped items, or the exact report |
+
 `--base` and `--candidate` take full commit IDs, never branch names or short forms. Amiss
 evaluates exactly the trees you name and resolves nothing for you. Use `--index` instead of
 `--candidate` to check what is currently staged against a base commit. An entry marked
