@@ -1,14 +1,20 @@
 # Working with agents
 
-Amiss meets coding agents in two directions. The reactive one is the gate: a pull
-request fails, and everything the agent needs travels with the failure. Annotations
-point to introduced Fixes; grouped Checks and Existing inventory stay in the job summary
-and report. The exact finding and error rows still carry their fixed descriptions. Even a
-rejected invocation teaches, printing the closed grammar on stderr, so an agent with no
-book at hand can construct a working command from the refusal alone.
+Amiss meets coding agents in two directions: as the gate an agent runs into, and as a
+check the agent runs itself before pushing.
 
-The preemptive direction is telling your repository's agents to check before they push.
-If your repository keeps an `AGENTS.md`, paste this section into it:
+## The failing gate
+
+When a pull request fails, everything the agent needs travels with the failure.
+Annotations point to introduced Fixes. Grouped Checks and Existing inventory stay in the
+job summary and report, and the exact finding and error rows carry their fixed
+descriptions. Even a rejected invocation teaches: it prints the closed grammar on stderr,
+so an agent with no book at hand can construct a working command from the refusal alone.
+
+## Check before pushing
+
+Tell your repository's agents to scan before they push. If the repository keeps an
+`AGENTS.md`, paste this section into it:
 
 ```markdown
 ## Documentation checks
@@ -30,16 +36,16 @@ points at; never weaken `.amiss/scanner-policy.json` to silence a finding.
 The block assumes the binary is installed (`cargo install --locked amiss`); pin the
 version your CI pins.
 
-## The deterministic sensor in a continuous-AI loop
+## Scheduled repair
 
 GitHub's agentic workflows run coding agents inside Actions and describe themselves as
 augmenting deterministic CI rather than replacing it. Amiss is the deterministic half
 of that pairing: it finds drift and refuses to guess, and an agent repairs what it
 found. A starting recipe lives at
-[`integrations/gh-aw/docs-drift-fix.md`](https://github.com/HardMax71/amiss/blob/main/integrations/gh-aw/docs-drift-fix.md):
-copied into `.github/workflows/` and compiled with the `gh aw` extension, it runs the
-scan on a schedule, reads the report, repairs the drift it can prove, and opens a pull
-request that passes back through the same gate it started from.
+[`integrations/gh-aw/docs-drift-fix.md`](https://github.com/HardMax71/amiss/blob/main/integrations/gh-aw/docs-drift-fix.md).
+Copied into `.github/workflows/` and compiled with the `gh aw` extension, it runs the
+scan on a schedule and reads the report. What it can prove it repairs, and the pull
+request it opens passes back through the same gate it started from.
 
 ## Claude Code
 
