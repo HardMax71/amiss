@@ -141,6 +141,7 @@ pub struct Publication {
     pub evaluation_id: ControllerEvaluationId,
     pub check: CheckBinding,
     pub run: RunIdentity,
+    pub gate_commit: amiss_wire::model::Oid,
     pub conclusion: CheckConclusion,
     pub report: Option<Vec<u8>>,
 }

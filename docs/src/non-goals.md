@@ -11,7 +11,7 @@ people.
 It is not a link checker in the usual sense. Live-URL checkers query the network and decay
 with it; the scanner engine never touches the network and only ever speaks about one
 repository's own files in two exact snapshots: a base commit and either a candidate commit or
-the staged index. A future provider controller may acquire the exact repository state before
+the staged index. The GitHub provider controller can acquire the exact repository state before
 invoking that engine, but it does not make live URLs an evaluation input. Amiss is not a style
 linter either: it has no opinion on headings, tone, or wording, and no rule engine to hold one.
 

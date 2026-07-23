@@ -122,6 +122,15 @@ pub struct ProviderIdentity {
     pub instance: ProviderInstance,
 }
 
+impl ProviderIdentity {
+    pub fn new(namespace: String, instance: String) -> Option<Self> {
+        Some(Self {
+            namespace: ProviderNamespace::new(namespace)?,
+            instance: ProviderInstance::new(instance)?,
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeliveryIdentity {
     pub provider: ProviderIdentity,

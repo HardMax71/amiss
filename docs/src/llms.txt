@@ -30,17 +30,21 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 
 - [Security model](https://hardmax71.github.io/amiss/security.html): the zero-capability sandbox posture and hostile-input handling
 - [Controls and policy](https://hardmax71.github.io/amiss/controls.html): repository policy, organization floors, debt, waivers, and trusted time
-- [Controller delivery](https://hardmax71.github.io/amiss/controller.html): authenticated delivery, temporary ownership, saved results, retries, and the current implementation boundary
+- [Provider-verified controls](https://hardmax71.github.io/amiss/provider-controls.html): the supported GitHub, GitLab, Gitea, and Forgejo lanes and their independent provider evidence
+- [GitHub provider lane](https://hardmax71.github.io/amiss/provider-github.html): GitHub App setup, strict ruleset, service configuration, and Check Run evidence
+- [GitLab provider lane](https://hardmax71.github.io/amiss/provider-gitlab.html): merge-train policy job, OIDC binding, service configuration, and job evidence
+- [Gitea and Forgejo provider lane](https://hardmax71.github.io/amiss/provider-gitea.html): dedicated reviewer, strict branch rule, service configuration, and review evidence
+- [Controller delivery](https://hardmax71.github.io/amiss/controller.html): authenticated delivery, temporary ownership, saved results, and retries
 
 ## The project
 
-- [Architecture](https://hardmax71.github.io/amiss/architecture.html): how the offline crates and separate controller foundation divide the trust flow
+- [Architecture](https://hardmax71.github.io/amiss/architecture.html): how the offline crates and separate controller workspace divide the trust flow
 - [Edge cases and divergences](https://hardmax71.github.io/amiss/divergences.html): the exact-wording edge cases and known parser differences
 - [What Amiss is not](https://hardmax71.github.io/amiss/non-goals.html): the non-goals held deliberately
 - [Amiss and link checkers](https://hardmax71.github.io/amiss/comparison.html): what lychee does well, what only two-snapshot comparison can see, and when to run both
 - [The evidence base](https://hardmax71.github.io/amiss/evidence.html): the audited repository that generated the requirements
 - [Provenance](https://hardmax71.github.io/amiss/provenance.html): how the tool became what it is and what was discarded on the way
 - [Development](https://hardmax71.github.io/amiss/development.html): building, the gates, and the push ratchets
-- [Project status](https://hardmax71.github.io/amiss/status.html): what is delivered, self-asserted, or not yet built
+- [Project status](https://hardmax71.github.io/amiss/status.html): what is delivered, source-built, self-asserted, or not yet built
 - [The scan ledger](https://hardmax71.github.io/amiss/ledger.html): the counted shadow scans behind the validation phase, one recorded row per repository
 - [Roadmap](https://hardmax71.github.io/amiss/roadmap.html): what comes next and in what order

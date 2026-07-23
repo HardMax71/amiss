@@ -50,8 +50,9 @@ the same way, to a
 that stores an open build-source identity instead of assuming `github.com`; the
 [release workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml)
 is a checkable example of that input. The report and request formats are forge-neutral. This
-repository currently ships only the GitHub convenience event wrapper, not a concrete
-provider-authenticated adapter.
+published workflow surface remains the GitHub convenience event wrapper. A separate,
+source-built [GitHub provider service](provider-github.md) supplies the authenticated lane; it
+is not invoked by this Action.
 
 The long form invokes the engine directly. It is useful outside GitHub Actions or when a
 workflow needs to construct the exact evaluation itself, but it is not the repository's
@@ -111,16 +112,16 @@ external controls, invoke the sealed bootstrap path, or publish through an indep
 authenticated integration. Using the open identity fields alone does not turn caller-supplied
 JSON into provider authority.
 
-The repository now contains two internal foundations for a future required-check lane. For
-commit-pair materialization, the sealed bootstrap accepts a canonical
-evaluation/snapshot/controls request triplet, verifies its constraint and trusted-time bindings,
-and frames its exact bytes to a verified engine over stdin. The separate nested Rust controller
-defines provider-neutral delivery and retry contracts, implements their local file record, and
-contains bounded GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers;
-[Controller delivery](controller.md) documents that mechanism. Neither foundation supplies a
-supported provider transport or integration, so there is no configuration snippet for that lane
-yet. See
-[Project status](status.md) for the exact boundary.
+Separately operated source-built services join the sealed bootstrap and provider-neutral delivery
+record to protected merge gates. GitHub authenticates a pull-request webhook through an App and
+publishes an App-owned Check Run on its authoritative test merge. GitLab authenticates a pipeline
+execution policy job through OIDC and returns success only for the exact passing merge-train
+result. Gitea and Forgejo authenticate pull-request webhooks and publish through one dedicated
+reviewer required by the effective branch rule. These are deployment services, not hosted Amiss
+products or workflow snippets. [Provider-verified controls](provider-controls.md) compares the
+lanes and links their credentials, strict JSON configuration, fixed Git limits, storage, TLS
+boundary, build command, freshness, and rotation rules.
+[Controller delivery](controller.md) documents the shared retry record.
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
 repair evidence. The human and Action views stop at ten items and state the overflow. The

@@ -46,10 +46,19 @@ impl<'headers, 'value> Headers<'headers, 'value> {
         expected_name: &str,
         max_value_bytes: usize,
     ) -> Result<&'value [u8], WebhookError> {
-        let mut matches = self
-            .values
-            .iter()
-            .filter(|header| header.name.eq_ignore_ascii_case(expected_name));
+        self.one_of(&[expected_name], max_value_bytes)
+    }
+
+    pub(super) fn one_of(
+        &self,
+        expected_names: &[&str],
+        max_value_bytes: usize,
+    ) -> Result<&'value [u8], WebhookError> {
+        let mut matches = self.values.iter().filter(|header| {
+            expected_names
+                .iter()
+                .any(|name| header.name.eq_ignore_ascii_case(name))
+        });
         let value = matches.next().ok_or(WebhookError::Headers)?.value;
         if matches.next().is_some() || value.is_empty() || value.len() > max_value_bytes {
             return Err(WebhookError::Headers);

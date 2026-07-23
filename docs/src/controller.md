@@ -35,8 +35,9 @@ The replay key depends on what the provider actually signs:
 | Provider input | What is authenticated | Replay key | Time rule |
 | --- | --- | --- | --- |
 | GitHub `X-Hub-Signature-256` | HMAC-SHA256 over the exact body | Domain-separated digest of the exact body | Replay-only; there is no signed delivery-attempt timestamp header. |
-| Gitea-family `X-Gitea-Signature` | HMAC-SHA256 over the exact body | Domain-separated digest of the exact body | Replay-only; there is no signed delivery-attempt timestamp header. |
+| Gitea-family `X-Gitea-Signature` or `X-Forgejo-Signature` | HMAC-SHA256 over the exact body | Domain-separated digest of the exact body | Replay-only; there is no signed delivery-attempt timestamp header. |
 | GitLab Standard Webhooks | HMAC-SHA256 over `webhook-id.webhook-timestamp.body` | Signed `webhook-id` | `SignedTimePolicy::Required(max_age)`; replay-only is not a valid GitLab route. |
+| GitLab policy-job OIDC | RS256 token with exact issuer, audience, policy origin, project, job, pipeline, runner, train commit, issue time, and `jti` | Domain-separated runner ID and `jti` digest | Required signed age plus token `nbf` and `exp`; replay-only is invalid. |
 
 This follows the providers' published contracts: [GitHub signs the payload body](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries),
 [Gitea signs the raw body](https://docs.gitea.com/usage/repository/webhooks), and
@@ -51,6 +52,13 @@ a replay-only route, so the signed timestamp cannot be silently discarded. A Git
 delivery header is useful for logs, but using it as the
 durable key would let a captured signed body bypass replay protection by changing an unsigned
 header.
+
+The supported GitLab lane instead uses GitLab's
+[OIDC ID-token contract](https://docs.gitlab.com/ci/secrets/id_token_authentication/) through the
+[`GitLabOidc`](https://github.com/HardMax71/amiss/blob/main/controller/gitlab/src/oidc.rs)
+verifier. It pins reviewed RSA keys and binds the small merge-request hint only after the token
+claims authenticate it. The Standard Webhook verifier remains available as an independent
+library surface, not as this lane's request path.
 
 `WebhookKeyring` holds one through eight HMAC keys in zeroizing, redacted memory. Anchor IDs and
 secret bytes must be unique. The ring owns the trust-set ID carried into its proof, so an adapter
@@ -69,8 +77,12 @@ choice reaches the ledger as part of `AcceptedDelivery` rather than being derive
 fields, and the file record rejects a bounded delivery from a different replay window.
 
 These verifiers establish webhook origin and integrity, not current authorization or an exact
-repository snapshot. A concrete adapter must still decode the authenticated body and refresh the
-provider through a controller-owned API credential. None exists yet.
+repository snapshot. The GitHub and Gitea-family lanes add signed pull-request decoding,
+controller-owned refresh, merge-rule checks, acquisition, and provider publication. The GitLab
+lane uses a separately verified OIDC token from its protected policy job instead of the Standard
+Webhook verifier. Its authenticated claims enter the same delivery and replay contract.
+Deployment and provider-specific trust rules live in
+[Provider-verified controls](provider-controls.md).
 
 ## The full flow
 
@@ -99,10 +111,13 @@ digraph controller_delivery {
 ```
 
 The first refresh resolves the event-bound provider run, not the change's latest head. It supplies
-the exact repository, URL dialect, refs, commits, and trees given to the runner. The second refresh
-checks the same identity and current authorization before the result is saved. If the change was
-closed, revoked, or superseded, the controller may publish that fail-closed status; it never
-publishes an old pass or block as if it were still current.
+the exact repository, URL dialect, refs, commits, and trees given to the runner, plus the
+provider-owned commit on which the required result is enforced. The second refresh checks the
+same identity, gate commit, and current authorization before the result is saved. If the change
+was closed, revoked, or superseded, the controller may publish that fail-closed status; it never
+publishes an old pass or block as if it were still current. A provider adapter may complete a
+stale publication without an external write only after independently proving that its staged
+provider gate is no longer current.
 
 ## The logical record
 
@@ -116,12 +131,13 @@ prescription for how bytes are stored.
 | Replay lifetime | Permanent, or an inclusive replay end based on authenticated time | Decided by trusted ingress and stored with the fixed binding. Only an ended bounded lifetime can permit deletion. |
 | Evaluation ID | Opaque controller-created ID with fresh random bytes | Created on the first claim and kept through retries and reclaims. A later row cannot reuse it. |
 | Temporary ownership | Evaluation ID, lease deadline, fence | Grants permission to evaluate; the record, not a worker's clock, decides whether it is still live. |
-| Saved result | Evaluation ID, check-plan binding, fence, provider run, full run identity, conclusion, optional report | Frozen as one exact value before provider I/O. |
+| Saved result | Evaluation ID, check-plan binding, fence, provider run, full run identity, provider gate commit, conclusion, optional report | Frozen as one exact value before provider I/O. |
 | State | New, running, result saved, done | Each change happens atomically: fully or not at all. |
 
-Here, “delivery ID” means the replay identity accepted by ingress. It is the signed GitLab
-message ID where that contract exists, and the controller's digest of the exact signed body for
-GitHub and Gitea-family requests. It is never an unsigned convenience header.
+Here, “delivery ID” means the replay identity accepted by ingress. It is the signed message ID for
+a GitLab Standard Webhook, a domain-separated runner-and-`jti` identity for the supported GitLab
+OIDC job, or the controller's digest of the exact signed body for GitHub and Gitea-family
+requests. It is never an unsigned convenience header.
 
 ### The file record
 
@@ -173,7 +189,7 @@ complete bytes or the new complete bytes. A stopped write may leave a temporary 
 make partial bytes current.
 
 The root must already exist as a real, private local directory outside the repository and action
-tree. `FileLedger` rejects a missing root or a root symlink. A future service using it must own the
+tree. `FileLedger` rejects a missing root or a root symlink. The service operator must own the
 directory and set its permissions or access-control list. Anyone who can read or change that
 directory is inside the controller trust boundary. The checksums detect damage, not a malicious
 writer. Shared and network filesystems are not supported.
@@ -298,6 +314,12 @@ acknowledgement. The adapter must make publishing the same result again have the
 using the authenticated delivery and evaluation ID as its repeat-safe key. A different result
 under that key must fail closed.
 
+That is the controller contract. GitHub's create-Check-Run API does not offer an atomic
+transaction or caller idempotency key: an accepted create with a lost reply can be retried before
+the first run is visible and leave a duplicate. The concrete adapter reconciles one exact visible
+run and rejects visible duplicates. [Provider-verified controls](provider-controls.md) records
+that provider limit.
+
 | Stop point | What the next claim sees | Safe next action |
 | --- | --- | --- |
 | During a live run | `Busy`, or `Execute` after expiry | Wait, or evaluate again with the same evaluation ID and a higher fence. |
@@ -322,7 +344,7 @@ is honestly `Lost` rather than guessed from missing evidence.
 | Another claim is live | Report in progress and do no work. |
 | Lease renewal cannot prove ownership | Stop, discard runner output, and do not publish it. |
 | A valid refresh for the same delivery reports closure or revocation | Save and publish the matching unavailable result, never the old pass or block. |
-| A valid refresh for the same delivery reports supersession or changes its URL dialect, refs, base commit, or trees | Save and publish `Superseded`, never the old pass or block. |
+| A valid refresh for the same delivery reports supersession or changes its URL dialect, refs, base commit, trees, or provider gate commit | Save `Superseded` and invoke publication, which may prove the staged gate stale and write nothing; never publish the old pass or block. |
 | A refresh returns another repository, change, object format, or event candidate | Reject it without saving or publishing a result. |
 | Runner output is missing, timed out, too large, tampered with, or bound to the wrong identity or tree | Save and publish the matching unavailable result without a report. |
 | Atomic stage loses the fence race | Make no publication call. |
@@ -364,32 +386,27 @@ they do not promise recovery from a host kernel call that itself never returns.
 
 Focused tests cover wrong commits and trees, a wrong bootstrap digest, the cleared child
 environment, timeout and heartbeat races, descendants that remain alive after their leader exits,
-path replacement, and missing, malformed, and oversized output. This is still only the execution
-step. No current component acquires those trees from a provider-authenticated source or calls the
-runner from a working provider lane.
+path replacement, and missing, malformed, and oversized output. Every provider service calls this
+runner only after its adapter has refreshed provider state and acquired the exact roots.
 
 ## What exists now
 
-The nested workspace now contains the provider-neutral identities, bounded ingress gate, adapter
-registry, GitHub, GitLab Standard Webhooks, and Gitea-family signature verifiers, rotating key
-ring, `DeliveryLedger`, orchestrator, `FileLedger`, and the supervised bootstrap runner. Focused
-tests cover limits, wrong routes,
-stale and future time, exact-body replay identity, malformed and duplicate headers, body and
-signed-field tampering, wrong keys, rotation, expiry, and revocation by anchor removal. The file
-record separately covers cross-process ownership, reclaim, exact staged-result recovery,
-corruption checks, and permanent done markers without a database. Further cases pin full-root
-admission while existing work finishes, capacity released by a bounded completion, fixed lock
-growth under rejected identities, replay-window mismatch, the inclusive cleanup end, clock
-rollback, retention of running and staged work, and strict handling of root and temporary files.
+The nested workspace contains the provider-neutral identities, bounded ingress gate, rotating
+key ring, signature verifiers, durable raw inbox, `DeliveryLedger`, `FileLedger`, worker,
+orchestrator, acquisition boundary, and supervised bootstrap runner. Focused tests cover ingress
+limits and tampering, replay, rotation and revocation, file corruption, cross-process ownership,
+reclaim, exact publication retry, full roots, clock rollback, runner timeout, process descendants,
+and output replacement.
 
-There is still no HTTP transport, authenticated event decoder, concrete `ProviderAdapter`, API
-credential source or client, repository and action-tree acquisition worker, provider publisher,
-deployable service, or end-to-end provider lane. No adapter or route loader yet enforces the
-required verifier-to-time-policy pairing, and nothing joins authenticated provider state and
-network acquisition to the runner. The signature and runner types are library parts, not a
-supported GitHub, GitLab, or Gitea-family integration. The engine's `forge` field still chooses
-only a URL dialect.
+Three merge-gate shapes join those pieces. GitHub uses a signed pull-request event, App refresh,
+strict App-bound ruleset, authoritative test merge, and App-owned Check Run. GitLab uses policy
+job OIDC, an enforced merge train, independently owned pipeline execution policy, and the policy
+job's own result. Gitea and Forgejo use a signed pull-request event, effective protected-branch
+rule, dedicated reviewer identity, and that account's approval or request for changes. All three
+acquire exact SHA-1 repository and action objects through the same fixed-budget protocol-v2 path,
+run the bootstrap, and refresh the provider gate again.
 
-[Project status](status.md) records this boundary. [Roadmap](roadmap.md) lists the work needed to
-turn the contract into a provider-verified lane, while [Security model](security.md) defines the
-larger trust boundary.
+[Provider-verified controls](provider-controls.md) compares the lanes and links each deployment
+reference. The GitLab Standard Webhook verifier remains an independent library surface; the
+supported GitLab lane authenticates OIDC instead. The engine's `forge` field still chooses only a
+URL dialect and never authenticates a provider.

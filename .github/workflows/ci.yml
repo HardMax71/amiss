@@ -170,7 +170,7 @@ jobs:
           key: platform2-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'controller/Cargo.lock', 'fuzz/Cargo.lock') }}
           restore-keys: platform2-${{ runner.os }}-
       - run: cargo nextest run --workspace --locked
-      - run: cargo nextest run --manifest-path controller/Cargo.toml --locked
+      - run: cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
       - name: Verify the committed fuzz lockfile
         run: cargo test --locked --release

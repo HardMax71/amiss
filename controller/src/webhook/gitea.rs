@@ -2,7 +2,7 @@ use crate::IngressCheck;
 
 use super::{WebhookError, WebhookKeyring, WebhookProof, body_signature};
 
-const SIGNATURE_HEADER: &str = "x-gitea-signature";
+const SIGNATURE_HEADERS: [&str; 2] = ["x-gitea-signature", "x-forgejo-signature"];
 
 /// Verifies Gitea-family HMAC-SHA256 signatures over the exact request body.
 #[derive(Debug)]
@@ -23,6 +23,6 @@ impl GiteaWebhook {
     /// Returns an error for invalid headers, an inactive key set, or a
     /// signature mismatch.
     pub fn verify(&self, check: IngressCheck<'_>) -> Result<WebhookProof, WebhookError> {
-        body_signature::verify(&self.keys, check, SIGNATURE_HEADER, b"")
+        body_signature::verify_one_of(&self.keys, check, &SIGNATURE_HEADERS, b"")
     }
 }

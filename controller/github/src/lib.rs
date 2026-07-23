@@ -1,20 +1,32 @@
 #![forbid(unsafe_code)]
 
+mod acquisition;
+mod live;
+
+use std::sync::Arc;
+
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, DeliveryId, DeliveryIdentity,
-    GitHubWebhook, IngressCheck, IntegrationId, ProviderAdapter, ProviderError, ProviderIdentity,
-    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication,
-    SignedTimePolicy, VerifiedDelivery,
+    AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion,
+    DeliveryId, DeliveryIdentity, GitHubWebhook, IngressCheck, IntegrationId, ProviderAdapter,
+    ProviderError, ProviderIdentity, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
+    ProviderRunIdentity, Publication, SignedTimePolicy, VerifiedDelivery, WebhookProof,
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
+
+pub use acquisition::{
+    GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubFetchPlan, GitHubTokenSource,
+    github_fetch_plan,
+};
+pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
 const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronize"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GitHubPullRequest<'a> {
+    pub change: &'a ChangeLocator,
     pub installation_id: u64,
     pub repository_id: u64,
     pub repository_owner: &'a str,
@@ -45,28 +57,48 @@ pub trait GitHubApi: Send + Sync {
     ) -> Result<(), ProviderError>;
 }
 
-pub struct GitHubPullRequestAdapter<A> {
+pub struct GitHubPullRequestSource {
     provider: ProviderIdentity,
     webhook: GitHubWebhook,
-    api: A,
 }
 
-impl<A> GitHubPullRequestAdapter<A> {
-    pub const fn new(provider: ProviderIdentity, webhook: GitHubWebhook, api: A) -> Self {
-        Self {
-            provider,
-            webhook,
-            api,
+impl GitHubPullRequestSource {
+    pub const fn new(provider: ProviderIdentity, webhook: GitHubWebhook) -> Self {
+        Self { provider, webhook }
+    }
+
+    /// Authenticates one signed GitHub pull-request delivery without provider
+    /// network access.
+    ///
+    /// # Errors
+    ///
+    /// The route, signature, or signed pull-request payload is invalid.
+    pub fn authenticate(&self, check: IngressCheck<'_>) -> Result<VerifiedDelivery, ProviderError> {
+        let (proof, facts) = self.authenticate_facts(check)?;
+        Ok(proof.bind(facts.delivery))
+    }
+
+    /// Authenticates one delivery only when its signed target is this lane's target.
+    ///
+    /// # Errors
+    ///
+    /// The request is invalid, or its signed target is outside the configured lane.
+    pub fn authenticate_for_target(
+        &self,
+        check: IngressCheck<'_>,
+        target: &BranchRef,
+    ) -> Result<VerifiedDelivery, ProviderError> {
+        let (proof, facts) = self.authenticate_facts(check)?;
+        if facts.target_ref != *target {
+            return Err(ProviderError::AuthorizationRevoked);
         }
-    }
-}
-
-impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
-    fn namespace(&self) -> &ProviderNamespace {
-        &self.provider.namespace
+        Ok(proof.bind(facts.delivery))
     }
 
-    fn authenticate(&self, check: IngressCheck<'_>) -> Result<VerifiedDelivery, ProviderError> {
+    fn authenticate_facts(
+        &self,
+        check: IngressCheck<'_>,
+    ) -> Result<(WebhookProof, PullRequestFacts), ProviderError> {
         let proof = self
             .webhook
             .verify(check)
@@ -79,14 +111,50 @@ impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
         }
         let facts = PullRequestFacts::decode(input.body, &self.provider)
             .ok_or(ProviderError::Authentication)?;
-        Ok(proof.bind(facts.delivery))
+        Ok((proof, facts))
+    }
+}
+
+pub struct GitHubPullRequestAdapter<A> {
+    source: Arc<GitHubPullRequestSource>,
+    api: A,
+}
+
+impl<A> GitHubPullRequestAdapter<A> {
+    pub fn new(provider: ProviderIdentity, webhook: GitHubWebhook, api: A) -> Self {
+        Self::from_source(
+            Arc::new(GitHubPullRequestSource::new(provider, webhook)),
+            api,
+        )
+    }
+
+    pub const fn from_source(source: Arc<GitHubPullRequestSource>, api: A) -> Self {
+        Self { source, api }
+    }
+}
+
+impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
+    fn namespace(&self) -> &ProviderNamespace {
+        &self.source.provider.namespace
+    }
+
+    fn authenticate(&self, check: IngressCheck<'_>) -> Result<VerifiedDelivery, ProviderError> {
+        self.source.authenticate(check)
     }
 
     fn refresh(&self, delivery: &AuthenticatedDelivery) -> Result<ChangeSnapshot, ProviderError> {
-        let pull_request = validate_delivery(delivery, &self.provider)?;
+        let pull_request = validate_delivery(delivery, &self.source.provider)?;
         let snapshot = self.api.refresh(pull_request)?;
-        validate_run(delivery, &snapshot.run)?;
-        Ok(snapshot)
+        let event_bound = event_bound_run(delivery, &snapshot.run)?;
+        Ok(ChangeSnapshot {
+            state: if event_bound {
+                snapshot.state
+            } else {
+                ChangeState::Superseded
+            },
+            run: snapshot.run,
+            gate_commit: snapshot.gate_commit,
+        })
     }
 
     fn publish(
@@ -94,23 +162,27 @@ impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
         delivery: &AuthenticatedDelivery,
         publication: &Publication,
     ) -> Result<(), ProviderError> {
-        let pull_request = validate_delivery(delivery, &self.provider)?;
+        let pull_request = validate_delivery(delivery, &self.source.provider)?;
         if publication.provider_run != delivery.provider_run {
             return Err(ProviderError::InvalidResponse);
         }
-        validate_run(delivery, &publication.run)?;
+        let event_bound = event_bound_run(delivery, &publication.run)?;
+        if !event_bound && !matches!(publication.conclusion, CheckConclusion::Superseded) {
+            return Err(ProviderError::InvalidResponse);
+        }
         self.api.publish(pull_request, publication)
     }
 }
 
 struct PullRequestFacts {
     delivery: AuthenticatedDelivery,
+    target_ref: BranchRef,
 }
 
 impl PullRequestFacts {
     fn decode(body: &[u8], provider: &ProviderIdentity) -> Option<Self> {
         let payload: PullRequestPayload = serde_json::from_slice(body).ok()?;
-        if !SUPPORTED_ACTIONS.contains(&payload.action.as_str()) {
+        if !supported_action(&payload) {
             return None;
         }
         let installation_id = positive(payload.installation.id)?;
@@ -160,8 +232,19 @@ impl PullRequestFacts {
                 change,
                 provider_run,
             },
+            target_ref,
         })
     }
+}
+
+fn supported_action(payload: &PullRequestPayload) -> bool {
+    SUPPORTED_ACTIONS.contains(&payload.action.as_str())
+        || payload.action == "edited"
+            && payload
+                .changes
+                .as_ref()
+                .and_then(|changes| changes.base.as_ref())
+                .is_some_and(|base| github_ref(&base.reference.from).is_some())
 }
 
 fn validate_delivery<'a>(
@@ -208,6 +291,7 @@ fn validate_delivery<'a>(
     let installation_id = installation_id.ok_or(ProviderError::InvalidResponse)?;
     let (repository_id, pull_request_id, number) = change.ok_or(ProviderError::InvalidResponse)?;
     Ok(GitHubPullRequest {
+        change: &delivery.change,
         installation_id,
         repository_id,
         repository_owner: &repository.owner,
@@ -218,10 +302,10 @@ fn validate_delivery<'a>(
     })
 }
 
-fn validate_run(
+fn event_bound_run(
     delivery: &AuthenticatedDelivery,
     run: &amiss_controller::RunIdentity,
-) -> Result<(), ProviderError> {
+) -> Result<bool, ProviderError> {
     let identity = provider_run(
         &delivery.identity.integration,
         &delivery.change,
@@ -230,14 +314,12 @@ fn validate_run(
         &run.refs.target,
     )
     .ok_or(ProviderError::InvalidResponse)?;
-    if run.change != delivery.change
-        || run.refs.forge != ForgeDialect::Github
-        || run.object_format != ObjectFormat::Sha1
-        || identity != delivery.provider_run
-    {
-        return Err(ProviderError::InvalidResponse);
-    }
-    Ok(())
+    (run.change == delivery.change
+        && run.refs.forge == ForgeDialect::Github
+        && run.object_format == ObjectFormat::Sha1
+        && run.commits.candidate == delivery.provider_run.candidate_commit)
+        .then_some(identity == delivery.provider_run)
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 fn provider_run(
@@ -297,10 +379,27 @@ fn github_ref(branch: &str) -> Option<BranchRef> {
 #[derive(Deserialize)]
 struct PullRequestPayload {
     action: String,
+    changes: Option<PullRequestChanges>,
     installation: Installation,
     repository: Repository,
     number: u64,
     pull_request: PullRequest,
+}
+
+#[derive(Deserialize)]
+struct PullRequestChanges {
+    base: Option<BaseChange>,
+}
+
+#[derive(Deserialize)]
+struct BaseChange {
+    #[serde(rename = "ref")]
+    reference: PreviousReference,
+}
+
+#[derive(Deserialize)]
+struct PreviousReference {
+    from: String,
 }
 
 #[derive(Deserialize)]

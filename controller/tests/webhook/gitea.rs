@@ -22,6 +22,39 @@ fn accepts_constructed_gitea_vector_without_trusting_delivery_header() -> Result
 }
 
 #[test]
+fn accepts_forgejo_header_without_changing_configured_identity() -> Result<(), IngressError> {
+    let verifier = GiteaWebhook::new(ring("gitea-current", SECRET));
+    let headers = [header("x-forgejo-signature", SIGNATURE)];
+    let proof = verifier.verify(replay_check(&headers, BODY, NOW)?).unwrap();
+
+    assert_eq!(proof.anchor(), &anchor("gitea-current"));
+    assert_eq!(proof.replay(), &ReplayIdentity::ExactBody);
+    Ok(())
+}
+
+#[test]
+fn rejects_duplicate_or_ambiguous_family_signatures() -> Result<(), IngressError> {
+    let verifier = GiteaWebhook::new(ring("gitea-current", SECRET));
+    let ambiguous = [
+        header("x-gitea-signature", SIGNATURE),
+        header("x-forgejo-signature", SIGNATURE),
+    ];
+    assert_eq!(
+        verifier.verify(replay_check(&ambiguous, BODY, NOW)?),
+        Err(WebhookError::Headers)
+    );
+    let duplicate = [
+        header("x-forgejo-signature", SIGNATURE),
+        header("X-Forgejo-Signature", SIGNATURE),
+    ];
+    assert_eq!(
+        verifier.verify(replay_check(&duplicate, BODY, NOW)?),
+        Err(WebhookError::Headers)
+    );
+    Ok(())
+}
+
+#[test]
 fn rejects_body_changes_and_noncanonical_signatures() -> Result<(), IngressError> {
     let verifier = GiteaWebhook::new(ring("gitea-current", SECRET));
     let headers = [header("x-gitea-signature", SIGNATURE)];

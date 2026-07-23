@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::InboxError;
 
+pub(crate) const MAX_INBOX_RECORDS: u64 = 1_024;
+pub(crate) const MAX_INBOX_BYTES: u64 = 128 * 1_024 * 1_024;
+pub(crate) const MAX_INBOX_RECORD_BYTES: u64 = 16 * 1_024 * 1_024;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InboxLimits {
     pub lease_duration: Duration,
@@ -37,17 +41,17 @@ impl StoredLimits {
             .ok()
             .filter(|millis| *millis > 0)
             .ok_or(InboxError::Configuration)?;
-        if [
-            limits.max_records,
-            limits.max_bytes,
-            limits.max_record_bytes,
-            limits.max_body_bytes,
-            limits.max_headers,
-            limits.max_header_bytes,
-            limits.max_route_bytes,
-            limits.max_source_id_bytes,
-        ]
-        .contains(&0)
+        if !(1..=MAX_INBOX_RECORDS).contains(&limits.max_records)
+            || !(1..=MAX_INBOX_BYTES).contains(&limits.max_bytes)
+            || !(1..=MAX_INBOX_RECORD_BYTES).contains(&limits.max_record_bytes)
+            || [
+                limits.max_body_bytes,
+                limits.max_headers,
+                limits.max_header_bytes,
+                limits.max_route_bytes,
+                limits.max_source_id_bytes,
+            ]
+            .contains(&0)
             || limits
                 .max_record_bytes
                 .checked_mul(2)

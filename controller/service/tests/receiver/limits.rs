@@ -1,6 +1,14 @@
-use amiss_controller_service::{InboxError, IncomingDelivery, ReceiverConfigError, router};
-use axum::body::Body;
+use std::convert::Infallible;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+
+use amiss_controller_service::{
+    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, InboxError,
+    IncomingDelivery, ReceiverConfig, ReceiverConfigError, router,
+};
+use axum::body::{Body, Bytes};
 use axum::http::{Method, Request, StatusCode};
+use tokio_stream::StreamExt as _;
 use tower::ServiceExt as _;
 
 use super::support::{
@@ -11,27 +19,81 @@ use super::support::{
 async fn body_limit_returns_413_before_admission() {
     let mut config = receiver_config();
     config.max_body_bytes = BODY.len().saturating_sub(1);
-    let fixture = Fixture::new(&config, inbox_limits(), TestAdmission::accepting());
-    let response = fixture
-        .app
-        .clone()
-        .oneshot(delivery_request(
-            Method::POST,
-            DELIVERY_PATH,
-            "delivery-1",
-            BODY,
-        ))
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
-    assert_eq!(fixture.admission.calls(), 0);
-    assert!(fixture.inbox.lock().unwrap().entries().unwrap().is_empty());
+    assert_rejected_before_admission(config, StatusCode::PAYLOAD_TOO_LARGE).await;
 }
 
 #[tokio::test]
 async fn header_limit_returns_431_before_copy_or_admission() {
     let mut config = receiver_config();
     config.max_headers = 1;
+    assert_rejected_before_admission(config, StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn full_delivery_capacity_rejects_before_reading_another_body()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::TempDir::new()?;
+    let inbox = Arc::new(Mutex::new(amiss_controller_service::Inbox::open(
+        directory.path(),
+        inbox_limits(),
+    )?));
+    let release = Arc::new((Mutex::new(false), Condvar::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let admission: Arc<dyn DeliveryAdmission> = Arc::new(BlockingAdmission {
+        calls: Arc::clone(&calls),
+        release: Arc::clone(&release),
+    });
+    let mut config = receiver_config();
+    config.max_concurrent_deliveries = 1;
+    let app = router(&config, inbox, admission)?;
+
+    let first_app = app.clone();
+    let first = tokio::spawn(async move {
+        first_app
+            .oneshot(delivery_request(
+                Method::POST,
+                DELIVERY_PATH,
+                "delivery-1",
+                BODY,
+            ))
+            .await
+    });
+    for _attempt in 0..10_000 {
+        if calls.load(Ordering::SeqCst) > 0 {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    let body_read = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&body_read);
+    let stream =
+        tokio_stream::iter([Ok::<_, Infallible>(Bytes::from_static(BODY))]).map(move |item| {
+            observed.store(true, Ordering::SeqCst);
+            item
+        });
+    let second = Request::builder()
+        .method(Method::POST)
+        .uri(DELIVERY_PATH)
+        .header("x-provider-secret", super::support::SECRET)
+        .header("x-source-id", "delivery-2")
+        .body(Body::from_stream(stream))?;
+    let response = app.oneshot(second).await?;
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(!body_read.load(Ordering::SeqCst));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    let (lock, ready) = &*release;
+    *lock
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+    ready.notify_one();
+    assert_eq!(first.await??.status(), StatusCode::ACCEPTED);
+    Ok(())
+}
+
+async fn assert_rejected_before_admission(config: ReceiverConfig, expected: StatusCode) {
     let fixture = Fixture::new(&config, inbox_limits(), TestAdmission::accepting());
     let response = fixture
         .app
@@ -44,11 +106,9 @@ async fn header_limit_returns_431_before_copy_or_admission() {
         ))
         .await
         .unwrap();
-    assert_eq!(
-        response.status(),
-        StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE
-    );
+    assert_eq!(response.status(), expected);
     assert_eq!(fixture.admission.calls(), 0);
+    assert!(fixture.inbox.lock().unwrap().entries().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -87,12 +147,11 @@ async fn full_inbox_returns_503_after_successful_admission() {
 #[test]
 fn invalid_paths_and_limits_are_data_errors_not_panics() {
     let directory = tempfile::TempDir::new().unwrap();
-    let inbox = std::sync::Arc::new(std::sync::Mutex::new(
+    let inbox = Arc::new(Mutex::new(
         amiss_controller_service::Inbox::open(directory.path(), inbox_limits()).unwrap(),
     ));
-    let admission = std::sync::Arc::new(TestAdmission::accepting());
-    let receiver_admission: std::sync::Arc<dyn amiss_controller_service::DeliveryAdmission> =
-        admission.clone();
+    let admission = Arc::new(TestAdmission::accepting());
+    let receiver_admission: Arc<dyn DeliveryAdmission> = admission.clone();
     for path in [
         "",
         "/",
@@ -110,9 +169,56 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
     let mut config = receiver_config();
     config.max_body_bytes = 0;
     assert!(matches!(
-        router(&config, inbox, receiver_admission,),
+        router(&config, Arc::clone(&inbox), Arc::clone(&receiver_admission),),
         Err(ReceiverConfigError::Limits)
     ));
+    config.max_body_bytes = 1;
+    config.max_concurrent_deliveries = 65;
+    assert!(matches!(
+        router(&config, Arc::clone(&inbox), Arc::clone(&receiver_admission),),
+        Err(ReceiverConfigError::Limits)
+    ));
+    for (body, headers, header_bytes) in [
+        (8 * 1_024 * 1_024 + 1, 8, 256),
+        (16, 129, 256),
+        (16, 8, 32 * 1_024 + 1),
+    ] {
+        let mut config = receiver_config();
+        config.max_body_bytes = body;
+        config.max_headers = headers;
+        config.max_header_bytes = header_bytes;
+        assert!(matches!(
+            router(&config, Arc::clone(&inbox), Arc::clone(&receiver_admission),),
+            Err(ReceiverConfigError::Limits)
+        ));
+    }
+}
+
+struct BlockingAdmission {
+    calls: Arc<AtomicUsize>,
+    release: Arc<(Mutex<bool>, Condvar)>,
+}
+
+impl DeliveryAdmission for BlockingAdmission {
+    fn admit(
+        &self,
+        _request: AdmissionRequest<'_>,
+    ) -> Result<AdmittedDelivery, AdmissionRejection> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let (lock, ready) = &*self.release;
+        let mut released = lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while !*released {
+            released = ready
+                .wait(released)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        Ok(AdmittedDelivery {
+            route: "github-main".to_owned(),
+            source_id: "delivery-1".to_owned(),
+        })
+    }
 }
 
 #[test]

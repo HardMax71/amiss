@@ -217,11 +217,13 @@ fn oid(byte: char) -> Oid {
 
 pub(super) fn publication(delivery: &AcceptedDelivery, lease: &DeliveryLease) -> Publication {
     let delivery = delivery.delivery();
+    let run = run_identity(delivery);
     Publication {
         provider_run: delivery.provider_run.clone(),
         evaluation_id: lease.evaluation_id.clone(),
         check: lease.check.clone(),
-        run: run_identity(delivery),
+        gate_commit: run.commits.candidate.clone(),
+        run,
         conclusion: CheckConclusion::Pass,
         report: Some(vec![0, 1, 2, 0xfe, 0xff]),
     }

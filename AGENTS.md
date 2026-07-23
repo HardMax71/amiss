@@ -11,8 +11,8 @@ provider-facing orchestration contracts. The book under `docs/` is the reference
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
-cargo nextest run --manifest-path controller/Cargo.toml --locked
-cargo clippy --manifest-path controller/Cargo.toml --all-targets --locked -- -D warnings
+cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
+cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
 ```
 
 The toolchain is pinned by `rust-toolchain.toml`. Hooks run through prek: formatting and

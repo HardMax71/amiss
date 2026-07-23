@@ -1,4 +1,4 @@
-use amiss_controller::{DeliveryId, ProviderNamespace, ProviderRunAttempt};
+use amiss_controller::{DeliveryId, ProviderIdentity, ProviderNamespace, ProviderRunAttempt};
 
 #[test]
 fn provider_namespace_is_open_but_canonical() {
@@ -6,6 +6,13 @@ fn provider_namespace_is_open_but_canonical() {
     assert!(ProviderNamespace::new("forgejo-v2".to_owned()).is_some());
     assert!(ProviderNamespace::new("GitHub".to_owned()).is_none());
     assert!(ProviderNamespace::new("gitea/family".to_owned()).is_none());
+}
+
+#[test]
+fn provider_identity_validates_both_parts() {
+    assert!(ProviderIdentity::new("gitlab".to_owned(), "gitlab.example".to_owned()).is_some());
+    assert!(ProviderIdentity::new("GitLab".to_owned(), "gitlab.example".to_owned()).is_none());
+    assert!(ProviderIdentity::new("gitlab".to_owned(), "bad host".to_owned()).is_none());
 }
 
 #[test]

@@ -38,7 +38,10 @@ impl RootEntries {
                 continue;
             }
             if let Some(key) = row_key(name) {
-                if !file_type.is_file() || rows.contains_key(key) {
+                if !file_type.is_file()
+                    || rows.contains_key(key)
+                    || u64::try_from(rows.len()).unwrap_or(u64::MAX) >= limits.max_records()
+                {
                     return Err(InboxError::Corrupt);
                 }
                 let metadata = entry.metadata()?;
@@ -46,13 +49,16 @@ impl RootEntries {
                 if row_bytes > limits.max_record_bytes() {
                     return Err(InboxError::Corrupt);
                 }
+                bytes = bytes
+                    .checked_add(row_bytes)
+                    .filter(|total| *total <= limits.max_bytes())
+                    .ok_or(InboxError::Corrupt)?;
                 let encoded = read_bounded(&entry.path(), limits.max_record_bytes())?;
                 if u64::try_from(encoded.len()).ok() != Some(row_bytes) {
                     return Err(InboxError::Corrupt);
                 }
                 let record = decode_record(&encoded)?;
                 record.validate(key, limits)?;
-                bytes = bytes.checked_add(row_bytes).ok_or(InboxError::Corrupt)?;
                 rows.insert(
                     key.to_owned(),
                     Row {
@@ -63,6 +69,9 @@ impl RootEntries {
                 continue;
             }
             if name.starts_with(ATOMIC_DIRECTORY_PREFIX) && file_type.is_dir() {
+                if u64::try_from(temporary.len()).unwrap_or(u64::MAX) >= limits.max_records() {
+                    return Err(InboxError::Corrupt);
+                }
                 temporary.push(TemporaryDirectory::read(entry.path())?);
                 continue;
             }

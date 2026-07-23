@@ -23,6 +23,7 @@ pub(super) fn publication(
     } else if fresh.state == ChangeState::Superseded
         || initial.state == ChangeState::Superseded
         || initial.run != fresh.run
+        || initial.gate_commit != fresh.gate_commit
     {
         (CheckConclusion::Superseded, None)
     } else {
@@ -33,6 +34,7 @@ pub(super) fn publication(
         evaluation_id: request.evaluation_id.clone(),
         check: request.check.clone(),
         run: initial.run.clone(),
+        gate_commit: initial.gate_commit.clone(),
         conclusion,
         report,
     }

@@ -77,6 +77,8 @@ impl RunIdentity {
 pub struct ChangeSnapshot {
     pub state: ChangeState,
     pub run: RunIdentity,
+    /// Provider revision on which this run's required result is enforced.
+    pub gate_commit: Oid,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -95,7 +97,8 @@ pub enum Evaluation {
     Block,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum RunFailure {
     MissingOutput,
     Timeout,

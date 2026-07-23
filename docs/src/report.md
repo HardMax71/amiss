@@ -25,8 +25,9 @@ to which branch-scoped controls were matched. Either may be null on a local, sel
 and the direct CLI currently leaves the target null. Both values enter the candidate-identity
 preimage. They describe the exact inputs the engine evaluated; their presence does not prove who
 selected or authenticated them.
-The current sealed commit-pair path still reports `explicit-commit-pair` and
-`explicit-replay`; no provider adapter supplies a provider event kind or finality today.
+The sealed commit-pair path, including every provider lane, still reports
+`explicit-commit-pair` and `explicit-replay`. Provider event and publication facts remain outside
+the engine report.
 
 A repository path anywhere in the payload has exactly one spelling. Valid UTF-8 bytes
 travel as a plain string; anything else travels as `{"bytes_hex": "..."}` naming the raw
@@ -104,13 +105,19 @@ the findings count has its own separate ceiling in [Limits and refusals](limits.
 
 The report is evidence of engine evaluation, not a self-authenticating provider attestation. A
 control row with `status: "verified"` means that the engine accepted the supplied digest and
-repository, target-ref, tree, time, or run relationships required for that control. A caller
-that can supply the request can still make those assertions; the enum does not identify or
+repository, target-ref, tree, time, or run relationships required for that control. A caller that
+can supply the request can still make those assertions; the enum does not identify or
 authenticate the caller. The sealed bootstrap additionally checks the requested identities and
-digests against the returned envelope, but republishes the accepted bytes unchanged. The
-provider-controller foundation likewise defines orchestration and publication boundaries but
-does not yet sign a report or implement a provider-published check. Independent provider
-evidence therefore does not exist in the current report contract.
+digests against the returned envelope, but republishes the accepted bytes unchanged.
+
+The [provider lanes](provider-controls.md) leave separate provider evidence: an App-owned Check
+Run on GitHub's test merge, a protected GitLab policy-job result on a merge-train commit, or a
+dedicated Gitea-family review. GitHub's Check Run and the Gitea-family review carry the staged
+summary and report digest; GitLab's provider-visible evidence is the exact policy job's outcome.
+The controller's saved result binds the plan, execution constraint, gate identity, and report
+digest in every lane, but no provider signs or adds fields to the report. Moving the same report
+bytes away from that gate therefore loses the provider context; there is still no provider
+attestation inside the current report contract.
 
 Sandbox provenance is separate again. The present writer reports `self-asserted` assurance,
 `local-process` enforcement, and null verification. The sealed bootstrap requires that honest

@@ -21,7 +21,7 @@ pub use bootstrap_job::{
     PolicyControls, bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
-pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
+pub use bootstrap_runner::{BOOTSTRAP_EXECUTABLE_BYTES, BootstrapRun, run_bootstrap};
 pub use clock::{ControllerClock, SystemClock};
 pub use file_ledger::{FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError};
 pub use identity::{
@@ -45,6 +45,6 @@ pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ProviderAdapter, ProviderError, RegistryError,
 };
 pub use webhook::{
-    GitHubWebhook, GitLabWebhook, GiteaWebhook, WebhookError, WebhookKey, WebhookKeyring,
-    WebhookKeyringError, WebhookProof,
+    GitHubWebhook, GitLabWebhook, GiteaWebhook, SignedRequestProof, WebhookError, WebhookKey,
+    WebhookKeyring, WebhookKeyringError, WebhookProof,
 };

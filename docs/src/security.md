@@ -83,59 +83,68 @@ watchdog are meaningful controls; they are not an OCI sandbox or microVM and mus
 reported as a provider-verified sandbox. The accepted engine envelope is republished unchanged,
 so it does not gain an authenticated signature merely by passing through bootstrap.
 
-Provider authentication belongs outside both executables. The separate
-[`amiss-controller`](https://github.com/HardMax71/amiss/tree/main/controller) foundation models
-an untouched delivery whose headers and body remain untrusted until a registered adapter
-authenticates them. It stops and discards output when ownership cannot be proven, and it refreshes
-provider state before accepting a result as current. Closure, revocation, and runner failures such
-as missing output, timeout, tampered runtime, or an output bound to the wrong identity or tree
-remain fail-closed conclusions rather than passes. [Controller delivery](controller.md) defines
-the complete flow, durable record, race, and retry rules.
+Provider authentication belongs outside both executables. The nested
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace keeps the raw
+delivery untrusted until a configured verifier accepts it, keeps provider and storage
+dependencies out of the scanner, and stops when ownership cannot be proven.
+[Controller delivery](controller.md) defines the neutral record, heartbeat, race, and retry
+rules.
 
-Its concrete provider-neutral runner begins only after acquisition. It independently re-verifies
-the exact repository and action commit-tree roots against the run, derives the sealed job from that
-same run, and matches the bootstrap bytes to the pinned digest before making a private copy. The
-child receives a cleared environment, closed standard streams, and private request and output
-paths. The controller creates and retains both output handles, so replacing their path names cannot
-change what it reads. The report is bounded by the machine-report ceiling and the fixed result
-record is written last. Missing or malformed output, a mismatched exit, excessive output, timeout,
-signal, heartbeat loss, and runtime tampering cannot become a pass.
+The source-built provider services are the concrete independent lanes. Their bounded plaintext
+listeners must sit behind an operator-controlled TLS terminator that also bounds connection
+concurrency and header, body, idle, and slow-body time. GitHub, Gitea, and Forgejo authenticate
+the exact webhook body before saving it, acknowledge only durable input, and authenticate the
+saved bytes again in the worker. GitLab instead authenticates the policy job's short-lived OIDC
+token and keeps the request synchronous so only the exact passing result makes that protected job
+succeed. Each endpoint takes a configured in-process permit before reading the body and holds it
+through durable admission or synchronous evaluation. That cap does not replace the public
+connection and slow-client limits at the TLS edge.
 
-Pinned ProcessKit provides one cross-platform process-tree boundary. On normal exit, timeout, or
-cancellation, the runner hard-kills the group and requires ProcessKit to report it empty before
-reading output. The runner renews before launch and halfway through each controller-derived
-relative lease window, capped at five seconds, and cancels the tree on heartbeat refusal. Its wall
-limit is no greater than 120 seconds. A leader that exits cleanly cannot leave its descendants
-behind. These rules close ordinary descendant and lease-loss races; they do not claim that a
-synchronous host kernel operation can be interrupted if that operation itself stops returning.
+Each adapter refreshes the repository, change, commits, trees, and protected merge rule through a
+controller-owned credential. GitHub requires a strict required check bound to its App and writes
+the Check Run on the test merge. GitLab requires an enforced merge train and independently owned
+pipeline execution policy, binds the job's policy origin and runner, and uses the policy job's
+result as evidence. Gitea and Forgejo require one approval restricted to the service's dedicated
+reviewer and write the final review through that account. A missing, weakened, bypassable, or
+changed rule stays fail closed.
 
-The concrete file record requires a pre-created private local directory outside the repository and
-action tree. A future service must own that directory and set its operating-system permissions or
-access-control list: anyone who can read or change it is inside the trust boundary. Its checksums
-detect damage; they do not authenticate a writer. Shared and network filesystems are unsupported.
-The root metadata fixes its lease duration, maximum record count, and replay window and keeps a
-high-water clock. Admission under one fixed lock prevents concurrent processes from crossing the
-record cap; one maintenance lock, one clock lock, and at most 256 row-lock shards keep lock-file
-growth fixed. A full root rejects a new identity without evicting work already admitted.
+All lanes acquire exact SHA-1 repository and action commits through Git protocol v2, with fixed
+pack, object, inflated-byte, resolved-byte, delta-depth, and indexing-thread limits. They invoke
+the supervised bootstrap and refresh provider state again before accepting or publishing the
+result. Closure, changed head or gate, removed authorization, missing output, timeout, runtime
+tampering, or a wrong identity stays fail closed. The pinned action repository must be on the
+same provider instance.
 
-Cleanup runs when the root opens and is available explicitly. Under the exclusive maintenance
-lock it saves the high-water clock, validates the root, then removes dead report and atomic-write
-files and completed rows whose authenticated replay end has passed. It never removes
-running or saved work. GitHub and Gitea-family exact-body deliveries remain permanent because their
-signatures authenticate no attempt time; forgetting those rows would reopen replay for a captured
-body. A local clock rollback cannot revive a bounded delivery after deletion. Operators must size
-the fixed record cap for permanent replay rows rather than treating cleanup as eviction policy.
+The runner independently reopens the acquired repositories and checks the exact commit-tree roots.
+It derives the sealed job, matches the bootstrap to the pinned execution constraint, clears the
+child environment and standard streams, retains both bounded output handles, and uses ProcessKit's
+cross-platform process-tree boundary. Every terminal path hard-kills and drains the group before
+output is accepted. Lease loss cancels the same tree. These rules cover ordinary process and
+ownership races; they do not promise that a host kernel operation can be interrupted if that
+operation itself never returns.
 
-The controller library now bounds raw ingress and verifies GitHub, GitLab Standard Webhooks, and
-Gitea-family HMAC signatures against rotating, redacted anchors. GitHub and Gitea replay identity
-comes from the exact signed body rather than their unsigned delivery headers; GitLab binds its
-signed ID and timestamp. A verifier proof is tied to the exact controller route, receipt time,
-header sequence, and body, and its fields cannot be rewritten by an adapter. Ingress rejects a
-GitLab proof under a replay-only route, so its signed timestamp must be checked for freshness.
-There is still no concrete provider adapter,
-route loader, webhook listener, authenticated payload decoder, API client, credential source,
-repository or action-tree acquisition worker, deployable controller, or provider check publisher.
-No authenticated integration joins those pieces to the bootstrap runner for any provider or
-self-hosted instance. The engine's `forge` field still selects only a link URL dialect.
-The JavaScript launcher is pinned manifest data and refuses if invoked directly; the current
-composite Action does not invoke bootstrap or the controller.
+The provider API credential, webhook key ring or OIDC keys, execution constraint, optional
+controls, bootstrap, TLS terminator, scratch directory, raw inbox where used, and delivery ledger
+are trust roots. Provider and repository administrators who can change the protected merge rule,
+integration or policy owners, reviewer-account owners, key issuers, and configured bypass actors
+are also inside the boundary. Repository bytes are not. A deployment is only as independent as
+its host and those operator-controlled inputs. Self-hosted instances must expose the exact APIs
+required by their lane and a certificate chain accepted by the Rust TLS clients; there is no
+insecure-TLS mode.
+
+The inbox and ledger use checksummed ordinary files, not SQL or a database. Their roots must be
+pre-created private local directories outside the repository and action tree; shared and network
+filesystems are unsupported. Checksums detect damage, not a malicious local writer. A webhook
+inbox removes raw bytes after controller completion. The ledger retains running and saved work
+and keeps GitHub and Gitea-family exact-body completion markers permanently, because those
+signatures contain no trusted delivery time. A full store rejects new identities instead of
+evicting accepted work.
+
+The resulting Check Run, policy-job result, or dedicated review is provider evidence, but the
+engine report remains an unchanged, self-asserted envelope. The controller neither signs it nor
+upgrades its sandbox claim.
+[Provider-verified controls](provider-controls.md) gives the exact setup, configuration, limits,
+storage rules, freshness and retry limits, rotation, and report distinction. No provider update
+is atomic with the local ledger; each provider page states its reconciliation limit. The GitHub
+convenience Action still invokes the public scanner directly and does not gain this trust
+boundary.

@@ -9,9 +9,28 @@ pub(super) fn verify(
     header_name: &str,
     prefix: &[u8],
 ) -> Result<WebhookProof, WebhookError> {
+    verify_one_of(keys, check, &[header_name], prefix)
+}
+
+pub(super) fn verify_one_of(
+    keys: &WebhookKeyring,
+    check: IngressCheck<'_>,
+    header_names: &[&str],
+    prefix: &[u8],
+) -> Result<WebhookProof, WebhookError> {
     let delivery = check.delivery();
     let headers = Headers::new(delivery.headers)?;
-    let raw = headers.exact(header_name, prefix.len().saturating_add(64))?;
+    let raw = headers.one_of(header_names, prefix.len().saturating_add(64))?;
+    authenticate(keys, check, raw, prefix)
+}
+
+fn authenticate(
+    keys: &WebhookKeyring,
+    check: IngressCheck<'_>,
+    raw: &[u8],
+    prefix: &[u8],
+) -> Result<WebhookProof, WebhookError> {
+    let delivery = check.delivery();
     let encoded = raw.strip_prefix(prefix).ok_or(WebhookError::Headers)?;
     let signature = crypto::lowercase_hex(encoded)?;
     let anchor = keys.authenticate(
@@ -19,7 +38,7 @@ pub(super) fn verify(
         &[signature],
         &[delivery.body],
     )?;
-    Ok(WebhookProof::new(
+    Ok(WebhookProof::verified(
         check,
         keys.trust_set().clone(),
         anchor,

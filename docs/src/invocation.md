@@ -65,9 +65,9 @@ dialects and any other host selects none, in which case absolute links to that h
 foreign and the report's `evaluation.forge` is null. An explicit flag always beats the
 table, which is how a self-hosted instance gets its grammar. The github and gitea dialects
 refuse a nested owner they could never match.
-This dialect selection is independent of the provider-controller adapter registry: recognizing
-a GitLab or Gitea-family URL does not mean that an authenticated adapter for that provider
-exists.
+This dialect selection is independent of the provider-controller lane. Recognizing a forge URL
+does not authenticate it or prove that this ordinary CLI run came through one of the supported
+provider services.
 
 `--explain-scope` does not create a separate early-exit command. The scan still runs, and in
 human format the flag adds deterministic scope lines to the normal result. JSON output is

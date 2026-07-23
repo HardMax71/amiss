@@ -16,6 +16,9 @@ entry conditions live in the [Roadmap](roadmap.md).
 | Policy | `.amiss/scanner-policy.json` may expand discovery and raise the disposition of missing targets, target-type mismatches, and invalid references. It cannot downgrade or suppress a finding. | [Policy application](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) |
 | Reports | Machine output uses the rolling pre-1.0 report envelope and payload contract. Exact findings remain the evidence surface; engine-grouped Fix, Check, and Existing feedback is its review projection. The compatibility marker remains `experimental`. | [Current schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report.schema.json) |
 | GitHub convenience Action | A source-tag dispatcher selects the same version's immutable runtime tree. The runtime derives snapshots from supported GitHub events, verifies the selected engine against its manifest, shows at most ten grouped items, and annotates only displayed Fixes. It is not a provider-authenticated controller adapter or an independent trust boundary. | [Dispatcher](https://github.com/HardMax71/amiss/blob/main/action.yml) and [runtime](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml) |
+| GitHub provider lane | A source-built App service authenticates pull-request events, refreshes exact state and strict App-bound rules, acquires exact SHA-1 objects, runs the sealed bootstrap, and publishes on GitHub's test-merge commit. GitHub.com and compatible GHES releases are supported. | [GitHub setup](provider-github.md) |
+| GitLab provider lane | A source-built service authenticates a pipeline execution policy job through OIDC, verifies its enforced merge train, policy origin, runner, project, and exact train commit, then lets only an exact pass make that job succeed. GitLab 19.3 or newer with Ultimate is supported. | [GitLab setup](provider-gitlab.md) |
+| Gitea and Forgejo provider lane | A source-built service authenticates pull-request webhooks, refreshes the effective protected-branch rule, acquires exact SHA-1 objects, runs the sealed bootstrap, and approves or rejects through one dedicated reviewer. Gitea 1.27 or newer and Forgejo 16 or newer are supported. | [Gitea and Forgejo setup](provider-gitea.md) |
 
 Repository form is deliberately closed too. The reader accepts a primary non-bare checkout
 whose `.git` entry is a real directory. Bare repositories and linked worktrees represented
@@ -30,7 +33,7 @@ opaque; leading-slash site routes, heading fragments, code symbols, live URLs, a
 to other repositories are not validated under those systems' semantics. Their visible
 boundary behavior is described in [Discovery](discovery.md) and [Resolution](resolution.md).
 
-## Built, but not a supported delivery lane
+## Trust surfaces
 
 The repository contains strict parsers and canonical writers for evaluation, snapshot, and
 external-control requests, plus evaluation logic for organization floors, adoption debt,
@@ -59,60 +62,38 @@ floor, debt snapshot, and waiver bundle, and the execution constraint's digest, 
 and recomputed semantics. It likewise recomputes the trusted-time statement's semantic digest and
 requires the sandbox provenance to remain self-asserted. The wire crate exposes checked
 constructors and canonical writers for the execution constraint and trusted-time statement, and
-the controller uses them when it derives a sealed job. The path is built by the release workflow,
-but the published composite Action still launches `amiss` directly; nothing public
-acquires these inputs from an authenticated provider. The distinction is visible in the
+the controller uses them when it derives a sealed job. The path is built by the release workflow.
+The published composite Action still launches `amiss` directly, while the separately operated
+provider services acquire their inputs and invoke the sealed path. The distinction is visible in
+the
 [bootstrap entry point](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs),
 [release assembly](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml), and
 [Action execution](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml).
 
 The separate nested Rust workspace under
-[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) is also implemented only
-as a transport-neutral foundation. It defines provider-neutral identities and the adapter,
-durable-record, runner, and orchestration boundaries described in
-[Controller delivery](controller.md). Its provider-neutral
-[`FileLedger`](https://github.com/HardMax71/amiss/blob/main/controller/src/file_ledger.rs) gives
-that boundary a cross-process, durable local file record without SQL or a database. The root has a
-fixed record cap, fixed maintenance, admission, and clock locks, at most 256 row-lock shards, and
-one state and report path per admitted delivery. Checksummed root metadata fixes the lease duration
-and replay window and keeps a high-water clock. Cleanup removes dead files and only bounded
-completed rows after their authenticated lifetime ends; it retains running work, saved results, and
-permanent exact-body replay markers. A full root rejects new identities rather than evicting them.
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines the
+provider-neutral identities, bounded ingress, rotating verifier keys, durable raw inbox,
+delivery record, worker, orchestration, acquisition, and supervised runner contracts. Its state
+uses checksummed ordinary files with fixed capacity and atomic replacement, not SQL or a
+database. [Controller delivery](controller.md) records the cross-process ownership, heartbeat,
+replay, and exact-publication retry rules.
 
-The same workspace has a [bounded ingress contract](https://github.com/HardMax71/amiss/blob/main/controller/src/ingress/policy.rs)
-and separate GitHub, GitLab Standard Webhooks, and Gitea-family HMAC verifiers with rotating,
-revocable in-memory anchors. A future GitLab route must require its authenticated timestamp to be
-fresh. GitHub and Gitea-family routes instead key replay protection by the exact signed body and
-use permanent completion markers. No adapter or route loader enforces these pairings yet.
+The provider crates add signed-input decoders, controller-owned credentials and API clients,
+strict merge-rule authorization, fixed-budget protocol-v2 Git acquisition, and provider evidence.
+GitHub uses an App-bound required Check Run on the test merge. GitLab uses an independently owned
+pipeline execution policy job on an enforced merge train and authenticates that job through OIDC.
+Gitea and Forgejo use a protected approval restricted to one dedicated reviewer. The workspace
+keeps those adapters separate instead of turning provider differences into one closed provider
+enum. [Provider-verified controls](provider-controls.md) compares the supported lanes and links
+their exact setup, retry limits, and trust boundaries.
 
-The provider-neutral
-[`run_bootstrap`](https://github.com/HardMax71/amiss/blob/main/controller/src/bootstrap_runner.rs)
-primitive re-verifies acquired repository and action commit-tree roots, derives the sealed job
-from the frozen run, checks and privately copies the pinned bootstrap, and starts it with a cleared
-environment and closed standard streams. The controller creates and retains the output handles;
-pinned ProcessKit, driven by a current-thread Tokio runtime, supervises one cross-platform process
-tree. The runner renews ownership within each controller-derived relative lease window, enforces at
-most 120 seconds, and hard-kills and drains the tree on every terminal path before reading output.
-Its private report is bounded, and the final result record makes missing, malformed, oversized,
-timed-out, signalled, and tampered runs fail closed. Focused tests include wrong roots and bootstrap
-bytes, a cleared environment, replaced output paths, timeout and heartbeat races, and descendants
-left behind by an exited leader.
-
-The workspace deliberately has no provider enum and no concrete provider adapter,
-HTTP listener, authenticated payload decoder, provider API client, credential store, repository
-acquisition worker, deployable binary, publication transport, or provider status publisher. No
-current path joins provider authentication, authoritative refresh, network acquisition, the
-runner, and publication. These absences make it an internal foundation, not a supported delivery
-lane.
-
-Local and convenience-Action reports consequently describe repository policy with no
-external authority consulted. Each external control has status `none`, and the sandbox
-assurance is `self-asserted`; there is no aggregate `provider_verified` report field. Even on
-the sealed internal path, a control row marked `verified` means that the engine accepted its
-digest and identity bindings. The report does not prove who acquired that control, and neither
-the bootstrap nor controller signs or augments the engine's report with provider evidence. No
-provider-authenticated required-check lane or provider-verified sandbox is supported. See
-[Controls and policy](controls.md) for the exact interpretation.
+Local and convenience-Action reports still describe repository policy with no outside authority
+consulted. Their external controls are absent and sandbox assurance is `self-asserted`. A report
+produced through a provider lane can contain verified external controls, but the report does not
+authenticate who supplied them and gains no `provider_verified` field or signature. Provider
+evidence lives in the App-owned Check Run, protected policy job, or dedicated review and the
+matching merge rule. See
+[Controls and policy](controls.md) and [The report](report.md) for the exact distinction.
 
 ## Keeping this page honest
 

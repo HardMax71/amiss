@@ -60,19 +60,20 @@ same provider/run tuple, and the
 [verification gate](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs) compares it byte-for-byte before
 using the time.
 
-These are binding rules, not authentication. The separate controller must authenticate provider
-input before constructing requests for the exact run. Its provider-neutral sequence and durable
-retry contract are documented in [Controller delivery](controller.md). The controller library can
-bound ingress and verify the implemented GitHub body-HMAC, GitLab Standard Webhooks, and
-Gitea-family body-HMAC forms, while the wire library can construct the canonical trusted-time and
-execution-constraint values. Its provider-neutral runner can derive and supervise the sealed
-bootstrap job after exact repository and action trees have been acquired. No concrete adapter,
-acquisition worker, or publisher joins authentication, authoritative provider state, those trees,
-the runner, and publication today. The request's
-`forge` value remains only the URL dialect used by link resolution and is separate from the
-controller's provider namespace and instance identity. Debt must reproduce its adoption tree, and
-a waiver item for another candidate tree is simply not selected. The commit and staged-index paths
-share one [trusted-time, debt, and waiver pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
+These are binding rules, not authentication. The controller must authenticate provider input
+before constructing requests for the exact run. Its provider-neutral sequence and durable retry
+contract are documented in [Controller delivery](controller.md). The concrete
+[provider lanes](provider-controls.md) load organization policy and their execution constraint
+outside the checked repository, authenticate a signed webhook or policy-job token, refresh
+provider-owned change and merge-rule state, acquire the exact trees, derive trusted time, and run
+the sealed bootstrap. Their separate pages describe the Check Run, policy-job result, or
+dedicated review that carries provider evidence.
+
+The request's `forge` value remains only the URL dialect used by link resolution and is separate
+from the controller's provider namespace and instance identity. Debt must reproduce its adoption
+tree, and a waiver item for another candidate tree is simply not selected. The commit and
+staged-index paths share one
+[trusted-time, debt, and waiver pipeline](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/pipeline/external.rs).
 
 Debt and waiver require verified trusted time and a complete Git candidate. An item
 carries its accepted fact, and that fact is the sole source of the finding kind and the
@@ -117,9 +118,10 @@ statement semantics; and the candidate identity and honest sandbox projection. T
 each value as `None`. A report control row with `status: "verified"` means the engine verified
 the supplied value's digest and identity relationships. It does not prove that a provider
 authenticated or supplied the value: neither the report nor its enum authenticates its own
-source. Until the delivery lane in [Project status](status.md) is complete, the honest reading
-of a local or convenience-Action report is: these findings, under this repository policy, with
-no outside authority consulted.
+source. The honest reading of a local or convenience-Action report remains: these findings, under
+this repository policy, with no outside authority consulted. In a provider lane, origin is
+evidenced separately by the App-owned Check Run, protected policy job, or dedicated review and
+the matching merge rule; copied report bytes do not become an attestation.
 
 The control-plane finding family closes the loop from the other side. When a candidate
 weakens its own policy file or drops required coverage, the comparison raises

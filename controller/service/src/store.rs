@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use atomicwrites::{AllowOverwrite, AtomicFile};
 use serde::{Deserialize, Serialize};
 
-use self::entries::{ATOMIC_DIRECTORY_PREFIX, RootEntries, TemporaryDirectory};
+pub(crate) use self::entries::RootEntries;
+use self::entries::{ATOMIC_DIRECTORY_PREFIX, TemporaryDirectory};
 use crate::InboxError;
 use crate::frame;
 use crate::limits::StoredLimits;
@@ -78,16 +79,6 @@ impl Store {
         self.save(entries, key, record, 0)
     }
 
-    pub(crate) fn replace(
-        &self,
-        entries: &RootEntries,
-        key: &str,
-        record: &Record,
-        old_bytes: u64,
-    ) -> Result<(), InboxError> {
-        self.save(entries, key, record, old_bytes)
-    }
-
     pub(crate) fn remove(&self, key: &str) -> Result<(), InboxError> {
         validate_key(key)?;
         let path = self.root.join(row_name(key));
@@ -99,7 +90,7 @@ impl Store {
         Ok(())
     }
 
-    fn save(
+    pub(crate) fn save(
         &self,
         entries: &RootEntries,
         key: &str,

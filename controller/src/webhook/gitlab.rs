@@ -49,7 +49,7 @@ impl GitLabWebhook {
             &signatures,
             &[raw_id, b".", raw_timestamp, b".", request.body],
         )?;
-        Ok(WebhookProof::new(
+        Ok(WebhookProof::verified(
             check,
             self.keys.trust_set().clone(),
             anchor,

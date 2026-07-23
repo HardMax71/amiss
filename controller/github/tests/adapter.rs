@@ -3,18 +3,20 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, ControllerClock,
-    ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook, IngressLimits,
-    IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, Publication, ReplayWindow, RunIdentity, RunRefs,
-    SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, CheckConclusion,
+    ControllerClock, ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook,
+    IngressCheck, IngressLimits, IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, Publication, ReplayWindow, RunIdentity,
+    RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
-use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter};
+use amiss_controller_github::{
+    GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
+};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -127,6 +129,58 @@ impl GitHubApi for FakeApi {
     }
 }
 
+struct DropApi {
+    dropped: Arc<AtomicBool>,
+}
+
+impl Drop for DropApi {
+    fn drop(&mut self) {
+        self.dropped.store(true, Ordering::Release);
+    }
+}
+
+impl GitHubApi for DropApi {
+    fn refresh(
+        &self,
+        _pull_request: GitHubPullRequest<'_>,
+    ) -> Result<ChangeSnapshot, ProviderError> {
+        Err(ProviderError::Unavailable)
+    }
+
+    fn publish(
+        &self,
+        _pull_request: GitHubPullRequest<'_>,
+        _publication: &Publication,
+    ) -> Result<(), ProviderError> {
+        Err(ProviderError::Unavailable)
+    }
+}
+
+trait SignedSource {
+    fn authenticate_delivery(
+        &self,
+        check: IngressCheck<'_>,
+    ) -> Result<amiss_controller::VerifiedDelivery, ProviderError>;
+}
+
+impl<A: GitHubApi> SignedSource for GitHubPullRequestAdapter<A> {
+    fn authenticate_delivery(
+        &self,
+        check: IngressCheck<'_>,
+    ) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
+        ProviderAdapter::authenticate(self, check)
+    }
+}
+
+impl SignedSource for GitHubPullRequestSource {
+    fn authenticate_delivery(
+        &self,
+        check: IngressCheck<'_>,
+    ) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
+        Self::authenticate(self, check)
+    }
+}
+
 #[test]
 fn signed_body_alone_defines_the_pull_request() {
     let adapter = adapter(FakeApi::new(dummy_snapshot()));
@@ -139,7 +193,8 @@ fn signed_body_alone_defines_the_pull_request() {
         ],
         SignedTimePolicy::ReplayOnly,
         provider(),
-    );
+    )
+    .unwrap();
     let pretty = authenticated(
         &adapter,
         BODY,
@@ -149,7 +204,8 @@ fn signed_body_alone_defines_the_pull_request() {
         ],
         SignedTimePolicy::ReplayOnly,
         provider(),
-    );
+    )
+    .unwrap();
 
     assert_eq!(first.delivery().identity.integration.as_str(), "7");
     assert_eq!(first.delivery().change.repository.owner, "hardmax71");
@@ -179,12 +235,95 @@ fn signed_body_alone_defines_the_pull_request() {
             &[],
             SignedTimePolicy::ReplayOnly,
             provider(),
-        );
+        )
+        .unwrap();
         assert_eq!(
             delivery.delivery().provider_run,
             first.delivery().provider_run
         );
     }
+}
+
+#[test]
+fn signed_target_must_belong_to_the_configured_lane() {
+    let source = source();
+    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let release = BranchRef::new("refs/heads/release".to_owned()).unwrap();
+
+    assert!(authenticate_target(&source, BODY, &main).is_ok());
+    assert_eq!(
+        authenticate_target(&source, BODY, &release),
+        Err(ProviderError::AuthorizationRevoked)
+    );
+}
+
+#[test]
+fn edited_requires_a_signed_base_change() {
+    let adapter = adapter(FakeApi::new(dummy_snapshot()));
+    let base_change = replaced_once(
+        BODY,
+        r#""action":"opened","#,
+        r#""action":"edited","changes":{"base":{"ref":{"from":"main"}}},"#,
+    );
+    let accepted = authenticated(
+        &adapter,
+        &base_change,
+        &[],
+        SignedTimePolicy::ReplayOnly,
+        provider(),
+    )
+    .unwrap();
+    assert_eq!(
+        accepted.delivery().provider_run.candidate_commit.as_str(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    );
+
+    let title_change = replaced_once(
+        BODY,
+        r#""action":"opened","#,
+        r#""action":"edited","changes":{"title":{"from":"old title"}},"#,
+    );
+    assert_eq!(
+        authenticated(
+            &adapter,
+            &title_change,
+            &[],
+            SignedTimePolicy::ReplayOnly,
+            provider(),
+        ),
+        Err(ProviderError::Authentication)
+    );
+}
+
+#[test]
+fn signed_source_outlives_the_live_api_adapter() {
+    let source = Arc::new(source());
+    let dropped = Arc::new(AtomicBool::new(false));
+    let adapter = GitHubPullRequestAdapter::from_source(
+        Arc::clone(&source),
+        DropApi {
+            dropped: Arc::clone(&dropped),
+        },
+    );
+    let through_adapter = authenticated(
+        &adapter,
+        BODY,
+        &[],
+        SignedTimePolicy::ReplayOnly,
+        provider(),
+    )
+    .unwrap();
+    drop(adapter);
+    assert!(dropped.load(Ordering::Acquire));
+    let through_source = authenticated(
+        source.as_ref(),
+        BODY,
+        &[],
+        SignedTimePolicy::ReplayOnly,
+        provider(),
+    )
+    .unwrap();
+    assert_eq!(through_adapter, through_source);
 }
 
 #[test]
@@ -210,7 +349,7 @@ fn rejects_malformed_or_internally_inconsistent_signed_payloads() {
     ];
     for body in cases {
         let adapter = adapter(FakeApi::new(dummy_snapshot()));
-        let result = try_authenticate(
+        let result = authenticated(
             &adapter,
             &body,
             &[],
@@ -243,7 +382,7 @@ fn rejects_body_tampering_and_wrong_routes() {
         instance: ProviderInstance::new("github.enterprise.test".to_owned()).unwrap(),
     };
     assert_eq!(
-        try_authenticate(
+        authenticated(
             &adapter,
             BODY,
             &[],
@@ -253,7 +392,7 @@ fn rejects_body_tampering_and_wrong_routes() {
         Err(ProviderError::Authentication)
     );
     assert_eq!(
-        try_authenticate(
+        authenticated(
             &adapter,
             BODY,
             &[],
@@ -265,9 +404,10 @@ fn rejects_body_tampering_and_wrong_routes() {
 }
 
 #[test]
-fn refresh_delegates_only_when_the_authoritative_identity_is_exact() {
+fn refresh_marks_ref_drift_superseded() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
-    let verified = authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider());
+    let verified =
+        authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = verified.delivery().clone();
     let exact = snapshot(&delivery, "topic", "main");
     let exact_api = FakeApi::new(exact.clone());
@@ -287,8 +427,22 @@ fn refresh_delegates_only_when_the_authoritative_identity_is_exact() {
         }]
     );
 
-    let wrong = snapshot(&delivery, "other", "main");
-    let wrong_api = FakeApi::new(wrong);
+    let drifted = snapshot(&delivery, "other", "main");
+    let drifted_api = FakeApi::new(drifted.clone());
+    let drifted_adapter = adapter(drifted_api.clone());
+    assert_eq!(
+        drifted_adapter.refresh(&delivery),
+        Ok(ChangeSnapshot {
+            state: ChangeState::Superseded,
+            run: drifted.run,
+            gate_commit: drifted.gate_commit,
+        })
+    );
+    assert_eq!(drifted_api.state.refreshes.load(Ordering::Relaxed), 1);
+
+    let mut wrong_candidate = snapshot(&delivery, "topic", "main");
+    wrong_candidate.run.commits.candidate = oid('e');
+    let wrong_api = FakeApi::new(wrong_candidate);
     let wrong_adapter = adapter(wrong_api.clone());
     assert_eq!(
         wrong_adapter.refresh(&delivery),
@@ -310,13 +464,15 @@ fn refresh_delegates_only_when_the_authoritative_identity_is_exact() {
 #[test]
 fn publication_is_delegated_only_under_the_authenticated_identity() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
-    let verified = authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider());
+    let verified =
+        authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = verified.delivery().clone();
     let run = snapshot(&delivery, "topic", "main").run;
     let valid = publication(&delivery, run.clone());
     let api = FakeApi::new(ChangeSnapshot {
         state: ChangeState::Active,
         run: run.clone(),
+        gate_commit: oid('e'),
     });
     let adapter = adapter(api.clone());
     assert_eq!(adapter.publish(&delivery, &valid), Ok(()));
@@ -328,9 +484,23 @@ fn publication_is_delegated_only_under_the_authenticated_identity() {
         Err(ProviderError::InvalidResponse)
     );
     assert_eq!(api.state.publications.lock().unwrap().len(), 1);
+
+    let mut cancelled = publication(&delivery, snapshot(&delivery, "changed", "main").run);
+    cancelled.conclusion = CheckConclusion::Superseded;
+    cancelled.report = None;
+    assert_eq!(adapter.publish(&delivery, &cancelled), Ok(()));
+    assert_eq!(api.state.publications.lock().unwrap().len(), 2);
 }
 
 fn adapter(api: FakeApi) -> GitHubPullRequestAdapter<FakeApi> {
+    GitHubPullRequestAdapter::new(provider(), webhook(), api)
+}
+
+fn source() -> GitHubPullRequestSource {
+    GitHubPullRequestSource::new(provider(), webhook())
+}
+
+fn webhook() -> GitHubWebhook {
     let trust_set = OpaqueId::new("github-webhooks".to_owned()).unwrap();
     let key = WebhookKey::new(
         OpaqueId::new("current".to_owned()).unwrap(),
@@ -339,11 +509,7 @@ fn adapter(api: FakeApi) -> GitHubPullRequestAdapter<FakeApi> {
         None,
     )
     .unwrap();
-    GitHubPullRequestAdapter::new(
-        provider(),
-        GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap()),
-        api,
-    )
+    GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
 }
 
 fn observed(pull_request: GitHubPullRequest<'_>) -> ApiRequest {
@@ -366,24 +532,14 @@ fn provider() -> ProviderIdentity {
 }
 
 fn authenticated(
-    adapter: &GitHubPullRequestAdapter<FakeApi>,
-    body: &[u8],
-    unsigned: &[(&str, &[u8])],
-    signed_time: SignedTimePolicy,
-    route_provider: ProviderIdentity,
-) -> amiss_controller::VerifiedDelivery {
-    try_authenticate(adapter, body, unsigned, signed_time, route_provider).unwrap()
-}
-
-fn try_authenticate(
-    adapter: &GitHubPullRequestAdapter<FakeApi>,
+    source: &dyn SignedSource,
     body: &[u8],
     unsigned: &[(&str, &[u8])],
     signed_time: SignedTimePolicy,
     route_provider: ProviderIdentity,
 ) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
     try_authenticate_with_signature(
-        adapter,
+        source,
         body,
         &signature(body),
         unsigned,
@@ -393,7 +549,7 @@ fn try_authenticate(
 }
 
 fn try_authenticate_with_signature(
-    adapter: &GitHubPullRequestAdapter<FakeApi>,
+    source: &dyn SignedSource,
     body: &[u8],
     signature: &[u8],
     unsigned: &[(&str, &[u8])],
@@ -427,7 +583,7 @@ fn try_authenticate_with_signature(
             &FixedClock,
         )
         .unwrap();
-    adapter.authenticate(check)
+    source.authenticate_delivery(check)
 }
 
 fn policy() -> IngressPolicy {
@@ -437,6 +593,35 @@ fn policy() -> IngressPolicy {
         Duration::ZERO,
     )
     .unwrap()
+}
+
+fn authenticate_target(
+    source: &GitHubPullRequestSource,
+    body: &[u8],
+    target: &BranchRef,
+) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
+    let signature = signature(body);
+    let headers = [DeliveryHeader {
+        name: "x-hub-signature-256",
+        value: &signature,
+    }];
+    let route = DeliveryRoute {
+        provider: provider(),
+        trust_set: OpaqueId::new("github-webhooks".to_owned()).unwrap(),
+        signed_time: SignedTimePolicy::ReplayOnly,
+    };
+    let check = policy()
+        .pre_auth(
+            UntrustedDelivery {
+                route: &route,
+                received_at_unix_millis: NOW,
+                headers: &headers,
+                body,
+            },
+            &FixedClock,
+        )
+        .unwrap();
+    source.authenticate_for_target(check, target)
 }
 
 fn signature(body: &[u8]) -> Vec<u8> {
@@ -474,6 +659,7 @@ fn snapshot(
             },
         )
         .unwrap(),
+        gate_commit: oid('e'),
     }
 }
 
@@ -508,6 +694,7 @@ fn dummy_snapshot() -> ChangeSnapshot {
             },
         )
         .unwrap(),
+        gate_commit: oid('e'),
     }
 }
 
@@ -522,7 +709,8 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
             execution_constraint_digest: digest,
         },
         run,
-        conclusion: amiss_controller::CheckConclusion::Pass,
+        gate_commit: oid('e'),
+        conclusion: CheckConclusion::Pass,
         report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
     }
 }

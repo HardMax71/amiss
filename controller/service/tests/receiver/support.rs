@@ -100,6 +100,7 @@ pub(crate) fn receiver_config() -> ReceiverConfig {
         max_body_bytes: 1_024,
         max_headers: 16,
         max_header_bytes: 2_048,
+        max_concurrent_deliveries: 4,
     }
 }
 
