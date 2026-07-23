@@ -23,7 +23,7 @@ fn signed_delivery_reaches_one_pass_and_replay_is_suppressed() {
     harness.enqueue();
 
     assert_eq!(harness.work(), WorkOutcome::Processed);
-    assert_eq!(harness.conclusion(), Some(CheckConclusion::Pass));
+    harness.expect_conclusion(Some(CheckConclusion::Pass));
     assert!(harness.inbox.lock().unwrap().entries().unwrap().is_empty());
 
     harness.enqueue();
@@ -71,10 +71,9 @@ fn wrong_tree_and_changed_bootstrap_publish_tampered_runtime() {
         harness.enqueue();
 
         assert_eq!(harness.work(), WorkOutcome::Processed);
-        assert_eq!(
-            harness.conclusion(),
-            Some(CheckConclusion::Unavailable(RunFailure::TamperedRuntime))
-        );
+        harness.expect_conclusion(Some(CheckConclusion::Unavailable(
+            RunFailure::TamperedRuntime,
+        )));
     }
 }
 
@@ -95,12 +94,9 @@ fn ruleset_revocation_reaches_the_required_check() {
     harness.enqueue();
 
     assert_eq!(harness.work(), WorkOutcome::Processed);
-    assert_eq!(
-        harness.conclusion(),
-        Some(CheckConclusion::Unavailable(
-            RunFailure::AuthorizationRevoked
-        ))
-    );
+    harness.expect_conclusion(Some(CheckConclusion::Unavailable(
+        RunFailure::AuthorizationRevoked,
+    )));
 }
 
 #[test]
@@ -113,9 +109,6 @@ fn missing_output_and_timeout_reach_distinct_failures() {
         harness.enqueue();
 
         assert_eq!(harness.work(), WorkOutcome::Processed);
-        assert_eq!(
-            harness.conclusion(),
-            Some(CheckConclusion::Unavailable(failure))
-        );
+        harness.expect_conclusion(Some(CheckConclusion::Unavailable(failure)));
     }
 }

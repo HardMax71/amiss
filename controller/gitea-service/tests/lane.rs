@@ -31,7 +31,7 @@ fn both_family_headers_reach_one_pass_and_replay_is_suppressed() {
         harness.enqueue();
 
         assert_eq!(harness.work(), WorkOutcome::Processed);
-        assert_eq!(harness.conclusion(), Some(CheckConclusion::Pass));
+        harness.expect_conclusion(Some(CheckConclusion::Pass));
         assert!(harness.inbox.lock().unwrap().entries().unwrap().is_empty());
 
         harness.enqueue();
@@ -90,10 +90,9 @@ fn wrong_tree_and_changed_bootstrap_publish_tampered_runtime() {
         harness.enqueue();
 
         assert_eq!(harness.work(), WorkOutcome::Processed);
-        assert_eq!(
-            harness.conclusion(),
-            Some(CheckConclusion::Unavailable(RunFailure::TamperedRuntime))
-        );
+        harness.expect_conclusion(Some(CheckConclusion::Unavailable(
+            RunFailure::TamperedRuntime,
+        )));
     }
 }
 
@@ -121,7 +120,7 @@ fn publication_failure_is_retried_from_the_staged_result() {
 
     std::thread::sleep(Duration::from_millis(60));
     assert_eq!(harness.work(), WorkOutcome::Processed);
-    assert_eq!(harness.conclusion(), Some(CheckConclusion::Pass));
+    harness.expect_conclusion(Some(CheckConclusion::Pass));
     assert!(harness.inbox.lock().unwrap().entries().unwrap().is_empty());
 }
 

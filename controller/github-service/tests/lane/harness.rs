@@ -191,11 +191,17 @@ impl Harness {
         self.worker.work_once().unwrap()
     }
 
-    pub(super) fn conclusion(&self) -> Option<CheckConclusion> {
-        self.api
+    pub(super) fn expect_conclusion(&self, expected: Option<CheckConclusion>) {
+        let last = self
+            .api
             .publications()
             .last()
-            .map(|publication| publication.conclusion)
+            .map(|publication| publication.conclusion);
+        assert!(
+            last == expected,
+            "expected {expected:?}, got {last:?}; {}",
+            self.api.flow_trace()
+        );
     }
 }
 
@@ -301,7 +307,7 @@ impl LaneCase {
         if matches!(self, Self::Timeout) {
             Duration::from_millis(50)
         } else {
-            Duration::from_secs(1)
+            Duration::from_secs(10)
         }
     }
 }

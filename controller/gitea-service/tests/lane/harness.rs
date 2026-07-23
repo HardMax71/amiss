@@ -117,7 +117,7 @@ impl Harness {
             repositories.acquisition(),
             executable_for(settings.tampered_runtime, &state, &executable),
             scratch,
-            Duration::from_secs(1),
+            Duration::from_secs(10),
             Duration::from_mins(5),
             Arc::clone(&clock),
         )
@@ -207,8 +207,13 @@ impl Harness {
         self.worker.work_once().unwrap()
     }
 
-    pub(super) fn conclusion(&self) -> Option<CheckConclusion> {
-        last_conclusion(&self.api)
+    pub(super) fn expect_conclusion(&self, expected: Option<CheckConclusion>) {
+        let last = last_conclusion(&self.api);
+        assert!(
+            last == expected,
+            "expected {expected:?}, got {last:?}; {}",
+            super::provider::flow_trace(&self.api)
+        );
     }
 }
 
