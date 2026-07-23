@@ -254,7 +254,7 @@ impl LaneCase {
         if matches!(self, Self::Timeout) {
             Duration::from_millis(50)
         } else {
-            Duration::from_secs(1)
+            Duration::from_secs(10)
         }
     }
 

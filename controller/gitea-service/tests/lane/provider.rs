@@ -179,6 +179,19 @@ pub(super) fn publication_count(api: &FakeGitea) -> usize {
     api.state.publications.lock().unwrap().len()
 }
 
+pub(super) fn flow_trace(api: &FakeGitea) -> String {
+    let conclusions: Vec<_> = api
+        .state
+        .publications
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|publication| publication.conclusion)
+        .collect();
+    let refreshes_left = api.state.refreshes.lock().unwrap().len();
+    format!("published {conclusions:?}, scripted refreshes left {refreshes_left}")
+}
+
 pub(super) fn last_conclusion(api: &FakeGitea) -> Option<amiss_controller::CheckConclusion> {
     api.state
         .publications
