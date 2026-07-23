@@ -21,6 +21,12 @@ IID:
 {"merge_request_iid": 42}
 ```
 
+The bearer token, not that body, supplies the project, pipeline, job, runner, policy origin, exact
+train commit, issue time, and replay ID. The service requires an RS256 token under one configured
+key ID, issuer, and audience. It then binds the `job_project_id`, canonical
+`job_project_path`, `pipeline_id`, `job_id`, `runner_id`, `runner_environment`, `sha`,
+`pipeline_source`, `job_source`, and policy `job_config` claims. The pipeline source must be
+`merge_request_event`, and the job source must be `pipeline_execution_policy`.
 ```dot process
 digraph gitlab_provider {
   rankdir = TB;
@@ -48,13 +54,6 @@ digraph gitlab_provider {
 
 }
 ```
-
-The bearer token, not that body, supplies the project, pipeline, job, runner, policy origin, exact
-train commit, issue time, and replay ID. The service requires an RS256 token under one configured
-key ID, issuer, and audience. It then binds the `job_project_id`, canonical
-`job_project_path`, `pipeline_id`, `job_id`, `runner_id`, `runner_environment`, `sha`,
-`pipeline_source`, `job_source`, and policy `job_config` claims. The pipeline source must be
-`merge_request_event`, and the job source must be `pipeline_execution_policy`.
 
 The first provider refresh reads the exact job, pipeline, merge-train car, merge request, project,
 target branch, protected-branch rules, and Git objects. The service requires the job, pipeline,
