@@ -28,6 +28,8 @@ const BODY: &[u8] = br#"{"event":"change"}"#;
 const ROUTE_ID: &str = "github-main";
 const SOURCE_ID: &str = "source-1";
 const SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
+const STEADY_LEASE: Duration = Duration::from_secs(30);
+const RENEWAL_LEASE: Duration = Duration::from_secs(2);
 
 pub(crate) enum Refresh {
     Active,
@@ -181,13 +183,18 @@ impl Fixture {
         refreshes: impl IntoIterator<Item = Refresh>,
         runner_delay: Duration,
     ) -> Self {
-        Self::build(refreshes, runner_delay, None)
+        Self::build(refreshes, runner_delay, None, STEADY_LEASE)
     }
 
     pub(crate) fn held(refreshes: impl IntoIterator<Item = Refresh>) -> (Self, Arc<AtomicBool>) {
         let release = Arc::new(AtomicBool::new(false));
         (
-            Self::build(refreshes, Duration::ZERO, Some(Arc::clone(&release))),
+            Self::build(
+                refreshes,
+                Duration::ZERO,
+                Some(Arc::clone(&release)),
+                RENEWAL_LEASE,
+            ),
             release,
         )
     }
@@ -196,6 +203,7 @@ impl Fixture {
         refreshes: impl IntoIterator<Item = Refresh>,
         runner_delay: Duration,
         release: Option<Arc<AtomicBool>>,
+        inbox_lease: Duration,
     ) -> Self {
         let temporary = TempDir::new().unwrap();
         let inbox_root = temporary.path().join("inbox");
@@ -230,7 +238,7 @@ impl Fixture {
         )
         .unwrap();
         let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_secs(30)).unwrap();
-        let ledger_config = FileLedgerConfig::new(Duration::from_millis(100), 16, replay).unwrap();
+        let ledger_config = FileLedgerConfig::new(STEADY_LEASE, 16, replay).unwrap();
         let ledger =
             FileLedger::open_with_clock(&ledger_root, ledger_config, Arc::clone(&clock)).unwrap();
         let started = Arc::new(Barrier::new(
@@ -261,7 +269,7 @@ impl Fixture {
             Arc::clone(&clock),
         );
         let inbox = Arc::new(Mutex::new(
-            Inbox::open(&inbox_root, inbox_limits()).unwrap(),
+            Inbox::open(&inbox_root, inbox_limits(inbox_lease)).unwrap(),
         ));
         let admission = Arc::new(Admission::new());
         let shared_admission: Arc<dyn DeliveryAdmission> = admission.clone();
@@ -417,9 +425,9 @@ fn plan() -> amiss_controller::CheckPlan {
     check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap()
 }
 
-fn inbox_limits() -> InboxLimits {
+fn inbox_limits(lease_duration: Duration) -> InboxLimits {
     InboxLimits {
-        lease_duration: Duration::from_millis(80),
+        lease_duration,
         max_records: 8,
         max_bytes: 262_144,
         max_record_bytes: 131_072,
