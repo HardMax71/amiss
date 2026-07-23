@@ -62,7 +62,7 @@ test-merge commit. A changed head or gate, closed pull request, removed authoriz
 missing output, or tampered runtime cannot turn the new evaluation into a pass.
 
 The raw inbox is not the replay authority. It removes a row after the controller finishes.
-The separate [`FileLedger`](controller.md) keeps the final delivery state and makes a repeated
+The separate [`FileLedger`](file-ledger.md) keeps the final delivery state and makes a repeated
 publication use the same evaluation and result.
 
 ## GitHub App
