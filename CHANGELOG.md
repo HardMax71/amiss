@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/HardMax71/amiss/compare/v0.8.0...v0.9.0) - 2026-07-23
+
+### Changes
+
+- Fold licensing into the introduction
+- Share required status validation
+- Add checked UTC epoch conversion
+- Add canonical commit identity builder
+- Add provider-facing trust foundation
+- Address provider controls review
+- Streamline provider control paths
+- Require controller-owned bootstrap outputs
+- Seal bootstrap output files
+- Carry bootstrap refusal classes at origin
+- Make bootstrap termination coherent
+- Emit closed bootstrap results
+- Define bootstrap result records
+
 ## [0.8.0](https://github.com/HardMax71/amiss/compare/v0.7.0...v0.8.0) - 2026-07-20
 
 ### Changes
