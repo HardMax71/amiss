@@ -29,35 +29,20 @@ const MAX_IO_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GitHubTimeouts {
     connect: Duration,
-    read: Duration,
-    write: Duration,
     operation: Duration,
 }
 
 impl GitHubTimeouts {
-    /// Bounds transport phases and one complete `refresh` or `publish` call.
+    /// Bounds the connect phase and one complete `refresh` or `publish` call.
     ///
-    /// The operation timeout must be no longer than 30 seconds and must cover
-    /// every transport phase. Configure it below the controller ledger lease.
-    pub fn new(
-        connect: Duration,
-        read: Duration,
-        write: Duration,
-        operation: Duration,
-    ) -> Option<Self> {
-        let phases = [connect, read, write];
-        let phases_valid = phases
-            .into_iter()
-            .all(|timeout| !timeout.is_zero() && timeout <= MAX_IO_TIMEOUT);
-        let operation_valid = !operation.is_zero()
-            && operation <= MAX_IO_TIMEOUT
-            && phases.into_iter().all(|timeout| timeout <= operation);
-        (phases_valid && operation_valid).then_some(Self {
-            connect,
-            read,
-            write,
-            operation,
-        })
+    /// The operation timeout must be no longer than 30 seconds and covers
+    /// every request phase. Configure it below the controller ledger lease.
+    pub fn new(connect: Duration, operation: Duration) -> Option<Self> {
+        let valid = !connect.is_zero()
+            && !operation.is_zero()
+            && connect <= operation
+            && operation <= MAX_IO_TIMEOUT;
+        valid.then_some(Self { connect, operation })
     }
 }
 

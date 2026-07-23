@@ -438,17 +438,12 @@ fn moved_head_publication_never_lands_on_the_new_gate() {
 #[test]
 fn timeout_configuration_bounds_the_whole_operation() {
     let second = std::time::Duration::from_secs(1);
-    assert!(super::GitHubTimeouts::new(second, second, second, second).is_some());
+    assert!(super::GitHubTimeouts::new(second, second).is_some());
     for invalid in [
-        super::GitHubTimeouts::new(std::time::Duration::ZERO, second, second, second),
-        super::GitHubTimeouts::new(second, second, second, std::time::Duration::ZERO),
-        super::GitHubTimeouts::new(
-            second,
-            second,
-            second,
-            std::time::Duration::from_millis(999),
-        ),
-        super::GitHubTimeouts::new(second, second, second, std::time::Duration::from_secs(31)),
+        super::GitHubTimeouts::new(std::time::Duration::ZERO, second),
+        super::GitHubTimeouts::new(second, std::time::Duration::ZERO),
+        super::GitHubTimeouts::new(second, std::time::Duration::from_millis(999)),
+        super::GitHubTimeouts::new(second, std::time::Duration::from_secs(31)),
     ] {
         assert!(invalid.is_none());
     }

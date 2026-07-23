@@ -136,13 +136,7 @@ struct Claims {
 
 #[test]
 fn an_expired_deadline_fails_before_any_transport_io() {
-    let timeouts = GitHubTimeouts::new(
-        Duration::from_secs(1),
-        Duration::from_secs(1),
-        Duration::from_secs(1),
-        Duration::from_secs(1),
-    )
-    .unwrap();
+    let timeouts = GitHubTimeouts::new(Duration::from_secs(1), Duration::from_secs(1)).unwrap();
     let transport = Transport::new(
         99,
         7,
