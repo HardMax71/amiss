@@ -28,6 +28,7 @@
   - [GitLab](provider-gitlab.md)
   - [Gitea and Forgejo](provider-gitea.md)
 - [Controller delivery](controller.md)
+  - [The file ledger](file-ledger.md)
 - [Licenses and notices](licenses.md)
 
 # The project
