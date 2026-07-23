@@ -1,10 +1,12 @@
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex};
 
 use amiss_controller_service::{EvaluationConfig, evaluation_router};
-use axum::body::Body;
+use axum::body::{Body, Bytes};
 use axum::http::{Method, Request, StatusCode};
+use tokio_stream::StreamExt as _;
 use tower::ServiceExt as _;
 
 const PATH: &str = "/provider/evaluate";
@@ -79,12 +81,15 @@ async fn full_evaluation_capacity_rejects_without_starting_more_work()
 -> Result<(), Box<dyn std::error::Error>> {
     let calls = Arc::new(AtomicUsize::new(0));
     let release = Arc::new((Mutex::new(false), Condvar::new()));
+    let started = Arc::new(tokio::sync::Notify::new());
     let observed_calls = Arc::clone(&calls);
     let observed_release = Arc::clone(&release);
+    let observed_started = Arc::clone(&started);
     let mut limited = config();
     limited.max_concurrent_evaluations = 1;
     let app = evaluation_router(&limited, move |_request| {
         observed_calls.fetch_add(1, Ordering::SeqCst);
+        observed_started.notify_one();
         let (lock, ready) = &*observed_release;
         let mut released = lock
             .lock()
@@ -103,12 +108,7 @@ async fn full_evaluation_capacity_rejects_without_starting_more_work()
         .uri(PATH)
         .body(Body::from("first"))?;
     let first = tokio::spawn(async move { first_app.oneshot(first_request).await });
-    for _attempt in 0..10_000 {
-        if calls.load(Ordering::SeqCst) > 0 {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    tokio::time::timeout(std::time::Duration::from_secs(2), started.notified()).await?;
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     let second = app
         .oneshot(
@@ -127,6 +127,62 @@ async fn full_evaluation_capacity_rejects_without_starting_more_work()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
     ready.notify_one();
     assert_eq!(first.await??.status(), StatusCode::NO_CONTENT);
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+async fn pending_body_times_out_and_releases_evaluation_capacity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed_calls = Arc::clone(&calls);
+    let mut limited = config();
+    limited.max_concurrent_evaluations = 1;
+    let app = evaluation_router(&limited, move |_request| {
+        observed_calls.fetch_add(1, Ordering::SeqCst);
+        StatusCode::NO_CONTENT
+    })?;
+    let (body_read, observed) = tokio::sync::oneshot::channel();
+    let mut body_read = Some(body_read);
+    let stream = tokio_stream::once(Ok::<_, Infallible>(Bytes::new()))
+        .chain(tokio_stream::pending())
+        .map(move |item| {
+            if let Some(body_read) = body_read.take() {
+                let _ignored = body_read.send(());
+            }
+            item
+        });
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(PATH)
+        .body(Body::from_stream(stream))?;
+    let pending_app = app.clone();
+    let pending = tokio::spawn(async move { pending_app.oneshot(request).await });
+
+    observed.await?;
+    let saturated = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(PATH)
+                .body(Body::from("second"))?,
+        )
+        .await?;
+    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    tokio::time::advance(std::time::Duration::from_secs(31)).await;
+    assert_eq!(pending.await??.status(), StatusCode::REQUEST_TIMEOUT);
+    let evaluated = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(PATH)
+                .body(Body::from("after-timeout"))?,
+        )
+        .await?;
+    assert_eq!(evaluated.status(), StatusCode::NO_CONTENT);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
     Ok(())
 }
 

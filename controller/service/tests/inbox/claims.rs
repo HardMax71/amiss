@@ -54,7 +54,7 @@ fn retry_waits_until_the_requested_time() {
 }
 
 #[test]
-fn renewal_extends_the_live_claim_and_expired_tokens_are_lost() {
+fn renewal_fences_the_replaced_token() {
     let directory = TempDir::new().unwrap();
     let mut inbox = open(directory.path());
     inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
@@ -65,12 +65,41 @@ fn renewal_extends_the_live_claim_and_expired_tokens_are_lost() {
     };
     assert_eq!(renewed.expires_at_unix_millis, 250);
     assert!(matches!(
-        inbox.renew(&renewed, 250).unwrap(),
+        inbox.renew(&first.lease, 160).unwrap(),
         RenewOutcome::Lost
     ));
-    assert_eq!(inbox.retry(&renewed, 250, 300).unwrap(), RetryOutcome::Lost);
     assert_eq!(
-        inbox.complete(&renewed, 250).unwrap(),
+        inbox.retry(&first.lease, 160, 300).unwrap(),
+        RetryOutcome::Lost
+    );
+    assert_eq!(
+        inbox.complete(&first.lease, 160).unwrap(),
+        CompleteOutcome::Lost
+    );
+    assert_eq!(
+        inbox.complete(&renewed, 160).unwrap(),
+        CompleteOutcome::Completed
+    );
+}
+
+#[test]
+fn renewal_never_shortens_on_clock_rollback_and_expired_tokens_are_lost() {
+    let directory = TempDir::new().unwrap();
+    let mut inbox = open(directory.path());
+    inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+    let first = claimed(inbox.claim(100).unwrap());
+    let renewed = match inbox.renew(&first.lease, 50).unwrap() {
+        RenewOutcome::Renewed(lease) => lease,
+        RenewOutcome::Lost => panic!("live lease was lost"),
+    };
+    assert_eq!(renewed.expires_at_unix_millis, 200);
+    assert!(matches!(
+        inbox.renew(&renewed, 200).unwrap(),
+        RenewOutcome::Lost
+    ));
+    assert_eq!(inbox.retry(&renewed, 200, 300).unwrap(), RetryOutcome::Lost);
+    assert_eq!(
+        inbox.complete(&renewed, 200).unwrap(),
         CompleteOutcome::Lost
     );
 }

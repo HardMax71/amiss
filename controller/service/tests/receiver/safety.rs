@@ -26,6 +26,7 @@ async fn response_errors_never_echo_authentication_or_body_bytes() {
         ))
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let response_body = body::to_bytes(response.into_body(), 1_024).await.unwrap();
     assert!(
         !response_body

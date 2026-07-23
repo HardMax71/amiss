@@ -378,7 +378,7 @@ fn inbox_limits() -> InboxLimits {
         lease_duration: Duration::from_secs(2),
         max_records: 16,
         max_bytes: 16_777_216,
-        max_record_bytes: 1_048_576,
+        max_record_bytes: 2_097_152,
         max_body_bytes: 1_000_000,
         max_headers: 32,
         max_header_bytes: 8_192,

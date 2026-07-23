@@ -1,3 +1,4 @@
+use std::fs;
 use std::time::Duration;
 
 use amiss_controller_service::{
@@ -5,7 +6,7 @@ use amiss_controller_service::{
 };
 use tempfile::TempDir;
 
-use super::support::{claimed, incoming, incoming_at, limits, open};
+use super::support::{claimed, incoming, incoming_at, limits, open, row_file};
 
 #[test]
 fn delivery_survives_restart_and_is_enumerable() {
@@ -72,14 +73,89 @@ fn record_and_byte_capacity_are_enforced_before_writing() {
 
     let byte_directory = TempDir::new().unwrap();
     let mut byte_limits = limits();
-    byte_limits.max_record_bytes = 256;
-    byte_limits.max_bytes = 512;
+    byte_limits.max_bytes = 160_000;
     let mut bytes = Inbox::open(byte_directory.path(), byte_limits).unwrap();
+    bytes.enqueue(incoming("delivery-1", b"body")).unwrap();
     assert!(matches!(
-        bytes.enqueue(incoming("delivery-1", b"body")),
+        bytes.enqueue(incoming("delivery-2", b"body")),
         Err(InboxError::Full)
     ));
-    assert!(bytes.entries().unwrap().is_empty());
+    assert_eq!(bytes.entries().unwrap().len(), 1);
+}
+
+#[test]
+fn maximum_valid_delivery_can_be_claimed_after_acknowledgement() {
+    let directory = TempDir::new().unwrap();
+    let mut bounded = limits();
+    bounded.max_record_bytes = 80_000;
+    bounded.max_bytes = 160_000;
+    let mut inbox = Inbox::open(directory.path(), bounded).unwrap();
+    let route = "\"".repeat(128);
+    let source_id = "\\".repeat(128);
+    let names = ["X-A", "X-B", "X-C", "X-D", "X-E", "X-F", "X-G", "X-H"];
+    let values = (0..8).map(|_| vec![b'x'; 253]).collect::<Vec<_>>();
+    let headers = names
+        .iter()
+        .zip(&values)
+        .map(|(name, value)| IncomingHeader {
+            name,
+            value: value.as_slice(),
+        })
+        .collect::<Vec<_>>();
+    let body = vec![b'x'; 4_096];
+
+    assert_eq!(
+        inbox
+            .enqueue(IncomingDelivery {
+                route: &route,
+                source_id: &source_id,
+                received_at_unix_millis: 0,
+                headers: &headers,
+                body: &body,
+            })
+            .unwrap(),
+        EnqueueOutcome::Stored
+    );
+    let claimed = claimed(inbox.claim(0).unwrap());
+    assert_eq!(claimed.delivery.route, route);
+    assert_eq!(claimed.delivery.source_id, source_id);
+    assert_eq!(claimed.delivery.headers.len(), 8);
+    assert_eq!(claimed.delivery.body.len(), 4_096);
+}
+
+#[test]
+fn existing_dense_roots_drain_while_new_admission_uses_the_reservation() {
+    let directory = TempDir::new().unwrap();
+    let second_directory = TempDir::new().unwrap();
+    let mut bounded = limits();
+    bounded.max_record_bytes = 80_000;
+    bounded.max_bytes = 160_000;
+    let mut first = Inbox::open(directory.path(), bounded).unwrap();
+    first.enqueue(incoming("delivery-1", b"one")).unwrap();
+    drop(first);
+    let mut second = Inbox::open(second_directory.path(), bounded).unwrap();
+    second.enqueue(incoming("delivery-2", b"two")).unwrap();
+    drop(second);
+    let second_row = row_file(second_directory.path());
+    fs::copy(
+        &second_row,
+        directory.path().join(second_row.file_name().unwrap()),
+    )
+    .unwrap();
+
+    let mut reopened = Inbox::open(directory.path(), bounded).unwrap();
+    assert!(matches!(
+        reopened.enqueue(incoming("delivery-3", b"three")),
+        Err(InboxError::Full)
+    ));
+    for _ in 0..2 {
+        let claimed = claimed(reopened.claim(0).unwrap());
+        assert_eq!(
+            reopened.complete(&claimed.lease, 0).unwrap(),
+            amiss_controller_service::CompleteOutcome::Completed
+        );
+    }
+    assert!(matches!(reopened.claim(0).unwrap(), ClaimOutcome::Empty));
 }
 
 #[test]
@@ -162,6 +238,14 @@ fn impossible_limits_are_configuration_errors() {
         },
         amiss_controller_service::InboxLimits {
             max_record_bytes: 16 * 1_024 * 1_024 + 1,
+            ..limits()
+        },
+        amiss_controller_service::InboxLimits {
+            max_record_bytes: 256,
+            ..limits()
+        },
+        amiss_controller_service::InboxLimits {
+            max_body_bytes: u64::MAX,
             ..limits()
         },
     ] {

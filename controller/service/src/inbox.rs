@@ -30,6 +30,7 @@ pub struct DeliveryLease {
     key: String,
     owner: String,
     fence: u64,
+    generation: u64,
 }
 
 pub enum RenewOutcome {
@@ -287,7 +288,13 @@ impl Inbox {
         let row = entries.rows.get(&lease.key).ok_or(InboxError::Corrupt)?;
         let record = row.record.clone();
         let bytes = row.bytes;
-        let live = record.lease_is_live(&lease.owner, lease.fence, now);
+        let live = record.lease_is_live(
+            &lease.owner,
+            lease.fence,
+            lease.generation,
+            lease.expires_at_unix_millis,
+            now,
+        );
         Ok(live.then_some(LeasedRow {
             entries,
             record,
@@ -303,6 +310,7 @@ fn make_lease(key: String, lease: LeaseData) -> DeliveryLease {
         key,
         owner: lease.owner,
         fence: lease.fence,
+        generation: lease.generation,
     }
 }
 

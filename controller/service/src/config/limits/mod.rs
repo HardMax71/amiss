@@ -48,6 +48,8 @@ pub fn load_limits(raw: &ServiceLimits, webhook_path: String) -> Result<LoadedLi
         max_header_bytes: common.endpoint.header_bytes,
         max_concurrent_deliveries: raw.queue.max_concurrent_deliveries,
     };
+    crate::receiver::validate(&receiver)
+        .map_err(|_defect| ConfigError("webhook endpoint is invalid"))?;
     Ok(LoadedLimits {
         receiver,
         inbox,
@@ -78,14 +80,17 @@ pub fn load_execution_limits(
         return Err(ConfigError("evaluation concurrency is invalid"));
     }
     let common = checked_common(raw)?;
+    let evaluation = EvaluationConfig {
+        path: evaluation_path,
+        max_body_bytes: common.endpoint.body_bytes,
+        max_headers: common.endpoint.headers,
+        max_header_bytes: common.endpoint.header_bytes,
+        max_concurrent_evaluations,
+    };
+    crate::evaluation::validate(&evaluation)
+        .map_err(|_defect| ConfigError("evaluation endpoint is invalid"))?;
     Ok(LoadedExecutionLimits {
-        evaluation: EvaluationConfig {
-            path: evaluation_path,
-            max_body_bytes: common.endpoint.body_bytes,
-            max_headers: common.endpoint.headers,
-            max_header_bytes: common.endpoint.header_bytes,
-            max_concurrent_evaluations,
-        },
+        evaluation,
         ledger: common.ledger,
         ingress: common.ingress,
         replay: common.replay,

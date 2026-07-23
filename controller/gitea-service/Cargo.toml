@@ -27,7 +27,6 @@ amiss-controller-service = { path = "../service" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1.53.1", features = ["net", "rt-multi-thread", "signal"] }
 
 [dev-dependencies]
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }

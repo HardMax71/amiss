@@ -3,7 +3,7 @@ use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::{Deserialize, Serialize};
 
-use crate::{ControllerEvaluationId, Publication};
+use crate::{AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, Publication};
 
 use super::model::{
     StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check, store_check,
@@ -19,7 +19,8 @@ pub(in crate::file_ledger) struct StoredPublication {
     evaluation_id: String,
     check: StoredCheck,
     run: StoredRun,
-    gate_commit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gate_commit: Option<String>,
     conclusion: StoredConclusion,
     report: StoredReport,
 }
@@ -32,7 +33,7 @@ impl StoredPublication {
             evaluation_id: publication.evaluation_id.as_str().to_owned(),
             check: store_check(&publication.check),
             run: StoredRun::new(&publication.run),
-            gate_commit: publication.gate_commit.as_str().to_owned(),
+            gate_commit: Some(publication.gate_commit.as_str().to_owned()),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
         })
@@ -43,6 +44,10 @@ impl StoredPublication {
             StoredReport::Absent => None,
             StoredReport::Blob { reference } => Some(reference),
         }
+    }
+
+    pub(in crate::file_ledger) const fn has_gate_commit(&self) -> bool {
+        self.gate_commit.is_some()
     }
 
     pub(in crate::file_ledger) fn materialize(
@@ -57,7 +62,10 @@ impl StoredPublication {
             reference.validate()?;
         }
         let run = self.run.materialize()?;
-        let gate_commit = Oid::new(run.object_format, self.gate_commit.clone())
+        let gate_commit = self
+            .gate_commit
+            .as_ref()
+            .and_then(|commit| Oid::new(run.object_format, commit.clone()))
             .ok_or(FileLedgerError::Corrupt)?;
         Ok(Publication {
             provider_run: self.provider_run.materialize()?,
@@ -69,6 +77,36 @@ impl StoredPublication {
             conclusion: self.conclusion.materialize(),
             report: None,
         })
+    }
+
+    pub(super) fn validate_binding(
+        &self,
+        expected_evaluation_id: &str,
+        delivery: &AuthenticatedDelivery,
+        expected_check: &CheckBinding,
+    ) -> Result<(), FileLedgerError> {
+        if let Some(reference) = self.report() {
+            reference.validate()?;
+        }
+        let provider_run = self.provider_run.materialize()?;
+        let evaluation_id = ControllerEvaluationId::new(self.evaluation_id.clone())
+            .ok_or(FileLedgerError::Corrupt)?;
+        let check = materialize_check(&self.check)?;
+        let run = self.run.materialize()?;
+        if self
+            .gate_commit
+            .as_ref()
+            .is_some_and(|commit| Oid::new(run.object_format, commit.clone()).is_none())
+            || evaluation_id.as_str() != expected_evaluation_id
+            || provider_run != delivery.provider_run
+            || run.change != delivery.change
+            || run.object_format != delivery.provider_run.object_format
+            || run.commits.candidate != delivery.provider_run.candidate_commit
+            || check != *expected_check
+        {
+            return Err(FileLedgerError::Corrupt);
+        }
+        Ok(())
     }
 }
 

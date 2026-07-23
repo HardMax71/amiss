@@ -88,7 +88,7 @@ pub async fn serve(listener: TcpListener, router: Router) -> io::Result<()> {
     axum::serve(listener, router).await
 }
 
-fn validate(config: &ReceiverConfig) -> Result<(), ReceiverConfigError> {
+pub(crate) fn validate(config: &ReceiverConfig) -> Result<(), ReceiverConfigError> {
     if !(1..=MAX_BODY_BYTES).contains(&config.max_body_bytes)
         || !(1..=MAX_HEADERS).contains(&config.max_headers)
         || !(1..=MAX_HEADER_BYTES).contains(&config.max_header_bytes)

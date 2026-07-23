@@ -69,7 +69,7 @@ where
             join_worker(worker_result)
         }
         result = &mut worker_task => join_worker(result),
-        signal = tokio::signal::ctrl_c() => {
+        signal = crate::shutdown_signal() => {
             signal.map_err(|_defect| QueuedServiceError("shutdown signal cannot be observed"))?;
             stop.store(true, Ordering::Release);
             join_worker(worker_task.await)

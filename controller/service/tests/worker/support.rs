@@ -138,6 +138,7 @@ impl ProviderAdapter for Adapter {
 pub(crate) struct TestRunner {
     run: RunIdentity,
     delay: Duration,
+    release: Option<Arc<AtomicBool>>,
     started: Arc<Barrier>,
 }
 
@@ -150,10 +151,13 @@ impl Runner for TestRunner {
                 return RunnerOutcome::Unavailable;
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                break;
-            }
-            std::thread::sleep(remaining.min(Duration::from_millis(20)));
+            let wait = match &self.release {
+                Some(release) if release.load(Ordering::Acquire) => break,
+                Some(_release) => Duration::from_millis(20),
+                None if remaining.is_zero() => break,
+                None => remaining.min(Duration::from_millis(20)),
+            };
+            std::thread::sleep(wait);
         }
         RunnerOutcome::Complete {
             identity: Box::new(self.run.clone()),
@@ -176,6 +180,22 @@ impl Fixture {
     pub(crate) fn new(
         refreshes: impl IntoIterator<Item = Refresh>,
         runner_delay: Duration,
+    ) -> Self {
+        Self::build(refreshes, runner_delay, None)
+    }
+
+    pub(crate) fn held(refreshes: impl IntoIterator<Item = Refresh>) -> (Self, Arc<AtomicBool>) {
+        let release = Arc::new(AtomicBool::new(false));
+        (
+            Self::build(refreshes, Duration::ZERO, Some(Arc::clone(&release))),
+            release,
+        )
+    }
+
+    fn build(
+        refreshes: impl IntoIterator<Item = Refresh>,
+        runner_delay: Duration,
+        release: Option<Arc<AtomicBool>>,
     ) -> Self {
         let temporary = TempDir::new().unwrap();
         let inbox_root = temporary.path().join("inbox");
@@ -213,10 +233,17 @@ impl Fixture {
         let ledger_config = FileLedgerConfig::new(Duration::from_millis(100), 16, replay).unwrap();
         let ledger =
             FileLedger::open_with_clock(&ledger_root, ledger_config, Arc::clone(&clock)).unwrap();
-        let started = Arc::new(Barrier::new(if runner_delay.is_zero() { 1 } else { 2 }));
+        let started = Arc::new(Barrier::new(
+            if runner_delay.is_zero() && release.is_none() {
+                1
+            } else {
+                2
+            },
+        ));
         let runner = TestRunner {
             run,
             delay: runner_delay,
+            release,
             started: Arc::clone(&started),
         };
         let ingress = IngressPolicy::new(
@@ -395,7 +422,7 @@ fn inbox_limits() -> InboxLimits {
         lease_duration: Duration::from_millis(80),
         max_records: 8,
         max_bytes: 262_144,
-        max_record_bytes: 32_768,
+        max_record_bytes: 131_072,
         max_body_bytes: 4_096,
         max_headers: 8,
         max_header_bytes: 2_048,

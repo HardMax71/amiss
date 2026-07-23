@@ -14,6 +14,7 @@ use crate::{
 };
 
 const RENEWAL_POLL: Duration = Duration::from_secs(5);
+pub(crate) const MAX_RETRY_DELAY: Duration = Duration::from_hours(24);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeliveryWorkerError(&'static str);
@@ -72,6 +73,7 @@ where
     pub fn new(input: DeliveryWorkerInput<L, R>) -> Result<Self, DeliveryWorkerError> {
         if input.retry_min.is_zero()
             || input.retry_max < input.retry_min
+            || input.retry_max > MAX_RETRY_DELAY
             || input.idle_poll.is_zero()
         {
             return Err(DeliveryWorkerError("delivery worker timing is invalid"));

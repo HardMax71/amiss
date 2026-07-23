@@ -7,6 +7,9 @@ use crate::InboxError;
 pub(crate) const MAX_INBOX_RECORDS: u64 = 1_024;
 pub(crate) const MAX_INBOX_BYTES: u64 = 128 * 1_024 * 1_024;
 pub(crate) const MAX_INBOX_RECORD_BYTES: u64 = 16 * 1_024 * 1_024;
+const RECORD_FIXED_BYTES: u64 = 65_536;
+const HEADER_RECORD_BYTES: u64 = 256;
+const LABEL_RECORD_MULTIPLIER: u64 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InboxLimits {
@@ -41,6 +44,14 @@ impl StoredLimits {
             .ok()
             .filter(|millis| *millis > 0)
             .ok_or(InboxError::Configuration)?;
+        let record_reservation = record_reservation(
+            limits.max_body_bytes,
+            limits.max_headers,
+            limits.max_header_bytes,
+            limits.max_route_bytes,
+            limits.max_source_id_bytes,
+        )
+        .ok_or(InboxError::Configuration)?;
         if !(1..=MAX_INBOX_RECORDS).contains(&limits.max_records)
             || !(1..=MAX_INBOX_BYTES).contains(&limits.max_bytes)
             || !(1..=MAX_INBOX_RECORD_BYTES).contains(&limits.max_record_bytes)
@@ -52,8 +63,8 @@ impl StoredLimits {
                 limits.max_source_id_bytes,
             ]
             .contains(&0)
-            || limits
-                .max_record_bytes
+            || record_reservation > limits.max_record_bytes
+            || record_reservation
                 .checked_mul(2)
                 .is_none_or(|minimum| minimum > limits.max_bytes)
         {
@@ -107,4 +118,36 @@ impl StoredLimits {
     pub(crate) const fn max_source_id_bytes(self) -> u64 {
         self.max_source_id_bytes
     }
+
+    pub(crate) fn record_reservation(self) -> Option<u64> {
+        record_reservation(
+            self.max_body_bytes,
+            self.max_headers,
+            self.max_header_bytes,
+            self.max_route_bytes,
+            self.max_source_id_bytes,
+        )
+    }
+}
+
+fn record_reservation(
+    max_body_bytes: u64,
+    max_headers: u64,
+    max_header_bytes: u64,
+    max_route_bytes: u64,
+    max_source_id_bytes: u64,
+) -> Option<u64> {
+    base64_size(max_body_bytes)?
+        .checked_add(base64_size(max_header_bytes)?)?
+        .checked_add(max_headers.checked_mul(HEADER_RECORD_BYTES)?)?
+        .checked_add(
+            max_route_bytes
+                .checked_add(max_source_id_bytes)?
+                .checked_mul(LABEL_RECORD_MULTIPLIER)?,
+        )?
+        .checked_add(RECORD_FIXED_BYTES)
+}
+
+fn base64_size(bytes: u64) -> Option<u64> {
+    bytes.checked_add(2)?.checked_div(3)?.checked_mul(4)
 }

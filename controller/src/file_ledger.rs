@@ -108,6 +108,15 @@ impl From<io::Error> for FileLedgerError {
     }
 }
 
+impl From<crate::atomic_write_recovery::AtomicWriteDirectoryError> for FileLedgerError {
+    fn from(error: crate::atomic_write_recovery::AtomicWriteDirectoryError) -> Self {
+        match error {
+            crate::atomic_write_recovery::AtomicWriteDirectoryError::Io(error) => Self::Io(error),
+            crate::atomic_write_recovery::AtomicWriteDirectoryError::Malformed => Self::Corrupt,
+        }
+    }
+}
+
 /// A provider-neutral delivery record backed by atomic files and operating
 /// system file locks.
 ///

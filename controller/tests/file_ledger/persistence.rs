@@ -60,6 +60,35 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
 }
 
 #[test]
+fn staged_v3_without_a_gate_commit_is_reexecuted_before_publication() {
+    let directory = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(1_000));
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), &clock);
+    let original = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    let original_publication = publication(&delivery, &original);
+    ledger
+        .stage(&delivery, &original, &original_publication)
+        .unwrap();
+    let report_path = ledger_file(directory.path(), ".report").unwrap();
+    assert!(report_path.exists());
+    drop(ledger);
+
+    remove_gate_commit(directory.path());
+    let mut reopened = open(directory.path(), &clock);
+    let recovered = executed(reopened.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    assert_eq!(recovered.evaluation_id, original.evaluation_id);
+    assert!(recovered.fence.get() > original.fence.get());
+    assert!(!report_path.exists());
+
+    let replacement = publication(&delivery, &recovered);
+    assert!(matches!(
+        reopened.stage(&delivery, &recovered, &replacement).unwrap(),
+        StageOutcome::Staged(staged) if staged.publication.as_ref() == &replacement
+    ));
+}
+
+#[test]
 fn corrupt_state_or_report_fails_closed() {
     let clock = Arc::new(TestClock::new(1_000));
     let delivery = delivery("42");
@@ -219,6 +248,33 @@ fn malformed_record_and_publication_check_bindings_fail_closed() {
 }
 
 fn rewrite_state(root: &Path, change: impl FnOnce(&mut Map<String, Value>)) {
+    rewrite_payload(root, |payload| {
+        let mut value: Value = serde_json::from_slice(payload).unwrap();
+        change(value.as_object_mut().unwrap());
+        serde_json::to_vec(&value).unwrap()
+    });
+}
+
+fn remove_gate_commit(root: &Path) {
+    const FIELD: &[u8] = b",\"gate_commit\":\"";
+
+    rewrite_payload(root, |payload| {
+        let start = payload
+            .windows(FIELD.len())
+            .position(|window| window == FIELD)
+            .unwrap();
+        let value_start = start + FIELD.len();
+        let value_bytes = payload.get(value_start..).unwrap();
+        let value_end = value_bytes.iter().position(|byte| *byte == b'"').unwrap();
+        let end = value_start + value_end + 1;
+        let mut legacy = Vec::with_capacity(payload.len() - (end - start));
+        legacy.extend_from_slice(payload.get(..start).unwrap());
+        legacy.extend_from_slice(payload.get(end..).unwrap());
+        legacy
+    });
+}
+
+fn rewrite_payload(root: &Path, change: impl FnOnce(&[u8]) -> Vec<u8>) {
     const MAGIC: &[u8] = b"AMISS-DELIVERY-RECORD";
     const VERSION: u8 = 1;
     const DIGEST_BYTES: usize = 32;
@@ -228,9 +284,7 @@ fn rewrite_state(root: &Path, change: impl FnOnce(&mut Map<String, Value>)) {
     let frame = fs::read(&path).unwrap();
     let header_bytes = MAGIC.len() + 1 + size_of::<u64>() + DIGEST_BYTES;
     let payload = frame.get(header_bytes..).unwrap();
-    let mut value: Value = serde_json::from_slice(payload).unwrap();
-    change(value.as_object_mut().unwrap());
-    let payload = serde_json::to_vec(&value).unwrap();
+    let payload = change(payload);
     let payload_length = u64::try_from(payload.len()).unwrap();
     let mut frame = Vec::with_capacity(header_bytes + payload.len());
     frame.extend_from_slice(MAGIC);
