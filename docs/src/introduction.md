@@ -7,6 +7,23 @@ points at a file or line range that is gone, it reports that. When the selected 
 changed while the paragraph containing the reference did not, it reports that too. It never
 reads meaning: it cannot tell you whether a sentence is true, and it does not try.
 
+```dot process
+digraph introduction {
+  rankdir = LR;
+  node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
+  edge [arrowsize = 0.7, fontname = "Latin Modern, Georgia, serif", fontsize = 10];
+  states   [label = "base and\ncandidate commits"];
+  discover [label = "discover\ndocuments"];
+  extract  [label = "extract supported\nreferences"];
+  resolve  [label = "resolve\ntargets"];
+  compare  [label = "compare targets\nand paragraphs"];
+  report   [label = "report findings\nand visibility"];
+  states -> discover -> extract -> resolve -> compare -> report;
+}
+```
+
+## The supported boundary
+
 "Supported explicit reference" is an important boundary. Bare path-like prose is not
 inferred. Raw HTML and MDX code regions are opaque. Site routes, heading semantics, code
 symbols, live URLs, and other repositories need information this engine does not have, so
@@ -14,6 +31,8 @@ they stay visible as declared boundaries instead of being guessed at. Numeric li
 fragments are the narrow exception: they select bytes, not language symbols or meaning.
 [Discovery](discovery.md) and [Resolution](resolution.md) describe the boundary rows, and
 [Project status](status.md) links the classifier and resolver that draw them.
+
+## The four questions
 
 A run compares two exact states of the repository: the base (usually where your branch
 started) and the candidate (usually the commit being reviewed). Amiss answers four questions
@@ -30,6 +49,8 @@ The fourth question matters as much as the first three. A checker that silently 
 it cannot handle is worse than no checker, because its green result claims more than it
 checked. So everything Amiss cannot read or follow becomes a visible row in the report, and
 a document it cannot decode at all fails the run rather than dropping out of it.
+
+## What a run never does
 
 The scanner keeps no state. There is no baseline file, no cache, no database, and nothing
 committed to your repository. Run it twice on the same commits with the same engine binary and
