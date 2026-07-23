@@ -36,6 +36,7 @@ pub(crate) enum State {
 pub(crate) struct LeaseData {
     pub(crate) owner: String,
     pub(crate) fence: u64,
+    pub(crate) generation: u64,
     pub(crate) attempt: u64,
     pub(crate) expires_at_unix_millis: i64,
 }
@@ -117,7 +118,14 @@ impl Record {
         now: i64,
         lease_millis: i64,
     ) -> Result<(Self, LeaseData), InboxError> {
-        let expires_at_unix_millis = now.checked_add(lease_millis).ok_or(InboxError::Clock)?;
+        let requested_expiry = now.checked_add(lease_millis).ok_or(InboxError::Clock)?;
+        let expires_at_unix_millis = match &self.state {
+            State::Pending { .. } => requested_expiry,
+            State::Claimed {
+                expires_at_unix_millis,
+                ..
+            } => requested_expiry.max(*expires_at_unix_millis),
+        };
         let attempts = self.attempts;
         let fence = self.fence;
         self.claimed(owner, expires_at_unix_millis, attempts, fence)
@@ -134,8 +142,25 @@ impl Record {
         })
     }
 
-    pub(crate) fn lease_is_live(&self, owner: &str, fence: u64, now: i64) -> bool {
-        self.lease_matches(owner, fence, now)
+    pub(crate) fn lease_is_live(
+        &self,
+        owner: &str,
+        fence: u64,
+        generation: u64,
+        expires_at_unix_millis: i64,
+        now: i64,
+    ) -> bool {
+        matches!(
+            &self.state,
+            State::Claimed {
+                owner: claimed_owner,
+                expires_at_unix_millis: claimed_expiry,
+            } if claimed_owner == owner
+                && self.fence == fence
+                && self.generation == generation
+                && *claimed_expiry == expires_at_unix_millis
+                && now < *claimed_expiry
+        )
     }
 
     fn claimed(
@@ -150,6 +175,7 @@ impl Record {
         let lease = LeaseData {
             owner: owner.clone(),
             fence,
+            generation,
             attempt: attempts,
             expires_at_unix_millis,
         };
@@ -179,18 +205,6 @@ impl Record {
             return Err(InboxError::Corrupt);
         }
         Ok(())
-    }
-
-    fn lease_matches(&self, owner: &str, fence: u64, now: i64) -> bool {
-        matches!(
-            &self.state,
-            State::Claimed {
-                owner: claimed_owner,
-                expires_at_unix_millis,
-            } if claimed_owner == owner
-                && self.fence == fence
-                && now < *expires_at_unix_millis
-        )
     }
 }
 

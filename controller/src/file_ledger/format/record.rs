@@ -103,16 +103,7 @@ impl Record {
                 if *fence == 0 || *fence > self.generation {
                     return Err(FileLedgerError::Corrupt);
                 }
-                let publication = publication.materialize_metadata()?;
-                if publication.evaluation_id.as_str() != self.evaluation_id
-                    || publication.provider_run != delivery.provider_run
-                    || publication.run.change != delivery.change
-                    || publication.run.object_format != delivery.provider_run.object_format
-                    || publication.run.commits.candidate != delivery.provider_run.candidate_commit
-                    || publication.check != check
-                {
-                    return Err(FileLedgerError::Corrupt);
-                }
+                publication.validate_binding(&self.evaluation_id, &delivery, &check)?;
             }
             State::Done {
                 fence,

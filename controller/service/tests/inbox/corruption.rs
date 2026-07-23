@@ -96,3 +96,28 @@ fn unknown_entries_and_a_second_process_owner_fail_closed() {
         Err(InboxError::Corrupt)
     ));
 }
+
+#[test]
+fn interrupted_atomic_writes_are_removed_only_in_the_known_shape() {
+    let directory = TempDir::new().unwrap();
+    let empty = directory.path().join(".atomicwrite-empty");
+    let with_file = directory.path().join(".atomicwrite-file");
+    fs::create_dir(&empty).unwrap();
+    fs::create_dir(&with_file).unwrap();
+    fs::write(with_file.join("tmpfile.tmp"), b"partial").unwrap();
+
+    let inbox = open(directory.path());
+    assert!(!empty.exists());
+    assert!(!with_file.exists());
+    drop(inbox);
+
+    let malformed_directory = TempDir::new().unwrap();
+    let malformed = malformed_directory.path().join(".atomicwrite-malformed");
+    fs::create_dir(&malformed).unwrap();
+    fs::write(malformed.join("unexpected"), b"data").unwrap();
+    assert!(matches!(
+        Inbox::open(malformed_directory.path(), limits()),
+        Err(InboxError::Corrupt)
+    ));
+    assert!(malformed.exists());
+}

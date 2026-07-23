@@ -8,10 +8,13 @@ mod frame;
 mod hash;
 mod inbox;
 mod lane;
+mod launcher;
 mod limits;
 mod queued;
 mod receiver;
 mod record;
+mod request_body;
+mod shutdown;
 mod store;
 mod worker;
 
@@ -32,10 +35,12 @@ pub use inbox::{
     InboxEntry, InboxState, RenewOutcome, RetryOutcome,
 };
 pub use lane::{LaneAdmission, check_lane, lane_admission};
+pub use launcher::service_main;
 pub use limits::InboxLimits;
 pub use queued::{QueuedServiceError, QueuedServiceInput, run_queued_service};
 pub use receiver::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, ReceiverConfig,
     ReceiverConfigError, router, serve,
 };
+pub use shutdown::shutdown_signal;
 pub use worker::{DeliveryWorker, DeliveryWorkerError, DeliveryWorkerInput, WorkOutcome};

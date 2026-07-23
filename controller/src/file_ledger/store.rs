@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 
 use atomicwrites::{AllowOverwrite, AtomicFile};
 
-use self::cleanup::{ATOMIC_DIRECTORY_PREFIX, TemporaryDirectory};
 use self::metadata::RootMetadata;
 use super::format::{self, Record};
 use super::{FileLedgerConfig, FileLedgerError};
+use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 use crate::ingress::ReplayKeep;
 
 const MAINTENANCE_LOCK: &str = ".amiss-maintenance.lock";
@@ -159,8 +159,8 @@ fn prepare_new_root(root: &Path) -> Result<(), FileLedgerError> {
         if name == MAINTENANCE_LOCK && file_type.is_file() {
             continue;
         }
-        if name.starts_with(ATOMIC_DIRECTORY_PREFIX) && file_type.is_dir() {
-            temporary.push(TemporaryDirectory::read(entry.path())?);
+        if name.starts_with(ATOMIC_WRITE_DIRECTORY_PREFIX) && file_type.is_dir() {
+            temporary.push(AtomicWriteDirectory::read(entry.path())?);
             continue;
         }
         return Err(FileLedgerError::Corrupt);

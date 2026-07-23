@@ -29,12 +29,22 @@ impl DeliveryLedger for FileLedger {
         let evaluation_id = record.evaluation_id()?;
         match record.state.clone() {
             State::Running { .. } => self.claim_running(&row, record, evaluation_id, check),
-            State::Staged { fence, publication } => Ok(DeliveryClaim::Publish(staged(
-                &row,
-                evaluation_id,
-                fence,
-                &publication,
-            )?)),
+            State::Staged { fence, publication } => {
+                if publication.has_gate_commit() {
+                    Ok(DeliveryClaim::Publish(staged(
+                        &row,
+                        evaluation_id,
+                        fence,
+                        &publication,
+                    )?))
+                } else {
+                    let now = self.now(&row, Some(&record))?;
+                    let claim =
+                        self.start_running(&row, record, evaluation_id, check, fence, now)?;
+                    row.remove_report()?;
+                    Ok(claim)
+                }
+            }
             State::Done { .. } => {
                 row.remove_report()?;
                 Ok(DeliveryClaim::Duplicate { evaluation_id })

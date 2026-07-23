@@ -4,11 +4,13 @@ use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
+use amiss_controller::atomic_write_recovery::{
+    ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory,
+};
 use atomicwrites::{AllowOverwrite, AtomicFile};
 use serde::{Deserialize, Serialize};
 
 pub(crate) use self::entries::RootEntries;
-use self::entries::{ATOMIC_DIRECTORY_PREFIX, TemporaryDirectory};
 use crate::InboxError;
 use crate::frame;
 use crate::limits::StoredLimits;
@@ -76,6 +78,8 @@ impl Store {
         if entries.count() >= self.limits.max_records() {
             return Err(InboxError::Full);
         }
+        let rows_after = entries.count().checked_add(1).ok_or(InboxError::Full)?;
+        self.reserve_transition(rows_after)?;
         self.save(entries, key, record, 0)
     }
 
@@ -100,21 +104,35 @@ impl Store {
         validate_key(key)?;
         let bytes = encode_record(record)?;
         let encoded_bytes = u64::try_from(bytes.len()).map_err(|_| InboxError::Full)?;
-        if encoded_bytes > self.limits.max_record_bytes() {
+        let record_reservation = self
+            .limits
+            .record_reservation()
+            .ok_or(InboxError::Corrupt)?;
+        if encoded_bytes > record_reservation || encoded_bytes > self.limits.max_record_bytes() {
             return Err(InboxError::Full);
         }
-        let durable_after = entries
+        let _durable_after = entries
             .bytes()
             .checked_sub(old_bytes)
             .and_then(|bytes| bytes.checked_add(encoded_bytes))
             .ok_or(InboxError::Corrupt)?;
-        let with_atomic_reserve = durable_after
-            .checked_add(self.limits.max_record_bytes())
+        let actual_with_atomic_copy = entries
+            .bytes()
+            .checked_add(encoded_bytes)
             .ok_or(InboxError::Full)?;
-        if with_atomic_reserve > self.limits.max_bytes() {
+        if actual_with_atomic_copy > self.limits.max_bytes() {
             return Err(InboxError::Full);
         }
         atomic_write(&self.root.join(row_name(key)), &bytes)
+    }
+
+    fn reserve_transition(&self, rows_after: u64) -> Result<(), InboxError> {
+        rows_after
+            .checked_add(1)
+            .and_then(|rows| rows.checked_mul(self.limits.record_reservation()?))
+            .filter(|bytes| *bytes <= self.limits.max_bytes())
+            .map(|_bytes| ())
+            .ok_or(InboxError::Full)
     }
 }
 
@@ -178,8 +196,8 @@ fn prepare_new_root(root: &Path) -> Result<(), InboxError> {
         if name == LOCK_FILE && file_type.is_file() {
             continue;
         }
-        if name.starts_with(ATOMIC_DIRECTORY_PREFIX) && file_type.is_dir() {
-            temporary.push(TemporaryDirectory::read(entry.path())?);
+        if name.starts_with(ATOMIC_WRITE_DIRECTORY_PREFIX) && file_type.is_dir() {
+            temporary.push(AtomicWriteDirectory::read(entry.path())?);
             continue;
         }
         return Err(InboxError::Corrupt);

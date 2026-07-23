@@ -51,3 +51,16 @@ impl From<io::Error> for InboxError {
         Self::Io(error)
     }
 }
+
+impl From<amiss_controller::atomic_write_recovery::AtomicWriteDirectoryError> for InboxError {
+    fn from(error: amiss_controller::atomic_write_recovery::AtomicWriteDirectoryError) -> Self {
+        match error {
+            amiss_controller::atomic_write_recovery::AtomicWriteDirectoryError::Io(error) => {
+                Self::Io(error)
+            }
+            amiss_controller::atomic_write_recovery::AtomicWriteDirectoryError::Malformed => {
+                Self::Corrupt
+            }
+        }
+    }
+}

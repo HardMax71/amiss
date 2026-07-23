@@ -1,19 +1,18 @@
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::fs;
-use std::path::PathBuf;
 
 use super::{decode_record, fixed_file, read_bounded, row_key};
 use crate::InboxError;
 use crate::limits::StoredLimits;
 use crate::record::Record;
-
-pub(crate) const ATOMIC_DIRECTORY_PREFIX: &str = ".atomicwrite";
+use amiss_controller::atomic_write_recovery::{
+    ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory,
+};
 
 pub(crate) struct RootEntries {
     pub(crate) rows: BTreeMap<String, Row>,
     bytes: u64,
-    temporary: Vec<TemporaryDirectory>,
+    temporary: Vec<AtomicWriteDirectory>,
 }
 
 pub(crate) struct Row {
@@ -26,6 +25,7 @@ impl RootEntries {
         let mut rows = BTreeMap::new();
         let mut bytes = 0_u64;
         let mut temporary = Vec::new();
+        let record_reservation = limits.record_reservation().ok_or(InboxError::Corrupt)?;
         for entry in fs::read_dir(root)? {
             let entry = entry?;
             let name = entry.file_name();
@@ -46,7 +46,7 @@ impl RootEntries {
                 }
                 let metadata = entry.metadata()?;
                 let row_bytes = metadata.len();
-                if row_bytes > limits.max_record_bytes() {
+                if row_bytes > limits.max_record_bytes() || row_bytes > record_reservation {
                     return Err(InboxError::Corrupt);
                 }
                 bytes = bytes
@@ -68,18 +68,17 @@ impl RootEntries {
                 );
                 continue;
             }
-            if name.starts_with(ATOMIC_DIRECTORY_PREFIX) && file_type.is_dir() {
+            if name.starts_with(ATOMIC_WRITE_DIRECTORY_PREFIX) && file_type.is_dir() {
                 if u64::try_from(temporary.len()).unwrap_or(u64::MAX) >= limits.max_records() {
                     return Err(InboxError::Corrupt);
                 }
-                temporary.push(TemporaryDirectory::read(entry.path())?);
+                temporary.push(AtomicWriteDirectory::read(entry.path())?);
                 continue;
             }
             return Err(InboxError::Corrupt);
         }
-        if u64::try_from(rows.len()).unwrap_or(u64::MAX) > limits.max_records()
-            || bytes > limits.max_bytes()
-        {
+        let row_count = u64::try_from(rows.len()).unwrap_or(u64::MAX);
+        if row_count > limits.max_records() || bytes > limits.max_bytes() {
             return Err(InboxError::Corrupt);
         }
         Ok(Self {
@@ -101,36 +100,6 @@ impl RootEntries {
         for directory in self.temporary.drain(..) {
             directory.remove()?;
         }
-        Ok(())
-    }
-}
-
-pub(crate) struct TemporaryDirectory {
-    path: PathBuf,
-    file: Option<PathBuf>,
-}
-
-impl TemporaryDirectory {
-    pub(crate) fn read(path: PathBuf) -> Result<Self, InboxError> {
-        let mut file = None;
-        for entry in fs::read_dir(&path)? {
-            let entry = entry?;
-            if file.is_some() || entry.file_name() != OsStr::new("tmpfile.tmp") {
-                return Err(InboxError::Corrupt);
-            }
-            if !entry.file_type()?.is_file() {
-                return Err(InboxError::Corrupt);
-            }
-            file = Some(entry.path());
-        }
-        Ok(Self { path, file })
-    }
-
-    pub(crate) fn remove(self) -> Result<(), InboxError> {
-        if let Some(file) = self.file {
-            fs::remove_file(file)?;
-        }
-        fs::remove_dir(self.path)?;
         Ok(())
     }
 }

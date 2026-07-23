@@ -1,7 +1,9 @@
-use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
 
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt as _, OpenOptionsSyncExt as _};
+use cap_std::ambient_authority;
+use cap_std::fs::{Dir, OpenOptions};
 use serde::de::DeserializeOwned;
 
 use super::ConfigError;
@@ -29,14 +31,28 @@ pub fn read_regular(path: &Path, maximum: u64) -> Result<Vec<u8>, ConfigError> {
     if !path.is_absolute() {
         return Err(ConfigError("trust files must use absolute paths"));
     }
-    let metadata = std::fs::symlink_metadata(path)
+    let parent = path
+        .parent()
+        .ok_or(ConfigError("a trust file cannot be read"))?;
+    let name = path
+        .file_name()
+        .ok_or(ConfigError("a trust file cannot be read"))?;
+    let directory = Dir::open_ambient_dir(parent, ambient_authority())
+        .map_err(|_defect| ConfigError("a trust file cannot be read"))?;
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No).nonblock(true);
+    let file = directory
+        .open_with(name, &options)
+        .map_err(|_defect| ConfigError("a trust file cannot be read"))?;
+    let metadata = file
+        .metadata()
         .map_err(|_defect| ConfigError("a trust file cannot be read"))?;
     if !metadata.file_type().is_file() || metadata.len() > maximum {
         return Err(ConfigError("a trust file is not a bounded regular file"));
     }
     let mut bytes = Vec::new();
-    File::open(path)
-        .and_then(|file| file.take(maximum.saturating_add(1)).read_to_end(&mut bytes))
+    file.take(maximum.saturating_add(1))
+        .read_to_end(&mut bytes)
         .map_err(|_defect| ConfigError("a trust file cannot be read"))?;
     let length =
         u64::try_from(bytes.len()).map_err(|_defect| ConfigError("a trust file is too large"))?;

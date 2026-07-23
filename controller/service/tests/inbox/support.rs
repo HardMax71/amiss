@@ -22,7 +22,7 @@ pub(crate) fn limits() -> InboxLimits {
         lease_duration: Duration::from_millis(100),
         max_records: 8,
         max_bytes: 262_144,
-        max_record_bytes: 32_768,
+        max_record_bytes: 131_072,
         max_body_bytes: 4_096,
         max_headers: 8,
         max_header_bytes: 2_048,

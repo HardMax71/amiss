@@ -9,6 +9,7 @@ use super::{
     ExecutionLimits, GitLimits, HttpLimits, LedgerLimits, RunnerLimits, ServiceLimits, WorkerLimits,
 };
 use crate::ConfigError;
+use crate::worker::MAX_RETRY_DELAY;
 
 const MAX_IDLE_POLL: Duration = Duration::from_secs(5);
 const MAX_LEDGER_RECORDS: u64 = 100_000;
@@ -52,6 +53,7 @@ pub(super) fn checked_queue(raw: &ServiceLimits) -> Result<WorkerLimits, ConfigE
     };
     let valid = !worker.retry_min.is_zero()
         && worker.retry_min <= worker.retry_max
+        && worker.retry_max <= MAX_RETRY_DELAY
         && !worker.idle_poll.is_zero()
         && worker.idle_poll <= MAX_IDLE_POLL;
     valid

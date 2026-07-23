@@ -35,7 +35,7 @@ impl FileLedger {
     pub(super) fn claim_running(
         &self,
         row: &Row,
-        mut record: Record,
+        record: Record,
         evaluation_id: ControllerEvaluationId,
         check: &CheckBinding,
     ) -> Result<DeliveryClaim, FileLedgerError> {
@@ -62,19 +62,31 @@ impl FileLedger {
                 retry_at_unix_millis: expires_at_unix_millis,
             });
         }
-        let fence = fence.checked_add(1).ok_or(FileLedgerError::Corrupt)?;
+        self.start_running(row, record, evaluation_id, check, fence, now)
+    }
+
+    pub(super) fn start_running(
+        &self,
+        row: &Row,
+        mut record: Record,
+        evaluation_id: ControllerEvaluationId,
+        check: &CheckBinding,
+        fence: u64,
+        now: i64,
+    ) -> Result<DeliveryClaim, FileLedgerError> {
+        let next_fence = fence.checked_add(1).ok_or(FileLedgerError::Corrupt)?;
         let expires_at_unix_millis = self.deadline(now)?;
         record.advance(now)?;
         record.state = State::Running {
             owner: self.owner,
-            fence,
+            fence: next_fence,
             expires_at_unix_millis,
         };
         row.save(&record)?;
         Ok(DeliveryClaim::Execute(make_lease(
             evaluation_id,
             check.clone(),
-            fence,
+            next_fence,
             expires_at_unix_millis,
         )?))
     }

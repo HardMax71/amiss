@@ -9,10 +9,9 @@ use super::{
     MAINTENANCE_LOCK, METADATA_FILE, Store, atomic_write, is_state_name, load_metadata, metadata,
     open_lock, read_bounded, validate_key,
 };
+use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 use crate::file_ledger::format::{self, Record, State};
 use crate::file_ledger::{FileLedgerCleanup, FileLedgerError};
-
-pub(super) const ATOMIC_DIRECTORY_PREFIX: &str = ".atomicwrite";
 
 impl Store {
     pub(in crate::file_ledger) fn cleanup(
@@ -42,7 +41,7 @@ impl Store {
 struct RootEntries {
     states: BTreeMap<String, (PathBuf, Record)>,
     reports: BTreeMap<String, PathBuf>,
-    temporary: Vec<TemporaryDirectory>,
+    temporary: Vec<AtomicWriteDirectory>,
 }
 
 impl RootEntries {
@@ -82,13 +81,13 @@ impl RootEntries {
                 {
                     return Err(FileLedgerError::Corrupt);
                 }
-            } else if name.starts_with(ATOMIC_DIRECTORY_PREFIX) {
+            } else if name.starts_with(ATOMIC_WRITE_DIRECTORY_PREFIX) {
                 if !file_type.is_dir() {
                     return Err(FileLedgerError::Corrupt);
                 }
                 entries
                     .temporary
-                    .push(TemporaryDirectory::read(entry.path())?);
+                    .push(AtomicWriteDirectory::read(entry.path())?);
             } else {
                 return Err(FileLedgerError::Corrupt);
             }
@@ -168,36 +167,6 @@ impl RootEntries {
                 State::Staged { publication, .. } if publication.report().is_some()
             )
         })
-    }
-}
-
-pub(super) struct TemporaryDirectory {
-    path: PathBuf,
-    file: Option<PathBuf>,
-}
-
-impl TemporaryDirectory {
-    pub(super) fn read(path: PathBuf) -> Result<Self, FileLedgerError> {
-        let mut file = None;
-        for entry in fs::read_dir(&path)? {
-            let entry = entry?;
-            if file.is_some() || entry.file_name() != OsStr::new("tmpfile.tmp") {
-                return Err(FileLedgerError::Corrupt);
-            }
-            if !entry.file_type()?.is_file() {
-                return Err(FileLedgerError::Corrupt);
-            }
-            file = Some(entry.path());
-        }
-        Ok(Self { path, file })
-    }
-
-    pub(super) fn remove(self) -> Result<(), FileLedgerError> {
-        if let Some(file) = self.file {
-            fs::remove_file(file)?;
-        }
-        fs::remove_dir(self.path)?;
-        Ok(())
     }
 }
 

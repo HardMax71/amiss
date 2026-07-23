@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Router;
-use axum::body;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
@@ -13,6 +12,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 use crate::DeliveryHeader;
 use crate::receiver::headers;
+use crate::request_body::{self, ReadError};
 
 const HEALTH_PATH: &str = "/healthz";
 const MAX_PATH_BYTES: usize = 1_024;
@@ -99,17 +99,18 @@ async fn run(State(state): State<EvaluationState>, request: Request) -> StatusCo
     if parts.uri.query().is_some() {
         return StatusCode::BAD_REQUEST;
     }
-    let Some(headers) =
-        headers::normalize(&parts.headers, state.max_headers, state.max_header_bytes)
-    else {
+    if !headers::within_limits(&parts.headers, state.max_headers, state.max_header_bytes) {
         return StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE;
-    };
+    }
     let Ok(permit) = Arc::clone(&state.permits).try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE;
     };
-    let Ok(body) = body::to_bytes(body, state.max_body_bytes).await else {
-        return StatusCode::PAYLOAD_TOO_LARGE;
+    let body = match request_body::read(body, state.max_body_bytes).await {
+        Ok(body) => body,
+        Err(ReadError::Invalid) => return StatusCode::PAYLOAD_TOO_LARGE,
+        Err(ReadError::TimedOut) => return StatusCode::REQUEST_TIMEOUT,
     };
+    let headers = headers::materialize(&parts.headers);
     let evaluate = Arc::clone(&state.evaluate);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -123,7 +124,7 @@ async fn run(State(state): State<EvaluationState>, request: Request) -> StatusCo
     .unwrap_or(StatusCode::SERVICE_UNAVAILABLE)
 }
 
-fn validate(config: &EvaluationConfig) -> Result<(), EvaluationConfigError> {
+pub(crate) fn validate(config: &EvaluationConfig) -> Result<(), EvaluationConfigError> {
     let path = config.path.as_bytes();
     let exact_path = path.len() <= MAX_PATH_BYTES
         && path.first() == Some(&b'/')

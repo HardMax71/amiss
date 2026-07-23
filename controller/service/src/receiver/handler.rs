@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::body;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use tokio::sync::Semaphore;
 
 use super::admission::{AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission};
 use super::headers;
+use crate::request_body::{self, ReadError};
 use crate::{DeliveryHeader, EnqueueOutcome, Inbox, InboxError, IncomingDelivery, IncomingHeader};
 
 #[derive(Clone)]
@@ -32,17 +32,18 @@ pub(super) async fn receive(State(state): State<ReceiverState>, request: Request
     if parts.uri.query().is_some() {
         return StatusCode::BAD_REQUEST;
     }
-    let Some(headers) =
-        headers::normalize(&parts.headers, state.max_headers, state.max_header_bytes)
-    else {
+    if !headers::within_limits(&parts.headers, state.max_headers, state.max_header_bytes) {
         return StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE;
-    };
+    }
     let Ok(permit) = Arc::clone(&state.permits).try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE;
     };
-    let Ok(body) = body::to_bytes(body, state.max_body_bytes).await else {
-        return StatusCode::PAYLOAD_TOO_LARGE;
+    let body = match request_body::read(body, state.max_body_bytes).await {
+        Ok(body) => body,
+        Err(ReadError::Invalid) => return StatusCode::PAYLOAD_TOO_LARGE,
+        Err(ReadError::TimedOut) => return StatusCode::REQUEST_TIMEOUT,
     };
+    let headers = headers::materialize(&parts.headers);
     let outcome = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         dispatch(&state, received_at_unix_millis, &headers, body.as_ref())

@@ -1,11 +1,14 @@
+use std::fs::{self, File};
 use std::time::Duration;
 
 use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
-    load_execution_limits, load_limits,
+    load_execution_limits, load_limits, read_regular,
 };
+use fs_at::{LinkEntryType, OpenOptions};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use tempfile::TempDir;
 
 #[test]
 fn limit_shapes_accept_only_owned_fields() {
@@ -33,6 +36,26 @@ fn limit_shapes_accept_only_owned_fields() {
             json!({ "unexpected": true }),
         ],
     );
+}
+
+#[test]
+fn trust_files_are_read_through_one_regular_nofollow_handle()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = TempDir::new()?;
+    let regular = root.path().join("regular");
+    fs::write(&regular, b"trusted")?;
+    assert_eq!(read_regular(&regular, 7)?, b"trusted");
+
+    let target = root.path().join("target");
+    fs::write(&target, b"replacement")?;
+    let root_file = File::open(root.path())?;
+    OpenOptions::default().symlink_at(&root_file, "linked", LinkEntryType::File, "target")?;
+    assert!(read_regular(&root.path().join("linked"), 32).is_err());
+
+    let directory = root.path().join("directory");
+    fs::create_dir(&directory)?;
+    assert!(read_regular(&directory, 32).is_err());
+    Ok(())
 }
 
 #[test]
@@ -88,6 +111,20 @@ fn synchronous_concurrency_must_be_positive() {
 }
 
 #[test]
+fn endpoint_paths_fail_during_configuration() {
+    for path in ["/", "/healthz", "relative", "/double//part"] {
+        assert!(
+            load_limits(&ServiceLimits::default(), path.to_owned()).is_err(),
+            "{path}"
+        );
+        assert!(
+            load_execution_limits(&ExecutionLimits::default(), path.to_owned(), 4).is_err(),
+            "{path}"
+        );
+    }
+}
+
+#[test]
 fn future_skew_has_a_small_hard_ceiling() -> Result<(), Box<dyn std::error::Error>> {
     for seconds in [0, 5, 300] {
         let raw: ExecutionLimits =
@@ -135,6 +172,7 @@ fn configured_limits_have_hard_ceilings() {
             ("inbox_records", 1_024_u64),
             ("inbox_bytes", 128 * 1_024 * 1_024),
             ("inbox_record_bytes", 16 * 1_024 * 1_024),
+            ("retry_max_millis", 24 * 60 * 60 * 1_000),
         ],
         |field, value| json!({ "queue": { (field): value } }),
         |raw| load_limits(raw, "/provider/delivery".to_owned()).is_ok(),

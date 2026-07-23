@@ -2,6 +2,8 @@
 
 mod acquiring_runner;
 mod acquisition;
+#[doc(hidden)]
+pub mod atomic_write_recovery;
 mod bootstrap_job;
 mod bootstrap_result;
 mod bootstrap_runner;

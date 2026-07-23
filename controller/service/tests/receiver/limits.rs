@@ -39,9 +39,11 @@ async fn full_delivery_capacity_rejects_before_reading_another_body()
     )?));
     let release = Arc::new((Mutex::new(false), Condvar::new()));
     let calls = Arc::new(AtomicUsize::new(0));
+    let (started, observed) = tokio::sync::oneshot::channel();
     let admission: Arc<dyn DeliveryAdmission> = Arc::new(BlockingAdmission {
         calls: Arc::clone(&calls),
         release: Arc::clone(&release),
+        started: Mutex::new(Some(started)),
     });
     let mut config = receiver_config();
     config.max_concurrent_deliveries = 1;
@@ -58,12 +60,7 @@ async fn full_delivery_capacity_rejects_before_reading_another_body()
             ))
             .await
     });
-    for _attempt in 0..10_000 {
-        if calls.load(Ordering::SeqCst) > 0 {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    observed.await?;
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
     let body_read = Arc::new(AtomicBool::new(false));
@@ -90,6 +87,61 @@ async fn full_delivery_capacity_rejects_before_reading_another_body()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
     ready.notify_one();
     assert_eq!(first.await??.status(), StatusCode::ACCEPTED);
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+async fn pending_body_times_out_and_releases_delivery_capacity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut config = receiver_config();
+    config.max_concurrent_deliveries = 1;
+    let fixture = Fixture::new(&config, inbox_limits(), TestAdmission::accepting());
+    let (body_read, observed) = tokio::sync::oneshot::channel();
+    let mut body_read = Some(body_read);
+    let stream = tokio_stream::once(Ok::<_, Infallible>(Bytes::new()))
+        .chain(tokio_stream::pending())
+        .map(move |item| {
+            if let Some(body_read) = body_read.take() {
+                let _ignored = body_read.send(());
+            }
+            item
+        });
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(DELIVERY_PATH)
+        .header("x-provider-secret", super::support::SECRET)
+        .header("x-source-id", "pending-delivery")
+        .body(Body::from_stream(stream))?;
+    let app = fixture.app.clone();
+    let pending = tokio::spawn(async move { app.oneshot(request).await });
+
+    observed.await?;
+    let saturated = fixture
+        .app
+        .clone()
+        .oneshot(delivery_request(
+            Method::POST,
+            DELIVERY_PATH,
+            "delivery-1",
+            BODY,
+        ))
+        .await?;
+    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(fixture.admission.calls(), 0);
+
+    tokio::time::advance(std::time::Duration::from_secs(31)).await;
+    assert_eq!(pending.await??.status(), StatusCode::REQUEST_TIMEOUT);
+    let accepted = fixture
+        .app
+        .clone()
+        .oneshot(delivery_request(
+            Method::POST,
+            DELIVERY_PATH,
+            "delivery-1",
+            BODY,
+        ))
+        .await?;
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
     Ok(())
 }
 
@@ -197,6 +249,7 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
 struct BlockingAdmission {
     calls: Arc<AtomicUsize>,
     release: Arc<(Mutex<bool>, Condvar)>,
+    started: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl DeliveryAdmission for BlockingAdmission {
@@ -205,6 +258,14 @@ impl DeliveryAdmission for BlockingAdmission {
         _request: AdmissionRequest<'_>,
     ) -> Result<AdmittedDelivery, AdmissionRejection> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if let Some(started) = self
+            .started
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        {
+            let _ignored = started.send(());
+        }
         let (lock, ready) = &*self.release;
         let mut released = lock
             .lock()
