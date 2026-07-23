@@ -19,6 +19,9 @@ use crate::{
     verify_acquired,
 };
 
+#[path = "../tests/internal/bootstrap_runner.rs"]
+mod tests;
+
 const MAX_HEARTBEAT_WAIT: Duration = Duration::from_secs(5);
 const PROCESS_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 const PROCESS_DRAIN_POLL: Duration = Duration::from_millis(10);

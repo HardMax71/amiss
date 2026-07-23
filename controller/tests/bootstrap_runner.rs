@@ -4,7 +4,7 @@
 )]
 
 use std::fs::{File, OpenOptions};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -29,6 +29,8 @@ const STARTED_MARKER: &str = "runner-started";
 const RENEWAL_GATE: &str = "runner-renewal-gate";
 const RESOURCE_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
 const RESOURCE_RELEASE_POLL: Duration = Duration::from_millis(10);
+// Wide enough that only a stalled run ever renews twice.
+const NO_RENEWAL_LEASE: Duration = Duration::from_mins(1);
 
 #[path = "bootstrap_runner/acquiring.rs"]
 mod acquiring;
@@ -36,21 +38,19 @@ mod acquiring;
 struct Heartbeat {
     calls: u64,
     stop_on_call: Option<u64>,
-    stop_delay: Duration,
     renew_within: Duration,
     release_when_present: Option<(PathBuf, File)>,
 }
 
 impl Heartbeat {
     const fn renewing() -> Self {
-        Self::renewing_with(Duration::from_millis(200))
+        Self::renewing_with(NO_RENEWAL_LEASE)
     }
 
     const fn renewing_with(renew_within: Duration) -> Self {
         Self {
             calls: 0,
             stop_on_call: None,
-            stop_delay: Duration::ZERO,
             renew_within,
             release_when_present: None,
         }
@@ -59,16 +59,7 @@ impl Heartbeat {
     fn stopping_on(call: u64) -> Self {
         Self {
             stop_on_call: Some(call),
-            ..Self::renewing()
-        }
-    }
-
-    fn stopping_after(call: u64, delay: Duration) -> Self {
-        Self {
-            stop_on_call: Some(call),
-            stop_delay: delay,
-            renew_within: Duration::from_millis(100),
-            ..Self::renewing()
+            ..Self::renewing_with(Duration::from_millis(25))
         }
     }
 
@@ -91,7 +82,6 @@ impl RunHeartbeat for Heartbeat {
             return HeartbeatOutcome::Stop;
         }
         if self.stop_on_call == Some(self.calls) {
-            std::thread::sleep(self.stop_delay);
             HeartbeatOutcome::Stop
         } else {
             HeartbeatOutcome::Renewed {
@@ -142,7 +132,7 @@ impl Harness {
 
     fn run_in(
         &self,
-        scratch: &std::path::Path,
+        scratch: &Path,
         wall_timeout: Duration,
         heartbeat: &mut Heartbeat,
     ) -> RunnerOutcome {
@@ -444,35 +434,6 @@ fn wall_timeout_stops_contained_descendants() {
     assert!(harness.ready());
     assert!(harness.descendant_resources_released());
     assert!(!harness.escaped());
-}
-
-#[test]
-fn heartbeat_loss_stops_contained_descendants() {
-    let harness = Harness::new("runner-hang", None);
-    let mut heartbeat = Heartbeat::stopping_on(2);
-
-    assert_eq!(
-        harness.run(Duration::from_secs(2), &mut heartbeat),
-        RunnerOutcome::Unavailable
-    );
-    assert_eq!(heartbeat.calls, 2);
-    assert!(harness.started());
-    assert!(harness.ready());
-    assert!(harness.descendant_resources_released());
-    assert!(!harness.escaped());
-}
-
-#[test]
-fn heartbeat_loss_discards_a_completion_already_waiting() {
-    let harness = Harness::new("runner-delayed-pass", None);
-    let mut heartbeat = Heartbeat::stopping_after(2, Duration::from_millis(200));
-
-    assert_eq!(
-        harness.run(Duration::from_secs(2), &mut heartbeat),
-        RunnerOutcome::Unavailable
-    );
-    assert_eq!(heartbeat.calls, 2);
-    assert!(harness.started());
 }
 
 #[test]
