@@ -1,5 +1,5 @@
 (function () {
-  var OPEN_BY_DEFAULT = ["Using Amiss"];
+  var ALWAYS_OPEN = ["Using Amiss"];
 
   function groups(list) {
     var result = [];
@@ -28,7 +28,9 @@
       return false;
     }
     groups(list).forEach(function (group) {
-      var name = group.title.textContent.trim();
+      if (ALWAYS_OPEN.indexOf(group.title.textContent.trim()) !== -1) {
+        return;
+      }
       var holdsPage = group.members.some(function (member) {
         return member.querySelector("a.active") !== null;
       });
@@ -36,7 +38,7 @@
       chevron.className = "part-chevron";
       chevron.textContent = "❯";
       group.title.appendChild(chevron);
-      apply(group, holdsPage || OPEN_BY_DEFAULT.indexOf(name) !== -1);
+      apply(group, holdsPage);
       group.title.addEventListener("click", function () {
         apply(group, group.title.getAttribute("data-expanded") !== "true");
       });
