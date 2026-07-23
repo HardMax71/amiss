@@ -20,7 +20,7 @@ use self::publication::{
     PublicationDecision, publication_decision, validate_created, validate_publication,
 };
 use self::refresh::{publication_target_is_current, snapshot, validate_request};
-use self::rest::{GitHubRest, OctocrabRest};
+use self::rest::{GitHubRest, HttpRest};
 
 const MAX_PRIVATE_KEY_BYTES: usize = 65_536;
 const MIN_PRIVATE_KEY_BYTES: usize = 512;
@@ -64,7 +64,6 @@ impl GitHubTimeouts {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitHubClientError {
     Configuration,
-    Runtime,
     Client,
 }
 
@@ -72,7 +71,6 @@ impl fmt::Display for GitHubClientError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Configuration => "the GitHub App configuration is invalid",
-            Self::Runtime => "the GitHub App runtime could not be created",
             Self::Client => "the GitHub App client could not be created",
         })
     }
@@ -82,7 +80,7 @@ impl std::error::Error for GitHubClientError {}
 
 #[derive(Clone)]
 pub struct GitHubApp {
-    client: Arc<Client<OctocrabRest>>,
+    client: Arc<Client<HttpRest>>,
 }
 
 impl GitHubApp {
@@ -92,8 +90,8 @@ impl GitHubApp {
     ///
     /// # Errors
     ///
-    /// The provider, IDs, key, API base, status name, or client runtime is
-    /// invalid.
+    /// The provider, IDs, key, API base, status name, or client
+    /// configuration is invalid.
     pub fn new(
         provider: ProviderIdentity,
         app_id: u64,
@@ -114,7 +112,7 @@ impl GitHubApp {
         if !valid {
             return Err(GitHubClientError::Configuration);
         }
-        let rest = OctocrabRest::new(
+        let rest = HttpRest::new(
             app_id,
             installation_id,
             private_key,
@@ -135,8 +133,8 @@ impl GitHubApp {
         })
     }
 
-    /// Returns Octocrab's cached, redacted installation credential for a
-    /// scoped HTTPS Git acquisition callback.
+    /// Returns the cached, redacted installation credential for a scoped
+    /// HTTPS Git acquisition callback.
     ///
     /// # Errors
     ///
