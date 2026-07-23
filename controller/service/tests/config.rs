@@ -1,11 +1,13 @@
-use std::fs::{self, File};
+use std::fs;
 use std::time::Duration;
 
 use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
     load_execution_limits, load_limits, read_regular,
 };
-use fs_at::{LinkEntryType, OpenOptions};
+use cap_fs_ext::DirExt as _;
+use cap_std::ambient_authority;
+use cap_std::fs::Dir;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -48,8 +50,8 @@ fn trust_files_are_read_through_one_regular_nofollow_handle()
 
     let target = root.path().join("target");
     fs::write(&target, b"replacement")?;
-    let root_file = File::open(root.path())?;
-    OpenOptions::default().symlink_at(&root_file, "linked", LinkEntryType::File, "target")?;
+    let root_dir = Dir::open_ambient_dir(root.path(), ambient_authority())?;
+    root_dir.symlink_file("target", "linked")?;
     assert!(read_regular(&root.path().join("linked"), 32).is_err());
 
     let directory = root.path().join("directory");
