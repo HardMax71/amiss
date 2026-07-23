@@ -112,12 +112,14 @@ digraph controller_delivery {
 
 The first refresh resolves the event-bound provider run, not the change's latest head. It supplies
 the exact repository, URL dialect, refs, commits, and trees given to the runner, plus the
-provider-owned commit on which the required result is enforced. The second refresh checks the
-same identity, gate commit, and current authorization before the result is saved. If the change
-was closed, revoked, or superseded, the controller may publish that fail-closed status; it never
-publishes an old pass or block as if it were still current. A provider adapter may complete a
-stale publication without an external write only after independently proving that its staged
-provider gate is no longer current.
+provider gate revision to which publication is bound. GitHub and GitLab enforce their result on
+that commit. A Gitea-family lane publishes an exact-commit review, while the provider owns how
+that review affects merging. The second refresh checks the same identity, gate revision, and
+current authorization before the result is saved. If the change was closed, revoked, or
+superseded, the controller may publish that fail-closed status; it never publishes an old pass or
+block as if it were still current. A provider adapter may complete a stale publication without an
+external write only after independently proving that its staged provider gate is no longer
+current.
 
 ## The logical record
 

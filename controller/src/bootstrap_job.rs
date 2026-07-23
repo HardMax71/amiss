@@ -79,9 +79,10 @@ pub fn check_plan(
     execution: ExecutionConstraintDescriptor,
 ) -> Result<CheckPlan, BootstrapJobError> {
     let policy_identity = controls::identity(&policy)?;
-    let _constraint = execution
+    let constraint = execution
         .canonical_bytes()
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    controls::validate_request_size(&policy, &policy_identity, &execution, &constraint)?;
     let digest = hj(
         CHECK_PLAN_DOMAIN,
         &plan_value(profile, &policy_identity, &execution),

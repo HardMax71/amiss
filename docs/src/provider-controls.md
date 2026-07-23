@@ -72,7 +72,8 @@ operator-controlled TLS terminator in front. The proxy must preserve signed head
 body, and must cap connections plus total, header, body, idle, and slow-body time. `/healthz`
 reports only process liveness. A webhook service also takes one of its configured delivery
 permits before reading a body and holds it through durable inbox admission. That bounds in-process
-work; it does not replace the proxy's public connection limits.
+work. Both endpoint shapes stop an unfinished body after 30 seconds; neither limit replaces the
+proxy's public connection limits.
 
 Shared hard ceilings cap bodies at 8 MiB, header count at 128, aggregate header bytes at 32 KiB,
 ledger rows at 100,000, and in-process endpoint concurrency at 64. Webhook inboxes add ceilings of
