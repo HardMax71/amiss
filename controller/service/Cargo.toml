@@ -1,43 +1,25 @@
 [package]
-name = "amiss-controller"
+name = "amiss-controller-service"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
-description = "Provider-neutral orchestration contracts for Amiss runs"
+description = "Durable provider-neutral delivery intake for the Amiss controller"
 license = "FSL-1.1-ALv2"
 repository = "https://github.com/HardMax71/amiss"
 publish = false
 
-[[bin]]
-name = "amiss-bootstrap-fixture"
-path = "tests/fixtures/bootstrap.rs"
-test = false
-bench = false
-
-[workspace]
-members = ["github", "service"]
-resolver = "3"
-
 [dependencies]
-amiss-bootstrap = { path = "../crates/amiss-bootstrap" }
-amiss-git = { path = "../crates/amiss-git" }
-amiss-wire = { path = "../crates/amiss-wire" }
 atomicwrites = "0.4.4"
 base64 = "0.22"
 getrandom = "0.4.3"
 hex = "0.4"
-hmac = "0.13"
-processkit = { version = "=2.2.5", features = ["stats"] }
-same-file = "1"
-secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-tempfile = "3"
-tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]
-amiss-fixtures = { path = "../crates/amiss-fixtures" }
+fs_at = "0.2.1"
+tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -70,7 +52,3 @@ cast_precision_loss = "deny"
 wildcard_enum_match_arm = "deny"
 mem_forget = "deny"
 dbg_macro = "deny"
-
-[profile.release]
-overflow-checks = true
-panic = "unwind"

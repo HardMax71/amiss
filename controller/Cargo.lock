@@ -63,6 +63,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-controller-service"
+version = "0.1.0"
+dependencies = [
+ "atomicwrites",
+ "base64",
+ "fs_at",
+ "getrandom",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "amiss-fixtures"
 version = "0.8.0"
 dependencies = [
