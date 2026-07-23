@@ -6,6 +6,29 @@ hand-written count ("ten workflows") in a tree that has 22, a paragraph that kep
 explaining a function long after the function was rewritten under it. Nobody notices
 until a reader trusts the page and loses an afternoon.
 
+Here is the smallest version of it. A pull request tightens a retry limit and renames the
+module, touching nothing under `docs/`:
+
+```diff
+--- a/src/retry.rs
++++ b/src/backoff.rs
+@@ -1 +1 @@
+-pub const MAX_ATTEMPTS: u32 = 3;
++pub const MAX_ATTEMPTS: u32 = 5;
+```
+
+The operations page keeps reading:
+
+```markdown
+Retries are capped at three attempts; the limit lives in [`src/retry.rs`](../src/retry.rs).
+```
+
+The paragraph did not change, so nothing in the review draws an eye to it. Against these
+two snapshots Amiss reports the link's target as gone from the candidate tree, which blocks
+under `enforce`. Had the constant changed in place instead, the changed bytes under the
+unchanged paragraph would warn. What neither finding claims is that "three" is now a lie;
+that judgment belongs to whoever reads the finding.
+
 The [audit behind this tool](evidence.md) went through one repository that took
 documentation seriously: golden files, executable CLI examples, a link checker, roughly a
 dozen hand-built defenses. It still held seven live drift classes. The architecture page
