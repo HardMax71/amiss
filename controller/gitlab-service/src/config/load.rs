@@ -41,11 +41,18 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
     let paths = load_execution_paths(&raw.paths, &plan)?;
     let api_token = load_token(&raw.gitlab.api_token_file)?;
     let git_token = load_token(&raw.gitlab.git.token_file)?;
+    let repository_url = format!(
+        "https://{}/{}.git",
+        provider.instance.as_str(),
+        policy.project_path
+    );
     let git_bounds = GitFetchBounds::new(limits.git.request)
         .ok_or(ConfigError("GitLab Git timeout is invalid"))?;
     let objects = Arc::new(
         GitLabGitObjects::new(
             paths.scratch.clone(),
+            policy.project_id,
+            repository_url,
             raw.gitlab.git.username.clone(),
             clone_secret(&git_token),
             limits.git.request,

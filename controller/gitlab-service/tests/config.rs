@@ -184,6 +184,19 @@ fn policy_runner_and_action_bindings_fail_closed() {
         "GitLab runner trust is invalid"
     );
 
+    for target in ["refs/heads/main", "bad..branch"] {
+        let mut invalid_target = Fixture::new();
+        *invalid_target.field("/policy/target_branch") = json!(target);
+        invalid_target.save();
+        assert_eq!(
+            ServiceConfig::load(&invalid_target.config)
+                .err()
+                .unwrap()
+                .to_string(),
+            "GitLab policy target branch is invalid"
+        );
+    }
+
     let wrong_action = Fixture::new();
     wrong_action.save();
     let mut descriptor: Value =

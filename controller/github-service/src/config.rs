@@ -13,7 +13,7 @@ use amiss_controller_service::{
     CheckPlanFiles, InboxLimits, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
     load_limits, load_paths, load_plan, load_webhook_keyring, read_regular, read_strict_json,
 };
-use amiss_wire::model::{BranchRef, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use serde::Deserialize;
 
 const PRIVATE_KEY_BYTES: u64 = 65_536;
@@ -105,6 +105,7 @@ impl RawConfig {
             .map_err(|_defect| ConfigError("listen must be one socket address"))?;
         let scope = checked_scope(&self.github, self.repository)?;
         let plan = Arc::new(load_plan(&self.plan)?);
+        validate_action(&scope.provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let trust_set = TrustSetId::new("github-webhook-keys".to_owned())
             .ok_or(ConfigError("trust set identity is invalid"))?;
@@ -244,6 +245,16 @@ fn github_branch(branch: &str) -> Result<BranchRef, ConfigError> {
         .then(|| BranchRef::new(format!("refs/heads/{branch}")))
         .flatten()
         .ok_or(ConfigError("GitHub target branch is invalid"))
+}
+
+fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
+    (plan.execution.action_repository.host == provider.instance.as_str()
+        && !plan.execution.action_repository.owner.contains('/')
+        && plan.execution.action_object_format == ObjectFormat::Sha1)
+        .then_some(())
+        .ok_or(ConfigError(
+            "action repository must use this SHA-1 GitHub instance",
+        ))
 }
 
 fn positive_id(raw: u64) -> Result<IntegrationId, ConfigError> {

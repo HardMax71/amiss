@@ -12,7 +12,7 @@ use amiss_controller::{
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EvaluationRequest, check_lane, evaluation_router,
+    AdmissionRejection, EvaluationRequest, check_lane, evaluation_router, shutdown_signal,
 };
 use axum::Router;
 use axum::http::StatusCode;
@@ -70,7 +70,7 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
         result = &mut server => {
             result.map_err(|_defect| ServiceError("HTTP evaluation service stopped"))
         }
-        signal = tokio::signal::ctrl_c() => {
+        signal = shutdown_signal() => {
             signal.map_err(|_defect| ServiceError("shutdown signal cannot be observed"))
         }
     }

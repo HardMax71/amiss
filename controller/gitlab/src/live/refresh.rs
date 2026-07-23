@@ -1,7 +1,7 @@
 use amiss_controller::ProviderError;
 use serde::de::DeserializeOwned;
 
-use crate::identity::exact_sha1;
+use crate::identity::{canonical_project_path, exact_sha1, repository_url};
 use crate::{
     GitLabApi, GitLabBranch, GitLabJob, GitLabMergeRequest, GitLabObjects, GitLabPipeline,
     GitLabProject, GitLabProtection, GitLabRefresh, GitLabRefreshQuery, GitLabTrainCar,
@@ -142,6 +142,13 @@ impl GitLabClient {
         project: &GitLabProject,
         budget: Budget,
     ) -> Result<GitLabObjects, ProviderError> {
+        let repository_url = validated_repository_url(
+            self.transport.provider_instance(),
+            query.project_id,
+            project.id,
+            &project.path_with_namespace,
+            &project.http_url_to_repo,
+        )?;
         let gate_commit = exact_sha1(&pipeline.sha).ok_or(ProviderError::InvalidResponse)?;
         let (commit, budget) = self.fetch_project::<CommitResponse>(
             project_id,
@@ -162,7 +169,7 @@ impl GitLabClient {
         }
         let objects = self.objects.resolve(&crate::GitLabObjectRequest {
             project_id: query.project_id,
-            repository_url: project.http_url_to_repo.clone(),
+            repository_url,
             gate_commit,
             base_commit,
             timeout: budget.remaining()?,
@@ -190,6 +197,22 @@ impl GitLabClient {
     ) -> Result<(T, Budget), ProviderError> {
         self.transport.get(self.endpoint(project_id, tail)?, budget)
     }
+}
+
+pub(super) fn validated_repository_url(
+    provider_instance: &str,
+    expected_project_id: u64,
+    project_id: u64,
+    project_path: &str,
+    reported_url: &str,
+) -> Result<String, ProviderError> {
+    let project_path =
+        canonical_project_path(project_path).ok_or(ProviderError::InvalidResponse)?;
+    let canonical =
+        repository_url(provider_instance, &project_path).ok_or(ProviderError::InvalidResponse)?;
+    (project_id == expected_project_id && reported_url == canonical)
+        .then_some(canonical)
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 fn validate_query(query: &GitLabRefreshQuery) -> Result<(), ProviderError> {

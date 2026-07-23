@@ -150,6 +150,10 @@ impl Transport {
         })
     }
 
+    pub(super) fn provider_instance(&self) -> &str {
+        self.shared.provider.instance.as_str()
+    }
+
     pub(super) fn endpoint<'a>(
         &self,
         segments: impl IntoIterator<Item = &'a str>,

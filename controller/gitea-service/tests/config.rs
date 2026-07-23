@@ -216,6 +216,26 @@ fn action_and_repository_must_stay_on_the_exact_lane() {
             .to_string(),
         "action repository must use this SHA-1 provider instance"
     );
+
+    let nested_action = Fixture::new("gitea");
+    nested_action.save();
+    let constraint = nested_action
+        .value
+        .pointer("/plan/execution_constraint_file")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let mut descriptor: Value =
+        serde_json::from_slice(&std::fs::read(constraint).unwrap()).unwrap();
+    *descriptor.pointer_mut("/action_repository/owner").unwrap() = json!("nested/group");
+    std::fs::write(constraint, serde_json::to_vec_pretty(&descriptor).unwrap()).unwrap();
+    assert_eq!(
+        ServiceConfig::load(&nested_action.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "action repository must use this SHA-1 provider instance"
+    );
 }
 
 #[test]

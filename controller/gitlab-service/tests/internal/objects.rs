@@ -3,9 +3,10 @@
 use std::time::{Duration, Instant};
 
 use amiss_controller::ProviderError;
+use amiss_controller_gitlab::GitLabObjectRequest;
 use amiss_wire::model::{ObjectFormat, Oid};
 
-use super::read_objects;
+use super::{read_objects, validate_request};
 
 #[test]
 fn local_object_proof_reads_exact_commit_trees_and_parents()
@@ -39,6 +40,32 @@ fn an_expired_object_proof_does_not_touch_the_repository() -> Result<(), Box<dyn
     assert_eq!(
         read_objects(pair.root(), &gate, &base, Instant::now()),
         Err(ProviderError::Unavailable)
+    );
+    Ok(())
+}
+
+#[test]
+fn object_request_must_match_the_configured_project_and_repository()
+-> Result<(), Box<dyn std::error::Error>> {
+    let repository_url = "https://gitlab.example/acme/widget.git";
+    let request = GitLabObjectRequest {
+        project_id: 101,
+        repository_url: repository_url.to_owned(),
+        gate_commit: oid(&"a".repeat(40))?,
+        base_commit: oid(&"b".repeat(40))?,
+        timeout: Duration::from_secs(1),
+    };
+    assert_eq!(validate_request(&request, 101, repository_url), Ok(()));
+
+    let mut attacker = request.clone();
+    attacker.repository_url = "https://attacker.invalid/acme/widget.git".to_owned();
+    assert_eq!(
+        validate_request(&attacker, 101, repository_url),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        validate_request(&request, 202, repository_url),
+        Err(ProviderError::InvalidResponse)
     );
     Ok(())
 }

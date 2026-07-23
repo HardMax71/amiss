@@ -7,6 +7,7 @@ use amiss_controller::{
     DeliveryLease, LeaseCompletion, LeaseFence, LeaseRenewal, Publication, StageOutcome,
     StagedPublication,
 };
+use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::support::{
     FakeAdapter, LedgerError, ScriptedLedger, complete, controller_with_ledger, delivery, lease,
@@ -166,6 +167,44 @@ fn a_lost_completion_record_is_distinct_after_publication() {
         Err(ControllerError::CompletionLost)
     ));
     assert_eq!(adapter.publications().len(), 1);
+}
+
+#[test]
+fn a_staged_gate_must_use_the_publication_runs_object_format() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let authenticated = delivery(&provider, change, 'b');
+    let expected = lease();
+    let staged = StagedPublication {
+        evaluation_id: expected.evaluation_id.clone(),
+        fence: expected.fence,
+        publication: Box::new(Publication {
+            provider_run: authenticated.provider_run.clone(),
+            evaluation_id: expected.evaluation_id.clone(),
+            check: expected.check.clone(),
+            run: run.clone(),
+            gate_commit: Oid::new(ObjectFormat::Sha256, "e".repeat(64)).unwrap(),
+            conclusion: CheckConclusion::Pass,
+            report: None,
+        }),
+    };
+    let adapter = Arc::new(FakeAdapter::new(authenticated, []));
+    let ledger = ScriptedLedger {
+        claim: Some(DeliveryClaim::Publish(staged)),
+        renewals: VecDeque::new(),
+        stage: None,
+        completion: LeaseCompletion::Lost,
+    };
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::WrongProviderRun)
+    ));
+    assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 0);
+    assert!(controller.runner.requests.is_empty());
+    assert!(adapter.publications().is_empty());
 }
 
 #[test]

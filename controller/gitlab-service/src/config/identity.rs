@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use amiss_controller::{IntegrationId, PlanScope, ProviderIdentity, TrustAnchorId};
 use amiss_controller_gitlab::{OidcPublicKey, PolicyBinding, RunnerTrust};
 use amiss_controller_service::{ConfigError, read_regular};
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::raw::{RawOidcKey, RawPolicy};
 
@@ -26,7 +26,12 @@ pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
         .collect::<BTreeSet<_>>();
     let runners_valid =
         self_hosted_ids.len() == runner_count && self_hosted_ids.iter().all(|runner| *runner > 0);
-    runners_valid
+    if !runners_valid {
+        return Err(ConfigError("GitLab runner trust is invalid"));
+    }
+    let target_valid = !raw.target_branch.starts_with("refs/")
+        && BranchRef::new(format!("refs/heads/{}", raw.target_branch)).is_some();
+    target_valid
         .then_some(PolicyBinding {
             integration,
             project_id: raw.project_id,
@@ -40,7 +45,7 @@ pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
                 self_hosted_ids,
             },
         })
-        .ok_or(ConfigError("GitLab runner trust is invalid"))
+        .ok_or(ConfigError("GitLab policy target branch is invalid"))
 }
 
 pub(super) fn keys(raw: Vec<RawOidcKey>) -> Result<Vec<OidcPublicKey>, ConfigError> {

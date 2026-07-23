@@ -17,6 +17,8 @@ const BASE_REF: &str = "refs/amiss/gitlab/base";
 #[derive(Clone)]
 pub(crate) struct GitLabGitObjects {
     scratch: PathBuf,
+    project_id: u64,
+    repository_url: String,
     username: String,
     token: SecretString,
     maximum: Duration,
@@ -25,6 +27,8 @@ pub(crate) struct GitLabGitObjects {
 impl GitLabGitObjects {
     pub(crate) fn new(
         scratch: PathBuf,
+        project_id: u64,
+        repository_url: String,
         username: String,
         token: SecretString,
         maximum: Duration,
@@ -34,8 +38,14 @@ impl GitLabGitObjects {
             && username
                 .chars()
                 .all(|character| character != ':' && !character.is_control());
-        (valid_username && GitFetchBounds::new(maximum).is_some()).then_some(Self {
+        (project_id > 0
+            && repository_url.starts_with("https://")
+            && valid_username
+            && GitFetchBounds::new(maximum).is_some())
+        .then_some(Self {
             scratch,
+            project_id,
+            repository_url,
             username,
             token,
             maximum,
@@ -45,7 +55,7 @@ impl GitLabGitObjects {
 
 impl GitLabObjectResolver for GitLabGitObjects {
     fn resolve(&self, request: &GitLabObjectRequest) -> Result<GitLabObjects, ProviderError> {
-        validate_request(request)?;
+        validate_request(request, self.project_id, &self.repository_url)?;
         let seconds = request.timeout.min(self.maximum).as_secs();
         let timeout = Duration::from_secs(seconds);
         let bounds = GitFetchBounds::new(timeout).ok_or(ProviderError::Unavailable)?;
@@ -58,7 +68,7 @@ impl GitLabObjectResolver for GitLabGitObjects {
             .map_err(|_defect| ProviderError::Unavailable)?;
         let cancelled = AtomicBool::new(false);
         fetch_exact(ExactFetch {
-            url: &request.repository_url,
+            url: &self.repository_url,
             wants: &[
                 ExactWant {
                     oid: &request.gate_commit,
@@ -87,13 +97,20 @@ impl GitLabObjectResolver for GitLabGitObjects {
     }
 }
 
-fn validate_request(request: &GitLabObjectRequest) -> Result<(), ProviderError> {
+fn validate_request(
+    request: &GitLabObjectRequest,
+    project_id: u64,
+    repository_url: &str,
+) -> Result<(), ProviderError> {
     let exact = [&request.gate_commit, &request.base_commit]
         .into_iter()
         .all(|oid| Oid::new(ObjectFormat::Sha1, oid.as_str().to_owned()).as_ref() == Some(oid));
-    (request.project_id > 0 && exact && !request.timeout.is_zero())
-        .then_some(())
-        .ok_or(ProviderError::InvalidResponse)
+    (request.project_id == project_id
+        && request.repository_url == repository_url
+        && exact
+        && !request.timeout.is_zero())
+    .then_some(())
+    .ok_or(ProviderError::InvalidResponse)
 }
 
 fn read_objects(
