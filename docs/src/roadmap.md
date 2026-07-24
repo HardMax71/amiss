@@ -169,8 +169,9 @@ inspectable; version-specific history stays in the
 
 ## Now: prove and run provider lanes
 
-The three provider lanes are implemented. The next phase collects evidence from real providers
-and makes the source-built services easier to run; it does not add another provider.
+The three provider lanes and their shared execution-constraint producer are implemented. The
+next phase collects evidence from real providers and makes the source-built services easier to
+run; it does not add another provider.
 
 - Retain positive and revoked-control runs from provider-hosted GitHub, GitLab, Gitea, and Forgejo
   test projects. Record the provider version, controller commit, and provider evidence. Local HTTP

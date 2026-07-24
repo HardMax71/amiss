@@ -201,6 +201,9 @@ deployment's trust boundary. Otherwise list the exact positive self-hosted runne
 
 ## Build and run
 
+First [prepare the execution constraint](execution-constraint.md) for the exact action commit,
+bootstrap, and stable controller result name used by this lane.
+
 Build the nested workspace from source:
 
 ```sh

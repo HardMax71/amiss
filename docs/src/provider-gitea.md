@@ -155,6 +155,9 @@ therefore permanent. Removing it would reopen a signed request that remains vali
 
 ## Build and run
 
+First [prepare the execution constraint](execution-constraint.md) for the exact action commit,
+bootstrap, and review label used by this lane.
+
 Build the nested workspace from source:
 
 ```sh
