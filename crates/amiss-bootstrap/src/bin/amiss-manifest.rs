@@ -3,16 +3,19 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use amiss_bootstrap::build::{StagedArtifact, StagedBuild, StagedFile, build_manifest};
+use amiss_bootstrap::build::{
+    RELEASE_MANIFEST_DIGEST_PATH, RELEASE_MANIFEST_PATH, StagedArtifact, StagedBuild, StagedFile,
+    build_manifest,
+};
 use amiss_wire::action::executable_platform;
 use amiss_wire::manifest::RuntimeRole;
 
 /// The release-side manifest builder: it reads the staged action tree,
-/// hashes the exact bytes, and writes the strict manifest blob. The reviewed
-/// action definition and launcher are pinned into every platform's runtime
-/// closure, so the bootstrap validates their bytes like any other runtime
-/// file. Every platform row comes from the artifact's own header, so a
-/// mislabeled binary cannot enter the manifest.
+/// hashes the exact bytes, and writes the strict manifest plus its digest
+/// marker. The reviewed action definition and launcher are pinned into every
+/// platform's runtime closure, so the bootstrap validates their bytes like
+/// any other runtime file. Every platform row comes from the artifact's own
+/// header, so a mislabeled binary cannot enter the manifest.
 ///
 /// `amiss-manifest --tree DIR --version V --host H --owner O --repository R
 ///  --commit OID --action PATH --launcher PATH --lock PATH [--lock PATH]...
@@ -104,8 +107,13 @@ fn run(args: &Args) -> Result<(), String> {
             .collect(),
     };
     let (manifest, digest) = build_manifest(&build, &mut staged).map_err(str::to_owned)?;
-    std::fs::write(args.tree.join("release-manifest.json"), &manifest)
-        .map_err(|defect| format!("release-manifest.json: {defect}"))?;
+    std::fs::write(args.tree.join(RELEASE_MANIFEST_PATH), &manifest)
+        .map_err(|defect| format!("{RELEASE_MANIFEST_PATH}: {defect}"))?;
+    std::fs::write(
+        args.tree.join(RELEASE_MANIFEST_DIGEST_PATH),
+        format!("{digest}\n"),
+    )
+    .map_err(|defect| format!("{RELEASE_MANIFEST_DIGEST_PATH}: {defect}"))?;
     print_digest(digest.to_string().as_str());
     Ok(())
 }

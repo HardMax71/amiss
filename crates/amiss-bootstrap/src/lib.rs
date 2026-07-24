@@ -1,4 +1,5 @@
 pub mod build;
+pub mod constraint;
 pub mod result;
 pub mod supervise;
 
@@ -15,6 +16,7 @@ use amiss_wire::model::{Oid, RepoPathText};
 pub use amiss_wire::report::ENGINE_DOMAIN;
 
 pub const BOOTSTRAP_DOMAIN: &str = "amiss/scanner-action-bootstrap";
+pub const BOOTSTRAP_EXECUTABLE_BYTES: u64 = 33_554_432;
 pub const ACTION_METADATA_PATH: &str = "action.yml";
 
 /// A validation refusal and the trust decision it requires. The diagnostic is
@@ -69,27 +71,34 @@ pub fn validate(
     if platform != constraint.selected_platform {
         return Err(tampered("platform-binding-mismatch"));
     }
-
-    let tree = action_tree(action, resources, constraint)?;
-
-    let (manifest_bytes, manifest_mode) =
-        blob(action, resources, &tree, &constraint.manifest_path)?;
-    if manifest_mode != GitMode::RegularFile {
-        return Err(tampered("path-not-regular-blob"));
+    if action.object_format() != constraint.action_object_format {
+        return Err(tampered("action-tree-mismatch"));
     }
-    let manifest = ReleaseManifest::parse(&manifest_bytes)
-        .map_err(|_defect| tampered("manifest-unreadable"))?;
+    let tree = resolve_action_tree(action, resources, &constraint.action_commit_oid)?;
+    if tree != constraint.action_tree_oid {
+        return Err(tampered("action-tree-mismatch"));
+    }
+    let manifest = load_release_manifest(action, resources, &tree, &constraint.manifest_path)?;
     if manifest.digest != constraint.release_manifest_digest {
         return Err(tampered("manifest-digest-mismatch"));
     }
+    validate_release(action, resources, &tree, manifest, platform)
+}
 
+pub(crate) fn validate_release(
+    action: &Repository,
+    resources: &mut GitResources,
+    tree: &Oid,
+    manifest: ReleaseManifest,
+    platform: ConstraintPlatform,
+) -> Result<Validated, Refusal> {
     // The manifest's lock set is parse-bound to its own set digest, so what is
     // left to prove is that the tree really carries those bytes: each recorded
     // lockfile re-resolved as a regular blob and re-hashed under the same
     // domain the release builder used. Without this, the one file that says
     // which dependencies built the engine is the one file nothing checks.
     for (lock_path, lock_digest) in &manifest.dependency_lock.files {
-        let (lock_bytes, lock_mode) = blob(action, resources, &tree, lock_path)?;
+        let (lock_bytes, lock_mode) = blob(action, resources, tree, lock_path)?;
         if lock_mode != GitMode::RegularFile {
             return Err(tampered("path-not-regular-blob"));
         }
@@ -107,7 +116,7 @@ pub fn validate(
 
     let mut binary: Option<Vec<u8>> = None;
     for file in &artifact.runtime_files {
-        let (bytes, mode) = blob(action, resources, &tree, &file.path)?;
+        let (bytes, mode) = blob(action, resources, tree, &file.path)?;
         if mode != file.git_mode {
             return Err(tampered("runtime-closure-mismatch"));
         }
@@ -151,32 +160,36 @@ pub fn validate(
     })
 }
 
-/// Resolves the reported action commit to its reported tree, requiring the
-/// commit to exist in the pinned object format and its tree OID to equal the
-/// reported one.
-fn action_tree(
+pub(crate) fn resolve_action_tree(
     action: &Repository,
     resources: &mut GitResources,
-    constraint: &ExecutionConstraintDescriptor,
+    commit_oid: &Oid,
 ) -> Result<Oid, Refusal> {
-    if action.object_format() != constraint.action_object_format {
-        return Err(tampered("action-tree-mismatch"));
-    }
     let object = action
-        .read_expected(resources, &constraint.action_commit_oid, ObjectKind::Commit)
+        .read_expected(resources, commit_oid, ObjectKind::Commit)
         .map_err(|_defect| tampered("action-tree-mismatch"))?;
     let commit = amiss_git::parse_commit(action.object_format(), &object.body)
         .map_err(|_defect| tampered("action-tree-mismatch"))?;
-    if commit.tree != constraint.action_tree_oid {
-        return Err(tampered("action-tree-mismatch"));
-    }
     Ok(commit.tree)
+}
+
+pub(crate) fn load_release_manifest(
+    action: &Repository,
+    resources: &mut GitResources,
+    tree: &Oid,
+    path: &RepoPathText,
+) -> Result<ReleaseManifest, Refusal> {
+    let (bytes, mode) = blob(action, resources, tree, path)?;
+    if mode != GitMode::RegularFile {
+        return Err(tampered("path-not-regular-blob"));
+    }
+    ReleaseManifest::parse(&bytes).map_err(|_defect| tampered("manifest-unreadable"))
 }
 
 /// Resolves one path in the pinned tree as a regular non-symlink blob,
 /// returning its bytes and its exact Git mode. Symlinks, gitlinks,
 /// directories, and absent entries all refuse.
-fn blob(
+pub(crate) fn blob(
     action: &Repository,
     resources: &mut GitResources,
     tree: &Oid,

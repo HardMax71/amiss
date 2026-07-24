@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_bootstrap::result::RESULT_BYTES;
+use amiss_bootstrap::{BOOTSTRAP_DOMAIN, BOOTSTRAP_EXECUTABLE_BYTES};
 use amiss_wire::digest::hb;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::{MACHINE_JSON_BYTES, WATCHDOG_MILLISECONDS};
@@ -25,8 +25,6 @@ mod tests;
 const MAX_HEARTBEAT_WAIT: Duration = Duration::from_secs(5);
 const PROCESS_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 const PROCESS_DRAIN_POLL: Duration = Duration::from_millis(10);
-pub const BOOTSTRAP_EXECUTABLE_BYTES: u64 = 33_554_432;
-
 /// The trusted paths, sealed input, and time bounds for one bootstrap process.
 #[derive(Clone, Copy, Debug)]
 pub struct BootstrapRun<'a> {

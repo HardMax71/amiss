@@ -132,7 +132,6 @@ jobs:
             --launcher dist/launcher.js \
             $args)"
           printf 'release_manifest_digest=%s\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$digest" > action-tree/release-manifest.digest
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: action-tree
