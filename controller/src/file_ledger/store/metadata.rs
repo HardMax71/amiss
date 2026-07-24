@@ -1,15 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-use super::frame;
-use crate::file_ledger::{FileLedgerConfig, FileLedgerError};
+use crate::file_ledger::{FileLedgerConfig, FileLedgerError, frame};
 
 const METADATA_SCHEMA: &str = "amiss/controller-file-root-v2";
 const LEGACY_METADATA_SCHEMA: &str = "amiss/controller-file-root-v1";
-const METADATA_DOMAIN: &str = "amiss/controller-file-root-frame-v1";
-const FRAME_MAGIC: &[u8] = b"AMISS-DELIVERY-ROOT";
-const FRAME_VERSION: u8 = 1;
 
 pub(super) const MAX_METADATA_BYTES: u64 = 4_096;
+
+const METADATA_FRAME: frame::FrameFormat = frame::define(
+    b"AMISS-DELIVERY-ROOT",
+    "amiss/controller-file-root-frame-v1",
+    MAX_METADATA_BYTES,
+);
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -96,40 +98,24 @@ impl StoredMetadata {
 }
 
 pub(super) fn encode(metadata: &RootMetadata) -> Result<Vec<u8>, FileLedgerError> {
-    metadata.validate_values()?;
-    if !matches!(
-        metadata.schema.as_str(),
-        METADATA_SCHEMA | LEGACY_METADATA_SCHEMA
-    ) {
-        return Err(FileLedgerError::Corrupt);
-    }
-    let payload = serde_json::to_vec(metadata).map_err(|_| FileLedgerError::Corrupt)?;
-    frame::encode(
-        FRAME_MAGIC,
-        FRAME_VERSION,
-        METADATA_DOMAIN,
-        &payload,
-        MAX_METADATA_BYTES,
-    )
+    frame::encode(METADATA_FRAME, metadata, validate)
 }
 
 pub(super) fn decode(bytes: &[u8]) -> Result<StoredMetadata, FileLedgerError> {
-    let payload = frame::decode(
-        bytes,
-        FRAME_MAGIC,
-        FRAME_VERSION,
-        METADATA_DOMAIN,
-        MAX_METADATA_BYTES,
-    )?;
-    let metadata: RootMetadata =
-        serde_json::from_slice(payload).map_err(|_| FileLedgerError::Corrupt)?;
-    metadata.validate_values()?;
-    if serde_json::to_vec(&metadata).map_err(|_| FileLedgerError::Corrupt)? != payload {
-        return Err(FileLedgerError::Corrupt);
-    }
+    let metadata = frame::decode(METADATA_FRAME, bytes, validate)?;
     match metadata.schema.as_str() {
         METADATA_SCHEMA => Ok(StoredMetadata::Current(metadata)),
         LEGACY_METADATA_SCHEMA => Ok(StoredMetadata::Legacy(metadata)),
         _ => Err(FileLedgerError::Corrupt),
     }
+}
+
+fn validate(metadata: &RootMetadata) -> Result<(), FileLedgerError> {
+    metadata.validate_values()?;
+    matches!(
+        metadata.schema.as_str(),
+        METADATA_SCHEMA | LEGACY_METADATA_SCHEMA
+    )
+    .then_some(())
+    .ok_or(FileLedgerError::Corrupt)
 }

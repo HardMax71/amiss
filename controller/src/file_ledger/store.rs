@@ -1,6 +1,5 @@
 mod capacity;
 mod cleanup;
-mod frame;
 mod metadata;
 mod report;
 

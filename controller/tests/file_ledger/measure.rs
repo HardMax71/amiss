@@ -19,6 +19,7 @@ fn admission_cost_is_measured_against_retained_root_entries() {
     let directory = TempDir::new().unwrap();
     let clock = std::sync::Arc::new(TestClock::new(1_000));
     let mut ledger = open_with_max(directory.path(), &clock, MAX_RECORDS);
+    let binding = check_binding();
     let mut created = 0_u64;
 
     for threshold in THRESHOLDS {
@@ -34,7 +35,7 @@ fn admission_cost_is_measured_against_retained_root_entries() {
                     &format!("{}", threshold + sample + 1),
                 );
                 let started = Instant::now();
-                let claim = ledger.claim(&delivery, &check_binding()).unwrap();
+                let claim = ledger.claim(&delivery, &binding).unwrap();
                 let elapsed = started.elapsed();
                 assert!(matches!(claim, DeliveryClaim::Execute(_)));
                 elapsed
@@ -51,7 +52,7 @@ fn admission_cost_is_measured_against_retained_root_entries() {
         ledger
             .claim(
                 &delivery_with_id(&format!("fill-{fill}"), &format!("{}", 200_000 + fill)),
-                &check_binding(),
+                &binding,
             )
             .unwrap();
     }
@@ -60,7 +61,7 @@ fn admission_cost_is_measured_against_retained_root_entries() {
             let delivery =
                 delivery_with_id(&format!("full-{sample}"), &format!("{}", 300_000 + sample));
             let started = Instant::now();
-            let claim = ledger.claim(&delivery, &check_binding());
+            let claim = ledger.claim(&delivery, &binding);
             let elapsed = started.elapsed();
             assert!(matches!(claim, Err(FileLedgerError::Full)));
             elapsed

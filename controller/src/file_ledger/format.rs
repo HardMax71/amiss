@@ -1,4 +1,3 @@
-mod frame;
 mod model;
 mod publication;
 mod record;
@@ -11,12 +10,26 @@ use crate::{ControllerEvaluationId, DeliveryIdentity};
 use self::model::StoredDeliveryKey;
 pub(super) use self::publication::{ReportRef, StoredPublication};
 pub(super) use self::record::{Record, State};
-use super::FileLedgerError;
+use super::{FileLedgerError, frame};
 
-pub(super) use self::frame::{MAX_RECORD_BYTES, decode, encode};
+const RECORD_FRAME: frame::FrameFormat = frame::define(
+    b"AMISS-DELIVERY-RECORD",
+    "amiss/controller-file-record-v1",
+    MAX_RECORD_BYTES,
+);
 
 const KEY_DOMAIN: &str = "amiss/controller-delivery-key-v1";
 const STAGED_DOMAIN: &str = "amiss/controller-staged-publication-v2";
+
+pub(super) const MAX_RECORD_BYTES: u64 = 131_072;
+
+pub(super) fn encode(record: &Record) -> Result<Vec<u8>, FileLedgerError> {
+    frame::encode(RECORD_FRAME, record, Record::validate)
+}
+
+pub(super) fn decode(bytes: &[u8]) -> Result<Record, FileLedgerError> {
+    frame::decode(RECORD_FRAME, bytes, Record::validate)
+}
 
 pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLedgerError> {
     let bytes = serde_json::to_vec(&StoredDeliveryKey::new(identity))

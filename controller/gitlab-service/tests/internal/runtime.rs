@@ -18,13 +18,16 @@ use amiss_controller_git::GitFetchBounds;
 use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest};
 use axum::http::StatusCode;
 use secrecy::SecretString;
+use tokio::sync::Notify;
 
-use super::{Lane, evaluate, rejection_status, result_status};
+use super::{
+    Lane, ServiceError, cleanup_ledger, evaluate, maintenance_loop, rejection_status, result_status,
+};
 
 #[test]
 fn only_a_published_pass_is_an_http_success() {
     assert_eq!(
-        result_status::<super::ServiceError>(Ok(HandleOutcome::Published(CheckConclusion::Pass))),
+        result_status::<ServiceError>(Ok(HandleOutcome::Published(CheckConclusion::Pass))),
         StatusCode::NO_CONTENT
     );
     for conclusion in [
@@ -33,12 +36,12 @@ fn only_a_published_pass_is_an_http_success() {
         CheckConclusion::Unavailable(RunFailure::Unavailable),
     ] {
         assert_eq!(
-            result_status::<super::ServiceError>(Ok(HandleOutcome::Published(conclusion))),
+            result_status::<ServiceError>(Ok(HandleOutcome::Published(conclusion))),
             StatusCode::PRECONDITION_FAILED
         );
     }
     assert_eq!(
-        result_status::<super::ServiceError>(Err(super::ServiceError("evaluation unavailable"))),
+        result_status::<ServiceError>(Err(ServiceError("evaluation unavailable"))),
         StatusCode::SERVICE_UNAVAILABLE
     );
 }
@@ -79,7 +82,7 @@ fn failed_authentication_never_touches_the_delivery_record() {
         route,
         adapter,
         plans: PlanRegistry::new(),
-        ledger,
+        ledger: Arc::new(ledger),
         clock,
         ingress,
         project_id: 101,
@@ -108,6 +111,67 @@ fn failed_authentication_never_touches_the_delivery_record() {
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(entries(&ledger_root), entries_before);
+}
+
+#[tokio::test(start_paused = true)]
+async fn periodic_maintenance_cleans_without_stopping_the_lane() {
+    let state = tempfile::TempDir::new().unwrap();
+    let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
+    let ledger = Arc::new(
+        FileLedgerRoot::open(
+            state.path(),
+            FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+        )
+        .unwrap(),
+    );
+    let leftover = state.path().join(".atomicwrite-session-leftover");
+    std::fs::create_dir(&leftover).unwrap();
+    let completed = Arc::new(Notify::new());
+    let observed = Arc::clone(&completed);
+    let period = Duration::from_mins(1);
+    let maintenance = tokio::spawn(maintenance_loop(period, move || {
+        let ledger = Arc::clone(&ledger);
+        let completed = Arc::clone(&observed);
+        async move {
+            cleanup_ledger(ledger).await?;
+            completed.notify_one();
+            Ok(())
+        }
+    }));
+
+    assert!(leftover.is_dir());
+    assert!(!maintenance.is_finished());
+    tokio::time::advance(period).await;
+    completed.notified().await;
+    assert!(!leftover.exists());
+    assert!(!maintenance.is_finished());
+
+    maintenance.abort();
+}
+
+#[tokio::test(start_paused = true)]
+async fn periodic_maintenance_failure_stops_the_lane() {
+    let state = tempfile::TempDir::new().unwrap();
+    let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
+    let ledger = Arc::new(
+        FileLedgerRoot::open(
+            state.path(),
+            FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+        )
+        .unwrap(),
+    );
+    std::fs::write(state.path().join("unknown"), b"invalid ledger entry").unwrap();
+    let period = Duration::from_mins(1);
+    let maintenance = tokio::spawn(maintenance_loop(period, move || {
+        cleanup_ledger(Arc::clone(&ledger))
+    }));
+
+    assert!(!maintenance.is_finished());
+    tokio::time::advance(period).await;
+    assert_eq!(
+        maintenance.await.unwrap(),
+        Err(ServiceError("delivery record maintenance failed"))
+    );
 }
 
 fn entries(root: &std::path::Path) -> Vec<std::ffi::OsString> {
