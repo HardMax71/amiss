@@ -8,6 +8,9 @@ use amiss_wire::manifest::{
 
 use crate::ENGINE_DOMAIN;
 
+pub const RELEASE_MANIFEST_PATH: &str = "release-manifest.json";
+pub const RELEASE_MANIFEST_DIGEST_PATH: &str = "release-manifest.digest";
+
 /// One staged runtime file: its action-tree path, its role, whether Git will
 /// record the execute bit, and its exact bytes.
 pub struct StagedFile<'bytes> {

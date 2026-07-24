@@ -2,6 +2,7 @@ use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+use amiss_wire::controls::ConstraintPlatform;
 use sha1_checked::Digest as _;
 
 /// Repository-local variables Git exports to hooks. They must not select the
@@ -218,6 +219,50 @@ pub fn directory_link(target: &Path, link: &Path) -> std::io::Result<()> {
     } else {
         Err(std::io::Error::other("mklink /J failed"))
     }
+}
+
+/// A small executable header for one supported platform.
+#[must_use]
+pub fn executable_bytes(platform: ConstraintPlatform) -> Vec<u8> {
+    let mut bytes = match platform {
+        ConstraintPlatform::LinuxX8664 | ConstraintPlatform::LinuxAarch64 => {
+            let machine = if platform == ConstraintPlatform::LinuxX8664 {
+                [0x3e, 0x00]
+            } else {
+                [0xb7, 0x00]
+            };
+            let mut header = vec![0x7f, b'E', b'L', b'F', 2, 1, 1, 0];
+            header.extend_from_slice(&[0; 8]);
+            header.extend_from_slice(&[0x02, 0x00]);
+            header.extend_from_slice(&machine);
+            header
+        }
+        ConstraintPlatform::MacosX8664 | ConstraintPlatform::MacosAarch64 => {
+            let cpu = if platform == ConstraintPlatform::MacosX8664 {
+                [0x07, 0x00, 0x00, 0x01]
+            } else {
+                [0x0c, 0x00, 0x00, 0x01]
+            };
+            let mut header = vec![0xcf, 0xfa, 0xed, 0xfe];
+            header.extend_from_slice(&cpu);
+            header
+        }
+        ConstraintPlatform::WindowsX8664 | ConstraintPlatform::WindowsAarch64 => {
+            let machine = if platform == ConstraintPlatform::WindowsX8664 {
+                [0x64, 0x86]
+            } else {
+                [0x64, 0xaa]
+            };
+            let mut header = vec![b'M', b'Z'];
+            header.resize(0x3c, 0);
+            header.extend_from_slice(&0x40_u32.to_le_bytes());
+            header.extend_from_slice(b"PE\0\0");
+            header.extend_from_slice(&machine);
+            header
+        }
+    };
+    bytes.extend_from_slice(&[0x90; 512]);
+    bytes
 }
 
 /// Writes one loose object of `kind` framing `body` into the store at

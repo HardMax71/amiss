@@ -18,12 +18,13 @@ mod webhook;
 
 pub use acquiring_runner::{AcquiringRunner, Acquisition, AcquisitionTarget};
 pub use acquisition::{AcquireError, AcquiredRoots, verify_acquired};
+pub use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,
     PolicyControls, bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
-pub use bootstrap_runner::{BOOTSTRAP_EXECUTABLE_BYTES, BootstrapRun, run_bootstrap};
+pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
 pub use clock::{ControllerClock, SystemClock};
 pub use file_ledger::{
     FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError, FileLedgerRoot,
