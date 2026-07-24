@@ -12,9 +12,6 @@ use amiss_bootstrap::validate;
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
-use cap_fs_ext::DirExt;
-use cap_std::ambient_authority;
-use cap_std::fs::Dir;
 use tempfile::TempDir;
 
 mod support;
@@ -96,21 +93,22 @@ fn writes_one_canonical_constraint_without_clobbering() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
     assert_eq!(std::fs::read(first).unwrap(), b"operator-owned");
+}
 
-    let target = destination.path().join("linked-target.json");
-    let linked = destination.path().join("linked-output.json");
-    std::fs::write(&target, b"linked-operator-owned").unwrap();
-    DirExt::symlink_file(
-        &Dir::open_ambient_dir(destination.path(), ambient_authority()).unwrap(),
-        "linked-target.json",
-        "linked-output.json",
-    )
-    .unwrap();
+#[cfg(unix)]
+#[test]
+fn does_not_clobber_a_linked_output() {
+    let release = release(|_root| {});
+    let destination = TempDir::new().unwrap();
+    let target = destination.path().join("target.json");
+    let linked = destination.path().join("linked.json");
+    std::fs::write(&target, b"operator-owned").unwrap();
+    std::os::unix::fs::symlink(&target, &linked).unwrap();
     let output = invoke(&release, &linked);
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
-    assert_eq!(std::fs::read(&linked).unwrap(), b"linked-operator-owned");
-    assert_eq!(std::fs::read(target).unwrap(), b"linked-operator-owned");
+    assert_eq!(std::fs::read(&linked).unwrap(), b"operator-owned");
+    assert_eq!(std::fs::read(target).unwrap(), b"operator-owned");
 }
 
 #[test]
@@ -264,18 +262,14 @@ fn rejects_non_regular_and_oversized_bootstraps() {
     assert_refused(&output, &output_path, "bootstrap-unreadable");
 }
 
+#[cfg(unix)]
 #[test]
 fn rejects_a_linked_bootstrap() {
     let release = release(|_root| {});
     let destination = TempDir::new().unwrap();
     std::fs::write(destination.path().join("bootstrap-target"), b"replacement").unwrap();
     let link = destination.path().join("bootstrap-link");
-    DirExt::symlink_file(
-        &Dir::open_ambient_dir(destination.path(), ambient_authority()).unwrap(),
-        "bootstrap-target",
-        "bootstrap-link",
-    )
-    .unwrap();
+    std::os::unix::fs::symlink("bootstrap-target", &link).unwrap();
     let output_path = destination.path().join("constraint.json");
     let output = command(&release, &release.commit, &link, &output_path)
         .output()

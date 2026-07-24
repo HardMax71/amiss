@@ -11,13 +11,12 @@ publish = false
 [dependencies]
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
+amiss-controller-files = { path = "../files" }
 amiss-controller-git = { path = "../git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 atomicwrites = "0.4.4"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
 base64 = "0.22"
-cap-fs-ext = "4.0.2"
-cap-std = "4.0.2"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 getrandom = "0.4.3"
 hex = "0.4"
@@ -28,6 +27,8 @@ tokio = { version = "1.53.1", features = ["net", "rt-multi-thread", "sync", "tim
 tower-http = { version = "0.7.0", features = ["limit"] }
 
 [dev-dependencies]
+cap-fs-ext = "4.0.2"
+cap-std = "4.0.2"
 hmac = "0.13"
 sha2 = "0.11"
 tempfile = "3"

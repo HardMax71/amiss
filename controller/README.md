@@ -8,6 +8,9 @@ The workspace separates shared mechanics from provider code:
 
 - `amiss-controller` defines provider-neutral ingress, orchestration, durable delivery records,
   and supervised bootstrap contracts.
+- `amiss-controller-files` owns bounded no-follow reads for local trust files.
+- `amiss-controller-constraint` derives one canonical execution constraint from an exact local
+  action commit and bootstrap.
 - `amiss-controller-git` acquires exact SHA-1 commits through the bounded Git protocol-v2 path.
 - `amiss-controller-service` provides a bounded HTTP receiver, a durable raw-delivery inbox, and
   worker for webhook lanes, plus a bounded synchronous endpoint for a CI job that must wait for
