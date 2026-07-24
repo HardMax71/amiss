@@ -21,6 +21,8 @@ tempfile = "3"
 
 [dev-dependencies]
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
+cap-fs-ext = "4.0.2"
+cap-std = "4.0.2"
 
 [lints.rust]
 unsafe_code = "forbid"

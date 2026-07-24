@@ -1,6 +1,8 @@
 use std::path::Path;
 
 use amiss_controller_files::read_bounded;
+use cap_std::ambient_authority;
+use cap_std::fs::Dir;
 use tempfile::TempDir;
 
 #[test]
@@ -17,12 +19,16 @@ fn reads_only_absolute_bounded_regular_files() {
     assert!(read_bounded(&directory, 32).is_err());
 }
 
-#[cfg(unix)]
 #[test]
 fn does_not_follow_the_final_file_entry() {
     let root = TempDir::new().unwrap();
     std::fs::write(root.path().join("target"), b"replacement").unwrap();
     let linked = root.path().join("linked");
-    std::os::unix::fs::symlink("target", &linked).unwrap();
+    cap_fs_ext::DirExt::symlink_file(
+        &Dir::open_ambient_dir(root.path(), ambient_authority()).unwrap(),
+        "target",
+        "linked",
+    )
+    .unwrap();
     assert!(read_bounded(&linked, 32).is_err());
 }
