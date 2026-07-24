@@ -70,6 +70,8 @@ dependencies = [
  "amiss-fixtures",
  "amiss-git",
  "amiss-wire",
+ "cap-fs-ext",
+ "cap-std",
  "tempfile",
 ]
 
