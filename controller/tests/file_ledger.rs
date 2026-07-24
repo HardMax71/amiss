@@ -11,6 +11,8 @@ mod claims;
 mod cleanup;
 #[path = "file_ledger/locking.rs"]
 mod locking;
+#[path = "file_ledger/measure.rs"]
+mod measure;
 #[path = "file_ledger/persistence.rs"]
 mod persistence;
 #[path = "file_ledger/process_locking.rs"]

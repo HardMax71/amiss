@@ -98,6 +98,14 @@ pub(super) fn delivery_with_id(delivery_id: &str, change_id: &str) -> AcceptedDe
 }
 
 pub(super) fn bounded_delivery(delivery_id: &str, change_id: &str) -> AcceptedDelivery {
+    bounded_delivery_at(delivery_id, change_id, BOUNDED_ISSUED_AT)
+}
+
+pub(super) fn bounded_delivery_at(
+    delivery_id: &str,
+    change_id: &str,
+    issued_at: i64,
+) -> AcceptedDelivery {
     let provider = gitlab_provider();
     let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
     let route = DeliveryRoute {
@@ -105,7 +113,7 @@ pub(super) fn bounded_delivery(delivery_id: &str, change_id: &str) -> AcceptedDe
         trust_set: trust_set.clone(),
         signed_time: SignedTimePolicy::Required(Duration::from_mins(1)),
     };
-    let timestamp = (BOUNDED_ISSUED_AT / 1_000).to_string();
+    let timestamp = (issued_at / 1_000).to_string();
     let signature = standard_signature(delivery_id.as_bytes(), timestamp.as_bytes());
     let headers = [
         DeliveryHeader {
@@ -131,11 +139,11 @@ pub(super) fn bounded_delivery(delivery_id: &str, change_id: &str) -> AcceptedDe
         .pre_auth(
             UntrustedDelivery {
                 route: &route,
-                received_at_unix_millis: BOUNDED_ISSUED_AT,
+                received_at_unix_millis: issued_at,
                 headers: &headers,
                 body: WEBHOOK_BODY,
             },
-            &TestClock::new(BOUNDED_ISSUED_AT),
+            &TestClock::new(issued_at),
         )
         .unwrap();
     let key = WebhookKey::new(
@@ -156,7 +164,9 @@ pub(super) fn bounded_delivery(delivery_id: &str, change_id: &str) -> AcceptedDe
     let accepted = policy.post_auth(check, verified).unwrap();
     assert_eq!(
         accepted.replay_keep_through_unix_millis(),
-        Some(BOUNDED_KEEP_THROUGH)
+        (issued_at / 1_000)
+            .checked_mul(1_000)
+            .and_then(|issued_at| issued_at.checked_add(70_000))
     );
     accepted
 }
@@ -286,4 +296,52 @@ pub(super) fn is_delivery_file(name: &str, suffix: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
     })
+}
+
+pub(super) fn downgrade_root_metadata(root: &Path) {
+    const MAGIC: &[u8] = b"AMISS-DELIVERY-ROOT";
+    const DOMAIN: &str = "amiss/controller-file-root-frame-v1";
+
+    let path = root.join(".amiss-root.state");
+    let bytes = fs::read(&path).unwrap();
+    let header = MAGIC.len() + 1 + 8 + 32;
+    let payload = std::str::from_utf8(bytes.get(header..).unwrap()).unwrap();
+    let legacy = payload.replace(
+        "amiss/controller-file-root-v2",
+        "amiss/controller-file-root-v1",
+    );
+    assert_ne!(legacy, payload);
+    fs::write(path, test_frame(MAGIC, DOMAIN, legacy.as_bytes())).unwrap();
+    fs::remove_file(root.join(".amiss-capacity.state")).unwrap();
+}
+
+pub(super) fn write_capacity(
+    root: &Path,
+    maximum: u64,
+    records: u64,
+    pending: Option<&str>,
+    cleanup_pending: bool,
+) {
+    const MAGIC: &[u8] = b"AMISS-DELIVERY-CAPACITY";
+    const DOMAIN: &str = "amiss/controller-file-capacity-frame-v1";
+
+    let pending = serde_json::to_string(&pending).unwrap();
+    let payload = format!(
+        r#"{{"schema":"amiss/controller-file-capacity-v1","max_records":{maximum},"records":{records},"pending_key":{pending},"cleanup_pending":{cleanup_pending}}}"#
+    );
+    fs::write(
+        root.join(".amiss-capacity.state"),
+        test_frame(MAGIC, DOMAIN, payload.as_bytes()),
+    )
+    .unwrap();
+}
+
+fn test_frame(magic: &[u8], domain: &str, payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::new();
+    frame.extend_from_slice(magic);
+    frame.push(1);
+    frame.extend_from_slice(&u64::try_from(payload.len()).unwrap().to_be_bytes());
+    frame.extend_from_slice(hb(domain, payload).as_bytes());
+    frame.extend_from_slice(payload);
+    frame
 }

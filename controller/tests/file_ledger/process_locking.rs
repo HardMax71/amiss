@@ -35,6 +35,12 @@ struct ChildRun {
     status: Option<ExitStatus>,
 }
 
+struct ConcurrentRun {
+    outcomes: Vec<Vec<u8>>,
+    ledger_root: PathBuf,
+    _directory: TempDir,
+}
+
 impl ChildRun {
     fn refresh(&mut self) {
         if self.status.is_none() {
@@ -53,36 +59,45 @@ impl Drop for ChildRun {
 
 #[test]
 fn concurrent_first_claims_choose_one_owner_across_processes() {
-    assert_race(
-        OWNER_TEST_NAME,
-        MAX_RECORDS,
-        ["delivery-9", "delivery-9"],
-        BUSY,
-    );
+    let Some(run) = race(OWNER_TEST_NAME, MAX_RECORDS, ["delivery-9", "delivery-9"]) else {
+        return;
+    };
+    assert_outcomes(&run.outcomes, BUSY);
 }
 
 #[test]
 fn concurrent_distinct_claims_enforce_capacity_across_processes() {
-    assert_race(
-        CAPACITY_TEST_NAME,
-        1,
-        ["capacity-first", "capacity-second"],
-        FULL,
-    );
+    let Some(run) = race(CAPACITY_TEST_NAME, 1, ["capacity-first", "capacity-second"]) else {
+        return;
+    };
+    assert_outcomes(&run.outcomes, FULL);
+
+    let clock = Arc::new(TestClock::new(1_000));
+    let mut reopened = open_with_max(&run.ledger_root, &clock, 1);
+    assert!(matches!(
+        reopened.claim(&delivery_with_id("capacity-third", "43"), &check_binding()),
+        Err(FileLedgerError::Full)
+    ));
 }
 
-fn assert_race(test_name: &str, max_records: u64, delivery_ids: [&str; 2], other: &[u8]) {
+fn race(test_name: &str, max_records: u64, delivery_ids: [&str; 2]) -> Option<ConcurrentRun> {
     if env::var_os(LEDGER_ROOT_ENV).is_some() {
         run_child();
-        return;
+        return None;
     }
-
-    let outcomes = concurrent_outcomes(test_name, max_records, delivery_ids);
-    assert_eq!(count(&outcomes, EXECUTE), 1);
-    assert_eq!(count(&outcomes, other), 1);
+    Some(concurrent_outcomes(test_name, max_records, delivery_ids))
 }
 
-fn concurrent_outcomes(test_name: &str, max_records: u64, delivery_ids: [&str; 2]) -> Vec<Vec<u8>> {
+fn assert_outcomes(outcomes: &[Vec<u8>], other: &[u8]) {
+    assert_eq!(count(outcomes, EXECUTE), 1);
+    assert_eq!(count(outcomes, other), 1);
+}
+
+fn concurrent_outcomes(
+    test_name: &str,
+    max_records: u64,
+    delivery_ids: [&str; 2],
+) -> ConcurrentRun {
     let [first_delivery, second_delivery] = delivery_ids;
     let directory = TempDir::new().unwrap();
     let ledger_root = directory.path().join("ledger");
@@ -136,10 +151,15 @@ fn concurrent_outcomes(test_name: &str, max_records: u64, delivery_ids: [&str; 2
         "a child process failed"
     );
 
-    children
+    let outcomes = children
         .iter()
         .map(|child| fs::read(&child.result_path).unwrap())
-        .collect()
+        .collect();
+    ConcurrentRun {
+        outcomes,
+        ledger_root,
+        _directory: directory,
+    }
 }
 
 fn run_child() {

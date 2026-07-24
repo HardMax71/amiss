@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use super::{
-    MAINTENANCE_LOCK, METADATA_FILE, Store, atomic_write, is_state_name, load_metadata, metadata,
-    open_lock, read_bounded, validate_key,
+    ADMISSION_LOCK, CAPACITY_FILE, MAINTENANCE_LOCK, METADATA_FILE, Store, atomic_write, capacity,
+    is_state_name, load_optional_capacity, load_stored_metadata, metadata, open_lock, read_bounded,
+    save_capacity, validate_key,
 };
 use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 use crate::file_ledger::format::{self, Record, State};
@@ -20,22 +21,61 @@ impl Store {
     ) -> Result<FileLedgerCleanup, FileLedgerError> {
         let maintenance = open_lock(&self.root.join(MAINTENANCE_LOCK))?;
         maintenance.lock()?;
-        let mut metadata = load_metadata(&self.root)?;
-        if !metadata.matches(self.config) {
+        let admission = open_lock(&self.root.join(ADMISSION_LOCK))?;
+        admission.lock()?;
+        let stored_metadata = load_stored_metadata(&self.root)?;
+        if !stored_metadata.matches(self.config) {
             return Err(FileLedgerError::Configuration);
         }
+        let mut root = RootEntries::read(&self.root, self.config.max_records())?;
+        root.validate_reports()?;
+        let (mut metadata, migrating) = stored_metadata.into_current();
+        let capacity = prepare_capacity(&self.root, &root, self.config.max_records(), migrating)?;
         let previous = metadata.clock_high_water_unix_millis();
         let effective_now = metadata.advance_clock(now)?;
-        if effective_now != previous {
+        if migrating || effective_now != previous {
             atomic_write(
                 &self.root.join(METADATA_FILE),
                 &metadata::encode(&metadata)?,
             )?;
         }
-        let mut root = RootEntries::read(&self.root, self.config.max_records())?;
-        root.validate_reports()?;
-        root.remove(effective_now)
+        root.remove(&self.root, capacity, effective_now)
     }
+}
+
+fn prepare_capacity(
+    root: &Path,
+    entries: &RootEntries,
+    maximum: u64,
+    migrating: bool,
+) -> Result<capacity::Capacity, FileLedgerError> {
+    let records = u64::try_from(entries.states.len()).map_err(|_| FileLedgerError::Corrupt)?;
+    let loaded = load_optional_capacity(root)?;
+    if migrating {
+        if loaded
+            .as_ref()
+            .is_some_and(|capacity| capacity.max_records != maximum)
+        {
+            return Err(FileLedgerError::Corrupt);
+        }
+        let capacity = capacity::ready(maximum, records)?;
+        save_capacity(root, &capacity)?;
+        return Ok(capacity);
+    }
+    let capacity = loaded.ok_or(FileLedgerError::Corrupt)?;
+    if capacity.max_records != maximum {
+        return Err(FileLedgerError::Corrupt);
+    }
+    let reconciliation_needed = capacity.pending_key.is_some() || capacity.cleanup_pending;
+    let capacity = match capacity.pending_key.clone() {
+        Some(key) => capacity::settle(capacity, entries.states.contains_key(&key))?,
+        None => capacity,
+    };
+    let capacity = capacity::reconcile_cleanup(capacity, records)?;
+    if reconciliation_needed {
+        save_capacity(root, &capacity)?;
+    }
+    Ok(capacity)
 }
 
 struct RootEntries {
@@ -117,7 +157,12 @@ impl RootEntries {
         Ok(())
     }
 
-    fn remove(&mut self, now: i64) -> Result<FileLedgerCleanup, FileLedgerError> {
+    fn remove(
+        &mut self,
+        root: &Path,
+        capacity: capacity::Capacity,
+        now: i64,
+    ) -> Result<FileLedgerCleanup, FileLedgerError> {
         let report_keys = self.reports.keys().cloned().collect::<Vec<_>>();
         let mut removed_reports = 0_u64;
         for key in report_keys {
@@ -137,14 +182,22 @@ impl RootEntries {
             .filter(|&(_, (_, record))| record.is_done_and_expired(now))
             .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
-        let mut removed_records = 0_u64;
-        for key in state_keys {
-            let (path, _) = self.states.remove(&key).ok_or(FileLedgerError::Corrupt)?;
-            fs::remove_file(path)?;
-            removed_records = removed_records
-                .checked_add(1)
-                .ok_or(FileLedgerError::Corrupt)?;
-        }
+        let removed_records = if state_keys.is_empty() {
+            0
+        } else {
+            let capacity = capacity::begin_cleanup(capacity)?;
+            save_capacity(root, &capacity)?;
+            let removed = state_keys.into_iter().try_fold(0_u64, |removed, key| {
+                let path = &self.states.get(&key).ok_or(FileLedgerError::Corrupt)?.0;
+                fs::remove_file(path)?;
+                self.states.remove(&key).ok_or(FileLedgerError::Corrupt)?;
+                removed.checked_add(1).ok_or(FileLedgerError::Corrupt)
+            })?;
+            let records = u64::try_from(self.states.len()).map_err(|_| FileLedgerError::Corrupt)?;
+            let capacity = capacity::finish_cleanup(capacity, records)?;
+            save_capacity(root, &capacity)?;
+            removed
+        };
 
         let mut removed_temporary = 0_u64;
         for directory in self.temporary.drain(..) {
@@ -173,7 +226,7 @@ impl RootEntries {
 fn is_fixed_file(name: &str) -> bool {
     matches!(
         name,
-        MAINTENANCE_LOCK | super::ADMISSION_LOCK | super::CLOCK_LOCK | METADATA_FILE
+        MAINTENANCE_LOCK | ADMISSION_LOCK | super::CLOCK_LOCK | METADATA_FILE | CAPACITY_FILE
     )
 }
 

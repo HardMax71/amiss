@@ -25,7 +25,9 @@ pub use bootstrap_job::{
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BOOTSTRAP_EXECUTABLE_BYTES, BootstrapRun, run_bootstrap};
 pub use clock::{ControllerClock, SystemClock};
-pub use file_ledger::{FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError};
+pub use file_ledger::{
+    FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError, FileLedgerRoot,
+};
 pub use identity::{
     ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
     OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
