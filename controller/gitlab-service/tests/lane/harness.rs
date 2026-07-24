@@ -5,8 +5,8 @@ use std::time::Duration;
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryHeader, DeliveryRoute,
-    FileLedger, FileLedgerConfig, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry, PlanScope,
-    PolicyControls, ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock,
+    FileLedgerConfig, FileLedgerRoot, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
+    PlanScope, PolicyControls, ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock,
     UntrustedDelivery, check_plan, register_plan,
 };
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
@@ -46,6 +46,7 @@ pub(super) struct Harness {
     repositories: Repositories,
     router: Router,
     token: String,
+    ledger_root: PathBuf,
     pub(super) api: FakeGitLab,
 }
 
@@ -53,8 +54,8 @@ struct Lane {
     route: DeliveryRoute,
     adapter: Arc<dyn ProviderAdapter>,
     plans: PlanRegistry,
-    ledger: FileLedgerConfig,
-    ledger_root: PathBuf,
+    ledger: FileLedgerRoot,
+    clock: Arc<dyn ControllerClock>,
     ingress: IngressPolicy,
     acquisition: CopyAcquisition,
     executable: PathBuf,
@@ -112,12 +113,19 @@ impl Harness {
             plan,
         )
         .unwrap();
+        let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+        let ledger = FileLedgerRoot::open_with_clock(
+            &ledger_root,
+            FileLedgerConfig::new(Duration::from_secs(2), 64, replay).unwrap(),
+            Arc::clone(&clock),
+        )
+        .unwrap();
         let lane = Arc::new(Lane {
             route,
             adapter,
             plans,
-            ledger: FileLedgerConfig::new(Duration::from_secs(2), 64, replay).unwrap(),
-            ledger_root,
+            ledger,
+            clock,
             ingress,
             acquisition: repositories.acquisition(),
             executable: executable_for(case, &state, &executable),
@@ -141,6 +149,7 @@ impl Harness {
             repositories,
             router,
             token,
+            ledger_root,
             api,
         }
     }
@@ -168,6 +177,12 @@ impl Harness {
 
     pub(super) fn claims(&self) -> Value {
         claims(&self.repositories.commits().candidate)
+    }
+
+    pub(super) fn cleanup_leftover(&self) -> PathBuf {
+        let path = self.ledger_root.join(".atomicwrite-session-leftover");
+        std::fs::create_dir(&path).unwrap();
+        path
     }
 }
 
@@ -207,9 +222,8 @@ fn execute(
     lane: &Lane,
     untrusted: UntrustedDelivery<'_>,
 ) -> Result<amiss_controller::HandleOutcome, ()> {
-    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
-    let ledger = FileLedger::open_with_clock(&lane.ledger_root, lane.ledger, Arc::clone(&clock))
-        .map_err(|_defect| ())?;
+    let clock = Arc::clone(&lane.clock);
+    let ledger = lane.ledger.session().map_err(|_defect| ())?;
     let runner = AcquiringRunner::new(
         lane.acquisition.clone(),
         lane.executable.clone(),

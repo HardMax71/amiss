@@ -214,6 +214,12 @@ Pre-create the private scratch and ledger directories, then pass one absolute co
 controller/target/release/amiss-controller-gitlab /etc/amiss/gitlab.json
 ```
 
+Before binding the listener, the service opens, validates, migrates, and cleans the ledger root.
+Each admitted policy job then gets a fresh fenced owner session from that prepared root. A normal
+request does not repeat startup maintenance, so separate evaluations can remain concurrent. Stop
+every v0.9 controller process before the first upgraded open; the
+[ledger metadata upgrade](file-ledger.md#frames-and-replacement) is one-way.
+
 The service listens on plain HTTP. Bind it to loopback or a private network and put an
 operator-controlled TLS terminator in front. The proxy must preserve the `Authorization` header
 and exact body and must cap connections plus total, header, body, idle, and slow-body time. Set
@@ -338,17 +344,22 @@ The endpoint returns:
 | `431` | The header count or byte limit was crossed. |
 | `503` | Capacity, trusted time, storage, provider access, acquisition, or evaluation was unavailable. |
 
-The service checks bounds, OIDC, and the configured plan before opening the ledger or starting API,
-Git, or runner work. The policy job must treat only `204` as success. Do not turn `400`, `401`,
-`403`, `412`, or `503` into a warning or retry them inside the same script. A GitLab job retry
-receives a new job and token; the adapter will bind that new run independently if the merge-train
-car is still active.
+The service checks bounds, OIDC, and the configured plan before creating an owner session, touching
+a delivery row, or starting API, Git, or runner work. The policy job must treat only `204` as
+success. Do not turn `400`, `401`, `403`, `412`, or `503` into a warning or retry them inside the
+same script. A GitLab job retry receives a new job and token; the adapter will bind that new run
+independently if the merge-train car is still active.
 
 There is no raw webhook inbox. The synchronous request remains open while the controller uses its
 ordinary-file ledger, acquires both repositories, runs the bootstrap, and performs the final
 refresh. The OIDC `jti`, runner ID, and authenticated issue time form a bounded replay identity.
 Completed rows remain through their inclusive replay end and can then be removed by ledger
 cleanup. A clock rollback cannot reopen an expired row.
+
+New-row admission reads only the capacity frame and exact row path. A full root returns `503`;
+request handling never turns that rejection into a full-root scan. The service performs full
+maintenance when it starts. If a long-lived instance reaches the cap, restart it after bounded
+rows have ended so startup cleanup can free their slots.
 
 The final “publication” step makes no GitLab API write. It refreshes the same job and gate one last
 time, stages that exact result in the ledger, and lets the endpoint status decide the already

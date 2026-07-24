@@ -9,9 +9,10 @@ use std::time::Duration;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, CheckConclusion, ControllerClock, DeliveryRoute,
-    FileLedgerConfig, HandleOutcome, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
-    ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    Publication, ReplayWindow, RunFailure, SignedTimePolicy, SystemClock, VerifiedDelivery,
+    FileLedgerConfig, FileLedgerRoot, HandleOutcome, IngressLimits, IngressPolicy, OpaqueId,
+    PlanRegistry, ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, Publication, ReplayWindow, RunFailure, SignedTimePolicy, SystemClock,
+    VerifiedDelivery,
 };
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest};
@@ -43,9 +44,10 @@ fn only_a_published_pass_is_an_http_success() {
 }
 
 #[test]
-fn failed_authentication_never_opens_the_delivery_record() {
+fn failed_authentication_never_touches_the_delivery_record() {
     let state = tempfile::TempDir::new().unwrap();
-    let ledger_root = state.path().join("must-not-be-opened");
+    let ledger_root = state.path().join("ledger");
+    std::fs::create_dir(&ledger_root).unwrap();
     let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
     let ingress = IngressPolicy::new(
         IngressLimits::new(1_024, 8, 32 * 1_024).unwrap(),
@@ -65,12 +67,20 @@ fn failed_authentication_never_opens_the_delivery_record() {
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(RejectingAdapter {
         namespace: route.provider.namespace.clone(),
     });
+    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+    let ledger = FileLedgerRoot::open_with_clock(
+        &ledger_root,
+        FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+        Arc::clone(&clock),
+    )
+    .unwrap();
+    let entries_before = entries(&ledger_root);
     let lane = Lane {
         route,
         adapter,
         plans: PlanRegistry::new(),
-        ledger: FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
-        ledger_root: ledger_root.clone(),
+        ledger,
+        clock,
         ingress,
         project_id: 101,
         git_username: "oauth2".to_owned(),
@@ -97,7 +107,16 @@ fn failed_authentication_never_opens_the_delivery_record() {
         ),
         StatusCode::UNAUTHORIZED
     );
-    assert!(!ledger_root.exists());
+    assert_eq!(entries(&ledger_root), entries_before);
+}
+
+fn entries(root: &std::path::Path) -> Vec<std::ffi::OsString> {
+    let mut entries = std::fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    entries.sort_unstable();
+    entries
 }
 
 #[test]

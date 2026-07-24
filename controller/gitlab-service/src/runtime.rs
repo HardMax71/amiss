@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryHeader, DeliveryRoute,
-    FileLedger, FileLedgerConfig, IngressPolicy, PlanRegistry, ProviderAdapter, SystemClock,
-    UntrustedDelivery, register_plan,
+    FileLedgerRoot, IngressPolicy, PlanRegistry, ProviderAdapter, SystemClock, UntrustedDelivery,
+    register_plan,
 };
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
@@ -42,8 +42,8 @@ struct Lane {
     route: DeliveryRoute,
     adapter: Arc<dyn ProviderAdapter>,
     plans: PlanRegistry,
-    ledger: FileLedgerConfig,
-    ledger_root: PathBuf,
+    ledger: FileLedgerRoot,
+    clock: Arc<dyn ControllerClock>,
     ingress: IngressPolicy,
     project_id: u64,
     git_username: String,
@@ -77,8 +77,10 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
 }
 
 fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
-    FileLedger::open(&config.ledger_root, config.ledger)
-        .map_err(|_defect| ServiceError("delivery record cannot be opened"))?;
+    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+    let ledger =
+        FileLedgerRoot::open_with_clock(&config.ledger_root, config.ledger, Arc::clone(&clock))
+            .map_err(|_defect| ServiceError("delivery record cannot be opened"))?;
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, config.scope, Arc::clone(&config.plan))
         .map_err(|_defect| ServiceError("check plan cannot be registered"))?;
@@ -88,8 +90,8 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         route: config.route,
         adapter,
         plans,
-        ledger: config.ledger,
-        ledger_root: config.ledger_root,
+        ledger,
+        clock,
         ingress: config.ingress,
         project_id: config.project_id,
         git_username: config.git_username,
@@ -138,8 +140,10 @@ fn handle(
     lane: &Lane,
     untrusted: UntrustedDelivery<'_>,
 ) -> Result<amiss_controller::HandleOutcome, ServiceError> {
-    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
-    let ledger = FileLedger::open_with_clock(&lane.ledger_root, lane.ledger, Arc::clone(&clock))
+    let clock = Arc::clone(&lane.clock);
+    let ledger = lane
+        .ledger
+        .session()
         .map_err(|_defect| ServiceError("evaluation unavailable"))?;
     let acquisition = gitlab_acquisition(
         lane.git_bounds,
