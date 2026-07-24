@@ -11,9 +11,10 @@ use amiss_controller::{
 use tempfile::TempDir;
 
 use super::support::{
-    BOUNDED_ISSUED_AT, BOUNDED_KEEP_THROUGH, LEASE, TestClock, bounded_delivery, check_binding,
-    config, delivery_with_id, executed, is_delivery_file, open_with_max, publication,
-    replay_window, staged,
+    BOUNDED_ISSUED_AT, BOUNDED_KEEP_THROUGH, LEASE, TestClock, bounded_delivery,
+    bounded_delivery_at, check_binding, config, delivery_with_id, downgrade_root_metadata,
+    executed, is_delivery_file, ledger_file, open_with_max, publication, replay_window, staged,
+    write_capacity,
 };
 
 #[test]
@@ -50,11 +51,12 @@ fn capacity_rejects_new_records_without_blocking_existing_work() {
 }
 
 #[test]
-fn pruning_a_bounded_completion_frees_capacity_for_a_new_identity() {
+fn explicit_cleanup_frees_an_ended_bounded_slot() {
     let directory = TempDir::new().unwrap();
     let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
     let bounded = bounded_delivery("bounded-capacity", "41");
-    let next = delivery_with_id("next", "42");
+    let next_issued_at = BOUNDED_KEEP_THROUGH + 1_000;
+    let next = bounded_delivery_at("next", "42", next_issued_at);
     let mut ledger = open_with_max(directory.path(), &clock, 1);
     let lease = executed(ledger.claim(&bounded, &check_binding()).unwrap()).unwrap();
     let frozen = staged(
@@ -72,11 +74,57 @@ fn pruning_a_bounded_completion_frees_capacity_for_a_new_identity() {
         Err(FileLedgerError::Full)
     ));
 
-    clock.set(BOUNDED_KEEP_THROUGH + 1);
+    clock.set(next_issued_at);
     assert_eq!(ledger.cleanup().unwrap().removed_records, 1);
     assert!(matches!(
         ledger.claim(&next, &check_binding()).unwrap(),
         DeliveryClaim::Execute(_)
+    ));
+}
+
+#[test]
+fn cleanup_frees_exactly_the_removed_slots_after_reopen() {
+    let directory = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let first = bounded_delivery("bounded-first", "41");
+    let second = bounded_delivery("bounded-second", "42");
+    let running = bounded_delivery("bounded-running", "43");
+    let mut ledger = open_with_max(directory.path(), &clock, 3);
+
+    for delivery in [&first, &second] {
+        let lease = executed(ledger.claim(delivery, &check_binding()).unwrap()).unwrap();
+        let frozen = staged(
+            ledger
+                .stage(delivery, &lease, &publication(delivery, &lease))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.complete(delivery, &frozen).unwrap(),
+            LeaseCompletion::Completed
+        );
+    }
+    ledger.claim(&running, &check_binding()).unwrap();
+
+    clock.set(BOUNDED_KEEP_THROUGH + 1);
+    assert_eq!(ledger.cleanup().unwrap().removed_records, 2);
+    drop(ledger);
+
+    let mut reopened = open_with_max(directory.path(), &clock, 3);
+    for (delivery_id, change_id) in [("replacement-first", "44"), ("replacement-second", "45")] {
+        assert!(matches!(
+            reopened
+                .claim(&delivery_with_id(delivery_id, change_id), &check_binding())
+                .unwrap(),
+            DeliveryClaim::Execute(_)
+        ));
+    }
+    assert!(matches!(
+        reopened.claim(
+            &delivery_with_id("replacement-third", "46"),
+            &check_binding()
+        ),
+        Err(FileLedgerError::Full)
     ));
 }
 
@@ -159,7 +207,7 @@ fn rejected_identities_create_only_a_fixed_number_of_lock_files() {
             .count(),
         0
     );
-    assert!(names.len() <= 261);
+    assert!(names.len() <= 262);
 }
 
 #[test]
@@ -178,6 +226,162 @@ fn a_missing_root_record_cannot_be_recreated_over_existing_state() {
         FileLedger::open_with_clock(directory.path(), config(1), clock_source),
         Err(FileLedgerError::Corrupt)
     ));
+}
+
+#[test]
+fn a_v09_root_migrates_without_losing_its_replay_marker() {
+    let directory = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(1_000));
+    let delivery = delivery_with_id("migrated", "42");
+    let mut ledger = open_with_max(directory.path(), &clock, 1);
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    let frozen = staged(
+        ledger
+            .stage(&delivery, &lease, &publication(&delivery, &lease))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        ledger.complete(&delivery, &frozen).unwrap(),
+        LeaseCompletion::Completed
+    );
+    drop(ledger);
+    downgrade_root_metadata(directory.path());
+
+    let mut migrated = open_with_max(directory.path(), &clock, 1);
+    assert!(matches!(
+        migrated.claim(&delivery, &check_binding()).unwrap(),
+        DeliveryClaim::Duplicate { evaluation_id } if evaluation_id == frozen.evaluation_id
+    ));
+}
+
+#[test]
+fn missing_or_corrupt_capacity_and_a_missing_record_fail_closed() {
+    let missing_capacity = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(1_000));
+    let mut ledger = open_with_max(missing_capacity.path(), &clock, 1);
+    ledger
+        .claim(&delivery_with_id("capacity", "41"), &check_binding())
+        .unwrap();
+    drop(ledger);
+    fs::remove_file(missing_capacity.path().join(".amiss-capacity.state")).unwrap();
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(matches!(
+        FileLedger::open_with_clock(missing_capacity.path(), config(1), clock_source),
+        Err(FileLedgerError::Corrupt)
+    ));
+
+    let corrupt_capacity = TempDir::new().unwrap();
+    drop(open_with_max(corrupt_capacity.path(), &clock, 1));
+    fs::write(
+        corrupt_capacity.path().join(".amiss-capacity.state"),
+        b"truncated",
+    )
+    .unwrap();
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(matches!(
+        FileLedger::open_with_clock(corrupt_capacity.path(), config(1), clock_source),
+        Err(FileLedgerError::Corrupt)
+    ));
+
+    let missing_record = TempDir::new().unwrap();
+    let mut ledger = open_with_max(missing_record.path(), &clock, 1);
+    ledger
+        .claim(&delivery_with_id("record", "42"), &check_binding())
+        .unwrap();
+    drop(ledger);
+    fs::remove_file(ledger_file(missing_record.path(), ".state").unwrap()).unwrap();
+    let clock_source: Arc<dyn ControllerClock> = clock;
+    assert!(matches!(
+        FileLedger::open_with_clock(missing_record.path(), config(1), clock_source),
+        Err(FileLedgerError::Corrupt)
+    ));
+}
+
+#[test]
+fn interrupted_capacity_updates_recover_from_the_exact_pending_path() {
+    let absent = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(1_000));
+    drop(open_with_max(absent.path(), &clock, 2));
+    write_capacity(absent.path(), 2, 1, Some(&"f".repeat(64)), false);
+    let mut recovered = open_with_max(absent.path(), &clock, 2);
+    assert!(matches!(
+        recovered
+            .claim(&delivery_with_id("after-absent", "41"), &check_binding())
+            .unwrap(),
+        DeliveryClaim::Execute(_)
+    ));
+
+    let present = TempDir::new().unwrap();
+    let delivery = delivery_with_id("delivery-9", "42");
+    let mut ledger = open_with_max(present.path(), &clock, 2);
+    ledger.claim(&delivery, &check_binding()).unwrap();
+    drop(ledger);
+    write_capacity(
+        present.path(),
+        2,
+        1,
+        Some(super::support::FIXTURE_KEY),
+        false,
+    );
+    let mut recovered = open_with_max(present.path(), &clock, 2);
+    assert!(matches!(
+        recovered.claim(&delivery, &check_binding()).unwrap(),
+        DeliveryClaim::Busy { .. }
+    ));
+}
+
+#[test]
+fn interrupted_batch_cleanup_reconciles_only_with_its_marker() {
+    let clock = Arc::new(TestClock::new(1_000));
+    let unchanged = TempDir::new().unwrap();
+    let delivery = delivery_with_id("kept-by-cleanup", "40");
+    let mut ledger = open_with_max(unchanged.path(), &clock, 2);
+    ledger.claim(&delivery, &check_binding()).unwrap();
+    drop(ledger);
+    write_capacity(unchanged.path(), 2, 1, None, true);
+    let mut recovered = open_with_max(unchanged.path(), &clock, 2);
+    assert!(matches!(
+        recovered.claim(&delivery, &check_binding()).unwrap(),
+        DeliveryClaim::Busy { .. }
+    ));
+
+    let directory = TempDir::new().unwrap();
+    let mut ledger = open_with_max(directory.path(), &clock, 2);
+    ledger
+        .claim(
+            &delivery_with_id("removed-by-cleanup", "41"),
+            &check_binding(),
+        )
+        .unwrap();
+    drop(ledger);
+
+    write_capacity(directory.path(), 2, 1, None, true);
+    fs::remove_file(ledger_file(directory.path(), ".state").unwrap()).unwrap();
+
+    let mut recovered = open_with_max(directory.path(), &clock, 2);
+    assert!(matches!(
+        recovered
+            .claim(&delivery_with_id("after-cleanup", "42"), &check_binding())
+            .unwrap(),
+        DeliveryClaim::Execute(_)
+    ));
+}
+
+#[test]
+fn a_wrong_capacity_limit_is_rejected_without_settling_it() {
+    let directory = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(1_000));
+    let mut ledger = open_with_max(directory.path(), &clock, 1);
+    write_capacity(directory.path(), 2, 1, Some(&"f".repeat(64)), false);
+    let path = directory.path().join(".amiss-capacity.state");
+    let before = fs::read(&path).unwrap();
+
+    assert!(matches!(
+        ledger.claim(&delivery_with_id("wrong-limit", "42"), &check_binding()),
+        Err(FileLedgerError::Corrupt)
+    ));
+    assert_eq!(fs::read(path).unwrap(), before);
 }
 
 #[test]

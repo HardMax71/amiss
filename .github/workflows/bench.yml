@@ -27,7 +27,8 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: bench-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+            controller/target
+          key: bench-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'controller/Cargo.lock') }}
           restore-keys: bench-
       - shell: bash
         run: cargo bench --workspace --locked 2>&1 | tee benches.txt
@@ -39,10 +40,16 @@ jobs:
         run: >-
           cargo nextest run -p amiss-scan --test measure --release --locked
           --run-ignored ignored-only --no-capture 2>&1 | tee measurement.txt
+      - shell: bash
+        run: >-
+          cargo nextest run --manifest-path controller/Cargo.toml
+          -p amiss-controller --test file_ledger --release --locked
+          --run-ignored ignored-only --no-capture 2>&1 | tee controller-ledger.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: promotion-evidence
           path: |
             benches.txt
+            controller-ledger.txt
             eligibility.txt
             measurement.txt

@@ -59,12 +59,16 @@ inspectable; version-specific history stays in the
   that stored lifetime.
 - `FileLedger` implements the contract with ordinary files, cross-process file locks, and atomic
   replacement, without SQL or a database. Root metadata fixes the record cap and replay window and
-  preserves a high-water clock. Reopening the root with different limits or damaged data fails
-  closed.
+  preserves a high-water clock. A separate checksummed capacity frame keeps a slot count that never
+  understates use and one exact pending key so an interrupted addition can be settled from that row
+  alone. Batch deletion uses one recovery marker and one final count write instead of syncing
+  bookkeeping for every row. The v0.9 root metadata migrates in place; reopening with different
+  limits, missing current capacity, or unmarked damaged data fails closed.
 - The root has one maintenance lock, one new-record lock, one clock lock, and at most 256 lazily
   created row-lock shards. New identities are admitted under the configured record cap, while work
-  already inside the cap can finish. A fresh random evaluation suffix prevents an old retry from
-  matching a later row after safe deletion.
+  already inside the cap can finish. Ordinary new-row admission does not scan the root. A prepared
+  root creates a fresh fenced owner session without repeating startup maintenance. A fresh random
+  evaluation suffix prevents an old retry from matching a later row after safe deletion.
 - A row has one bounded state file and, only while needed, one bounded report file. Saving the
   result writes the report before the state that names it; completion saves `done` before removing
   the report. Opening the root and explicit cleanup remove dead reports and known atomic-write
@@ -73,7 +77,9 @@ inspectable; version-specific history stays in the
   completion markers, running work, and saved results remain. The persisted high-water clock keeps
   a local clock rollback from reopening expired work. Focused tests pin the inclusive end, rollback,
   permanent retention, preservation of running and saved work, fixed lock growth, full-root
-  behavior, and cleanup's fail-closed root scan.
+  behavior, interrupted capacity recovery, and cleanup's fail-closed root scan. A weekly
+  non-gating run measures admission with 1,000, 10,000, 50,000, and 100,000 retained root entries
+  and records full-capacity rejection and full-cleanup cost separately.
 
 </details>
 
@@ -160,6 +166,21 @@ inspectable; version-specific history stays in the
   boundary.
 
 </details>
+
+## Now: prove and run provider lanes
+
+The three provider lanes are implemented. The next phase collects evidence from real providers
+and makes the source-built services easier to run; it does not add another provider.
+
+- Retain positive and revoked-control runs from provider-hosted GitHub, GitLab, Gitea, and Forgejo
+  test projects. Record the provider version, controller commit, and provider evidence. Local HTTP
+  fixtures remain regression tests, not live-provider evidence.
+- Fuzz controller inputs such as webhooks, OIDC claims, provider replies, pack data, inbox rows,
+  and ledger frames. Add focused mutation runs around authentication, lease loss, final refresh,
+  and publication.
+- Add an offline configuration check, readiness separate from liveness, redacted events and
+  bounded counters, and graceful drain. The phase closes when an operator can validate, observe,
+  restart, and rotate one lane without guessing.
 
 ## Reference-coverage candidates
 

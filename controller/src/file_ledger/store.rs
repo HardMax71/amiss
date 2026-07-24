@@ -1,4 +1,6 @@
+mod capacity;
 mod cleanup;
+mod frame;
 mod metadata;
 mod report;
 
@@ -19,7 +21,9 @@ const MAINTENANCE_LOCK: &str = ".amiss-maintenance.lock";
 const ADMISSION_LOCK: &str = ".amiss-admission.lock";
 const CLOCK_LOCK: &str = ".amiss-clock.lock";
 const METADATA_FILE: &str = ".amiss-root.state";
+const CAPACITY_FILE: &str = ".amiss-capacity.state";
 
+#[derive(Clone)]
 pub(super) struct Store {
     root: PathBuf,
     config: FileLedgerConfig,
@@ -92,13 +96,19 @@ impl Row {
     pub(super) fn save_new(&self, record: &Record) -> Result<(), FileLedgerError> {
         let admission = open_lock(&self.root.join(ADMISSION_LOCK))?;
         admission.lock()?;
+        let capacity = load_capacity(&self.root)?;
+        if capacity.max_records != self.config.max_records() {
+            return Err(FileLedgerError::Corrupt);
+        }
+        let capacity = recover_capacity(&self.root, capacity)?;
         if self.load()?.is_some() {
             return Err(FileLedgerError::Corrupt);
         }
-        if count_records(&self.root, self.config.max_records())? >= self.config.max_records() {
-            return Err(FileLedgerError::Full);
-        }
-        self.save(record)
+        let capacity = capacity::reserve(capacity, &self.key)?;
+        save_capacity(&self.root, &capacity)?;
+        self.save(record)?;
+        let capacity = capacity::settle(capacity, true)?;
+        save_capacity(&self.root, &capacity)
     }
 
     pub(super) fn observe_clock(&self, now: i64) -> Result<i64, FileLedgerError> {
@@ -135,15 +145,15 @@ fn load_or_create_metadata(
     root: &Path,
     config: FileLedgerConfig,
     now: i64,
-) -> Result<RootMetadata, FileLedgerError> {
+) -> Result<metadata::StoredMetadata, FileLedgerError> {
     let path = root.join(METADATA_FILE);
     match read_bounded(&path, metadata::MAX_METADATA_BYTES) {
         Ok(bytes) => metadata::decode(&bytes),
         Err(FileLedgerError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
             prepare_new_root(root)?;
-            let metadata = RootMetadata::new(config, now);
+            let metadata = RootMetadata::legacy(config, now);
             atomic_write(&path, &metadata::encode(&metadata)?)?;
-            Ok(metadata)
+            Ok(metadata::StoredMetadata::Legacy(metadata))
         }
         Err(error) => Err(error),
     }
@@ -171,27 +181,57 @@ fn prepare_new_root(root: &Path) -> Result<(), FileLedgerError> {
     Ok(())
 }
 
-fn load_metadata(root: &Path) -> Result<RootMetadata, FileLedgerError> {
+fn load_stored_metadata(root: &Path) -> Result<metadata::StoredMetadata, FileLedgerError> {
     let bytes = read_bounded(&root.join(METADATA_FILE), metadata::MAX_METADATA_BYTES)?;
     metadata::decode(&bytes)
 }
 
-fn count_records(root: &Path, maximum: u64) -> Result<u64, FileLedgerError> {
-    let mut count = 0_u64;
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if !is_state_name(&entry.file_name()) {
-            continue;
-        }
-        if !entry.file_type()?.is_file() {
-            return Err(FileLedgerError::Corrupt);
-        }
-        count = count.checked_add(1).ok_or(FileLedgerError::Corrupt)?;
-        if count >= maximum {
-            return Ok(count);
-        }
+fn load_metadata(root: &Path) -> Result<RootMetadata, FileLedgerError> {
+    match load_stored_metadata(root)? {
+        metadata::StoredMetadata::Current(metadata) => Ok(metadata),
+        metadata::StoredMetadata::Legacy(_) => Err(FileLedgerError::Corrupt),
     }
-    Ok(count)
+}
+
+fn load_capacity(root: &Path) -> Result<capacity::Capacity, FileLedgerError> {
+    load_optional_capacity(root)?.ok_or(FileLedgerError::Corrupt)
+}
+
+fn load_optional_capacity(root: &Path) -> Result<Option<capacity::Capacity>, FileLedgerError> {
+    let path = root.join(CAPACITY_FILE);
+    match read_bounded(&path, capacity::MAX_CAPACITY_BYTES) {
+        Ok(bytes) => capacity::decode(&bytes).map(Some),
+        Err(FileLedgerError::Io(error)) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn save_capacity(root: &Path, capacity: &capacity::Capacity) -> Result<(), FileLedgerError> {
+    atomic_write(&root.join(CAPACITY_FILE), &capacity::encode(capacity)?)
+}
+
+fn recover_capacity(
+    root: &Path,
+    capacity: capacity::Capacity,
+) -> Result<capacity::Capacity, FileLedgerError> {
+    let Some(key) = capacity.pending_key.clone() else {
+        return Ok(capacity);
+    };
+    let path = root.join(format!("{key}.state"));
+    let present = match read_bounded(&path, format::MAX_RECORD_BYTES) {
+        Ok(bytes) => {
+            let record = format::decode(&bytes)?;
+            if !record.matches_key(&key)? {
+                return Err(FileLedgerError::Corrupt);
+            }
+            true
+        }
+        Err(FileLedgerError::Io(error)) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error),
+    };
+    let capacity = capacity::settle(capacity, present)?;
+    save_capacity(root, &capacity)?;
+    Ok(capacity)
 }
 
 fn is_state_name(name: &OsStr) -> bool {

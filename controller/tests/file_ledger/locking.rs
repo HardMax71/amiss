@@ -1,10 +1,10 @@
 use std::sync::{Arc, Barrier};
 use std::thread;
 
-use amiss_controller::{DeliveryClaim, DeliveryLedger};
+use amiss_controller::{ControllerClock, DeliveryClaim, DeliveryLedger, FileLedgerRoot};
 use tempfile::TempDir;
 
-use super::support::{FIXTURE_KEY, TestClock, check_binding, delivery, executed, open};
+use super::support::{FIXTURE_KEY, TestClock, check_binding, config, delivery, executed, open};
 
 #[test]
 fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
@@ -45,8 +45,10 @@ fn concurrent_first_claims_choose_one_owner() {
     let directory = TempDir::new().unwrap();
     let clock = Arc::new(TestClock::new(1_000));
     let barrier = Arc::new(Barrier::new(2));
-    let mut first = open(directory.path(), &clock);
-    let mut second = open(directory.path(), &clock);
+    let clock_source: Arc<dyn ControllerClock> = clock;
+    let root = FileLedgerRoot::open_with_clock(directory.path(), config(64), clock_source).unwrap();
+    let mut first = root.session().unwrap();
+    let mut second = root.session().unwrap();
     let first_delivery = delivery("42");
     let second_delivery = first_delivery.clone();
     let first_barrier = Arc::clone(&barrier);
