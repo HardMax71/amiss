@@ -64,7 +64,7 @@ struct Lane {
 ///
 /// # Errors
 ///
-/// A trust input, record root, endpoint, listener, maintenance task, or shutdown signal is invalid.
+/// Returns an error when the lane cannot start or continue safely.
 pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
     let Prepared {
         listen,
