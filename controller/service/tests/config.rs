@@ -5,9 +5,6 @@ use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
     load_execution_limits, load_limits, read_regular,
 };
-use cap_fs_ext::DirExt as _;
-use cap_std::ambient_authority;
-use cap_std::fs::Dir;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -41,18 +38,11 @@ fn limit_shapes_accept_only_owned_fields() {
 }
 
 #[test]
-fn trust_files_are_read_through_one_regular_nofollow_handle()
--> Result<(), Box<dyn std::error::Error>> {
+fn trust_files_use_the_shared_bounded_reader() -> Result<(), Box<dyn std::error::Error>> {
     let root = TempDir::new()?;
     let regular = root.path().join("regular");
     fs::write(&regular, b"trusted")?;
     assert_eq!(read_regular(&regular, 7)?, b"trusted");
-
-    let target = root.path().join("target");
-    fs::write(&target, b"replacement")?;
-    let root_dir = Dir::open_ambient_dir(root.path(), ambient_authority())?;
-    root_dir.symlink_file("target", "linked")?;
-    assert!(read_regular(&root.path().join("linked"), 32).is_err());
 
     let directory = root.path().join("directory");
     fs::create_dir(&directory)?;

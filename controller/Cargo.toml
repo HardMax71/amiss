@@ -17,6 +17,7 @@ bench = false
 [workspace]
 members = [
   "constraint",
+  "files",
   "git",
   "gitea",
   "gitea-service",

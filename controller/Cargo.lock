@@ -66,9 +66,17 @@ name = "amiss-controller-constraint"
 version = "0.1.0"
 dependencies = [
  "amiss-bootstrap",
+ "amiss-controller-files",
  "amiss-fixtures",
  "amiss-git",
  "amiss-wire",
+ "tempfile",
+]
+
+[[package]]
+name = "amiss-controller-files"
+version = "0.1.0"
+dependencies = [
  "cap-fs-ext",
  "cap-std",
  "tempfile",
@@ -205,6 +213,7 @@ version = "0.1.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
+ "amiss-controller-files",
  "amiss-controller-git",
  "amiss-wire",
  "atomicwrites",

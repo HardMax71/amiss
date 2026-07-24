@@ -1,17 +1,15 @@
 use std::env;
 use std::ffi::OsString;
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 use amiss_bootstrap::constraint::derive_execution_constraint;
+use amiss_controller_files::read_bounded;
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
-use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt as _, OpenOptionsSyncExt as _};
-use cap_std::ambient_authority;
-use cap_std::fs::{Dir, OpenOptions};
 
 const GRAMMAR: &str = concat!(
     "usage: amiss-constraint --action-repository PATH ",
@@ -60,7 +58,7 @@ struct ResolvedPaths {
 
 fn run(args: &Args) -> Result<String, &'static str> {
     let paths = resolve_paths(args)?;
-    let bootstrap = read_regular(&paths.bootstrap, BOOTSTRAP_EXECUTABLE_BYTES)
+    let bootstrap = read_bounded(&paths.bootstrap, BOOTSTRAP_EXECUTABLE_BYTES)
         .map_err(|_defect| "bootstrap-unreadable")?;
     let action = Repository::open(&paths.action_repository, ObjectFormat::Sha1)
         .map_err(|_defect| "action-repository-unavailable")?;
@@ -181,29 +179,6 @@ fn canonical_file(path: &Path) -> std::io::Result<PathBuf> {
         return Err(std::io::Error::other("not a real file"));
     }
     std::fs::canonicalize(path)
-}
-
-fn read_regular(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| std::io::Error::other("file has no parent"))?;
-    let name = path
-        .file_name()
-        .ok_or_else(|| std::io::Error::other("file has no name"))?;
-    let directory = Dir::open_ambient_dir(parent, ambient_authority())?;
-    let mut options = OpenOptions::new();
-    options.read(true).follow(FollowSymlinks::No).nonblock(true);
-    let file = directory.open_with(name, &options)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.len() > limit {
-        return Err(std::io::Error::other("not a bounded regular file"));
-    }
-    let mut bytes = Vec::new();
-    file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
-    if u64::try_from(bytes.len()).map_or(true, |length| length > limit) {
-        return Err(std::io::Error::other("file grew past its bound"));
-    }
-    Ok(bytes)
 }
 
 fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

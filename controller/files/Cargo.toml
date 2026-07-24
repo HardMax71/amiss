@@ -1,26 +1,19 @@
 [package]
-name = "amiss-controller-constraint"
+name = "amiss-controller-files"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
-description = "Offline producer for Amiss provider execution constraints"
+description = "Bounded trust-file reads for Amiss controller tools"
 license = "FSL-1.1-ALv2"
 repository = "https://github.com/HardMax71/amiss"
 publish = false
 
-[[bin]]
-name = "amiss-constraint"
-path = "src/main.rs"
-
 [dependencies]
-amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
-amiss-controller-files = { path = "../files" }
-amiss-git = { path = "../../crates/amiss-git" }
-amiss-wire = { path = "../../crates/amiss-wire" }
-tempfile = "3"
+cap-fs-ext = "4.0.2"
+cap-std = "4.0.2"
 
 [dev-dependencies]
-amiss-fixtures = { path = "../../crates/amiss-fixtures" }
+tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"
