@@ -24,6 +24,7 @@
 - [Security model](security.md)
 - [Controls and policy](controls.md)
 - [Provider-verified controls](provider-controls.md)
+  - [Prepare the execution constraint](execution-constraint.md)
   - [GitHub](provider-github.md)
   - [GitLab](provider-gitlab.md)
   - [Gitea and Forgejo](provider-gitea.md)

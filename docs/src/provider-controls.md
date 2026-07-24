@@ -89,6 +89,11 @@ scratch directory, and file-ledger root outside the repository and action trees.
 also have a separate raw-inbox root. All roots must be pre-created private local directories;
 shared and network filesystems are unsupported.
 
+Build the constraint from the exact local action and bootstrap bytes with
+[Prepare the execution constraint](execution-constraint.md). The generator checks every
+dependency lock and the selected platform's runtime closure but does not authenticate either
+input; independent acquisition and protected placement remain operator responsibilities.
+
 The listener is plain HTTP. Bind it to loopback or a private network and put an
 operator-controlled TLS terminator in front. The proxy must preserve signed headers and the exact
 body, and must cap connections plus total, header, body, idle, and slow-body time. `/healthz`

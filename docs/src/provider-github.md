@@ -101,6 +101,9 @@ repository also has a classic protection rule.
 
 ## Build and run
 
+First [prepare the execution constraint](execution-constraint.md) for the exact action commit,
+bootstrap, and required App-owned check name used by this lane.
+
 Build the nested workspace without adding its network dependencies to the offline root
 workspace:
 

@@ -62,11 +62,15 @@ floor, debt snapshot, and waiver bundle, and the execution constraint's digest, 
 and recomputed semantics. It likewise recomputes the trusted-time statement's semantic digest and
 requires the sandbox provenance to remain self-asserted. The wire crate exposes checked
 constructors and canonical writers for the execution constraint and trusted-time statement, and
-the controller uses them when it derives a sealed job. The path is built by the release workflow.
-The published composite Action still launches `amiss` directly, while the separately operated
-provider services acquire their inputs and invoke the sealed path. The distinction is visible in
-the
+the controller uses them when it derives a sealed job. The source-built `amiss-constraint`
+companion reads an exact local action commit and bootstrap, derives the redundant execution
+fields, validates the dependency locks and selected runtime closure, and writes the canonical
+constraint without fetching or authenticating either input. The release workflow builds the
+sealed action and bootstrap path; it does not publish the companion or provider services. The
+published composite Action still launches `amiss` directly, while separately operated provider
+services acquire their inputs and invoke the sealed path. The distinction is visible in the
 [bootstrap entry point](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/src/main.rs),
+[constraint producer](https://github.com/HardMax71/amiss/blob/main/controller/constraint/src/main.rs),
 [release assembly](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml), and
 [Action execution](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml).
 

@@ -26,6 +26,8 @@ when the provider signature has no trusted time.
 
 [Provider-verified controls](../docs/src/provider-controls.md) compares the supported lanes and
 links their exact setup, configuration, state, and trust rules.
+[Prepare the execution constraint](../docs/src/execution-constraint.md) covers the shared offline
+producer used before any lane starts.
 [Controller delivery](../docs/src/controller.md) documents the provider-neutral record,
 heartbeats, races, and retry rules.
 

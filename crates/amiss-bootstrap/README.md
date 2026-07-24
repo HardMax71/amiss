@@ -13,6 +13,19 @@ amiss-bootstrap exec --action-repository P --repository P --constraint F \
   --report F --result F
 ```
 
+The nested controller workspace builds the offline constraint producer:
+
+```text
+amiss-constraint --action-repository P --action-identity H/O/N \
+  --action-commit OID --bootstrap F --required-status-name N --output F
+```
+
+It reads the exact commit from a local action object store, derives the tree, manifest, target
+platform, and bootstrap digest, validates every dependency lock and the selected runtime
+closure, and creates one canonical constraint without replacing an existing file. It fetches
+and authenticates nothing. The operator workflow and trust boundary are documented in
+[Prepare the execution constraint](../../docs/src/execution-constraint.md).
+
 `--scratch` is a controller-owned absolute directory for the private verified engine copy; the
 bootstrap never discovers it through ambient environment variables. `--report` and `--result`
 are required. They must be distinct, controller-created empty regular files named `report` and
