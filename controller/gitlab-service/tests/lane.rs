@@ -27,6 +27,15 @@ async fn signed_policy_job_passes_once_and_same_jti_replay_cannot_pass() {
 }
 
 #[tokio::test]
+async fn request_sessions_do_not_repeat_full_root_maintenance() {
+    let harness = Harness::new(LaneCase::Pass);
+    let leftover = harness.cleanup_leftover();
+
+    assert_eq!(harness.request().await, StatusCode::NO_CONTENT);
+    assert!(leftover.is_dir());
+}
+
+#[tokio::test]
 async fn definitive_engine_and_runtime_failures_never_return_success() {
     for case in [
         LaneCase::Block,
