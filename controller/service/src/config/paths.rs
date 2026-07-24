@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{BOOTSTRAP_EXECUTABLE_BYTES, CheckPlan};
+use amiss_wire::action::host_platform;
 use amiss_wire::digest::hb;
 use serde::Deserialize;
 
@@ -125,13 +126,18 @@ fn resolve_execution_paths(
     )?;
     let bootstrap_bytes = read_regular(&bootstrap, BOOTSTRAP_EXECUTABLE_BYTES)?;
     (hb(BOOTSTRAP_DOMAIN, &bootstrap_bytes) == plan.execution.bootstrap_digest)
+        .then_some(())
+        .ok_or(ConfigError(
+            "bootstrap does not match the execution constraint",
+        ))?;
+    (host_platform() == Some(plan.execution.selected_platform))
         .then_some(LoadedExecutionPaths {
             bootstrap,
             scratch,
             ledger,
         })
         .ok_or(ConfigError(
-            "bootstrap does not match the execution constraint",
+            "execution constraint does not target this host",
         ))
 }
 

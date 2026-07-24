@@ -165,7 +165,14 @@ cargo build --manifest-path controller/Cargo.toml --release --locked \
   -p amiss-controller-gitea-service --bin amiss-controller-gitea
 ```
 
-Pre-create the private scratch, inbox, and ledger directories, then pass one absolute config path:
+Pre-create the private scratch, inbox, and ledger directories, then run the shared
+[offline configuration check](provider-controls.md#offline-configuration-check):
+
+```sh
+controller/target/release/amiss-controller-gitea --check /etc/amiss/gitea.json
+```
+
+Start the service with the same absolute config path:
 
 ```sh
 controller/target/release/amiss-controller-gitea /etc/amiss/gitea.json

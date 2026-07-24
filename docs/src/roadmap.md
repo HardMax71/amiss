@@ -169,9 +169,9 @@ inspectable; version-specific history stays in the
 
 ## Now: prove and run provider lanes
 
-The three provider lanes and their shared execution-constraint producer are implemented. The
-next phase collects evidence from real providers and makes the source-built services easier to
-run; it does not add another provider.
+The three provider lanes, their shared execution-constraint producer, and their offline
+configuration check are implemented. The next phase collects evidence from real providers and
+makes the source-built services easier to run; it does not add another provider.
 
 - Retain positive and revoked-control runs from provider-hosted GitHub, GitLab, Gitea, and Forgejo
   test projects. Record the provider version, controller commit, and provider evidence. Local HTTP
@@ -179,9 +179,9 @@ run; it does not add another provider.
 - Fuzz controller inputs such as webhooks, OIDC claims, provider replies, pack data, inbox rows,
   and ledger frames. Add focused mutation runs around authentication, lease loss, final refresh,
   and publication.
-- Add an offline configuration check, readiness separate from liveness, redacted events and
-  bounded counters, and graceful drain. The phase closes when an operator can validate, observe,
-  restart, and rotate one lane without guessing.
+- Add readiness separate from liveness, redacted events and bounded counters, and graceful drain.
+  The phase closes when an operator can validate, observe, restart, and rotate one lane without
+  guessing.
 
 ## Reference-coverage candidates
 

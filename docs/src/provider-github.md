@@ -112,8 +112,14 @@ cargo build --manifest-path controller/Cargo.toml --release --locked \
   -p amiss-controller-github-service --bin amiss-controller-github
 ```
 
-Pre-create the private state and scratch directories, then pass exactly one absolute config
-path:
+Pre-create the private state and scratch directories, then run the shared
+[offline configuration check](provider-controls.md#offline-configuration-check):
+
+```sh
+controller/target/release/amiss-controller-github --check /etc/amiss/github.json
+```
+
+Start the service with the same absolute config path:
 
 ```sh
 controller/target/release/amiss-controller-github /etc/amiss/github.json
