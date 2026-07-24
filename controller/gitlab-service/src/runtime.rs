@@ -1,4 +1,5 @@
 use std::fmt;
+use std::future::Future;
 use std::future::IntoFuture as _;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -18,9 +19,12 @@ use axum::Router;
 use axum::http::StatusCode;
 use secrecy::{ExposeSecret as _, SecretString};
 use tokio::net::TcpListener;
+use tokio::time::{Instant, MissedTickBehavior};
 
 use crate::acquisition::gitlab_acquisition;
 use crate::config::ServiceConfig;
+
+const LEDGER_MAINTENANCE_INTERVAL: Duration = Duration::from_mins(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ServiceError(pub &'static str);
@@ -36,13 +40,14 @@ impl std::error::Error for ServiceError {}
 struct Prepared {
     listen: std::net::SocketAddr,
     router: Router,
+    ledger: Arc<FileLedgerRoot>,
 }
 
 struct Lane {
     route: DeliveryRoute,
     adapter: Arc<dyn ProviderAdapter>,
     plans: PlanRegistry,
-    ledger: FileLedgerRoot,
+    ledger: Arc<FileLedgerRoot>,
     clock: Arc<dyn ControllerClock>,
     ingress: IngressPolicy,
     project_id: u64,
@@ -59,17 +64,23 @@ struct Lane {
 ///
 /// # Errors
 ///
-/// A trust input, record root, endpoint, listener, or shutdown signal is invalid.
+/// A trust input, record root, endpoint, listener, maintenance task, or shutdown signal is invalid.
 pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
-    let prepared = prepare(config)?;
-    let listener = TcpListener::bind(prepared.listen)
+    let Prepared {
+        listen,
+        router,
+        ledger,
+    } = prepare(config)?;
+    let listener = TcpListener::bind(listen)
         .await
         .map_err(|_defect| ServiceError("HTTP listener cannot bind"))?;
-    let mut server = Box::pin(axum::serve(listener, prepared.router).into_future());
+    let mut server = Box::pin(axum::serve(listener, router).into_future());
+    let mut maintenance = Box::pin(maintain_ledger(ledger));
     tokio::select! {
         result = &mut server => {
             result.map_err(|_defect| ServiceError("HTTP evaluation service stopped"))
         }
+        result = &mut maintenance => result,
         signal = shutdown_signal() => {
             signal.map_err(|_defect| ServiceError("shutdown signal cannot be observed"))
         }
@@ -78,9 +89,10 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
 
 fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
     let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
-    let ledger =
+    let ledger = Arc::new(
         FileLedgerRoot::open_with_clock(&config.ledger_root, config.ledger, Arc::clone(&clock))
-            .map_err(|_defect| ServiceError("delivery record cannot be opened"))?;
+            .map_err(|_defect| ServiceError("delivery record cannot be opened"))?,
+    );
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, config.scope, Arc::clone(&config.plan))
         .map_err(|_defect| ServiceError("check plan cannot be registered"))?;
@@ -90,7 +102,7 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         route: config.route,
         adapter,
         plans,
-        ledger,
+        ledger: Arc::clone(&ledger),
         clock,
         ingress: config.ingress,
         project_id: config.project_id,
@@ -108,7 +120,37 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
     Ok(Prepared {
         listen: config.listen,
         router,
+        ledger,
     })
+}
+
+async fn maintain_ledger(ledger: Arc<FileLedgerRoot>) -> Result<(), ServiceError> {
+    maintenance_loop(LEDGER_MAINTENANCE_INTERVAL, move || {
+        cleanup_ledger(Arc::clone(&ledger))
+    })
+    .await
+}
+
+async fn maintenance_loop<F, M>(period: Duration, mut maintenance: F) -> Result<(), ServiceError>
+where
+    F: FnMut() -> M,
+    M: Future<Output = Result<(), ServiceError>>,
+{
+    let start = Instant::now() + period;
+    let mut ticks = tokio::time::interval_at(start, period);
+    ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    loop {
+        ticks.tick().await;
+        maintenance().await?;
+    }
+}
+
+async fn cleanup_ledger(ledger: Arc<FileLedgerRoot>) -> Result<(), ServiceError> {
+    tokio::task::spawn_blocking(move || ledger.cleanup())
+        .await
+        .map_err(|_panic| ServiceError("delivery record maintenance panicked"))?
+        .map(|_removed| ())
+        .map_err(|_defect| ServiceError("delivery record maintenance failed"))
 }
 
 fn evaluate(lane: &Lane, request: EvaluationRequest<'_>) -> StatusCode {

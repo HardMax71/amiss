@@ -216,8 +216,11 @@ controller/target/release/amiss-controller-gitlab /etc/amiss/gitlab.json
 
 Before binding the listener, the service opens, validates, migrates, and cleans the ledger root.
 Each admitted policy job then gets a fresh fenced owner session from that prepared root. A normal
-request does not repeat startup maintenance, so separate evaluations can remain concurrent. Stop
-every v0.9 controller process before the first upgraded open; the
+request does not repeat full-root maintenance, so separate evaluations can remain concurrent.
+After startup, the service runs the same cleanup once per minute outside request handling. Scans
+use a blocking worker, skip missed intervals, and never overlap. If a scan or worker fails, the
+service stops instead of continuing with unvalidated ledger state. Stop every v0.9 controller
+process before the first upgraded open; the
 [ledger metadata upgrade](file-ledger.md#frames-and-replacement) is one-way.
 
 The service listens on plain HTTP. Bind it to loopback or a private network and put an
@@ -357,9 +360,9 @@ Completed rows remain through their inclusive replay end and can then be removed
 cleanup. A clock rollback cannot reopen an expired row.
 
 New-row admission reads only the capacity frame and exact row path. A full root returns `503`;
-request handling never turns that rejection into a full-root scan. The service performs full
-maintenance when it starts. If a long-lived instance reaches the cap, restart it after bounded
-rows have ended so startup cleanup can free their slots.
+request handling never turns that rejection into a full-root scan. Startup and periodic
+maintenance remove bounded rows after their replay lifetime ends, freeing their slots without a
+service restart.
 
 The final “publication” step makes no GitLab API write. It refreshes the same job and gate one last
 time, stages that exact result in the ledger, and lets the endpoint status decide the already

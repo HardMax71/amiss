@@ -336,6 +336,26 @@ pub(super) fn write_capacity(
     .unwrap();
 }
 
+pub(super) fn assert_frame_contract(
+    path: &Path,
+    magic: &[u8],
+    domain: &str,
+    maximum: u64,
+    schema: &str,
+) {
+    let bytes = fs::read(path).unwrap();
+    assert!(u64::try_from(bytes.len()).unwrap() <= maximum);
+    let header_length = magic.len() + 1 + 8 + 32;
+    let payload = bytes.get(header_length..).unwrap();
+    assert_eq!(bytes, test_frame(magic, domain, payload));
+    let value: serde_json::Value = serde_json::from_slice(payload).unwrap();
+    assert_eq!(
+        value.get("schema").and_then(serde_json::Value::as_str),
+        Some(schema)
+    );
+    assert!(payload.starts_with(format!(r#"{{"schema":"{schema}""#).as_bytes()));
+}
+
 fn test_frame(magic: &[u8], domain: &str, payload: &[u8]) -> Vec<u8> {
     let mut frame = Vec::new();
     frame.extend_from_slice(magic);

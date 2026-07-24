@@ -1,4 +1,5 @@
 mod format;
+mod frame;
 mod store;
 mod transitions;
 

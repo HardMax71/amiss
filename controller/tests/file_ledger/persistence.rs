@@ -12,8 +12,40 @@ use serde_json::{Map, Value};
 use tempfile::TempDir;
 
 use super::support::{
-    TestClock, check_binding, delivery, executed, ledger_file, open, publication, staged,
+    TestClock, assert_frame_contract, check_binding, delivery, executed, ledger_file, open,
+    publication, staged,
 };
+
+#[test]
+fn state_files_keep_the_existing_frame_contracts() {
+    let directory = TempDir::new().unwrap();
+    let clock = Arc::new(TestClock::new(1_000));
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), &clock);
+    ledger.claim(&delivery, &check_binding()).unwrap();
+
+    assert_frame_contract(
+        &directory.path().join(".amiss-root.state"),
+        b"AMISS-DELIVERY-ROOT",
+        "amiss/controller-file-root-frame-v1",
+        4_096,
+        "amiss/controller-file-root-v2",
+    );
+    assert_frame_contract(
+        &directory.path().join(".amiss-capacity.state"),
+        b"AMISS-DELIVERY-CAPACITY",
+        "amiss/controller-file-capacity-frame-v1",
+        4_096,
+        "amiss/controller-file-capacity-v1",
+    );
+    assert_frame_contract(
+        &ledger_file(directory.path(), ".state").unwrap(),
+        b"AMISS-DELIVERY-RECORD",
+        "amiss/controller-file-record-v1",
+        131_072,
+        "amiss/controller-file-record-v3",
+    );
+}
 
 #[test]
 fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {

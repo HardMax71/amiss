@@ -1,14 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-use super::{frame, validate_key};
-use crate::file_ledger::FileLedgerError;
+use super::validate_key;
+use crate::file_ledger::{FileLedgerError, frame};
 
 const CAPACITY_SCHEMA: &str = "amiss/controller-file-capacity-v1";
-const CAPACITY_DOMAIN: &str = "amiss/controller-file-capacity-frame-v1";
-const FRAME_MAGIC: &[u8] = b"AMISS-DELIVERY-CAPACITY";
-const FRAME_VERSION: u8 = 1;
 
 pub(super) const MAX_CAPACITY_BYTES: u64 = 4_096;
+
+const CAPACITY_FRAME: frame::FrameFormat = frame::define(
+    b"AMISS-DELIVERY-CAPACITY",
+    "amiss/controller-file-capacity-frame-v1",
+    MAX_CAPACITY_BYTES,
+);
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -161,30 +164,9 @@ fn validate(capacity: &Capacity) -> Result<(), FileLedgerError> {
 }
 
 pub(super) fn encode(capacity: &Capacity) -> Result<Vec<u8>, FileLedgerError> {
-    validate(capacity)?;
-    let payload = serde_json::to_vec(capacity).map_err(|_| FileLedgerError::Corrupt)?;
-    frame::encode(
-        FRAME_MAGIC,
-        FRAME_VERSION,
-        CAPACITY_DOMAIN,
-        &payload,
-        MAX_CAPACITY_BYTES,
-    )
+    frame::encode(CAPACITY_FRAME, capacity, validate)
 }
 
 pub(super) fn decode(bytes: &[u8]) -> Result<Capacity, FileLedgerError> {
-    let payload = frame::decode(
-        bytes,
-        FRAME_MAGIC,
-        FRAME_VERSION,
-        CAPACITY_DOMAIN,
-        MAX_CAPACITY_BYTES,
-    )?;
-    let capacity: Capacity =
-        serde_json::from_slice(payload).map_err(|_| FileLedgerError::Corrupt)?;
-    validate(&capacity)?;
-    if serde_json::to_vec(&capacity).map_err(|_| FileLedgerError::Corrupt)? != payload {
-        return Err(FileLedgerError::Corrupt);
-    }
-    Ok(capacity)
+    frame::decode(CAPACITY_FRAME, bytes, validate)
 }
