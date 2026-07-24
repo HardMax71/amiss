@@ -12,9 +12,9 @@ The workspace separates shared mechanics from provider code:
 - `amiss-controller-constraint` derives one canonical execution constraint from an exact local
   action commit and bootstrap.
 - `amiss-controller-git` acquires exact SHA-1 commits through the bounded Git protocol-v2 path.
-- `amiss-controller-service` provides a bounded HTTP receiver, a durable raw-delivery inbox, and
-  worker for webhook lanes, plus a bounded synchronous endpoint for a CI job that must wait for
-  the result.
+- `amiss-controller-service` provides the shared offline configuration launcher, a bounded HTTP
+  receiver, a durable raw-delivery inbox and worker for webhook lanes, plus a bounded synchronous
+  endpoint for a CI job that must wait for the result.
 - `amiss-controller-github` and `amiss-controller-github-service` implement the GitHub App and
   required Check Run lane.
 - `amiss-controller-gitlab` and `amiss-controller-gitlab-service` implement the GitLab merge-train

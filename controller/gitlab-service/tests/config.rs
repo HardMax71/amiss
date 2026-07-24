@@ -3,17 +3,23 @@
     reason = "fixed configuration fixtures must fail loudly"
 )]
 
+use std::process::Command;
+
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller_gitlab_service::ServiceConfig;
+use amiss_wire::action::host_platform;
 use amiss_wire::digest::hb;
 use serde_json::{Value, json};
 use tempfile::TempDir;
+
+const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-gitlab");
 
 struct Fixture {
     _root: TempDir,
     config: std::path::PathBuf,
     api_token: std::path::PathBuf,
     constraint: std::path::PathBuf,
+    ledger: std::path::PathBuf,
     value: Value,
 }
 
@@ -50,7 +56,7 @@ impl Fixture {
                 "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 "manifest_path": "release/manifest.json",
                 "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                "selected_platform": "linux-x86_64",
+                "selected_platform": host_platform().unwrap().as_str(),
                 "required_status_name": "amiss / documentation assurance",
                 "bootstrap_contract": "amiss-action-bootstrap",
                 "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, bootstrap_bytes).to_string()
@@ -111,6 +117,7 @@ impl Fixture {
             config,
             api_token,
             constraint,
+            ledger,
             value,
         }
     }
@@ -133,6 +140,18 @@ fn closed_gitlab_policy_lane_loads() {
     let fixture = Fixture::new();
     fixture.save();
     ServiceConfig::load(&fixture.config).unwrap();
+    std::fs::write(fixture.ledger.join("unexpected"), b"invalid state").unwrap();
+    let output = Command::new(BINARY)
+        .arg("--check")
+        .arg(&fixture.config)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "amiss-controller-gitlab: configuration valid\n"
+    );
+    assert!(output.stderr.is_empty());
 }
 
 #[test]

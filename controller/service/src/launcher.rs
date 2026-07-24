@@ -1,9 +1,10 @@
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-/// Loads and runs one provider service from its sole absolute config argument.
+/// Checks or runs one provider service from one absolute config path.
 pub fn service_main<C, LoadError, RunError, RunFuture>(
     name: &str,
     load: impl FnOnce(&Path) -> Result<C, LoadError>,
@@ -14,8 +15,8 @@ where
     RunError: Display,
     RunFuture: Future<Output = Result<(), RunError>>,
 {
-    let Some(path) = config_path() else {
-        eprintln!("{name}: expected one absolute config path");
+    let Some((path, check_only)) = config_path() else {
+        eprintln!("{name}: expected ABS_CONFIG or --check ABS_CONFIG");
         return ExitCode::FAILURE;
     };
     let config = match load(&path) {
@@ -25,6 +26,10 @@ where
             return ExitCode::FAILURE;
         }
     };
+    if check_only {
+        println!("{name}: configuration valid");
+        return ExitCode::SUCCESS;
+    }
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -44,9 +49,10 @@ where
     }
 }
 
-fn config_path() -> Option<PathBuf> {
-    let mut arguments = std::env::args_os();
-    let _program = arguments.next()?;
-    let path = PathBuf::from(arguments.next()?);
-    (arguments.next().is_none() && path.is_absolute()).then_some(path)
+fn config_path() -> Option<(PathBuf, bool)> {
+    let mut arguments = std::env::args_os().skip(1);
+    let first = arguments.next()?;
+    let check_only = first == OsStr::new("--check");
+    let path = PathBuf::from(if check_only { arguments.next()? } else { first });
+    (arguments.next().is_none() && path.is_absolute()).then_some((path, check_only))
 }

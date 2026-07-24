@@ -91,6 +91,12 @@ keeps those adapters separate instead of turning provider differences into one c
 enum. [Provider-verified controls](provider-controls.md) compares the supported lanes and links
 their exact setup, retry limits, and trust boundaries.
 
+All three service binaries share an
+[offline configuration check](provider-controls.md#offline-configuration-check). It validates
+local configuration and named trust inputs before creating the runtime or touching provider and
+mutable service state. It is a deployment preflight, not readiness or retained live-provider
+evidence.
+
 Local and convenience-Action reports still describe repository policy with no outside authority
 consulted. Their external controls are absent and sandbox assurance is `self-asserted`. A report
 produced through a provider lane can contain verified external controls, but the report does not

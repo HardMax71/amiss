@@ -211,7 +211,14 @@ cargo build --manifest-path controller/Cargo.toml --release --locked \
   -p amiss-controller-gitlab-service --bin amiss-controller-gitlab
 ```
 
-Pre-create the private scratch and ledger directories, then pass one absolute config path:
+Pre-create the private scratch and ledger directories, then run the shared
+[offline configuration check](provider-controls.md#offline-configuration-check):
+
+```sh
+controller/target/release/amiss-controller-gitlab --check /etc/amiss/gitlab.json
+```
+
+Start the service with the same absolute config path:
 
 ```sh
 controller/target/release/amiss-controller-gitlab /etc/amiss/gitlab.json

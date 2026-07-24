@@ -3,16 +3,26 @@
     reason = "fixed configuration fixtures must fail loudly"
 )]
 
+use std::ffi::OsString;
+use std::process::Command;
+
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller_github_service::ServiceConfig;
+use amiss_wire::action::host_platform;
+use amiss_wire::controls::ConstraintPlatform;
 use amiss_wire::digest::hb;
 use serde_json::{Value, json};
 use tempfile::TempDir;
+
+const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-github");
 
 struct Fixture {
     _root: TempDir,
     config: std::path::PathBuf,
     bootstrap: std::path::PathBuf,
+    constraint: std::path::PathBuf,
+    ledger: std::path::PathBuf,
+    private_key: std::path::PathBuf,
     value: Value,
 }
 
@@ -26,7 +36,11 @@ impl Fixture {
         let bootstrap_bytes = b"trusted bootstrap fixture";
         std::fs::write(&bootstrap, bootstrap_bytes).unwrap();
         let private_key = root.path().join("app.pem");
-        std::fs::write(&private_key, vec![b'k'; 512]).unwrap();
+        std::fs::write(
+            &private_key,
+            include_bytes!("../../github/tests/fixtures/private.pem"),
+        )
+        .unwrap();
         let webhook_secret = root.path().join("webhook.secret");
         std::fs::write(&webhook_secret, b"github-webhook-fixture-secret").unwrap();
         let constraint = root.path().join("execution.json");
@@ -44,7 +58,7 @@ impl Fixture {
                 "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 "manifest_path": "release/manifest.json",
                 "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                "selected_platform": "linux-x86_64",
+                "selected_platform": host_platform().unwrap().as_str(),
                 "required_status_name": "amiss / documentation assurance",
                 "bootstrap_contract": "amiss-action-bootstrap",
                 "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, bootstrap_bytes).to_string()
@@ -93,6 +107,9 @@ impl Fixture {
             _root: root,
             config,
             bootstrap,
+            constraint,
+            ledger,
+            private_key,
             value,
         }
     }
@@ -123,6 +140,97 @@ fn one_closed_configuration_loads_every_trust_input() {
     fixture.save();
 
     ServiceConfig::load(&fixture.config).unwrap();
+    std::fs::write(fixture.ledger.join("unexpected"), b"invalid state").unwrap();
+    let output = Command::new(BINARY)
+        .arg("--check")
+        .arg(&fixture.config)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "amiss-controller-github: configuration valid\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn execution_constraint_must_target_the_host() {
+    let fixture = Fixture::new();
+    fixture.save();
+    let wrong_platform = [
+        ConstraintPlatform::LinuxX8664,
+        ConstraintPlatform::WindowsAarch64,
+    ]
+    .into_iter()
+    .find(|candidate| Some(*candidate) != host_platform())
+    .unwrap();
+    let mut constraint: Value =
+        serde_json::from_slice(&std::fs::read(&fixture.constraint).unwrap()).unwrap();
+    *constraint.pointer_mut("/selected_platform").unwrap() = json!(wrong_platform.as_str());
+    std::fs::write(
+        &fixture.constraint,
+        serde_json::to_vec_pretty(&constraint).unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        ServiceConfig::load(&fixture.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "execution constraint does not target this host"
+    );
+}
+
+#[test]
+fn app_credentials_and_transport_fail_during_configuration() {
+    let invalid_key = Fixture::new();
+    invalid_key.save();
+    std::fs::write(&invalid_key.private_key, vec![b'k'; 512]).unwrap();
+    let output = Command::new(BINARY)
+        .arg("--check")
+        .arg(&invalid_key.config)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "amiss-controller-github: GitHub App configuration is invalid\n"
+    );
+
+    let mut invalid_api = Fixture::new();
+    *invalid_api.field("/github/api_base") = json!("https://attacker.example");
+    invalid_api.save();
+    assert_eq!(
+        ServiceConfig::load(&invalid_api.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "GitHub App configuration is invalid"
+    );
+}
+
+#[test]
+fn service_command_grammar_is_closed() {
+    let root = TempDir::new().unwrap();
+    let absolute = root.path().join("config.json");
+    for arguments in [
+        Vec::new(),
+        vec![OsString::from("--check")],
+        vec![OsString::from("relative.json")],
+        vec![OsString::from("--check"), OsString::from("relative.json")],
+        vec![absolute.into_os_string(), OsString::from("extra")],
+    ] {
+        let output = Command::new(BINARY).args(arguments).output().unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            "amiss-controller-github: expected ABS_CONFIG or --check ABS_CONFIG\n"
+        );
+    }
 }
 
 #[test]

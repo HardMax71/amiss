@@ -4,12 +4,11 @@ use std::time::Duration;
 
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryRoute, FileLedger,
-    FileLedgerConfig, IngressPolicy, PlanRegistry, ProviderAdapter, ProviderError,
-    ProviderIdentity, SystemClock, register_plan,
+    FileLedgerConfig, IngressPolicy, PlanRegistry, ProviderAdapter, ProviderError, SystemClock,
+    register_plan,
 };
 use amiss_controller_github::{
-    GitFetchBounds, GitHubAcquisition, GitHubApp, GitHubPullRequestAdapter,
-    GitHubPullRequestSource, GitHubTimeouts,
+    GitFetchBounds, GitHubAcquisition, GitHubApp, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
 pub use amiss_controller_service::QueuedServiceError as ServiceError;
 use amiss_controller_service::{
@@ -38,13 +37,7 @@ struct WorkerContext {
 }
 
 struct WorkerSettings {
-    provider: ProviderIdentity,
-    app_id: u64,
-    installation_id: u64,
-    private_key: Vec<u8>,
-    api_base: String,
-    required_status_name: String,
-    api_timeouts: GitHubTimeouts,
+    app: GitHubApp,
     bootstrap: PathBuf,
     scratch: PathBuf,
     bootstrap_timeout: Duration,
@@ -103,13 +96,7 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
     };
     let worker = WorkerContext {
         settings: WorkerSettings {
-            provider: config.provider,
-            app_id: config.app_id,
-            installation_id: config.installation_id,
-            private_key: config.private_key,
-            api_base: config.api_base,
-            required_status_name: config.plan.execution.required_status_name.clone(),
-            api_timeouts: config.api_timeouts,
+            app: config.app,
             bootstrap: config.bootstrap,
             scratch: config.scratch,
             bootstrap_timeout: config.bootstrap_timeout,
@@ -178,16 +165,7 @@ fn build_worker(
 ) -> Result<GitHubWorker, ServiceError> {
     let settings = input.settings;
     let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
-    let app = GitHubApp::new(
-        settings.provider,
-        settings.app_id,
-        settings.installation_id,
-        settings.private_key,
-        &settings.api_base,
-        settings.required_status_name,
-        settings.api_timeouts,
-    )
-    .map_err(|_defect| ServiceError("GitHub App client cannot start"))?;
+    let app = settings.app;
     let adapter = Arc::new(GitHubPullRequestAdapter::from_source(
         input.source,
         app.clone(),

@@ -81,6 +81,23 @@ and the repository's own scan checks the references between them on every change
 Building the provider workspace requires the pinned Rust toolchain and a working C/C++ compiler
 for its AWS-LC cryptography backend.
 
+## Offline configuration check
+
+Before starting a lane, run its service binary with `--check` and the same absolute config path
+used at startup. The check uses the service's strict loader, so it reads and validates the config,
+the named credentials and trust files, the bound plan, the execution constraint, the bootstrap,
+the limits, and the path layout.
+
+It then exits before entering the service runtime, binding the listener, opening mutable inbox or
+ledger state, running the bootstrap, or contacting the provider. Success prints the service name
+followed by `configuration valid`; failure prints the same configuration error that startup would
+report.
+
+This is a local preflight, not readiness or provider evidence. It cannot prove that the configured
+address is available, that state roots are writable and healthy, that credentials have the
+required provider permissions, or that the live merge rule matches the documented setup. Those
+checks still require startup and retained runs against the provider.
+
 ## Shared trust boundary
 
 Run a provider service on a host controlled independently of the checked repository. Keep its API

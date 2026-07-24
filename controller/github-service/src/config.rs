@@ -7,7 +7,7 @@ use amiss_controller::{
     CheckPlan, DeliveryRoute, GitHubWebhook, IngressPolicy, IntegrationId, PlanScope,
     ProviderIdentity, ReplayWindow, SignedTimePolicy, TrustSetId,
 };
-use amiss_controller_github::GitHubTimeouts;
+use amiss_controller_github::{GitHubApp, GitHubTimeouts};
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
     CheckPlanFiles, InboxLimits, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
@@ -30,14 +30,10 @@ pub struct ServiceConfig {
     pub(crate) route: DeliveryRoute,
     pub(crate) route_id: String,
     pub(crate) provider: ProviderIdentity,
-    pub(crate) app_id: u64,
-    pub(crate) installation_id: u64,
+    pub(crate) app: GitHubApp,
     pub(crate) repository_id: u64,
     pub(crate) target: BranchRef,
-    pub(crate) api_base: String,
-    pub(crate) private_key: Vec<u8>,
     pub(crate) webhook: GitHubWebhook,
-    pub(crate) api_timeouts: GitHubTimeouts,
     pub(crate) git_timeout: Duration,
     pub(crate) plan: Arc<CheckPlan>,
     pub(crate) scope: PlanScope,
@@ -138,6 +134,16 @@ impl RawConfig {
             GitHubWebhook::new(load_webhook_keyring(trust_set, self.github.webhook_keys)?);
         let api_timeouts = GitHubTimeouts::new(limits.http.connect, limits.http.request)
             .ok_or(ConfigError("GitHub API timeouts are invalid"))?;
+        let app = GitHubApp::new(
+            scope.provider.clone(),
+            positive(self.github.app_id)?,
+            positive(self.github.installation_id)?,
+            read_regular(&self.github.private_key_file, PRIVATE_KEY_BYTES)?,
+            &self.github.api_base,
+            plan.execution.required_status_name.clone(),
+            api_timeouts,
+        )
+        .map_err(|_defect| ConfigError("GitHub App configuration is invalid"))?;
         let plan_scope = PlanScope {
             provider: scope.provider.clone(),
             integration: scope.integration,
@@ -155,14 +161,10 @@ impl RawConfig {
             route,
             route_id,
             provider: scope.provider,
-            app_id: positive(self.github.app_id)?,
-            installation_id: positive(self.github.installation_id)?,
+            app,
             repository_id: positive(scope.repository_id)?,
             target: scope.target,
-            api_base: self.github.api_base,
-            private_key: read_regular(&self.github.private_key_file, PRIVATE_KEY_BYTES)?,
             webhook,
-            api_timeouts,
             git_timeout: limits.git.request,
             plan,
             scope: plan_scope,
