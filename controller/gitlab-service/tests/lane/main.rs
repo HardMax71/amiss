@@ -2,13 +2,8 @@
     clippy::unwrap_used,
     reason = "fixed provider-lane fixtures must fail loudly"
 )]
-
-#[path = "lane/harness.rs"]
 mod harness;
-#[path = "lane/provider.rs"]
 mod provider;
-#[path = "lane/repositories.rs"]
-mod repositories;
 
 use axum::http::StatusCode;
 use serde_json::json;

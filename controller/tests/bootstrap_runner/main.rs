@@ -31,8 +31,6 @@ const RESOURCE_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
 const RESOURCE_RELEASE_POLL: Duration = Duration::from_millis(10);
 // Wide enough that only a stalled run ever renews twice.
 const NO_RENEWAL_LEASE: Duration = Duration::from_mins(1);
-
-#[path = "bootstrap_runner/acquiring.rs"]
 mod acquiring;
 
 struct Heartbeat {
@@ -206,7 +204,7 @@ fn execution(
     bootstrap_digest: Digest,
 ) -> ExecutionConstraintDescriptor {
     let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../spec/examples/scanner-execution-constraint.json"
+        "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
     let mut input = ExecutionConstraintInput::from(&template);
