@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use amiss_controller::ProviderError;
 use amiss_controller_gitea::{GiteaObjectRequest, GiteaObjectResolver as _};
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_fixtures::sha1_oid;
+use amiss_wire::model::Oid;
 use secrecy::SecretString;
 
 use super::GiteaGitObjects;
@@ -65,5 +66,5 @@ fn request(repository_id: u64) -> Result<GiteaObjectRequest, Box<dyn std::error:
 }
 
 fn oid(raw: &str) -> Result<Oid, Box<dyn std::error::Error>> {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or_else(|| "fixture commit is not SHA-1".into())
+    sha1_oid(raw).ok_or_else(|| "fixture commit is not SHA-1".into())
 }

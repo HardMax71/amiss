@@ -214,9 +214,7 @@ impl Fixture {
                 review_name: "amiss".to_owned(),
             },
             rest: rest.clone(),
-            objects: Arc::new(FakeObjects {
-                objects: Arc::new(Mutex::new(objects)),
-            }),
+            objects: Arc::new(FakeObjects { objects }),
         };
         Self {
             change,
@@ -311,18 +309,18 @@ fn resolved_objects() -> GiteaObjects {
 
 #[derive(Clone)]
 pub(super) struct FakeObjects {
-    objects: Arc<Mutex<GiteaObjects>>,
+    objects: GiteaObjects,
 }
 
 pub(super) fn objects() -> Arc<dyn GiteaObjectResolver> {
     Arc::new(FakeObjects {
-        objects: Arc::new(Mutex::new(resolved_objects())),
+        objects: resolved_objects(),
     })
 }
 
 impl GiteaObjectResolver for FakeObjects {
     fn resolve(&self, _request: &GiteaObjectRequest) -> Result<GiteaObjects, ProviderError> {
-        Ok(self.objects.lock().unwrap().clone())
+        Ok(self.objects.clone())
     }
 }
 
