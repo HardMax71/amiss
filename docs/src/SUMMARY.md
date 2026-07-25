@@ -52,7 +52,7 @@
     - [Review feedback is grouped, ordered, and bounded](completed/grouped-review-feedback.md)
     - [The self-scan runs the event shapes it claims to support](completed/self-scan-event-coverage.md)
     - [Mutation and fuzz runs are installed with recorded baselines](completed/mutation-and-fuzz-baselines.md)
-    - [The delivery record has four states and no fifth](completed/delivery-record-contract.md)
+    - [Claim, lease, result, and completion are one contract](completed/delivery-record-contract.md)
     - [Every accepted delivery carries a replay lifetime](completed/replay-lifetime.md)
     - [The record is ordinary files, not a database](completed/file-ledger-implementation.md)
     - [Lock growth is fixed and admission does not scan](completed/file-ledger-locks.md)
