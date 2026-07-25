@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use amiss_controller::{Acquisition, AcquisitionTarget, OidPair, RunRequest};
-use amiss_fixtures::{CommitPair, commit_pair, git};
+use amiss_fixtures::{CommitPair, commit_pair};
 use amiss_wire::model::{ObjectFormat, Oid};
 
 /// The checked repository and the action repository a provider lane acquires,
@@ -40,11 +40,11 @@ impl Repositories {
 
     /// # Errors
     ///
-    /// A tree that cannot be read or is not a valid object name.
+    /// A tree that is not a valid object name.
     pub fn trees(&self) -> io::Result<OidPair> {
         Ok(OidPair {
-            base: tree(&self.repository, &self.repository.base)?,
-            candidate: tree(&self.repository, &self.repository.candidate)?,
+            base: oid(&self.repository.base_tree)?,
+            candidate: oid(&self.repository.candidate_tree)?,
         })
     }
 
@@ -57,9 +57,9 @@ impl Repositories {
 
     /// # Errors
     ///
-    /// An action tree that cannot be read or is not a valid object name.
+    /// An action tree that is not a valid object name.
     pub fn action_tree(&self) -> io::Result<Oid> {
-        tree(&self.action, &self.action.candidate)
+        oid(&self.action.candidate_tree)
     }
 
     pub fn acquisition(&self) -> CopyAcquisition {
@@ -120,9 +120,4 @@ fn copy_tree(
 fn oid(raw: &str) -> io::Result<Oid> {
     Oid::new(ObjectFormat::Sha1, raw.to_owned())
         .ok_or_else(|| io::Error::other("fixture object name is not a SHA-1 oid"))
-}
-
-fn tree(repository: &CommitPair, commit: &str) -> io::Result<Oid> {
-    let revision = format!("{commit}^{{tree}}");
-    oid(git(repository.root(), &["rev-parse", &revision])?.trim())
 }

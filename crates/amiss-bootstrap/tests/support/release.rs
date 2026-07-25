@@ -11,7 +11,7 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::manifest::RuntimeRole;
 use tempfile::TempDir;
 
-pub(crate) use amiss_fixtures::{executable_bytes as engine_bytes, git};
+pub(crate) use amiss_fixtures::executable_bytes as engine_bytes;
 
 pub(crate) const LAUNCHER: &[u8] = include_bytes!("../../../amiss/action/launcher.js");
 pub(crate) const ACTION: &[u8] = include_bytes!("../../../amiss/action/runtime.yml");
@@ -29,7 +29,7 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     let platform = host_platform().expect("a supported test platform");
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    git(root, &["init", "-q"]).expect("initialize repository");
+    amiss_fixtures::init_repository(root).expect("initialize repository");
 
     let binary = amiss_fixtures::executable_bytes(platform);
     let launcher = LAUNCHER.to_vec();
@@ -84,29 +84,14 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     fs::write(root.join("Cargo.lock"), &lock).unwrap();
     mutate(root);
 
-    git(root, &["add", "-A"]).expect("stage release");
-    executable(root, &binary_path);
-    git(root, &["commit", "-qm", "release"]).expect("commit release");
-    let commit = git(root, &["rev-parse", "HEAD"])
-        .expect("resolve release commit")
-        .trim()
-        .to_owned();
-    let tree = git(root, &["rev-parse", "HEAD^{tree}"])
-        .expect("resolve release tree")
-        .trim()
-        .to_owned();
+    let committed =
+        amiss_fixtures::commit_worktree(root, &[&binary_path], "release").expect("commit release");
     Release {
         dir,
-        commit,
-        tree,
+        commit: committed.id,
+        tree: committed.tree,
         manifest_digest,
         engine_digest,
         platform,
-    }
-}
-
-pub(crate) fn executable(root: &Path, path: &str) {
-    if fs::symlink_metadata(root.join(path)).is_ok_and(|entry| entry.is_file()) {
-        git(root, &["update-index", "--chmod=+x", "--", path]).expect("mark executable in index");
     }
 }

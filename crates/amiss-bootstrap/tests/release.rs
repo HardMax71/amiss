@@ -20,7 +20,7 @@ use tempfile::TempDir;
 
 mod support;
 
-use support::release::{ACTION, LAUNCHER, Release, engine_bytes, executable, git, release};
+use support::release::{ACTION, LAUNCHER, Release, engine_bytes, release};
 
 const BOOTSTRAP: &[u8] = b"the exact protected bootstrap bytes";
 
@@ -325,7 +325,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     };
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    git(root, &["init", "-q"]).expect("initialize repository");
+    amiss_fixtures::init_repository(root).expect("initialize repository");
 
     let binary = engine_bytes(other);
     let launcher = LAUNCHER.to_vec();
@@ -371,19 +371,12 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     fs::write(root.join("dist/launcher.js"), &launcher).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();
     fs::write(root.join("Cargo.lock"), &lock).unwrap();
-    git(root, &["add", "-A"]).expect("stage release");
-    executable(root, &binary_path);
-    git(root, &["commit", "-qm", "mismatched"]).expect("commit release");
+    let committed = amiss_fixtures::commit_worktree(root, &[&binary_path], "mismatched")
+        .expect("commit release");
 
     let release = Release {
-        commit: git(root, &["rev-parse", "HEAD"])
-            .expect("resolve release commit")
-            .trim()
-            .to_owned(),
-        tree: git(root, &["rev-parse", "HEAD^{tree}"])
-            .expect("resolve release tree")
-            .trim()
-            .to_owned(),
+        commit: committed.id,
+        tree: committed.tree,
         dir,
         manifest_digest,
         engine_digest: hb(amiss_bootstrap::ENGINE_DOMAIN, &binary),
