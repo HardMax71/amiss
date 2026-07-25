@@ -201,9 +201,15 @@ inspectable; version-specific history stays in the
 The provider code chapter is closed. What remains cannot be produced by a local fixture: it
 requires accounts and protected test projects on the providers themselves.
 
-- Retain positive and revoked-control runs from provider-hosted GitHub, GitLab, Gitea, and Forgejo
-  test projects. Record the provider version, controller commit, and provider evidence. Local HTTP
-  fixtures remain regression tests, not live-provider evidence.
+GitHub, Gitea, and Forgejo are done. [Retained provider runs](provider-evidence.md) holds a
+positive and a revoked-control run for each, against github.com, Gitea 1.27.0, and Forgejo
+16.0.1. Running them found four defects that every fixture had agreed with, so the lanes
+themselves changed on the way.
+
+- Retain positive and revoked-control runs from a GitLab project. Record the provider version,
+  controller commit, and provider evidence. The lane's floor is 19.3 with Ultimate and 19.2.0 is
+  the newest release, so this waits on GitLab. Local HTTP fixtures remain regression tests, not
+  live-provider evidence.
 
 ## Reference-coverage candidates
 
