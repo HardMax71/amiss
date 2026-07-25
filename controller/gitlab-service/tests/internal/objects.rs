@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use amiss_controller::ProviderError;
 use amiss_controller_gitlab::{GitLabObjectRequest, GitLabObjectResolver as _};
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_fixtures::sha1_oid;
+use amiss_wire::model::Oid;
 use secrecy::SecretString;
 
 use super::GitLabGitObjects;
@@ -66,5 +67,5 @@ fn request(project_id: u64) -> Result<GitLabObjectRequest, Box<dyn std::error::E
 }
 
 fn oid(raw: &str) -> Result<Oid, Box<dyn std::error::Error>> {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or_else(|| "fixture commit is not SHA-1".into())
+    sha1_oid(raw).ok_or_else(|| "fixture commit is not SHA-1".into())
 }

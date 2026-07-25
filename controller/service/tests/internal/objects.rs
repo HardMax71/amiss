@@ -3,7 +3,8 @@
 use std::time::{Duration, Instant};
 
 use amiss_controller::ProviderError;
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_fixtures::sha1_oid;
+use amiss_wire::model::Oid;
 
 use super::{ResolveWant, read_commits};
 
@@ -11,8 +12,8 @@ use super::{ResolveWant, read_commits};
 fn local_object_proof_reads_exact_commit_trees_and_parents()
 -> Result<(), Box<dyn std::error::Error>> {
     let pair = amiss_fixtures::commit_pair(&[("README.md", "base")], &[("README.md", "next")])?;
-    let base = oid(&pair.base)?;
-    let candidate = oid(&pair.candidate)?;
+    let base = commit(&pair.base)?;
+    let candidate = commit(&pair.candidate)?;
     let [read_candidate, read_base] = read_commits(
         pair.root(),
         [want(&candidate), want(&base)],
@@ -31,7 +32,7 @@ fn local_object_proof_reads_exact_commit_trees_and_parents()
 #[test]
 fn a_read_tree_is_never_the_commit_that_names_it() -> Result<(), Box<dyn std::error::Error>> {
     let pair = amiss_fixtures::commit_pair(&[("README.md", "base")], &[("README.md", "next")])?;
-    let candidate = oid(&pair.candidate)?;
+    let candidate = commit(&pair.candidate)?;
     let [read] = read_commits(
         pair.root(),
         [want(&candidate)],
@@ -46,7 +47,7 @@ fn a_read_tree_is_never_the_commit_that_names_it() -> Result<(), Box<dyn std::er
 fn an_expired_object_proof_does_not_touch_the_repository() -> Result<(), Box<dyn std::error::Error>>
 {
     let pair = amiss_fixtures::commit_pair(&[("README.md", "base")], &[("README.md", "next")])?;
-    let candidate = oid(&pair.candidate)?;
+    let candidate = commit(&pair.candidate)?;
 
     assert_eq!(
         read_commits(pair.root(), [want(&candidate)], Instant::now()),
@@ -55,13 +56,13 @@ fn an_expired_object_proof_does_not_touch_the_repository() -> Result<(), Box<dyn
     Ok(())
 }
 
+fn commit(raw: &str) -> Result<Oid, Box<dyn std::error::Error>> {
+    sha1_oid(raw).ok_or_else(|| "fixture commit is not SHA-1".into())
+}
+
 fn want(oid: &Oid) -> ResolveWant<'_> {
     ResolveWant {
         oid,
         reference: "refs/amiss/test/object",
     }
-}
-
-fn oid(raw: &str) -> Result<Oid, Box<dyn std::error::Error>> {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or_else(|| "fixture commit is not SHA-1".into())
 }

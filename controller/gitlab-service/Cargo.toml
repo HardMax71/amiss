@@ -31,6 +31,7 @@ serde.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 tempfile.workspace = true
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true

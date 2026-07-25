@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use amiss_wire::controls::ConstraintPlatform;
+use amiss_wire::model::{ObjectFormat, Oid};
 use sha1_checked::Digest as _;
 
 /// Repository-local variables Git exports to hooks. They must not select the
@@ -660,6 +661,12 @@ pub fn commit_chain(steps: &[(&str, &[(&str, &str)])]) -> std::io::Result<Commit
     index_file(root, &rows)?;
     let repo = path_arg(root);
     Ok(CommitChain { dir, repo, commits })
+}
+
+/// Reads one fixture object name as the SHA-1 object it must be.
+#[must_use]
+pub fn sha1_oid(raw: &str) -> Option<Oid> {
+    Oid::new(ObjectFormat::Sha1, raw.to_owned())
 }
 
 /// Builds the base commit from `base` files, then the candidate commit from
