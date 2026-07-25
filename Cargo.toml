@@ -117,6 +117,10 @@ panic = "unwind"
 [profile.release.package.amiss-controller-fuzz]
 debug = 1
 
+# Full DWARF was 96% of every test binary and 14.5 MB of the 15.2 MB lane fixture.
+[profile.dev]
+debug = "line-tables-only"
+
 # Debug builds keep debug assertions but optimize the library crates, so the
 # large-envelope goldens and parser-heavy tests run in seconds, not minutes.
 [profile.dev.package.amiss-wire]
