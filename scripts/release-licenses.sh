@@ -20,7 +20,7 @@ for target in \
   x86_64-apple-darwin \
   x86_64-pc-windows-msvc
 do
-  cargo tree --workspace --locked --edges normal,build --target "$target" \
+  cargo tree -p amiss -p amiss-bootstrap --locked --edges normal,build --target "$target" \
     --prefix none --format '{p}'
 done \
   | awk '{ version = $2; sub(/^v/, "", version); print $1 "\t" version }' \

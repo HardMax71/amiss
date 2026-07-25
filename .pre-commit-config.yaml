@@ -131,6 +131,18 @@ repos:
         types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
+      - id: sweep
+        name: drop build artifacts older than five days
+        entry: >-
+          sh -c 'command -v cargo-sweep >/dev/null || exit 0;
+          cargo sweep --time 5 >/dev/null;
+          find target -mindepth 3 -maxdepth 3 -type d -path "*/incremental/*" -mtime +5
+          -exec rm -rf {} + 2>/dev/null;
+          exit 0'
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-push]
       # Whole functions compared by AST edit distance: threshold 0.85, eight
       # lines minimum, counted by a pinned similarity-rs. The baseline is exact
       # rather than a ceiling, so a new twin fails as a regression and a cleanup
