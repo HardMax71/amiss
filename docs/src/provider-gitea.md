@@ -15,7 +15,7 @@ owns that reviewer account and writes the final review itself.
 
 The receiver accepts only the configured `POST` path with no query string. It bounds headers and
 body, takes a configured delivery permit before reading the body and holds it through durable
-admission, requires exactly one supported family signature header, verifies lowercase
+admission, requires one agreed family signature value, verifies lowercase
 HMAC-SHA256 over the untouched body, binds the configured repository and target branch, and saves
 the raw request before returning `202 Accepted`. The worker verifies the saved bytes again.
 
@@ -156,9 +156,11 @@ Create a repository webhook for pull-request events:
 - the configured service URL; and
 - the native Gitea or Forgejo webhook type.
 
-Gitea sends `X-Gitea-Signature`; Forgejo sends `X-Forgejo-Signature`. Both are lowercase
-hexadecimal HMAC-SHA256 over the raw body. The service accepts exactly one of the two names and
-rejects duplicates or a request carrying both. The TLS proxy must not decode, decompress, trim, or
+Gitea sends `X-Gitea-Signature`. Forgejo sends `X-Forgejo-Signature` and `X-Gitea-Signature`
+together, carrying one value under both spellings. Both are lowercase hexadecimal HMAC-SHA256 over
+the raw body. The service reads whichever of the two names the request states and accepts them
+when they agree, since agreeing spellings are one claim. Spellings that disagree, and one name
+stated twice, are ambiguous and are rejected. The TLS proxy must not decode, decompress, trim, or
 rewrite the body.
 
 See the native [Gitea](https://docs.gitea.com/usage/repository/webhooks) and

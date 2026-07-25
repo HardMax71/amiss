@@ -83,13 +83,15 @@ impl SignedEvent {
         route: &DeliveryRoute,
         ingress: IngressPolicy,
         source: &GiteaPullRequestSource,
-        signature_header: &str,
+        signature_headers: &[&'static str],
     ) -> AuthenticatedDelivery {
-        let header = DeliveryHeader {
-            name: signature_header,
-            value: &self.signature,
-        };
-        let headers = [header];
+        let headers: Vec<DeliveryHeader<'_>> = signature_headers
+            .iter()
+            .map(|name| DeliveryHeader {
+                name,
+                value: &self.signature,
+            })
+            .collect();
         let checked = ingress
             .pre_auth(
                 UntrustedDelivery {
