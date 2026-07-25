@@ -33,10 +33,32 @@ repository = "https://github.com/HardMax71/amiss"
 
 [workspace.dependencies]
 amiss-controller-fixtures = { path = "controller/fixtures" }
+atomicwrites = "0.4.4"
 aws-lc-rs = "1.17.3"
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+base64 = "0.22"
+cap-fs-ext = "4.0.2"
+cap-std = "4.0.2"
+divan = "0.1.21"
+flate2 = "1"
+getrandom = "0.4.3"
+hex = "0.4"
+hmac = "0.13"
+jsonschema = { version = "0.47", default-features = false, features = ["resolve-file"] }
+jsonwebtoken = { version = "10.4", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 pem = "3.0.6"
+percent-encoding = "2"
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+secrecy = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1-checked = "0.10"
 sha2 = "0.11"
 strum = { version = "0.28", features = ["derive"] }
+tempfile = "3"
+tokio = "1.53.1"
+tower = { version = "0.5.3", features = ["util"] }
+url = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

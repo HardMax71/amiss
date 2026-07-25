@@ -9,11 +9,11 @@ repository.workspace = true
 [dependencies]
 amiss-git = { path = "../amiss-git", version = "0.9.0" }
 amiss-wire = { path = "../amiss-wire", version = "0.9.0" }
-tempfile = "3"
+tempfile.workspace = true
 
 [dev-dependencies]
 amiss-fixtures = { path = "../amiss-fixtures" }
-tempfile = "3"
+tempfile.workspace = true
 
 [lints]
 workspace = true

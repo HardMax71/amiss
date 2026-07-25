@@ -12,25 +12,21 @@ publish = false
 amiss-controller = { path = ".." }
 amiss-controller-git = { path = "../git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
-jsonwebtoken = { version = "10.4", default-features = false, features = ["aws_lc_rs", "use_pem"] }
-percent-encoding = "2"
-reqwest = { version = "0.13", default-features = false, features = [
-  "blocking",
-  "json",
-  "rustls",
-] }
-secrecy = "0.10"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+jsonwebtoken.workspace = true
+percent-encoding.workspace = true
+reqwest.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 serde_urlencoded = "0.7"
-url = "2"
+url.workspace = true
 
 [dev-dependencies]
 amiss-controller-fixtures.workspace = true
-hex = "0.4"
-hmac = "0.13"
-sha2 = "0.11"
-tempfile = "3"
+hex.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
