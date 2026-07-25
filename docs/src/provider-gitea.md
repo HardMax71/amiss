@@ -52,9 +52,18 @@ delivery UUID is not trusted; replay identity is a domain-separated digest of th
 body.
 
 Using the dedicated reviewer's token, the adapter refreshes the token identity, repository, pull
-request, target branch, effective protection rule, exact commits and trees, and existing reviews.
-It requires the event head to remain current, the pull request to be open and mergeable, and the
-head to be based on the current target. It then acquires exact SHA-1 objects, runs the sealed
+request, target branch, effective protection rule, exact commits, and existing reviews. Tree names
+come from the Git objects, not from the API: both families answer `/git/commits/{sha}` with the
+commit name in the commit's `tree` field, and every tree route echoes whatever name it was given,
+so no route states the tree of a commit. The adapter fetches the two commits over HTTPS, reads
+each tree from the proven object, and refuses a REST body whose parents disagree with it.
+
+It requires the event head to remain current, the pull request to be open, and the head to be
+based on the current target. A pull request Gitea reports as unmergeable is an unsettled provider
+state rather than a verdict, because Gitea reports `mergeable: false` for the second or two it
+spends recomputing a merge after a push and offers no separate "computing" signal. The lane
+retries such a refresh instead of publishing on it, so a pull request that stays unmergeable
+receives no review at all and cannot merge. It then acquires exact SHA-1 objects, runs the sealed
 bootstrap, refreshes everything again, saves the result, and posts or reuses one exact review.
 
 | Controller result | Review |
@@ -71,10 +80,16 @@ the provider gate itself is the dedicated reviewer identity.
 
 ## Dedicated reviewer
 
-Create a separate restricted account for this lane. Give it write access only to the checked
+Create a separate restricted account for this lane. Give it administrator access to the checked
 repository and read access to the pinned action repository when that is separate. The account
 must be able to submit official pull-request reviews. Do not use a maintainer's personal account
 or reuse one reviewer for another plan on the same protected branch.
+
+Write access is not enough. On Gitea 1.27.0 and Forgejo 12.0.4,
+`/repos/{owner}/{repo}/branch_protections/{rule}` answers a write collaborator with `403`, and the
+branch route leaves `effective_branch_protection_name` empty for anyone below administrator, so
+the lane cannot read the rule it is required to check. The protection rule below binds
+administrators too, so the reviewer gains no way to merge past its own verdict.
 
 Create a scoped access token with the smallest instance-specific permissions that cover:
 

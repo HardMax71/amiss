@@ -120,7 +120,7 @@ fn exact_sha1(oid: &Oid) -> bool {
     Oid::new(ObjectFormat::Sha1, oid.as_str().to_owned()).as_ref() == Some(oid)
 }
 
-fn repository_url(repository: &RepositoryIdentity) -> String {
+pub fn repository_url(repository: &RepositoryIdentity) -> String {
     format!(
         "https://{}/{}/{}.git",
         repository.host, repository.owner, repository.name

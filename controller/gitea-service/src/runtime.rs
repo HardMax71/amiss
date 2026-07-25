@@ -9,8 +9,8 @@ use amiss_controller::{
 };
 use amiss_controller_git::{GitAcquisition, GitAcquisitionPlan, GitFetchBounds, GitRemote};
 use amiss_controller_gitea::{
-    DedicatedReviewer, GiteaClient, GiteaFetchPlan, GiteaPlanError, GiteaPullRequestAdapter,
-    GiteaPullRequestSource, GiteaTimeouts, gitea_fetch_plan,
+    DedicatedReviewer, GiteaClient, GiteaFetchPlan, GiteaObjectResolver, GiteaPlanError,
+    GiteaPullRequestAdapter, GiteaPullRequestSource, GiteaTimeouts, gitea_fetch_plan,
 };
 pub use amiss_controller_service::QueuedServiceError as ServiceError;
 use amiss_controller_service::{
@@ -46,6 +46,7 @@ struct WorkerSettings {
     reviewer: DedicatedReviewer,
     token: SecretString,
     api_base: String,
+    objects: Arc<dyn GiteaObjectResolver>,
     review_name: String,
     api_timeouts: GiteaTimeouts,
     bootstrap: PathBuf,
@@ -119,6 +120,7 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
             reviewer: config.reviewer,
             token: config.token,
             api_base: config.api_base,
+            objects: config.objects,
             review_name: config.plan.execution.required_status_name.clone(),
             api_timeouts: config.api_timeouts,
             bootstrap: config.bootstrap,
@@ -197,6 +199,7 @@ fn build_worker(
         &settings.api_base,
         settings.review_name,
         settings.api_timeouts,
+        settings.objects,
     )
     .map_err(|_defect| ServiceError("Gitea-family client cannot start"))?;
     let adapter = Arc::new(GiteaPullRequestAdapter::from_source(input.source, client));

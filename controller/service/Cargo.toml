@@ -13,6 +13,7 @@ amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
 amiss-controller-files = { path = "../files" }
 amiss-controller-git = { path = "../git" }
+amiss-git = { path = "../../crates/amiss-git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 atomicwrites.workspace = true
 axum.workspace = true
@@ -21,13 +22,16 @@ ctrlc = { version = "3.5.2", features = ["termination"] }
 getrandom.workspace = true
 hex.workspace = true
 prometheus-client = "0.25"
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "sync", "time"] }
 tower-http = { version = "0.7.0", features = ["limit"] }
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 cap-fs-ext.workspace = true
 cap-std.workspace = true
 hmac.workspace = true

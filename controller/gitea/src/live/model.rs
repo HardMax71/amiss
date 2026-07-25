@@ -131,12 +131,8 @@ pub(super) struct OverrideProtection {
 #[derive(Clone, Deserialize)]
 pub(super) struct CommitRecord {
     pub sha: String,
-    pub commit: Option<RepositoryCommitRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct RepositoryCommitRecord {
-    pub tree: Option<CommitMetaRecord>,
+    #[serde(default)]
+    pub parents: Vec<CommitMetaRecord>,
 }
 
 #[derive(Clone, Deserialize)]

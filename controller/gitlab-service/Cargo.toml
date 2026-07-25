@@ -24,18 +24,16 @@ amiss-controller-bootstrap-fixture.workspace = true
 amiss-controller-git = { path = "../git" }
 amiss-controller-gitlab = { path = "../gitlab" }
 amiss-controller-service = { path = "../service" }
-amiss-git = { path = "../../crates/amiss-git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 axum.workspace = true
 secrecy.workspace = true
 serde.workspace = true
-tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
+tempfile.workspace = true
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true
-amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 jsonwebtoken.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "test-util", "time"] }
