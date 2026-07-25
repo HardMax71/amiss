@@ -29,6 +29,7 @@ secrecy.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true
 hex.workspace = true

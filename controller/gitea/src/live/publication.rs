@@ -93,11 +93,15 @@ pub(super) fn validate_created(
         .ok_or(ProviderError::InvalidResponse)
 }
 
-pub(super) fn publishable(state: ChangeState) -> Result<bool, ProviderError> {
+/// A revoked control is what an unavailable verdict reports, so withholding
+/// that verdict until the control returns would report it only once it no
+/// longer holds. An approval is withheld instead: it would state that a gate
+/// which no longer binds the repository was satisfied.
+pub(super) fn publishable(state: ChangeState, conclusion: CheckConclusion) -> bool {
     match state {
-        ChangeState::Active => Ok(true),
-        ChangeState::Superseded | ChangeState::Closed => Ok(false),
-        ChangeState::AuthorizationRevoked => Err(ProviderError::AuthorizationRevoked),
+        ChangeState::Active => true,
+        ChangeState::Superseded | ChangeState::Closed => false,
+        ChangeState::AuthorizationRevoked => conclusion != CheckConclusion::Pass,
     }
 }
 

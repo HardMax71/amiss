@@ -32,7 +32,7 @@ const ROUTE_ID: &str = "gitea-family-provider-lane";
 #[derive(Clone, Copy)]
 pub(super) struct LaneSettings {
     pub namespace: &'static str,
-    pub signature_header: &'static str,
+    pub signature_headers: &'static [&'static str],
     pub provider_reviewer_id: u64,
     pub wrong_tree: bool,
     pub tampered_runtime: bool,
@@ -41,10 +41,13 @@ pub(super) struct LaneSettings {
 }
 
 impl LaneSettings {
-    pub(super) const fn pass(namespace: &'static str, signature_header: &'static str) -> Self {
+    pub(super) const fn pass(
+        namespace: &'static str,
+        signature_headers: &'static [&'static str],
+    ) -> Self {
         Self {
             namespace,
-            signature_header,
+            signature_headers,
             provider_reviewer_id: super::provider::REVIEWER_ID,
             wrong_tree: false,
             tampered_runtime: false,
@@ -57,7 +60,7 @@ impl LaneSettings {
 pub(super) struct Harness {
     _state: TempDir,
     repositories: Repositories,
-    signature_header: &'static str,
+    signature_headers: &'static [&'static str],
     event: SignedEvent,
     admission: Arc<dyn DeliveryAdmission>,
     pub inbox: Arc<Mutex<Inbox>>,
@@ -149,7 +152,7 @@ impl Harness {
         Self {
             _state: state,
             repositories,
-            signature_header: settings.signature_header,
+            signature_headers: settings.signature_headers,
             event,
             admission,
             inbox,
@@ -160,10 +163,14 @@ impl Harness {
 
     pub(super) fn enqueue(&self) {
         let received_at_unix_millis = SystemClock.now_unix_millis().unwrap();
-        let headers = [DeliveryHeader {
-            name: self.signature_header.to_owned(),
-            value: self.event.signature.clone(),
-        }];
+        let headers: Vec<DeliveryHeader> = self
+            .signature_headers
+            .iter()
+            .map(|name| DeliveryHeader {
+                name: (*name).to_owned(),
+                value: self.event.signature.clone(),
+            })
+            .collect();
         let admitted = self
             .admission
             .admit(AdmissionRequest {
@@ -172,10 +179,14 @@ impl Harness {
                 body: &self.event.body,
             })
             .unwrap();
-        let stored_headers = [IncomingHeader {
-            name: self.signature_header,
-            value: &self.event.signature,
-        }];
+        let stored_headers: Vec<IncomingHeader<'_>> = self
+            .signature_headers
+            .iter()
+            .map(|name| IncomingHeader {
+                name,
+                value: &self.event.signature,
+            })
+            .collect();
         self.inbox
             .lock()
             .unwrap()
@@ -195,10 +206,14 @@ impl Harness {
             target,
             SECRET,
         );
-        let headers = [DeliveryHeader {
-            name: self.signature_header.to_owned(),
-            value: event.signature,
-        }];
+        let headers: Vec<DeliveryHeader> = self
+            .signature_headers
+            .iter()
+            .map(|name| DeliveryHeader {
+                name: (*name).to_owned(),
+                value: event.signature.clone(),
+            })
+            .collect();
         self.admission
             .admit(AdmissionRequest {
                 received_at_unix_millis: event.received_at_unix_millis,
@@ -233,7 +248,7 @@ fn provider_setup(
     let source =
         Arc::new(GiteaPullRequestSource::new(provider.clone(), reviewer(), webhook()).unwrap());
     let event = SignedEvent::new(&repositories.commits().unwrap().candidate, SECRET);
-    let delivery = event.delivery(&route, ingress, &source, settings.signature_header);
+    let delivery = event.delivery(&route, ingress, &source, settings.signature_headers);
     let mut current = snapshot(
         &delivery,
         repositories.commits().unwrap(),

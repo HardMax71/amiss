@@ -1,10 +1,10 @@
-use amiss_controller::ChangeState;
+use amiss_controller::{ChangeState, ProviderError};
 use amiss_wire::model::ForgeDialect;
 
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
 use super::support::{
     FORGEJO_PROTECTION, FORGEJO_REPOSITORY, Fixture, GITEA_PROTECTION, GITEA_REPOSITORY, commit,
-    oid,
+    oid, resolved,
 };
 
 #[test]
@@ -21,6 +21,55 @@ fn exact_live_snapshot_accepts_gitea_and_forgejo() {
         assert_eq!(snapshot.run.trees.candidate, oid('d'));
         assert_eq!(snapshot.gate_commit, oid('b'));
     }
+}
+
+#[test]
+fn an_unmergeable_pull_request_is_unsettled_state_not_a_verdict() {
+    let fixture = Fixture::mutated("gitea", |data| data.pull_request.mergeable = false);
+
+    assert_eq!(
+        fixture.client.refresh(fixture.pull_request()).err(),
+        Some(ProviderError::Unavailable)
+    );
+}
+
+#[test]
+fn a_closed_pull_request_is_closed_even_though_it_cannot_merge() {
+    let fixture = Fixture::mutated("gitea", |data| {
+        data.pull_request.state = "closed".to_owned();
+        data.pull_request.mergeable = false;
+    });
+
+    assert_eq!(
+        fixture
+            .client
+            .refresh(fixture.pull_request())
+            .unwrap()
+            .state,
+        ChangeState::Closed
+    );
+}
+
+#[test]
+fn a_tree_comes_from_the_git_object_never_from_the_commit_that_names_it() {
+    let fixture = Fixture::resolving("gitea", |objects| {
+        objects.candidate = resolved('b', 'e', &['a']);
+        objects.base = resolved('a', 'f', &[]);
+    });
+
+    let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
+
+    assert_eq!(snapshot.run.trees.candidate, oid('e'));
+    assert_eq!(snapshot.run.trees.base, oid('f'));
+}
+
+#[test]
+fn a_resolver_that_disagrees_with_the_rest_body_fails_closed() {
+    let fixture = Fixture::resolving("gitea", |objects| {
+        objects.candidate = resolved('b', 'd', &['e']);
+    });
+
+    assert!(fixture.client.refresh(fixture.pull_request()).is_err());
 }
 
 #[test]
@@ -151,16 +200,7 @@ fn wrong_identity_tree_and_review_rule_fail_closed() {
         |data| data.repository.id = 999,
         |data| data.pull_request.base.repo_id = 999,
         |data| data.target_branch.commit.as_mut().unwrap().id = oid('e').as_str().to_owned(),
-        |data| {
-            data.candidate
-                .commit
-                .as_mut()
-                .unwrap()
-                .tree
-                .as_mut()
-                .unwrap()
-                .sha = "bad".to_owned();
-        },
+        |data| data.candidate.parents.clear(),
         |data| data.reviewer.id = 999,
         |data| data.pull_request.head.repo_id = 0,
         |data| {
@@ -243,7 +283,7 @@ fn dedicated_reviewer_rows_are_strict() {
         });
         assert_eq!(
             fixture.client.refresh(fixture.pull_request()),
-            Err(amiss_controller::ProviderError::InvalidResponse)
+            Err(ProviderError::InvalidResponse)
         );
     }
 }
@@ -252,7 +292,7 @@ fn dedicated_reviewer_rows_are_strict() {
 fn head_or_base_drift_is_superseded() {
     let stale_head = Fixture::mutated("gitea", |data| {
         data.pull_request.head.sha = oid('e').as_str().to_owned();
-        data.current_head = commit('e', 'f');
+        data.current_head = commit('e', &['a']);
     });
     assert_eq!(
         stale_head

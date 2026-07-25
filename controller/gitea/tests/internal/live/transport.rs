@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::super::model::BranchRecord;
 use super::super::rest::protection_rule_path;
 use super::super::{GiteaClient, GiteaClientError, GiteaTimeouts};
-use super::support::{provider, reviewer};
+use super::support::{objects, provider, reviewer};
 
 #[test]
 fn live_client_rejects_unsafe_transport_and_identity_configuration() {
@@ -16,6 +16,7 @@ fn live_client_rejects_unsafe_transport_and_identity_configuration() {
             api,
             "amiss".to_owned(),
             timeouts,
+            objects(),
         )
     };
     assert!(create(provider("compatible-fork"), "https://forge.example/api/v1").is_ok());

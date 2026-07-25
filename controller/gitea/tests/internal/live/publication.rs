@@ -1,4 +1,4 @@
-use amiss_controller::{CheckConclusion, ProviderError};
+use amiss_controller::{CheckConclusion, ProviderError, RunFailure};
 
 use super::support::{Fixture, oid};
 
@@ -100,4 +100,43 @@ fn conflicting_replay_and_wrong_publication_tree_do_not_publish() {
         Ok(())
     );
     assert_eq!(fixture.rest.state.lock().unwrap().created.len(), 1);
+}
+
+#[test]
+fn a_revoked_control_publishes_the_verdict_that_reports_it() {
+    let fixture = Fixture::new("gitea");
+    let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
+    let publication = fixture.publication(
+        snapshot,
+        "evaluation-1",
+        CheckConclusion::Unavailable(RunFailure::AuthorizationRevoked),
+    );
+    let revoked = Fixture::mutated("gitea", |data| data.protection.writes.enable_push = true);
+
+    assert_eq!(
+        revoked.client.publish(revoked.pull_request(), &publication),
+        Ok(())
+    );
+    let state = revoked.rest.state.lock().unwrap();
+    assert_eq!(state.created.len(), 1);
+    assert_eq!(state.created[0].event, "REQUEST_CHANGES");
+    assert!(
+        state.created[0]
+            .body
+            .contains("failure: authorization-revoked")
+    );
+}
+
+#[test]
+fn a_revoked_control_withholds_an_approval() {
+    let fixture = Fixture::new("gitea");
+    let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
+    let publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Pass);
+    let revoked = Fixture::mutated("gitea", |data| data.protection.writes.enable_push = true);
+
+    assert_eq!(
+        revoked.client.publish(revoked.pull_request(), &publication),
+        Ok(())
+    );
+    assert!(revoked.rest.state.lock().unwrap().created.is_empty());
 }

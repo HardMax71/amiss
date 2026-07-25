@@ -12,11 +12,14 @@ use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use super::super::model::{
     BranchProtectionRecord, BranchRecord, CommitMetaRecord, CommitRecord, CreateReview,
     PayloadCommitRecord, PullRefRecord, PullRepositoryRecord, PullRequestRecord, RefreshData,
-    RepositoryCommitRecord, RepositoryRecord, ReviewRecord, UserRecord,
+    RepositoryRecord, ReviewRecord, UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
-use crate::{DedicatedReviewer, GiteaPullRequest};
+use crate::{
+    DedicatedReviewer, GiteaCommit, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects,
+    GiteaPullRequest,
+};
 
 pub(super) const GITEA_PROTECTION: &str = r#"{
   "rule_name":"main",
@@ -157,6 +160,18 @@ impl Fixture {
     }
 
     pub(super) fn mutated(namespace: &str, mutate: impl FnOnce(&mut RefreshData)) -> Self {
+        Self::built(namespace, mutate, |_| {})
+    }
+
+    pub(super) fn resolving(namespace: &str, mutate: impl FnOnce(&mut GiteaObjects)) -> Self {
+        Self::built(namespace, |_| {}, mutate)
+    }
+
+    fn built(
+        namespace: &str,
+        mutate: impl FnOnce(&mut RefreshData),
+        mutate_objects: impl FnOnce(&mut GiteaObjects),
+    ) -> Self {
         let provider = provider(namespace);
         let repository = RepositoryIdentity::new(
             "forge.example".to_owned(),
@@ -189,6 +204,8 @@ impl Fixture {
         };
         let mut data = refresh_data(protection_for(namespace), repository_for(namespace));
         mutate(&mut data);
+        let mut objects = resolved_objects();
+        mutate_objects(&mut objects);
         let rest = FakeRest::new(data);
         let client = Client {
             config: Config {
@@ -197,6 +214,7 @@ impl Fixture {
                 review_name: "amiss".to_owned(),
             },
             rest: rest.clone(),
+            objects: Arc::new(FakeObjects { objects }),
         };
         Self {
             change,
@@ -257,14 +275,52 @@ pub(super) fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }
 
-pub(super) fn commit(commit: char, tree: char) -> CommitRecord {
+pub(super) fn commit(commit: char, parents: &[char]) -> CommitRecord {
     CommitRecord {
         sha: oid(commit).as_str().to_owned(),
-        commit: Some(RepositoryCommitRecord {
-            tree: Some(CommitMetaRecord {
-                sha: oid(tree).as_str().to_owned(),
-            }),
-        }),
+        parents: parent_names(parents)
+            .into_iter()
+            .map(|sha| CommitMetaRecord { sha })
+            .collect(),
+    }
+}
+
+fn parent_names(parents: &[char]) -> Vec<String> {
+    parents
+        .iter()
+        .map(|parent| oid(*parent).as_str().to_owned())
+        .collect()
+}
+
+pub(super) fn resolved(commit: char, tree: char, parents: &[char]) -> GiteaCommit {
+    GiteaCommit {
+        id: oid(commit).as_str().to_owned(),
+        tree: oid(tree).as_str().to_owned(),
+        parents: parent_names(parents),
+    }
+}
+
+fn resolved_objects() -> GiteaObjects {
+    GiteaObjects {
+        candidate: resolved('b', 'd', &['a']),
+        base: resolved('a', 'c', &[]),
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct FakeObjects {
+    objects: GiteaObjects,
+}
+
+pub(super) fn objects() -> Arc<dyn GiteaObjectResolver> {
+    Arc::new(FakeObjects {
+        objects: resolved_objects(),
+    })
+}
+
+impl GiteaObjectResolver for FakeObjects {
+    fn resolve(&self, _request: &GiteaObjectRequest) -> Result<GiteaObjects, ProviderError> {
+        Ok(self.objects.clone())
     }
 }
 
@@ -325,9 +381,9 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             effective_branch_protection_name: "main".to_owned(),
         },
         protection,
-        target: commit('a', 'c'),
-        candidate: commit('b', 'd'),
-        current_head: commit('b', 'd'),
+        target: commit('a', &[]),
+        candidate: commit('b', &['a']),
+        current_head: commit('b', &['a']),
         reviews: vec![ReviewRecord {
             id: 1,
             user: Some(UserRecord {

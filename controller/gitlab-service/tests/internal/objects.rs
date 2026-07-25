@@ -1,79 +1,71 @@
 #![cfg(test)]
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use amiss_controller::ProviderError;
-use amiss_controller_gitlab::GitLabObjectRequest;
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_controller_gitlab::{GitLabObjectRequest, GitLabObjectResolver as _};
+use amiss_fixtures::sha1_oid;
+use amiss_wire::model::Oid;
+use secrecy::SecretString;
 
-use super::{read_objects, validate_request};
+use super::GitLabGitObjects;
+
+const REPOSITORY_URL: &str = "https://gitlab.example/acme/widget.git";
 
 #[test]
-fn local_object_proof_reads_exact_commit_trees_and_parents()
+fn a_request_for_another_project_or_repository_never_fetches()
 -> Result<(), Box<dyn std::error::Error>> {
-    let pair = amiss_fixtures::commit_pair(&[("README.md", "base")], &[("README.md", "next")])?;
-    let base = oid(&pair.base)?;
-    let gate = oid(&pair.candidate)?;
-    let objects = read_objects(
-        pair.root(),
-        &gate,
-        &base,
-        Instant::now() + Duration::from_secs(5),
-    )?;
+    let scratch = tempfile::TempDir::new()?;
+    let objects = GitLabGitObjects::new(
+        scratch.path().to_owned(),
+        101,
+        REPOSITORY_URL.to_owned(),
+        "amiss".to_owned(),
+        SecretString::from("token"),
+        Duration::from_secs(5),
+    )
+    .ok_or("the resolver is not configurable")?;
 
-    assert_eq!(objects.gate.id, pair.candidate);
-    assert_eq!(objects.base.id, pair.base);
-    assert_eq!(objects.gate.parents, [objects.base.id]);
-    assert!(exact_sha1(&objects.gate.tree));
-    assert!(exact_sha1(&objects.base.tree));
-    assert!(objects.base.parents.is_empty());
-    Ok(())
-}
-
-#[test]
-fn an_expired_object_proof_does_not_touch_the_repository() -> Result<(), Box<dyn std::error::Error>>
-{
-    let pair = amiss_fixtures::commit_pair(&[("README.md", "base")], &[("README.md", "next")])?;
-    let base = oid(&pair.base)?;
-    let gate = oid(&pair.candidate)?;
-
+    let mut foreign = request(101)?;
+    foreign.repository_url = "https://attacker.invalid/acme/widget.git".to_owned();
     assert_eq!(
-        read_objects(pair.root(), &gate, &base, Instant::now()),
-        Err(ProviderError::Unavailable)
+        objects.resolve(&foreign),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        objects.resolve(&request(202)?),
+        Err(ProviderError::InvalidResponse)
     );
     Ok(())
 }
 
 #[test]
-fn object_request_must_match_the_configured_project_and_repository()
--> Result<(), Box<dyn std::error::Error>> {
-    let repository_url = "https://gitlab.example/acme/widget.git";
-    let request = GitLabObjectRequest {
-        project_id: 101,
-        repository_url: repository_url.to_owned(),
+fn a_project_identity_must_be_positive() -> Result<(), Box<dyn std::error::Error>> {
+    let scratch = tempfile::TempDir::new()?;
+    assert!(
+        GitLabGitObjects::new(
+            scratch.path().to_owned(),
+            0,
+            REPOSITORY_URL.to_owned(),
+            "amiss".to_owned(),
+            SecretString::from("token"),
+            Duration::from_secs(5),
+        )
+        .is_none()
+    );
+    Ok(())
+}
+
+fn request(project_id: u64) -> Result<GitLabObjectRequest, Box<dyn std::error::Error>> {
+    Ok(GitLabObjectRequest {
+        project_id,
+        repository_url: REPOSITORY_URL.to_owned(),
         gate_commit: oid(&"a".repeat(40))?,
         base_commit: oid(&"b".repeat(40))?,
         timeout: Duration::from_secs(1),
-    };
-    assert_eq!(validate_request(&request, 101, repository_url), Ok(()));
-
-    let mut attacker = request.clone();
-    attacker.repository_url = "https://attacker.invalid/acme/widget.git".to_owned();
-    assert_eq!(
-        validate_request(&attacker, 101, repository_url),
-        Err(ProviderError::InvalidResponse)
-    );
-    assert_eq!(
-        validate_request(&request, 202, repository_url),
-        Err(ProviderError::InvalidResponse)
-    );
-    Ok(())
+    })
 }
 
 fn oid(raw: &str) -> Result<Oid, Box<dyn std::error::Error>> {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or_else(|| "fixture commit is not SHA-1".into())
-}
-
-fn exact_sha1(raw: &str) -> bool {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).is_some()
+    sha1_oid(raw).ok_or_else(|| "fixture commit is not SHA-1".into())
 }
