@@ -6,13 +6,10 @@
 use std::process::Command;
 use std::sync::LazyLock;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
+use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab_service::ServiceConfig;
-use amiss_wire::action::host_platform;
-use amiss_wire::digest::hb;
 use serde_json::{Value, json};
-use tempfile::TempDir;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-gitlab");
 
@@ -24,7 +21,7 @@ static RSA_KEYS: LazyLock<RsaKeys> =
     LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 struct Fixture {
-    _root: TempDir,
+    _trust: TrustFiles,
     config: std::path::PathBuf,
     api_token: std::path::PathBuf,
     constraint: std::path::PathBuf,
@@ -34,42 +31,19 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let root = TempDir::new().unwrap();
-        let scratch = directory(&root, "scratch");
-        let ledger = directory(&root, "ledger");
-        let bootstrap = root.path().join("amiss-bootstrap");
-        let bootstrap_bytes = b"trusted bootstrap fixture";
-        std::fs::write(&bootstrap, bootstrap_bytes).unwrap();
-        let api_token = root.path().join("api.token");
-        std::fs::write(&api_token, b"gitlab-api-token-fixture-2026").unwrap();
-        let git_token = root.path().join("git.token");
-        std::fs::write(&git_token, b"gitlab-git-token-fixture-2026").unwrap();
-        let public_key = root.path().join("oidc-public.pem");
-        std::fs::write(&public_key, &RSA_KEYS.public_pem).unwrap();
-        let constraint = root.path().join("execution.json");
-        std::fs::write(
-            &constraint,
-            serde_json::to_vec_pretty(&json!({
-                "schema": "amiss/scanner-execution-constraint",
-                "action_repository": {
-                    "host": "gitlab.example",
-                    "owner": "security",
-                    "name": "amiss-action"
-                },
-                "action_object_format": "sha1",
-                "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "manifest_path": "release/manifest.json",
-                "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                "selected_platform": host_platform().unwrap().as_str(),
-                "required_status_name": "amiss / documentation assurance",
-                "bootstrap_contract": "amiss-action-bootstrap",
-                "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, bootstrap_bytes).to_string()
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        let config = root.path().join("service.json");
+        let trust = TrustFiles::new("gitlab.example", "security", "amiss-action").unwrap();
+        let scratch = trust.directory("scratch").unwrap();
+        let ledger = trust.directory("ledger").unwrap();
+        let api_token = trust
+            .write("api.token", b"gitlab-api-token-fixture-2026")
+            .unwrap();
+        let git_token = trust
+            .write("git.token", b"gitlab-git-token-fixture-2026")
+            .unwrap();
+        let public_key = trust
+            .write("oidc-public.pem", &RSA_KEYS.public_pem)
+            .unwrap();
+        let config = trust.path("service.json");
         let value = json!({
             "listen": "127.0.0.1:0",
             "evaluation_path": "/gitlab/policy/evaluate",
@@ -104,24 +78,14 @@ impl Fixture {
                 "gitlab_hosted_runners": true,
                 "self_hosted_runner_ids": [77]
             },
-            "plan": {
-                "profile": "enforce",
-                "execution_constraint_file": constraint,
-                "organization_floor_file": null,
-                "debt_snapshot_file": null,
-                "waiver_bundle_file": null
-            },
-            "paths": {
-                "bootstrap": bootstrap,
-                "scratch": scratch,
-                "ledger": ledger
-            }
+            "plan": plan(&trust.constraint),
+            "paths": paths(&trust.bootstrap, &scratch, &ledger, None)
         });
         Self {
-            _root: root,
+            constraint: trust.constraint.clone(),
+            _trust: trust,
             config,
             api_token,
-            constraint,
             ledger,
             value,
         }
@@ -263,10 +227,4 @@ fn synchronous_capacity_and_configuration_shape_are_closed() {
             .to_string(),
         "configuration is not strict JSON"
     );
-}
-
-fn directory(root: &TempDir, name: &str) -> std::path::PathBuf {
-    let path = root.path().join(name);
-    std::fs::create_dir(&path).unwrap();
-    path
 }

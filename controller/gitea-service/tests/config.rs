@@ -5,17 +5,14 @@
 
 use std::process::Command;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
+use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
 use amiss_controller_gitea_service::ServiceConfig;
-use amiss_wire::action::host_platform;
-use amiss_wire::digest::hb;
 use serde_json::{Value, json};
-use tempfile::TempDir;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-gitea");
 
 struct Fixture {
-    _root: TempDir,
+    _trust: TrustFiles,
     config: std::path::PathBuf,
     bootstrap: std::path::PathBuf,
     ledger: std::path::PathBuf,
@@ -25,41 +22,17 @@ struct Fixture {
 
 impl Fixture {
     fn new(namespace: &str) -> Self {
-        let root = TempDir::new().unwrap();
-        let scratch = directory(&root, "scratch");
-        let inbox = directory(&root, "inbox");
-        let ledger = directory(&root, "ledger");
-        let bootstrap = root.path().join("amiss-bootstrap");
-        let bootstrap_bytes = b"trusted bootstrap fixture";
-        std::fs::write(&bootstrap, bootstrap_bytes).unwrap();
-        let token = root.path().join("reviewer.token");
-        std::fs::write(&token, b"dedicated-reviewer-token-2026").unwrap();
-        let webhook_secret = root.path().join("webhook.secret");
-        std::fs::write(&webhook_secret, b"gitea-family-webhook-fixture-secret").unwrap();
-        let constraint = root.path().join("execution.json");
-        std::fs::write(
-            &constraint,
-            serde_json::to_vec_pretty(&json!({
-                "schema": "amiss/scanner-execution-constraint",
-                "action_repository": {
-                    "host": "forge.example",
-                    "owner": "hardmax71",
-                    "name": "amiss"
-                },
-                "action_object_format": "sha1",
-                "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "manifest_path": "release/manifest.json",
-                "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                "selected_platform": host_platform().unwrap().as_str(),
-                "required_status_name": "amiss / documentation assurance",
-                "bootstrap_contract": "amiss-action-bootstrap",
-                "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, bootstrap_bytes).to_string()
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        let config = root.path().join("service.json");
+        let trust = TrustFiles::new("forge.example", "hardmax71", "amiss").unwrap();
+        let scratch = trust.directory("scratch").unwrap();
+        let inbox = trust.directory("inbox").unwrap();
+        let ledger = trust.directory("ledger").unwrap();
+        let token = trust
+            .write("reviewer.token", b"dedicated-reviewer-token-2026")
+            .unwrap();
+        let webhook_secret = trust
+            .write("webhook.secret", b"gitea-family-webhook-fixture-secret")
+            .unwrap();
+        let config = trust.path("service.json");
         let value = json!({
             "listen": "127.0.0.1:0",
             "webhook_path": "/webhooks/forge",
@@ -85,24 +58,13 @@ impl Fixture {
                 "name": "widget",
                 "target_branch": "main"
             },
-            "plan": {
-                "profile": "enforce",
-                "execution_constraint_file": constraint,
-                "organization_floor_file": null,
-                "debt_snapshot_file": null,
-                "waiver_bundle_file": null
-            },
-            "paths": {
-                "bootstrap": bootstrap,
-                "scratch": scratch,
-                "inbox": inbox,
-                "ledger": ledger
-            }
+            "plan": plan(&trust.constraint),
+            "paths": paths(&trust.bootstrap, &scratch, &ledger, Some(&inbox))
         });
         Self {
-            _root: root,
+            bootstrap: trust.bootstrap.clone(),
+            _trust: trust,
             config,
-            bootstrap,
             ledger,
             token,
             value,
@@ -351,10 +313,4 @@ fn unknown_nested_limit_fields_are_rejected() {
             "configuration is not strict JSON"
         );
     }
-}
-
-fn directory(root: &TempDir, name: &str) -> std::path::PathBuf {
-    let path = root.path().join(name);
-    std::fs::create_dir(&path).unwrap();
-    path
 }
