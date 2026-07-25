@@ -67,7 +67,8 @@ impl Record {
         {
             return Err(InboxError::Corrupt);
         }
-        validate_source(&self.route, &self.source_id, limits).map_err(|_| InboxError::Corrupt)?;
+        validate_source(&self.route, &self.source_id, limits)
+            .map_err(|_defect| InboxError::Corrupt)?;
         match (&self.state, &self.delivery) {
             (
                 State::Pending {

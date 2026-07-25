@@ -90,12 +90,12 @@ impl StoredDelivery {
                         name: header.name.clone(),
                         value,
                     })
-                    .map_err(|_| InboxError::Corrupt)
+                    .map_err(|_defect| InboxError::Corrupt)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let body = STANDARD
             .decode(&self.body_base64)
-            .map_err(|_| InboxError::Corrupt)?;
+            .map_err(|_defect| InboxError::Corrupt)?;
         let delivery = Delivery {
             route: self.route.clone(),
             source_id: self.source_id.clone(),
@@ -103,7 +103,7 @@ impl StoredDelivery {
             headers,
             body,
         };
-        validate_delivery(&delivery, limits).map_err(|_| InboxError::Corrupt)?;
+        validate_delivery(&delivery, limits).map_err(|_defect| InboxError::Corrupt)?;
         if Self::from_delivery(&delivery) != *self {
             return Err(InboxError::Corrupt);
         }
@@ -117,7 +117,7 @@ impl StoredDelivery {
             headers: &self.headers,
             body_base64: &self.body_base64,
         };
-        let bytes = serde_json::to_vec(&content).map_err(|_| InboxError::Corrupt)?;
+        let bytes = serde_json::to_vec(&content).map_err(|_defect| InboxError::Corrupt)?;
         Ok(digest_hex(CONTENT_DOMAIN, &bytes))
     }
 
@@ -154,7 +154,7 @@ impl StoredDelivery {
 
 pub(crate) fn source_key(route: &str, source_id: &str) -> Result<String, InboxError> {
     let bytes =
-        serde_json::to_vec(&Source { route, source_id }).map_err(|_| InboxError::Corrupt)?;
+        serde_json::to_vec(&Source { route, source_id }).map_err(|_defect| InboxError::Corrupt)?;
     Ok(digest_hex(KEY_DOMAIN, &bytes))
 }
 
@@ -278,5 +278,5 @@ fn valid_header_value(value: &[u8]) -> bool {
 }
 
 fn length<T>(values: &[T]) -> Result<u64, InboxError> {
-    u64::try_from(values.len()).map_err(|_| InboxError::InvalidDelivery)
+    u64::try_from(values.len()).map_err(|_defect| InboxError::InvalidDelivery)
 }

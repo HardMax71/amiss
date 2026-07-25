@@ -242,7 +242,7 @@ fn receive(
 pub(crate) fn renewal_wait(outcome: HeartbeatOutcome) -> Option<Duration> {
     match outcome {
         HeartbeatOutcome::Renewed { renew_within } => {
-            let wait = renew_within / 2;
+            let wait = renew_within.checked_div(2)?;
             (!wait.is_zero()).then_some(wait.min(MAX_HEARTBEAT_WAIT))
         }
         HeartbeatOutcome::Stop => None,

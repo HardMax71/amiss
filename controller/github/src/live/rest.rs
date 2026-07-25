@@ -254,9 +254,12 @@ impl GitHubRest for HttpRest {
             let response: CheckRunPage = self.transport.get(&route, deadline)?;
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
+            let maximum = u64::from(PAGE_SIZE_U8)
+                .checked_mul(u64::from(MAX_PAGES))
+                .ok_or(ProviderError::InvalidResponse)?;
             if response.check_runs.len() > PAGE_SIZE
                 || response.total_count < count
-                || response.total_count > u64::from(PAGE_SIZE_U8) * u64::from(MAX_PAGES)
+                || response.total_count > maximum
             {
                 return Err(ProviderError::InvalidResponse);
             }

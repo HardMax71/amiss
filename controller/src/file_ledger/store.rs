@@ -254,8 +254,11 @@ fn row_lock_name(key: &str) -> Result<String, FileLedgerError> {
 
 fn hex_value(byte: u8) -> Result<u8, FileLedgerError> {
     match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        b'0'..=b'9' => byte.checked_sub(b'0').ok_or(FileLedgerError::Corrupt),
+        b'a'..=b'f' => byte
+            .checked_sub(b'a')
+            .and_then(|value| value.checked_add(10))
+            .ok_or(FileLedgerError::Corrupt),
         _ => Err(FileLedgerError::Corrupt),
     }
 }

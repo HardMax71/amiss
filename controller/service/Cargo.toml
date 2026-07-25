@@ -1,11 +1,11 @@
 [package]
 name = "amiss-controller-service"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.97"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Durable provider-neutral delivery intake for the Amiss controller"
-license = "FSL-1.1-ALv2"
-repository = "https://github.com/HardMax71/amiss"
+license.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]
@@ -20,6 +20,7 @@ base64 = "0.22"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 getrandom = "0.4.3"
 hex = "0.4"
+prometheus-client = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -36,34 +37,5 @@ tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "test-uti
 tokio-stream = "0.1"
 tower = { version = "0.5.3", features = ["util"] }
 
-[lints.rust]
-unsafe_code = "forbid"
-elided_lifetimes_in_paths = "warn"
-trivial_numeric_casts = "warn"
-unnameable_types = "warn"
-unreachable_pub = "warn"
-unused_qualifications = "warn"
-
-[lints.clippy]
-pedantic = { level = "warn", priority = -1 }
-must_use_candidate = "allow"
-missing_errors_doc = "deny"
-missing_panics_doc = "deny"
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-unreachable = "deny"
-todo = "deny"
-unimplemented = "deny"
-indexing_slicing = "deny"
-string_slice = "deny"
-disallowed_types = "deny"
-disallowed_methods = "deny"
-as_conversions = "deny"
-cast_possible_truncation = "deny"
-cast_possible_wrap = "deny"
-cast_sign_loss = "deny"
-cast_precision_loss = "deny"
-wildcard_enum_match_arm = "deny"
-mem_forget = "deny"
-dbg_macro = "deny"
+[lints]
+workspace = true

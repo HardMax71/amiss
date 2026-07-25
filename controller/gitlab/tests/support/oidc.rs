@@ -1,11 +1,12 @@
 use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use amiss_controller::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressLimits, IngressPolicy, OpaqueId,
     ProviderError, ReplayWindow, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
 };
+use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde_json::{Value, json};
@@ -14,6 +15,13 @@ use super::identity::{HOST, PROJECT_PATH, TestClock, oid, provider};
 
 const AUDIENCE: &str = "amiss-controller";
 const KID: &str = "current";
+
+#[expect(
+    clippy::expect_used,
+    reason = "the generated RSA fixture must remain valid"
+)]
+static RSA_KEYS: LazyLock<RsaKeys> =
+    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 pub fn oidc() -> Arc<GitLabOidc> {
     let policy = PolicyBinding {
@@ -47,7 +55,7 @@ fn public_key() -> OidcPublicKey {
     OidcPublicKey::from_rsa_pem(
         KID.to_owned(),
         OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
-        include_bytes!("../fixtures/public.pem"),
+        &RSA_KEYS.public_pem,
     )
     .unwrap()
 }
@@ -57,8 +65,8 @@ pub fn claims(now: u64) -> Value {
         "iss": format!("https://{HOST}"),
         "sub": "project_path:acme/widget:ref_type:branch:ref:topic",
         "aud": AUDIENCE,
-        "exp": now + 300,
-        "nbf": now - 1,
+        "exp": now.checked_add(300).unwrap(),
+        "nbf": now.checked_sub(1).unwrap(),
         "iat": now,
         "jti": "2d7d0a3f-4aaf-47f5-aeec-291a7c40eef0",
         "job_project_id": "101",
@@ -87,7 +95,7 @@ pub fn sign(claims: &Value) -> String {
     encode(
         &header,
         claims,
-        &EncodingKey::from_rsa_pem(include_bytes!("../fixtures/private.pem")).unwrap(),
+        &EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
     )
     .unwrap()
 }
@@ -194,5 +202,5 @@ fn route() -> DeliveryRoute {
 }
 
 fn now_millis(now: u64) -> i64 {
-    i64::try_from(now).unwrap() * 1_000
+    i64::try_from(now).unwrap().checked_mul(1_000).unwrap()
 }

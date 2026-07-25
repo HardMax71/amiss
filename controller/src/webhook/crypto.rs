@@ -14,7 +14,7 @@ pub(super) fn lowercase_hex(raw: &[u8]) -> Result<[u8; 32], WebhookError> {
         return Err(WebhookError::Headers);
     }
     let mut signature = [0_u8; 32];
-    hex::decode_to_slice(raw, &mut signature).map_err(|_| WebhookError::Headers)?;
+    hex::decode_to_slice(raw, &mut signature).map_err(|_defect| WebhookError::Headers)?;
     Ok(signature)
 }
 

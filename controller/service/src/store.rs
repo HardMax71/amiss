@@ -103,7 +103,7 @@ impl Store {
     ) -> Result<(), InboxError> {
         validate_key(key)?;
         let bytes = encode_record(record)?;
-        let encoded_bytes = u64::try_from(bytes.len()).map_err(|_| InboxError::Full)?;
+        let encoded_bytes = u64::try_from(bytes.len()).map_err(|_defect| InboxError::Full)?;
         let record_reservation = self
             .limits
             .record_reservation()

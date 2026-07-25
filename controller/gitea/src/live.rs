@@ -3,7 +3,7 @@ mod publication;
 mod refresh;
 mod rest;
 
-#[path = "../../tests/internal/live.rs"]
+#[path = "../tests/internal/live.rs"]
 mod tests;
 
 use std::fmt;

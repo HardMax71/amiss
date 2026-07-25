@@ -14,8 +14,8 @@ pub(crate) fn encode<T: Serialize>(
     domain: &str,
     value: &T,
 ) -> Result<Vec<u8>, InboxError> {
-    let payload = serde_json::to_vec(value).map_err(|_| InboxError::Corrupt)?;
-    let payload_length = u64::try_from(payload.len()).map_err(|_| InboxError::Corrupt)?;
+    let payload = serde_json::to_vec(value).map_err(|_defect| InboxError::Corrupt)?;
+    let payload_length = u64::try_from(payload.len()).map_err(|_defect| InboxError::Corrupt)?;
     let header_bytes = header_bytes(magic)?;
     let capacity = header_bytes
         .checked_add(payload.len())
@@ -50,7 +50,7 @@ pub(crate) fn decode<T: DeserializeOwned + Serialize>(
             .get(length_start..length_end)
             .ok_or(InboxError::Corrupt)?
             .try_into()
-            .map_err(|_| InboxError::Corrupt)?,
+            .map_err(|_defect| InboxError::Corrupt)?,
     );
     let expected_digest = frame
         .get(length_end..digest_end)
@@ -61,8 +61,8 @@ pub(crate) fn decode<T: DeserializeOwned + Serialize>(
     {
         return Err(InboxError::Corrupt);
     }
-    let value: T = serde_json::from_slice(payload).map_err(|_| InboxError::Corrupt)?;
-    if serde_json::to_vec(&value).map_err(|_| InboxError::Corrupt)? != payload {
+    let value: T = serde_json::from_slice(payload).map_err(|_defect| InboxError::Corrupt)?;
+    if serde_json::to_vec(&value).map_err(|_defect| InboxError::Corrupt)? != payload {
         return Err(InboxError::Corrupt);
     }
     Ok(value)

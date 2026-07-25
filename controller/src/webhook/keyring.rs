@@ -86,7 +86,7 @@ impl WebhookKey {
         let secret = SecretSlice::from(
             base64::engine::general_purpose::STANDARD
                 .decode(encoded)
-                .map_err(|_| WebhookKeyringError::Secret)?,
+                .map_err(|_defect| WebhookKeyringError::Secret)?,
         );
         drop(token);
         if !(MIN_STANDARD_SECRET_BYTES..=MAX_STANDARD_SECRET_BYTES)

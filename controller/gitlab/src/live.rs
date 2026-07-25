@@ -2,7 +2,7 @@ mod model;
 mod refresh;
 mod transport;
 
-#[path = "../../tests/internal/live.rs"]
+#[path = "../tests/internal/live.rs"]
 mod tests;
 
 use std::fmt;

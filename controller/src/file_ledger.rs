@@ -283,7 +283,7 @@ fn trusted_now(clock: &dyn ControllerClock) -> Result<i64, FileLedgerError> {
 }
 
 fn random_id() -> Result<[u8; 16], FileLedgerError> {
-    let high = u128::from(getrandom::u64().map_err(|_| FileLedgerError::Random)?);
-    let low = u128::from(getrandom::u64().map_err(|_| FileLedgerError::Random)?);
+    let high = u128::from(getrandom::u64().map_err(|_defect| FileLedgerError::Random)?);
+    let low = u128::from(getrandom::u64().map_err(|_defect| FileLedgerError::Random)?);
     Ok(((high << u64::BITS) | low).to_be_bytes())
 }

@@ -315,8 +315,8 @@ fn make_lease(key: String, lease: LeaseData) -> DeliveryLease {
 }
 
 fn random_owner() -> Result<String, InboxError> {
-    let high = u128::from(getrandom::u64().map_err(|_| InboxError::Random)?);
-    let low = u128::from(getrandom::u64().map_err(|_| InboxError::Random)?);
+    let high = u128::from(getrandom::u64().map_err(|_defect| InboxError::Random)?);
+    let low = u128::from(getrandom::u64().map_err(|_defect| InboxError::Random)?);
     Ok(hex::encode(((high << u64::BITS) | low).to_be_bytes()))
 }
 

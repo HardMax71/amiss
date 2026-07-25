@@ -33,7 +33,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Record, FileLedgerError> {
 
 pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLedgerError> {
     let bytes = serde_json::to_vec(&StoredDeliveryKey::new(identity))
-        .map_err(|_| FileLedgerError::Corrupt)?;
+        .map_err(|_defect| FileLedgerError::Corrupt)?;
     digest_hex(&hb(KEY_DOMAIN, &bytes).to_string())
 }
 
@@ -59,7 +59,7 @@ pub(super) fn staged_digest(
         fence,
         publication,
     };
-    let bytes = serde_json::to_vec(&value).map_err(|_| FileLedgerError::Corrupt)?;
+    let bytes = serde_json::to_vec(&value).map_err(|_defect| FileLedgerError::Corrupt)?;
     Ok(hb(STAGED_DOMAIN, &bytes).to_string())
 }
 
