@@ -1,10 +1,6 @@
-#[path = "support/adapter.rs"]
 mod adapter;
-#[path = "support/fixtures.rs"]
 mod fixtures;
-#[path = "support/ledger.rs"]
 mod ledger;
-#[path = "support/runner.rs"]
 mod runner;
 
 pub(crate) use adapter::FakeAdapter;

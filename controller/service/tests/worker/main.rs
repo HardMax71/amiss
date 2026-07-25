@@ -2,8 +2,6 @@
     clippy::unwrap_used,
     reason = "fixed worker fixtures and filesystem setup must fail loudly"
 )]
-
-#[path = "worker/support.rs"]
 mod support;
 
 use std::sync::Arc;
