@@ -6,8 +6,37 @@
 
 use amiss_controller::ProviderError;
 
+use super::model::ProjectResponse;
 use super::refresh::validated_repository_url;
 use super::{MAX_PAGES, PAGE_SIZE, page_complete};
+
+const BELOW_THE_FLOOR: &str = r#"{
+  "id": 1,
+  "path_with_namespace": "root/lane",
+  "default_branch": "main",
+  "http_url_to_repo": "https://gitlab.example/root/lane.git",
+  "repository_object_format": "sha1",
+  "only_allow_merge_if_pipeline_succeeds": false,
+  "allow_merge_on_skipped_pipeline": null,
+  "merge_method": "merge",
+  "squash_option": "default_off"
+}"#;
+
+const AT_THE_FLOOR: &str = r#"{
+  "id": 1,
+  "path_with_namespace": "root/lane",
+  "default_branch": "main",
+  "http_url_to_repo": "https://gitlab.example/root/lane.git",
+  "repository_object_format": "sha1",
+  "only_allow_merge_if_pipeline_succeeds": true,
+  "allow_merge_on_skipped_pipeline": false,
+  "merge_pipelines_enabled": true,
+  "merge_trains_enabled": true,
+  "merge_trains_skip_train_allowed": false,
+  "merge_train_enforcement": "enforced",
+  "merge_method": "merge",
+  "squash_option": "default_off"
+}"#;
 
 #[test]
 fn pagination_must_prove_the_complete_protection_set() {
@@ -46,4 +75,10 @@ fn object_fetch_uses_only_the_canonical_provider_repository_url() {
             Err(ProviderError::InvalidResponse)
         );
     }
+}
+
+#[test]
+fn a_project_without_the_merge_train_settings_is_below_the_supported_floor() {
+    assert!(serde_json::from_str::<ProjectResponse>(BELOW_THE_FLOOR).is_err());
+    assert!(serde_json::from_str::<ProjectResponse>(AT_THE_FLOOR).is_ok());
 }

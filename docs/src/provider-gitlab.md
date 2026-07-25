@@ -5,7 +5,10 @@ The unpublished
 crate serves one GitLab project, one pipeline execution policy, and one protected target branch.
 It supports GitLab 19.3 or newer with Ultimate. The minimum comes from enforced merge trains,
 which are generally available from 19.3.
-GitLab 19.2's feature-flagged preview is not supported.
+GitLab 19.2's feature-flagged preview is not supported. An instance below that floor is refused
+where it first shows: its project response carries none of `merge_pipelines_enabled`,
+`merge_trains_enabled`, `merge_trains_skip_train_allowed`, or `merge_train_enforcement`, so the
+adapter cannot read the project at all.
 
 This lane does not use a project webhook or write a commit status. An independently owned pipeline
 execution policy injects one job into the merge train. That job presents a short-lived GitLab OIDC
