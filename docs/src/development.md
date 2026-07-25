@@ -25,29 +25,37 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 
 cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
 cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+cargo test --manifest-path fuzz/Cargo.toml --locked --release
+cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
 The first pair checks the offline scanner workspace. The unpublished provider and service crates
 under `controller/` form a separate nested workspace with their own lockfile and dependency
-policy, so the second pair checks them explicitly. The separation is a trust boundary: HTTP,
-provider API, Git acquisition, credential, storage, and service-runtime dependencies belong in
-that nested workspace, never in the root engine workspace whose dependency bans keep networking
-and async runtimes out. The prek hooks and Linux CI run both sets. The macOS and Windows jobs also
-run the controller tests, including the cross-process file stores, provider authentication,
-worker, and supervised-process cases. The supported service deployments are documented in
+policy, so the second pair checks them explicitly. The last pair checks the scanner's standalone
+fuzz package and its separate lockfile. The separation is a trust boundary: HTTP, provider API,
+Git acquisition, credential, storage, and service-runtime dependencies belong in the controller
+workspace, never in the root engine workspace whose dependency bans keep networking and async
+runtimes out. The prek hooks and Linux CI run all three sets. The macOS and Windows jobs also run
+the controller tests, including the cross-process file stores, provider authentication, worker,
+and supervised-process cases. The supported service deployments are documented in
 [Provider-verified controls](provider-controls.md).
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
 [weekly mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
-publishes a non-gating measurement of that property for the root scanner workspace; it does
-not currently cover `controller/` or certify a global mutation threshold.
+publishes a non-gating measurement of that property for the root scanner workspace. Two bounded
+controller runs cover authentication and the ownership-to-publication path rather than attempting
+every mutant in the unpublished workspace. These measurements do not certify a global mutation
+threshold.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the
 [corpus notes](https://github.com/HardMax71/amiss/blob/main/corpus/README.md) document every
-known difference. Each parser that takes untrusted bytes also has a fuzz target under
-`fuzz/`, with committed regression inputs and a
+known difference. Scanner parsers that take untrusted bytes have targets under `fuzz/`.
+The [controller fuzz package](https://github.com/HardMax71/amiss/tree/main/controller/fuzz)
+signs generated provider requests before varying their facts, so its account-free targets reach
+the provider identity and binding checks. Both suites carry committed seeds and a
 [nightly coverage-guided run](https://github.com/HardMax71/amiss/blob/main/.github/workflows/fuzz-long.yml).
 
 The scanner runs on its own repository under `--profile enforce` in CI. This documentation

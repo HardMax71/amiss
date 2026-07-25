@@ -167,21 +167,43 @@ inspectable; version-specific history stays in the
 
 </details>
 
-## Now: prove and run provider lanes
+<details>
+<summary>Done: provider operations</summary>
 
-The three provider lanes, their shared execution-constraint producer, and their offline
-configuration check are implemented. The next phase collects evidence from real providers and
-makes the source-built services easier to run; it does not add another provider.
+- Every provider binary has a network-free `--check` path that loads the same strict
+  configuration, local credentials, trust anchors, controls, constraint, bootstrap, and path
+  layout used at startup without binding a listener, opening mutable service state, or contacting
+  a provider.
+- The private listener separates `/healthz` liveness from `/readyz` admission readiness. It
+  reports ready only after local initialization, becomes unready before requested drain, and
+  drops readiness when supervision observes a required component stop. Provider work is refused
+  with `503` while unready.
+- `/metrics` exposes exactly ten fixed, label-free, process-local counters. Lifecycle transitions
+  use one fixed JSONL stderr schema with no request data or free-form fields. The metrics endpoint,
+  probes, and plaintext listener remain private deployment surfaces.
+- Graceful drain finishes in-flight HTTP work. Webhook workers finish the current delivery and
+  preserve the durable backlog; the synchronous lane finishes admitted evaluations and any active
+  ledger maintenance before exit.
+- Account-free controller robustness checks construct valid signed GitHub and Gitea-family
+  webhooks and GitLab policy-job tokens before mutating identity, target binding, replay identity
+  and lifetime, and freshness facts. Committed seeds have a stable deterministic smoke lane and
+  nightly coverage-guided fuzzing. Focused mutation runs exercise authentication, lease loss,
+  final refresh, and publication without turning the complete controller workspace into an
+  unbounded CI job. Private pack, inbox, and ledger decoders keep their focused corruption suites
+  instead of widening production APIs for a harness; the
+  [controller fuzz notes](https://github.com/HardMax71/amiss/tree/main/controller/fuzz) record
+  that boundary.
+
+</details>
+
+## Now: retain live provider evidence
+
+The provider code chapter is closed. What remains cannot be produced by a local fixture: it
+requires accounts and protected test projects on the providers themselves.
 
 - Retain positive and revoked-control runs from provider-hosted GitHub, GitLab, Gitea, and Forgejo
   test projects. Record the provider version, controller commit, and provider evidence. Local HTTP
   fixtures remain regression tests, not live-provider evidence.
-- Fuzz controller inputs such as webhooks, OIDC claims, provider replies, pack data, inbox rows,
-  and ledger frames. Add focused mutation runs around authentication, lease loss, final refresh,
-  and publication.
-- Add readiness separate from liveness, redacted events and bounded counters, and graceful drain.
-  The phase closes when an operator can validate, observe, restart, and rotate one lane without
-  guessing.
 
 ## Reference-coverage candidates
 

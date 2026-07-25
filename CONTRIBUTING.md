@@ -17,10 +17,14 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 
 cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
 cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+cargo test --manifest-path fuzz/Cargo.toml --locked --release
+cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-The second pair covers the separate provider-controller workspace; the root workspace remains
-the offline scanner and does not take provider transport, storage, or runtime dependencies.
+The second pair covers the separate provider-controller workspace. The last pair covers the
+scanner's standalone fuzz workspace. The root workspace remains offline and does not take
+provider transport, storage, or runtime dependencies.
 
 A change is acceptable when it keeps every gate green, adds tests for the
 behavior it adds or changes, and stays inside the boundaries described in

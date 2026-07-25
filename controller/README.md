@@ -21,6 +21,8 @@ The workspace separates shared mechanics from provider code:
   policy-job lane.
 - `amiss-controller-gitea` and `amiss-controller-gitea-service` implement the dedicated-reviewer
   lane used by Gitea and Forgejo.
+- `amiss-controller-fuzz` drives the three provider authentication boundaries with signed,
+  account-free requests.
 
 Durable state uses checksummed ordinary files with bounded capacity and atomic replacement. There
 is no SQL or database. Webhook raw input is removed after controller completion; `FileLedger`
@@ -33,6 +35,11 @@ links their exact setup, configuration, state, and trust rules.
 producer used before any lane starts.
 [Controller delivery](../docs/src/controller.md) documents the provider-neutral record,
 heartbeats, races, and retry rules.
+
+Every service follows the shared
+[operation contract](../docs/src/provider-controls.md#service-operation): private liveness,
+readiness, and metrics endpoints; fixed redacted lifecycle events; and a graceful drain that
+finishes admitted work while preserving a webhook backlog.
 
 Run the nested workspace checks without adding anything to the root workspace:
 
