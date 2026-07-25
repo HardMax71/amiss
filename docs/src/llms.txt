@@ -48,4 +48,6 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Development](https://hardmax71.github.io/amiss/development.html): building, the gates, and the push ratchets
 - [Project status](https://hardmax71.github.io/amiss/status.html): what is delivered, source-built, self-asserted, or not yet built
 - [The scan ledger](https://hardmax71.github.io/amiss/ledger.html): the counted shadow scans behind the validation phase, one recorded row per repository
+- [Retained provider runs](https://hardmax71.github.io/amiss/provider-evidence.html): live positive and revoked-control runs per provider, with the version, controller commit, and provider evidence
+- [Completed phases](https://hardmax71.github.io/amiss/completed-phases.html): the closed phases, one page per claim, each stating what it defends and where it landed
 - [Roadmap](https://hardmax71.github.io/amiss/roadmap.html): what comes next and in what order
