@@ -104,11 +104,11 @@ repository also has a classic protection rule.
 First [prepare the execution constraint](execution-constraint.md) for the exact action commit,
 bootstrap, and required App-owned check name used by this lane.
 
-Build the nested workspace without adding its network dependencies to the offline root
-workspace:
+Build the service. Its network dependencies belong to the provider crates and never enter the
+engine's own closure:
 
 ```sh
-cargo build --manifest-path controller/Cargo.toml --release --locked \
+cargo build --release --locked \
   -p amiss-controller-github-service --bin amiss-controller-github
 ```
 
@@ -116,13 +116,13 @@ Pre-create the private state and scratch directories, then run the shared
 [offline configuration check](provider-controls.md#offline-configuration-check):
 
 ```sh
-controller/target/release/amiss-controller-github --check /etc/amiss/github.json
+target/release/amiss-controller-github --check /etc/amiss/github.json
 ```
 
 Start the service with the same absolute config path:
 
 ```sh
-controller/target/release/amiss-controller-github /etc/amiss/github.json
+target/release/amiss-controller-github /etc/amiss/github.json
 ```
 
 The listener is plain HTTP. Bind it to loopback or a private network and put a TLS terminator

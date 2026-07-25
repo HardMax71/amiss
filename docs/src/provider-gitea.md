@@ -158,10 +158,10 @@ therefore permanent. Removing it would reopen a signed request that remains vali
 First [prepare the execution constraint](execution-constraint.md) for the exact action commit,
 bootstrap, and review label used by this lane.
 
-Build the nested workspace from source:
+Build the service from source:
 
 ```sh
-cargo build --manifest-path controller/Cargo.toml --release --locked \
+cargo build --release --locked \
   -p amiss-controller-gitea-service --bin amiss-controller-gitea
 ```
 
@@ -169,13 +169,13 @@ Pre-create the private scratch, inbox, and ledger directories, then run the shar
 [offline configuration check](provider-controls.md#offline-configuration-check):
 
 ```sh
-controller/target/release/amiss-controller-gitea --check /etc/amiss/gitea.json
+target/release/amiss-controller-gitea --check /etc/amiss/gitea.json
 ```
 
 Start the service with the same absolute config path:
 
 ```sh
-controller/target/release/amiss-controller-gitea /etc/amiss/gitea.json
+target/release/amiss-controller-gitea /etc/amiss/gitea.json
 ```
 
 Bind the plain HTTP listener to loopback or a private network and put the bounded TLS edge

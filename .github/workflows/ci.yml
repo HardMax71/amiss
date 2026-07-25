@@ -30,9 +30,7 @@ jobs:
       # on branches cannot crowd the shared budget and evict small entries.
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          workspaces: |
-            .
-            controller
+          workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: prek run --all-files
       - run: prek run --all-files --hook-stage pre-push
@@ -122,8 +120,8 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: |
+            .
             fuzz
-            controller
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Verify the scanner fuzz lockfile
         run: cargo test --locked --release
@@ -154,11 +152,9 @@ jobs:
         with:
           workspaces: |
             .
-            controller
             fuzz
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo nextest run --workspace --locked
-      - run: cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
       - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
       - name: Verify the scanner fuzz lockfile
         run: cargo test --locked --release

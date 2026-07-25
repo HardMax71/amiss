@@ -204,10 +204,10 @@ deployment's trust boundary. Otherwise list the exact positive self-hosted runne
 First [prepare the execution constraint](execution-constraint.md) for the exact action commit,
 bootstrap, and stable controller result name used by this lane.
 
-Build the nested workspace from source:
+Build the service from source:
 
 ```sh
-cargo build --manifest-path controller/Cargo.toml --release --locked \
+cargo build --release --locked \
   -p amiss-controller-gitlab-service --bin amiss-controller-gitlab
 ```
 
@@ -215,13 +215,13 @@ Pre-create the private scratch and ledger directories, then run the shared
 [offline configuration check](provider-controls.md#offline-configuration-check):
 
 ```sh
-controller/target/release/amiss-controller-gitlab --check /etc/amiss/gitlab.json
+target/release/amiss-controller-gitlab --check /etc/amiss/gitlab.json
 ```
 
 Start the service with the same absolute config path:
 
 ```sh
-controller/target/release/amiss-controller-gitlab /etc/amiss/gitlab.json
+target/release/amiss-controller-gitlab /etc/amiss/gitlab.json
 ```
 
 Before binding the listener, the service opens, validates, migrates, and cleans the ledger root.

@@ -1,8 +1,9 @@
 # AGENTS.md
 
-Amiss contains an offline Rust workspace whose engine checks documentation against the
-repository tree it describes, plus a separate nested Rust workspace under `controller/` for
-provider-facing orchestration contracts. The book under `docs/` is the reference;
+Amiss is one Rust workspace. The engine crates under `crates/` check documentation against
+the repository tree it describes and take no network or async dependency; the unpublished
+provider crates under `controller/` carry that stack and nothing in the engine depends on
+them. The book under `docs/` is the reference;
 `CONTRIBUTING.md` states the acceptance bar.
 
 ## Build and test
@@ -10,9 +11,6 @@ provider-facing orchestration contracts. The book under `docs/` is the reference
 ```sh
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
-
-cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
-cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
 
 cargo test --manifest-path fuzz/Cargo.toml --locked --release
 cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings

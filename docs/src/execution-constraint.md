@@ -14,12 +14,11 @@ service:
 
 ```sh
 cargo build --release --locked -p amiss-bootstrap --bin amiss-bootstrap
-cargo build --release --locked --manifest-path controller/Cargo.toml \
+cargo build --release --locked \
   -p amiss-controller-constraint --bin amiss-constraint
 ```
 
-Run the bootstrap from `target/release` and the producer from `controller/target/release`; no
-system-wide installation is needed. Windows binary names carry the normal `.exe` suffix.
+Both land in `target/release`; no system-wide installation is needed. Windows binary names carry the normal `.exe` suffix.
 
 Acquire the published action repository independently, as an ordinary non-bare checkout with a
 real `.git` directory. Choose and record the full immutable action commit. The checkout must
@@ -29,7 +28,7 @@ remotes, and worktree files.
 Then create a new constraint file:
 
 ```sh
-controller/target/release/amiss-constraint \
+target/release/amiss-constraint \
   --action-repository /absolute/path/to/action-checkout \
   --action-identity github.com/example/amiss \
   --action-commit eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \

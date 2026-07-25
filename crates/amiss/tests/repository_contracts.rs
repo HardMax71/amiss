@@ -29,7 +29,6 @@ fn cargo_lints_are_repo_wide() {
     let root = repository_root();
     let manifests = [
         (root.join("Cargo.toml"), "workspace."),
-        (root.join("controller/Cargo.toml"), "workspace."),
         (root.join("fuzz/Cargo.toml"), ""),
     ];
 

@@ -83,8 +83,8 @@ watchdog are meaningful controls; they are not an OCI sandbox or microVM and mus
 reported as a provider-verified sandbox. The accepted engine envelope is republished unchanged,
 so it does not gain an authenticated signature merely by passing through bootstrap.
 
-Provider authentication belongs outside both executables. The nested
-[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace keeps the raw
+Provider authentication belongs outside both executables. The
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) crates keep the raw
 delivery untrusted until a configured verifier accepts it, keeps provider and storage
 dependencies out of the scanner, and stops when ownership cannot be proven.
 [Controller delivery](controller.md) defines the neutral record, heartbeat, race, and retry
