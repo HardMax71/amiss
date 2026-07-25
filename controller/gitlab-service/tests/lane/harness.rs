@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
@@ -11,7 +12,7 @@ use amiss_controller::{
 };
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EvaluationConfig, check_lane, evaluation_router,
+    AdmissionRejection, EvaluationConfig, Operations, check_lane, evaluation_router,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
 use amiss_wire::digest::hb;
@@ -132,7 +133,7 @@ impl Harness {
             scratch,
             wall_timeout: case.wall_timeout(),
         });
-        let router = evaluation_router(
+        let (router, _drain) = evaluation_router(
             &EvaluationConfig {
                 path: ENDPOINT.to_owned(),
                 max_body_bytes: 1_024,
@@ -140,6 +141,8 @@ impl Harness {
                 max_header_bytes: 32 * 1_024,
                 max_concurrent_evaluations: 2,
             },
+            Arc::new(AtomicBool::new(true)),
+            Operations::default(),
             move |request| evaluate(&lane, request),
         )
         .unwrap();

@@ -1,20 +1,23 @@
 use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Router;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::middleware;
+use axum::routing::post;
 use tokio::sync::Semaphore;
 use tower_http::limit::RequestBodyLimitLayer;
 
-use crate::DeliveryHeader;
+use crate::operations::record_provider_response;
+use crate::probe::{EndpointDrain, HEALTH_PATH, METRICS_PATH, READY_PATH, work_permits};
 use crate::receiver::headers;
 use crate::request_body::{self, ReadError};
+use crate::{DeliveryHeader, Operations};
 
-const HEALTH_PATH: &str = "/healthz";
 const MAX_PATH_BYTES: usize = 1_024;
 pub(crate) const MAX_CONCURRENT_EVALUATIONS: usize = 64;
 pub(crate) const MAX_BODY_BYTES: usize = 8 * 1_024 * 1_024;
@@ -66,29 +69,38 @@ struct EvaluationState {
 /// The path is not one exact static path or a limit is outside its hard bounds.
 pub fn evaluation_router<F>(
     config: &EvaluationConfig,
+    ready: Arc<AtomicBool>,
+    operations: Operations,
     evaluate: F,
-) -> Result<Router, EvaluationConfigError>
+) -> Result<(Router, EndpointDrain), EvaluationConfigError>
 where
     F: for<'a> Fn(EvaluationRequest<'a>) -> StatusCode + Send + Sync + 'static,
 {
     validate(config)?;
+    let (permits, drain) =
+        work_permits(config.max_concurrent_evaluations).ok_or(EvaluationConfigError)?;
     let state = EvaluationState {
         evaluate: Arc::new(evaluate),
         max_body_bytes: config.max_body_bytes,
         max_headers: config.max_headers,
         max_header_bytes: config.max_header_bytes,
-        permits: Arc::new(Semaphore::new(config.max_concurrent_evaluations)),
+        permits,
     };
-    let evaluation =
-        post(run).layer::<_, Infallible>(RequestBodyLimitLayer::new(config.max_body_bytes));
-    Ok(Router::new()
-        .route(&config.path, evaluation)
-        .route(HEALTH_PATH, get(health))
-        .with_state(state))
-}
-
-async fn health() -> StatusCode {
-    StatusCode::OK
+    let evaluation = post(run)
+        .layer::<_, Infallible>(RequestBodyLimitLayer::new(config.max_body_bytes))
+        .layer(middleware::from_fn_with_state(
+            (operations.clone(), Arc::clone(&ready)),
+            record_provider_response,
+        ));
+    Ok((
+        crate::probe::routes(
+            Router::new().route(&config.path, evaluation),
+            ready,
+            operations,
+        )
+        .with_state(state),
+        drain,
+    ))
 }
 
 async fn run(State(state): State<EvaluationState>, request: Request) -> StatusCode {
@@ -130,6 +142,8 @@ pub(crate) fn validate(config: &EvaluationConfig) -> Result<(), EvaluationConfig
         && path.first() == Some(&b'/')
         && config.path != "/"
         && config.path != HEALTH_PATH
+        && config.path != METRICS_PATH
+        && config.path != READY_PATH
         && path
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_' | b'.'))

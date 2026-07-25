@@ -20,10 +20,6 @@ pub(super) struct ReceiverState {
     pub(super) permits: Arc<Semaphore>,
 }
 
-pub(super) async fn health() -> StatusCode {
-    StatusCode::OK
-}
-
 pub(super) async fn receive(State(state): State<ReceiverState>, request: Request) -> StatusCode {
     let Some(received_at_unix_millis) = controller_time() else {
         return StatusCode::SERVICE_UNAVAILABLE;
@@ -51,7 +47,7 @@ pub(super) async fn receive(State(state): State<ReceiverState>, request: Request
     .await;
     match outcome {
         Ok(outcome) => status(&outcome),
-        Err(_) => StatusCode::SERVICE_UNAVAILABLE,
+        Err(_panic) => StatusCode::SERVICE_UNAVAILABLE,
     }
 }
 

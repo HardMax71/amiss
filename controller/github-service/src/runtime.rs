@@ -12,7 +12,7 @@ use amiss_controller_github::{
 };
 pub use amiss_controller_service::QueuedServiceError as ServiceError;
 use amiss_controller_service::{
-    AdmissionRejection, DeliveryAdmission, DeliveryWorker, DeliveryWorkerInput, Inbox,
+    AdmissionRejection, DeliveryAdmission, DeliveryWorker, DeliveryWorkerInput, Inbox, Operations,
     QueuedServiceInput, lane_admission, run_queued_service,
 };
 use amiss_wire::model::BranchRef;
@@ -61,7 +61,10 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
         admission,
         worker,
     } = prepare(config)?;
-    run_queued_service(service, admission, move |inbox| build_worker(worker, inbox)).await
+    run_queued_service(service, admission, move |inbox, operations| {
+        build_worker(worker, inbox, operations)
+    })
+    .await
 }
 
 fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
@@ -162,6 +165,7 @@ fn admission(
 fn build_worker(
     input: WorkerContext,
     inbox: Arc<Mutex<Inbox>>,
+    operations: Operations,
 ) -> Result<GitHubWorker, ServiceError> {
     let settings = input.settings;
     let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
@@ -203,6 +207,7 @@ fn build_worker(
         retry_max: settings.retry_max,
         idle_poll: settings.idle_poll,
         clock,
+        operations,
     })
     .map_err(|_defect| ServiceError("delivery worker cannot start"))
 }
