@@ -7,12 +7,11 @@ use std::ffi::OsString;
 use std::process::Command;
 use std::sync::LazyLock;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
+use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_github_service::ServiceConfig;
 use amiss_wire::action::host_platform;
 use amiss_wire::controls::ConstraintPlatform;
-use amiss_wire::digest::hb;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -26,7 +25,7 @@ static RSA_KEYS: LazyLock<RsaKeys> =
     LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 struct Fixture {
-    _root: TempDir,
+    _trust: TrustFiles,
     config: std::path::PathBuf,
     bootstrap: std::path::PathBuf,
     constraint: std::path::PathBuf,
@@ -37,41 +36,15 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let root = TempDir::new().unwrap();
-        let scratch = directory(&root, "scratch");
-        let inbox = directory(&root, "inbox");
-        let ledger = directory(&root, "ledger");
-        let bootstrap = root.path().join("amiss-bootstrap");
-        let bootstrap_bytes = b"trusted bootstrap fixture";
-        std::fs::write(&bootstrap, bootstrap_bytes).unwrap();
-        let private_key = root.path().join("app.pem");
-        std::fs::write(&private_key, &RSA_KEYS.private_pem).unwrap();
-        let webhook_secret = root.path().join("webhook.secret");
-        std::fs::write(&webhook_secret, b"github-webhook-fixture-secret").unwrap();
-        let constraint = root.path().join("execution.json");
-        std::fs::write(
-            &constraint,
-            serde_json::to_vec_pretty(&json!({
-                "schema": "amiss/scanner-execution-constraint",
-                "action_repository": {
-                    "host": "github.com",
-                    "owner": "hardmax71",
-                    "name": "amiss"
-                },
-                "action_object_format": "sha1",
-                "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "manifest_path": "release/manifest.json",
-                "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                "selected_platform": host_platform().unwrap().as_str(),
-                "required_status_name": "amiss / documentation assurance",
-                "bootstrap_contract": "amiss-action-bootstrap",
-                "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, bootstrap_bytes).to_string()
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        let config = root.path().join("service.json");
+        let trust = TrustFiles::new("github.com", "hardmax71", "amiss").unwrap();
+        let scratch = trust.directory("scratch").unwrap();
+        let inbox = trust.directory("inbox").unwrap();
+        let ledger = trust.directory("ledger").unwrap();
+        let private_key = trust.write("app.pem", &RSA_KEYS.private_pem).unwrap();
+        let webhook_secret = trust
+            .write("webhook.secret", b"github-webhook-fixture-secret")
+            .unwrap();
+        let config = trust.path("service.json");
         let value = json!({
             "listen": "127.0.0.1:0",
             "webhook_path": "/webhooks/github",
@@ -94,25 +67,14 @@ impl Fixture {
                 "name": "amiss",
                 "target_branch": "main"
             },
-            "plan": {
-                "profile": "enforce",
-                "execution_constraint_file": constraint,
-                "organization_floor_file": null,
-                "debt_snapshot_file": null,
-                "waiver_bundle_file": null
-            },
-            "paths": {
-                "bootstrap": bootstrap,
-                "scratch": scratch,
-                "inbox": inbox,
-                "ledger": ledger
-            }
+            "plan": plan(&trust.constraint),
+            "paths": paths(&trust.bootstrap, &scratch, &ledger, Some(&inbox))
         });
         Self {
-            _root: root,
+            bootstrap: trust.bootstrap.clone(),
+            constraint: trust.constraint.clone(),
+            _trust: trust,
             config,
-            bootstrap,
-            constraint,
             ledger,
             private_key,
             value,
@@ -349,10 +311,4 @@ fn target_branch_is_one_full_git_branch_name() {
 
     let error = ServiceConfig::load(&fixture.config).err().unwrap();
     assert_eq!(error.to_string(), "GitHub target branch is invalid");
-}
-
-fn directory(root: &TempDir, name: &str) -> std::path::PathBuf {
-    let path = root.path().join(name);
-    std::fs::create_dir(&path).unwrap();
-    path
 }

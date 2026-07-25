@@ -145,11 +145,14 @@ dependencies = [
 name = "amiss-controller-fixtures"
 version = "0.9.0"
 dependencies = [
+ "amiss-bootstrap",
  "amiss-controller",
  "amiss-fixtures",
  "amiss-wire",
  "aws-lc-rs",
  "pem",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
