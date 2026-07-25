@@ -206,7 +206,7 @@ impl<R: GiteaRest> Client<R> {
             &data,
             &objects,
         )?;
-        if !publishable(state)? {
+        if !publishable(state, publication.conclusion) {
             return Ok(());
         }
         match publication_decision(&self.config, publication, &data.reviews)? {
