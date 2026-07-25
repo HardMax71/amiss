@@ -49,18 +49,32 @@ impl<'headers, 'value> Headers<'headers, 'value> {
         self.one_of(&[expected_name], max_value_bytes)
     }
 
+    /// Reads the one value the request states under any of `expected_names`.
+    /// Providers that spell the same header several ways, as Forgejo does with
+    /// `x-gitea-signature` and `x-forgejo-signature`, state one value under
+    /// each spelling; agreeing spellings are one claim. Spellings that
+    /// disagree, and any one name stated twice, are refused.
     pub(super) fn one_of(
         &self,
         expected_names: &[&str],
         max_value_bytes: usize,
     ) -> Result<&'value [u8], WebhookError> {
-        let mut matches = self.values.iter().filter(|header| {
-            expected_names
+        let mut stated: Option<&'value [u8]> = None;
+        for name in expected_names {
+            let mut matches = self
+                .values
                 .iter()
-                .any(|name| header.name.eq_ignore_ascii_case(name))
-        });
-        let value = matches.next().ok_or(WebhookError::Headers)?.value;
-        if matches.next().is_some() || value.is_empty() || value.len() > max_value_bytes {
+                .filter(|header| header.name.eq_ignore_ascii_case(name));
+            let Some(header) = matches.next() else {
+                continue;
+            };
+            if matches.next().is_some() || stated.is_some_and(|value| value != header.value) {
+                return Err(WebhookError::Headers);
+            }
+            stated = Some(header.value);
+        }
+        let value = stated.ok_or(WebhookError::Headers)?;
+        if value.is_empty() || value.len() > max_value_bytes {
             return Err(WebhookError::Headers);
         }
         Ok(value)

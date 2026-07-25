@@ -33,22 +33,49 @@ fn accepts_forgejo_header_without_changing_configured_identity() -> Result<(), I
 }
 
 #[test]
-fn rejects_duplicate_or_ambiguous_family_signatures() -> Result<(), IngressError> {
+fn accepts_the_aliased_spellings_forgejo_actually_sends() -> Result<(), IngressError> {
     let verifier = GiteaWebhook::new(ring("gitea-current", SECRET));
-    let ambiguous = [
-        header("x-gitea-signature", SIGNATURE),
+    let aliased = [
         header("x-forgejo-signature", SIGNATURE),
+        header("x-gitea-signature", SIGNATURE),
+        header("x-gogs-signature", SIGNATURE),
+        header("x-forgejo-delivery", b"unsigned-delivery-id"),
     ];
-    assert_eq!(
-        verifier.verify(replay_check(&ambiguous, BODY, NOW)?),
-        Err(WebhookError::Headers)
-    );
-    let duplicate = [
+    let proof = verifier.verify(replay_check(&aliased, BODY, NOW)?).unwrap();
+
+    assert_eq!(proof.anchor(), &anchor("gitea-current"));
+    let repeated = [
         header("x-forgejo-signature", SIGNATURE),
         header("X-Forgejo-Signature", SIGNATURE),
     ];
     assert_eq!(
-        verifier.verify(replay_check(&duplicate, BODY, NOW)?),
+        verifier.verify(replay_check(&repeated, BODY, NOW)?),
+        Err(WebhookError::Headers),
+        "one name stated twice stays ambiguous"
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_family_signatures_that_disagree() -> Result<(), IngressError> {
+    let verifier = GiteaWebhook::new(ring("gitea-current", SECRET));
+    let disagreeing = [
+        header("x-gitea-signature", SIGNATURE),
+        header(
+            "x-forgejo-signature",
+            b"0000000000000000000000000000000000000000000000000000000000000000",
+        ),
+    ];
+    assert_eq!(
+        verifier.verify(replay_check(&disagreeing, BODY, NOW)?),
+        Err(WebhookError::Headers)
+    );
+    let empty = [
+        header("x-gitea-signature", SIGNATURE),
+        header("x-forgejo-signature", b""),
+    ];
+    assert_eq!(
+        verifier.verify(replay_check(&empty, BODY, NOW)?),
         Err(WebhookError::Headers)
     );
     Ok(())
