@@ -19,8 +19,8 @@ test = false
 bench = false
 
 [dependencies]
-amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
+amiss-controller-bootstrap-fixture.workspace = true
 amiss-controller-git = { path = "../git" }
 amiss-controller-gitlab = { path = "../gitlab" }
 amiss-controller-service = { path = "../service" }
@@ -33,6 +33,7 @@ tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
+amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 jsonwebtoken.workspace = true

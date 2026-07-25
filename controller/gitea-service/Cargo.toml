@@ -19,8 +19,8 @@ test = false
 bench = false
 
 [dependencies]
-amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
+amiss-controller-bootstrap-fixture.workspace = true
 amiss-controller-git = { path = "../git" }
 amiss-controller-gitea = { path = "../gitea" }
 amiss-controller-service = { path = "../service" }
@@ -29,7 +29,8 @@ secrecy.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-amiss-fixtures = { path = "../../crates/amiss-fixtures" }
+amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
+amiss-controller-fixtures.workspace = true
 hex.workspace = true
 hmac.workspace = true
 serde_json.workspace = true

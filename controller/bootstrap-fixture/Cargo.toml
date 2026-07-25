@@ -1,0 +1,16 @@
+[package]
+name = "amiss-controller-bootstrap-fixture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Lane bootstrap fixture body, kept free of test-only dependencies so the fixture binary stays inside the bootstrap size bound"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
+amiss-wire = { path = "../../crates/amiss-wire" }
+
+[lints]
+workspace = true

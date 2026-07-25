@@ -25,7 +25,7 @@ use tempfile::TempDir;
 use tower::ServiceExt as _;
 
 use super::provider::{FakeGitLab, HOST, claims, policy, provider, refresh, sign, source};
-use super::repositories::{CopyAcquisition, Repositories};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
 
 const ENDPOINT: &str = "/gitlab/policy/evaluate";
 
@@ -69,7 +69,7 @@ impl Harness {
         let state = TempDir::new().unwrap();
         let scratch = directory(&state, "scratch");
         let ledger_root = directory(&state, "ledger");
-        let repositories = Repositories::new();
+        let repositories = Repositories::new().unwrap();
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-gitlab-service-bootstrap-fixture"));
         let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
@@ -146,7 +146,7 @@ impl Harness {
             move |request| evaluate(&lane, request),
         )
         .unwrap();
-        let token = sign(&claims(&repositories.commits().candidate));
+        let token = sign(&claims(&repositories.commits().unwrap().candidate));
         Self {
             _state: state,
             repositories,
@@ -179,7 +179,7 @@ impl Harness {
     }
 
     pub(super) fn claims(&self) -> Value {
-        claims(&self.repositories.commits().candidate)
+        claims(&self.repositories.commits().unwrap().candidate)
     }
 
     pub(super) fn cleanup_leftover(&self) -> PathBuf {
@@ -326,8 +326,8 @@ fn execution(
     )
     .unwrap();
     input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = repositories.action_commit();
-    input.action_tree_oid = repositories.action_tree();
+    input.action_commit_oid = repositories.action_commit().unwrap();
+    input.action_tree_oid = repositories.action_tree().unwrap();
     status.clone_into(&mut input.required_status_name);
     input.bootstrap_digest = bootstrap_digest;
     ExecutionConstraintDescriptor::new(input).unwrap()
