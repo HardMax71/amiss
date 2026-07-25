@@ -5,8 +5,10 @@
 
 use std::ffi::OsString;
 use std::process::Command;
+use std::sync::LazyLock;
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
+use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_github_service::ServiceConfig;
 use amiss_wire::action::host_platform;
 use amiss_wire::controls::ConstraintPlatform;
@@ -15,6 +17,13 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-github");
+
+#[expect(
+    clippy::expect_used,
+    reason = "the generated RSA fixture must remain valid"
+)]
+static RSA_KEYS: LazyLock<RsaKeys> =
+    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 struct Fixture {
     _root: TempDir,
@@ -36,11 +45,7 @@ impl Fixture {
         let bootstrap_bytes = b"trusted bootstrap fixture";
         std::fs::write(&bootstrap, bootstrap_bytes).unwrap();
         let private_key = root.path().join("app.pem");
-        std::fs::write(
-            &private_key,
-            include_bytes!("../../github/tests/fixtures/private.pem"),
-        )
-        .unwrap();
+        std::fs::write(&private_key, &RSA_KEYS.private_pem).unwrap();
         let webhook_secret = root.path().join("webhook.secret");
         std::fs::write(&webhook_secret, b"github-webhook-fixture-secret").unwrap();
         let constraint = root.path().join("execution.json");

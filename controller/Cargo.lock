@@ -85,6 +85,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-controller-fixtures"
+version = "0.1.0"
+dependencies = [
+ "aws-lc-rs",
+ "pem",
+]
+
+[[package]]
+name = "amiss-controller-fuzz"
+version = "0.1.0"
+dependencies = [
+ "amiss-controller",
+ "amiss-controller-fixtures",
+ "amiss-controller-gitea",
+ "amiss-controller-github",
+ "amiss-controller-gitlab",
+ "amiss-wire",
+ "hex",
+ "hmac",
+ "jsonwebtoken",
+ "libfuzzer-sys",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "amiss-controller-git"
 version = "0.1.0"
 dependencies = [
@@ -139,6 +165,7 @@ name = "amiss-controller-github"
 version = "0.1.0"
 dependencies = [
  "amiss-controller",
+ "amiss-controller-fixtures",
  "amiss-controller-git",
  "amiss-wire",
  "hex",
@@ -161,6 +188,7 @@ version = "0.1.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
+ "amiss-controller-fixtures",
  "amiss-controller-github",
  "amiss-controller-service",
  "amiss-fixtures",
@@ -178,6 +206,7 @@ name = "amiss-controller-gitlab"
 version = "0.1.0"
 dependencies = [
  "amiss-controller",
+ "amiss-controller-fixtures",
  "amiss-wire",
  "jsonwebtoken",
  "reqwest",
@@ -193,6 +222,7 @@ version = "0.1.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
+ "amiss-controller-fixtures",
  "amiss-controller-git",
  "amiss-controller-gitlab",
  "amiss-controller-service",
@@ -227,6 +257,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "hmac",
+ "prometheus-client",
  "serde",
  "serde_json",
  "sha2",
@@ -268,6 +299,12 @@ dependencies = [
  "sha2",
  "strum",
 ]
+
+[[package]]
+name = "arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
 name = "arc-swap"
@@ -761,6 +798,12 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "dtoa"
+version = "1.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c3cf4824e2d5f025c7b531afcb2325364084a16806f6d47fbc1f5fbd9960590"
 
 [[package]]
 name = "dunce"
@@ -2233,6 +2276,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
+name = "libfuzzer-sys"
+version = "0.4.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9fd2f41a1cba099f79a0b6b6c35656cf7c03351a7bae8ff0f28f25270f929d2"
+dependencies = [
+ "arbitrary",
+ "cc",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2540,6 +2593,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "962200e2d7d551451297d9fdce85138374019ada198e30ea9ede38034e27604c"
 dependencies = [
  "parking_lot",
+]
+
+[[package]]
+name = "prometheus-client"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba70bf887030e45213b4a95c9b08d5a450b157f87c1d63661ed0847a12fa2aad"
+dependencies = [
+ "dtoa",
+ "itoa",
+ "parking_lot",
+ "prometheus-client-derive-encode",
+]
+
+[[package]]
+name = "prometheus-client-derive-encode"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9adf1691c04c0a5ff46ff8f262b58beb07b0dbb61f96f9f54f6cbd82106ed87f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

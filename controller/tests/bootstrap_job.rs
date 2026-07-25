@@ -58,15 +58,16 @@ fn maximal_floor() -> Vec<u8> {
 fn near_ceiling_floor() -> Vec<u8> {
     let ceiling = usize::try_from(REQUEST_STREAM_BYTES).unwrap();
     let maximal = maximal_floor();
-    let excess = maximal.len().checked_sub(ceiling - 1).unwrap();
-    let last = LARGE_INVENTORY_ENTRIES - 1;
+    let floor_length = ceiling.checked_sub(1).unwrap();
+    let excess = maximal.len().checked_sub(floor_length).unwrap();
+    let last = LARGE_INVENTORY_ENTRIES.checked_sub(1).unwrap();
     let maximal_path = inventory_path(last, MAX_PATH_BYTES);
     let shorter_path = inventory_path(last, MAX_PATH_BYTES.checked_sub(excess).unwrap());
     let floor = String::from_utf8(maximal)
         .unwrap()
         .replacen(&maximal_path, &shorter_path, 1)
         .into_bytes();
-    assert_eq!(floor.len(), ceiling - 1);
+    assert_eq!(floor.len(), floor_length);
     floor
 }
 

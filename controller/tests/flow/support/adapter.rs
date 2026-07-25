@@ -93,7 +93,7 @@ impl ProviderAdapter for FakeAdapter {
         self.authentication_count.fetch_add(1, Ordering::Relaxed);
         self.verifier
             .verify(delivery)
-            .map_err(|_| ProviderError::Authentication)
+            .map_err(|_defect| ProviderError::Authentication)
             .map(|proof| proof.bind(self.authenticated.clone()))
     }
 

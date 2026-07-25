@@ -1,0 +1,16 @@
+[package]
+name = "amiss-controller-fixtures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Generated provider fixtures for the Amiss controller workspace"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+aws-lc-rs.workspace = true
+pem.workspace = true
+
+[lints]
+workspace = true

@@ -295,11 +295,15 @@ fn remove_gate_commit(root: &Path) {
             .windows(FIELD.len())
             .position(|window| window == FIELD)
             .unwrap();
-        let value_start = start + FIELD.len();
+        let value_start = start.checked_add(FIELD.len()).unwrap();
         let value_bytes = payload.get(value_start..).unwrap();
         let value_end = value_bytes.iter().position(|byte| *byte == b'"').unwrap();
-        let end = value_start + value_end + 1;
-        let mut legacy = Vec::with_capacity(payload.len() - (end - start));
+        let end = value_start
+            .checked_add(value_end)
+            .and_then(|offset| offset.checked_add(1))
+            .unwrap();
+        let removed = end.checked_sub(start).unwrap();
+        let mut legacy = Vec::with_capacity(payload.len().checked_sub(removed).unwrap());
         legacy.extend_from_slice(payload.get(..start).unwrap());
         legacy.extend_from_slice(payload.get(end..).unwrap());
         legacy
@@ -314,11 +318,16 @@ fn rewrite_payload(root: &Path, change: impl FnOnce(&[u8]) -> Vec<u8>) {
 
     let path = ledger_file(root, ".state").unwrap();
     let frame = fs::read(&path).unwrap();
-    let header_bytes = MAGIC.len() + 1 + size_of::<u64>() + DIGEST_BYTES;
+    let header_bytes = MAGIC
+        .len()
+        .checked_add(1)
+        .and_then(|length| length.checked_add(size_of::<u64>()))
+        .and_then(|length| length.checked_add(DIGEST_BYTES))
+        .unwrap();
     let payload = frame.get(header_bytes..).unwrap();
     let payload = change(payload);
     let payload_length = u64::try_from(payload.len()).unwrap();
-    let mut frame = Vec::with_capacity(header_bytes + payload.len());
+    let mut frame = Vec::with_capacity(header_bytes.checked_add(payload.len()).unwrap());
     frame.extend_from_slice(MAGIC);
     frame.push(VERSION);
     frame.extend_from_slice(&payload_length.to_be_bytes());

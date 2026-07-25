@@ -1,11 +1,12 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use amiss_controller::{
     OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
 };
+use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab::{
     GitLabAccess, GitLabApi, GitLabBranch, GitLabCommit, GitLabJob, GitLabMergeChecks,
     GitLabMergeRequest, GitLabOidc, GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh,
@@ -23,6 +24,13 @@ pub(super) const PROJECT_ID: u64 = 101;
 const PROJECT_PATH: &str = "acme/widget";
 const AUDIENCE: &str = "amiss-controller";
 const KID: &str = "current";
+
+#[expect(
+    clippy::expect_used,
+    reason = "the generated RSA fixture must remain valid"
+)]
+static RSA_KEYS: LazyLock<RsaKeys> =
+    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 #[derive(Clone)]
 pub(super) struct FakeGitLab {
@@ -67,7 +75,7 @@ pub(super) fn source() -> Arc<GitLabOidc> {
     let key = OidcPublicKey::from_rsa_pem(
         KID.to_owned(),
         OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
-        include_bytes!("../../../gitlab/tests/fixtures/public.pem"),
+        &RSA_KEYS.public_pem,
     )
     .unwrap();
     Arc::new(
@@ -116,8 +124,8 @@ pub(super) fn claims(gate: &Oid) -> Value {
         "iss": format!("https://{HOST}"),
         "sub": "project_path:acme/widget:ref_type:branch:ref:topic",
         "aud": AUDIENCE,
-        "exp": now + 300,
-        "nbf": now - 1,
+        "exp": now.checked_add(300).unwrap(),
+        "nbf": now.checked_sub(1).unwrap(),
         "iat": now,
         "jti": "gitlab-service-lane-jti",
         "job_project_id": PROJECT_ID.to_string(),
@@ -142,8 +150,7 @@ pub(super) fn sign(claims: &Value) -> String {
     encode(
         &header,
         claims,
-        &EncodingKey::from_rsa_pem(include_bytes!("../../../gitlab/tests/fixtures/private.pem"))
-            .unwrap(),
+        &EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
     )
     .unwrap()
 }

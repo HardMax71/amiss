@@ -1,9 +1,11 @@
 #![cfg(test)]
 
 use std::io::Cursor;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
+use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use secrecy::{ExposeSecret as _, SecretSlice};
 use serde::Deserialize;
@@ -13,6 +15,9 @@ use super::{
     map_status, mint_status, validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
+
+static RSA_KEYS: LazyLock<RsaKeys> =
+    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 #[test]
 fn api_authority_is_derived_from_the_provider_instance() {
@@ -110,7 +115,7 @@ fn provider_statuses_have_stable_failure_classes() {
 #[test]
 fn app_jwt_binds_the_app_and_a_bounded_lifetime() {
     let credential = AppCredential {
-        key: EncodingKey::from_rsa_pem(include_bytes!("../fixtures/private.pem")).unwrap(),
+        key: EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
         app_id: 99,
         installation_id: 7,
     };
@@ -119,7 +124,7 @@ fn app_jwt_binds_the_app_and_a_bounded_lifetime() {
     validation.set_issuer(&["99"]);
     let decoded = jsonwebtoken::decode::<Claims>(
         token.expose_secret(),
-        &DecodingKey::from_rsa_pem(include_bytes!("../fixtures/public.pem")).unwrap(),
+        &DecodingKey::from_rsa_pem(&RSA_KEYS.public_pem).unwrap(),
         &validation,
     )
     .unwrap();
@@ -140,7 +145,7 @@ fn an_expired_deadline_fails_before_any_transport_io() {
     let transport = Transport::new(
         99,
         7,
-        SecretSlice::from(include_bytes!("../fixtures/private.pem").to_vec()),
+        SecretSlice::from(RSA_KEYS.private_pem.clone()),
         "github.com",
         "https://api.github.com",
         timeouts,

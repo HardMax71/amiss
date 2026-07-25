@@ -180,7 +180,7 @@ impl ReportRef {
 }
 
 fn report_length(report: &[u8]) -> Result<u64, FileLedgerError> {
-    let length = u64::try_from(report.len()).map_err(|_| FileLedgerError::ReportTooLarge)?;
+    let length = u64::try_from(report.len()).map_err(|_defect| FileLedgerError::ReportTooLarge)?;
     (length <= MACHINE_JSON_BYTES)
         .then_some(length)
         .ok_or(FileLedgerError::ReportTooLarge)

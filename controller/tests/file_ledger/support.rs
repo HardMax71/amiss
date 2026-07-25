@@ -304,7 +304,12 @@ pub(super) fn downgrade_root_metadata(root: &Path) {
 
     let path = root.join(".amiss-root.state");
     let bytes = fs::read(&path).unwrap();
-    let header = MAGIC.len() + 1 + 8 + 32;
+    let header = MAGIC
+        .len()
+        .checked_add(1)
+        .and_then(|length| length.checked_add(8))
+        .and_then(|length| length.checked_add(32))
+        .unwrap();
     let payload = std::str::from_utf8(bytes.get(header..).unwrap()).unwrap();
     let legacy = payload.replace(
         "amiss/controller-file-root-v2",
@@ -345,7 +350,12 @@ pub(super) fn assert_frame_contract(
 ) {
     let bytes = fs::read(path).unwrap();
     assert!(u64::try_from(bytes.len()).unwrap() <= maximum);
-    let header_length = magic.len() + 1 + 8 + 32;
+    let header_length = magic
+        .len()
+        .checked_add(1)
+        .and_then(|length| length.checked_add(8))
+        .and_then(|length| length.checked_add(32))
+        .unwrap();
     let payload = bytes.get(header_length..).unwrap();
     assert_eq!(bytes, test_frame(magic, domain, payload));
     let value: serde_json::Value = serde_json::from_slice(payload).unwrap();

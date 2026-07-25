@@ -63,7 +63,7 @@ fn delivery_id(raw: &[u8]) -> Result<DeliveryId, WebhookError> {
     if raw.contains(&b'.') {
         return Err(WebhookError::Headers);
     }
-    let value = std::str::from_utf8(raw).map_err(|_| WebhookError::Headers)?;
+    let value = std::str::from_utf8(raw).map_err(|_defect| WebhookError::Headers)?;
     DeliveryId::new(value.to_owned()).ok_or(WebhookError::Headers)
 }
 
@@ -74,7 +74,7 @@ fn timestamp_millis(raw: &[u8]) -> Result<i64, WebhookError> {
     let seconds = raw.iter().try_fold(0_i64, |value, byte| {
         value
             .checked_mul(10)?
-            .checked_add(i64::from(*byte) - i64::from(b'0'))
+            .checked_add(i64::from(byte.saturating_sub(b'0')))
     });
     seconds
         .and_then(|seconds| seconds.checked_mul(1_000))
@@ -90,8 +90,8 @@ fn signatures(raw: &[u8]) -> Result<Vec<[u8; 32]>, WebhookError> {
         let encoded = encoded.strip_prefix(b"v1,").ok_or(WebhookError::Headers)?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(encoded)
-            .map_err(|_| WebhookError::Headers)?;
-        let signature: [u8; 32] = bytes.try_into().map_err(|_| WebhookError::Headers)?;
+            .map_err(|_defect| WebhookError::Headers)?;
+        let signature: [u8; 32] = bytes.try_into().map_err(|_defect| WebhookError::Headers)?;
         if decoded.contains(&signature) {
             return Err(WebhookError::Headers);
         }

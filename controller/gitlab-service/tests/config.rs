@@ -4,8 +4,10 @@
 )]
 
 use std::process::Command;
+use std::sync::LazyLock;
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
+use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab_service::ServiceConfig;
 use amiss_wire::action::host_platform;
 use amiss_wire::digest::hb;
@@ -13,6 +15,13 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-gitlab");
+
+#[expect(
+    clippy::expect_used,
+    reason = "the generated RSA fixture must remain valid"
+)]
+static RSA_KEYS: LazyLock<RsaKeys> =
+    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
 struct Fixture {
     _root: TempDir,
@@ -36,11 +45,7 @@ impl Fixture {
         let git_token = root.path().join("git.token");
         std::fs::write(&git_token, b"gitlab-git-token-fixture-2026").unwrap();
         let public_key = root.path().join("oidc-public.pem");
-        std::fs::write(
-            &public_key,
-            include_bytes!("../../gitlab/tests/fixtures/public.pem"),
-        )
-        .unwrap();
+        std::fs::write(&public_key, &RSA_KEYS.public_pem).unwrap();
         let constraint = root.path().join("execution.json");
         std::fs::write(
             &constraint,

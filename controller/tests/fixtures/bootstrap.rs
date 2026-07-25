@@ -302,7 +302,9 @@ fn spawn_grandchild(args: &RunnerArgs) -> bool {
 }
 
 fn wait_for_ready(path: &Path) -> bool {
-    let deadline = Instant::now() + GRANDCHILD_READY_TIMEOUT;
+    let Some(deadline) = Instant::now().checked_add(GRANDCHILD_READY_TIMEOUT) else {
+        return false;
+    };
     while Instant::now() < deadline {
         if path.exists() {
             return true;

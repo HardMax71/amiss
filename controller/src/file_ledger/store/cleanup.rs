@@ -49,7 +49,8 @@ fn prepare_capacity(
     maximum: u64,
     migrating: bool,
 ) -> Result<capacity::Capacity, FileLedgerError> {
-    let records = u64::try_from(entries.states.len()).map_err(|_| FileLedgerError::Corrupt)?;
+    let records =
+        u64::try_from(entries.states.len()).map_err(|_defect| FileLedgerError::Corrupt)?;
     let loaded = load_optional_capacity(root)?;
     if migrating {
         if loaded
@@ -193,7 +194,8 @@ impl RootEntries {
                 self.states.remove(&key).ok_or(FileLedgerError::Corrupt)?;
                 removed.checked_add(1).ok_or(FileLedgerError::Corrupt)
             })?;
-            let records = u64::try_from(self.states.len()).map_err(|_| FileLedgerError::Corrupt)?;
+            let records =
+                u64::try_from(self.states.len()).map_err(|_defect| FileLedgerError::Corrupt)?;
             let capacity = capacity::finish_cleanup(capacity, records)?;
             save_capacity(root, &capacity)?;
             removed

@@ -102,7 +102,7 @@ impl GitHubPullRequestSource {
         let proof = self
             .webhook
             .verify(check)
-            .map_err(|_| ProviderError::Authentication)?;
+            .map_err(|_defect| ProviderError::Authentication)?;
         let input = check.delivery();
         if input.route.provider != self.provider
             || input.route.signed_time != SignedTimePolicy::ReplayOnly

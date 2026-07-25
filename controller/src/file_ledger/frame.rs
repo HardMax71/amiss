@@ -33,8 +33,9 @@ pub(super) fn encode<T: Serialize>(
     validate: impl FnOnce(&T) -> Result<(), FileLedgerError>,
 ) -> Result<Vec<u8>, FileLedgerError> {
     validate(value)?;
-    let payload = serde_json::to_vec(value).map_err(|_| FileLedgerError::Corrupt)?;
-    let payload_length = u64::try_from(payload.len()).map_err(|_| FileLedgerError::Corrupt)?;
+    let payload = serde_json::to_vec(value).map_err(|_defect| FileLedgerError::Corrupt)?;
+    let payload_length =
+        u64::try_from(payload.len()).map_err(|_defect| FileLedgerError::Corrupt)?;
     let frame_length = format
         .magic
         .len()
@@ -43,7 +44,7 @@ pub(super) fn encode<T: Serialize>(
         .and_then(|length| length.checked_add(DIGEST_BYTES))
         .and_then(|length| length.checked_add(payload.len()))
         .ok_or(FileLedgerError::Corrupt)?;
-    if u64::try_from(frame_length).map_err(|_| FileLedgerError::Corrupt)? > format.maximum {
+    if u64::try_from(frame_length).map_err(|_defect| FileLedgerError::Corrupt)? > format.maximum {
         return Err(FileLedgerError::Corrupt);
     }
     let mut frame = Vec::with_capacity(frame_length);
@@ -85,7 +86,7 @@ pub(super) fn decode<T: DeserializeOwned + Serialize>(
             .get(length_start..length_end)
             .ok_or(FileLedgerError::Corrupt)?
             .try_into()
-            .map_err(|_| FileLedgerError::Corrupt)?,
+            .map_err(|_defect| FileLedgerError::Corrupt)?,
     );
     let digest_end = length_end
         .checked_add(DIGEST_BYTES)
@@ -98,9 +99,9 @@ pub(super) fn decode<T: DeserializeOwned + Serialize>(
     {
         return Err(FileLedgerError::Corrupt);
     }
-    let value = serde_json::from_slice(payload).map_err(|_| FileLedgerError::Corrupt)?;
+    let value = serde_json::from_slice(payload).map_err(|_defect| FileLedgerError::Corrupt)?;
     validate(&value)?;
-    if serde_json::to_vec(&value).map_err(|_| FileLedgerError::Corrupt)? != payload {
+    if serde_json::to_vec(&value).map_err(|_defect| FileLedgerError::Corrupt)? != payload {
         return Err(FileLedgerError::Corrupt);
     }
     Ok(value)
