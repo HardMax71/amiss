@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Document parsers for Amiss, pinned to the CommonMark and GFM corpora"
 license.workspace = true
 repository.workspace = true
+exclude.workspace = true
 autotests = false
 
 [dependencies]

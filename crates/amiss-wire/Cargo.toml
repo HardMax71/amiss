@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Canonical JSON, digest domains, and the machine contracts of Amiss"
 license.workspace = true
 repository.workspace = true
+exclude.workspace = true
 
 [lib]
 bench = false

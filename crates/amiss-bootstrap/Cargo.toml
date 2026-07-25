@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Trusted CI wrapper that validates and launches a verified Amiss engine"
 license.workspace = true
 repository.workspace = true
+exclude.workspace = true
 
 [dependencies]
 amiss-git = { path = "../amiss-git", version = "0.9.0" }
