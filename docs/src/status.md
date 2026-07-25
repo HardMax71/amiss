@@ -19,6 +19,7 @@ entry conditions live in the [Roadmap](roadmap.md).
 | GitHub provider lane | A source-built App service authenticates pull-request events, refreshes exact state and strict App-bound rules, acquires exact SHA-1 objects, runs the sealed bootstrap, and publishes on GitHub's test-merge commit. GitHub.com and compatible GHES releases are supported. | [GitHub setup](provider-github.md) |
 | GitLab provider lane | A source-built service authenticates a pipeline execution policy job through OIDC, verifies its enforced merge train, policy origin, runner, project, and exact train commit, then lets only an exact pass make that job succeed. GitLab 19.3 or newer with Ultimate is supported. | [GitLab setup](provider-gitlab.md) |
 | Gitea and Forgejo provider lane | A source-built service authenticates pull-request webhooks, refreshes the effective protected-branch rule, acquires exact SHA-1 objects, runs the sealed bootstrap, and approves or rejects through one dedicated reviewer. Gitea 1.27 or newer and Forgejo 16 or newer are supported. | [Gitea and Forgejo setup](provider-gitea.md) |
+| Provider service operation | Every service has an offline configuration check, separate liveness and readiness, ten fixed label-free counters, redacted lifecycle events, and graceful drain. The listener and its operator endpoints remain private. | [Service operation](provider-controls.md#service-operation) |
 
 Repository form is deliberately closed too. The reader accepts a primary non-bare checkout
 whose `.git` entry is a real directory. Bare repositories and linked worktrees represented
@@ -94,8 +95,10 @@ their exact setup, retry limits, and trust boundaries.
 All three service binaries share an
 [offline configuration check](provider-controls.md#offline-configuration-check). It validates
 local configuration and named trust inputs before creating the runtime or touching provider and
-mutable service state. It is a deployment preflight, not readiness or retained live-provider
-evidence.
+mutable service state. Once running, their shared
+[service operation](provider-controls.md#service-operation) contract separates liveness from
+readiness, keeps metrics and lifecycle events bounded, and drains admitted work without losing a
+durable webhook backlog. These are deployment tools, not retained live-provider evidence.
 
 Local and convenience-Action reports still describe repository policy with no outside authority
 consulted. Their external controls are absent and sandbox assurance is `self-asserted`. A report

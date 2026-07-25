@@ -98,6 +98,69 @@ address is available, that state roots are writable and healthy, that credential
 required provider permissions, or that the live merge rule matches the documented setup. Those
 checks still require startup and retained runs against the provider.
 
+## Service operation
+
+Every provider service uses the same three private `GET` endpoints:
+
+| Path | Contract |
+| --- | --- |
+| `/healthz` | Returns `200` while the HTTP process can answer. It is liveness only. |
+| `/readyz` | Returns `200` only after local initialization, and `503` before readiness or during drain. |
+| `/metrics` | Returns the fixed process-local OpenMetrics counters below. |
+
+Initialization includes opening and validating the lane's local state, building its worker or
+evaluation path, and binding the listener. Readiness becomes false before a requested drain and
+as soon as supervision observes a worker or maintenance stop, before remaining work drains. A
+provider `POST` returns `503` while readiness is false;
+`/healthz` can therefore remain live while `/readyz` correctly removes the process from service.
+
+`/metrics` has exactly ten label-free counters:
+
+| Counter | Counts |
+| --- | --- |
+| `amiss_controller_provider_requests_total` | Configured provider `POST` requests answered. |
+| `amiss_controller_provider_acceptances_total` | Provider requests accepted for durable or synchronous work. |
+| `amiss_controller_provider_refusals_total` | Provider requests refused by authentication, bounds, request shape, or policy. |
+| `amiss_controller_provider_unavailable_total` | Provider requests that returned an unavailable result. |
+| `amiss_controller_delivery_attempts_total` | Durable deliveries attempted by a webhook worker. |
+| `amiss_controller_delivery_completions_total` | Durable deliveries completed. |
+| `amiss_controller_delivery_retries_total` | Durable deliveries left for retry. |
+| `amiss_controller_delivery_discards_total` | Durable deliveries removed after failed reauthentication. |
+| `amiss_controller_maintenance_runs_total` | Ledger maintenance scans completed. |
+| `amiss_controller_maintenance_removals_total` | Durable records, reports, and temporary entries removed by maintenance. |
+
+The set cannot grow from a repository, request, provider identity, or result. It has no labels,
+and all values reset on restart. Counters that do not apply to a lane remain zero. The metrics
+endpoint remains scrapeable during drain until the listener closes; it does not make the
+listener safe to expose.
+
+Runtime lifecycle events are one compact JSON object per stderr line. The schema is
+`amiss/controller-event/v1`, and the only keys are `schema`, `level`, `event`, and `component`.
+Normal transitions are `ready`, `draining`, and `stopped`, with level `info` and component
+`service`. A required background component failure uses event `failed`, level `error`, and
+component `worker` or `maintenance`. It appears before `draining` when the component initiates
+shutdown and after `draining` when admitted work fails while finishing.
+
+```json
+{"schema":"amiss/controller-event/v1","level":"info","event":"draining","component":"service"}
+```
+
+These events deliberately carry no request body, header, credential, repository, path, object ID,
+provider reply, or free-form error. This keeps lifecycle logging bounded and avoids echoing
+secret-bearing input.
+
+On a termination signal, the service marks itself unready before it stops accepting new work.
+The HTTP server finishes requests already in flight. A webhook worker finishes its current
+delivery and leaves the remaining durable inbox backlog for the next process. The synchronous
+GitLab lane finishes admitted evaluations and any ledger maintenance already running. This
+includes blocking work whose provider connection closed after admission. A second termination
+signal aborts a stuck drain. Do not depend on a final metrics scrape after drain starts: the
+listener may close before the other components finish.
+
+Bind this listener only to loopback or a private operator network. If a TLS proxy accepts provider
+traffic, publish only the configured provider `POST` path through it; keep `/healthz`, `/readyz`,
+and `/metrics` private. None of the three operator endpoints is authenticated.
+
 ## Shared trust boundary
 
 Run a provider service on a host controlled independently of the checked repository. Keep its API
@@ -114,7 +177,8 @@ input; independent acquisition and protected placement remain operator responsib
 The listener is plain HTTP. Bind it to loopback or a private network and put an
 operator-controlled TLS terminator in front. The proxy must preserve signed headers and the exact
 body, and must cap connections plus total, header, body, idle, and slow-body time. `/healthz`
-reports only process liveness. A webhook service also takes one of its configured delivery
+reports only process liveness; the full probe and drain contract is in
+[Service operation](#service-operation). A webhook service also takes one of its configured delivery
 permits before reading a body and holds it through durable inbox admission. That bounds in-process
 work. Both endpoint shapes stop an unfinished body after 30 seconds; neither limit replaces the
 proxy's public connection limits.

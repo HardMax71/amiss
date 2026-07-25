@@ -179,7 +179,24 @@ controller/target/release/amiss-controller-gitea /etc/amiss/gitea.json
 ```
 
 Bind the plain HTTP listener to loopback or a private network and put the bounded TLS edge
-described in [Provider-verified controls](provider-controls.md) in front.
+described in [Provider-verified controls](provider-controls.md) in front. Keep the probes and
+metrics private, and use the shared
+[service operation](provider-controls.md#service-operation) contract for readiness, redacted
+lifecycle events, counters, and graceful drain.
+
+The delivery endpoint returns:
+
+| Status | Meaning |
+| --- | --- |
+| `202` | The authenticated raw request is durable, or the exact request was already saved. |
+| `400` | The request shape, path query, or stored delivery is invalid. |
+| `401` | Authentication failed. |
+| `403` | The signed event names another repository, target, or plan. |
+| `408` | The request body did not finish within 30 seconds. |
+| `409` | The same source identity was reused for different bytes. |
+| `413` | The body limit was crossed. |
+| `431` | The header count or byte limit was crossed. |
+| `503` | The service is unready, or trusted time, storage, capacity, or the worker is unavailable. |
 
 ## Configuration
 

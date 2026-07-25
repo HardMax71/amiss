@@ -236,8 +236,10 @@ process before the first upgraded open; the
 The service listens on plain HTTP. Bind it to loopback or a private network and put an
 operator-controlled TLS terminator in front. The proxy must preserve the `Authorization` header
 and exact body and must cap connections plus total, header, body, idle, and slow-body time. Set
-the policy job timeout above the service's API, Git, and bootstrap deadlines. `/healthz` reports
-only process liveness.
+the policy job timeout above the service's API, Git, and bootstrap deadlines. Keep the probes and
+metrics private, and use the shared
+[service operation](provider-controls.md#service-operation) contract for readiness, redacted
+lifecycle events, counters, and graceful drain.
 
 `max_concurrent_evaluations` is an in-process cap from 1 through 64. The service takes a permit
 after validating headers and before reading the body, then holds it through the complete blocking
@@ -352,16 +354,17 @@ The endpoint returns:
 | `400` | The configured endpoint was called with a query string. |
 | `401` | The merge-request hint or OIDC bearer token, signature, key, time, or required claims were invalid. |
 | `403` | The authenticated request did not select the configured provider route or check plan. |
+| `408` | The request body did not finish within 30 seconds. |
 | `412` | The controller completed without an exact published pass, including block, unavailable, stale, busy, or duplicate work. |
 | `413` | The body limit was crossed. |
 | `431` | The header count or byte limit was crossed. |
-| `503` | Capacity, trusted time, storage, provider access, acquisition, or evaluation was unavailable. |
+| `503` | The service is unready, or capacity, trusted time, storage, provider access, acquisition, or evaluation was unavailable. |
 
 The service checks bounds, OIDC, and the configured plan before creating an owner session, touching
 a delivery row, or starting API, Git, or runner work. The policy job must treat only `204` as
-success. Do not turn `400`, `401`, `403`, `412`, or `503` into a warning or retry them inside the
-same script. A GitLab job retry receives a new job and token; the adapter will bind that new run
-independently if the merge-train car is still active.
+success. Do not turn any other response into a warning or retry it inside the same script. A
+GitLab job retry receives a new job and token; the adapter will bind that new run independently
+if the merge-train car is still active.
 
 There is no raw webhook inbox. The synchronous request remains open while the controller uses its
 ordinary-file ledger, acquires both repositories, runs the bootstrap, and performs the final

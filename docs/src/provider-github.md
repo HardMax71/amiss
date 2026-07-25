@@ -130,8 +130,9 @@ in front of it. The proxy must preserve the exact body and required GitHub heade
 decode, decompress, or rewrite the signed body. The service takes a configured delivery permit
 before reading a body and holds it through durable inbox admission, but it does not own the public
 connection budget. The proxy must still cap concurrent connections and apply total, header, body,
-idle, and slow-body deadlines. `/healthz` is a liveness response only; it does not prove that
-GitHub, the worker, or either state directory is ready.
+idle, and slow-body deadlines. Keep the probes and metrics private, and use the shared
+[service operation](provider-controls.md#service-operation) contract for readiness, redacted
+lifecycle events, counters, and graceful drain.
 
 The delivery endpoint returns:
 
@@ -141,10 +142,11 @@ The delivery endpoint returns:
 | `400` | The request shape, path query, or stored delivery is invalid. |
 | `401` | Authentication failed. |
 | `403` | The signed event names another repository, target, or plan. |
+| `408` | The request body did not finish within 30 seconds. |
 | `409` | The same source identity was reused for different bytes. |
 | `413` | The body limit was crossed. |
 | `431` | The header count or byte limit was crossed. |
-| `503` | Trusted time, storage, capacity, or the receiver worker is unavailable. |
+| `503` | The service is unready, or trusted time, storage, capacity, or the worker is unavailable. |
 
 ## Configuration
 
