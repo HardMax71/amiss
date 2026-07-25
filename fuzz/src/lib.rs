@@ -4,6 +4,14 @@ use amiss_wire::model::{Adapter, ObjectFormat};
 /// Strict JSON: parsing either rejects or yields a value whose canonical
 /// form reparses to the same value, canonicalization is idempotent, and the
 /// streaming serializer with its counting pass agrees byte for byte.
+///
+/// # Panics
+///
+/// Panics when an accepted input violates a JSON invariant.
+#[expect(
+    clippy::expect_used,
+    reason = "a canonical-output parse failure is a fuzz finding"
+)]
 pub fn json(bytes: &[u8]) {
     let Ok(value) = amiss_wire::json::parse(bytes) else {
         return;
@@ -32,6 +40,10 @@ pub fn json(bytes: &[u8]) {
 
 /// Every control parser over the same bytes: no panic escapes, and parsing
 /// twice yields identical results.
+///
+/// # Panics
+///
+/// Panics when a control parser is nondeterministic.
 pub fn controls(bytes: &[u8]) {
     assert_eq!(
         amiss_wire::controls::ScannerPolicy::parse(bytes),
@@ -61,6 +73,10 @@ pub fn controls(bytes: &[u8]) {
 
 /// The three request parsers: no panic escapes, and parsing is
 /// deterministic.
+///
+/// # Panics
+///
+/// Panics when a request parser is nondeterministic.
 pub fn requests(bytes: &[u8]) {
     assert_eq!(
         amiss_wire::requests::EvaluationRequest::parse(bytes),
@@ -79,6 +95,10 @@ pub fn requests(bytes: &[u8]) {
 /// Both document adapters under the contract ceilings: a parser panic is
 /// classified, never escaping; every span stays inside the source; the
 /// reference budget holds.
+///
+/// # Panics
+///
+/// Panics when an accepted document violates a parser invariant.
 pub fn markdown(bytes: &[u8]) {
     for adapter in [Adapter::Markdown, Adapter::Mdx] {
         let mut resources = ScanResources::new(ScanLimits::CONTRACT);
@@ -104,6 +124,10 @@ pub fn markdown(bytes: &[u8]) {
 
 /// The index-file grammar in both object formats: no panic escapes, and
 /// parsing is deterministic.
+///
+/// # Panics
+///
+/// Panics when the index parser is nondeterministic.
 pub fn git_index(bytes: &[u8]) {
     for format in [ObjectFormat::Sha1, ObjectFormat::Sha256] {
         let first = amiss_git::parse_index_file(format, bytes).is_ok();
@@ -114,6 +138,10 @@ pub fn git_index(bytes: &[u8]) {
 
 /// The commit and tree body grammars in both object formats: no panic
 /// escapes, and accepted trees obey the entry laws.
+///
+/// # Panics
+///
+/// Panics when an accepted tree violates an entry invariant.
 pub fn git_objects(bytes: &[u8]) {
     for format in [ObjectFormat::Sha1, ObjectFormat::Sha256] {
         let _commit = amiss_git::parse_commit(format, bytes);
@@ -132,6 +160,10 @@ pub fn git_objects(bytes: &[u8]) {
 /// The human atom renderer: bounded output for any input, quoted, with the
 /// 200-scalar law. A retained non-BMP scalar escapes to a surrogate pair of
 /// twelve output characters, the widest single-scalar expansion.
+///
+/// # Panics
+///
+/// Panics when rendered output violates a human-atom invariant.
 pub fn human(bytes: &[u8]) {
     let text = String::from_utf8_lossy(bytes);
     let atom = amiss_wire::human::atom(&text);

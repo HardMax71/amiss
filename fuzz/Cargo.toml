@@ -74,5 +74,48 @@ doc = false
 bench = false
 required-features = ["harness"]
 
+[lints.rust]
+unsafe_code = "forbid"
+elided_lifetimes_in_paths = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+arithmetic_side_effects = "warn"
+disallowed_types = "deny"
+disallowed_methods = "deny"
+as_conversions = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+cast_precision_loss = "deny"
+wildcard_enum_match_arm = "deny"
+mem_forget = "deny"
+iter_over_hash_type = "warn"
+map_err_ignore = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+exit = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+dbg_macro = "deny"
+mod_module_files = "warn"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
 [profile.release]
 debug = 1

@@ -27,3 +27,41 @@ jobs:
         with:
           name: mutants-report
           path: mutants.out/
+
+  controller-mutants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        focus: [authentication, ownership-publication]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+      - if: matrix.focus == 'authentication'
+        run: >-
+          cargo mutants --workspace --test-tool nextest
+          --file 'src/ingress/policy.rs'
+          --file 'src/webhook/*.rs'
+          --file 'github/src/lib.rs'
+          --file 'gitea/src/source.rs'
+          --file 'gitlab/src/oidc.rs'
+          --file 'gitlab/src/oidc/claims.rs'
+        working-directory: controller
+        continue-on-error: true
+      - if: matrix.focus == 'ownership-publication'
+        run: >-
+          cargo mutants --workspace --test-tool nextest
+          --file 'src/orchestration/controller.rs'
+          --file 'src/orchestration/publication.rs'
+          --file 'gitea/src/adapter.rs'
+          --file 'gitlab/src/adapter.rs'
+        working-directory: controller
+        continue-on-error: true
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: controller-mutants-${{ matrix.focus }}
+          path: controller/mutants.out/

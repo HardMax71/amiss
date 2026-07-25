@@ -1,6 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 
+#[expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "missing committed seeds are test setup failures"
+)]
 fn seeds(target: &str) -> Vec<Vec<u8>> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("seeds")
@@ -31,6 +36,11 @@ impl XorShift {
     }
 }
 
+fn bounded_index(random: u64, bound: usize) -> usize {
+    let bound = u64::try_from(bound).unwrap_or(u64::MAX);
+    usize::try_from(random.checked_rem(bound).unwrap_or(0)).unwrap_or(0)
+}
+
 /// Deterministic byte-level mutants of one seed: flips, truncations,
 /// duplications, and splices, seeded per target so every run replays.
 fn mutants(seed: &[u8], rng: &mut XorShift, count: usize) -> Vec<Vec<u8>> {
@@ -39,23 +49,25 @@ fn mutants(seed: &[u8], rng: &mut XorShift, count: usize) -> Vec<Vec<u8>> {
         let mut mutant = seed.to_vec();
         match rng.next() % 4 {
             0 if !mutant.is_empty() => {
-                let index = usize::try_from(rng.next()).unwrap_or(0) % mutant.len();
+                let index = bounded_index(rng.next(), mutant.len());
                 let bit = u8::try_from(rng.next() % 8).unwrap_or(0);
-                mutant[index] ^= 1 << bit;
+                if let Some(byte) = mutant.get_mut(index) {
+                    *byte ^= 1 << bit;
+                }
             }
             1 if !mutant.is_empty() => {
-                let keep = usize::try_from(rng.next()).unwrap_or(0) % mutant.len();
+                let keep = bounded_index(rng.next(), mutant.len());
                 mutant.truncate(keep);
             }
             2 => {
                 let byte = u8::try_from(rng.next() % 256).unwrap_or(0);
-                let index = usize::try_from(rng.next()).unwrap_or(0) % (mutant.len() + 1);
+                let index = bounded_index(rng.next(), mutant.len().saturating_add(1));
                 mutant.insert(index, byte);
             }
             _ if mutant.len() >= 2 => {
-                let from = usize::try_from(rng.next()).unwrap_or(0) % mutant.len();
-                let to = usize::try_from(rng.next()).unwrap_or(0) % mutant.len();
-                let span = 1 + usize::try_from(rng.next()).unwrap_or(0) % 16;
+                let from = bounded_index(rng.next(), mutant.len());
+                let to = bounded_index(rng.next(), mutant.len());
+                let span = bounded_index(rng.next(), 16).saturating_add(1);
                 let chunk: Vec<u8> = mutant
                     .iter()
                     .cycle()
