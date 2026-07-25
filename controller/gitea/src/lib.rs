@@ -10,9 +10,33 @@ use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication
 use amiss_wire::model::Oid;
 
 pub use adapter::GiteaPullRequestAdapter;
-pub use fetch_plan::{GiteaFetchPlan, GiteaPlanError, gitea_fetch_plan};
-pub use live::{GiteaClient, GiteaClientError, GiteaTimeouts};
+pub use fetch_plan::{
+    GiteaFetchPlan, GiteaPlanError, gitea_fetch_plan, repository_url as gitea_repository_url,
+};
+pub use live::{GiteaClient, GiteaClientError, GiteaObjectResolver, GiteaTimeouts};
 pub use source::GiteaPullRequestSource;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GiteaCommit {
+    pub id: String,
+    pub tree: String,
+    pub parents: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GiteaObjects {
+    pub candidate: GiteaCommit,
+    pub base: GiteaCommit,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GiteaObjectRequest {
+    pub repository_id: u64,
+    pub repository_url: String,
+    pub candidate_commit: Oid,
+    pub base_commit: Oid,
+    pub timeout: std::time::Duration,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DedicatedReviewer {

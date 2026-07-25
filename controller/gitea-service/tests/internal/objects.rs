@@ -3,50 +3,49 @@
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
-use amiss_controller_gitlab::{GitLabObjectRequest, GitLabObjectResolver as _};
+use amiss_controller_gitea::{GiteaObjectRequest, GiteaObjectResolver as _};
 use amiss_wire::model::{ObjectFormat, Oid};
 use secrecy::SecretString;
 
-use super::GitLabGitObjects;
+use super::GiteaGitObjects;
 
-const REPOSITORY_URL: &str = "https://gitlab.example/acme/widget.git";
+const REPOSITORY_URL: &str = "https://gitea.example/acme/widget.git";
 
 #[test]
-fn a_request_for_another_project_or_repository_never_fetches()
--> Result<(), Box<dyn std::error::Error>> {
+fn a_request_for_another_repository_never_fetches() -> Result<(), Box<dyn std::error::Error>> {
     let scratch = tempfile::TempDir::new()?;
-    let objects = GitLabGitObjects::new(
+    let objects = GiteaGitObjects::new(
         scratch.path().to_owned(),
-        101,
+        7,
         REPOSITORY_URL.to_owned(),
-        "amiss".to_owned(),
+        "amiss-reviewer".to_owned(),
         SecretString::from("token"),
         Duration::from_secs(5),
     )
     .ok_or("the resolver is not configurable")?;
 
-    let mut foreign = request(101)?;
+    let mut foreign = request(7)?;
     foreign.repository_url = "https://attacker.invalid/acme/widget.git".to_owned();
     assert_eq!(
         objects.resolve(&foreign),
         Err(ProviderError::InvalidResponse)
     );
     assert_eq!(
-        objects.resolve(&request(202)?),
+        objects.resolve(&request(8)?),
         Err(ProviderError::InvalidResponse)
     );
     Ok(())
 }
 
 #[test]
-fn a_project_identity_must_be_positive() -> Result<(), Box<dyn std::error::Error>> {
+fn a_repository_identity_must_be_positive() -> Result<(), Box<dyn std::error::Error>> {
     let scratch = tempfile::TempDir::new()?;
     assert!(
-        GitLabGitObjects::new(
+        GiteaGitObjects::new(
             scratch.path().to_owned(),
             0,
             REPOSITORY_URL.to_owned(),
-            "amiss".to_owned(),
+            "amiss-reviewer".to_owned(),
             SecretString::from("token"),
             Duration::from_secs(5),
         )
@@ -55,11 +54,11 @@ fn a_project_identity_must_be_positive() -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-fn request(project_id: u64) -> Result<GitLabObjectRequest, Box<dyn std::error::Error>> {
-    Ok(GitLabObjectRequest {
-        project_id,
+fn request(repository_id: u64) -> Result<GiteaObjectRequest, Box<dyn std::error::Error>> {
+    Ok(GiteaObjectRequest {
+        repository_id,
         repository_url: REPOSITORY_URL.to_owned(),
-        gate_commit: oid(&"a".repeat(40))?,
+        candidate_commit: oid(&"a".repeat(40))?,
         base_commit: oid(&"b".repeat(40))?,
         timeout: Duration::from_secs(1),
     })

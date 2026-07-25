@@ -3,11 +3,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::objects::GiteaGitObjects;
 use amiss_controller::{
     CheckPlan, DeliveryRoute, GiteaWebhook, IngressPolicy, IntegrationId, PlanScope,
     ProviderIdentity, ReplayWindow, SignedTimePolicy, TrustSetId,
 };
-use amiss_controller_gitea::{DedicatedReviewer, GiteaClient, GiteaTimeouts};
+use amiss_controller_gitea::{
+    DedicatedReviewer, GiteaClient, GiteaObjectResolver, GiteaTimeouts, gitea_repository_url,
+};
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
     CheckPlanFiles, HttpLimits, InboxLimits, ServiceLimits, ServicePaths, WebhookKeyFile,
@@ -34,6 +37,7 @@ pub struct ServiceConfig {
     pub(crate) provider: ProviderIdentity,
     pub(crate) reviewer: DedicatedReviewer,
     pub(crate) repository_id: u64,
+    pub(crate) objects: Arc<dyn GiteaObjectResolver>,
     pub(crate) target: BranchRef,
     pub(crate) api_base: String,
     pub(crate) token: SecretString,
@@ -117,6 +121,18 @@ impl RawConfig {
         validate_action(&provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let token = load_token(&self.provider.reviewer.token_file)?;
+        let paths = load_paths(&self.paths, &plan)?;
+        let objects: Arc<dyn GiteaObjectResolver> = Arc::new(
+            GiteaGitObjects::new(
+                paths.scratch.clone(),
+                repository_id,
+                gitea_repository_url(&repository),
+                reviewer.login.clone(),
+                token.clone(),
+                limits.git.request,
+            )
+            .ok_or(ConfigError("Gitea-family Git credential is invalid"))?,
+        );
         let api_timeouts = GiteaTimeouts::new(limits.http.connect, operation_timeout(limits.http))
             .ok_or(ConfigError("Gitea-family API timeouts are invalid"))?;
         validate_client(
@@ -126,6 +142,7 @@ impl RawConfig {
             &self.provider.api_base,
             &plan,
             api_timeouts,
+            Arc::clone(&objects),
         )?;
 
         let trust_set = TrustSetId::new("gitea-family-webhook-keys".to_owned())
@@ -161,7 +178,6 @@ impl RawConfig {
             integration: reviewer_integration(reviewer.id)?,
             repository,
         };
-        let paths = load_paths(&self.paths, &plan)?;
 
         Ok(ServiceConfig {
             listen,
@@ -176,6 +192,7 @@ impl RawConfig {
             provider,
             reviewer,
             repository_id,
+            objects,
             target,
             api_base: self.provider.api_base,
             token,
@@ -268,6 +285,7 @@ fn validate_client(
     api_base: &str,
     plan: &CheckPlan,
     timeouts: GiteaTimeouts,
+    objects: Arc<dyn GiteaObjectResolver>,
 ) -> Result<(), ConfigError> {
     GiteaClient::new(
         provider.clone(),
@@ -276,6 +294,7 @@ fn validate_client(
         api_base,
         plan.execution.required_status_name.clone(),
         timeouts,
+        objects,
     )
     .map(|_client| ())
     .map_err(|_defect| ConfigError("Gitea-family API configuration is invalid"))

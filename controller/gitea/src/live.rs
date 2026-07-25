@@ -12,20 +12,34 @@ use std::time::Duration;
 
 use amiss_controller::{ChangeSnapshot, ProviderError, ProviderIdentity, Publication};
 use amiss_wire::controls::valid_required_status_name;
+use amiss_wire::model::RepositoryIdentity;
 use secrecy::{ExposeSecret as _, SecretString};
 
 use crate::identity::canonical_host;
-use crate::{DedicatedReviewer, GiteaApi, GiteaPullRequest};
+use crate::{
+    DedicatedReviewer, GiteaApi, GiteaObjectRequest, GiteaObjects, GiteaPullRequest,
+    fetch_plan::repository_url,
+};
 
+use self::model::{CommitRecord, RefreshData};
 use self::publication::{
     PublicationDecision, publication_decision, publishable, validate_created, validate_publication,
 };
-use self::refresh::{publication_target_is_current, snapshot, validate_request};
-use self::rest::{GiteaRest, HttpRest};
+use self::refresh::{exact_oid, publication_target_is_current, snapshot, validate_request};
+use self::rest::{GiteaRest, HttpRest, OperationDeadline};
 
 const MAX_TOKEN_BYTES: usize = 4_096;
 const MIN_TOKEN_BYTES: usize = 16;
 const MAX_IO_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub trait GiteaObjectResolver: Send + Sync {
+    /// Resolves exact commit and tree objects without trusting the REST body.
+    ///
+    /// # Errors
+    ///
+    /// The requested objects cannot be fetched and proven before `timeout`.
+    fn resolve(&self, request: &GiteaObjectRequest) -> Result<GiteaObjects, ProviderError>;
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GiteaTimeouts {
@@ -84,6 +98,7 @@ impl GiteaClient {
         api_base: &str,
         review_name: String,
         timeouts: GiteaTimeouts,
+        objects: Arc<dyn GiteaObjectResolver>,
     ) -> Result<Self, GiteaClientError> {
         let token = SecretString::from(token);
         let configuration = GiteaClientError::Configuration;
@@ -110,6 +125,7 @@ impl GiteaClient {
                     review_name,
                 },
                 rest,
+                objects,
             }),
         })
     }
@@ -132,6 +148,7 @@ impl GiteaApi for GiteaClient {
 struct Client<R> {
     config: Config,
     rest: R,
+    objects: Arc<dyn GiteaObjectResolver>,
 }
 
 impl<R: GiteaRest> Client<R> {
@@ -141,7 +158,33 @@ impl<R: GiteaRest> Client<R> {
         let data = self
             .rest
             .refresh_data(&self.config, pull_request, deadline)?;
-        snapshot(&self.config, pull_request, &data)
+        let objects = self.resolve_objects(pull_request, &data, deadline)?;
+        snapshot(&self.config, pull_request, &data, &objects)
+    }
+
+    fn resolve_objects(
+        &self,
+        pull_request: GiteaPullRequest<'_>,
+        data: &RefreshData,
+        deadline: OperationDeadline,
+    ) -> Result<GiteaObjects, ProviderError> {
+        let repository = RepositoryIdentity::new(
+            self.config.provider.instance.as_str().to_owned(),
+            pull_request.repository_owner.to_owned(),
+            pull_request.repository_name.to_owned(),
+        )
+        .ok_or(ProviderError::InvalidResponse)?;
+        let objects = self.objects.resolve(&GiteaObjectRequest {
+            repository_id: pull_request.repository_id,
+            repository_url: repository_url(&repository),
+            candidate_commit: pull_request.candidate_commit.clone(),
+            base_commit: exact_oid(&data.target.sha)?,
+            timeout: deadline.remaining()?,
+        })?;
+        if !agrees(&objects.candidate, &data.candidate) || !agrees(&objects.base, &data.target) {
+            return Err(ProviderError::InvalidResponse);
+        }
+        Ok(objects)
     }
 
     fn publish(
@@ -155,7 +198,14 @@ impl<R: GiteaRest> Client<R> {
         let data = self
             .rest
             .refresh_data(&self.config, pull_request, deadline)?;
-        let state = publication_target_is_current(&self.config, pull_request, publication, &data)?;
+        let objects = self.resolve_objects(pull_request, &data, deadline)?;
+        let state = publication_target_is_current(
+            &self.config,
+            pull_request,
+            publication,
+            &data,
+            &objects,
+        )?;
         if !publishable(state)? {
             return Ok(());
         }
@@ -174,4 +224,14 @@ struct Config {
     provider: ProviderIdentity,
     reviewer: DedicatedReviewer,
     review_name: String,
+}
+
+fn agrees(resolved: &crate::GiteaCommit, record: &CommitRecord) -> bool {
+    resolved.id == record.sha
+        && resolved.parents.len() == record.parents.len()
+        && resolved
+            .parents
+            .iter()
+            .zip(&record.parents)
+            .all(|(resolved, record)| *resolved == record.sha)
 }

@@ -3,8 +3,8 @@ use amiss_controller::{
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use crate::GiteaPullRequest;
 use crate::identity::parse_change_id;
+use crate::{GiteaObjects, GiteaPullRequest};
 
 use super::Config;
 use super::model::{
@@ -57,6 +57,7 @@ pub(super) fn snapshot(
     config: &Config,
     pull_request: GiteaPullRequest<'_>,
     data: &RefreshData,
+    objects: &GiteaObjects,
 ) -> Result<ChangeSnapshot, ProviderError> {
     validate_request(config, pull_request)?;
     validate_reviewer(config, &data.reviewer)?;
@@ -80,15 +81,15 @@ pub(super) fn snapshot(
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)
         .and_then(|commit| exact_oid(&commit.id))?;
-    let candidate_tree = commit_tree(&data.candidate)?;
-    let current_head_tree = commit_tree(&data.current_head)?;
-    let base_tree = commit_tree(&data.target)?;
+    let candidate_tree = exact_oid(&objects.candidate.tree)?;
+    let base_tree = exact_oid(&objects.base.tree)?;
     let merge_base = exact_oid(&data.pull_request.merge_base)?;
     if candidate != *pull_request.candidate_commit
         || current_head != fetched_head
         || data.pull_request.base.sha != data.target.sha
         || base != branch_base
-        || current_head_tree != candidate_tree && current_head == candidate
+        || objects.candidate.id != candidate.as_str()
+        || objects.base.id != base.as_str()
     {
         return Err(ProviderError::InvalidResponse);
     }
@@ -126,7 +127,9 @@ pub(super) fn snapshot(
         ChangeState::AuthorizationRevoked
     } else if !open {
         ChangeState::Closed
-    } else if !up_to_date || !data.pull_request.mergeable {
+    } else if !data.pull_request.mergeable {
+        return Err(ProviderError::Unavailable);
+    } else if !up_to_date {
         ChangeState::Superseded
     } else {
         ChangeState::Active
@@ -143,8 +146,9 @@ pub(super) fn publication_target_is_current(
     pull_request: GiteaPullRequest<'_>,
     publication: &Publication,
     data: &RefreshData,
+    objects: &GiteaObjects,
 ) -> Result<ChangeState, ProviderError> {
-    let fresh = snapshot(config, pull_request, data)?;
+    let fresh = snapshot(config, pull_request, data, objects)?;
     let exact = fresh.run == publication.run
         && fresh.gate_commit == publication.gate_commit
         && fresh.gate_commit == *pull_request.candidate_commit;
@@ -366,16 +370,7 @@ fn pull_repository_identity(
     )
 }
 
-fn commit_tree(commit: &super::model::CommitRecord) -> Result<Oid, ProviderError> {
-    commit
-        .commit
-        .as_ref()
-        .and_then(|commit| commit.tree.as_ref())
-        .ok_or(ProviderError::InvalidResponse)
-        .and_then(|tree| exact_oid(&tree.sha))
-}
-
-fn exact_oid(raw: &str) -> Result<Oid, ProviderError> {
+pub(super) fn exact_oid(raw: &str) -> Result<Oid, ProviderError> {
     Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or(ProviderError::InvalidResponse)
 }
 

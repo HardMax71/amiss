@@ -10,6 +10,7 @@ mod inbox;
 mod lane;
 mod launcher;
 mod limits;
+mod objects;
 mod operations;
 mod probe;
 mod queued;
@@ -40,6 +41,7 @@ pub use inbox::{
 pub use lane::{LaneAdmission, check_lane, lane_admission};
 pub use launcher::service_main;
 pub use limits::InboxLimits;
+pub use objects::{GitObjectSource, ResolveWant, ResolvedCommit};
 pub use operations::{Operations, ServiceComponent, ServiceEvent};
 pub use probe::EndpointDrain;
 pub use queued::{QueuedServiceError, QueuedServiceInput, run_queued_service};
