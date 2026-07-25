@@ -3,7 +3,7 @@ use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 
-use crate::extract::{Extraction, Occurrence, analyze};
+use crate::extract::{Extraction, Heading, Occurrence, analyze};
 
 pub const SCHEMA: &str = "amiss/parser-profile-corpus";
 
@@ -487,8 +487,36 @@ fn occurrence_value(entry: &Occurrence) -> Value {
     ])
 }
 
+fn heading_value(heading: &Heading) -> Value {
+    let attribute = heading.attribute.as_ref().map_or(Value::Null, |attribute| {
+        Value::Object(vec![
+            ("id".to_owned(), Value::String(attribute.id.clone())),
+            ("suffix".to_owned(), Value::String(attribute.suffix.clone())),
+        ])
+    });
+    Value::Object(vec![
+        ("attribute".to_owned(), attribute),
+        ("span".to_owned(), span_value(heading.span)),
+        ("text".to_owned(), Value::String(heading.text.clone())),
+    ])
+}
+
 fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
     vec![
+        (
+            "headings".to_owned(),
+            Value::Array(extraction.headings.iter().map(heading_value).collect()),
+        ),
+        (
+            "html_anchors".to_owned(),
+            Value::Array(
+                extraction
+                    .html_anchors
+                    .iter()
+                    .map(|anchor| Value::String(anchor.clone()))
+                    .collect(),
+            ),
+        ),
         (
             "occurrences".to_owned(),
             Value::Array(
@@ -549,6 +577,8 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
             if let Some(extraction) = &analysis.extraction {
                 members.extend(extraction_members(extraction));
             }
+            // Canonical JSON wants sorted keys, and every key here is ASCII.
+            members.sort_by(|left, right| left.0.cmp(&right.0));
             Value::Object(members)
         }
         Err(error) => {

@@ -57,11 +57,30 @@ pub struct Opaque {
     pub html: Vec<(usize, usize)>,
 }
 
+/// The trailing attribute syntax a heading may carry. Renderers disagree about
+/// it, so `suffix` keeps the exact bytes removed from the text: one group
+/// publishes `id`, the other reads the text and the suffix together.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeadingAttribute {
+    pub id: String,
+    pub suffix: String,
+}
+
+/// One heading's rendered text content, in document order with its siblings.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Heading {
+    pub text: String,
+    pub attribute: Option<HeadingAttribute>,
+    pub span: (usize, usize),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Extraction {
     pub occurrences: Vec<Occurrence>,
     pub opaque: Opaque,
     pub governed: Vec<GovernedDefinition>,
+    pub headings: Vec<Heading>,
+    pub html_anchors: Vec<String>,
 }
 
 /// Everything one parse yields: the work charge, the embedded-code bytes the
@@ -150,6 +169,7 @@ fn extract_tree(
         definitions: resolved,
         root_span: span_of(tree)?,
         occurrences: Vec::new(),
+        headings: Vec::new(),
         mdx: Vec::new(),
         html: Vec::new(),
     };
@@ -172,12 +192,21 @@ fn extract_tree(
             .cmp(&right.span)
             .then(left.node_path.cmp(&right.node_path))
     });
+    sweep.headings.sort_by_key(|heading| heading.span);
     let opaque = Opaque {
         frontmatter_bytes,
         mdx: union(sweep.mdx),
         html: union(sweep.html),
     };
-    validate(&sweep.occurrences, &opaque, offset, suffix.len(), raw)?;
+    validate(
+        &sweep.occurrences,
+        &sweep.headings,
+        &opaque,
+        offset,
+        suffix.len(),
+        raw,
+    )?;
+    let html_anchors = html_anchors(suffix, &opaque.html);
 
     let translate =
         |span: (usize, usize)| (span.0.saturating_add(offset), span.1.saturating_add(offset));
@@ -202,6 +231,15 @@ fn extract_tree(
                 span: translate(span),
             })
             .collect(),
+        headings: sweep
+            .headings
+            .into_iter()
+            .map(|heading| Heading {
+                span: translate(heading.span),
+                ..heading
+            })
+            .collect(),
+        html_anchors,
     })
 }
 
@@ -210,6 +248,7 @@ struct Sweep<'a> {
     definitions: Vec<Definition>,
     root_span: (usize, usize),
     occurrences: Vec<Occurrence>,
+    headings: Vec<Heading>,
     mdx: Vec<(usize, usize)>,
     html: Vec<(usize, usize)>,
 }
@@ -230,6 +269,14 @@ impl Sweep<'_> {
                 return Ok(false);
             }
             Node::Html(_) => self.html.push(span_of(node)?),
+            Node::Heading(_) => {
+                let (text, attribute) = split_attribute(&text_content(node));
+                self.headings.push(Heading {
+                    text,
+                    attribute,
+                    span: span_of(node)?,
+                });
+            }
             Node::ListItem(_) => owners.list_item = Some(span_of(node)?),
             Node::TableCell(_) => owners.cell = Some(span_of(node)?),
             Node::Paragraph(_) => owners.paragraph = Some(span_of(node)?),
@@ -284,7 +331,6 @@ impl Sweep<'_> {
             | Node::Text(_)
             | Node::Code(_)
             | Node::Math(_)
-            | Node::Heading(_)
             | Node::Table(_)
             | Node::ThematicBreak(_)
             | Node::TableRow(_)
@@ -620,11 +666,189 @@ fn union(mut spans: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     out
 }
 
+/// The text a renderer slugs a heading by: text, code and math verbatim, the
+/// alt text of images, and nothing from raw HTML, MDX, or a footnote call.
+fn text_content(node: &Node) -> String {
+    let mut out = String::new();
+    let mut stack = vec![node];
+    while let Some(current) = stack.pop() {
+        match current {
+            Node::Text(text) => out.push_str(&text.value),
+            Node::InlineCode(code) => out.push_str(&code.value),
+            Node::InlineMath(math) => out.push_str(&math.value),
+            Node::Code(code) => out.push_str(&code.value),
+            Node::Math(math) => out.push_str(&math.value),
+            Node::Image(image) => out.push_str(&image.alt),
+            Node::ImageReference(reference) => out.push_str(&reference.alt),
+            Node::Break(_)
+            | Node::Definition(_)
+            | Node::FootnoteReference(_)
+            | Node::Html(_)
+            | Node::MdxFlowExpression(_)
+            | Node::MdxJsxFlowElement(_)
+            | Node::MdxJsxTextElement(_)
+            | Node::MdxTextExpression(_)
+            | Node::MdxjsEsm(_)
+            | Node::ThematicBreak(_)
+            | Node::Toml(_)
+            | Node::Yaml(_) => {}
+            Node::Blockquote(_)
+            | Node::Delete(_)
+            | Node::Emphasis(_)
+            | Node::FootnoteDefinition(_)
+            | Node::Heading(_)
+            | Node::Link(_)
+            | Node::LinkReference(_)
+            | Node::List(_)
+            | Node::ListItem(_)
+            | Node::Paragraph(_)
+            | Node::Root(_)
+            | Node::Strong(_)
+            | Node::Table(_)
+            | Node::TableCell(_)
+            | Node::TableRow(_) => {
+                if let Some(children) = current.children() {
+                    stack.extend(children.iter().rev());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Splits a trailing `{#id}`, in either the plain or the `attr_list` spelling,
+/// from the heading text. The removed bytes are kept whole, so the text a
+/// renderer that ignores the syntax reads is `text` followed by `suffix`.
+fn split_attribute(text: &str) -> (String, Option<HeadingAttribute>) {
+    let whole = || (text.to_owned(), None);
+    let trimmed = text.trim_end();
+    let Some(open) = trimmed.rfind('{') else {
+        return whole();
+    };
+    let Some(inner) = trimmed
+        .strip_suffix('}')
+        .and_then(|body| body.get(open.saturating_add(1)..))
+    else {
+        return whole();
+    };
+    let inner = inner.strip_prefix(':').unwrap_or(inner).trim();
+    let Some(id) = inner.strip_prefix('#') else {
+        return whole();
+    };
+    if id.is_empty() || id.contains(['{', '}']) || id.contains(char::is_whitespace) {
+        return whole();
+    }
+    let Some(head) = trimmed.get(..open).map(str::trim_end) else {
+        return whole();
+    };
+    let Some(removed) = text.get(head.len()..) else {
+        return whole();
+    };
+    (
+        head.to_owned(),
+        Some(HeadingAttribute {
+            id: id.to_owned(),
+            suffix: removed.to_owned(),
+        }),
+    )
+}
+
+/// Every `id` and `name` attribute value inside the raw-HTML regions, in
+/// document order. Accepting more than a browser would can only leave an
+/// anchor unreported, never report a live one as missing.
+fn html_anchors(suffix: &str, regions: &[(usize, usize)]) -> Vec<String> {
+    let bytes = suffix.as_bytes();
+    let mut out = Vec::new();
+    for (start, end) in regions {
+        let Some(region) = bytes.get(*start..*end) else {
+            continue;
+        };
+        let mut at = 0_usize;
+        while at < region.len() {
+            let Some(name) = ["id", "name"]
+                .into_iter()
+                .find(|name| attribute_name_at(region, at, name.as_bytes()))
+            else {
+                at = at.saturating_add(1);
+                continue;
+            };
+            let after = at.saturating_add(name.len());
+            match attribute_value(region, after) {
+                Some((value, next)) => {
+                    out.push(value);
+                    at = next;
+                }
+                None => at = after,
+            }
+        }
+    }
+    out
+}
+
+fn attribute_name_at(region: &[u8], at: usize, name: &[u8]) -> bool {
+    let before = at
+        .checked_sub(1)
+        .and_then(|index| region.get(index))
+        .is_some_and(u8::is_ascii_whitespace);
+    let after = region
+        .get(at.saturating_add(name.len()))
+        .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'=');
+    before
+        && after
+        && region
+            .get(at..at.saturating_add(name.len()))
+            .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+}
+
+fn attribute_value(region: &[u8], from: usize) -> Option<(String, usize)> {
+    let mut at = from;
+    while region.get(at).is_some_and(u8::is_ascii_whitespace) {
+        at = at.saturating_add(1);
+    }
+    if region.get(at) != Some(&b'=') {
+        return None;
+    }
+    at = at.saturating_add(1);
+    while region.get(at).is_some_and(u8::is_ascii_whitespace) {
+        at = at.saturating_add(1);
+    }
+    let quote = match region.get(at).copied() {
+        Some(mark @ (b'"' | b'\'')) => Some(mark),
+        Some(_) | None => None,
+    };
+    let start = if quote.is_some() {
+        at.saturating_add(1)
+    } else {
+        at
+    };
+    let mut end = start;
+    while let Some(byte) = region.get(end) {
+        let closes = quote.map_or_else(
+            || byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/',
+            |mark| *byte == mark,
+        );
+        if closes {
+            break;
+        }
+        end = end.saturating_add(1);
+    }
+    let value = region
+        .get(start..end)
+        .and_then(|raw| core::str::from_utf8(raw).ok())?;
+    let next = if quote.is_some() {
+        end.saturating_add(1)
+    } else {
+        end
+    };
+    (!value.is_empty()).then(|| (value.to_owned(), next))
+}
+
 /// The closed source contract on every published span: inside the document,
 /// not reversed, never splitting a CRLF pair, the opaque partition disjoint,
 /// and every retained opaque region nonempty.
 fn validate(
     occurrences: &[Occurrence],
+    headings: &[Heading],
     opaque: &Opaque,
     offset: usize,
     suffix_len: usize,
@@ -641,6 +865,11 @@ fn validate(
     };
     for entry in occurrences {
         if !bounded(entry.span) || !bounded(entry.block_span) || entry.span.0 == entry.span.1 {
+            return Err(Fault::InvalidSourceSpan);
+        }
+    }
+    for heading in headings {
+        if !bounded(heading.span) || heading.span.0 == heading.span.1 {
             return Err(Fault::InvalidSourceSpan);
         }
     }

@@ -4,8 +4,9 @@
 integration. Each case carries its raw source, what upstream says about it, the exact node count
 and depth that `parser-work-accounting` charges for it under every profile, and, under the two
 parsing profiles, the full extraction goldens: every occurrence with both destination
-representations, its byte span, its node-path address, its block owner, and the document's opaque
-partition. An implementation that does not reproduce this manifest may not sit under the
+representations, its byte span, its node-path address, its block owner, the document's opaque
+partition, every heading with the text a renderer would slug, and every anchor its raw HTML
+declares. An implementation that does not reproduce this manifest may not sit under the
 evaluator.
 
 The manifest is canonical JSON with a trailing newline, and its digest is pinned in
@@ -155,6 +156,19 @@ JSX element's outer span covers its Markdown-looking children, so nothing inside
 The three interval families never overlap, and a Markdown document has no MDX intervals as an MDX
 document has no raw-HTML nodes.
 
+A heading carries the text a renderer slugs and nothing else: text leaves in document order, code
+and math verbatim, the alt text of images, and no bytes from raw HTML, MDX, or a footnote call. A
+trailing `{#id}` splits off, in the plain spelling and in the `attr_list` spelling with the colon,
+because renderers disagree about it: mdBook, VitePress, Gitea and MkDocs with `attr_list` publish
+that id, while GitHub and GitLab render the braces as text. The removed bytes are kept whole, so
+the text followed by the suffix is exactly what the second group reads.
+
+Raw HTML publishes its anchors separately, in document order: every `id` and `name` attribute
+inside a raw-HTML region, matched only at a word boundary, so `data-id` is not one. Accepting more
+than a browser would can only leave an anchor unreported, never report a live one as missing.
+Neither golden decides an identity. They record what a renderer would read; the rule it applies
+to that is pinned elsewhere.
+
 Two locators read source bytes rather than the tree, because the tree does not carry them. The
 destination token is found by walking past the label (`](`, optional whitespace, angle or bare
 form under CommonMark's escape and balanced-parenthesis rules), where a destination on the next
@@ -226,8 +240,10 @@ unmatched JSX tag is `DOCUMENT_INVALID`, not a parser failure.
 Published profiles: `commonmark-gfm`, `mdx-source`, and `plain-zero-lexer`. Every case is
 charged under all three, so a grammar change anywhere moves the manifest.
 
-With extraction, span, address, owner, and opaque goldens in the manifest, every golden family
-the spec names for this gate is present. What the corpus still cannot prove is tree-shape equality
+With extraction, span, address, owner, opaque, heading, and raw-HTML-anchor goldens in the
+manifest, every golden family the spec names for this gate is present. What the heading goldens
+do not carry is any renderer's slugging rule, which is pinned separately from this manifest.
+What the corpus still cannot prove is tree-shape equality
 with the frozen Node oracle (nothing upstream publishes mdast node counts), and the two recorded
 parser bugs stand until markdown-rs fixes land: the `[link[^1]](#)` link this parser does not
 form, and the two documents that panic it.
