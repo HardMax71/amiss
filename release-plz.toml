@@ -7,7 +7,27 @@ git_release_enable = false
 name = "amiss"
 changelog_update = true
 changelog_path = "CHANGELOG.md"
-changelog_include = ["amiss-git", "amiss-scan", "amiss-md", "amiss-wire", "amiss-bootstrap", "amiss-fixtures"]
+changelog_include = [
+  "amiss-git",
+  "amiss-scan",
+  "amiss-md",
+  "amiss-wire",
+  "amiss-bootstrap",
+  "amiss-fixtures",
+  "amiss-controller",
+  "amiss-controller-constraint",
+  "amiss-controller-files",
+  "amiss-controller-fixtures",
+  "amiss-controller-fuzz",
+  "amiss-controller-git",
+  "amiss-controller-gitea",
+  "amiss-controller-gitea-service",
+  "amiss-controller-github",
+  "amiss-controller-github-service",
+  "amiss-controller-gitlab",
+  "amiss-controller-gitlab-service",
+  "amiss-controller-service",
+]
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
 git_release_enable = true

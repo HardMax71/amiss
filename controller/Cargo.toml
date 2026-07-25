@@ -14,35 +14,6 @@ path = "tests/fixtures/bootstrap.rs"
 test = false
 bench = false
 
-[workspace]
-members = [
-  "constraint",
-  "files",
-  "fixtures",
-  "fuzz",
-  "git",
-  "gitea",
-  "gitea-service",
-  "github",
-  "github-service",
-  "gitlab",
-  "gitlab-service",
-  "service",
-]
-resolver = "3"
-
-[workspace.package]
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.97"
-license = "FSL-1.1-ALv2"
-repository = "https://github.com/HardMax71/amiss"
-
-[workspace.dependencies]
-amiss-controller-fixtures = { path = "fixtures" }
-aws-lc-rs = "1.17.3"
-pem = "3.0.6"
-
 [dependencies]
 amiss-bootstrap = { path = "../crates/amiss-bootstrap" }
 amiss-git = { path = "../crates/amiss-git" }
@@ -64,55 +35,5 @@ tokio = { version = "1", features = ["rt", "time"] }
 [dev-dependencies]
 amiss-fixtures = { path = "../crates/amiss-fixtures" }
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
-elided_lifetimes_in_paths = "warn"
-trivial_numeric_casts = "warn"
-unnameable_types = "warn"
-unreachable_pub = "warn"
-unused_qualifications = "warn"
-
-[workspace.lints.clippy]
-pedantic = { level = "warn", priority = -1 }
-must_use_candidate = "allow"
-missing_errors_doc = "deny"
-missing_panics_doc = "deny"
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-unreachable = "deny"
-todo = "deny"
-unimplemented = "deny"
-indexing_slicing = "deny"
-string_slice = "deny"
-arithmetic_side_effects = "warn"
-disallowed_types = "deny"
-disallowed_methods = "deny"
-as_conversions = "deny"
-cast_possible_truncation = "deny"
-cast_possible_wrap = "deny"
-cast_sign_loss = "deny"
-cast_precision_loss = "deny"
-wildcard_enum_match_arm = "deny"
-mem_forget = "deny"
-iter_over_hash_type = "warn"
-map_err_ignore = "warn"
-rc_buffer = "warn"
-rc_mutex = "warn"
-exit = "deny"
-print_stdout = "warn"
-print_stderr = "warn"
-dbg_macro = "deny"
-mod_module_files = "warn"
-allow_attributes = "deny"
-allow_attributes_without_reason = "deny"
-
 [lints]
 workspace = true
-
-[profile.release]
-overflow-checks = true
-panic = "unwind"
-
-[profile.release.package.amiss-controller-fuzz]
-debug = 1

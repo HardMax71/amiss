@@ -1,10 +1,10 @@
 # Amiss controller
 
-This unpublished nested Rust workspace holds provider transport, credentials, storage, and
-runtime code. The offline scanner remains in the root workspace with a separate lockfile and no
-network stack.
+These unpublished crates hold provider transport, credentials, storage, and runtime code. They
+share the repository workspace and depend on the engine; nothing in the engine depends on them,
+so the scanner an `amiss` user downloads carries none of this.
 
-The workspace separates shared mechanics from provider code:
+They separate shared mechanics from provider code:
 
 - `amiss-controller` defines provider-neutral ingress, orchestration, durable delivery records,
   and supervised bootstrap contracts.
@@ -41,11 +41,11 @@ Every service follows the shared
 readiness, and metrics endpoints; fixed redacted lifecycle events; and a graceful drain that
 finishes admitted work while preserving a webhook backlog.
 
-Run the nested workspace checks without adding anything to the root workspace:
+One workspace, so the repository checks cover these crates too:
 
 ```sh
-cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
-cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
+cargo nextest run --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
 Source builds require the pinned Rust toolchain and a working C/C++ compiler for the AWS-LC

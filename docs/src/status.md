@@ -75,8 +75,8 @@ services acquire their inputs and invoke the sealed path. The distinction is vis
 [release assembly](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release.yml), and
 [Action execution](https://github.com/HardMax71/amiss/blob/main/crates/amiss/action/runtime.yml).
 
-The separate nested Rust workspace under
-[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) defines the
+The unpublished crates under
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) define the
 provider-neutral identities, bounded ingress, rotating verifier keys, durable raw inbox,
 delivery record, worker, orchestration, acquisition, and supervised runner contracts. Its state
 uses checksummed ordinary files with fixed capacity and atomic replacement, not SQL or a

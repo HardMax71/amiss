@@ -1,15 +1,40 @@
 [workspace]
 resolver = "3"
-members = ["crates/amiss", "crates/amiss-bootstrap", "crates/amiss-fixtures", "crates/amiss-git", "crates/amiss-md", "crates/amiss-scan", "crates/amiss-wire"]
-exclude = ["controller", "fuzz"]
+members = [
+  "crates/amiss",
+  "crates/amiss-bootstrap",
+  "crates/amiss-fixtures",
+  "crates/amiss-git",
+  "crates/amiss-md",
+  "crates/amiss-scan",
+  "crates/amiss-wire",
+  "controller",
+  "controller/constraint",
+  "controller/files",
+  "controller/fixtures",
+  "controller/fuzz",
+  "controller/git",
+  "controller/gitea",
+  "controller/gitea-service",
+  "controller/github",
+  "controller/github-service",
+  "controller/gitlab",
+  "controller/gitlab-service",
+  "controller/service",
+]
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.9.0"
 edition = "2024"
+rust-version = "1.97"
 license = "FSL-1.1-ALv2"
 repository = "https://github.com/HardMax71/amiss"
 
 [workspace.dependencies]
+amiss-controller-fixtures = { path = "controller/fixtures" }
+aws-lc-rs = "1.17.3"
+pem = "3.0.6"
 sha2 = "0.11"
 strum = { version = "0.28", features = ["derive"] }
 
@@ -62,6 +87,9 @@ allow_attributes_without_reason = "deny"
 [profile.release]
 overflow-checks = true
 panic = "unwind"
+
+[profile.release.package.amiss-controller-fuzz]
+debug = 1
 
 # Debug builds keep debug assertions but optimize the library crates, so the
 # large-envelope goldens and parser-heavy tests run in seconds, not minutes.

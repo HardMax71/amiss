@@ -65,27 +65,12 @@ repos:
         entry: cargo fmt --
         language: system
         types: [rust]
-        exclude: ^controller/
         require_serial: true # parallel batches race rustup's toolchain auto-install
-      - id: controller-fmt
-        name: controller cargo fmt
-        entry: cargo fmt --manifest-path controller/Cargo.toml --all --
-        language: system
-        files: ^controller/.*\.rs$
-        pass_filenames: false
-        require_serial: true
       - id: clippy
         name: cargo clippy
         entry: cargo clippy --workspace --all-targets --locked -- -D warnings
         language: system
         types_or: [rust, toml]
-        pass_filenames: false
-        stages: [pre-push]
-      - id: controller-clippy
-        name: controller cargo clippy
-        entry: cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
-        language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|clippy\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: fuzz-clippy
@@ -99,13 +84,6 @@ repos:
         name: cargo nextest
         entry: cargo nextest run --workspace --locked
         language: system
-        pass_filenames: false
-        stages: [pre-push]
-      - id: controller-nextest
-        name: controller cargo nextest
-        entry: cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
-        language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: fuzz-smoke
@@ -122,11 +100,14 @@ repos:
         files: (^|/)(Cargo\.(toml|lock)|deny\.toml)$
         pass_filenames: false
         stages: [pre-push]
-      - id: controller-deny
-        name: controller cargo deny
-        entry: cargo deny --manifest-path controller/Cargo.toml --config controller/deny.toml --workspace check
+      - id: deny-engine
+        name: cargo deny engine bans
+        entry: >-
+          sh -c 'set -eu;
+          cargo deny --config deny-engine.toml check bans;
+          cargo deny --manifest-path fuzz/Cargo.toml --config deny-engine.toml check bans'
         language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|deny\.toml)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/Cargo\.toml|rust-toolchain\.toml)$
+        files: (^|/)(Cargo\.(toml|lock)|deny-engine\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: fuzz-deny
@@ -141,13 +122,6 @@ repos:
         entry: cargo shear
         language: system
         types_or: [rust, toml]
-        pass_filenames: false
-        stages: [pre-push]
-      - id: controller-shear
-        name: controller cargo shear
-        entry: cargo shear --locked controller
-        language: system
-        files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
       - id: fuzz-shear

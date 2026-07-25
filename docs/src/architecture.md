@@ -1,8 +1,8 @@
 # Architecture
 
-The offline root workspace has six production crates, and trust flows in one direction; a
-seventh exists only for tests. Unpublished provider-controller crates live in a separate nested
-Rust workspace.
+The engine has six production crates, and trust flows in one direction; a seventh exists only
+for tests. The unpublished provider-controller crates share the same workspace and depend on the
+engine, never the other way round.
 
 ```dot process
 digraph amiss {
@@ -56,8 +56,8 @@ published convenience Action; [Project status](status.md) keeps that distinction
 A seventh crate, `amiss-fixtures`, exists only for tests: it writes hostile Git bytes
 straight into test repositories so the same fixtures exist on every platform.
 
-The nested [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) workspace
-is outside that graph and outside the root lockfile. Its unpublished crates keep provider, HTTP,
+The [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) crates sit outside
+that graph. They are unpublished, nothing above depends on them, and they keep provider, HTTP,
 storage, credential, Git acquisition, and runtime dependencies out of the scanner.
 `amiss-controller` owns the provider-neutral orchestration and supervised bootstrap contracts;
 `amiss-controller-git` owns bounded protocol-v2 acquisition; and `amiss-controller-service` owns

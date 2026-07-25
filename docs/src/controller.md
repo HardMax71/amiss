@@ -323,7 +323,7 @@ runner only after its adapter has refreshed provider state and acquired the exac
 
 ## What exists now
 
-The nested workspace contains the provider-neutral identities, bounded ingress gate, rotating
+The controller crates contain the provider-neutral identities, bounded ingress gate, rotating
 key ring, signature verifiers, durable raw inbox, `DeliveryLedger`, `FileLedger`, worker,
 orchestrator, acquisition boundary, and supervised bootstrap runner. Focused tests cover ingress
 limits and tampering, replay, rotation and revocation, file corruption, cross-process ownership,

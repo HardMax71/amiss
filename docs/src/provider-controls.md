@@ -58,16 +58,17 @@ the job's own success is the protected evidence.
 
 ## One tree, small crates
 
-Each lane is a pair of small crates in the nested workspace under
+Each lane is a pair of small crates under
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller): an adapter that speaks
 one provider's API and a service binary that deploys it. Provider differences end at those
 crates. The shared controller stays provider-neutral, the engine gains no provider enum, and the
 scanner report does not change shape because a forge was added.
 
-The nested workspace is also a dependency boundary. HTTP clients, provider APIs, credentials,
-TLS, and service storage live inside it, with its own lockfile and dependency policy, while the
-engine workspace keeps its bans on networking and async runtimes. Auditing the scanner never
-means auditing a webhook stack.
+Those crates are also a dependency boundary. HTTP clients, provider APIs, credentials, TLS, and
+service storage live behind them, and no engine crate depends on any of them, so a `cargo add
+amiss` closure contains none of it. `deny-engine.toml` enforces that by dropping the provider
+crates from the graph and banning the network and async stack in what remains. Auditing the
+scanner never means auditing a webhook stack.
 
 The lanes are deliberately unpublished: source-built services, not hosted Amiss products,
 release binaries, or registry crates. One commit of this repository pins everything a lane

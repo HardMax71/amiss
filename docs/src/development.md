@@ -23,22 +23,19 @@ that manifest to discover the `amiss` staged-index check shown in
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
-cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
-cargo clippy --manifest-path controller/Cargo.toml --workspace --all-targets --locked -- -D warnings
-
 cargo test --manifest-path fuzz/Cargo.toml --locked --release
 cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-The first pair checks the offline scanner workspace. The unpublished provider and service crates
-under `controller/` form a separate nested workspace with their own lockfile and dependency
-policy, so the second pair checks them explicitly. The last pair checks the scanner's standalone
-fuzz package and its separate lockfile. The separation is a trust boundary: HTTP, provider API,
-Git acquisition, credential, storage, and service-runtime dependencies belong in the controller
-workspace, never in the root engine workspace whose dependency bans keep networking and async
-runtimes out. The prek hooks and Linux CI run all three sets. The macOS and Windows jobs also run
-the controller tests, including the cross-process file stores, provider authentication, worker,
-and supervised-process cases. The supported service deployments are documented in
+The first pair checks every crate, engine and provider alike, from one lockfile. The second
+checks the scanner's standalone fuzz package, which keeps its own lockfile because coverage-guided
+runs need nightly. The trust boundary is a dependency boundary rather than a workspace boundary:
+HTTP, provider API, Git acquisition, credential, storage, and service-runtime dependencies belong
+to the unpublished crates under `controller/`, and `deny-engine.toml` drops those crates from the
+graph and then bans the network and async stack, so what an `amiss` user downloads cannot acquire
+it. The prek hooks and Linux CI run both sets. The macOS and Windows jobs also run the controller
+tests, including the cross-process file stores, provider authentication, worker, and
+supervised-process cases. The supported service deployments are documented in
 [Provider-verified controls](provider-controls.md).
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
