@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1](https://github.com/HardMax71/amiss/compare/v0.9.0...v0.9.1) - 2026-07-25
+
+### Changes
+
+- Keep tests out of the published packages
+- Declare each shared dependency version once
+- Fold the controller crates into one workspace
+- Fuzz controller authentication with generated keys
+- Build fixture histories and worktrees without git too
+- Document execution constraint provisioning
+- Derive execution constraints from release trees
+
 ## [0.9.0](https://github.com/HardMax71/amiss/compare/v0.8.0...v0.9.0) - 2026-07-23
 
 ### Changes
