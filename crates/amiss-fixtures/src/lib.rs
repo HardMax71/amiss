@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -439,26 +440,78 @@ pub fn commit_pair(
 ) -> std::io::Result<CommitPair> {
     let dir = tempfile::TempDir::new()?;
     let root = dir.path();
-    git(root, &["init", "-q"])?;
-    for (path, body) in base {
-        write_file(root, path, body)?;
-    }
-    git(root, &["add", "."])?;
-    git(root, &["commit", "-q", "--allow-empty", "-m", "base"])?;
-    let base = git(root, &["rev-parse", "HEAD"])?.trim().to_owned();
-    for (path, body) in candidate {
-        write_file(root, path, body)?;
-    }
-    git(root, &["add", "."])?;
-    git(root, &["commit", "-q", "--allow-empty", "-m", "candidate"])?;
-    let candidate = git(root, &["rev-parse", "HEAD"])?.trim().to_owned();
+    let git_dir = root.join(".git");
+    std::fs::create_dir_all(git_dir.join("objects"))?;
+    std::fs::create_dir_all(git_dir.join("refs").join("heads"))?;
+    std::fs::write(git_dir.join("HEAD"), b"ref: refs/heads/main\n")?;
+
+    let mut staged = BTreeMap::new();
+    let base_id = commit_state(root, base, &mut staged, &[], "base")?;
+    let candidate_id = commit_state(root, candidate, &mut staged, &[&base_id], "candidate")?;
+    std::fs::write(
+        git_dir.join("refs").join("heads").join("main"),
+        format!("{candidate_id}\n"),
+    )?;
+    let rows: Vec<(&[u8], &str)> = staged
+        .iter()
+        .map(|(path, oid)| (path.as_bytes(), oid.as_str()))
+        .collect();
+    index_file(root, &rows)?;
     let repo = path_arg(root);
     Ok(CommitPair {
         dir,
         repo,
-        base,
-        candidate,
+        base: base_id,
+        candidate: candidate_id,
     })
+}
+
+fn commit_state(
+    root: &Path,
+    files: &[(&str, &str)],
+    staged: &mut BTreeMap<String, String>,
+    parents: &[&str],
+    message: &str,
+) -> std::io::Result<String> {
+    for (path, body) in files {
+        write_file(root, path, body)?;
+        staged.insert(
+            (*path).to_owned(),
+            loose_object(root, "blob", body.as_bytes())?,
+        );
+    }
+    let tree = tree_from(root, staged)?;
+    commit_object(root, &tree, parents, message)
+}
+
+fn tree_from(root: &Path, files: &BTreeMap<String, String>) -> std::io::Result<String> {
+    let mut blobs = Vec::new();
+    let mut directories: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    for (path, oid) in files {
+        match path.split_once('/') {
+            None => blobs.push((path.clone(), oid.clone())),
+            Some((head, rest)) => {
+                directories
+                    .entry(head.to_owned())
+                    .or_default()
+                    .insert(rest.to_owned(), oid.clone());
+            }
+        }
+    }
+    let mut subtrees = Vec::new();
+    for (name, nested) in &directories {
+        subtrees.push((name.clone(), tree_from(root, nested)?));
+    }
+    let mut entries: Vec<(&str, &[u8], &str)> = blobs
+        .iter()
+        .map(|(name, oid)| ("100644", name.as_bytes(), oid.as_str()))
+        .collect();
+    entries.extend(
+        subtrees
+            .iter()
+            .map(|(name, oid)| ("40000", name.as_bytes(), oid.as_str())),
+    );
+    tree_object(root, &entries)
 }
 
 fn write_file(root: &Path, path: &str, body: &str) -> std::io::Result<()> {
