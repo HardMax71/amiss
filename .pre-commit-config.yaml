@@ -1,7 +1,7 @@
 minimum_prek_version: "0.4.9"
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
-exclude: ^(spec|corpus|fuzz/seeds|docs/src/fonts)/ # byte-exact assets: schemas, corpus, seeds, fonts
+exclude: ^(spec|corpus|fuzz/seeds|controller/fuzz/seeds|docs/src/fonts)/ # byte-exact assets: schemas, corpus, seeds, fonts
 
 repos:
   - repo: builtin
@@ -88,6 +88,13 @@ repos:
         files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|clippy\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
+      - id: fuzz-clippy
+        name: scanner fuzz cargo clippy
+        entry: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
+        language: system
+        types_or: [rust, toml]
+        pass_filenames: false
+        stages: [pre-push]
       - id: nextest
         name: cargo nextest
         entry: cargo nextest run --workspace --locked
@@ -99,6 +106,13 @@ repos:
         entry: cargo nextest run --manifest-path controller/Cargo.toml --workspace --locked
         language: system
         files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
+        pass_filenames: false
+        stages: [pre-push]
+      - id: fuzz-smoke
+        name: scanner fuzz smoke
+        entry: cargo test --manifest-path fuzz/Cargo.toml --locked --release
+        language: system
+        types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
       - id: deny
@@ -115,6 +129,13 @@ repos:
         files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|deny\.toml)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/Cargo\.toml|rust-toolchain\.toml)$
         pass_filenames: false
         stages: [pre-push]
+      - id: fuzz-deny
+        name: scanner fuzz cargo deny
+        entry: cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml check
+        language: system
+        files: ^(Cargo\.(toml|lock)|deny\.toml|fuzz/Cargo\.(toml|lock)|crates/(amiss-git|amiss-scan|amiss-wire)/Cargo\.toml|rust-toolchain\.toml)$
+        pass_filenames: false
+        stages: [pre-push]
       - id: shear
         name: cargo shear
         entry: cargo shear
@@ -127,6 +148,13 @@ repos:
         entry: cargo shear --locked controller
         language: system
         files: ^(Cargo\.toml|controller/(Cargo\.(toml|lock)|.*/Cargo\.toml|.*\.rs)|crates/(amiss-bootstrap|amiss-fixtures|amiss-git|amiss-wire)/(Cargo\.toml|src/.*\.rs)|rust-toolchain\.toml)$
+        pass_filenames: false
+        stages: [pre-push]
+      - id: fuzz-shear
+        name: scanner fuzz cargo shear
+        entry: cargo shear --locked fuzz
+        language: system
+        types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
       # Whole functions compared by AST edit distance: threshold 0.85, eight

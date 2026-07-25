@@ -63,7 +63,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       # release-plz updates the root workspace lockfile, but the controller and
-      # fuzz are intentionally separate workspaces. Commit their path-package
+      # scanner fuzz workspaces are separate. Commit their path-package
       # IDs to the release PR too, so locked CI verifies the repository instead
       # of fixing an incomplete release checkout in place.
       - name: Refresh generated release files in the release PR
