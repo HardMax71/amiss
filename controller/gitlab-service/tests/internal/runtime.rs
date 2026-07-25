@@ -15,7 +15,7 @@ use amiss_controller::{
     VerifiedDelivery,
 };
 use amiss_controller_git::GitFetchBounds;
-use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest};
+use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest, Operations};
 use axum::http::StatusCode;
 use secrecy::SecretString;
 use tokio::sync::Notify;
@@ -128,12 +128,16 @@ async fn periodic_maintenance_cleans_without_stopping_the_lane() {
     std::fs::create_dir(&leftover).unwrap();
     let completed = Arc::new(Notify::new());
     let observed = Arc::clone(&completed);
+    let stop = Arc::new(Notify::new());
+    let operations = Operations::default();
+    let observed_operations = operations.clone();
     let period = Duration::from_mins(1);
-    let maintenance = tokio::spawn(maintenance_loop(period, move || {
+    let maintenance = tokio::spawn(maintenance_loop(period, Arc::clone(&stop), move || {
         let ledger = Arc::clone(&ledger);
         let completed = Arc::clone(&observed);
+        let operations = operations.clone();
         async move {
-            cleanup_ledger(ledger).await?;
+            cleanup_ledger(ledger, operations).await?;
             completed.notify_one();
             Ok(())
         }
@@ -144,9 +148,40 @@ async fn periodic_maintenance_cleans_without_stopping_the_lane() {
     tokio::time::advance(period).await;
     completed.notified().await;
     assert!(!leftover.exists());
+    assert_eq!(observed_operations.maintenance_runs.get(), 1);
+    assert_eq!(observed_operations.maintenance_removals.get(), 1);
     assert!(!maintenance.is_finished());
 
-    maintenance.abort();
+    stop.notify_one();
+    assert_eq!(maintenance.await.unwrap(), Ok(()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn stop_waits_for_active_maintenance() {
+    let stop = Arc::new(Notify::new());
+    let started = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let observed_started = Arc::clone(&started);
+    let observed_release = Arc::clone(&release);
+    let period = Duration::from_mins(1);
+    let maintenance = tokio::spawn(maintenance_loop(period, Arc::clone(&stop), move || {
+        let started = Arc::clone(&observed_started);
+        let release = Arc::clone(&observed_release);
+        async move {
+            started.notify_one();
+            release.notified().await;
+            Ok(())
+        }
+    }));
+
+    tokio::time::advance(period).await;
+    started.notified().await;
+    stop.notify_one();
+    tokio::task::yield_now().await;
+    assert!(!maintenance.is_finished());
+
+    release.notify_one();
+    assert_eq!(maintenance.await.unwrap(), Ok(()));
 }
 
 #[tokio::test(start_paused = true)]
@@ -161,10 +196,14 @@ async fn periodic_maintenance_failure_stops_the_lane() {
         .unwrap(),
     );
     std::fs::write(state.path().join("unknown"), b"invalid ledger entry").unwrap();
+    let operations = Operations::default();
+    let observed_operations = operations.clone();
     let period = Duration::from_mins(1);
-    let maintenance = tokio::spawn(maintenance_loop(period, move || {
-        cleanup_ledger(Arc::clone(&ledger))
-    }));
+    let maintenance = tokio::spawn(maintenance_loop(
+        period,
+        Arc::new(Notify::new()),
+        move || cleanup_ledger(Arc::clone(&ledger), operations.clone()),
+    ));
 
     assert!(!maintenance.is_finished());
     tokio::time::advance(period).await;
@@ -172,6 +211,8 @@ async fn periodic_maintenance_failure_stops_the_lane() {
         maintenance.await.unwrap(),
         Err(ServiceError("delivery record maintenance failed"))
     );
+    assert_eq!(observed_operations.maintenance_runs.get(), 0);
+    assert_eq!(observed_operations.maintenance_removals.get(), 0);
 }
 
 fn entries(root: &std::path::Path) -> Vec<std::ffi::OsString> {

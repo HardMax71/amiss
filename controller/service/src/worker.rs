@@ -10,7 +10,7 @@ use amiss_controller::{
 
 use crate::{
     AdmissionRequest, ClaimOutcome, ClaimedDelivery, CompleteOutcome, Delivery, DeliveryAdmission,
-    DeliveryLease, Inbox, InboxError, RenewOutcome, RetryOutcome,
+    DeliveryLease, Inbox, InboxError, Operations, RenewOutcome, RetryOutcome,
 };
 
 const RENEWAL_POLL: Duration = Duration::from_secs(5);
@@ -44,6 +44,7 @@ pub struct DeliveryWorkerInput<L, R> {
     pub retry_max: Duration,
     pub idle_poll: Duration,
     pub clock: Arc<dyn ControllerClock>,
+    pub operations: Operations,
 }
 
 /// Drains one durable raw-delivery inbox through the provider-neutral controller.
@@ -57,6 +58,7 @@ pub struct DeliveryWorker<L, R> {
     retry_max: Duration,
     idle_poll: Duration,
     clock: Arc<dyn ControllerClock>,
+    operations: Operations,
 }
 
 impl<L, R> DeliveryWorker<L, R>
@@ -101,6 +103,7 @@ where
             retry_max: input.retry_max,
             idle_poll: input.idle_poll,
             clock: input.clock,
+            operations: input.operations,
         })
     }
 
@@ -111,15 +114,34 @@ where
     /// Returns an error when trusted time, durable inbox ownership, or local
     /// controller state cannot be established.
     pub fn work_once(&mut self) -> Result<WorkOutcome, DeliveryWorkerError> {
+        let Some(claim) = self.claim(None)? else {
+            return Ok(WorkOutcome::Empty);
+        };
+        self.process_claim(claim)
+    }
+
+    fn claim(
+        &self,
+        stop: Option<&AtomicBool>,
+    ) -> Result<Option<ClaimOutcome>, DeliveryWorkerError> {
         let now = self.now()?;
-        let claim = self
+        let mut inbox = self
             .inbox
             .lock()
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox lock is unavailable"))?
+            .map_err(|_defect| DeliveryWorkerError("delivery inbox lock is unavailable"))?;
+        if stop.is_some_and(|stop| stop.load(Ordering::Acquire)) {
+            return Ok(None);
+        }
+        inbox
             .claim(now)
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox cannot be trusted"))?;
+            .map(Some)
+            .map_err(|_defect| DeliveryWorkerError("delivery inbox cannot be trusted"))
+    }
+
+    fn process_claim(&mut self, claim: ClaimOutcome) -> Result<WorkOutcome, DeliveryWorkerError> {
         match claim {
             ClaimOutcome::Claimed(claimed) => {
+                self.operations.delivery_attempts.inc();
                 self.process(claimed)?;
                 Ok(WorkOutcome::Processed)
             }
@@ -138,8 +160,8 @@ where
     ///
     /// Returns an error when [`Self::work_once`] cannot safely continue.
     pub fn run(mut self, stop: &AtomicBool) -> Result<(), DeliveryWorkerError> {
-        while !stop.load(Ordering::Acquire) {
-            match self.work_once()? {
+        while let Some(claim) = self.claim(Some(stop))? {
+            match self.process_claim(claim)? {
                 WorkOutcome::Processed => {}
                 WorkOutcome::Waiting {
                     ready_at_unix_millis,
@@ -157,12 +179,29 @@ where
         if claimed.delivery.route != self.route_id {
             return Err(DeliveryWorkerError("claimed delivery names another route"));
         }
-        if !self.reauthenticate(&claimed.delivery) {
-            return self.complete(&claimed);
-        }
-        let result = self.handle(&mut claimed)?;
-        match disposition(&result) {
-            Disposition::Complete => self.complete(&claimed),
+        let discarded = !self.reauthenticate(&claimed.delivery);
+        let decision = if discarded {
+            Disposition::Complete
+        } else {
+            disposition(&self.handle(&mut claimed)?)
+        };
+        match decision {
+            Disposition::Complete => {
+                self.update_inbox(
+                    &claimed,
+                    "delivery inbox cannot complete a row",
+                    |inbox, lease, now| {
+                        inbox
+                            .complete(lease, now)
+                            .map(|outcome| outcome == CompleteOutcome::Completed)
+                    },
+                )?;
+                self.operations.delivery_completions.inc();
+                if discarded {
+                    self.operations.delivery_discards.inc();
+                }
+                Ok(())
+            }
             Disposition::Retry(at) => self.retry(&claimed, at),
             Disposition::Backoff => {
                 let now = self.now()?;
@@ -259,18 +298,6 @@ where
         Ok(result)
     }
 
-    fn complete(&self, claimed: &ClaimedDelivery) -> Result<(), DeliveryWorkerError> {
-        self.update_inbox(
-            claimed,
-            "delivery inbox cannot complete a row",
-            |inbox, lease, now| {
-                inbox
-                    .complete(lease, now)
-                    .map(|outcome| outcome == CompleteOutcome::Completed)
-            },
-        )
-    }
-
     fn retry(
         &self,
         claimed: &ClaimedDelivery,
@@ -284,7 +311,9 @@ where
                     .retry(lease, now, requested_at.max(now))
                     .map(|outcome| outcome == RetryOutcome::Scheduled)
             },
-        )
+        )?;
+        self.operations.delivery_retries.inc();
+        Ok(())
     }
 
     fn update_inbox(

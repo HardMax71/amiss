@@ -4,23 +4,27 @@ pub(crate) mod headers;
 
 use std::convert::Infallible;
 use std::fmt;
+use std::future::{Future, IntoFuture as _};
 use std::io;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::middleware;
+use axum::routing::post;
 use tokio::net::TcpListener;
-use tokio::sync::Semaphore;
 use tower_http::limit::RequestBodyLimitLayer;
 
 pub use self::admission::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission,
 };
-use self::handler::{ReceiverState, health, receive};
+use self::handler::{ReceiverState, receive};
 use crate::Inbox;
+use crate::Operations;
 use crate::evaluation::{MAX_BODY_BYTES, MAX_HEADER_BYTES, MAX_HEADERS};
+use crate::operations::record_provider_response;
+use crate::probe::{EndpointDrain, HEALTH_PATH, METRICS_PATH, READY_PATH, work_permits};
 
-const HEALTH_PATH: &str = "/healthz";
 const MAX_PATH_BYTES: usize = 1_024;
 pub(crate) const MAX_CONCURRENT_DELIVERIES: usize = 64;
 
@@ -60,8 +64,12 @@ pub fn router(
     config: &ReceiverConfig,
     inbox: Arc<Mutex<Inbox>>,
     admission: Arc<dyn DeliveryAdmission>,
-) -> Result<Router, ReceiverConfigError> {
+    ready: Arc<AtomicBool>,
+    operations: Operations,
+) -> Result<(Router, EndpointDrain), ReceiverConfigError> {
     validate(config)?;
+    let (permits, drain) =
+        work_permits(config.max_concurrent_deliveries).ok_or(ReceiverConfigError::Limits)?;
     let delivery_path = config.delivery_path.clone();
     let state = ReceiverState {
         admission,
@@ -69,23 +77,38 @@ pub fn router(
         max_body_bytes: config.max_body_bytes,
         max_headers: config.max_headers,
         max_header_bytes: config.max_header_bytes,
-        permits: Arc::new(Semaphore::new(config.max_concurrent_deliveries)),
+        permits,
     };
-    let delivery =
-        post(receive).layer::<_, Infallible>(RequestBodyLimitLayer::new(config.max_body_bytes));
-    Ok(Router::new()
-        .route(&delivery_path, delivery)
-        .route(HEALTH_PATH, get(health))
-        .with_state(state))
+    let delivery = post(receive)
+        .layer::<_, Infallible>(RequestBodyLimitLayer::new(config.max_body_bytes))
+        .layer(middleware::from_fn_with_state(
+            (operations.clone(), Arc::clone(&ready)),
+            record_provider_response,
+        ));
+    Ok((
+        crate::probe::routes(
+            Router::new().route(&delivery_path, delivery),
+            ready,
+            operations,
+        )
+        .with_state(state),
+        drain,
+    ))
 }
 
-/// Serves a receiver on an already-bound TCP listener.
+/// Serves a receiver on an already-bound TCP listener until graceful shutdown.
 ///
 /// # Errors
 ///
 /// Returns the listener or connection error reported by Axum.
-pub async fn serve(listener: TcpListener, router: Router) -> io::Result<()> {
-    axum::serve(listener, router).await
+pub async fn serve<F>(listener: TcpListener, router: Router, shutdown: F) -> io::Result<()>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown)
+        .into_future()
+        .await
 }
 
 pub(crate) fn validate(config: &ReceiverConfig) -> Result<(), ReceiverConfigError> {
@@ -101,6 +124,8 @@ pub(crate) fn validate(config: &ReceiverConfig) -> Result<(), ReceiverConfigErro
         && path.first() == Some(&b'/')
         && config.delivery_path != "/"
         && config.delivery_path != HEALTH_PATH
+        && config.delivery_path != METRICS_PATH
+        && config.delivery_path != READY_PATH
         && path
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_' | b'.'))

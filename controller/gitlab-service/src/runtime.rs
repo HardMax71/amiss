@@ -1,8 +1,8 @@
 use std::fmt;
 use std::future::Future;
-use std::future::IntoFuture as _;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use amiss_controller::{
@@ -13,12 +13,14 @@ use amiss_controller::{
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EvaluationRequest, check_lane, evaluation_router, shutdown_signal,
+    AdmissionRejection, EndpointDrain, EvaluationRequest, Operations, ServiceComponent,
+    Supervision, SupervisionError, check_lane, evaluation_router, shutdown_signal, supervise,
 };
 use axum::Router;
 use axum::http::StatusCode;
 use secrecy::{ExposeSecret as _, SecretString};
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
 use tokio::time::{Instant, MissedTickBehavior};
 
 use crate::acquisition::gitlab_acquisition;
@@ -41,6 +43,9 @@ struct Prepared {
     listen: std::net::SocketAddr,
     router: Router,
     ledger: Arc<FileLedgerRoot>,
+    ready: Arc<AtomicBool>,
+    operations: Operations,
+    endpoint: EndpointDrain,
 }
 
 struct Lane {
@@ -66,25 +71,41 @@ struct Lane {
 ///
 /// Returns an error when the lane cannot start or continue safely.
 pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
+    let shutdown = shutdown_signal()
+        .map_err(|_defect| ServiceError("shutdown signal handler cannot be installed"))?;
     let Prepared {
         listen,
         router,
         ledger,
+        ready,
+        operations,
+        endpoint,
     } = prepare(config)?;
     let listener = TcpListener::bind(listen)
         .await
         .map_err(|_defect| ServiceError("HTTP listener cannot bind"))?;
-    let mut server = Box::pin(axum::serve(listener, router).into_future());
-    let mut maintenance = Box::pin(maintain_ledger(ledger));
-    tokio::select! {
-        result = &mut server => {
-            result.map_err(|_defect| ServiceError("HTTP evaluation service stopped"))
-        }
-        result = &mut maintenance => result,
-        signal = shutdown_signal() => {
-            signal.map_err(|_defect| ServiceError("shutdown signal cannot be observed"))
-        }
-    }
+    let maintenance_stop = Arc::new(Notify::new());
+    let component_stop = Arc::clone(&maintenance_stop);
+    let component = maintain_ledger(ledger, Arc::clone(&maintenance_stop), operations.clone());
+    let component = async move { component.await.map_err(|error| SupervisionError(error.0)) };
+    supervise(
+        Supervision {
+            listener,
+            router,
+            ready,
+            operations,
+            endpoint,
+            component: ServiceComponent::Maintenance,
+        },
+        component,
+        shutdown,
+        move || {
+            component_stop.notify_one();
+            Ok(())
+        },
+    )
+    .await
+    .map_err(|error| ServiceError(error.0))
 }
 
 fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
@@ -115,42 +136,75 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         statement_validity: config.statement_validity,
     });
     let evaluation = config.evaluation;
-    let router = evaluation_router(&evaluation, move |request| evaluate(&lane, request))
-        .map_err(|_defect| ServiceError("HTTP evaluation configuration is invalid"))?;
+    let ready = Arc::new(AtomicBool::new(false));
+    let operations = Operations::default();
+    let (router, endpoint) = evaluation_router(
+        &evaluation,
+        Arc::clone(&ready),
+        operations.clone(),
+        move |request| evaluate(&lane, request),
+    )
+    .map_err(|_defect| ServiceError("HTTP evaluation configuration is invalid"))?;
     Ok(Prepared {
         listen: config.listen,
         router,
         ledger,
+        ready,
+        operations,
+        endpoint,
     })
 }
 
-async fn maintain_ledger(ledger: Arc<FileLedgerRoot>) -> Result<(), ServiceError> {
-    maintenance_loop(LEDGER_MAINTENANCE_INTERVAL, move || {
-        cleanup_ledger(Arc::clone(&ledger))
+async fn maintain_ledger(
+    ledger: Arc<FileLedgerRoot>,
+    stop: Arc<Notify>,
+    operations: Operations,
+) -> Result<(), ServiceError> {
+    maintenance_loop(LEDGER_MAINTENANCE_INTERVAL, stop, move || {
+        cleanup_ledger(Arc::clone(&ledger), operations.clone())
     })
     .await
 }
 
-async fn maintenance_loop<F, M>(period: Duration, mut maintenance: F) -> Result<(), ServiceError>
+async fn maintenance_loop<F, M>(
+    period: Duration,
+    stop: Arc<Notify>,
+    mut maintenance: F,
+) -> Result<(), ServiceError>
 where
     F: FnMut() -> M,
     M: Future<Output = Result<(), ServiceError>>,
 {
-    let start = Instant::now() + period;
+    let start = Instant::now()
+        .checked_add(period)
+        .ok_or(ServiceError("maintenance interval overflow"))?;
     let mut ticks = tokio::time::interval_at(start, period);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
-        ticks.tick().await;
-        maintenance().await?;
+        tokio::select! {
+            biased;
+            () = stop.notified() => return Ok(()),
+            _instant = ticks.tick() => maintenance().await?,
+        }
     }
 }
 
-async fn cleanup_ledger(ledger: Arc<FileLedgerRoot>) -> Result<(), ServiceError> {
-    tokio::task::spawn_blocking(move || ledger.cleanup())
+async fn cleanup_ledger(
+    ledger: Arc<FileLedgerRoot>,
+    operations: Operations,
+) -> Result<(), ServiceError> {
+    let removed = tokio::task::spawn_blocking(move || ledger.cleanup())
         .await
         .map_err(|_panic| ServiceError("delivery record maintenance panicked"))?
-        .map(|_removed| ())
-        .map_err(|_defect| ServiceError("delivery record maintenance failed"))
+        .map_err(|_defect| ServiceError("delivery record maintenance failed"))?;
+    operations.maintenance_runs.inc();
+    operations.maintenance_removals.inc_by(
+        removed
+            .removed_records
+            .saturating_add(removed.removed_reports)
+            .saturating_add(removed.removed_temporary),
+    );
+    Ok(())
 }
 
 fn evaluate(lane: &Lane, request: EvaluationRequest<'_>) -> StatusCode {

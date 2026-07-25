@@ -1,10 +1,10 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, Inbox, InboxLimits,
-    ReceiverConfig, router,
+    Operations, ReceiverConfig, router,
 };
 use axum::Router;
 use axum::body::Body;
@@ -69,6 +69,8 @@ pub(crate) struct Fixture {
     pub(crate) app: Router,
     pub(crate) inbox: Arc<Mutex<Inbox>>,
     pub(crate) admission: Arc<TestAdmission>,
+    pub(crate) ready: Arc<AtomicBool>,
+    pub(crate) operations: Operations,
     _directory: TempDir,
 }
 
@@ -84,11 +86,22 @@ impl Fixture {
         ));
         let admission = Arc::new(admission);
         let receiver_admission: Arc<dyn DeliveryAdmission> = admission.clone();
-        let app = router(receiver_config, inbox.clone(), receiver_admission).unwrap();
+        let ready = Arc::new(AtomicBool::new(true));
+        let operations = Operations::default();
+        let (app, _drain) = router(
+            receiver_config,
+            inbox.clone(),
+            receiver_admission,
+            Arc::clone(&ready),
+            operations.clone(),
+        )
+        .unwrap();
         Self {
             app,
             inbox,
             admission,
+            ready,
+            operations,
             _directory: directory,
         }
     }

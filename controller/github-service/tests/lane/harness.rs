@@ -13,8 +13,8 @@ use amiss_controller::{
 use amiss_controller_github::{GitHubPullRequestAdapter, GitHubPullRequestSource};
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, DeliveryAdmission, DeliveryHeader, DeliveryWorker,
-    DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader, WorkOutcome,
-    lane_admission,
+    DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader, Operations,
+    WorkOutcome, lane_admission,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
 use amiss_wire::digest::hb;
@@ -128,6 +128,7 @@ impl Harness {
             retry_max: Duration::from_millis(100),
             idle_poll: Duration::from_millis(5),
             clock,
+            operations: Operations::default(),
         })
         .unwrap();
         Self {

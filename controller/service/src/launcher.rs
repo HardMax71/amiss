@@ -5,6 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 /// Checks or runs one provider service from one absolute config path.
+#[expect(
+    clippy::print_stderr,
+    clippy::print_stdout,
+    reason = "the provider service command-line contract"
+)]
 pub fn service_main<C, LoadError, RunError, RunFuture>(
     name: &str,
     load: impl FnOnce(&Path) -> Result<C, LoadError>,

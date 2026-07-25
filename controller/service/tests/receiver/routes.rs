@@ -1,6 +1,8 @@
+use std::sync::atomic::Ordering;
+
 use amiss_controller_service::{AdmissionRejection, ClaimOutcome};
-use axum::body::Body;
-use axum::http::{Method, StatusCode};
+use axum::body::{self, Body};
+use axum::http::{Method, StatusCode, header};
 use tower::ServiceExt as _;
 
 use super::support::{
@@ -28,6 +30,8 @@ async fn accepted_response_follows_durable_storage() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::ACCEPTED);
     assert_eq!(fixture.admission.calls(), 1);
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
+    assert_eq!(fixture.operations.provider_acceptances.get(), 1);
 
     let claimed = {
         let mut inbox = fixture.inbox.lock().unwrap();
@@ -91,6 +95,8 @@ async fn admission_rejection_never_reaches_storage() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
+    assert_eq!(fixture.operations.provider_refusals.get(), 1);
     assert!(fixture.inbox.lock().unwrap().entries().unwrap().is_empty());
 }
 
@@ -138,22 +144,57 @@ async fn only_the_configured_post_path_reaches_admission() {
     assert_eq!(wrong_path.status(), StatusCode::NOT_FOUND);
     assert_eq!(query_route.status(), StatusCode::BAD_REQUEST);
     assert_eq!(fixture.admission.calls(), 0);
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
+    assert_eq!(fixture.operations.provider_refusals.get(), 1);
 }
 
 #[tokio::test]
-async fn health_only_reports_process_liveness() {
+async fn probes_separate_liveness_from_local_readiness() {
+    let mut config = receiver_config();
+    config.max_body_bytes = BODY.len().saturating_sub(1);
     let fixture = Fixture::new(
-        &receiver_config(),
+        &config,
         inbox_limits(),
         TestAdmission::rejecting(AdmissionRejection::Forbidden),
     );
+    fixture.ready.store(false, Ordering::Release);
+    for (path, expected) in [
+        ("/healthz", StatusCode::OK),
+        ("/readyz", StatusCode::SERVICE_UNAVAILABLE),
+    ] {
+        let response = fixture
+            .app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(Method::GET)
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    let mut draining_request = delivery_request(Method::POST, DELIVERY_PATH, "delivery-1", BODY);
+    draining_request.headers_mut().insert(
+        header::CONTENT_LENGTH,
+        axum::http::HeaderValue::from_str(&BODY.len().to_string()).unwrap(),
+    );
+    let draining_delivery = fixture.app.clone().oneshot(draining_request).await.unwrap();
+    assert_eq!(draining_delivery.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
+    assert_eq!(fixture.operations.provider_unavailable.get(), 1);
+    assert_eq!(fixture.admission.calls(), 0);
+
+    fixture.ready.store(true, Ordering::Release);
     let response = fixture
         .app
         .clone()
         .oneshot(
             axum::http::Request::builder()
                 .method(Method::GET)
-                .uri("/healthz")
+                .uri("/readyz")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -161,4 +202,28 @@ async fn health_only_reports_process_liveness() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(fixture.admission.calls(), 0);
+
+    let metrics = fixture
+        .app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method(Method::GET)
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(metrics.status(), StatusCode::OK);
+    assert_eq!(
+        metrics.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/openmetrics-text; version=1.0.0; charset=utf-8"
+    );
+    let body = body::to_bytes(metrics.into_body(), 16 * 1_024)
+        .await
+        .unwrap();
+    let body = std::str::from_utf8(&body).unwrap();
+    assert!(body.contains("amiss_controller_provider_requests_total 1"));
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
 }

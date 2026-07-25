@@ -17,6 +17,7 @@ use amiss_controller::{
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, DeliveryHeader,
     DeliveryWorker, DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader,
+    Operations,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
@@ -26,7 +27,7 @@ use tempfile::TempDir;
 
 const BODY: &[u8] = br#"{"event":"change"}"#;
 const ROUTE_ID: &str = "github-main";
-const SOURCE_ID: &str = "source-1";
+pub(crate) const SOURCE_ID: &str = "source-1";
 const SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
 const STEADY_LEASE: Duration = Duration::from_secs(30);
 const RENEWAL_LEASE: Duration = Duration::from_secs(2);
@@ -62,9 +63,16 @@ impl DeliveryAdmission for Admission {
         {
             return Err(AdmissionRejection::Unauthorized);
         }
+        let source_id = request
+            .headers
+            .iter()
+            .find(|header| header.name == "x-source-id")
+            .and_then(|header| std::str::from_utf8(&header.value).ok())
+            .filter(|value| !value.is_empty())
+            .ok_or(AdmissionRejection::Malformed)?;
         Ok(AdmittedDelivery {
             route: ROUTE_ID.to_owned(),
-            source_id: SOURCE_ID.to_owned(),
+            source_id: source_id.to_owned(),
         })
     }
 }
@@ -147,7 +155,9 @@ pub(crate) struct TestRunner {
 impl Runner for TestRunner {
     fn run(&mut self, _request: &RunRequest, heartbeat: &mut dyn RunHeartbeat) -> RunnerOutcome {
         self.started.wait();
-        let deadline = Instant::now() + self.delay;
+        let Some(deadline) = Instant::now().checked_add(self.delay) else {
+            return RunnerOutcome::Unavailable;
+        };
         loop {
             if heartbeat.renew() == HeartbeatOutcome::Stop {
                 return RunnerOutcome::Unavailable;
@@ -176,6 +186,7 @@ pub(crate) struct Fixture {
     pub(crate) admission: Arc<Admission>,
     pub(crate) adapter: Arc<Adapter>,
     pub(crate) run_started: Arc<Barrier>,
+    pub(crate) operations: Operations,
 }
 
 impl Fixture {
@@ -273,6 +284,7 @@ impl Fixture {
         ));
         let admission = Arc::new(Admission::new());
         let shared_admission: Arc<dyn DeliveryAdmission> = admission.clone();
+        let operations = Operations::default();
         let worker = DeliveryWorker::new(DeliveryWorkerInput {
             inbox: Arc::clone(&inbox),
             controller,
@@ -283,6 +295,7 @@ impl Fixture {
             retry_max: Duration::from_secs(1),
             idle_poll: Duration::from_millis(5),
             clock,
+            operations: operations.clone(),
         })
         .unwrap();
         Self {
@@ -292,17 +305,24 @@ impl Fixture {
             admission,
             adapter,
             run_started: started,
+            operations,
         }
     }
 }
 
-pub(crate) fn enqueue(inbox: &Arc<Mutex<Inbox>>, admission: &Arc<Admission>) {
+pub(crate) fn enqueue(inbox: &Arc<Mutex<Inbox>>, admission: &Arc<Admission>, source_id: &str) {
     let received_at = now();
     let signature = signature(BODY);
-    let headers = [DeliveryHeader {
-        name: "x-hub-signature-256".to_owned(),
-        value: signature.clone(),
-    }];
+    let headers = [
+        DeliveryHeader {
+            name: "x-hub-signature-256".to_owned(),
+            value: signature.clone(),
+        },
+        DeliveryHeader {
+            name: "x-source-id".to_owned(),
+            value: source_id.as_bytes().to_vec(),
+        },
+    ];
     let admitted = admission
         .admit(AdmissionRequest {
             received_at_unix_millis: received_at,
@@ -310,10 +330,16 @@ pub(crate) fn enqueue(inbox: &Arc<Mutex<Inbox>>, admission: &Arc<Admission>) {
             body: BODY,
         })
         .unwrap();
-    let incoming_headers = [IncomingHeader {
-        name: "x-hub-signature-256",
-        value: &signature,
-    }];
+    let incoming_headers = [
+        IncomingHeader {
+            name: "x-hub-signature-256",
+            value: &signature,
+        },
+        IncomingHeader {
+            name: "x-source-id",
+            value: source_id.as_bytes(),
+        },
+    ];
     inbox
         .lock()
         .unwrap()

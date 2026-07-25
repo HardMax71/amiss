@@ -4,7 +4,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, InboxError,
-    IncomingDelivery, ReceiverConfig, ReceiverConfigError, router,
+    IncomingDelivery, Operations, ReceiverConfig, ReceiverConfigError, router,
 };
 use axum::body::{Body, Bytes};
 use axum::http::{Method, Request, StatusCode};
@@ -47,7 +47,13 @@ async fn full_delivery_capacity_rejects_before_reading_another_body()
     });
     let mut config = receiver_config();
     config.max_concurrent_deliveries = 1;
-    let app = router(&config, inbox, admission)?;
+    let (app, _drain) = router(
+        &config,
+        inbox,
+        admission,
+        Arc::new(AtomicBool::new(true)),
+        Operations::default(),
+    )?;
 
     let first_app = app.clone();
     let first = tokio::spawn(async move {
@@ -161,6 +167,8 @@ async fn assert_rejected_before_admission(config: ReceiverConfig, expected: Stat
     assert_eq!(response.status(), expected);
     assert_eq!(fixture.admission.calls(), 0);
     assert!(fixture.inbox.lock().unwrap().entries().unwrap().is_empty());
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
+    assert_eq!(fixture.operations.provider_refusals.get(), 1);
 }
 
 #[tokio::test]
@@ -208,26 +216,46 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
         "",
         "/",
         "/healthz",
+        "/metrics",
+        "/readyz",
         "/provider/{route}",
         "/provider//delivery",
     ] {
         let mut config = receiver_config();
         config.delivery_path = path.to_owned();
         assert!(matches!(
-            router(&config, inbox.clone(), receiver_admission.clone(),),
+            router(
+                &config,
+                inbox.clone(),
+                receiver_admission.clone(),
+                Arc::new(AtomicBool::new(true)),
+                Operations::default(),
+            ),
             Err(ReceiverConfigError::Path)
         ));
     }
     let mut config = receiver_config();
     config.max_body_bytes = 0;
     assert!(matches!(
-        router(&config, Arc::clone(&inbox), Arc::clone(&receiver_admission),),
+        router(
+            &config,
+            Arc::clone(&inbox),
+            Arc::clone(&receiver_admission),
+            Arc::new(AtomicBool::new(true)),
+            Operations::default(),
+        ),
         Err(ReceiverConfigError::Limits)
     ));
     config.max_body_bytes = 1;
     config.max_concurrent_deliveries = 65;
     assert!(matches!(
-        router(&config, Arc::clone(&inbox), Arc::clone(&receiver_admission),),
+        router(
+            &config,
+            Arc::clone(&inbox),
+            Arc::clone(&receiver_admission),
+            Arc::new(AtomicBool::new(true)),
+            Operations::default(),
+        ),
         Err(ReceiverConfigError::Limits)
     ));
     for (body, headers, header_bytes) in [
@@ -240,7 +268,13 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
         config.max_headers = headers;
         config.max_header_bytes = header_bytes;
         assert!(matches!(
-            router(&config, Arc::clone(&inbox), Arc::clone(&receiver_admission),),
+            router(
+                &config,
+                Arc::clone(&inbox),
+                Arc::clone(&receiver_admission),
+                Arc::new(AtomicBool::new(true)),
+                Operations::default(),
+            ),
             Err(ReceiverConfigError::Limits)
         ));
     }

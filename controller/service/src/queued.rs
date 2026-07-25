@@ -1,4 +1,5 @@
 use std::fmt;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,7 +8,10 @@ use std::sync::{Arc, Mutex};
 use amiss_controller::{DeliveryLedger, Runner};
 use tokio::net::TcpListener;
 
-use crate::{DeliveryAdmission, DeliveryWorker, Inbox, InboxLimits, ReceiverConfig, router, serve};
+use crate::{
+    DeliveryAdmission, DeliveryWorker, Inbox, InboxLimits, Operations, ReceiverConfig,
+    ServiceComponent, Supervision, SupervisionError, router, supervise,
+};
 
 pub struct QueuedServiceInput {
     pub listen: SocketAddr,
@@ -40,48 +44,89 @@ pub async fn run_queued_service<L, R, F>(
 where
     L: DeliveryLedger + Send + 'static,
     R: Runner + Send + 'static,
-    F: FnOnce(Arc<Mutex<Inbox>>) -> Result<DeliveryWorker<L, R>, QueuedServiceError>
+    F: FnOnce(Arc<Mutex<Inbox>>, Operations) -> Result<DeliveryWorker<L, R>, QueuedServiceError>
         + Send
         + 'static,
+{
+    let shutdown = crate::shutdown_signal()
+        .map_err(|_defect| QueuedServiceError("shutdown signal handler cannot be installed"))?;
+    run_queued_service_until(
+        input,
+        admission,
+        build_worker,
+        Operations::default(),
+        shutdown,
+    )
+    .await
+}
+
+async fn run_queued_service_until<L, R, F, S>(
+    input: QueuedServiceInput,
+    admission: Arc<dyn DeliveryAdmission>,
+    build_worker: F,
+    operations: Operations,
+    shutdown: S,
+) -> Result<(), QueuedServiceError>
+where
+    L: DeliveryLedger + Send + 'static,
+    R: Runner + Send + 'static,
+    F: FnOnce(Arc<Mutex<Inbox>>, Operations) -> Result<DeliveryWorker<L, R>, QueuedServiceError>
+        + Send
+        + 'static,
+    S: Future<Output = std::io::Result<()>>,
 {
     let inbox = Arc::new(Mutex::new(
         Inbox::open(input.inbox_root, input.inbox_limits)
             .map_err(|_defect| QueuedServiceError("delivery inbox cannot be opened"))?,
     ));
-    let receiver = router(&input.receiver, Arc::clone(&inbox), admission)
-        .map_err(|_defect| QueuedServiceError("HTTP receiver configuration is invalid"))?;
+    let ready = Arc::new(AtomicBool::new(false));
+    let (receiver, endpoint) = router(
+        &input.receiver,
+        Arc::clone(&inbox),
+        admission,
+        Arc::clone(&ready),
+        operations.clone(),
+    )
+    .map_err(|_defect| QueuedServiceError("HTTP receiver configuration is invalid"))?;
     let listener = TcpListener::bind(input.listen)
         .await
         .map_err(|_defect| QueuedServiceError("HTTP listener cannot bind"))?;
+    let worker_operations = operations.clone();
+    let worker_inbox = Arc::clone(&inbox);
+    let worker = tokio::task::spawn_blocking(move || build_worker(worker_inbox, worker_operations))
+        .await
+        .map_err(|_panic| QueuedServiceError("delivery worker panicked"))??;
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = Arc::clone(&stop);
-    let mut worker_task = tokio::task::spawn_blocking(move || {
-        build_worker(inbox)?
-            .run(&worker_stop)
-            .map_err(|_defect| QueuedServiceError("delivery worker stopped"))
-    });
-    let mut server = Box::pin(serve(listener, receiver));
-    tokio::select! {
-        result = &mut server => {
+    let component = async move {
+        tokio::task::spawn_blocking(move || worker.run(&worker_stop))
+            .await
+            .map_err(|_panic| SupervisionError("delivery worker panicked"))?
+            .map_err(|_defect| SupervisionError("delivery worker stopped"))
+    };
+    let stop_component = move || {
+        let stop_result = inbox
+            .lock()
+            .map(|_guard| stop.store(true, Ordering::Release))
+            .map_err(|_poisoned| SupervisionError("delivery inbox lock is unavailable"));
+        if stop_result.is_err() {
             stop.store(true, Ordering::Release);
-            let worker_result = worker_task.await;
-            result.map_err(|_defect| QueuedServiceError("HTTP receiver stopped"))?;
-            join_worker(worker_result)
         }
-        result = &mut worker_task => join_worker(result),
-        signal = crate::shutdown_signal() => {
-            signal.map_err(|_defect| QueuedServiceError("shutdown signal cannot be observed"))?;
-            stop.store(true, Ordering::Release);
-            join_worker(worker_task.await)
-        }
-    }
-}
-
-fn join_worker(
-    result: Result<Result<(), QueuedServiceError>, tokio::task::JoinError>,
-) -> Result<(), QueuedServiceError> {
-    match result {
-        Ok(result) => result,
-        Err(_panic) => Err(QueuedServiceError("delivery worker panicked")),
-    }
+        stop_result
+    };
+    supervise(
+        Supervision {
+            listener,
+            router: receiver,
+            ready,
+            operations,
+            endpoint,
+            component: ServiceComponent::Worker,
+        },
+        component,
+        shutdown,
+        stop_component,
+    )
+    .await
+    .map_err(|error| QueuedServiceError(error.0))
 }

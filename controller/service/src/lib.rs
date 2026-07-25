@@ -10,12 +10,15 @@ mod inbox;
 mod lane;
 mod launcher;
 mod limits;
+mod operations;
+mod probe;
 mod queued;
 mod receiver;
 mod record;
 mod request_body;
 mod shutdown;
 mod store;
+mod supervision;
 mod worker;
 
 pub use config::{
@@ -37,10 +40,13 @@ pub use inbox::{
 pub use lane::{LaneAdmission, check_lane, lane_admission};
 pub use launcher::service_main;
 pub use limits::InboxLimits;
+pub use operations::{Operations, ServiceComponent, ServiceEvent};
+pub use probe::EndpointDrain;
 pub use queued::{QueuedServiceError, QueuedServiceInput, run_queued_service};
 pub use receiver::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, ReceiverConfig,
     ReceiverConfigError, router, serve,
 };
 pub use shutdown::shutdown_signal;
+pub use supervision::{Supervision, SupervisionError, supervise};
 pub use worker::{DeliveryWorker, DeliveryWorkerError, DeliveryWorkerInput, WorkOutcome};
