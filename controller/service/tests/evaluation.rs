@@ -101,12 +101,11 @@ async fn full_evaluation_capacity_rejects_without_starting_more_work()
     let observed_calls = Arc::clone(&calls);
     let observed_release = Arc::clone(&release);
     let observed_started = Arc::clone(&started);
-    let ready = Arc::new(AtomicBool::new(true));
     let mut limited = config();
     limited.max_concurrent_evaluations = 1;
     let (app, _drain) = evaluation_router(
         &limited,
-        Arc::clone(&ready),
+        Arc::new(AtomicBool::new(true)),
         Operations::default(),
         move |_request| {
             observed_calls.fetch_add(1, Ordering::SeqCst);
@@ -144,7 +143,6 @@ async fn full_evaluation_capacity_rejects_without_starting_more_work()
     assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
-    ready.store(false, Ordering::Release);
     let (lock, ready) = &*release;
     *lock
         .lock()
