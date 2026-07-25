@@ -24,16 +24,16 @@ amiss-controller = { path = ".." }
 amiss-controller-github = { path = "../github" }
 amiss-controller-service = { path = "../service" }
 amiss-wire = { path = "../../crates/amiss-wire" }
-serde = { version = "1", features = ["derive"] }
+serde.workspace = true
 
 [dev-dependencies]
 amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
-hex = "0.4"
-hmac = "0.13"
-serde_json = "1"
-sha2 = "0.11"
-tempfile = "3"
+hex.workspace = true
+hmac.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

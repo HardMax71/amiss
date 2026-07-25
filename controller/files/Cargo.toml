@@ -9,11 +9,11 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-cap-fs-ext = "4.0.2"
-cap-std = "4.0.2"
+cap-fs-ext.workspace = true
+cap-std.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 
 [lints]
 workspace = true
