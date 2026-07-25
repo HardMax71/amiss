@@ -9,6 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+amiss-controller = { path = ".." }
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
+amiss-wire = { path = "../../crates/amiss-wire" }
 aws-lc-rs.workspace = true
 pem.workspace = true
 

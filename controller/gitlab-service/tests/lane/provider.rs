@@ -17,7 +17,7 @@ use amiss_wire::model::{ObjectFormat, Oid};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde_json::{Value, json};
 
-use super::repositories::Repositories;
+use amiss_controller_fixtures::lane::Repositories;
 
 pub(super) const HOST: &str = "gitlab.example";
 pub(super) const PROJECT_ID: u64 = 101;
@@ -156,8 +156,8 @@ pub(super) fn sign(claims: &Value) -> String {
 }
 
 pub(super) fn refresh(repositories: &Repositories) -> GitLabRefresh {
-    let commits = repositories.commits();
-    let trees = repositories.trees();
+    let commits = repositories.commits().unwrap();
+    let trees = repositories.trees().unwrap();
     let gate = commits.candidate.as_str().to_owned();
     let base = commits.base.as_str().to_owned();
     let source = oid('c').as_str().to_owned();

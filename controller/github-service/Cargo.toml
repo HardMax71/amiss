@@ -19,16 +19,16 @@ test = false
 bench = false
 
 [dependencies]
-amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
+amiss-controller-bootstrap-fixture.workspace = true
 amiss-controller-github = { path = "../github" }
 amiss-controller-service = { path = "../service" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 serde.workspace = true
 
 [dev-dependencies]
+amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true
-amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 hex.workspace = true
 hmac.workspace = true
 serde_json.workspace = true

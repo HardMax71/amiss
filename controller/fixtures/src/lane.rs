@@ -7,47 +7,62 @@ use amiss_controller::{Acquisition, AcquisitionTarget, OidPair, RunRequest};
 use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::model::{ObjectFormat, Oid};
 
-pub(super) struct Repositories {
+/// The checked repository and the action repository a provider lane acquires,
+/// each with a base and a candidate commit.
+pub struct Repositories {
     repository: CommitPair,
     action: CommitPair,
 }
 
 impl Repositories {
-    pub(super) fn new() -> Self {
-        Self {
-            repository: commit_pair(&[("README.md", "base\n")], &[("README.md", "candidate\n")])
-                .unwrap(),
+    /// # Errors
+    ///
+    /// Any git or filesystem failure, as plain I/O errors.
+    pub fn new() -> io::Result<Self> {
+        Ok(Self {
+            repository: commit_pair(&[("README.md", "base\n")], &[("README.md", "candidate\n")])?,
             action: commit_pair(
                 &[("release/engine", "first\n")],
                 &[("release/engine", "second\n")],
-            )
-            .unwrap(),
-        }
+            )?,
+        })
     }
 
-    pub(super) fn commits(&self) -> OidPair {
-        OidPair {
-            base: oid(&self.repository.base),
-            candidate: oid(&self.repository.candidate),
-        }
+    /// # Errors
+    ///
+    /// A fixture commit that is not a valid object name.
+    pub fn commits(&self) -> io::Result<OidPair> {
+        Ok(OidPair {
+            base: oid(&self.repository.base)?,
+            candidate: oid(&self.repository.candidate)?,
+        })
     }
 
-    pub(super) fn trees(&self) -> OidPair {
-        OidPair {
-            base: tree(&self.repository, &self.repository.base),
-            candidate: tree(&self.repository, &self.repository.candidate),
-        }
+    /// # Errors
+    ///
+    /// A tree that cannot be read or is not a valid object name.
+    pub fn trees(&self) -> io::Result<OidPair> {
+        Ok(OidPair {
+            base: tree(&self.repository, &self.repository.base)?,
+            candidate: tree(&self.repository, &self.repository.candidate)?,
+        })
     }
 
-    pub(super) fn action_commit(&self) -> Oid {
+    /// # Errors
+    ///
+    /// An action commit that is not a valid object name.
+    pub fn action_commit(&self) -> io::Result<Oid> {
         oid(&self.action.candidate)
     }
 
-    pub(super) fn action_tree(&self) -> Oid {
+    /// # Errors
+    ///
+    /// An action tree that cannot be read or is not a valid object name.
+    pub fn action_tree(&self) -> io::Result<Oid> {
         tree(&self.action, &self.action.candidate)
     }
 
-    pub(super) fn acquisition(&self) -> CopyAcquisition {
+    pub fn acquisition(&self) -> CopyAcquisition {
         CopyAcquisition {
             repository: self.repository.root().to_path_buf(),
             action: self.action.root().to_path_buf(),
@@ -55,8 +70,9 @@ impl Repositories {
     }
 }
 
+/// Places both fixture trees by copy, so a lane runs without a network.
 #[derive(Clone)]
-pub(super) struct CopyAcquisition {
+pub struct CopyAcquisition {
     repository: PathBuf,
     action: PathBuf,
 }
@@ -101,13 +117,12 @@ fn copy_tree(
     Ok(())
 }
 
-fn oid(raw: &str) -> Oid {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).unwrap()
+fn oid(raw: &str) -> io::Result<Oid> {
+    Oid::new(ObjectFormat::Sha1, raw.to_owned())
+        .ok_or_else(|| io::Error::other("fixture object name is not a SHA-1 oid"))
 }
 
-fn tree(repository: &CommitPair, commit: &str) -> Oid {
+fn tree(repository: &CommitPair, commit: &str) -> io::Result<Oid> {
     let revision = format!("{commit}^{{tree}}");
-    oid(git(repository.root(), &["rev-parse", &revision])
-        .unwrap()
-        .trim())
+    oid(git(repository.root(), &["rev-parse", &revision])?.trim())
 }

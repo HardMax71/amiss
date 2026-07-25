@@ -22,7 +22,7 @@ use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
 use super::provider::{FakeGitHub, SignedEvent, snapshot};
-use super::repositories::{CopyAcquisition, Repositories};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
 
 const SECRET: &[u8] = b"provider-lane-webhook-secret-2026";
 const ROUTE_ID: &str = "github-provider-lane";
@@ -63,7 +63,7 @@ impl Harness {
         let scratch = directory(&state, "scratch");
         let inbox_root = directory(&state, "inbox");
         let ledger_root = directory(&state, "ledger");
-        let repositories = Repositories::new();
+        let repositories = Repositories::new().unwrap();
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-github-service-bootstrap-fixture"));
         let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
@@ -174,7 +174,11 @@ impl Harness {
     }
 
     pub(super) fn target_rejection(&self, target: &str) -> Option<AdmissionRejection> {
-        let event = SignedEvent::for_target(&self.repositories.commits().candidate, target, SECRET);
+        let event = SignedEvent::for_target(
+            &self.repositories.commits().unwrap().candidate,
+            target,
+            SECRET,
+        );
         let headers = [DeliveryHeader {
             name: "x-hub-signature-256".to_owned(),
             value: event.signature,
@@ -215,13 +219,13 @@ fn provider_setup(
     let provider = provider();
     let route = route(&provider);
     let source = Arc::new(GitHubPullRequestSource::new(provider.clone(), webhook()));
-    let event = SignedEvent::new(&repositories.commits().candidate, SECRET);
+    let event = SignedEvent::new(&repositories.commits().unwrap().candidate, SECRET);
     let delivery = event.delivery(&route, ingress, &source);
     let mut current = snapshot(
         &delivery,
         case.state(),
-        repositories.commits(),
-        repositories.trees(),
+        repositories.commits().unwrap(),
+        repositories.trees().unwrap(),
     );
     if matches!(case, LaneCase::WrongIdentity) {
         "another".clone_into(&mut current.run.change.repository.name);
@@ -326,8 +330,8 @@ fn execution(
     input.action_repository =
         RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap();
     input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = repositories.action_commit();
-    input.action_tree_oid = repositories.action_tree();
+    input.action_commit_oid = repositories.action_commit().unwrap();
+    input.action_tree_oid = repositories.action_tree().unwrap();
     status.clone_into(&mut input.required_status_name);
     input.bootstrap_digest = bootstrap_digest;
     ExecutionConstraintDescriptor::new(input).unwrap()

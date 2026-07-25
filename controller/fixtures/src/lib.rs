@@ -1,3 +1,5 @@
+pub mod lane;
+
 use std::fmt;
 
 use aws_lc_rs::encoding::{AsDer, Pkcs8V1Der, PublicKeyX509Der};

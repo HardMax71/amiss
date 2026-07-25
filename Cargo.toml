@@ -9,6 +9,7 @@ members = [
   "crates/amiss-scan",
   "crates/amiss-wire",
   "controller",
+  "controller/bootstrap-fixture",
   "controller/constraint",
   "controller/files",
   "controller/fixtures",
@@ -32,6 +33,7 @@ license = "FSL-1.1-ALv2"
 repository = "https://github.com/HardMax71/amiss"
 
 [workspace.dependencies]
+amiss-controller-bootstrap-fixture = { path = "controller/bootstrap-fixture" }
 amiss-controller-fixtures = { path = "controller/fixtures" }
 atomicwrites = "0.4.4"
 aws-lc-rs = "1.17.3"

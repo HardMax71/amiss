@@ -111,6 +111,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-controller-bootstrap-fixture"
+version = "0.9.0"
+dependencies = [
+ "amiss-bootstrap",
+ "amiss-wire",
+]
+
+[[package]]
 name = "amiss-controller-constraint"
 version = "0.9.0"
 dependencies = [
@@ -137,6 +145,9 @@ dependencies = [
 name = "amiss-controller-fixtures"
 version = "0.9.0"
 dependencies = [
+ "amiss-controller",
+ "amiss-fixtures",
+ "amiss-wire",
  "aws-lc-rs",
  "pem",
 ]
@@ -195,10 +206,11 @@ version = "0.9.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
+ "amiss-controller-bootstrap-fixture",
+ "amiss-controller-fixtures",
  "amiss-controller-git",
  "amiss-controller-gitea",
  "amiss-controller-service",
- "amiss-fixtures",
  "amiss-wire",
  "hex",
  "hmac",
@@ -237,10 +249,10 @@ version = "0.9.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
+ "amiss-controller-bootstrap-fixture",
  "amiss-controller-fixtures",
  "amiss-controller-github",
  "amiss-controller-service",
- "amiss-fixtures",
  "amiss-wire",
  "hex",
  "hmac",
@@ -271,6 +283,7 @@ version = "0.9.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
+ "amiss-controller-bootstrap-fixture",
  "amiss-controller-fixtures",
  "amiss-controller-git",
  "amiss-controller-gitlab",
