@@ -149,6 +149,15 @@ jobs:
         name: Stop Defender scanning the build
         shell: pwsh
         run: Set-MpPreference -DisableRealtimeMonitoring $true
+      # 102 test binaries are relinked on every change, and MSVC's link.exe is
+      # where the Windows build time goes.
+      - if: runner.os == 'Windows'
+        name: Link with the toolchain's lld
+        shell: pwsh
+        run: |
+          $lld = Join-Path (rustc --print sysroot) 'lib\rustlib\x86_64-pc-windows-msvc\bin\rust-lld.exe'
+          if (-not (Test-Path $lld)) { throw 'the pinned toolchain ships no rust-lld' }
+          "RUSTFLAGS=-Clinker-flavor=lld-link -Clinker=$lld" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV # zizmor: ignore[github-env]
       - uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
         with:
           tool: cargo-nextest@0.9.140
