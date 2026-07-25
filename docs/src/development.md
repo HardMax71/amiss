@@ -9,7 +9,11 @@ compares functions within one file, so the first ratchet counts twins inside eve
 workspaces, and the second concatenates the deliberately parallel provider files, the three
 transports, the three lane-test harnesses, and the three service runtimes, so their cross-file
 twins stay counted as well. Each baseline is exact rather than a ceiling: a new twin fails as a
-regression, and a cleanup lowers the pinned number in the same change. CI runs the
+regression, and a cleanup lowers the pinned number in the same change. A last push-stage hook
+runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) over `target/`, dropping artifacts and
+incremental sessions older than five days; cargo never collects superseded builds, and this
+repository mints a fresh copy of every test binary on each lockfile or version change. The hook
+is a no-op where cargo-sweep is not installed. CI runs the
 same two hook stages, so passing locally and passing remotely are the same thing unless the
 hook table itself has a bug.
 
