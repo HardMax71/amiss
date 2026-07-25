@@ -25,7 +25,7 @@ contact with repositories nobody here wrote.
 Closed July 2026. A controller that publishes provider verdicts has to survive crashes,
 retries, and clock movement without losing a verdict or writing two.
 
-- [The delivery record has four states and no fifth](completed/delivery-record-contract.md)
+- [Claim, lease, result, and completion are one contract](completed/delivery-record-contract.md)
 - [Every accepted delivery carries a replay lifetime](completed/replay-lifetime.md)
 - [The record is ordinary files, not a database](completed/file-ledger-implementation.md)
 - [Lock growth is fixed and admission does not scan](completed/file-ledger-locks.md)
