@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Discovery, reference resolution, correlation, evaluation, and policy for Amiss"
 license.workspace = true
 repository.workspace = true
+exclude.workspace = true
 
 [lib]
 bench = false

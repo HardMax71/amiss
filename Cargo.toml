@@ -31,6 +31,8 @@ edition = "2024"
 rust-version = "1.97"
 license = "FSL-1.1-ALv2"
 repository = "https://github.com/HardMax71/amiss"
+# Tests reach for the unpublished fixtures crate and the repository corpus, so a consumer cannot run them.
+exclude = ["/tests", "/benches"]
 
 [workspace.dependencies]
 amiss-controller-bootstrap-fixture = { path = "controller/bootstrap-fixture" }
