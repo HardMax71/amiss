@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use amiss_fixtures::stage_symlink;
+use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{
     ForgeContext, RAW_EVIDENCE_DOMAIN, TARGET_LINE_PROJECTION_DOMAIN, TARGET_PROJECTION_DOMAIN,
@@ -21,7 +21,6 @@ use amiss_wire::resolution::{
     BlobContent, BlobMode, ExternalReference, InvalidReference, Missing, Target,
     UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
-use tempfile::TempDir;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -33,62 +32,37 @@ const MIXED_LINES: &[u8] = b"one\r\ntwo\nthree\rfour";
 const MIXED_LINES_OUTSIDE_CHANGED: &[u8] = b"changed before\r\ntwo\nchanged after\rchanged tail";
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn fixture() -> TempDir {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README"), "root doc\n").unwrap();
-    fs::write(root.join("llms.txt"), "advisory\n").unwrap();
-    fs::write(root.join("pointer.bin"), POINTER).unwrap();
-    fs::create_dir_all(root.join("docs/sub")).unwrap();
-    fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
-    fs::write(root.join("docs/data.json"), "{}\n").unwrap();
-    fs::write(root.join("docs/sub/keep.txt"), "kept\n").unwrap();
-    fs::create_dir_all(root.join("src")).unwrap();
-    fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
-    fs::write(root.join("src/lines.rs"), MIXED_LINES).unwrap();
-    fs::write(root.join("src/executable.sh"), MIXED_LINES).unwrap();
-    fs::write(
-        root.join("src/lines-outside-changed.rs"),
-        MIXED_LINES_OUTSIDE_CHANGED,
-    )
-    .unwrap();
-    fs::write(root.join("src/empty.rs"), b"").unwrap();
-    fs::create_dir_all(root.join("vendor")).unwrap();
-    fs::write(root.join("vendor/inside.md"), "hidden\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["update-index", "--chmod=+x", "src/executable.sh"]);
-    stage_symlink(root, "README", "alias").unwrap();
-    git(
-        root,
-        &[
-            "update-index",
-            "--add",
-            "--cacheinfo",
-            "160000,0123456789012345678901234567890123456789,module",
-        ],
-    );
-    // Staged as exact bytes rather than written to disk, because a macOS worktree
-    // would hand back the decomposed spelling and the fixture would be testing the
-    // filesystem instead of the resolver.
-    let blob = git(root, &["rev-parse", ":docs/sub/keep.txt"])
-        .trim()
-        .to_owned();
-    git(
-        root,
-        &[
-            "update-index",
-            "--add",
-            "--cacheinfo",
-            &format!("100644,{blob},docs/\u{e9}t\u{e9}.txt"),
-        ],
-    );
-    git(root, &["commit", "-qm", "fixture"]);
-    dir
+fn fixture() -> CommitChain {
+    staged_repository(&[
+        ("README", Staged::File(b"root doc\n")),
+        ("alias", Staged::Symlink("README")),
+        ("llms.txt", Staged::File(b"advisory\n")),
+        ("pointer.bin", Staged::File(POINTER.as_bytes())),
+        ("docs/guide.md", Staged::File(b"# Guide\n")),
+        ("docs/data.json", Staged::File(b"{}\n")),
+        ("docs/sub/keep.txt", Staged::File(b"kept\n")),
+        // Staged without a worktree file, because a macOS worktree would hand back
+        // the decomposed spelling and the fixture would be testing the filesystem.
+        ("docs/\u{e9}t\u{e9}.txt", Staged::Absent(b"kept\n")),
+        ("src/lib.rs", Staged::File(b"fn main() {}\n")),
+        ("src/lines.rs", Staged::File(MIXED_LINES)),
+        ("src/executable.sh", Staged::Executable(MIXED_LINES)),
+        (
+            "src/lines-outside-changed.rs",
+            Staged::File(MIXED_LINES_OUTSIDE_CHANGED),
+        ),
+        ("src/empty.rs", Staged::File(b"")),
+        ("vendor/inside.md", Staged::File(b"hidden\n")),
+        (
+            "module",
+            Staged::Submodule("0123456789012345678901234567890123456789"),
+        ),
+    ])
+    .unwrap()
 }
 
 struct Bed {
-    dir: TempDir,
+    dir: CommitChain,
     repo: Repository,
     git_resources: GitResources,
     scan_resources: ScanResources,
@@ -99,11 +73,12 @@ struct Bed {
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn bed_with(limits: ScanLimits) -> Bed {
     let dir = fixture();
-    let hex = git(dir.path(), &["rev-parse", "HEAD^{tree}"])
-        .trim()
-        .to_owned();
-    let tree = Oid::new(ObjectFormat::Sha1, hex).unwrap();
-    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let tree = Oid::new(
+        ObjectFormat::Sha1,
+        dir.commits.first().unwrap().tree.clone(),
+    )
+    .unwrap();
+    let repo = Repository::open(dir.root(), ObjectFormat::Sha1).unwrap();
     let mut git_resources = GitResources::new(GitLimits::CONTRACT);
     let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
     let snapshot = discover(
@@ -841,13 +816,13 @@ fn a_reused_target_cache_tracks_object_and_scan_scope() {
     };
 
     let changed = b"one\r\nchanged\nthree\rfour";
-    fs::write(bed.dir.path().join("src/lines.rs"), changed)
+    fs::write(bed.dir.root().join("src/lines.rs"), changed)
         .unwrap_or_else(|_defect| panic!("write changed target"));
-    git(bed.dir.path(), &["add", "src/lines.rs"]);
-    git(bed.dir.path(), &["commit", "-qm", "change target"]);
+    git(bed.dir.root(), &["add", "src/lines.rs"]);
+    git(bed.dir.root(), &["commit", "-qm", "change target"]);
     let tree = Oid::new(
         ObjectFormat::Sha1,
-        git(bed.dir.path(), &["rev-parse", "HEAD^{tree}"])
+        git(bed.dir.root(), &["rev-parse", "HEAD^{tree}"])
             .trim()
             .to_owned(),
     )
@@ -1163,11 +1138,12 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
 #[test]
 fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
     let dir = fixture();
-    let hex = git(dir.path(), &["rev-parse", "HEAD^{tree}"])
-        .trim()
-        .to_owned();
-    let tree = Oid::new(ObjectFormat::Sha1, hex).unwrap();
-    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let tree = Oid::new(
+        ObjectFormat::Sha1,
+        dir.commits.first().unwrap().tree.clone(),
+    )
+    .unwrap();
+    let repo = Repository::open(dir.root(), ObjectFormat::Sha1).unwrap();
     let mut git_resources = GitResources::new(GitLimits::CONTRACT);
     let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
     let includes = amiss_scan::Includes::default();

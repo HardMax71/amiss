@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -416,6 +417,8 @@ pub struct CommitPair {
     pub repo: String,
     pub base: String,
     pub candidate: String,
+    pub base_tree: String,
+    pub candidate_tree: String,
 }
 
 impl CommitPair {
@@ -426,42 +429,322 @@ impl CommitPair {
     }
 }
 
+/// Writes the `.git` skeleton a fixture repository needs: an object store, a
+/// heads directory, and a HEAD pointing at the branch commits will land on.
+///
+/// # Errors
+///
+/// Any filesystem failure, as plain I/O errors.
+pub fn init_repository(root: &Path) -> std::io::Result<()> {
+    let git_dir = root.join(".git");
+    std::fs::create_dir_all(git_dir.join("objects"))?;
+    std::fs::create_dir_all(git_dir.join("refs").join("heads"))?;
+    std::fs::write(git_dir.join("HEAD"), b"ref: refs/heads/main\n")
+}
+
+/// Commits everything under `root` except `.git`, on top of whatever HEAD
+/// names, staging the listed paths executable where they are ordinary files.
+/// Symbolic links are staged as links rather than followed.
+///
+/// # Errors
+///
+/// Any filesystem failure, or an entry that is neither a file, a directory,
+/// nor a symbolic link.
+pub fn commit_worktree(
+    root: &Path,
+    executables: &[&str],
+    message: &str,
+) -> std::io::Result<Commit> {
+    let mut staged = BTreeMap::new();
+    stage_directory(root, root, &mut staged)?;
+    for path in executables {
+        if let Some((mode, _oid)) = staged.get_mut(*path)
+            && mode == "100644"
+        {
+            "100755".clone_into(mode);
+        }
+    }
+    let tree = tree_from(root, &staged)?;
+    let parent = head_commit(root)?;
+    let parents: Vec<&str> = parent.iter().map(String::as_str).collect();
+    let id = commit_object(root, &tree, &parents, message)?;
+    std::fs::write(
+        root.join(".git").join("refs").join("heads").join("main"),
+        format!("{id}\n"),
+    )?;
+    let rows: Vec<(&[u8], &str)> = staged
+        .iter()
+        .map(|(path, (_mode, oid))| (path.as_bytes(), oid.as_str()))
+        .collect();
+    index_file(root, &rows)?;
+    Ok(Commit { id, tree })
+}
+
+fn head_commit(root: &Path) -> std::io::Result<Option<String>> {
+    let head = root.join(".git").join("refs").join("heads").join("main");
+    match std::fs::read_to_string(&head) {
+        Ok(text) => Ok(Some(text.trim().to_owned())),
+        Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(defect) => Err(defect),
+    }
+}
+
+fn stage_directory(
+    root: &Path,
+    directory: &Path,
+    staged: &mut BTreeMap<String, (String, String)>,
+) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.file_name().is_some_and(|name| name == ".git") {
+            continue;
+        }
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
+            stage_directory(root, &path, staged)?;
+            continue;
+        }
+        let relative = path
+            .strip_prefix(root)
+            .map_err(std::io::Error::other)?
+            .components()
+            .map(|part| {
+                part.as_os_str()
+                    .to_str()
+                    .ok_or_else(|| std::io::Error::other("fixture paths are utf-8"))
+            })
+            .collect::<std::io::Result<Vec<_>>>()?
+            .join("/");
+        let (mode, body) = if kind.is_symlink() {
+            let target = std::fs::read_link(&path)?;
+            ("120000", path_arg(&target).into_bytes())
+        } else if kind.is_file() {
+            ("100644", std::fs::read(&path)?)
+        } else {
+            return Err(std::io::Error::other("fixture trees hold files and links"));
+        };
+        staged.insert(
+            relative,
+            (mode.to_owned(), loose_object(root, "blob", &body)?),
+        );
+    }
+    Ok(())
+}
+
+/// What a fixture stages at one path.
+pub enum Staged<'a> {
+    /// Written to the worktree and staged as an ordinary file.
+    File(&'a [u8]),
+    /// Written to the worktree and staged executable.
+    Executable(&'a [u8]),
+    /// Staged as an ordinary file without touching the worktree, for a name a
+    /// filesystem would hand back in another spelling.
+    Absent(&'a [u8]),
+    /// Staged as a symbolic link to this target, without touching the worktree.
+    Symlink(&'a str),
+    /// Staged as a gitlink to this commit.
+    Submodule(&'a str),
+}
+
+/// Builds a one-commit repository whose tree holds exactly these entries.
+///
+/// # Errors
+///
+/// Any filesystem failure, or a submodule name that is not a full object name.
+pub fn staged_repository(entries: &[(&str, Staged<'_>)]) -> std::io::Result<CommitChain> {
+    let dir = tempfile::TempDir::new()?;
+    let root = dir.path();
+    let git_dir = root.join(".git");
+    std::fs::create_dir_all(git_dir.join("objects"))?;
+    std::fs::create_dir_all(git_dir.join("refs").join("heads"))?;
+    std::fs::write(git_dir.join("HEAD"), b"ref: refs/heads/main\n")?;
+
+    let mut staged = BTreeMap::new();
+    for (path, entry) in entries {
+        let (mode, oid) = match entry {
+            Staged::File(body) => {
+                write_bytes(root, path, body)?;
+                ("100644", loose_object(root, "blob", body)?)
+            }
+            Staged::Executable(body) => {
+                write_bytes(root, path, body)?;
+                ("100755", loose_object(root, "blob", body)?)
+            }
+            Staged::Absent(body) => ("100644", loose_object(root, "blob", body)?),
+            Staged::Symlink(target) => ("120000", loose_object(root, "blob", target.as_bytes())?),
+            Staged::Submodule(commit) => {
+                let _checked = oid_bytes(commit)?;
+                ("160000", (*commit).to_owned())
+            }
+        };
+        staged.insert((*path).to_owned(), (mode.to_owned(), oid));
+    }
+    let tree = tree_from(root, &staged)?;
+    let id = commit_object(root, &tree, &[], "fixture")?;
+    std::fs::write(
+        git_dir.join("refs").join("heads").join("main"),
+        format!("{id}\n"),
+    )?;
+    let rows: Vec<(&[u8], &str)> = staged
+        .iter()
+        .filter(|(_path, (mode, _oid))| mode != "160000")
+        .map(|(path, (_mode, oid))| (path.as_bytes(), oid.as_str()))
+        .collect();
+    index_file(root, &rows)?;
+    let repo = path_arg(root);
+    Ok(CommitChain {
+        dir,
+        repo,
+        commits: vec![Commit { id, tree }],
+    })
+}
+
+/// One commit of a fixture history: its own name and the name of its tree.
+pub struct Commit {
+    pub id: String,
+    pub tree: String,
+}
+
+/// A fixture history under a temporary root, one commit per step, each step
+/// written over the tree the previous one left.
+pub struct CommitChain {
+    dir: tempfile::TempDir,
+    pub repo: String,
+    pub commits: Vec<Commit>,
+}
+
+impl CommitChain {
+    /// The repository root, for tests that stage more on top.
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        self.dir.path()
+    }
+}
+
+/// Builds one commit per step, each named by its message and carrying the
+/// files written so far, so a later step may leave the tree unchanged.
+///
+/// # Errors
+///
+/// Any filesystem failure, as plain I/O errors.
+pub fn commit_chain(steps: &[(&str, &[(&str, &str)])]) -> std::io::Result<CommitChain> {
+    let dir = tempfile::TempDir::new()?;
+    let root = dir.path();
+    let git_dir = root.join(".git");
+    std::fs::create_dir_all(git_dir.join("objects"))?;
+    std::fs::create_dir_all(git_dir.join("refs").join("heads"))?;
+    std::fs::write(git_dir.join("HEAD"), b"ref: refs/heads/main\n")?;
+
+    let mut staged = BTreeMap::new();
+    let mut commits: Vec<Commit> = Vec::with_capacity(steps.len());
+    for (message, files) in steps {
+        let parents: Vec<&str> = commits
+            .last()
+            .map(|last| last.id.as_str())
+            .into_iter()
+            .collect();
+        let (id, tree) = commit_state(root, files, &mut staged, &parents, message)?;
+        commits.push(Commit { id, tree });
+    }
+    if let Some(head) = commits.last() {
+        std::fs::write(
+            git_dir.join("refs").join("heads").join("main"),
+            format!("{}\n", head.id),
+        )?;
+    }
+    let rows: Vec<(&[u8], &str)> = staged
+        .iter()
+        .map(|(path, (_mode, oid))| (path.as_bytes(), oid.as_str()))
+        .collect();
+    index_file(root, &rows)?;
+    let repo = path_arg(root);
+    Ok(CommitChain { dir, repo, commits })
+}
+
 /// Builds the base commit from `base` files, then the candidate commit from
 /// `candidate` files written over them. Parent directories appear as needed,
 /// and either commit may leave the tree unchanged.
 ///
 /// # Errors
 ///
-/// Any git or filesystem failure, as plain I/O errors.
+/// Any filesystem failure, as plain I/O errors.
 pub fn commit_pair(
     base: &[(&str, &str)],
     candidate: &[(&str, &str)],
 ) -> std::io::Result<CommitPair> {
-    let dir = tempfile::TempDir::new()?;
-    let root = dir.path();
-    git(root, &["init", "-q"])?;
-    for (path, body) in base {
-        write_file(root, path, body)?;
-    }
-    git(root, &["add", "."])?;
-    git(root, &["commit", "-q", "--allow-empty", "-m", "base"])?;
-    let base = git(root, &["rev-parse", "HEAD"])?.trim().to_owned();
-    for (path, body) in candidate {
-        write_file(root, path, body)?;
-    }
-    git(root, &["add", "."])?;
-    git(root, &["commit", "-q", "--allow-empty", "-m", "candidate"])?;
-    let candidate = git(root, &["rev-parse", "HEAD"])?.trim().to_owned();
-    let repo = path_arg(root);
+    let chain = commit_chain(&[("base", base), ("candidate", candidate)])?;
+    let mut built = chain.commits.into_iter();
+    let (Some(base), Some(candidate)) = (built.next(), built.next()) else {
+        return Err(std::io::Error::other("the fixture chain lost a commit"));
+    };
     Ok(CommitPair {
-        dir,
-        repo,
-        base,
-        candidate,
+        dir: chain.dir,
+        repo: chain.repo,
+        base: base.id,
+        candidate: candidate.id,
+        base_tree: base.tree,
+        candidate_tree: candidate.tree,
     })
 }
 
+fn commit_state(
+    root: &Path,
+    files: &[(&str, &str)],
+    staged: &mut BTreeMap<String, (String, String)>,
+    parents: &[&str],
+    message: &str,
+) -> std::io::Result<(String, String)> {
+    for (path, body) in files {
+        write_file(root, path, body)?;
+        staged.insert(
+            (*path).to_owned(),
+            (
+                "100644".to_owned(),
+                loose_object(root, "blob", body.as_bytes())?,
+            ),
+        );
+    }
+    let tree = tree_from(root, staged)?;
+    let commit = commit_object(root, &tree, parents, message)?;
+    Ok((commit, tree))
+}
+
+fn tree_from(root: &Path, files: &BTreeMap<String, (String, String)>) -> std::io::Result<String> {
+    let mut blobs = Vec::new();
+    let mut directories: BTreeMap<String, BTreeMap<String, (String, String)>> = BTreeMap::new();
+    for (path, entry) in files {
+        match path.split_once('/') {
+            None => blobs.push((path.clone(), entry.clone())),
+            Some((head, rest)) => {
+                directories
+                    .entry(head.to_owned())
+                    .or_default()
+                    .insert(rest.to_owned(), entry.clone());
+            }
+        }
+    }
+    let mut subtrees = Vec::new();
+    for (name, nested) in &directories {
+        subtrees.push((name.clone(), tree_from(root, nested)?));
+    }
+    let mut entries: Vec<(&str, &[u8], &str)> = blobs
+        .iter()
+        .map(|(name, (mode, oid))| (mode.as_str(), name.as_bytes(), oid.as_str()))
+        .collect();
+    entries.extend(
+        subtrees
+            .iter()
+            .map(|(name, oid)| ("40000", name.as_bytes(), oid.as_str())),
+    );
+    tree_object(root, &entries)
+}
+
 fn write_file(root: &Path, path: &str, body: &str) -> std::io::Result<()> {
+    write_bytes(root, path, body.as_bytes())
+}
+
+fn write_bytes(root: &Path, path: &str, body: &[u8]) -> std::io::Result<()> {
     let file = root.join(path);
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent)?;

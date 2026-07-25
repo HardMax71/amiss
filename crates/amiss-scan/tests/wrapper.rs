@@ -22,13 +22,8 @@ use amiss_wire::controls::{
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
-use tempfile::TempDir;
 
 const INSTANT: &str = "2026-07-12T10:00:00Z";
-
-fn git(dir: &Path, args: &[&str]) -> String {
-    amiss_fixtures::git(dir, args).unwrap()
-}
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -41,7 +36,7 @@ fn engine() -> EngineProvenance {
 /// candidate keeps it, so the structural finding is pre-existing and the
 /// base tree doubles as a reproducible adoption tree.
 struct Fixture {
-    _dir: TempDir,
+    _pair: amiss_fixtures::CommitChain,
     repo: Repository,
     base: Oid,
     candidate: Oid,
@@ -50,28 +45,28 @@ struct Fixture {
 }
 
 fn fixture(candidate_readme: &str) -> Fixture {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README.md"), "see [gone](missing.md)\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "base"]);
-    fs::write(root.join("README.md"), candidate_readme).unwrap();
-    fs::write(root.join("note.md"), "[readme](README.md)\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "candidate"]);
-    let base = git(root, &["rev-parse", "HEAD~1"]).trim().to_owned();
-    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    let base_tree = git(root, &["rev-parse", "HEAD~1^{tree}"]).trim().to_owned();
-    let candidate_tree = git(root, &["rev-parse", "HEAD^{tree}"]).trim().to_owned();
-    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let chain = amiss_fixtures::commit_chain(&[
+        ("base", &[("README.md", "see [gone](missing.md)\n")]),
+        (
+            "candidate",
+            &[
+                ("README.md", candidate_readme),
+                ("note.md", "[readme](README.md)\n"),
+            ],
+        ),
+    ])
+    .unwrap();
     Fixture {
-        _dir: dir,
-        repo,
-        base: Oid::new(ObjectFormat::Sha1, base).unwrap(),
-        candidate: Oid::new(ObjectFormat::Sha1, candidate).unwrap(),
-        base_tree,
-        candidate_tree,
+        repo: Repository::open(chain.root(), ObjectFormat::Sha1).unwrap(),
+        base: Oid::new(
+            ObjectFormat::Sha1,
+            chain.commits.first().unwrap().id.clone(),
+        )
+        .unwrap(),
+        candidate: Oid::new(ObjectFormat::Sha1, chain.commits.get(1).unwrap().id.clone()).unwrap(),
+        base_tree: chain.commits.first().unwrap().tree.clone(),
+        candidate_tree: chain.commits.get(1).unwrap().tree.clone(),
+        _pair: chain,
     }
 }
 
@@ -498,34 +493,20 @@ fn a_changed_fact_is_debt_worsened() {
 
 #[test]
 fn a_nonreproducing_adoption_binding_is_fatal() {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README.md"), "clean\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "ancient"]);
-    let ancient_tree = git(root, &["rev-parse", "HEAD^{tree}"]).trim().to_owned();
-    fs::write(root.join("README.md"), "see [gone](missing.md)\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "base"]);
-    fs::write(root.join("note.md"), "[readme](README.md)\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "candidate"]);
+    let chain = amiss_fixtures::commit_chain(&[
+        ("ancient", &[("README.md", "clean\n")]),
+        ("base", &[("README.md", "see [gone](missing.md)\n")]),
+        ("candidate", &[("note.md", "[readme](README.md)\n")]),
+    ])
+    .unwrap();
+    let ancient_tree = chain.commits.first().unwrap().tree.clone();
     let fx = Fixture {
-        repo: Repository::open(root, ObjectFormat::Sha1).unwrap(),
-        base: Oid::new(
-            ObjectFormat::Sha1,
-            git(root, &["rev-parse", "HEAD~1"]).trim().to_owned(),
-        )
-        .unwrap(),
-        candidate: Oid::new(
-            ObjectFormat::Sha1,
-            git(root, &["rev-parse", "HEAD"]).trim().to_owned(),
-        )
-        .unwrap(),
-        base_tree: git(root, &["rev-parse", "HEAD~1^{tree}"]).trim().to_owned(),
-        candidate_tree: git(root, &["rev-parse", "HEAD^{tree}"]).trim().to_owned(),
-        _dir: dir,
+        repo: Repository::open(chain.root(), ObjectFormat::Sha1).unwrap(),
+        base: Oid::new(ObjectFormat::Sha1, chain.commits.get(1).unwrap().id.clone()).unwrap(),
+        candidate: Oid::new(ObjectFormat::Sha1, chain.commits.get(2).unwrap().id.clone()).unwrap(),
+        base_tree: chain.commits.get(1).unwrap().tree.clone(),
+        candidate_tree: chain.commits.get(2).unwrap().tree.clone(),
+        _pair: chain,
     };
     let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
     let floor_digest = floor_input().floor.digest.to_string();
