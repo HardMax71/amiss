@@ -1,0 +1,563 @@
+{
+  "schema": "amiss/heading-anchor-vectors",
+  "contract": "heading-anchor",
+  "reference": {
+    "harvested": "2026-07-26",
+    "note": "Every expectation below was produced by the named implementation, not by this repository. A rule with no live pair is marked as transcribed.",
+    "rules": [
+      {
+        "name": "github",
+        "serves": [
+          "github.com",
+          "GitLab",
+          "Docusaurus",
+          "Hugo with autoHeadingIDType github"
+        ],
+        "expectations": "github-slugger 2.0.0 under node 22.22.1",
+        "cross_checked": "comrak 0.54.0, the engine gitlab-glfm-markdown wraps, agrees on all 9049 headings harvested from ten public repositories",
+        "source": "https://github.com/Flet/github-slugger/blob/main/index.js"
+      },
+      {
+        "name": "gitea",
+        "serves": [
+          "Gitea 1.27 repository files and wiki pages"
+        ],
+        "expectations": "transcribed from modules/markup/common/footnote.go CleanValue and modules/markup/html_node.go",
+        "cross_checked": "the fifty identities gitea.com publishes for gitea/awesome-gitea",
+        "source": "https://github.com/go-gitea/gitea/blob/main/modules/markup/common/footnote.go"
+      },
+      {
+        "name": "forgejo",
+        "serves": [
+          "Forgejo 16 repository files and wiki pages"
+        ],
+        "expectations": "transcribed from modules/markup/markdown/prefixed_id.go",
+        "cross_checked": "none; no live pair is pinned",
+        "source": "https://codeberg.org/forgejo/forgejo/src/branch/forgejo/modules/markup/markdown/prefixed_id.go"
+      },
+      {
+        "name": "mdbook",
+        "serves": [
+          "mdBook with smart punctuation off"
+        ],
+        "expectations": "mdbook 0.5.4 rendering one chapter per case",
+        "source": "https://github.com/rust-lang/mdBook/blob/master/crates/mdbook-html/src/utils.rs"
+      },
+      {
+        "name": "mdbook-smart",
+        "serves": [
+          "mdBook with its default smart punctuation"
+        ],
+        "expectations": "mdbook 0.5.4 rendering one chapter per case",
+        "source": "https://github.com/rust-lang/mdBook/blob/master/crates/mdbook-html/src/utils.rs"
+      },
+      {
+        "name": "goldmark",
+        "serves": [
+          "goldmark embedders that keep its own heading ids"
+        ],
+        "expectations": "goldmark 1.8.4 under go, reading the id it emits",
+        "source": "https://github.com/yuin/goldmark/blob/master/parser/parser.go"
+      },
+      {
+        "name": "python-markdown",
+        "serves": [
+          "MkDocs with the default toc slug"
+        ],
+        "expectations": "python-markdown 3.10 toc.slugify and toc.unique",
+        "source": "https://github.com/Python-Markdown/markdown/blob/master/markdown/extensions/toc.py"
+      },
+      {
+        "name": "pymdownx",
+        "serves": [
+          "MkDocs configured with pymdownx.slugs.slugify(case=lower)"
+        ],
+        "expectations": "pymdownx slugs, transcribed and executed under the same python",
+        "source": "https://github.com/facelessuser/pymdown-extensions/blob/main/pymdownx/slugs.py"
+      },
+      {
+        "name": "mdit-vue",
+        "serves": [
+          "VitePress",
+          "VuePress"
+        ],
+        "expectations": "@mdit-vue/shared slugify under node 22.22.1",
+        "source": "https://github.com/mdit-vue/mdit-vue/blob/main/packages/shared/src/slugify.ts"
+      },
+      {
+        "name": "kramdown",
+        "serves": [
+          "Jekyll",
+          "GitHub Pages"
+        ],
+        "expectations": "transcribed from converter/base.rb and executed under ruby",
+        "cross_checked": "none; no live pair is pinned",
+        "source": "https://github.com/gettalong/kramdown/blob/master/lib/kramdown/converter/base.rb"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "HA-001",
+      "description": "A punctuation run leaves one gap per character or one per run.",
+      "heading": "Setup & Config",
+      "ids": {
+        "github": "setup--config",
+        "gitea": "setup--config",
+        "forgejo": "setup--config",
+        "mdbook": "setup--config",
+        "mdbook-smart": "setup--config",
+        "goldmark": "setup--config",
+        "python-markdown": "setup-config",
+        "pymdownx": "setup--config",
+        "mdit-vue": "setup-config",
+        "kramdown": "setup--config"
+      }
+    },
+    {
+      "id": "HA-002",
+      "description": "An intraword underscore is a word character or a separator.",
+      "heading": "foo_bar baz",
+      "ids": {
+        "github": "foo_bar-baz",
+        "gitea": "foo_bar-baz",
+        "forgejo": "foo_bar-baz",
+        "mdbook": "foo_bar-baz",
+        "mdbook-smart": "foo_bar-baz",
+        "goldmark": "foo-bar-baz",
+        "python-markdown": "foo_bar-baz",
+        "pymdownx": "foo_bar-baz",
+        "mdit-vue": "foo-bar-baz",
+        "kramdown": "foobar-baz"
+      }
+    },
+    {
+      "id": "HA-003",
+      "description": "Two hyphens survive, collapse, or become an en dash.",
+      "heading": "A -- B",
+      "ids": {
+        "github": "a----b",
+        "gitea": "a----b",
+        "forgejo": "a----b",
+        "mdbook": "a----b",
+        "mdbook-smart": "a--b",
+        "goldmark": "a----b",
+        "python-markdown": "a-b",
+        "pymdownx": "a----b",
+        "mdit-vue": "a-b",
+        "kramdown": "a----b"
+      }
+    },
+    {
+      "id": "HA-004",
+      "description": "Three dots survive or become an ellipsis.",
+      "heading": "A ... B",
+      "ids": {
+        "github": "a--b",
+        "gitea": "a--b",
+        "forgejo": "a--b",
+        "mdbook": "a--b",
+        "mdbook-smart": "a--b",
+        "goldmark": "a--b",
+        "python-markdown": "a-b",
+        "pymdownx": "a--b",
+        "mdit-vue": "a-b",
+        "kramdown": "a--b"
+      }
+    },
+    {
+      "id": "HA-005",
+      "description": "Two spaces make two separators or one.",
+      "heading": "A  B",
+      "ids": {
+        "github": "a--b",
+        "gitea": "a--b",
+        "forgejo": "a--b",
+        "mdbook": "a--b",
+        "mdbook-smart": "a--b",
+        "goldmark": "a--b",
+        "python-markdown": "a-b",
+        "pymdownx": "a--b",
+        "mdit-vue": "a-b",
+        "kramdown": "a--b"
+      }
+    },
+    {
+      "id": "HA-006",
+      "description": "A percent sign is dropped everywhere.",
+      "heading": "100%",
+      "ids": {
+        "github": "100",
+        "gitea": "100",
+        "forgejo": "100",
+        "mdbook": "100",
+        "mdbook-smart": "100",
+        "goldmark": "100",
+        "python-markdown": "100",
+        "pymdownx": "100",
+        "mdit-vue": "_100",
+        "kramdown": "section"
+      }
+    },
+    {
+      "id": "HA-007",
+      "description": "A digits-only identity is left alone or prefixed.",
+      "heading": "2026",
+      "ids": {
+        "github": "2026",
+        "gitea": "2026",
+        "forgejo": "2026",
+        "mdbook": "2026",
+        "mdbook-smart": "2026",
+        "goldmark": "2026",
+        "python-markdown": "2026",
+        "pymdownx": "2026",
+        "mdit-vue": "_2026",
+        "kramdown": "section"
+      }
+    },
+    {
+      "id": "HA-008",
+      "description": "A leading digit is left alone or prefixed.",
+      "heading": "3D printing",
+      "ids": {
+        "github": "3d-printing",
+        "gitea": "3d-printing",
+        "forgejo": "3d-printing",
+        "mdbook": "3d-printing",
+        "mdbook-smart": "3d-printing",
+        "goldmark": "3d-printing",
+        "python-markdown": "3d-printing",
+        "pymdownx": "3d-printing",
+        "mdit-vue": "_3d-printing",
+        "kramdown": "d-printing"
+      }
+    },
+    {
+      "id": "HA-009",
+      "description": "Hyphens at both ends survive or are trimmed.",
+      "heading": "-hyphen-",
+      "ids": {
+        "github": "-hyphen-",
+        "gitea": "-hyphen-",
+        "forgejo": "-hyphen-",
+        "mdbook": "-hyphen-",
+        "mdbook-smart": "-hyphen-",
+        "goldmark": "-hyphen-",
+        "python-markdown": "-hyphen-",
+        "pymdownx": "-hyphen-",
+        "mdit-vue": "hyphen",
+        "kramdown": "hyphen-"
+      }
+    },
+    {
+      "id": "HA-010",
+      "description": "Dots inside a word are dropped.",
+      "heading": "a.b.c",
+      "ids": {
+        "github": "abc",
+        "gitea": "abc",
+        "forgejo": "abc",
+        "mdbook": "abc",
+        "mdbook-smart": "abc",
+        "goldmark": "abc",
+        "python-markdown": "abc",
+        "pymdownx": "abc",
+        "mdit-vue": "a-b-c",
+        "kramdown": "abc"
+      }
+    },
+    {
+      "id": "HA-011",
+      "description": "Plus and hash signs are dropped.",
+      "heading": "C++ / C#",
+      "ids": {
+        "github": "c--c",
+        "gitea": "c--c",
+        "forgejo": "c--c",
+        "mdbook": "c--c",
+        "mdbook-smart": "c--c",
+        "goldmark": "c--c",
+        "python-markdown": "c-c",
+        "pymdownx": "c--c",
+        "mdit-vue": "c-c",
+        "kramdown": "c--c"
+      }
+    },
+    {
+      "id": "HA-012",
+      "description": "A code span contributes its literal text.",
+      "heading": "What is `code`?",
+      "ids": {
+        "github": "what-is-code",
+        "gitea": "what-is-code",
+        "forgejo": "what-is-code",
+        "mdbook": "what-is-code",
+        "mdbook-smart": "what-is-code",
+        "goldmark": "what-is-code",
+        "python-markdown": "what-is-code",
+        "pymdownx": "what-is-code",
+        "mdit-vue": "what-is-code",
+        "kramdown": "what-is-code"
+      }
+    },
+    {
+      "id": "HA-013",
+      "description": "Precomposed Latin survives or folds to ASCII.",
+      "heading": "Résumé & CV",
+      "ids": {
+        "github": "résumé--cv",
+        "gitea": "résumé--cv",
+        "forgejo": "résumé--cv",
+        "mdbook": "résumé--cv",
+        "mdbook-smart": "résumé--cv",
+        "goldmark": "rsum--cv",
+        "python-markdown": "resume-cv",
+        "pymdownx": "résumé--cv",
+        "mdit-vue": "resume-cv",
+        "kramdown": "rsum--cv"
+      }
+    },
+    {
+      "id": "HA-014",
+      "description": "Decomposed Latin folds, keeps the mark, or drops it.",
+      "heading": "Café latte",
+      "ids": {
+        "github": "café-latte",
+        "gitea": "cafe-latte",
+        "forgejo": "cafe-latte",
+        "mdbook": "cafe-latte",
+        "mdbook-smart": "cafe-latte",
+        "goldmark": "cafe-latte",
+        "python-markdown": "cafe-latte",
+        "pymdownx": "café-latte",
+        "mdit-vue": "cafe-latte",
+        "kramdown": "cafe-latte"
+      }
+    },
+    {
+      "id": "HA-015",
+      "description": "The Turkish dotted capital is one letter or two.",
+      "heading": "İstanbul",
+      "ids": {
+        "github": "i̇stanbul",
+        "gitea": "istanbul",
+        "forgejo": "istanbul",
+        "mdbook": "istanbul",
+        "mdbook-smart": "istanbul",
+        "goldmark": "stanbul",
+        "python-markdown": "istanbul",
+        "pymdownx": "istanbul",
+        "mdit-vue": "istanbul",
+        "kramdown": "stanbul"
+      }
+    },
+    {
+      "id": "HA-016",
+      "description": "CJK survives, is dropped, or empties the identity.",
+      "heading": "日本語の見出し",
+      "ids": {
+        "github": "日本語の見出し",
+        "gitea": "日本語の見出し",
+        "forgejo": "日本語の見出し",
+        "mdbook": "日本語の見出し",
+        "mdbook-smart": "日本語の見出し",
+        "goldmark": "heading",
+        "python-markdown": "_1",
+        "pymdownx": "日本語の見出し",
+        "mdit-vue": "日本語の見出し",
+        "kramdown": "section"
+      }
+    },
+    {
+      "id": "HA-017",
+      "description": "A Bengali virama is a mark, so only a mark-keeping rule holds it.",
+      "heading": "ইন্সটল",
+      "ids": {
+        "github": "ইন্সটল",
+        "gitea": "ইনসটল",
+        "forgejo": "ইনসটল",
+        "mdbook": "ইনসটল",
+        "mdbook-smart": "ইনসটল",
+        "goldmark": "heading",
+        "python-markdown": "_1",
+        "pymdownx": "ইনসটল",
+        "mdit-vue": "ইন্সটল",
+        "kramdown": "section"
+      }
+    },
+    {
+      "id": "HA-018",
+      "description": "An emoji is a symbol and is dropped.",
+      "heading": "Emoji 🎉 party",
+      "ids": {
+        "github": "emoji--party",
+        "gitea": "emoji--party",
+        "forgejo": "emoji--party",
+        "mdbook": "emoji--party",
+        "mdbook-smart": "emoji--party",
+        "goldmark": "emoji--party",
+        "python-markdown": "emoji-party",
+        "pymdownx": "emoji--party",
+        "mdit-vue": "emoji-🎉-party",
+        "kramdown": "emoji--party"
+      }
+    },
+    {
+      "id": "HA-019",
+      "description": "A variation selector is a mark, invisible but kept by some rules.",
+      "heading": "❤️ Sponsors",
+      "ids": {
+        "github": "️-sponsors",
+        "gitea": "-sponsors",
+        "forgejo": "-sponsors",
+        "mdbook": "-sponsors",
+        "mdbook-smart": "-sponsors",
+        "goldmark": "-sponsors",
+        "python-markdown": "sponsors",
+        "pymdownx": "-sponsors",
+        "mdit-vue": "❤️-sponsors",
+        "kramdown": "sponsors"
+      }
+    },
+    {
+      "id": "HA-020",
+      "description": "An ideographic heading with a digit.",
+      "heading": "第 1 章",
+      "ids": {
+        "github": "第-1-章",
+        "gitea": "第-1-章",
+        "forgejo": "第-1-章",
+        "mdbook": "第-1-章",
+        "mdbook-smart": "第-1-章",
+        "goldmark": "-1-",
+        "python-markdown": "1",
+        "pymdownx": "第-1-章",
+        "mdit-vue": "第-1-章",
+        "kramdown": "section"
+      }
+    },
+    {
+      "id": "HA-021",
+      "description": "Nothing survives the filter, so the empty rules diverge.",
+      "heading": "...",
+      "ids": {
+        "github": "",
+        "gitea": null,
+        "forgejo": "heading",
+        "mdbook": "",
+        "mdbook-smart": "",
+        "goldmark": "heading",
+        "python-markdown": "_1",
+        "pymdownx": "_1",
+        "mdit-vue": "",
+        "kramdown": "section"
+      }
+    },
+    {
+      "id": "HA-022",
+      "description": "Umlauts survive or fold.",
+      "heading": "Ünïcödé Ähnlich",
+      "ids": {
+        "github": "ünïcödé-ähnlich",
+        "gitea": "ünïcödé-ähnlich",
+        "forgejo": "ünïcödé-ähnlich",
+        "mdbook": "ünïcödé-ähnlich",
+        "mdbook-smart": "ünïcödé-ähnlich",
+        "goldmark": "ncd-hnlich",
+        "python-markdown": "unicode-ahnlich",
+        "pymdownx": "ünïcödé-ähnlich",
+        "mdit-vue": "unicode-ahnlich",
+        "kramdown": "ncd-hnlich"
+      }
+    },
+    {
+      "id": "HA-023",
+      "description": "A Roman numeral is a letter number, not a letter.",
+      "heading": "Ⅻ chapter",
+      "ids": {
+        "github": "ⅻ-chapter",
+        "gitea": "ⅻ-chapter",
+        "forgejo": "ⅻ-chapter",
+        "mdbook": "ⅻ-chapter",
+        "mdbook-smart": "ⅻ-chapter",
+        "goldmark": "-chapter",
+        "python-markdown": "xii-chapter",
+        "pymdownx": "ⅻ-chapter",
+        "mdit-vue": "xii-chapter",
+        "kramdown": "chapter"
+      }
+    },
+    {
+      "id": "HA-024",
+      "description": "A no-break space is whitespace to some rules and nothing to others.",
+      "heading": "Command Duration",
+      "ids": {
+        "github": "commandduration",
+        "gitea": "command-duration",
+        "forgejo": "command-duration",
+        "mdbook": "command-duration",
+        "mdbook-smart": "command-duration",
+        "goldmark": "commandduration",
+        "python-markdown": "command-duration",
+        "pymdownx": "commandduration",
+        "mdit-vue": "command-duration",
+        "kramdown": "commandduration"
+      }
+    }
+  ],
+  "documents": [
+    {
+      "id": "HD-001",
+      "rule": "github",
+      "document": "probe.md",
+      "identities": "probe.github.ids",
+      "prefix": "user-content-",
+      "renderer": "api.github.com/markdown",
+      "harvested": "2026-07-26",
+      "licence": "the probe document is this repository's own"
+    },
+    {
+      "id": "HD-002",
+      "rule": "mdbook-smart",
+      "document": "probe.md",
+      "identities": "probe.mdbook-smart.ids",
+      "prefix": "",
+      "renderer": "mdbook 0.5.4, default configuration",
+      "harvested": "2026-07-26",
+      "licence": "the probe document is this repository's own"
+    },
+    {
+      "id": "HD-003",
+      "rule": "python-markdown",
+      "document": "probe.md",
+      "identities": "probe.python-markdown.ids",
+      "prefix": "",
+      "renderer": "python-markdown 3.10 with toc and attr_list",
+      "harvested": "2026-07-26",
+      "licence": "the probe document is this repository's own"
+    },
+    {
+      "id": "HD-004",
+      "rule": "gitea",
+      "document": "awesome-gitea.md",
+      "identities": "awesome-gitea.gitea.ids",
+      "prefix": "user-content-",
+      "renderer": "gitea.com",
+      "harvested": "2026-07-26",
+      "source": "https://gitea.com/gitea/awesome-gitea",
+      "licence": "CC0-1.0"
+    },
+    {
+      "id": "HD-005",
+      "rule": "mdit-vue",
+      "document": "starship-ja.md",
+      "identities": "starship-ja.mdit-vue.ids",
+      "prefix": "",
+      "renderer": "starship.rs/ja-JP/advanced-config/, VitePress",
+      "harvested": "2026-07-26",
+      "source": "https://github.com/starship/starship",
+      "licence": "ISC"
+    }
+  ]
+}

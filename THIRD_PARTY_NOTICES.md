@@ -15,6 +15,8 @@ from the locked four-platform Cargo graph by `scripts/release-licenses.sh` witho
 | `micromark-mdxjs-esm-3.0.0.test.js` | `micromark-extension-mdxjs-esm` `7cc9131` | MIT, copyright 2020 Titus Wormer. |
 | `micromark-gfm-footnote-2.1.0.test.js` and `gfm-footnote-fixtures/` | `micromark-extension-gfm-footnote` `df527f5` | MIT, copyright 2021 Titus Wormer. The HTML files record GitHub's rendering of the paired fixture documents. |
 | `micromark-gfm-strikethrough-2.1.0.test.js` | `micromark-extension-gfm-strikethrough` `a3a75cc` | MIT, copyright 2020 Titus Wormer. |
+| `corpus/third_party/anchor-fixtures/awesome-gitea.md` | `gitea/awesome-gitea` on gitea.com, fetched 2026-07-26 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The paired `.ids` file records the heading identities gitea.com published for it. |
+| `corpus/third_party/anchor-fixtures/starship-ja.md` | `starship/starship` `docs/ja-JP/advanced-config/README.md`, fetched 2026-07-26 | ISC, copyright Starship Contributors. The paired `.ids` file records the identities starship.rs published for it. |
 
 `corpus/parser-profile-corpus.json` is a composite generated from those inputs and Amiss's
 extraction results. Source-derived material remains under its upstream terms; the selection,

@@ -23,13 +23,13 @@ fn only(extraction: &Extraction) -> Heading {
     headings.remove(0)
 }
 
-/// The text every renderer slugs by: literal code, image alt text, and link
-/// labels, with emphasis and raw HTML contributing nothing of their own.
+/// The text every renderer slugs by: literal code and link labels, with
+/// emphasis, images and raw HTML contributing nothing of their own.
 #[test]
 fn heading_text_is_the_rendered_text_content() {
     let source = "## A *b* `c` [d](x) ![e](i.png) <b>f</b> g\n";
     let got = extraction(Adapter::Markdown, source);
-    assert_eq!(texts(&got), vec!["A b c d e f g".to_owned()]);
+    assert_eq!(texts(&got), vec!["A b c d  f g".to_owned()]);
 }
 
 #[test]
