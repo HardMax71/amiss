@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/HardMax71/amiss/compare/v0.9.1...v0.10.0) - 2026-07-26
+
+### Changes
+
+- Read the identity an MDX heading declares in a comment
+- Raise the report reservation past the largest documentation sets
+- Skip the fixture trees and raise the changelog ceiling
+- Read the identities a document declares outright
+- Answer a router spelling instead of reporting it missing
+- Pin what a documentation router serves
+- Anchor the headings a document writes as raw HTML
+- Answer a heading anchor instead of declining to
+- Pin what ten renderers call a heading
+- Publish the headings and anchors a renderer would read
+- Stop saying the heading is left unchecked
+
 ## [0.9.1](https://github.com/HardMax71/amiss/compare/v0.9.0...v0.9.1) - 2026-07-25
 
 ### Changes
