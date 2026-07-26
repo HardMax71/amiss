@@ -42,6 +42,10 @@ that identity for itself, which is how `[](){#anchor-point}` and a `{#section}` 
 paragraph work; an attribute block trailing other text on the same line declares nothing,
 and one inside a fence is code. The extension reads the block in the
 document's own literal text, so a block inside inline code is code and declares nothing.
+In MDX the attribute spelling is an expression, so Docusaurus writes the identity as a
+comment instead, `### \`noIndex\` {/* #noIndex */}`, and takes it as written with its case
+intact. That comment ends the heading or it declares nothing, which is
+`parseMarkdownHeadingId`'s own rule and the reason `{/* #id */} after` names nothing.
 Every declared identity joins the union whatever the renderer, because it is authored
 rather than derived, and accepting one a given renderer would not publish can only leave a
 finding unreported, never invent one.
@@ -73,7 +77,7 @@ python-markdown 3.10, pymdownx, `@mdit-vue/shared`, and kramdown's own generator
 remaining three are transcribed from Gitea's `CleanValue`, Forgejo's `prefixedIDs`, and
 mdBook's `id_from_content`.
 
-Seven documents, in
+Eight documents, in
 [`corpus/third_party/anchor-fixtures/`](https://github.com/HardMax71/amiss/tree/main/corpus/third_party/anchor-fixtures),
 carry what a renderer actually published for them, harvested 2026-07-26:
 
@@ -84,6 +88,7 @@ carry what a renderer actually published for them, harvested 2026-07-26:
 | `probe.md` | python-markdown 3.10 with `toc` and `attr_list` | 28 |
 | `probe-html.md`, this repository's own | github.com file view | 9 |
 | `probe-attr.md`, this repository's own | python-markdown 3.10 with `toc`, `attr_list` and `fenced_code` | 7 |
+| `probe-mdx-heading.mdx`, this repository's own | `@docusaurus/utils` 3.10.2, `parseMarkdownHeadingId` | 3 |
 | `awesome-gitea.md`, CC0 | gitea.com | 50 |
 | `starship-ja.md`, ISC | starship.rs, VitePress | 32 |
 
@@ -95,6 +100,12 @@ would come back empty rather than disagreeing.
 The Gitea pair is the only live evidence for that rule and the only place its missing
 duplicate suffix is visible: that one page publishes fifteen identities twice, so an anchor
 into it is ambiguous on Gitea and unique on Forgejo, for the same file.
+
+`probe-mdx-heading.mdx` is the same question in MDX, answered by the function Docusaurus
+parses headings with. Three of its seven headings declare an identity and four do not: one
+whose comment is followed by text, one with no identity in the comment, one whose identity
+carries a space, and the plain `{#id}` spelling, which that syntax does not read. The
+identity `a{b}` is in the set because their expression allows it.
 
 `probe-attr.md` is the declared identities: four heading spellings, an empty link carrying
 one, and a paragraph carrying one on its own last line. Five forms declare nothing, and they

@@ -265,6 +265,12 @@ carrying one on their own last line, and the five forms that declare nothing, in
 among them. python-markdown
 3.10 with `attr_list` answered for it, since that extension is where the syntax is defined.
 
+`probe-mdx-heading.mdx` asks the same question of MDX, where the attribute spelling is an
+expression and Docusaurus writes the identity as a comment. Its pair comes from
+`@docusaurus/utils` 3.10.2, run over the file's own headings through the
+`parseMarkdownHeadingId` the loader shares, and it records the three that declare an
+identity beside four forms that declare none.
+
 The two harvested documents cover what the probe cannot reach. `awesome-gitea.md` is fifty
 headings as gitea.com renders them, which is the only live evidence for Gitea's rule and the
 only place its missing duplicate suffix shows: that page publishes fifteen identities twice.

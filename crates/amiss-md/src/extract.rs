@@ -294,7 +294,15 @@ impl Sweep<'_> {
             }
             Node::Html(_) => self.html.push(span_of(node)?),
             Node::Heading(_) => {
-                let (text, attribute) = split_attribute(&text_content(node), trailing_text(node));
+                let content = text_content(node);
+                let (text, attribute) = mdx_comment_attribute(node).map_or_else(
+                    || split_attribute(&content, trailing_text(node)),
+                    |id| {
+                        let kept = content.trim_end();
+                        let suffix = content.get(kept.len()..).unwrap_or_default().to_owned();
+                        (kept.to_owned(), Some(HeadingAttribute { id, suffix }))
+                    },
+                );
                 self.headings.push(Heading {
                     text,
                     attribute,
@@ -748,6 +756,22 @@ fn text_content(node: &Node) -> String {
     out
 }
 
+/// Docusaurus writes a heading's identity as an MDX comment, because the
+/// attribute spelling is an expression there. The comment is the heading's last
+/// child and the identity is taken as written, case and all.
+fn mdx_comment_attribute(node: &Node) -> Option<String> {
+    let Node::MdxTextExpression(expression) = node.children()?.last()? else {
+        return None;
+    };
+    let inner = expression
+        .value
+        .strip_prefix("/*")?
+        .strip_suffix("*/")?
+        .trim()
+        .strip_prefix('#')?;
+    (!inner.is_empty() && !inner.contains(char::is_whitespace)).then(|| inner.to_owned())
+}
+
 /// The literal text a block ends with, which is where `attr_list` looks for an
 /// attribute block. Anything else last, inline code above all, means the block
 /// carries none however its flattened content reads.
@@ -821,8 +845,10 @@ fn attribute_id(inner: &str) -> Option<String> {
             bare
         } else if let Some(raw) = item.strip_prefix("id=") {
             raw.trim_matches(['"', '\''])
-        } else {
+        } else if item.starts_with('.') || item.contains('=') {
             continue;
+        } else {
+            return None;
         };
         if value.is_empty() {
             return None;
