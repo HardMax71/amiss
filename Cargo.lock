@@ -386,6 +386,8 @@ dependencies = [
  "stats_alloc",
  "strum",
  "tempfile",
+ "unicode-general-category",
+ "unicode-normalization",
 ]
 
 [[package]]

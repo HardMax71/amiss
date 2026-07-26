@@ -42,6 +42,7 @@ ten of those links, and the tool cannot pass its own strictest gate.
 | `third_party/micromark-gfm-footnote-2.1.0.test.js` | micromark-extension-gfm-footnote, commit `df527f5` | 18 |
 | `third_party/micromark-gfm-strikethrough-2.1.0.test.js` | micromark-extension-gfm-strikethrough, commit `a3a75cc` | 11 |
 | `third_party/gfm-footnote-fixtures/` | the same suite's documents and github.com's HTML for them | 29 |
+| `third_party/anchor-fixtures/` | documents and the heading identities five renderers published for them | 5 |
 
 The five JavaScript suites are the grammars' own fixtures, so the harness reads each
 `micromark(...)` call out of them: the first argument is the source, an enclosing `assert.throws`
@@ -234,6 +235,32 @@ unwinds instead of aborting, the parse is guarded, and those two documents come 
 
 The same table settles what a grammar rejection is: it is attributable to the source, so an
 unmatched JSX tag is `DOCUMENT_INVALID`, not a parser failure.
+
+## The heading-anchor fixtures
+
+`third_party/anchor-fixtures/` answers a question the parser goldens cannot: what identity a
+renderer builds from a heading. Each pair is one document and the identities one renderer
+published for it, harvested on 2026-07-26 and read by
+[`spec/examples/heading-anchor-vectors.json`](../spec/examples/heading-anchor-vectors.json),
+which names the renderer, the harvest, and the prefix to strip for every pair.
+
+`probe.md` is this repository's own document. It runs one heading per divergence: punctuation
+runs, intraword underscores, decomposed Latin, the Turkish dotted capital, CJK, a Bengali
+virama, an emoji variation selector, a digits-only heading, both attribute spellings, and a
+repeated heading. It was rendered by github.com's markdown API, by mdbook 0.5.4 in its default
+configuration, and by python-markdown 3.10 with `toc` and `attr_list`, so three renderers
+answer for the same bytes.
+
+The two harvested documents cover what the probe cannot reach. `awesome-gitea.md` is fifty
+headings as gitea.com renders them, which is the only live evidence for Gitea's rule and the
+only place its missing duplicate suffix shows: that page publishes fifteen identities twice.
+`starship-ja.md` is a VitePress page in Japanese, where mdit-vue's separator class and its
+NFKD pass both matter.
+
+Renderer drift is the reason these are pinned rather than computed. Gitea moved heading
+identities out of goldmark and into an HTML post-processor in January 2026, and mdBook
+rewrote its own generator in September 2025. A rule that silently stopped matching its
+renderer would otherwise look exactly like a rule that still matches.
 
 ## Coverage, and what is missing
 

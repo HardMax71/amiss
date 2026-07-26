@@ -666,8 +666,10 @@ fn union(mut spans: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     out
 }
 
-/// The text a renderer slugs a heading by: text, code and math verbatim, the
-/// alt text of images, and nothing from raw HTML, MDX, or a footnote call.
+/// The text a renderer slugs a heading by: text with code and math verbatim,
+/// and nothing from an image, raw HTML, MDX, or a footnote call. An image
+/// carries its alt text in an attribute, which is not element text, so no
+/// renderer reads it here.
 fn text_content(node: &Node) -> String {
     let mut out = String::new();
     let mut stack = vec![node];
@@ -678,12 +680,12 @@ fn text_content(node: &Node) -> String {
             Node::InlineMath(math) => out.push_str(&math.value),
             Node::Code(code) => out.push_str(&code.value),
             Node::Math(math) => out.push_str(&math.value),
-            Node::Image(image) => out.push_str(&image.alt),
-            Node::ImageReference(reference) => out.push_str(&reference.alt),
             Node::Break(_)
             | Node::Definition(_)
             | Node::FootnoteReference(_)
             | Node::Html(_)
+            | Node::Image(_)
+            | Node::ImageReference(_)
             | Node::MdxFlowExpression(_)
             | Node::MdxJsxFlowElement(_)
             | Node::MdxJsxTextElement(_)
