@@ -15,6 +15,7 @@
 - [Snapshots](snapshots.md)
 - [Discovery](discovery.md)
 - [Resolution](resolution.md)
+  - [What ten renderers call a heading](anchor-rules.md)
 - [Correlation and impact](correlation.md)
 - [The report](report.md)
 - [Limits and refusals](limits.md)

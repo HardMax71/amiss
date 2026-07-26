@@ -18,6 +18,10 @@ or used as a gate; small denominators make it especially noisy.
 
 Ten repositories, scanned 2026-07-18 with the v0.5.1 release build under
 `--profile observe`, each from its latest release tag to that day's default-branch head.
+That build resolved no heading anchors, so every reference counted here is a path or a line
+range. The same ten trees later supplied the anchor measurement behind
+[What ten renderers call a heading](anchor-rules.md), which is a separate study and not a
+row on this page.
 Two bases bend that convention: ripgrep tags rarely, so its base is the 150th ancestor
 of its head, and alacritty tags on release branches, so its base is the latest stable
 tag's merge point with master.

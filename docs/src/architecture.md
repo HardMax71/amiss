@@ -44,7 +44,8 @@ moves any of those moves the manifest, and review sees the diff.
 
 `amiss-scan` is the evaluation itself: discovery, resolution, correlation, the
 base-versus-candidate comparison, policy, and report construction. It is a library that
-does no I/O beyond the store handed to it.
+does no I/O beyond the store handed to it. It also carries the ten heading-identity rules,
+each pinned against the renderer it models rather than written from its documentation.
 
 `amiss` is the binary: the closed public command grammar, the in-process run, the two output
 formats, and a private sealed entry reserved for the bootstrap. `amiss-bootstrap` validates a
