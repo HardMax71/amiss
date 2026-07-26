@@ -496,6 +496,10 @@ fn heading_value(heading: &Heading) -> Value {
     });
     Value::Object(vec![
         ("attribute".to_owned(), attribute),
+        (
+            "source".to_owned(),
+            Value::String(heading.source.as_str().to_owned()),
+        ),
         ("span".to_owned(), span_value(heading.span)),
         ("text".to_owned(), Value::String(heading.text.clone())),
     ])

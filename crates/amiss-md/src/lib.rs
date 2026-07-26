@@ -8,6 +8,7 @@ pub mod profile;
 
 pub use accounting::{AnalyzeError, Fault, Work, charge};
 pub use extract::{
-    Analysis, BlockKind, Extraction, Heading, HeadingAttribute, Occurrence, Opaque, analyze,
+    Analysis, BlockKind, Extraction, Heading, HeadingAttribute, HeadingSource, Occurrence, Opaque,
+    analyze,
 };
 pub use frontmatter::Region;

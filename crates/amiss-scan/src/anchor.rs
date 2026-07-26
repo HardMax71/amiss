@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use amiss_md::Heading;
+use amiss_md::{Heading, HeadingSource};
 use unicode_general_category::{GeneralCategory, get_general_category};
 use unicode_normalization::UnicodeNormalization;
 
@@ -101,6 +101,15 @@ pub enum Attribute {
     Honored,
 }
 
+/// Whether the renderer builds an identity from a heading written as raw HTML.
+/// The ones that do run over the rendered document rather than over the
+/// Markdown tree, so they see both kinds in one sequence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RawHtml {
+    Anchored,
+    Ignored,
+}
+
 /// How a repeated identity is made unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Duplicates {
@@ -128,6 +137,7 @@ pub struct AnchorRule {
     pub empty: Empty,
     pub duplicates: Duplicates,
     pub attribute: Attribute,
+    pub raw_html: RawHtml,
 }
 
 /// Every renderer rule the resolver knows. Adding one can only grow the set an
@@ -150,6 +160,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
+        raw_html: RawHtml::Anchored,
     },
     AnchorRule {
         name: "gitea",
@@ -167,6 +178,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Drop,
         duplicates: Duplicates::Collide,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "forgejo",
@@ -184,6 +196,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Fill("heading"),
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "mdbook",
@@ -201,6 +214,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "mdbook-smart",
@@ -218,6 +232,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "goldmark",
@@ -235,6 +250,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Fill("heading"),
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "python-markdown",
@@ -252,6 +268,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Keep,
         duplicates: Duplicates::Underscore,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "pymdownx",
@@ -269,6 +286,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Keep,
         duplicates: Duplicates::Underscore,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "mdit-vue",
@@ -286,6 +304,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
+        raw_html: RawHtml::Ignored,
     },
     AnchorRule {
         name: "kramdown",
@@ -303,6 +322,7 @@ pub const RULES: [AnchorRule; 10] = [
         empty: Empty::Fill("section"),
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
+        raw_html: RawHtml::Ignored,
     },
 ];
 
@@ -324,6 +344,9 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
     let mut taken: BTreeSet<String> = BTreeSet::new();
     let mut out = Vec::with_capacity(headings.len());
     for heading in headings {
+        if heading.source == HeadingSource::RawHtml && rule.raw_html == RawHtml::Ignored {
+            continue;
+        }
         let base = match (&heading.attribute, rule.attribute) {
             (Some(attribute), Attribute::Honored) => attribute.id.clone(),
             (Some(attribute), Attribute::Literal) => {

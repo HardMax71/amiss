@@ -1,4 +1,4 @@
-use amiss_md::{Extraction, Heading, analyze};
+use amiss_md::{Extraction, Heading, HeadingSource, analyze};
 use amiss_wire::model::Adapter;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
@@ -131,6 +131,77 @@ fn an_mdx_element_in_a_heading_contributes_no_text_and_no_anchor() {
     let got = extraction(Adapter::Mdx, source);
     assert_eq!(texts(&got), vec!["Title ".to_owned()]);
     assert!(got.html_anchors.is_empty());
+}
+
+/// github.com anchors a heading written as raw HTML, so its text is recorded
+/// beside the Markdown ones: nested tags and comments contribute nothing,
+/// references decode, and the whitespace a wrapped element carries survives.
+#[test]
+fn raw_html_headings_are_recorded_with_their_text_content() {
+    let source = concat!(
+        "<h1 align=\"center\"><code>tool</code></h1>\n\n",
+        "<div>\n  <h2>A &amp; B<!-- note --> <em>c</em></h2>\n</div>\n\n",
+        "<h3>\n  Wrapped\n</h3>\n"
+    );
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        texts(&got),
+        vec![
+            "tool".to_owned(),
+            "A & B c".to_owned(),
+            "\n  Wrapped\n".to_owned()
+        ]
+    );
+    assert!(
+        got.headings
+            .iter()
+            .all(|heading| heading.source == HeadingSource::RawHtml),
+        "each came from raw HTML"
+    );
+}
+
+/// The span covers the whole element, so a raw-HTML heading sorts into
+/// document order with the Markdown headings around it.
+#[test]
+fn markdown_and_raw_html_headings_share_one_order() {
+    let source = "# One\n\n<h2>Two</h2>\n\n### Three\n";
+    let got = extraction(Adapter::Markdown, source);
+    let rows: Vec<(String, HeadingSource, (usize, usize))> = got
+        .headings
+        .iter()
+        .map(|heading| (heading.text.clone(), heading.source, heading.span))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("One".to_owned(), HeadingSource::Markdown, (0, 5)),
+            ("Two".to_owned(), HeadingSource::RawHtml, (7, 19)),
+            ("Three".to_owned(), HeadingSource::Markdown, (21, 30)),
+        ]
+    );
+}
+
+#[test]
+fn an_unclosed_raw_html_heading_records_nothing() {
+    let got = extraction(Adapter::Markdown, "<h2>Open\n\n<p>next</p>\n");
+    assert!(got.headings.is_empty());
+}
+
+/// A region of openers with no closer costs one search per level, not one per
+/// opener, so this returns instead of running for hours.
+#[test]
+fn a_region_of_unclosed_openers_stays_linear() {
+    let source = format!("<div>{}</div>\n", "<h1 >".repeat(120_000));
+    let got = extraction(Adapter::Markdown, &source);
+    assert!(got.headings.is_empty());
+}
+
+/// An MDX element is opaque to the HTML scan, so `<h1>` in an MDX document is
+/// a JSX element rather than a heading.
+#[test]
+fn a_raw_html_heading_in_mdx_records_nothing() {
+    let got = extraction(Adapter::Mdx, "<h1>Title</h1>\n");
+    assert!(got.headings.is_empty());
 }
 
 #[test]

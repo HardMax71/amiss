@@ -513,7 +513,7 @@
       "document": "probe.md",
       "identities": "probe.github.ids",
       "prefix": "user-content-",
-      "renderer": "api.github.com/markdown",
+      "renderer": "github.com file view, /repos/{owner}/{repo}/contents with the html media type",
       "harvested": "2026-07-26",
       "licence": "the probe document is this repository's own"
     },
@@ -558,6 +558,16 @@
       "harvested": "2026-07-26",
       "source": "https://github.com/starship/starship",
       "licence": "ISC"
+    },
+    {
+      "id": "HD-006",
+      "rule": "github",
+      "document": "probe-html.md",
+      "identities": "probe-html.github.ids",
+      "prefix": "user-content-",
+      "renderer": "github.com file view, /repos/{owner}/{repo}/contents with the html media type",
+      "harvested": "2026-07-26",
+      "licence": "the probe document is this repository's own"
     }
   ]
 }
