@@ -8,7 +8,7 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.9.1" }
+amiss-wire = { path = "../amiss-wire", version = "0.10.0" }
 crc32fast = "1"
 flate2.workspace = true
 fs_at = "0.2"
