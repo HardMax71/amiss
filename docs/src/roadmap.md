@@ -29,14 +29,27 @@ condition is met. Heading anchors left this list by meeting theirs: the slugging
 ten renderers are pinned against the renderers themselves, and an anchor no rule publishes
 is now an ordinary missing target, described in [Resolution](resolution.md).
 
-- Declared generated targets. The July 2026 shadow scans made this the largest measured
-  adoption blocker: documentation that links pages the docs build generates (ruff's
-  `settings.md`, 59 references) or clean URLs the site router resolves (starship's
-  preset pages, most of its 242 missing rows). Enforce mode cannot be adopted there,
-  because nothing can declare a generated target and policy only tightens. The candidate
-  contract is a declared, digested list of generated targets, visible in every report.
-  Entry condition: a design that keeps "no suppression" true, plus two design-partner
-  repositories from this class.
+- Router spellings. The July study filed these with generated targets under the name clean
+  URLs; the [rescan](ledger.md) separates them, and they are the larger half. 247 of the 516
+  missing references across the ten trees name a target the tree holds under another
+  spelling, and every one of starship's 241 is a preset page whose `.md` file sits beside the
+  link. No declaration is involved here: a spelling belongs to the router the way a heading
+  identity belongs to the renderer, and a route rule can only resolve a target that already
+  exists, so it cannot manufacture a pass. Entry condition: a pinned route corpus per
+  router, harvested from the router rather than transcribed, which is the bar the renderer
+  rules carry.
+- Declared generated targets. What is left after that split is ruff-shaped: a page the docs
+  build writes and the tree never holds, 102 references, 63 of them into `docs/settings.md`,
+  and 60 of those carrying a fragment into a page whose headings exist only after
+  generation. Enforce mode cannot be adopted there, because nothing can declare a generated
+  target and policy only tightens. The candidate contract is a declared, digested list of
+  generated targets, visible in every report, and the open question is whether such a list
+  can declare a reference unchecked without becoming the bulk clearing mechanism
+  [the evidence base](evidence.md) names as a gate's cheapest bypass. Entry condition: a
+  design that keeps "no suppression" true, plus two design-partner repositories from this
+  class. Against that second condition, ruff already runs `mkdocs build --strict` with
+  anchor validation on every pull request, so it gates these same links after generation, at
+  a layer this engine does not reach.
 - reStructuredText or AsciiDoc. Entry condition: a pinned grammar, a conformance corpus,
   extraction goldens, resource accounting, and honest opaque regions, the same set the
   Markdown adapters carry.

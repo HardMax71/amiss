@@ -26,4 +26,10 @@ accumulated, because a density figure over nine changed lines is noise and would
 quoted as a finding. The rule that keeps a row honest is stated on the page as what a row must
 be.
 
+The class it named was later split in two. A rescan of the same ten trees on 2026-07-26, with
+heading anchors resolving, showed that most of those rows name a target the tree holds under
+another spelling rather than one a docs build writes. The counts are on
+[The scan ledger](../ledger.md) and the [Roadmap](../roadmap.md) carries them as two
+candidates.
+
 Committed in [#82](https://github.com/hardmax71/amiss/pull/82) with six rows, grown to ten in [#86](https://github.com/hardmax71/amiss/pull/86).
