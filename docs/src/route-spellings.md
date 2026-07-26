@@ -72,15 +72,22 @@ from those reports. The fourth, docusaurus `16f537309e35`, produced no report: i
 end of evaluation and then refused at output, so nothing is counted from it. For the three
 that completed, a row is not the answer.
 
-Hugo's own documentation writes `[glob pattern](g)` and lets a link render hook turn `g` into
-the glossary entry, 734 references to a path that exists nowhere, and it pulls headings in
-through `{{% include %}}` shortcodes, which is where 101 of its missing anchors come from.
-Jest, on Docusaurus, links a document by its id rather than by its path: `[configuration](configuration)`
-names `Configuration.md`, 104 references differing from the file in case alone, and matching
-them would mean folding case, which the resolver refuses for the reason
-[Discovery](discovery.md) gives. Docusaurus itself is the run that refused: its findings
-serialize past the output reservation described in [Limits and refusals](limits.md), so what
-its links would have said is unknown.
+Hugo's own documentation writes `[glob pattern](g)` and resolves `g` in its own
+`render-link.html`, 734 references to a path that exists nowhere. Its 101 missing anchors are
+two further mechanisms: 71 name a definition-list term, which its configuration turns into an
+identity with `autoDefinitionTermID`, so `module.md`'s `files` term is published as
+`<dt id=files>` while the pinned grammar has no definition list to read at all; 28 name a
+heading pulled in by an `{{% include %}}` shortcode. Jest, on Docusaurus, links a document by
+the identity that document declares in its own front matter: `Configuration.md` opens with
+`id: configuration`, its page is published at that name, and 104 references reach it by URL
+rather than by path. The identity is in the tree, but reading it means parsing front matter
+this engine keeps opaque and then indexing every document by what it declares.
+
+Docusaurus itself refused at first, its findings serializing past the output reservation
+described in [Limits and refusals](limits.md). With that raised it scans, and with the
+identity its headings declare in an MDX comment now read it reports 198 missing references
+rather than 807. Those are the `@site` alias, a webpack path with no tree meaning, and
+identities that arrive through MDX imports of partial files.
 
 Jekyll is the one that looks like a missing row, and the harvest says otherwise. Its own site
 writes `reviewing-a-pull-request/` from a maintaining index, which reaches
