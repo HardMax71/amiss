@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_md::{Heading, analyze};
-use amiss_scan::anchor::{Attribute, RULES, anchor_set, identities};
+use amiss_scan::anchor::{Attribute, RULES, RawHtml, anchor_set, identities};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::Adapter;
 
@@ -201,6 +201,22 @@ fn duplicate_headings_diverge_by_suffix_style() {
         .map(str::to_owned)
         .collect();
         assert_eq!(ids, want, "{name}");
+    }
+}
+
+/// Only the rules that run over rendered HTML see a heading written that way,
+/// and the ones that do count it in the same duplicate sequence.
+#[test]
+fn a_raw_html_heading_belongs_to_the_rules_that_anchor_one() {
+    let (headings, _anchors) = headings("<h2>Twin</h2>\n\n## Twin\n");
+    for rule in &RULES {
+        let published = identities(rule, &headings);
+        let want: Vec<String> = if rule.raw_html == RawHtml::Anchored {
+            vec!["twin".to_owned(), "twin-1".to_owned()]
+        } else {
+            vec!["twin".to_owned()]
+        };
+        assert_eq!(published, want, "{}", rule.name);
     }
 }
 

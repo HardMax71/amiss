@@ -247,9 +247,17 @@ which names the renderer, the harvest, and the prefix to strip for every pair.
 `probe.md` is this repository's own document. It runs one heading per divergence: punctuation
 runs, intraword underscores, decomposed Latin, the Turkish dotted capital, CJK, a Bengali
 virama, an emoji variation selector, a digits-only heading, both attribute spellings, and a
-repeated heading. It was rendered by github.com's markdown API, by mdbook 0.5.4 in its default
+repeated heading. It was rendered by github.com's file view, by mdbook 0.5.4 in its default
 configuration, and by python-markdown 3.10 with `toc` and `attr_list`, so three renderers
-answer for the same bytes.
+answer for the same bytes. The file view is
+`/repos/{owner}/{repo}/contents/{path}` under the HTML media type; `POST /markdown` renders
+the same document and publishes no heading anchors at all.
+
+`probe-html.md` is the second own document, and it answers what a Markdown probe cannot
+ask: what github.com publishes for a heading written as raw HTML. Nine of them, including
+one wrapped across three lines, one carrying a character reference and a comment, and one
+that repeats a Markdown heading beside it, which is where the shared duplicate counter
+shows.
 
 The two harvested documents cover what the probe cannot reach. `awesome-gitea.md` is fifty
 headings as gitea.com renders them, which is the only live evidence for Gitea's rule and the

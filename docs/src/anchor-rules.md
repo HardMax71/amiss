@@ -15,7 +15,7 @@ matches.
 
 | Rule | Serves | Distinguishing behavior |
 | --- | --- | --- |
-| `github` | github.com, GitLab, Docusaurus, Hugo's github type | keeps letters, marks, numbers and connector punctuation; one separator per space |
+| `github` | github.com, GitLab, Docusaurus, Hugo's github type | keeps letters, marks, numbers and connector punctuation; one separator per space; the only rule that also anchors a heading written as raw HTML |
 | `gitea` | Gitea 1.27 repository files and wiki pages | drops marks; publishes nothing for an empty identity; never suffixes a repeat |
 | `forgejo` | Forgejo 16 repository files and wiki pages | Gitea's filter, but an empty identity becomes `heading` and repeats take `-1` |
 | `mdbook` | mdBook with smart punctuation off | Rust's alphanumeric test, so Indic vowel signs survive where Gitea drops them |
@@ -34,6 +34,17 @@ Two of the rows are configurations rather than renderers. mdBook ships with smar
 punctuation on and MkDocs takes its slug function from `mkdocs.yml`, so both spellings are
 carried rather than one being chosen for the reader.
 
+A heading can also be written as raw HTML, which many projects do for a centered title.
+github.com anchors those, because its filter runs over the rendered document and sees
+`<h1>` and `##` in one sequence: the text content of the element is slugged by the same
+rule, nested tags and comments contribute nothing, and a repeat of an earlier identity
+takes the next suffix. Forgejo does not, verified on
+[its own README](https://codeberg.org/forgejo/forgejo), where `<h1 align="center">Welcome to
+Forgejo</h1>` is the only heading rendered without an identity while all four `##` headings
+carry one. The rules built from a Markdown tree,
+mdBook, goldmark, python-markdown, pymdownx, mdit-vue and kramdown, never see the element
+at all. So this is the `github` row's behavior alone, and the union carries it.
+
 ## What each rule was checked against
 
 The published expectations are in
@@ -50,21 +61,33 @@ python-markdown 3.10, pymdownx, `@mdit-vue/shared`, and kramdown's own generator
 remaining three are transcribed from Gitea's `CleanValue`, Forgejo's `prefixedIDs`, and
 mdBook's `id_from_content`.
 
-Five documents, in
+Six documents, in
 [`corpus/third_party/anchor-fixtures/`](https://github.com/HardMax71/amiss/tree/main/corpus/third_party/anchor-fixtures),
 carry what a renderer actually published for them, harvested 2026-07-26:
 
 | Document | Renderer | Identities |
 | --- | --- | ---: |
-| `probe.md`, this repository's own | github.com markdown API | 28 |
+| `probe.md`, this repository's own | github.com file view | 28 |
 | `probe.md` | mdbook 0.5.4, default configuration | 28 |
 | `probe.md` | python-markdown 3.10 with `toc` and `attr_list` | 28 |
+| `probe-html.md`, this repository's own | github.com file view | 9 |
 | `awesome-gitea.md`, CC0 | gitea.com | 50 |
 | `starship-ja.md`, ISC | starship.rs, VitePress | 32 |
+
+The github.com column comes from the file view, `/repos/{owner}/{repo}/contents/{path}`
+under the HTML media type, which is the renderer that publishes heading anchors.
+`POST /markdown` renders the same Markdown and publishes none, so a re-harvest through it
+would come back empty rather than disagreeing.
 
 The Gitea pair is the only live evidence for that rule and the only place its missing
 duplicate suffix is visible: that one page publishes fifteen identities twice, so an anchor
 into it is ambiguous on Gitea and unique on Forgejo, for the same file.
+
+`probe-html.md` is nine raw-HTML headings and one Markdown heading among them, which is
+where the wrapped element, the decoded reference, the stripped comment and the shared
+duplicate counter are pinned. Its `<h2>` written across three lines publishes
+`--wrapped-title`, the leading newline and two spaces intact, which is the kind of detail a
+transcribed rule gets wrong and a harvest does not.
 
 ## How far apart the rules actually are
 

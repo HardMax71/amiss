@@ -66,11 +66,30 @@ pub struct HeadingAttribute {
     pub suffix: String,
 }
 
+/// Where a heading was written. Only some renderers build an identity from one
+/// written as raw HTML, so the two are kept apart in one ordered list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeadingSource {
+    Markdown,
+    RawHtml,
+}
+
+impl HeadingSource {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Markdown => "markdown",
+            Self::RawHtml => "raw-html",
+        }
+    }
+}
+
 /// One heading's rendered text content, in document order with its siblings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Heading {
     pub text: String,
     pub attribute: Option<HeadingAttribute>,
+    pub source: HeadingSource,
     pub span: (usize, usize),
 }
 
@@ -192,12 +211,13 @@ fn extract_tree(
             .cmp(&right.span)
             .then(left.node_path.cmp(&right.node_path))
     });
-    sweep.headings.sort_by_key(|heading| heading.span);
     let opaque = Opaque {
         frontmatter_bytes,
         mdx: union(sweep.mdx),
         html: union(sweep.html),
     };
+    sweep.headings.extend(html_headings(suffix, &opaque.html));
+    sweep.headings.sort_by_key(|heading| heading.span);
     validate(
         &sweep.occurrences,
         &sweep.headings,
@@ -274,6 +294,7 @@ impl Sweep<'_> {
                 self.headings.push(Heading {
                     text,
                     attribute,
+                    source: HeadingSource::Markdown,
                     span: span_of(node)?,
                 });
             }
@@ -759,32 +780,169 @@ fn split_attribute(text: &str) -> (String, Option<HeadingAttribute>) {
 /// document order. Accepting more than a browser would can only leave an
 /// anchor unreported, never report a live one as missing.
 fn html_anchors(suffix: &str, regions: &[(usize, usize)]) -> Vec<String> {
-    let bytes = suffix.as_bytes();
     let mut out = Vec::new();
-    for (start, end) in regions {
-        let Some(region) = bytes.get(*start..*end) else {
-            continue;
-        };
-        let mut at = 0_usize;
-        while at < region.len() {
-            let Some(name) = ["id", "name"]
+    for (_start, region) in slices(suffix, regions) {
+        walk_region(region, |at| {
+            let name = ["id", "name"]
                 .into_iter()
-                .find(|name| attribute_name_at(region, at, name.as_bytes()))
-            else {
-                at = at.saturating_add(1);
-                continue;
-            };
+                .find(|name| attribute_name_at(region, at, name.as_bytes()))?;
             let after = at.saturating_add(name.len());
-            match attribute_value(region, after) {
-                Some((value, next)) => {
-                    out.push(value);
-                    at = next;
-                }
-                None => at = after,
-            }
-        }
+            let Some((value, next)) = attribute_value(region, after) else {
+                return Some(after);
+            };
+            out.push(value);
+            Some(next)
+        });
     }
     out
+}
+
+/// Every `h1` through `h6` element written inside the raw-HTML regions, with
+/// the text content its renderer would read. An element whose closing tag is
+/// missing from its own region is left out.
+fn html_headings(suffix: &str, regions: &[(usize, usize)]) -> Vec<Heading> {
+    let mut out = Vec::new();
+    for (start, region) in slices(suffix, regions) {
+        // One failed search proves the level has no closer left, so a region of
+        // openers costs six scans rather than one per opener.
+        let mut unclosed = [false; 6];
+        walk_region(region, |at| {
+            let level = heading_open_at(region, at)?;
+            let depth = usize::from(level.saturating_sub(b'1'));
+            let Some(open_end) = tag_end(region, at) else {
+                return Some(region.len());
+            };
+            if unclosed.get(depth) == Some(&true) {
+                return Some(open_end);
+            }
+            let Some(close) = closing_tag(region, open_end, level) else {
+                if let Some(flag) = unclosed.get_mut(depth) {
+                    *flag = true;
+                }
+                return Some(open_end);
+            };
+            if let Some(inner) = region
+                .get(open_end..close)
+                .and_then(|raw| core::str::from_utf8(raw).ok())
+            {
+                out.push(Heading {
+                    text: strip_markup(inner),
+                    attribute: None,
+                    source: HeadingSource::RawHtml,
+                    span: (
+                        start.saturating_add(at),
+                        start.saturating_add(tag_end(region, close).unwrap_or(region.len())),
+                    ),
+                });
+            }
+            Some(close)
+        });
+    }
+    out
+}
+
+/// Every position in one region, advancing by whatever the step recognized or
+/// by one byte when it recognized nothing.
+fn walk_region(region: &[u8], mut step: impl FnMut(usize) -> Option<usize>) {
+    let mut at = 0_usize;
+    while at < region.len() {
+        at = step(at).unwrap_or_else(|| at.saturating_add(1));
+    }
+}
+
+fn heading_open_at(region: &[u8], at: usize) -> Option<u8> {
+    if region.get(at) != Some(&b'<')
+        || !matches!(region.get(at.saturating_add(1)), Some(b'h' | b'H'))
+    {
+        return None;
+    }
+    let level = *region.get(at.saturating_add(2))?;
+    let after = *region.get(at.saturating_add(3))?;
+    ((b'1'..=b'6').contains(&level)
+        && (after.is_ascii_whitespace() || after == b'>' || after == b'/'))
+        .then_some(level)
+}
+
+fn slices<'a>(
+    suffix: &'a str,
+    regions: &'a [(usize, usize)],
+) -> impl Iterator<Item = (usize, &'a [u8])> {
+    regions
+        .iter()
+        .filter_map(|(start, end)| Some((*start, suffix.as_bytes().get(*start..*end)?)))
+}
+
+fn scan(region: &[u8], from: usize, hit: impl Fn(usize) -> bool) -> Option<usize> {
+    (from..region.len()).find(|at| hit(*at))
+}
+
+fn tag_end(region: &[u8], from: usize) -> Option<usize> {
+    scan(region, from, |at| region.get(at) == Some(&b'>')).map(|at| at.saturating_add(1))
+}
+
+fn closing_tag(region: &[u8], from: usize, level: u8) -> Option<usize> {
+    scan(region, from, |at| {
+        region.get(at) == Some(&b'<')
+            && region.get(at.saturating_add(1)) == Some(&b'/')
+            && matches!(region.get(at.saturating_add(2)), Some(b'h' | b'H'))
+            && region.get(at.saturating_add(3)) == Some(&level)
+    })
+}
+
+/// The text content a browser reads from one element's markup: nested tags and
+/// comments contribute nothing, character references decode, and every other
+/// byte survives exactly, including the whitespace a wrapped element carries.
+fn strip_markup(inner: &str) -> String {
+    let mut out = String::with_capacity(inner.len());
+    let mut rest = inner;
+    while let Some(at) = rest.find(['<', '&']) {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        rest = if let Some(comment) = tail.strip_prefix("<!--") {
+            comment
+                .find("-->")
+                .and_then(|end| comment.get(end.saturating_add(3)..))
+                .unwrap_or_default()
+        } else if tail.starts_with('<') {
+            tail.find('>')
+                .and_then(|end| tail.get(end.saturating_add(1)..))
+                .unwrap_or_default()
+        } else if let Some((decoded, next)) = reference(tail) {
+            out.push(decoded);
+            next
+        } else {
+            out.push('&');
+            tail.get(1..).unwrap_or_default()
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The named references HTML predefines, plus numeric ones. A run longer than
+/// any of those spellings is text, not a reference.
+fn reference(tail: &str) -> Option<(char, &str)> {
+    const LONGEST: usize = 32;
+    let end = tail.find(';').filter(|end| *end <= LONGEST)?;
+    let body = tail.get(1..end)?;
+    let next = tail.get(end.saturating_add(1)..)?;
+    let decoded = match body {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        "nbsp" => '\u{a0}',
+        _ => {
+            let digits = body.strip_prefix('#')?;
+            let point = match digits.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => digits.parse().ok()?,
+            };
+            char::from_u32(point)?
+        }
+    };
+    Some((decoded, next))
 }
 
 fn attribute_name_at(region: &[u8], at: usize, name: &[u8]) -> bool {
