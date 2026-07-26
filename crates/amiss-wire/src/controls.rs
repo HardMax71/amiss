@@ -990,17 +990,22 @@ fn decode_resource_limit(path: &str, value: Value) -> Result<ResourceLimit, Erro
     let maximum_path = obj.field("maximum");
     let maximum = de::integer(&maximum_path, obj.take("maximum")?)?;
     obj.finish()?;
-    let in_bounds = if resource == ResourceName::TypedAnalysisErrorsRetained {
-        (1..=64).contains(&maximum)
-    } else if resource == ResourceName::MachineJsonBytes {
-        maximum == 67_108_864
-    } else {
-        maximum >= 0
-    };
-    if in_bounds {
+    if in_bounds(resource, maximum) {
         Ok(ResourceLimit { resource, maximum })
     } else {
         fail(&maximum_path, ErrorKind::InvalidValue)
+    }
+}
+
+/// Two resources fix their own maximum: the retained-error count is a small
+/// range, and the report reservation may be declared but never moved.
+fn in_bounds(resource: ResourceName, maximum: i64) -> bool {
+    if resource == ResourceName::TypedAnalysisErrorsRetained {
+        (1..=64).contains(&maximum)
+    } else if resource == ResourceName::MachineJsonBytes {
+        u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
+    } else {
+        maximum >= 0
     }
 }
 

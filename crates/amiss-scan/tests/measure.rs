@@ -5,6 +5,7 @@ use amiss_scan::report::RequestDigests;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::MACHINE_JSON_BYTES;
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -74,7 +75,7 @@ fn representative_repository_latency_and_memory() {
         stats.max_bytes, stats.max_blocks, stats.total_bytes
     );
     eprintln!(
-        "measure representative-500: {observations} observations, wire {} bytes of the 67108864 reservation",
+        "measure representative-500: {observations} observations, wire {} bytes of the {MACHINE_JSON_BYTES} reservation",
         wire.len()
     );
 }

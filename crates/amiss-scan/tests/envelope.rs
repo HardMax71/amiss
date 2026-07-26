@@ -11,15 +11,15 @@ use std::path::Path;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, canonical_length};
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, FatalSerializer, PAYLOAD_SCHEMA,
-    unavailable_evaluation_wire,
+    AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, FatalSerializer, MACHINE_JSON_BYTES,
+    PAYLOAD_SCHEMA, unavailable_evaluation_wire,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
-const WIRE_CAP: usize = 67_108_864;
+const WIRE_CAP: u64 = MACHINE_JSON_BYTES;
 
 fn string(text: &str) -> Value {
     Value::String(text.to_owned())
@@ -287,8 +287,8 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     assert_schema_valid(&wire);
 
     assert!(
-        wire.len() < WIRE_CAP,
-        "the fatal-incomplete wire fits the 64 MiB reservation: {} bytes",
+        u64::try_from(wire.len()).unwrap_or(u64::MAX) < WIRE_CAP,
+        "the fatal-incomplete wire fits the reservation: {} bytes",
         wire.len()
     );
     assert!(
@@ -300,7 +300,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     let paper_paths: usize = 1_536 + 32 + 64 + 6 + 2;
     let paper_bound = paper_paths * 24_576 + 64 * 8_192 + 16_777_216;
     assert!(
-        paper_bound < WIRE_CAP,
+        u64::try_from(paper_bound).unwrap_or(u64::MAX) < WIRE_CAP,
         "the documented worst-case decomposition stays under the reservation"
     );
     assert!(

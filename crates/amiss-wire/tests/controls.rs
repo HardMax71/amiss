@@ -232,7 +232,7 @@ fn parses_a_floor_declaring_every_resource() {
     let mut declared: Vec<(&'static str, i64)> = ResourceName::all()
         .map(|resource| {
             let maximum = if resource == ResourceName::MachineJsonBytes {
-                67_108_864
+                268_435_456
             } else if resource == ResourceName::TypedAnalysisErrorsRetained {
                 64
             } else {
@@ -333,7 +333,7 @@ fn floor_schema_kind(defect: FloorDefect) -> ErrorKind {
 #[test]
 fn rejects_floor_bound_defects() {
     let doc = String::from_utf8(FLOOR.to_vec()).unwrap();
-    let wrong_ceiling = doc.replace("67108864", "67108863");
+    let wrong_ceiling = doc.replace("268435456", "268435455");
     assert_eq!(
         floor_schema_kind(OrganizationFloor::parse(wrong_ceiling.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
@@ -346,8 +346,8 @@ fn rejects_floor_bound_defects() {
     );
 
     let unsorted_limits = doc.replace(
-        "{ \"resource\": \"machine-json-bytes\", \"maximum\": 67108864 },\n    { \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 }",
-        "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 67108864 }",
+        "{ \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 },\n    { \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 }",
+        "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 }",
     );
     assert_eq!(
         floor_schema_kind(OrganizationFloor::parse(unsorted_limits.as_bytes()).unwrap_err()),

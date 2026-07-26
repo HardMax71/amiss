@@ -10,7 +10,7 @@ pub const ENGINE_CONTRACT: &str = "amiss/scanner";
 
 /// The exact `machine-json-bytes` reservation: the report wire, canonical
 /// envelope plus the trailing newline, never exceeds this.
-pub const MACHINE_JSON_BYTES: u64 = 67_108_864;
+pub const MACHINE_JSON_BYTES: u64 = 268_435_456;
 
 /// The evaluator-managed memory ceiling asserted by the sandbox descriptor.
 pub const EVALUATOR_MANAGED_MEMORY_BYTES: u64 = 1_073_741_824;

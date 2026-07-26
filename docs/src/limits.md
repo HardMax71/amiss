@@ -59,7 +59,7 @@ judged: its anchors stay unsupported rather than becoming missing.
 | `organization-policy-entries` | 100,000 |
 | `complete-findings` | 100,000 |
 | `typed-analysis-errors-retained` | 64 |
-| `machine-json-bytes` | 67,108,864 |
+| `machine-json-bytes` | 268,435,456 |
 | `private-temporary-storage-bytes` | 67,108,864 |
 | `evaluator-managed-memory-bytes` | 1,073,741,824 |
 <!-- amiss-doc-contract:limits:end -->
@@ -67,14 +67,21 @@ judged: its anchors stay unsupported rather than becoming missing.
 Two of these ceilings have been measured against real repositories rather than reasoned
 about. `references-per-document` was 4,096 until fastapi's release notes came in at 7,075
 references in one auto-generated changelog; the next largest documents measured anywhere are
-just's and helix's changelogs, at about 2,900 and still growing. The binding ceiling for a
-large documentation set is not that one but `machine-json-bytes`: fastapi's 1,691 documents
-and 15,385 references serialize to 78 MB against a 64 MiB reservation, so it still refuses,
-and Docusaurus's own repository refuses at 110 MB.
-Ninety-one percent of those bytes are `external-out-of-scope` rows, one per external URL at
-about 5 KB across the findings and observations arrays, which makes the practical bound
-roughly fourteen thousand findings rather than the million references
-`references-per-snapshot` admits.
+just's and helix's changelogs, at about 2,900 and still growing. `machine-json-bytes` moved
+for the same reason and against the same repositories. A 64 MiB reservation refused both of the largest
+documentation sets measured: fastapi serializes 1,664 documents and 15,334 references to
+78 MB, and Docusaurus's own repository 1,543 documents and 23,035 references to 111 MB. At
+256 MiB both pass, and the value stays a quarter of the memory ceiling bounding the same
+process.
+
+Raising it treats the symptom, and the cause is worth stating. Ninety-one percent of fastapi's
+report is `external-out-of-scope`, one finding per external URL at about 5 KB across the
+findings and observations arrays. Of that, the finding's own evidence is a verbatim copy of a
+row the report already carries in `observations` and already names by id, so the same
+occurrence is serialized twice in full. `complete-findings` allows 100,000 findings, and at
+the leanest finding this engine builds a hundred thousand of them now fit under the
+reservation, so that counter is what stops a findings flood and the reservation backstops
+anything heavier.
 
 The last two rows are sandbox-descriptor values rather than ordinary scanner counters.
 The CLI applies the managed-memory value as an address-space limit on Unix; the current

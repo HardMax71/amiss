@@ -99,7 +99,7 @@ the result plus at most ten grouped feedback items, replaces every byte outside 
 `\uXXXX` escape so a hostile filename cannot inject terminal control codes or a forged CI
 command into a log, and states any overflow explicitly. It keeps raw totals and prints
 descriptions only for errors; finding kinds and their descriptions stay in JSON. The JSON is never
-cut short: a serialized report that would cross the 64 MiB `machine-json-bytes` ceiling
+cut short: a serialized report that would cross the `machine-json-bytes` ceiling
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).
 

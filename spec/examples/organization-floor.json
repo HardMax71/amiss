@@ -32,7 +32,7 @@
   "resource_limits": [
     {
       "resource": "machine-json-bytes",
-      "maximum": 67108864
+      "maximum": 268435456
     },
     {
       "resource": "typed-analysis-errors-retained",
