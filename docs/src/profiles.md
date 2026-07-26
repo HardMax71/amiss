@@ -54,7 +54,7 @@ not a second source of truth.
 - `explicit-target-missing`: a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link
 - `explicit-target-type-mismatch`: the referenced path exists as a different kind than the reference promises, as when a trailing slash names a regular file; make the spelling match the target
 - `invalid-reference`: the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination
-- `unsupported-reference-semantics`: the reference uses semantics Amiss does not evaluate, a heading fragment or a leading-slash site route; the unchecked part is declared instead of guessed
+- `unsupported-reference-semantics`: the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, or a fragment on a target it cannot parse; the unchecked part is declared instead of guessed
 - `unsupported-document-format`: a policy-included document has no parser in this engine; it is discovered and counted, and its content is never scanned
 - `unsupported-target-kind`: the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed
 - `unsupported-version-scope`: a forge URL names this repository at another version, a different branch, tag, or commit; only the candidate version is read, so the link is recognized and left unresolved
@@ -88,7 +88,7 @@ API described in [Controls and policy](controls.md).
 | `explicit-target-missing` | `docs/index.md`: `# Index`; `docs/missing.md` is absent. | Append `[missing](missing.md)` to `docs/index.md`; the target remains absent. |
 | `explicit-target-type-mismatch` | `docs/index.md`: `# Index`; `docs/guide.md` is a regular file. | Append `[guide](guide.md/)`; the trailing slash promises a directory. |
 | `invalid-reference` | `docs/index.md`: `# Index`. | Append a link whose destination is `../../etc/passwd`, which escapes the repository from `docs/`. |
-| `unsupported-reference-semantics` | `docs/index.md`: `[setup](guide.md)`; `docs/guide.md` exists. | Change the link to `[setup](guide.md#setup)`; Amiss resolves the file but does not validate its heading. |
+| `unsupported-reference-semantics` | `docs/index.md`: `[setup](guide.md)`; `docs/guide.md` exists. | Change the link to `[setup](/docs/guide.md)`; a leading slash names a site route, which no tree can answer. |
 | `unsupported-document-format` | Policy includes `docs/spec.rst` as a document; the file is absent. | Add `docs/spec.rst` containing `Title` and an `=====` underline. |
 | `unsupported-target-kind` | `alias` is a Git symlink; `docs/index.md` has no link to it. | Append `[alias](../alias)`; Amiss will not follow the symlink. |
 | `unsupported-version-scope` | Run with forge `github`, repository `github.com/acme/widgets`, candidate ref `refs/heads/feature/x`, and default ref `refs/heads/main`; the link names `blob/feature/x/docs/guide.md`. | Keep that identity context but change the link to name `blob/main/docs/guide.md`. |

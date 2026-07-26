@@ -22,10 +22,12 @@ and react when reality drifts from the record. The rejected design is described 
 migration, merge-conflict, and trust-on-edit failure modes wholesale, at the price of
 answering a smaller question.
 
-It resolves the file portion of a relative link with a heading fragment, but it does not
-check the heading's slug. A recognized numeric line fragment is narrower: Amiss can select
-and compare those exact bytes, but cannot tell whether they still express the idea the prose
-intended. It also does not validate site routes, code symbols, live URLs, or other repositories.
+It answers a heading anchor against the slugging rules of the renderers it models, and
+reports one that no rule publishes as a missing target. What it cannot say is whether the
+section behind a resolving anchor still means what the prose claims, and a renderer outside
+[What ten renderers call a heading](anchor-rules.md) is outside the answer. A recognized
+numeric line fragment is narrower still: Amiss can select and compare those exact bytes, but
+cannot tell whether they still express the idea the prose intended. It also does not validate site routes, code symbols, live URLs, or other repositories.
 Those checks belong to a layer holding the right information: the site
 generator knows its routes and the language server knows its symbols. Where a supported
 construct reaches one of these boundaries, Amiss records the unsupported or out-of-scope

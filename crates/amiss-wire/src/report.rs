@@ -957,7 +957,7 @@ impl FindingKind {
                 "the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination"
             }
             Self::UnsupportedReferenceSemantics => {
-                "the reference uses semantics Amiss does not evaluate, a heading fragment or a leading-slash site route; the unchecked part is declared instead of guessed"
+                "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, or a fragment on a target it cannot parse; the unchecked part is declared instead of guessed"
             }
             Self::UnsupportedDocumentFormat => {
                 "a policy-included document has no parser in this engine; it is discovered and counted, and its content is never scanned"
