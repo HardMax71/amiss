@@ -42,7 +42,7 @@ impl ScanLimits {
         parser_nodes_per_document: 250_000,
         parser_nodes_per_snapshot: 5_000_000,
         aggregate_embedded_code_evaluation_bytes_per_snapshot: 536_870_912,
-        references_per_document: 4_096,
+        references_per_document: 16_384,
         references_per_snapshot: 1_000_000,
         referenced_target_blob_bytes: 16_777_216,
         aggregate_referenced_target_bytes_per_snapshot: 536_870_912,

@@ -98,9 +98,10 @@ Missing splits three ways, and the July study's two rejection classes are two of
 page names across twenty-two translations, and its `presets/README.md` links the same file
 twice in one paragraph, once as `./plain-text.md` and once as `./plain-text`. mdBook's six
 are its own output extension, inside its guide and its fixtures. These resolve now, against
-[the spellings harvested from the routers themselves](route-spellings.md), which is the one
-column of this table the current build would answer differently: starship reads 103 missing
-and mdBook 31.
+[the spellings harvested from the routers themselves](route-spellings.md). Two columns of
+this table read differently on the current build for that reason and one more: starship
+reads 103 missing, and mdBook reads none at all, its whole count having been fixtures under
+`tests/`, which [discovery](discovery.md) now skips by name.
 
 146 name a target no spelling reaches, and 102 of those are ruff's generated pages, 63 of
 them into `docs/settings.md`. That is the class a docs build writes and a tree never holds.

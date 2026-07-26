@@ -21,7 +21,7 @@ const EXTENSIONLESS: [&str; 6] = [
     "CODE_OF_CONDUCT",
 ];
 
-const EXCLUDED_TREES: [&str; 7] = [
+const EXCLUDED_TREES: [&str; 9] = [
     "node_modules",
     "vendor",
     "third_party",
@@ -29,6 +29,8 @@ const EXCLUDED_TREES: [&str; 7] = [
     "build",
     ".next",
     "target",
+    "test",
+    "tests",
 ];
 
 impl Classification {
