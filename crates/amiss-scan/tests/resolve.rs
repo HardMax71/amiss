@@ -45,6 +45,7 @@ fn fixture() -> CommitChain {
         ("docs/invalid.md", Staged::File(b"# \xff\n")),
         ("docs/data.json", Staged::File(b"{}\n")),
         ("docs/sub/keep.txt", Staged::File(b"kept\n")),
+        ("docs/sub/README.md", Staged::File(b"# Sub\n")),
         // Staged without a worktree file, because a macOS worktree would hand back
         // the decomposed spelling and the fixture would be testing the filesystem.
         ("docs/\u{e9}t\u{e9}.txt", Staged::Absent(b"kept\n")),
@@ -1501,6 +1502,121 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
         };
         assert_eq!(path.as_str(), Some("docs/anchors.md"));
     }
+}
+
+/// A destination the tree does not hold is answered by the file a modelled
+/// router would serve under that spelling, and the report names that file.
+#[test]
+fn a_router_spelling_reaches_the_source_file_it_serves() {
+    let mut bed = bed();
+    for (destination, served) in [
+        ("guide", "docs/guide.md"),
+        ("guide.html", "docs/guide.md"),
+        ("sub/index.md", "docs/sub/README.md"),
+        ("sub/index.html", "docs/sub/README.md"),
+    ] {
+        let row = bed
+            .run(None, "docs/index.md", false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let Resolution::Resolved(Target::Blob(blob)) = &row else {
+            panic!("{destination} is served by a known router: {row:?}");
+        };
+        assert_eq!(blob.path.as_str(), Some(served), "{destination}");
+    }
+}
+
+/// The written destination stays the reference's identity, so the intent keeps
+/// the spelling the author used while the resolution names what answered it.
+#[test]
+fn a_routed_reference_keeps_the_authored_destination_as_its_intent() {
+    let mut bed = bed();
+    let (intent, row) = bed
+        .run(None, "docs/index.md", false, "guide")
+        .unwrap_or_else(|_defect| panic!("resolve guide"));
+    assert_eq!(
+        intent.repository_path.as_ref().and_then(RepoPath::as_str),
+        Some("docs/guide")
+    );
+    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+        panic!("guide resolves: {row:?}");
+    };
+    assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
+}
+
+/// A spelling only ever names a file the tree already holds, so nothing it
+/// reaches was invented and everything else stays missing.
+#[test]
+fn a_spelling_never_invents_a_target() {
+    let mut bed = bed();
+    for destination in ["absent", "absent.html", "sub/absent/index.md", "data"] {
+        let row = bed
+            .run(None, "docs/index.md", false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let Resolution::Missing(Missing::PathNotFound { path }) = &row else {
+            panic!("{destination} names no file any router serves: {row:?}");
+        };
+        assert_eq!(
+            path.as_str(),
+            Some(format!("docs/{destination}").as_str()),
+            "the missing row names what the author wrote"
+        );
+    }
+}
+
+/// A trailing slash promises a directory, and a forge URL is read by the forge
+/// rather than by a site router, so neither is ever re-spelled.
+#[test]
+fn a_promised_directory_and_a_forge_url_are_never_re_spelled() {
+    let mut bed = bed();
+    let row = bed
+        .run(None, "docs/index.md", false, "guide/")
+        .unwrap_or_else(|_defect| panic!("resolve guide/"))
+        .1;
+    let Resolution::Missing(Missing::PathNotFound { path }) = &row else {
+        panic!("a promised directory stays missing: {row:?}");
+    };
+    assert_eq!(path.as_str(), Some("docs/guide"));
+
+    let context = github_context();
+    let row = bed
+        .run(
+            Some(&context),
+            "docs/index.md",
+            false,
+            "https://github.com/acme/widgets/blob/feature/x/docs/guide",
+        )
+        .unwrap_or_else(|_defect| panic!("resolve the forge URL"))
+        .1;
+    let Resolution::Missing(Missing::PathNotFound { path }) = &row else {
+        panic!("a forge URL keeps the tree's answer: {row:?}");
+    };
+    assert_eq!(path.as_str(), Some("docs/guide"));
+}
+
+/// The fragment is read against the file that answered, so an anchor on a
+/// routed reference is evaluated rather than declined.
+#[test]
+fn a_fragment_on_a_routed_reference_reads_the_served_file() {
+    let mut bed = bed();
+    let row = bed
+        .run(None, "docs/index.md", false, "anchors#setup--config")
+        .unwrap_or_else(|_defect| panic!("resolve the routed anchor"))
+        .1;
+    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+        panic!("the anchor resolves on the served file: {row:?}");
+    };
+    assert_eq!(blob.path.as_str(), Some("docs/anchors.md"));
+
+    let row = bed
+        .run(None, "docs/index.md", false, "anchors#absent-heading")
+        .unwrap_or_else(|_defect| panic!("resolve the routed anchor"))
+        .1;
+    let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = &row else {
+        panic!("an absent identity is missing on the served file: {row:?}");
+    };
+    assert_eq!(path.as_str(), Some("docs/anchors.md"));
 }
 
 /// A target the evaluation cannot read, parse, or afford keeps the unsupported

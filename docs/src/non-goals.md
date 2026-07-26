@@ -27,12 +27,16 @@ reports one that no rule publishes as a missing target. What it cannot say is wh
 section behind a resolving anchor still means what the prose claims, and a renderer outside
 [What ten renderers call a heading](anchor-rules.md) is outside the answer. A recognized
 numeric line fragment is narrower still: Amiss can select and compare those exact bytes, but
-cannot tell whether they still express the idea the prose intended. It also does not validate site routes, code symbols, live URLs, or other repositories.
-Those checks belong to a layer holding the right information: the site
-generator knows its routes and the language server knows its symbols. Where a supported
-construct reaches one of these boundaries, Amiss records the unsupported or out-of-scope
-semantics instead of guessing, because a guessed pass looks exactly like a real one until it
-burns you.
+cannot tell whether they still express the idea the prose intended. A relative destination
+the tree does not hold is asked again under
+[the spellings a documentation router serves](route-spellings.md), which reaches a file the
+tree already holds or nothing at all. That is the whole of what it knows about routes: a
+leading slash still names a site route it does not answer, and it validates no code symbol,
+live URL, or other repository. Those checks belong to a layer holding the right information:
+the site generator owns its permalink scheme and the language server knows its symbols.
+Where a supported construct reaches one of these boundaries, Amiss records the unsupported
+or out-of-scope semantics instead of guessing, because a guessed pass looks exactly like a
+real one until it burns you.
 
 And it accepts no configuration that would let a repository weaken its own check. No
 suppression comments, no severity downgrades, no hooks. The absence is the point.
