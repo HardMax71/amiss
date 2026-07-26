@@ -65,10 +65,12 @@ selects a router, because a configuration file in the tree would be a lever the 
 request under review could pull.
 
 Routers outside the table serve spellings this check will not match. Four repositories built
-on them were scanned on 2026-07-26 to find out what a new row would have to answer, and for
-three of them a row is not the answer. The heads were hugoDocs `620696ab3b07`, jest
-`f49721c78e19`, jekyll `7697d249793d`, and docusaurus `16f537309e35`, each read whole against
-an empty base under the observe profile.
+on them were run on 2026-07-26 to find out what a new row would have to answer, each read
+whole against an empty base under the observe profile. Three completed, at hugoDocs
+`620696ab3b07`, jest `f49721c78e19`, and jekyll `7697d249793d`, and their counts below are
+from those reports. The fourth, docusaurus `16f537309e35`, produced no report: it ran to the
+end of evaluation and then refused at output, so nothing is counted from it. For the three
+that completed, a row is not the answer.
 
 Hugo's own documentation writes `[glob pattern](g)` and lets a link render hook turn `g` into
 the glossary entry, 734 references to a path that exists nowhere, and it pulls headings in
@@ -76,8 +78,9 @@ through `{{% include %}}` shortcodes, which is where 101 of its missing anchors 
 Jest, on Docusaurus, links a document by its id rather than by its path: `[configuration](configuration)`
 names `Configuration.md`, 104 references differing from the file in case alone, and matching
 them would mean folding case, which the resolver refuses for the reason
-[Discovery](discovery.md) gives. Docusaurus itself could not be scanned at all: its report
-crosses the output reservation described in [Limits and refusals](limits.md).
+[Discovery](discovery.md) gives. Docusaurus itself is the run that refused: its findings
+serialize past the output reservation described in [Limits and refusals](limits.md), so what
+its links would have said is unknown.
 
 Jekyll is the one that looks like a missing row, and the harvest says otherwise. Its own site
 writes `reviewing-a-pull-request/` from a maintaining index, which reaches
@@ -90,6 +93,6 @@ warning naming the `.md` file, and vitepress emits it verbatim into a build hold
 `page.html`, dead on any host despite its own dead-link checker accepting it. One router, by
 configuration, is not a rule.
 
-What the other three need is the generated class the [roadmap](roadmap.md) still carries,
-arriving as transclusion, as a repository's own render hook, and as an identifier that was
-never a path.
+What Hugo and Jest need instead is the generated class the [roadmap](roadmap.md) still
+carries, arriving there as transclusion, as a repository's own render hook, and as an
+identifier that was never a path.
