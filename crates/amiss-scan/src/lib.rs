@@ -13,6 +13,7 @@ pub mod report;
 pub mod request;
 pub mod resolve;
 pub mod resources;
+pub mod route;
 pub mod scan;
 
 use amiss_md::Fault;
