@@ -327,10 +327,15 @@ pub const RULES: [AnchorRule; 10] = [
 ];
 
 /// Every identity the known renderers would publish for one document, plus the
-/// anchors its raw HTML declares.
+/// anchors the document declares itself, in raw HTML or in an attribute block.
 #[must_use]
-pub fn anchor_set(headings: &[Heading], html_anchors: &[String]) -> BTreeSet<String> {
+pub fn anchor_set(
+    headings: &[Heading],
+    html_anchors: &[String],
+    declared_anchors: &[String],
+) -> BTreeSet<String> {
     let mut set: BTreeSet<String> = html_anchors.iter().cloned().collect();
+    set.extend(declared_anchors.iter().cloned());
     for rule in &RULES {
         set.extend(identities(rule, headings));
     }

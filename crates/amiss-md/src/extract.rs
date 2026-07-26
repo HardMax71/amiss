@@ -100,6 +100,7 @@ pub struct Extraction {
     pub governed: Vec<GovernedDefinition>,
     pub headings: Vec<Heading>,
     pub html_anchors: Vec<String>,
+    pub declared_anchors: Vec<String>,
 }
 
 /// Everything one parse yields: the work charge, the embedded-code bytes the
@@ -189,6 +190,7 @@ fn extract_tree(
         root_span: span_of(tree)?,
         occurrences: Vec::new(),
         headings: Vec::new(),
+        declared: Vec::new(),
         mdx: Vec::new(),
         html: Vec::new(),
     };
@@ -260,6 +262,7 @@ fn extract_tree(
             })
             .collect(),
         html_anchors,
+        declared_anchors: sweep.declared,
     })
 }
 
@@ -269,6 +272,7 @@ struct Sweep<'a> {
     root_span: (usize, usize),
     occurrences: Vec<Occurrence>,
     headings: Vec<Heading>,
+    declared: Vec<String>,
     mdx: Vec<(usize, usize)>,
     html: Vec<(usize, usize)>,
 }
@@ -290,7 +294,7 @@ impl Sweep<'_> {
             }
             Node::Html(_) => self.html.push(span_of(node)?),
             Node::Heading(_) => {
-                let (text, attribute) = split_attribute(&text_content(node));
+                let (text, attribute) = split_attribute(&text_content(node), trailing_text(node));
                 self.headings.push(Heading {
                     text,
                     attribute,
@@ -300,7 +304,12 @@ impl Sweep<'_> {
             }
             Node::ListItem(_) => owners.list_item = Some(span_of(node)?),
             Node::TableCell(_) => owners.cell = Some(span_of(node)?),
-            Node::Paragraph(_) => owners.paragraph = Some(span_of(node)?),
+            Node::Paragraph(_) => {
+                owners.paragraph = Some(span_of(node)?);
+                if let Some(id) = trailing_attribute(trailing_text(node)) {
+                    self.declared.push(id);
+                }
+            }
             Node::Link(link) => {
                 let span = span_of(node)?;
                 let (construct, raw) = link_destination(bytes, self.suffix, span, link)?;
@@ -739,11 +748,27 @@ fn text_content(node: &Node) -> String {
     out
 }
 
-/// Splits a trailing `{#id}`, in either the plain or the `attr_list` spelling,
-/// from the heading text. The removed bytes are kept whole, so the text a
-/// renderer that ignores the syntax reads is `text` followed by `suffix`.
-fn split_attribute(text: &str) -> (String, Option<HeadingAttribute>) {
-    let whole = || (text.to_owned(), None);
+/// The literal text a block ends with, which is where `attr_list` looks for an
+/// attribute block. Anything else last, inline code above all, means the block
+/// carries none however its flattened content reads.
+fn trailing_text(node: &Node) -> Option<&str> {
+    let last = node.children()?.last()?;
+    if let Node::Text(text) = last {
+        Some(text.value.as_str())
+    } else {
+        None
+    }
+}
+
+/// Splits a trailing attribute block from the heading text. The block is
+/// recognized in the trailing literal text and removed from the flattened
+/// content, so the text a renderer that ignores the syntax reads is `text`
+/// followed by `suffix`.
+fn split_attribute(content: &str, tail: Option<&str>) -> (String, Option<HeadingAttribute>) {
+    let whole = || (content.to_owned(), None);
+    let Some(text) = tail else {
+        return whole();
+    };
     let trimmed = text.trim_end();
     let Some(open) = trimmed.rfind('{') else {
         return whole();
@@ -754,13 +779,9 @@ fn split_attribute(text: &str) -> (String, Option<HeadingAttribute>) {
     else {
         return whole();
     };
-    let inner = inner.strip_prefix(':').unwrap_or(inner).trim();
-    let Some(id) = inner.strip_prefix('#') else {
+    let Some(id) = attribute_id(inner) else {
         return whole();
     };
-    if id.is_empty() || id.contains(['{', '}']) || id.contains(char::is_whitespace) {
-        return whole();
-    }
     let Some(head) = trimmed.get(..open).map(str::trim_end) else {
         return whole();
     };
@@ -770,10 +791,45 @@ fn split_attribute(text: &str) -> (String, Option<HeadingAttribute>) {
     (
         head.to_owned(),
         Some(HeadingAttribute {
-            id: id.to_owned(),
+            id,
             suffix: removed.to_owned(),
         }),
     )
+}
+
+/// The identity a block's own final line declares. `attr_list` applies a block
+/// that stands alone on the last line to the block itself, and applies nothing
+/// to one that merely trails other text, which is what the extension does.
+fn trailing_attribute(text: Option<&str>) -> Option<String> {
+    let last = text?.trim_end().lines().next_back()?.trim();
+    let inner = last.strip_prefix('{')?.strip_suffix('}')?;
+    attribute_id(inner)
+}
+
+/// The identity an `attr_list` block declares, in any of the spellings the
+/// extension accepts: `#id`, `id=value`, and `id="value"`, alone or among
+/// classes, with or without kramdown's leading colon. The last one wins, as it
+/// does in the extension.
+fn attribute_id(inner: &str) -> Option<String> {
+    let inner = inner.strip_prefix(':').unwrap_or(inner).trim();
+    if inner.contains(['{', '}']) {
+        return None;
+    }
+    let mut found: Option<String> = None;
+    for item in inner.split_whitespace() {
+        let value = if let Some(bare) = item.strip_prefix('#') {
+            bare
+        } else if let Some(raw) = item.strip_prefix("id=") {
+            raw.trim_matches(['"', '\''])
+        } else {
+            continue;
+        };
+        if value.is_empty() {
+            return None;
+        }
+        found = Some(value.to_owned());
+    }
+    found
 }
 
 /// Every `id` and `name` attribute value inside the raw-HTML regions, in

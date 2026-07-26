@@ -37,6 +37,16 @@ fn member(value: &Value, key: &str, label: &str) -> Value {
         .map_or_else(|| panic!("{label} has no {key}"), |(_, found)| found)
 }
 
+fn optional(value: &Value, key: &str) -> Option<Value> {
+    let Value::Object(members) = value else {
+        return None;
+    };
+    members
+        .iter()
+        .find(|(name, _)| name == key)
+        .map(|(_, found)| found.clone())
+}
+
 fn text(value: &Value, key: &str, label: &str) -> String {
     let found = member(value, key, label);
     let Value::String(found) = found else {
@@ -53,16 +63,20 @@ fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
     found
 }
 
-fn headings(source: &str) -> (Vec<Heading>, Vec<String>) {
+fn headings(source: &str) -> (Vec<Heading>, Vec<String>, Vec<String>) {
     let extraction = analyze(Adapter::Markdown, source.as_bytes(), u64::MAX)
         .expect("the fixture parses")
         .extraction
         .expect("a parsing adapter extracts");
-    (extraction.headings, extraction.html_anchors)
+    (
+        extraction.headings,
+        extraction.html_anchors,
+        extraction.declared_anchors,
+    )
 }
 
 fn one(text: &str) -> Vec<Heading> {
-    let (headings, _anchors) = headings(&format!("## {text}\n"));
+    let (headings, _anchors, _declared) = headings(&format!("## {text}\n"));
     assert_eq!(headings.len(), 1, "{text:?} is one heading");
     headings
 }
@@ -137,7 +151,17 @@ fn every_rendered_document_reproduces_its_identities() {
             .iter()
             .find(|rule| rule.name == rule_name)
             .unwrap_or_else(|| panic!("{label} names a known rule"));
-        let (headings, _anchors) = headings(&source);
+        let (headings, anchors, declared) = headings(&source);
+        if optional(document, "covers") == Some(Value::String("union".to_owned())) {
+            let union = anchor_set(&headings, &anchors, &declared);
+            for identity in &want {
+                assert!(
+                    union.contains(identity),
+                    "{label}: {identity} is published by {rule_name} and inside the union"
+                );
+            }
+            continue;
+        }
         assert_eq!(
             identities(rule, &headings),
             want,
@@ -148,15 +172,19 @@ fn every_rendered_document_reproduces_its_identities() {
 
 #[test]
 fn the_union_holds_every_rule_and_every_html_anchor() {
-    let source = "## Setup & Config\n\n<a name=\"declared\"></a>\n";
-    let (headings, anchors) = headings(source);
-    let union = anchor_set(&headings, &anchors);
+    let source = "## Setup & Config\n\n<a name=\"html-declared\"></a>\n\n[](){#block-declared}\n";
+    let (headings, anchors, declared) = headings(source);
+    let union = anchor_set(&headings, &anchors, &declared);
     assert!(union.contains("setup--config"), "the github family is in");
     assert!(
         union.contains("setup-config"),
         "the collapsing rules are in"
     );
-    assert!(union.contains("declared"), "raw HTML anchors are in");
+    assert!(union.contains("html-declared"), "raw HTML anchors are in");
+    assert!(
+        union.contains("block-declared"),
+        "attribute-block anchors are in"
+    );
     for rule in &RULES {
         for identity in identities(rule, &headings) {
             assert!(
@@ -170,7 +198,7 @@ fn the_union_holds_every_rule_and_every_html_anchor() {
 
 #[test]
 fn an_attribute_identity_replaces_the_slug_only_where_the_renderer_honours_it() {
-    let (headings, _anchors) = headings("## Explicit {#custom-id}\n");
+    let (headings, _anchors, _declared) = headings("## Explicit {#custom-id}\n");
     for rule in &RULES {
         let published = identities(rule, &headings);
         let want = if rule.attribute == Attribute::Honored {
@@ -186,7 +214,7 @@ fn an_attribute_identity_replaces_the_slug_only_where_the_renderer_honours_it() 
 
 #[test]
 fn duplicate_headings_diverge_by_suffix_style() {
-    let (headings, _anchors) = headings("# Same\n\n# Same\n\n# Same\n");
+    let (headings, _anchors, _declared) = headings("# Same\n\n# Same\n\n# Same\n");
     let published: Vec<(&str, Vec<String>)> = RULES
         .iter()
         .map(|rule| (rule.name, identities(rule, &headings)))
@@ -208,7 +236,7 @@ fn duplicate_headings_diverge_by_suffix_style() {
 /// and the ones that do count it in the same duplicate sequence.
 #[test]
 fn a_raw_html_heading_belongs_to_the_rules_that_anchor_one() {
-    let (headings, _anchors) = headings("<h2>Twin</h2>\n\n## Twin\n");
+    let (headings, _anchors, _declared) = headings("<h2>Twin</h2>\n\n## Twin\n");
     for rule in &RULES {
         let published = identities(rule, &headings);
         let want: Vec<String> = if rule.raw_html == RawHtml::Anchored {
@@ -222,7 +250,7 @@ fn a_raw_html_heading_belongs_to_the_rules_that_anchor_one() {
 
 #[test]
 fn a_heading_that_filters_to_nothing_diverges_by_empty_rule() {
-    let (headings, _anchors) = headings("## ...\n");
+    let (headings, _anchors, _declared) = headings("## ...\n");
     for rule in &RULES {
         let published = identities(rule, &headings);
         match rule.name {

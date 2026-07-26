@@ -82,6 +82,63 @@ fn both_attribute_spellings_split_off_reversibly() {
     }
 }
 
+/// `attr_list` accepts the identity in three spellings and among other items,
+/// and every one of them names the heading.
+#[test]
+fn every_attribute_spelling_names_the_heading() {
+    for (source, text, id) in [
+        ("## Pair { id=\"pair-id\" }\n", "Pair", "pair-id"),
+        ("## Bare { id=bare-id }\n", "Bare", "bare-id"),
+        ("## Classes { .cls #both-id }\n", "Classes", "both-id"),
+        ("## Trailing {#first .cls}\n", "Trailing", "first"),
+    ] {
+        let got = extraction(Adapter::Markdown, source);
+        let heading = only(&got);
+        assert_eq!(heading.text, text, "{source:?}");
+        let attribute = heading.attribute.clone();
+        let Some(attribute) = attribute else {
+            panic!("{source:?} carries an attribute");
+        };
+        assert_eq!(attribute.id, id, "{source:?}");
+        assert_eq!(
+            format!("{}{}", heading.text, attribute.suffix),
+            source.trim_start_matches("## ").trim_end(),
+            "the removed bytes stay whole"
+        );
+    }
+}
+
+/// A block whose last line is an attribute block declares that identity for
+/// itself. One that trails other text declares nothing, one inside a fence is
+/// code, and so is one inside an inline span, which is where the extension
+/// looks and does not find it.
+#[test]
+fn a_block_declares_the_identity_on_its_own_last_line() {
+    let source = concat!(
+        "[](){#empty-link-id}\n\n",
+        "A paragraph.\n{#standalone-id}\n\n",
+        "Trailing on the same line. {#not-an-identity}\n\n",
+        "`{#inside-inline-code}`\n\n",
+        "A paragraph whose last line is code.\n`{#code-on-the-last-line}`\n\n",
+        "```text\n{#inside-a-fence}\n```\n"
+    );
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        got.declared_anchors,
+        vec!["empty-link-id".to_owned(), "standalone-id".to_owned()]
+    );
+}
+
+/// The block is read in the heading's own literal text, so one written as code
+/// stays text and the heading keeps it.
+#[test]
+fn a_heading_block_written_as_code_names_nothing() {
+    let got = extraction(Adapter::Markdown, "## Heading `{id=code-in-a-heading}`\n");
+    let heading = only(&got);
+    assert!(heading.attribute.is_none());
+    assert_eq!(heading.text, "Heading {id=code-in-a-heading}");
+}
+
 #[test]
 fn braces_that_are_not_an_identity_stay_in_the_text() {
     for source in [

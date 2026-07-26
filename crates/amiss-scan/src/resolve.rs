@@ -842,7 +842,11 @@ fn anchor_resolution(
                 .ok()
                 .and_then(|analysis| analysis.extraction)
                 .map_or(Anchors::Unevaluable, |extraction| {
-                    Anchors::Published(anchor_set(&extraction.headings, &extraction.html_anchors))
+                    Anchors::Published(anchor_set(
+                        &extraction.headings,
+                        &extraction.html_anchors,
+                        &extraction.declared_anchors,
+                    ))
                 }),
             Err(_crossing) => Anchors::Unevaluable,
         };
