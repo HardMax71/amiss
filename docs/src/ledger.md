@@ -114,6 +114,12 @@ definition whose section moved; 7 in bat from case and translation; 2 in ruff an
 from changelog entries that moved out of the file. The remaining one is deliberate, inside
 mdBook's link-handling fixtures.
 
+Those 516 have since become 238, and the arithmetic closes: 247 resolve as
+[router spellings](route-spellings.md), 30 left with the fixture trees
+[discovery](discovery.md) now skips, and one was the defect below. What remains is 122 heading
+anchors and 116 targets no spelling reaches, with mdBook joining the three that were already
+clean.
+
 The rescan also found one false missing, which is a defect and not a class: just's README
 titles itself with `<h1 align=center><code>just</code></h1>`, github.com anchors that, and
 the rule table did not. It got a
