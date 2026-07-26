@@ -1,0 +1,181 @@
+{
+  "schema": "amiss/route-spelling-vectors",
+  "contract": "route-spelling",
+  "reference": "Which source file a documentation router serves for a written destination. Every verdict was harvested from the router itself over the tree below, one destination per probe page, and never transcribed from documentation.",
+  "tree": [
+    "index.md",
+    "page.md",
+    "sub/deep.md",
+    "withindex/index.md",
+    "withreadme/README.md"
+  ],
+  "routers": [
+    {
+      "rule": "mdbook",
+      "renderer": "mdbook 0.5.4, default configuration",
+      "evidence": "the href the build emitted for each probe page, resolved against the built output tree",
+      "harvested": "2026-07-26"
+    },
+    {
+      "rule": "vitepress",
+      "renderer": "vitepress 1.6.4 with cleanUrls",
+      "evidence": "the build's own dead-link report, corroborated by the built output tree",
+      "harvested": "2026-07-26"
+    },
+    {
+      "rule": "vitepress-readme",
+      "renderer": "vitepress 1.6.4 with cleanUrls and the README-to-index rewrites starship configures",
+      "evidence": "the build's own dead-link report, corroborated by the built output tree",
+      "harvested": "2026-07-26"
+    },
+    {
+      "rule": "mkdocs",
+      "renderer": "mkdocs 1.6.1, default use_directory_urls, validation.unrecognized_links at warn",
+      "evidence": "the build's own unrecognized-link warnings",
+      "harvested": "2026-07-26"
+    }
+  ],
+  "cases": [
+    {
+      "id": "RS-001",
+      "destination": "page.md",
+      "serves": {
+        "mdbook": "page.md",
+        "vitepress": "page.md",
+        "vitepress-readme": "page.md",
+        "mkdocs": "page.md"
+      }
+    },
+    {
+      "id": "RS-002",
+      "destination": "page",
+      "serves": {
+        "mdbook": null,
+        "vitepress": "page.md",
+        "vitepress-readme": "page.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-003",
+      "destination": "page.html",
+      "serves": {
+        "mdbook": "page.md",
+        "vitepress": "page.md",
+        "vitepress-readme": "page.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-004",
+      "destination": "withindex/",
+      "serves": {
+        "mdbook": "withindex/index.md",
+        "vitepress": "withindex/index.md",
+        "vitepress-readme": "withindex/index.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-005",
+      "destination": "withindex/index.md",
+      "serves": {
+        "mdbook": "withindex/index.md",
+        "vitepress": "withindex/index.md",
+        "vitepress-readme": "withindex/index.md",
+        "mkdocs": "withindex/index.md"
+      }
+    },
+    {
+      "id": "RS-006",
+      "destination": "withindex/index.html",
+      "serves": {
+        "mdbook": "withindex/index.md",
+        "vitepress": "withindex/index.md",
+        "vitepress-readme": "withindex/index.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-007",
+      "destination": "withreadme/",
+      "serves": {
+        "mdbook": "withreadme/README.md",
+        "vitepress": null,
+        "vitepress-readme": "withreadme/README.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-008",
+      "destination": "withreadme/README.md",
+      "serves": {
+        "mdbook": null,
+        "vitepress": "withreadme/README.md",
+        "vitepress-readme": "withreadme/README.md",
+        "mkdocs": "withreadme/README.md"
+      },
+      "note": "mdbook writes the page to withreadme/index.html and rewrites this link to withreadme/README.html, so its own source spelling is the one form it does not serve. The tree holds the file, so no rule of ours is involved."
+    },
+    {
+      "id": "RS-009",
+      "destination": "withreadme/index.md",
+      "serves": {
+        "mdbook": "withreadme/README.md",
+        "vitepress": null,
+        "vitepress-readme": "withreadme/README.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-010",
+      "destination": "withreadme/index.html",
+      "serves": {
+        "mdbook": "withreadme/README.md",
+        "vitepress": null,
+        "vitepress-readme": "withreadme/README.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-011",
+      "destination": "sub/deep",
+      "serves": {
+        "mdbook": null,
+        "vitepress": "sub/deep.md",
+        "vitepress-readme": "sub/deep.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-012",
+      "destination": "sub/deep.html",
+      "serves": {
+        "mdbook": "sub/deep.md",
+        "vitepress": "sub/deep.md",
+        "vitepress-readme": "sub/deep.md",
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-013",
+      "destination": "absent",
+      "serves": {
+        "mdbook": null,
+        "vitepress": null,
+        "vitepress-readme": null,
+        "mkdocs": null
+      }
+    },
+    {
+      "id": "RS-014",
+      "destination": "absent.md",
+      "serves": {
+        "mdbook": null,
+        "vitepress": null,
+        "vitepress-readme": null,
+        "mkdocs": null
+      }
+    }
+  ]
+}
