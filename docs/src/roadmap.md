@@ -25,19 +25,14 @@ themselves changed on the way.
 ## Reference-coverage candidates
 
 Candidates, not scheduled milestones. Each enters the roadmap only when its entry
-condition is met. Heading anchors left this list by meeting theirs: the slugging rules of
-ten renderers are pinned against the renderers themselves, and an anchor no rule publishes
-is now an ordinary missing target, described in [Resolution](resolution.md).
+condition is met. Two have left this list by meeting theirs. The slugging rules of ten
+renderers are pinned against the renderers themselves, so an anchor no rule publishes is now
+an ordinary missing target. Router spellings are pinned the same way, harvested from three
+routers rather than transcribed, so a destination the tree does not hold is asked again
+under the spellings a router serves: it moved 247 of the 516 missing references across the
+ten trees, starship's 241 and mdBook's 6, and moved nothing else. Both are described in
+[Resolution](resolution.md).
 
-- Router spellings. The July study filed these with generated targets under the name clean
-  URLs; the [rescan](ledger.md) separates them, and they are the larger half. 247 of the 516
-  missing references across the ten trees name a target the tree holds under another
-  spelling, and every one of starship's 241 is a preset page whose `.md` file sits beside the
-  link. No declaration is involved here: a spelling belongs to the router the way a heading
-  identity belongs to the renderer, and a route rule can only resolve a target that already
-  exists, so it cannot manufacture a pass. Entry condition: a pinned route corpus per
-  router, harvested from the router rather than transcribed, which is the bar the renderer
-  rules carry.
 - Declared generated targets. What is left after that split is ruff-shaped: a page the docs
   build writes and the tree never holds, 102 references, 63 of them into `docs/settings.md`,
   and 60 of those carrying a fragment into a page whose headings exist only after

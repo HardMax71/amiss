@@ -27,9 +27,11 @@ digraph introduction {
 "Supported explicit reference" is an important boundary. Bare path-like prose is not
 inferred. Raw HTML and MDX code regions are opaque. Site routes, code symbols,
 live URLs, and other repositories need information this engine does not have, so they stay
-visible as declared boundaries instead of being guessed at. Line fragments and heading
-anchors are the exceptions: a line fragment selects bytes, and a heading anchor is answered
-against pinned renderer rules rather than guessed.
+visible as declared boundaries instead of being guessed at. Line fragments, heading anchors
+and router spellings are the exceptions: a line fragment selects bytes, a heading anchor is
+answered against pinned renderer rules, and a destination the tree does not hold is asked
+again under the spellings a pinned router serves, which can only reach a file the tree
+already holds.
 [Discovery](discovery.md) and [Resolution](resolution.md) describe the boundary rows, and
 [Project status](status.md) links the classifier and resolver that draw them.
 

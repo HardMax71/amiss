@@ -44,6 +44,7 @@ One document, every destination shape:
 
 ```markdown
 [guide](guide.md)                     resolves beside this document
+[guide](guide)                        resolves to guide.md, the spelling a router serves
 [site](/docs/guide.md)                unsupported site route; it is not rewritten as a tree path
 [escape](https://github.com/HardMax71/amiss/blob/main/etc/passwd)            invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
@@ -83,6 +84,16 @@ and mode read"];
   tree -> hit [label = "found"]; tree -> miss [label = "absent"];
 }
 ```
+
+A relative destination the tree does not hold is asked once more, under the spellings a
+documentation router serves: `guide` and `guide.html` for `guide.md`, and a directory's
+`index` for its `README.md`. The first spelling that names a file resolves the reference to
+that file, and the report names the file that answered while the occurrence keeps the
+destination the author wrote. A spelling reaches nothing that is not already in the tree, so
+it can widen what resolves and never invents a target; a promised directory and a
+same-repository forge URL are never re-spelled at all.
+[What a documentation router serves](route-spellings.md) holds the spellings, the routers
+they were harvested from, and what the union costs.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even

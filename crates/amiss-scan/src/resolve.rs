@@ -18,6 +18,7 @@ use crate::anchor::anchor_set;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
+use crate::route::candidates;
 use crate::{Error, lfs};
 
 /// Trusted same-repository URL dialects. Generic URI classification and
@@ -511,19 +512,43 @@ fn native(
         query: query.clone(),
         fragment: fragment.clone(),
     };
+    let located = routed(snapshot, &joined, target_kind);
     let row = lookup(
         repo,
         git,
         scan,
         cache,
         snapshot,
-        &joined,
+        &located,
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
         forge,
     )?;
     Ok((intent, row))
+}
+
+/// The path this reference is answered against. A destination the tree holds
+/// is its own answer; otherwise the first router spelling that reaches an
+/// ordinary file stands in for it. A promised directory is never re-spelled,
+/// and a spelling reaches nothing that is not already a file, so this can only
+/// turn an absent target into a present one.
+fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind) -> RepoPath {
+    if target_kind == TargetKind::Tree || snapshot.locate(path).is_some() {
+        return path.clone();
+    }
+    candidates(path)
+        .into_iter()
+        .find(|(_, candidate)| {
+            matches!(
+                snapshot.locate(candidate),
+                Some(Located::Entry(
+                    GitMode::RegularFile | GitMode::ExecutableFile,
+                    _
+                ))
+            )
+        })
+        .map_or_else(|| path.clone(), |(_, candidate)| candidate)
 }
 
 fn normalized_native_path(

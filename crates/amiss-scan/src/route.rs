@@ -9,17 +9,6 @@ pub enum Spelling {
     ReadmeIndex,
 }
 
-impl Spelling {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Extensionless => "extensionless",
-            Self::OutputExtension => "output-extension",
-            Self::ReadmeIndex => "readme-index",
-        }
-    }
-}
-
 /// One router's route rule: the spellings it serves for a source file beyond
 /// the source path itself. A router that serves none demands the source
 /// spelling and adds nothing.

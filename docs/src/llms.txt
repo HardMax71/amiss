@@ -23,6 +23,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Discovery](https://hardmax71.github.io/amiss/discovery.html): which files count as documents and which trees are always skipped
 - [Resolution](https://hardmax71.github.io/amiss/resolution.html): how each destination resolves, the forge dialects, line anchors, and heading anchors
 - [What ten renderers call a heading](https://hardmax71.github.io/amiss/anchor-rules.html): the pinned slugging rules, what each was checked against, and how far apart they are
+- [What a documentation router serves](https://hardmax71.github.io/amiss/route-spellings.html): the harvested route spellings, the routers behind them, and what a spelling can never do
 - [Correlation and impact](https://hardmax71.github.io/amiss/correlation.html): pairing occurrences across the comparison and the impact quadrant
 - [The report](https://hardmax71.github.io/amiss/report.html): the canonical JSON wire, row descriptions, and the human projection
 - [Limits and refusals](https://hardmax71.github.io/amiss/limits.html): every resource ceiling and every analysis error code with its meaning
