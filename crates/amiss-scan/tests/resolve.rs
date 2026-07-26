@@ -28,7 +28,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 const POINTER: &str = "version https://git-lfs.github.com/spec/v1\noid sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nsize 42\n";
-const ANCHORS: &[u8] = "# Setup & Config\n\n## Setup & Config\n\n### Résumé draft\n\n<a name=\"declared\"></a>\n\n## Explicit {#custom}\n\n<h2 align=\"center\"><code>tool</code></h2>\n".as_bytes();
+const ANCHORS: &[u8] = "# Setup & Config\n\n## Setup & Config\n\n### Résumé draft\n\n<a name=\"declared\"></a>\n\n## Explicit {#custom}\n\n<h2 align=\"center\"><code>tool</code></h2>\n\n[](){#anchor-point}\n\n## Pair { id=\"pair-id\" }\n".as_bytes();
 const MIXED_LINES: &[u8] = b"one\r\ntwo\nthree\rfour";
 const MIXED_LINES_OUTSIDE_CHANGED: &[u8] = b"changed before\r\ntwo\nchanged after\rchanged tail";
 
@@ -1479,6 +1479,8 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
         "custom",
         "explicit-custom",
         "tool",
+        "anchor-point",
+        "pair-id",
     ] {
         let destination = format!("anchors.md#{fragment}");
         let row = bed

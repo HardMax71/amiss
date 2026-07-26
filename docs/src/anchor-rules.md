@@ -26,13 +26,25 @@ matches.
 | `mdit-vue` | VitePress, VuePress | a wide punctuation class collapses to one separator; a leading digit takes `_` |
 | `kramdown` | Jekyll, GitHub Pages | strips the leading run of non-letters; ASCII only; empty becomes `section` |
 
-An anchor resolves when any of them would publish it, or when the document's raw HTML
-declares it. Adding a rule can only grow that set, so a rule missing from the table is the
+An anchor resolves when any of them would publish it, or when the document declares it
+outright. Adding a rule can only grow that set, so a rule missing from the table is the
 only way a live anchor is reported absent, and nothing a repository declares can shrink it.
 
 Two of the rows are configurations rather than renderers. mdBook ships with smart
 punctuation on and MkDocs takes its slug function from `mkdocs.yml`, so both spellings are
 carried rather than one being chosen for the reader.
+
+An identity can also be written down rather than derived. Raw HTML declares one with `id`
+or `name`, and the `attr_list` extension declares one with an attribute block, in any of the
+spellings it accepts: `{#id}`, `{ id="id" }`, `{ id=id }`, among classes, and with
+kramdown's leading colon. A block whose last line is nothing but an attribute block declares
+that identity for itself, which is how `[](){#anchor-point}` and a `{#section}` line under a
+paragraph work; an attribute block trailing other text on the same line declares nothing,
+and one inside a fence is code. The extension reads the block in the
+document's own literal text, so a block inside inline code is code and declares nothing.
+Every declared identity joins the union whatever the renderer, because it is authored
+rather than derived, and accepting one a given renderer would not publish can only leave a
+finding unreported, never invent one.
 
 A heading can also be written as raw HTML, which many projects do for a centered title.
 github.com anchors those, because its filter runs over the rendered document and sees
@@ -61,7 +73,7 @@ python-markdown 3.10, pymdownx, `@mdit-vue/shared`, and kramdown's own generator
 remaining three are transcribed from Gitea's `CleanValue`, Forgejo's `prefixedIDs`, and
 mdBook's `id_from_content`.
 
-Six documents, in
+Seven documents, in
 [`corpus/third_party/anchor-fixtures/`](https://github.com/HardMax71/amiss/tree/main/corpus/third_party/anchor-fixtures),
 carry what a renderer actually published for them, harvested 2026-07-26:
 
@@ -71,6 +83,7 @@ carry what a renderer actually published for them, harvested 2026-07-26:
 | `probe.md` | mdbook 0.5.4, default configuration | 28 |
 | `probe.md` | python-markdown 3.10 with `toc` and `attr_list` | 28 |
 | `probe-html.md`, this repository's own | github.com file view | 9 |
+| `probe-attr.md`, this repository's own | python-markdown 3.10 with `toc`, `attr_list` and `fenced_code` | 7 |
 | `awesome-gitea.md`, CC0 | gitea.com | 50 |
 | `starship-ja.md`, ISC | starship.rs, VitePress | 32 |
 
@@ -82,6 +95,12 @@ would come back empty rather than disagreeing.
 The Gitea pair is the only live evidence for that rule and the only place its missing
 duplicate suffix is visible: that one page publishes fifteen identities twice, so an anchor
 into it is ambiguous on Gitea and unique on Forgejo, for the same file.
+
+`probe-attr.md` is the declared identities: four heading spellings, an empty link carrying
+one, and a paragraph carrying one on its own last line. Five forms declare nothing, and they
+are pinned too: a block trailing text on the same line, one inside a fence, and three inside
+inline code, where the extension reads the syntax as the code it is. Its pair is compared as a subset
+rather than as a list, because these identities join the union beside every rule's own.
 
 `probe-html.md` is nine raw-HTML headings and one Markdown heading among them, which is
 where the wrapped element, the decoded reference, the stripped comment and the shared

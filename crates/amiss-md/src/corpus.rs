@@ -508,6 +508,16 @@ fn heading_value(heading: &Heading) -> Value {
 fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
     vec![
         (
+            "declared_anchors".to_owned(),
+            Value::Array(
+                extraction
+                    .declared_anchors
+                    .iter()
+                    .map(|anchor| Value::String(anchor.clone()))
+                    .collect(),
+            ),
+        ),
+        (
             "headings".to_owned(),
             Value::Array(extraction.headings.iter().map(heading_value).collect()),
         ),

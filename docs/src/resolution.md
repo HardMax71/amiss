@@ -116,11 +116,13 @@ trees have no line selection and stay unsupported.
 Every other fragment on a document target is a heading anchor, and a heading identity
 belongs to the renderer rather than to Markdown. Ten rules are pinned, one per renderer or
 per configuration of one, and the resolver asks whether any of them would publish the
-anchor, counting the identities a document's raw HTML declares, and the headings it writes
-as raw HTML, as well. An anchor no rule
+anchor, counting the headings a document writes as raw HTML and the identities it declares
+outright, in raw HTML or in an attribute block, as well. An anchor no rule
 publishes is `kind: missing` with `reason: heading-anchor-not-found`, an ordinary missing
-target. The union is deliberate: adding a rule can only grow what an anchor may match, so
-nothing a repository declares can turn a real break into a pass.
+target. The union is deliberate: adding a rule can only grow what an anchor may match, and no
+repository policy narrows it. A document can add to it, by declaring an identity the way it
+would add a heading, which is an edit to the target that a reviewer reads rather than a
+setting that clears a finding.
 [What ten renderers call a heading](anchor-rules.md) holds the rules, what each was checked
 against, and how far apart they are.
 

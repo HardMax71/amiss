@@ -568,6 +568,17 @@
       "renderer": "github.com file view, /repos/{owner}/{repo}/contents with the html media type",
       "harvested": "2026-07-26",
       "licence": "the probe document is this repository's own"
+    },
+    {
+      "id": "HD-007",
+      "rule": "python-markdown",
+      "document": "probe-attr.md",
+      "identities": "probe-attr.python-markdown.ids",
+      "prefix": "",
+      "renderer": "python-markdown 3.10 with toc, attr_list and fenced_code",
+      "harvested": "2026-07-26",
+      "covers": "union",
+      "licence": "the probe document is this repository's own"
     }
   ]
 }

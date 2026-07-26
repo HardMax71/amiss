@@ -259,6 +259,12 @@ one wrapped across three lines, one carrying a character reference and a comment
 that repeats a Markdown heading beside it, which is where the shared duplicate counter
 shows.
 
+`probe-attr.md` is the third own document, and it pins the identities a document declares
+rather than derives: the `attr_list` spellings on a heading, an empty link and a paragraph
+carrying one on their own last line, and the five forms that declare nothing, inline code
+among them. python-markdown
+3.10 with `attr_list` answered for it, since that extension is where the syntax is defined.
+
 The two harvested documents cover what the probe cannot reach. `awesome-gitea.md` is fifty
 headings as gitea.com renders them, which is the only live evidence for Gitea's rule and the
 only place its missing duplicate suffix shows: that page publishes fifteen identities twice.
