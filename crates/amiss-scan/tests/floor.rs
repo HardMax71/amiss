@@ -394,7 +394,7 @@ fn a_verified_floor_tightens_the_policy_entry_budget() {
 /// The complete-findings ceiling is the one array bound in the report with no
 /// resource counter behind it until now: documents and observations snapshot
 /// charged limits, and findings relied on arithmetic, every finding being too
-/// heavy for 100,000 of them to fit under the 64 MiB wire cap. Arithmetic is a
+/// heavy for 100,000 of them to fit under the wire cap. Arithmetic is a
 /// property of today's finding shape, not a law, so the ceiling is now charged
 /// against the exact array the report would ship, after control rows and
 /// exceptions. A verified floor may tighten it like any other ceiling, which is

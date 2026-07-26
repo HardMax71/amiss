@@ -16,7 +16,7 @@ use amiss_wire::controls::{GitMode, SourceConstruct};
 use amiss_wire::digest::hb;
 use amiss_wire::json::parse;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
+use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES};
 use tempfile::TempDir;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -471,22 +471,24 @@ fn schema_max_items(array: &str) -> u64 {
         .expect("the schema caps its union arrays")
 }
 
-/// The schema caps `findings` at 100,000 and a charged ceiling now counts them
-/// at runtime, tested where the floor tightens it. This pins the other half of
-/// the story: at contract values that counter never fires, because the wire cap
-/// refuses any envelope over 64 MiB and a finding is heavy enough that a hundred
-/// thousand of them cannot fit beneath it, so a findings flood meets the wire
-/// cap first and the run exits 2 either way.
+/// The schema caps `findings` at 100,000 and a charged ceiling counts them at
+/// runtime, tested where the floor tightens it. Which of the two fires first on
+/// a findings flood is arithmetic between the cap and the weight of a finding,
+/// and the reservation moving to 256 MiB reversed it: the leanest finding this
+/// engine constructs is now lighter than the break-even, so a hundred thousand
+/// of them fit beneath the wire and the counter is what stops the run. That is
+/// the order worth having, since the counter names the flood while the wire cap
+/// names a byte total, and the wire cap still backstops findings heavier than
+/// the break-even.
 ///
-/// That margin is stated nowhere, so it is stated here. This does not prove a
-/// floor under every finding the engine could ever construct. It pins the
-/// leanest one it constructs today against the break-even. Slim the finding
-/// shape past that line and this fails, which is the signal that the counter
-/// has stopped being a backstop and become the ceiling that actually fires.
+/// The margin is stated nowhere else, so it is stated here against the leanest
+/// finding the engine builds today. Fatten the finding shape past the break-even
+/// and this fails, which is the signal that the counter has gone back to being
+/// unreachable and this note is out of date.
 #[test]
-fn the_findings_ceiling_sits_behind_the_wire_cap() {
+fn the_findings_counter_fires_before_the_wire_cap() {
     let ceiling = schema_max_items("findings");
-    let break_even = amiss_wire::report::MACHINE_JSON_BYTES / (ceiling + 1);
+    let break_even = MACHINE_JSON_BYTES / (ceiling + 1);
 
     let dir = TempDir::new().unwrap();
     let root = dir.path();
@@ -553,10 +555,10 @@ fn the_findings_ceiling_sits_behind_the_wire_cap() {
         .min()
         .expect("the fixture produces findings");
     assert!(
-        u64::try_from(leanest).unwrap() > break_even,
+        u64::try_from(leanest).unwrap() < break_even,
         "a finding is {leanest} bytes and the break-even is {break_even}: \
-         {ceiling} of them now fit under the wire cap, so the complete-findings \
-         counter is no longer a backstop and this margin note is out of date"
+         {ceiling} of them no longer fit under the wire cap, so the wire cap has \
+         gone back to firing first and this margin note is out of date"
     );
 }
 
@@ -630,7 +632,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
     assert_eq!(built.exit_code, 2);
     let wire = built.wire();
     assert!(
-        wire.len() < 67_108_864,
+        u64::try_from(wire.len()).unwrap_or(u64::MAX) < MACHINE_JSON_BYTES,
         "the projection itself fits the reservation"
     );
     let parsed: serde_json::Value = serde_json::from_slice(&wire).unwrap();
@@ -640,8 +642,8 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
     assert_eq!(row["code"], "OUTPUT_LIMIT_EXCEEDED");
     assert_eq!(row["phase"], "output");
     assert_eq!(row["resource"], "machine-json-bytes");
-    assert_eq!(row["configured_limit"], 67_108_864);
-    assert!(row["observed_lower_bound"].as_u64().unwrap() > 67_108_864);
+    assert_eq!(row["configured_limit"], MACHINE_JSON_BYTES);
+    assert!(row["observed_lower_bound"].as_u64().unwrap() > MACHINE_JSON_BYTES);
     assert_eq!(parsed["payload"]["findings"].as_array().unwrap().len(), 0);
     assert_eq!(
         parsed["payload"]["observations"].as_array().unwrap().len(),

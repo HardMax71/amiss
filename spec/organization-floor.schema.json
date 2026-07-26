@@ -309,8 +309,8 @@
             "properties": {
               "maximum": {
                 "type": "integer",
-                "minimum": 67108864,
-                "maximum": 67108864
+                "minimum": 268435456,
+                "maximum": 268435456
               }
             }
           }
