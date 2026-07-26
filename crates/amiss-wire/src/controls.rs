@@ -352,6 +352,7 @@ pub enum ResourceName {
     ReferencedTargetBlobBytes,
     AggregateReferencedTargetBytesPerSnapshot,
     AggregateLineFragmentEvaluationBytesPerSnapshot,
+    AggregateHeadingAnchorEvaluationBytesPerSnapshot,
     AggregateDocumentBytesPerSnapshot,
     RawLinkDestinationBytes,
     ParserNesting,
@@ -409,7 +410,8 @@ impl ResourceName {
             | Self::ReferencesPerSnapshot => "parse",
             Self::ReferencedTargetBlobBytes
             | Self::AggregateReferencedTargetBytesPerSnapshot
-            | Self::AggregateLineFragmentEvaluationBytesPerSnapshot => "resolution",
+            | Self::AggregateLineFragmentEvaluationBytesPerSnapshot
+            | Self::AggregateHeadingAnchorEvaluationBytesPerSnapshot => "resolution",
             Self::CompleteFindings => "policy",
             Self::MachineJsonBytes => "output",
             Self::TypedAnalysisErrorsRetained
@@ -1206,6 +1208,9 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                     path: resolved_path,
                 },
                 MissingTag::LineFragmentOutOfRange => Missing::LineFragmentOutOfRange {
+                    path: resolved_path,
+                },
+                MissingTag::HeadingAnchorNotFound => Missing::HeadingAnchorNotFound {
                     path: resolved_path,
                 },
             }))

@@ -10,7 +10,7 @@ use amiss_wire::digest::Digest;
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, Disposition, ErrorDetail, FindingKind};
 
-use crate::resources::ScanResources;
+use crate::resources::{Aggregate, ScanResources};
 use crate::{Error, lfs};
 
 /// One side's acquired repository policy: the digest is null exactly when the
@@ -754,7 +754,10 @@ pub fn protected_state(
     let object = repo
         .read_expected_capped(git, oid, ObjectKind::Blob, cap)
         .map_err(Error::from)?;
-    scan.charge_control_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
+    scan.charge(
+        Aggregate::SelectedControlBytes,
+        u64::try_from(object.body.len()).unwrap_or(u64::MAX),
+    )?;
     if lfs::is_pointer(&object.body) {
         return Ok(ProtectedState::Unsupported);
     }
@@ -892,6 +895,9 @@ pub fn tightened_limits(
             }
             ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot => {
                 Some(&mut scan.aggregate_line_fragment_evaluation_bytes_per_snapshot)
+            }
+            ResourceName::AggregateHeadingAnchorEvaluationBytesPerSnapshot => {
+                Some(&mut scan.aggregate_heading_anchor_evaluation_bytes_per_snapshot)
             }
             ResourceName::SelectedControlBlobBytes => Some(&mut scan.selected_control_blob_bytes),
             ResourceName::AggregateSelectedControlBytesPerSnapshot => {

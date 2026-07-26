@@ -289,12 +289,12 @@ fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
     } else {
         matches!(
             &row,
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
         )
     };
     assert!(
         matches_boundary,
-        "{id}: a document target classifies the fragment"
+        "{id}: outside the line grammar the fragment is a heading anchor, not a selection"
     );
 }
 
@@ -441,6 +441,7 @@ fn target_kind_case(bed: &mut Bed, case: &Value, id: &str) {
 fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
     let target = match text(case, "target_class") {
         "document" => "docs/a.md",
+        "document-anchor" => "docs/file.md",
         "code" => "src/a.scala",
         other => panic!("{id}: unknown target class {other}"),
     };
@@ -453,20 +454,17 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
         .and_then(Value::as_bool)
         .unwrap()
     {
-        let line = case
+        let key = if case
             .get("github_line_fragment")
             .and_then(Value::as_bool)
-            .unwrap();
-        if line {
-            destination.push('#');
-            destination.push_str(
-                case.get("line_fragment")
-                    .and_then(Value::as_str)
-                    .unwrap_or("L1"),
-            );
+            .unwrap()
+        {
+            "line_fragment"
         } else {
-            destination.push_str("#sec");
-        }
+            "fragment"
+        };
+        destination.push('#');
+        destination.push_str(case.get(key).and_then(Value::as_str).unwrap_or("L1"));
     }
     let (_intent, row) = bed.run(None, "README.md", false, &destination);
     let expected = case.get("expected").unwrap();
@@ -474,7 +472,10 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
     let expected_reason = expected.get("reason").and_then(Value::as_str);
     match &row {
         Resolution::Resolved(_) => assert_eq!(expected_reason, None, "{id}"),
-        Resolution::Missing(missing @ Missing::LineFragmentOutOfRange { .. }) => {
+        Resolution::Missing(
+            missing @ (Missing::LineFragmentOutOfRange { .. }
+            | Missing::HeadingAnchorNotFound { .. }),
+        ) => {
             assert_eq!(
                 Some(missing.discriminant().as_ref()),
                 expected_reason,

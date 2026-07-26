@@ -21,6 +21,7 @@ pub struct ScanLimits {
     pub referenced_target_blob_bytes: u64,
     pub aggregate_referenced_target_bytes_per_snapshot: u64,
     pub aggregate_line_fragment_evaluation_bytes_per_snapshot: u64,
+    pub aggregate_heading_anchor_evaluation_bytes_per_snapshot: u64,
     pub selected_control_blob_bytes: u64,
     pub aggregate_selected_control_bytes_per_snapshot: u64,
     pub control_input_bytes: u64,
@@ -46,6 +47,7 @@ impl ScanLimits {
         referenced_target_blob_bytes: 16_777_216,
         aggregate_referenced_target_bytes_per_snapshot: 536_870_912,
         aggregate_line_fragment_evaluation_bytes_per_snapshot: 536_870_912,
+        aggregate_heading_anchor_evaluation_bytes_per_snapshot: 536_870_912,
         selected_control_blob_bytes: 16_777_216,
         aggregate_selected_control_bytes_per_snapshot: 67_108_864,
         control_input_bytes: 16_777_216,
@@ -55,6 +57,15 @@ impl ScanLimits {
         errors_retained: 64,
         complete_findings: 100_000,
     };
+}
+
+/// The snapshot aggregates a caller charges by declared bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Aggregate {
+    SelectedControlBytes,
+    ReferencedTargetBytes,
+    LineFragmentBytes,
+    HeadingAnchorBytes,
 }
 
 /// Snapshot-scoped charge state. Count resources observe exactly one past the
@@ -73,6 +84,7 @@ pub struct ScanResources {
     references: u64,
     target_bytes: u64,
     line_fragment_bytes: u64,
+    heading_anchor_bytes: u64,
     control_bytes: u64,
 }
 
@@ -88,6 +100,7 @@ impl Clone for ScanResources {
             references: self.references,
             target_bytes: self.target_bytes,
             line_fragment_bytes: self.line_fragment_bytes,
+            heading_anchor_bytes: self.heading_anchor_bytes,
             control_bytes: self.control_bytes,
         }
     }
@@ -118,8 +131,25 @@ impl ScanResources {
             references: 0,
             target_bytes: 0,
             line_fragment_bytes: 0,
+            heading_anchor_bytes: 0,
             control_bytes: 0,
         }
+    }
+
+    /// One aggregate charge: the prior total plus this member, refused whole
+    /// when the sum crosses, so a rejected member is never counted.
+    fn charge_aggregate(
+        total: &mut u64,
+        limit: u64,
+        resource: ResourceName,
+        declared_bytes: u64,
+    ) -> Result<(), Error> {
+        let charged = total.saturating_add(declared_bytes);
+        if charged > limit {
+            return Err(crossing(resource, limit, charged));
+        }
+        *total = charged;
+        Ok(())
     }
 
     #[must_use]
@@ -194,67 +224,51 @@ impl ScanResources {
         self.line_fragment_bytes
     }
 
-    /// Charges one selected control blob's declared size to the snapshot
-    /// aggregate; the per-value cap is enforced where the read happens.
+    #[must_use]
+    pub const fn heading_anchor_bytes(&self) -> u64 {
+        self.heading_anchor_bytes
+    }
+
+    /// The heading-anchor evaluation bytes still grantable to the next target
+    /// parse.
+    #[must_use]
+    pub const fn heading_anchor_allowance(&self) -> u64 {
+        self.limits
+            .aggregate_heading_anchor_evaluation_bytes_per_snapshot
+            .saturating_sub(self.heading_anchor_bytes)
+    }
+
+    /// Charges one member to a snapshot aggregate. The per-value cap, where a
+    /// resource has one, is enforced where the read happens.
     ///
     /// # Errors
     ///
     /// The aggregate crossing, observing the prior total plus this member.
-    pub fn charge_control_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
-        let total = self.control_bytes.saturating_add(declared_bytes);
-        if total > self.limits.aggregate_selected_control_bytes_per_snapshot {
-            return Err(crossing(
+    pub fn charge(&mut self, aggregate: Aggregate, declared_bytes: u64) -> Result<(), Error> {
+        let limits = self.limits;
+        let (total, limit, resource) = match aggregate {
+            Aggregate::SelectedControlBytes => (
+                &mut self.control_bytes,
+                limits.aggregate_selected_control_bytes_per_snapshot,
                 ResourceName::AggregateSelectedControlBytesPerSnapshot,
-                self.limits.aggregate_selected_control_bytes_per_snapshot,
-                total,
-            ));
-        }
-        self.control_bytes = total;
-        Ok(())
-    }
-
-    /// Charges one referenced target's declared byte size to the snapshot
-    /// aggregate; the per-value cap is enforced where the read happens.
-    ///
-    /// # Errors
-    ///
-    /// The aggregate crossing, observing the prior charged total plus this
-    /// member.
-    pub fn charge_target_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
-        let total = self.target_bytes.saturating_add(declared_bytes);
-        if total > self.limits.aggregate_referenced_target_bytes_per_snapshot {
-            return Err(crossing(
+            ),
+            Aggregate::ReferencedTargetBytes => (
+                &mut self.target_bytes,
+                limits.aggregate_referenced_target_bytes_per_snapshot,
                 ResourceName::AggregateReferencedTargetBytesPerSnapshot,
-                self.limits.aggregate_referenced_target_bytes_per_snapshot,
-                total,
-            ));
-        }
-        self.target_bytes = total;
-        Ok(())
-    }
-
-    /// Charges one distinct target-and-line-range evaluation pessimistically
-    /// by the complete target size. Cached repeats are not charged again.
-    ///
-    /// # Errors
-    ///
-    /// The aggregate crossing, observing the prior total plus this evaluation.
-    pub fn charge_line_fragment_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
-        let total = self.line_fragment_bytes.saturating_add(declared_bytes);
-        if total
-            > self
-                .limits
-                .aggregate_line_fragment_evaluation_bytes_per_snapshot
-        {
-            return Err(crossing(
+            ),
+            Aggregate::LineFragmentBytes => (
+                &mut self.line_fragment_bytes,
+                limits.aggregate_line_fragment_evaluation_bytes_per_snapshot,
                 ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot,
-                self.limits
-                    .aggregate_line_fragment_evaluation_bytes_per_snapshot,
-                total,
-            ));
-        }
-        self.line_fragment_bytes = total;
-        Ok(())
+            ),
+            Aggregate::HeadingAnchorBytes => (
+                &mut self.heading_anchor_bytes,
+                limits.aggregate_heading_anchor_evaluation_bytes_per_snapshot,
+                ResourceName::AggregateHeadingAnchorEvaluationBytesPerSnapshot,
+            ),
+        };
+        Self::charge_aggregate(total, limit, resource, declared_bytes)
     }
 
     /// Admits one selected document of `declared_bytes`.
@@ -299,16 +313,12 @@ impl ScanResources {
                 declared_bytes,
             ));
         }
-        let total = self.document_bytes.saturating_add(declared_bytes);
-        if total > self.limits.aggregate_document_bytes_per_snapshot {
-            return Err(crossing(
-                ResourceName::AggregateDocumentBytesPerSnapshot,
-                self.limits.aggregate_document_bytes_per_snapshot,
-                total,
-            ));
-        }
-        self.document_bytes = total;
-        Ok(())
+        Self::charge_aggregate(
+            &mut self.document_bytes,
+            self.limits.aggregate_document_bytes_per_snapshot,
+            ResourceName::AggregateDocumentBytesPerSnapshot,
+            declared_bytes,
+        )
     }
 
     /// Charges one parsed document's node work.

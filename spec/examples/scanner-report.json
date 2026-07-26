@@ -324,7 +324,7 @@
           }
         },
         "kind": "explicit-target-missing",
-        "description": "a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link",
+        "description": "a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link",
         "location": {
           "path": "docs/guide.md",
           "side": "candidate",
@@ -1131,6 +1131,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:f44c2b720ef6fa72c3959cc15b98dfd32cf16bbf8a45d6d8b0b40ab49fab17e2",
+  "payload_digest": "sha256:9f64ec712aef5b97c1bc32c7833f99c8ef9b5b1b264f2db12bfccd1dfedc7b8a",
   "schema": "amiss/scanner-report-envelope"
 }

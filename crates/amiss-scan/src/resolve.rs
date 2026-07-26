@@ -1,21 +1,23 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
+use amiss_md::analyze;
 use amiss_md::lines::scan;
 use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::{ForgeDialect, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ForgeDialect, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, ExternalReference, InvalidReference, Missing,
     Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget,
 };
 
+use crate::anchor::anchor_set;
 use crate::discovery::{Located, SnapshotDiscovery};
-use crate::document::classify;
-use crate::resources::ScanResources;
+use crate::document::{Classification, classify};
+use crate::resources::{Aggregate, ScanResources};
 use crate::{Error, lfs};
 
 /// Trusted same-repository URL dialects. Generic URI classification and
@@ -97,6 +99,16 @@ struct CachedContent {
     content: Content,
 }
 
+/// A target's heading identities, built once and then answered from memory.
+/// `Unevaluable` records that the parse was refused or unaffordable, which is
+/// not the same as a document that publishes nothing.
+#[derive(Debug)]
+enum Anchors {
+    Unread,
+    Unevaluable,
+    Published(BTreeSet<String>),
+}
+
 #[derive(Debug)]
 enum Content {
     Ordinary {
@@ -104,6 +116,7 @@ enum Content {
         projection_digest: Digest,
         body: Box<[u8]>,
         line_projections: BTreeMap<LineRange, Option<Digest>>,
+        anchors: Anchors,
     },
     LfsPointer {
         raw_digest: Digest,
@@ -684,6 +697,29 @@ fn lookup(
         }
     };
 
+    if let Some(refusal) = refusal(snapshot, path, mode, target_kind, query, entry.clone()) {
+        return Ok(refusal);
+    }
+
+    match fragment {
+        Some(raw_fragment) if !raw_fragment.is_empty() => {
+            let decoded = decode_fragment(raw_fragment).unwrap_or_default();
+            fragment_resolution(scan, cache, path, mode, entry, forge, &decoded)
+        }
+        Some(_) | None => Ok(Resolution::Resolved(entry)),
+    }
+}
+
+/// The two answers a located target can carry before its fragment is read: a
+/// promised kind the entry is not, and a query the run cannot evaluate.
+fn refusal(
+    snapshot: &SnapshotDiscovery,
+    path: &RepoPath,
+    mode: GitMode,
+    target_kind: TargetKind,
+    query: Option<&str>,
+    entry: Target<RepoPath>,
+) -> Option<Resolution> {
     let is_tree = mode == GitMode::Tree;
     let compatible = match target_kind {
         TargetKind::Blob => !is_tree,
@@ -691,49 +727,110 @@ fn lookup(
         TargetKind::Either => true,
     };
     if !compatible {
-        return Ok(Resolution::TypeMismatch(entry));
+        return Some(Resolution::TypeMismatch(entry));
     }
-
-    if query.is_some() {
-        let accepted = !is_tree
-            && classify(path.as_bytes())
-                .is_some_and(|class| class != crate::Classification::PlainAdvisory)
-            && snapshot.is_scanned_structured(path);
-        if !accepted {
-            return Ok(Resolution::UnsupportedSemantics(
-                UnsupportedSemantics::Query(entry),
-            ));
-        }
+    let evaluable = !is_tree
+        && classify(path.as_bytes()).is_some_and(|class| class != Classification::PlainAdvisory)
+        && snapshot.is_scanned_structured(path);
+    match query {
+        Some(_) if !evaluable => Some(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::Query(entry),
+        )),
+        Some(_) | None => None,
     }
+}
 
-    if let Some(raw_fragment) = fragment
-        && !raw_fragment.is_empty()
-    {
-        let decoded = decode_fragment(raw_fragment).unwrap_or_default();
-        if is_tree {
-            return Ok(Resolution::UnsupportedSemantics(
-                UnsupportedSemantics::CodeFragment(entry),
-            ));
-        }
-        if let Some(range) = line_fragment(forge, &decoded) {
-            let Target::Blob(blob) = entry else {
-                return Err(Error::Internal);
-            };
-            return line_resolution(scan, cache, path, mode, blob, range);
-        }
-        if classify(path.as_bytes()).is_some() {
-            let Target::Blob(blob) = entry else {
-                return Err(Error::Internal);
-            };
-            return Ok(Resolution::UnsupportedSemantics(
-                UnsupportedSemantics::Fragment(blob),
-            ));
-        }
+/// The fragment precedence on a located target: a tree carries none, the line
+/// grammar wins where it applies, a document class is asked for the heading
+/// identity, and everything else keeps its unsupported answer.
+fn fragment_resolution(
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    path: &RepoPath,
+    mode: GitMode,
+    entry: Target<RepoPath>,
+    forge: Option<ForgeDialect>,
+    decoded: &str,
+) -> Result<Resolution, Error> {
+    if mode == GitMode::Tree {
         return Ok(Resolution::UnsupportedSemantics(
             UnsupportedSemantics::CodeFragment(entry),
         ));
     }
-    Ok(Resolution::Resolved(entry))
+    let Target::Blob(blob) = entry else {
+        return Err(Error::Internal);
+    };
+    if let Some(range) = line_fragment(forge, decoded) {
+        return line_resolution(scan, cache, path, mode, blob, range);
+    }
+    match classify(path.as_bytes()) {
+        Some(classification) => match classification.adapter() {
+            Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
+            None => Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::Fragment(blob),
+            )),
+        },
+        None => Ok(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
+        )),
+    }
+}
+
+/// Answers a heading anchor against the identities the known renderers would
+/// publish for the target. A target this evaluation cannot read, parse, or
+/// afford keeps the unsupported-semantics answer, so nothing is reported
+/// missing on the strength of a parse that did not happen.
+fn anchor_resolution(
+    scan_resources: &mut ScanResources,
+    cache: &mut TargetCache,
+    path: &RepoPath,
+    mode: GitMode,
+    blob: BlobTarget<RepoPath>,
+    adapter: Adapter,
+    fragment: &str,
+) -> Result<Resolution, Error> {
+    let unsupported =
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(blob.clone()));
+    let Some(cached) = cache.read.get_mut(path) else {
+        return Err(Error::Internal);
+    };
+    if cached.mode != mode || cached.content.evidence() != blob.content {
+        return Err(Error::Internal);
+    }
+    let Content::Ordinary {
+        body,
+        anchors: slot,
+        ..
+    } = &mut cached.content
+    else {
+        return Ok(unsupported);
+    };
+
+    if matches!(slot, Anchors::Unread) {
+        let charged = scan_resources.charge(
+            Aggregate::HeadingAnchorBytes,
+            u64::try_from(body.len()).unwrap_or(u64::MAX),
+        );
+        let allowance = scan_resources.heading_anchor_allowance();
+        *slot = match charged {
+            Ok(()) => analyze(adapter, body, allowance)
+                .ok()
+                .and_then(|analysis| analysis.extraction)
+                .map_or(Anchors::Unevaluable, |extraction| {
+                    Anchors::Published(anchor_set(&extraction.headings, &extraction.html_anchors))
+                }),
+            Err(_crossing) => Anchors::Unevaluable,
+        };
+    }
+    let Anchors::Published(identities) = slot else {
+        return Ok(unsupported);
+    };
+    if identities.contains(fragment) {
+        return Ok(Resolution::Resolved(Target::Blob(blob)));
+    }
+    Ok(Resolution::Missing(Missing::HeadingAnchorNotFound {
+        path: path.clone(),
+    }))
 }
 
 /// An inclusive, one-indexed selection of raw source lines.
@@ -771,7 +868,10 @@ fn line_resolution(
     let projection = if let Some(cached) = line_projections.get(&range).copied() {
         cached
     } else {
-        scan_resources.charge_line_fragment_bytes(u64::try_from(body.len()).unwrap_or(u64::MAX))?;
+        scan_resources.charge(
+            Aggregate::LineFragmentBytes,
+            u64::try_from(body.len()).unwrap_or(u64::MAX),
+        )?;
         let projection = selected_line_bytes(body, range).map(|selected| {
             target_projection(
                 TARGET_LINE_PROJECTION_DOMAIN,
@@ -891,7 +991,10 @@ fn read_target(
     let object = repo
         .read_expected_capped(git, oid, ObjectKind::Blob, cap)
         .map_err(Error::from)?;
-    scan.charge_target_bytes(u64::try_from(object.body.len()).unwrap_or(u64::MAX))?;
+    scan.charge(
+        Aggregate::ReferencedTargetBytes,
+        u64::try_from(object.body.len()).unwrap_or(u64::MAX),
+    )?;
     let raw = hb(RAW_EVIDENCE_DOMAIN, &object.body);
     let content = if lfs::is_pointer(&object.body) {
         Content::LfsPointer { raw_digest: raw }
@@ -901,6 +1004,7 @@ fn read_target(
             projection_digest: target_projection(TARGET_PROJECTION_DOMAIN, mode, raw),
             body: object.body.into_boxed_slice(),
             line_projections: BTreeMap::new(),
+            anchors: Anchors::Unread,
         }
     };
     let evidence = content.evidence();

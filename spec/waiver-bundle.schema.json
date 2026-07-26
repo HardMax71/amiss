@@ -389,7 +389,8 @@
         "reason": {
           "enum": [
             "path-not-found",
-            "line-fragment-out-of-range"
+            "line-fragment-out-of-range",
+            "heading-anchor-not-found"
           ]
         },
         "path": {
