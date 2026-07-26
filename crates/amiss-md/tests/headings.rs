@@ -82,26 +82,38 @@ fn both_attribute_spellings_split_off_reversibly() {
     }
 }
 
+/// Each case is a heading source, the text left after the identity is split
+/// off, and the identity itself.
+#[expect(clippy::panic, reason = "test fixture helper")]
+fn names_the_heading(adapter: Adapter, cases: &[(&str, &str, &str)]) {
+    for (source, text, id) in cases {
+        let got = extraction(adapter, source);
+        let heading = only(&got);
+        assert_eq!(&heading.text, text, "{source:?}");
+        let Some(attribute) = heading.attribute.clone() else {
+            panic!("{source:?} carries an identity")
+        };
+        assert_eq!(&attribute.id, id, "{source:?}");
+    }
+}
+
 /// `attr_list` accepts the identity in three spellings and among other items,
 /// and every one of them names the heading.
 #[test]
 fn every_attribute_spelling_names_the_heading() {
-    for (source, text, id) in [
+    let cases = [
         ("## Pair { id=\"pair-id\" }\n", "Pair", "pair-id"),
         ("## Bare { id=bare-id }\n", "Bare", "bare-id"),
         ("## Classes { .cls #both-id }\n", "Classes", "both-id"),
         ("## Trailing {#first .cls}\n", "Trailing", "first"),
-    ] {
+    ];
+    names_the_heading(Adapter::Markdown, &cases);
+    for (source, _text, _id) in cases {
         let got = extraction(Adapter::Markdown, source);
         let heading = only(&got);
-        assert_eq!(heading.text, text, "{source:?}");
-        let attribute = heading.attribute.clone();
-        let Some(attribute) = attribute else {
-            panic!("{source:?} carries an attribute");
-        };
-        assert_eq!(attribute.id, id, "{source:?}");
+        let suffix = heading.attribute.clone().map(|attribute| attribute.suffix);
         assert_eq!(
-            format!("{}{}", heading.text, attribute.suffix),
+            format!("{}{}", heading.text, suffix.unwrap_or_default()),
             source.trim_start_matches("## ").trim_end(),
             "the removed bytes stay whole"
         );
@@ -127,6 +139,60 @@ fn a_block_declares_the_identity_on_its_own_last_line() {
         got.declared_anchors,
         vec!["empty-link-id".to_owned(), "standalone-id".to_owned()]
     );
+}
+
+/// Docusaurus writes the identity as an MDX comment, which the expression
+/// grammar makes opaque, so the heading reads as if it carried none. The
+/// identity is taken as written, case and all.
+#[test]
+fn an_mdx_comment_names_the_heading_it_ends() {
+    names_the_heading(
+        Adapter::Mdx,
+        &[
+            ("## `noIndex` {/* #noIndex */}\n", "noIndex", "noIndex"),
+            (
+                "## Spaced out {/*   #spaced-id   */}\n",
+                "Spaced out",
+                "spaced-id",
+            ),
+            ("## Nested braces {/* #a{b} */}\n", "Nested braces", "a{b}"),
+        ],
+    );
+}
+
+/// The forms the parser answers with no identity, each verdict taken from
+/// `@docusaurus/utils` rather than from the syntax as it reads.
+#[test]
+fn an_mdx_comment_names_nothing_where_docusaurus_names_nothing() {
+    for source in [
+        "## Trailing text {/* #id */} after\n",
+        "## Empty comment {/* */}\n",
+        "## Two words {/* #two words */}\n",
+    ] {
+        let got = extraction(Adapter::Mdx, source);
+        let heading = only(&got);
+        assert!(
+            heading.attribute.is_none(),
+            "{source:?} declares no identity"
+        );
+    }
+}
+
+/// An item that is neither an identity, a class, nor a pair is not an
+/// attribute block, which is what keeps a mangled MDX comment in a Markdown
+/// file from naming a heading `attr_list` would not name.
+#[test]
+fn a_block_of_unknown_items_names_nothing() {
+    for source in [
+        "## Mangled comment {/ #mdx-id /}\n",
+        "## Set {a, b}\n",
+        "## Words {two words}\n",
+    ] {
+        let got = extraction(Adapter::Markdown, source);
+        let heading = only(&got);
+        assert!(heading.attribute.is_none(), "{source:?}");
+        assert!(heading.text.contains('{'), "{source:?} keeps its braces");
+    }
 }
 
 /// The block is read in the heading's own literal text, so one written as code

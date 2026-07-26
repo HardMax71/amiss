@@ -64,7 +64,11 @@ fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
 }
 
 fn headings(source: &str) -> (Vec<Heading>, Vec<String>, Vec<String>) {
-    let extraction = analyze(Adapter::Markdown, source.as_bytes(), u64::MAX)
+    parsed(Adapter::Markdown, source)
+}
+
+fn parsed(adapter: Adapter, source: &str) -> (Vec<Heading>, Vec<String>, Vec<String>) {
+    let extraction = analyze(adapter, source.as_bytes(), u64::MAX)
         .expect("the fixture parses")
         .extraction
         .expect("a parsing adapter extracts");
@@ -151,7 +155,12 @@ fn every_rendered_document_reproduces_its_identities() {
             .iter()
             .find(|rule| rule.name == rule_name)
             .unwrap_or_else(|| panic!("{label} names a known rule"));
-        let (headings, anchors, declared) = headings(&source);
+        let name = text(document, "document", &label);
+        let adapter = match name.rsplit('.').next() {
+            Some("mdx") => Adapter::Mdx,
+            Some(_) | None => Adapter::Markdown,
+        };
+        let (headings, anchors, declared) = parsed(adapter, &source);
         if optional(document, "covers") == Some(Value::String("union".to_owned())) {
             let union = anchor_set(&headings, &anchors, &declared);
             for identity in &want {
