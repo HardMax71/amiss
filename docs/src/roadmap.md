@@ -42,9 +42,16 @@ ten trees, starship's 241 and mdBook's 6, and moved nothing else. Both are descr
   can declare a reference unchecked without becoming the bulk clearing mechanism
   [the evidence base](evidence.md) names as a gate's cheapest bypass. Entry condition: a
   design that keeps "no suppression" true, plus two design-partner repositories from this
-  class. Against that second condition, ruff already runs `mkdocs build --strict` with
-  anchor validation on every pull request, so it gates these same links after generation, at
-  a layer this engine does not reach.
+  class. Twenty repositories have been scanned against that condition since, and what they
+  say is worth carrying here. uv is a second member of the class, 54 references into three
+  generated reference pages, though it shares an organisation and a toolchain with ruff
+  rather than being an independent partner. ruff itself already runs `mkdocs build --strict`
+  with anchor validation on every pull request, so it gates these same links after
+  generation, at a layer this engine does not reach. And the class is wider than pages: an
+  API generator publishes anchors on a page that is one line long, a repository's own hook
+  publishes them from a comment marker, and Hugo publishes them from definition-list terms
+  and transcluded files. A declared list of target paths answers none of those, which is the
+  part of the contract that still needs designing.
 - reStructuredText or AsciiDoc. Entry condition: a pinned grammar, a conformance corpus,
   extraction goldens, resource accounting, and honest opaque regions, the same set the
   Markdown adapters carry.
