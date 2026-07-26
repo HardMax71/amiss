@@ -284,23 +284,36 @@ fn a_complete_report_validates_against_the_schema() {
 }
 
 /// The engine never fetches an external URL, so it raises no finding and keeps
-/// the destination where it was seen, for the layer that does fetch.
+/// the destination where it was seen, for the layer that does fetch. Every
+/// external resolution carries one and nothing else does.
 #[expect(
     clippy::unwrap_used,
     clippy::indexing_slicing,
     reason = "test fixture helper"
 )]
 fn assert_external_destinations(payload: &serde_json::Value) {
-    let external: Vec<&str> = payload["observations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|row| row["candidate"]["external_destination"].as_str())
-        .collect();
-    assert!(
-        !external.is_empty() && external.iter().all(|url| url.starts_with("http")),
-        "every external observation names its destination: {external:?}"
-    );
+    let mut external = 0_usize;
+    for row in payload["observations"].as_array().unwrap() {
+        for side in ["base", "candidate"] {
+            let Some(entry) = row[side].as_object() else {
+                continue;
+            };
+            if entry["resolution"]["kind"] == "external" {
+                external = external.saturating_add(1);
+                assert_eq!(
+                    entry["external_destination"], "https://example.com/x",
+                    "an external observation names the destination the source decoded to"
+                );
+            } else {
+                assert!(
+                    !entry.contains_key("external_destination"),
+                    "{:?} is not external and names no destination",
+                    entry["resolution"]["kind"]
+                );
+            }
+        }
+    }
+    assert_eq!(external, 1, "the fixture holds one external reference");
 }
 
 #[test]

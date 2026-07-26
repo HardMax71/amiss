@@ -22,8 +22,9 @@ pub struct Observation {
     pub adapter: Adapter,
     pub construct: SourceConstruct,
     pub intent: Intent,
-    /// The destination as written, kept only for a reference the engine leaves
-    /// to another layer, so that layer can read it without the tree.
+    /// The destination after the format's own decoding, which is what a fetcher
+    /// would request, kept only for a reference the engine leaves to another
+    /// layer so that layer can read it without the tree.
     pub external_destination: Option<String>,
     pub raw_destination_digest: Digest,
     pub projection_digest: Digest,

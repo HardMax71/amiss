@@ -35,7 +35,9 @@ bytes as lowercase hex. A writer never uses the object form for bytes that decod
 text, so every derived digest stays whole.
 
 An external destination is recorded where it is seen and nowhere else. The occurrence keeps
-the URL as written in `external_destination`, no finding is raised, and the summary counts it
+the URL in `external_destination`, after the format's own decoding so that
+`https://example.com/x?a=1&amp;b=2` is recorded as the address a fetcher would request rather
+than as the bytes the source spells. No finding is raised, and the summary counts it
 under `external_out_of_scope`, because the engine never fetched it and so decided nothing.
 [Amiss and link checkers](comparison.md) shows the one command that turns those rows into a
 list for the tool that does fetch.
