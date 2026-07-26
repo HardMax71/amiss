@@ -13,8 +13,8 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, IntentKind};
 use amiss_wire::resolution::{
-    BlobContent, BlobMode, BlobTarget, ExternalReference, InvalidReference, Missing, Target,
-    UnsupportedSemantics, UnsupportedTarget, VersionScope,
+    BlobContent, BlobMode, BlobTarget, InvalidReference, Missing, Target, UnsupportedSemantics,
+    UnsupportedTarget, VersionScope,
 };
 
 fn engine() -> EngineProvenance {
@@ -132,6 +132,7 @@ fn observation(from: &Spec) -> Observation {
         node_path: scanned.occurrence.node_path.clone(),
         adapter: Adapter::Markdown,
         construct: SourceConstruct::InlineLink,
+        external_destination: None,
         intent: from.intent.clone(),
         raw_destination_digest: scanned.raw_destination_digest,
         projection_digest: scanned.projection_digest,
@@ -238,10 +239,6 @@ fn boundary_kinds_follow_the_mapping() {
                 path: repo_path("t.md"),
             }),
             FindingKind::UnsupportedTargetKind,
-        ),
-        (
-            Resolution::External(ExternalReference::Url),
-            FindingKind::ExternalOutOfScope,
         ),
     ];
     for (resolution, expected) in rows {

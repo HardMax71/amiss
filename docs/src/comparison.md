@@ -14,6 +14,16 @@ checks local file links, and with `--include-fragments` it verifies heading anch
 Amiss also does, against ten pinned renderer rules. If your failure mode is dead links on a
 published site, lychee alone is the right tool, and nothing here argues otherwise.
 
+The composition is literal rather than aspirational. Every external destination is recorded
+in the report as written, so the list a checker needs comes out of a run that already
+happened:
+
+```sh
+amiss check --repo . --base "$BASE" --candidate HEAD --format json |
+  jq -r '.payload.observations[] | (.base, .candidate) | select(. != null)
+         | .external_destination | select(. != null)' | sort -u | lychee -
+```
+
 What a link checker cannot see is change. It examines one state of the world, so it can
 say a target is missing but not who removed it, whether it was missing before your pull
 request, or that a target still resolves while its content moved out from under the
@@ -22,7 +32,7 @@ are where Amiss lives:
 
 | | Amiss | lychee |
 | --- | --- | --- |
-| Checks external URLs | never fetches | yes |
+| Checks external URLs | never fetches, lists them for you | yes |
 | Checks heading anchors | against ten pinned renderer rules | with `--include-fragments` |
 | Compares two snapshots | always | no |
 | Attributes a finding to the change | introduced, pre-existing, resolved | no |

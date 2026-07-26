@@ -141,6 +141,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
         node_path: Vec::new(),
         adapter: Adapter::Markdown,
         construct: SourceConstruct::InlineLink,
+        external_destination: None,
         intent: Intent {
             kind: IntentKind::RepositoryPath,
             repository_path: Some(target.clone()),

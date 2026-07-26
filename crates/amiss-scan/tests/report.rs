@@ -94,6 +94,11 @@ fn snapshot(
                 node_path: occurrence.occurrence.node_path.clone(),
                 adapter,
                 construct: occurrence.occurrence.construct,
+                external_destination: matches!(
+                    resolution,
+                    amiss_wire::resolution::Resolution::External(_)
+                )
+                .then(|| occurrence.occurrence.semantic_destination.clone()),
                 intent,
                 raw_destination_digest: occurrence.raw_destination_digest,
                 projection_digest: occurrence.projection_digest,
@@ -267,10 +272,34 @@ fn a_complete_report_validates_against_the_schema() {
         .map(|finding| finding["kind"].as_str().unwrap())
         .collect();
     assert!(kinds.contains(&"explicit-target-missing"));
-    assert!(kinds.contains(&"external-out-of-scope"));
     assert!(
         kinds.contains(&"unlinked-document"),
         "notes.mdx has no links"
+    );
+    assert!(
+        !kinds.contains(&"external-out-of-scope"),
+        "an external URL is an observation, not a finding"
+    );
+    assert_external_destinations(payload);
+}
+
+/// The engine never fetches an external URL, so it raises no finding and keeps
+/// the destination where it was seen, for the layer that does fetch.
+#[expect(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "test fixture helper"
+)]
+fn assert_external_destinations(payload: &serde_json::Value) {
+    let external: Vec<&str> = payload["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["candidate"]["external_destination"].as_str())
+        .collect();
+    assert!(
+        !external.is_empty() && external.iter().all(|url| url.starts_with("http")),
+        "every external observation names its destination: {external:?}"
     );
 }
 

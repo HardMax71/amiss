@@ -2911,6 +2911,12 @@
         },
         "resolution": {
           "$ref": "#/$defs/Resolution"
+        },
+        "external_destination": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "description": "The destination as written, present only for a reference resolved as external, so another layer can read it without the tree."
         }
       }
     },
@@ -3052,7 +3058,6 @@
         "subject-changed",
         "explicit-reference-removed",
         "document-removed",
-        "external-out-of-scope",
         "opaque-mdx-region",
         "opaque-html-region",
         "observation-correlation-ambiguous",

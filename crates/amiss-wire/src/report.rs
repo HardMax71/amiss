@@ -764,7 +764,6 @@ pub enum FindingKind {
     SubjectChanged,
     ExplicitReferenceRemoved,
     DocumentRemoved,
-    ExternalOutOfScope,
     OpaqueMdxRegion,
     OpaqueHtmlRegion,
     ObservationCorrelationAmbiguous,
@@ -804,7 +803,6 @@ impl FindingKind {
             | Self::DependencyAndSubjectCochanged
             | Self::SubjectChanged
             | Self::ExplicitReferenceRemoved
-            | Self::ExternalOutOfScope
             | Self::ObservationCorrelationAmbiguous => FindingScope::Observation,
             Self::UnsupportedDocumentFormat
             | Self::DocumentRemoved
@@ -851,7 +849,6 @@ impl FindingKind {
             | Self::SubjectChanged
             | Self::ExplicitReferenceRemoved
             | Self::DocumentRemoved
-            | Self::ExternalOutOfScope
             | Self::OpaqueMdxRegion
             | Self::OpaqueHtmlRegion
             | Self::ObservationCorrelationAmbiguous
@@ -926,7 +923,6 @@ impl FindingKind {
             | Self::SubjectChanged => "impact-observation",
             Self::ExplicitReferenceRemoved
             | Self::DocumentRemoved
-            | Self::ExternalOutOfScope
             | Self::OpaqueMdxRegion
             | Self::OpaqueHtmlRegion
             | Self::ObservationCorrelationAmbiguous
@@ -986,9 +982,6 @@ impl FindingKind {
             Self::DocumentRemoved => {
                 "a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one"
             }
-            Self::ExternalOutOfScope => {
-                "the destination is an external URL Amiss never fetches; counted, reported, and left alone"
-            }
             Self::OpaqueMdxRegion => {
                 "an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place"
             }
@@ -1038,7 +1031,6 @@ impl FindingKind {
             | Self::SubjectChanged
             | Self::ExplicitReferenceRemoved
             | Self::DocumentRemoved
-            | Self::ExternalOutOfScope
             | Self::OpaqueMdxRegion
             | Self::OpaqueHtmlRegion
             | Self::ObservationCorrelationAmbiguous

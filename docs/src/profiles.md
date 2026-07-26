@@ -30,7 +30,6 @@ and checked in CI.
 | `subject-changed` | `record` | `record` |
 | `explicit-reference-removed` | `record` | `record` |
 | `document-removed` | `record` | `record` |
-| `external-out-of-scope` | `record` | `record` |
 | `opaque-mdx-region` | `record` | `record` |
 | `opaque-html-region` | `record` | `record` |
 | `observation-correlation-ambiguous` | `record` | `record` |
@@ -64,7 +63,6 @@ not a second source of truth.
 - `subject-changed`: the block holding the reference changed while its target did not; recorded so prose moving over an unchanged dependency stays visible
 - `explicit-reference-removed`: a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong
 - `document-removed`: a scanned document left the tree; recorded so the disappearance is a stated fact rather than a silent one
-- `external-out-of-scope`: the destination is an external URL Amiss never fetches; counted, reported, and left alone
 - `opaque-mdx-region`: an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
 - `opaque-html-region`: a raw HTML region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
 - `observation-correlation-ambiguous`: an occurrence has more than one plausible counterpart across the comparison; Amiss never chooses by input order, so the match is recorded as undecided
@@ -98,7 +96,6 @@ API described in [Controls and policy](controls.md).
 | `subject-changed` | `docs/guide.md`: `See [parser](../src/parser.rs).`<br>`src/parser.rs`: `tokenize()` | Change the paragraph to `See [revised parser](../src/parser.rs).`<br>Leave `src/parser.rs` unchanged. |
 | `explicit-reference-removed` | `docs/guide.md` has separate `[parser](../src/parser.rs)` and `[lexer](../src/lexer.rs)` paragraphs. | Remove only the parser paragraph; both targets and the lexer paragraph remain. |
 | `document-removed` | `docs/obsolete.md` contains `# Obsolete`. | Delete `docs/obsolete.md`. |
-| `external-out-of-scope` | `guide.md`: `# Guide`. | Append `[Manual](https://example.com/manual)`. |
 | `opaque-mdx-region` | `page.mdx`: `[Parser](src/parser.rs)`. | Append `<Note>{"hidden"}</Note>`. |
 | `opaque-html-region` | `page.md`: `[Parser](src/parser.rs)`. | Append a separate `<div class="card">hidden</div>` block. |
 | `observation-correlation-ambiguous` | `docs/guide.md`: `Old [parser](../src/parser.rs).` | Replace it with two paragraphs: `First [parser](../src/parser.rs).` and `Second [parser](../src/parser.rs).` |

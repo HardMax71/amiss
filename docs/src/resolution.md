@@ -23,8 +23,10 @@ name. When the invocation provides `--repository`, `--ref`, and `--default-branc
 selects a dialect, a URL on the declared host that names the same repository in that
 dialect's spelling is converted to a path only when it names the candidate branch or, for
 Gitea, the exact candidate commit. A same-repository URL for any other version is
-`unsupported-version-scope`; URLs outside that identity are `external-out-of-scope`:
-counted, reported, left alone.
+`unsupported-version-scope`; a URL outside that identity is external, and the engine never
+fetches one. It records the occurrence with the destination as written, so the layer that
+does fetch can read the list without walking the tree again, and it raises no finding,
+because there is nothing it decided.
 
 Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
 The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
@@ -50,7 +52,7 @@ One document, every destination shape:
 [dir](sub/)                           the author promised a directory
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
 [lines](../src/lib.rs#L45-L48)         exact inclusive line selection under github or gitea
-[web](https://example.com/manual)     external-out-of-scope: counted, left alone
+[web](https://example.com/manual)     external: recorded with its destination, never fetched
 [anchor](guide.md#setup)              resolves when a known renderer publishes that heading identity
 ```
 
@@ -72,7 +74,8 @@ same repository"];
   other [label = "any other URL"];
   tree  [label = "resolve against
 the tree"];
-  ext   [label = "external-out-of-scope"];
+  ext   [label = "external,
+recorded not fetched"];
   vers  [label = "unsupported-version-scope"];
   unsup [label = "unsupported-reference-semantics"];
   hit   [label = "target bytes

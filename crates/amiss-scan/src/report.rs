@@ -212,7 +212,7 @@ fn occurrence_value(engine: &EngineProvenance, observation: &Observation) -> Val
         observation.raw_destination_digest,
     );
     let resolution = crate::evaluate::resolution_row(&observation.resolution);
-    object(vec![
+    let mut members = vec![
         ("observation_id", digest_value(id)),
         ("observation_id_input", input),
         ("adapter_id", string(observation.adapter.adapter_id())),
@@ -232,7 +232,11 @@ fn occurrence_value(engine: &EngineProvenance, observation: &Observation) -> Val
             observe::intent_value(&observation.intent, observation.raw_destination_digest),
         ),
         ("resolution", resolution),
-    ])
+    ];
+    if let Some(destination) = &observation.external_destination {
+        members.push(("external_destination", string(destination)));
+    }
+    object(members)
 }
 
 const fn reason_str(reason: Reason) -> &'static str {

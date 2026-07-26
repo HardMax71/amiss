@@ -34,6 +34,12 @@ travel as a plain string; anything else travels as `{"bytes_hex": "..."}` naming
 bytes as lowercase hex. A writer never uses the object form for bytes that decode as
 text, so every derived digest stays whole.
 
+An external destination is recorded where it is seen and nowhere else. The occurrence keeps
+the URL as written in `external_destination`, no finding is raised, and the summary counts it
+under `external_out_of_scope`, because the engine never fetched it and so decided nothing.
+[Amiss and link checkers](comparison.md) shows the one command that turns those rows into a
+list for the tool that does fetch.
+
 Every finding carries its kind, its location with byte offsets, its attribution, the
 policy steps that set its final disposition, and the digests of the facts underneath it.
 The `key_input` that produced the finding's identity is included too, so an external

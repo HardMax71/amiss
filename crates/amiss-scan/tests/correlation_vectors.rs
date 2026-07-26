@@ -202,6 +202,7 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
         node_path: vec![usize::from(side != "left")],
         adapter: Adapter::Markdown,
         construct: SourceConstruct::InlineLink,
+        external_destination: None,
         intent,
         raw_destination_digest: fixture.raw_destination_digest,
         projection_digest: hb(
