@@ -2916,9 +2916,42 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 16384,
-          "description": "The destination as written, present only for a reference resolved as external, so another layer can read it without the tree."
+          "description": "The destination the parser publishes after the format's own decoding, which is what a fetcher would request. Present exactly when the resolution is external, so another layer can read the list without the tree."
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "resolution": {
+                "properties": {
+                  "kind": {
+                    "const": "external"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "resolution"
+            ]
+          },
+          "then": {
+            "required": [
+              "external_destination"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "external_destination"
+              ]
+            }
+          }
+        }
+      ]
     },
     "CorrelationAlternatives": {
       "type": "object",

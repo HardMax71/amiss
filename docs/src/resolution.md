@@ -24,8 +24,8 @@ selects a dialect, a URL on the declared host that names the same repository in 
 dialect's spelling is converted to a path only when it names the candidate branch or, for
 Gitea, the exact candidate commit. A same-repository URL for any other version is
 `unsupported-version-scope`; a URL outside that identity is external, and the engine never
-fetches one. It records the occurrence with the destination as written, so the layer that
-does fetch can read the list without walking the tree again, and it raises no finding,
+fetches one. It records the occurrence with the destination the format decodes to, the address a fetcher
+would request, so the layer that does fetch can read the list without walking the tree again, and it raises no finding,
 because there is nothing it decided.
 
 Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
