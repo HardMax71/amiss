@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/HardMax71/amiss/compare/v0.10.0...v0.11.0) - 2026-07-26
+
+### Changes
+
+- Say which spelling the destination is, and pin it in the schema
+- Record an external destination instead of a finding about it
+
 ## [0.10.0](https://github.com/HardMax71/amiss/compare/v0.9.1...v0.10.0) - 2026-07-26
 
 ### Changes
