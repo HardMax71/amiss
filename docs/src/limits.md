@@ -74,14 +74,14 @@ documentation sets measured: fastapi serializes 1,664 documents and 15,334 refer
 256 MiB both pass, and the value stays a quarter of the memory ceiling bounding the same
 process.
 
-Raising it treats the symptom, and the cause is worth stating. Ninety-one percent of fastapi's
-report is `external-out-of-scope`, one finding per external URL at about 5 KB across the
-findings and observations arrays. Of that, the finding's own evidence is a verbatim copy of a
-row the report already carries in `observations` and already names by id, so the same
-occurrence is serialized twice in full. `complete-findings` allows 100,000 findings, and at
-the leanest finding this engine builds a hundred thousand of them now fit under the
-reservation, so that counter is what stops a findings flood and the reservation backstops
-anything heavier.
+Raising it treated a symptom whose cause has since been removed. Ninety-one percent of
+fastapi's report was one finding per external URL, each carrying a verbatim copy of an
+observation row the report already held and already named by id. An external reference is now
+an observation and nothing else, so fastapi serializes 33 MB and Docusaurus 53 MB, both of
+which would have fitted the old reservation. What the reservation buys now is headroom rather
+than admission. `complete-findings` allows 100,000 findings, and at the leanest finding this
+engine builds a hundred thousand of them fit under the reservation, so that counter is what
+stops a findings flood and the reservation backstops anything heavier.
 
 The last two rows are sandbox-descriptor values rather than ordinary scanner counters.
 The CLI applies the managed-memory value as an address-space limit on Unix; the current

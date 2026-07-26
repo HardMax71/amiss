@@ -467,142 +467,6 @@
                 "base": [],
                 "candidate": []
               },
-              "base": null,
-              "candidate": {
-                "adapter_id": "markdown",
-                "block_kind": "paragraph",
-                "document": "docs/guide.md",
-                "intent": {
-                  "external_scheme": "https",
-                  "fragment_digest": null,
-                  "kind": "external-url",
-                  "query_digest": null,
-                  "raw_destination_digest": "sha256:43ce639ea5ca9cd4bb08c098490c4708f9bb669bed4652e5f411aa8b35e5ad81",
-                  "repository_path": null,
-                  "target_kind": null
-                },
-                "observation_id": "sha256:733e57373c529d239dacf5148e60b49c6a450d6e04f85a527b34c9d05f1e88d8",
-                "observation_id_input": {
-                  "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
-                  "adapter_id": "markdown",
-                  "document": "docs/guide.md",
-                  "extracted_intent": {
-                    "external_scheme": "https",
-                    "fragment_digest": null,
-                    "kind": "external-url",
-                    "query_digest": null,
-                    "raw_destination_digest": "sha256:43ce639ea5ca9cd4bb08c098490c4708f9bb669bed4652e5f411aa8b35e5ad81",
-                    "repository_path": null,
-                    "target_kind": null
-                  },
-                  "schema": "amiss/scanner-observation-id-input",
-                  "source_construct": "markdown-inline-link",
-                  "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
-                  "structural_address": {
-                    "address_kind": "markdown-ast-node-path",
-                    "construct_index": 0,
-                    "duplicate_index": 0,
-                    "node_path": [
-                      1,
-                      4
-                    ],
-                    "schema": "amiss/scanner-structural-address"
-                  }
-                },
-                "resolution": {
-                  "kind": "external",
-                  "reason": "url"
-                },
-                "source_construct": "markdown-inline-link",
-                "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
-                "source_span": {
-                  "end_byte": 154,
-                  "end_column": 146,
-                  "end_line": 3,
-                  "start_byte": 121,
-                  "start_column": 113,
-                  "start_line": 3
-                }
-              },
-              "correlation": "none",
-              "correlation_reason": "new-observation",
-              "impact": "new-observation",
-              "source_change": "added",
-              "target_change": "not-comparable"
-            },
-            "kind": "observation"
-          },
-          "finding_kind": "external-out-of-scope",
-          "key_input": {
-            "finding_kind": "external-out-of-scope",
-            "schema": "amiss/scanner-finding-key-input",
-            "scope": {
-              "kind": "observation",
-              "observation_id": "sha256:733e57373c529d239dacf5148e60b49c6a450d6e04f85a527b34c9d05f1e88d8"
-            }
-          },
-          "schema": "amiss/scanner-fact"
-        },
-        "candidate_fact_digest": "sha256:42a7b70450defc1b5e9476f15d4efffd2e7d6692f29d99f5f486bbee630f1a5f",
-        "configured_disposition": "record",
-        "coverage_requirement": "none",
-        "debt": null,
-        "effective_disposition": "record",
-        "evidence_class": "coverage-boundary",
-        "finding_key": "sha256:56bb69b2ffbc442eef80d5cde8cae84bd1f19203c9df49d5d420049418cd0a4e",
-        "invariant_class": "advisory",
-        "key_input": {
-          "finding_kind": "external-out-of-scope",
-          "schema": "amiss/scanner-finding-key-input",
-          "scope": {
-            "kind": "observation",
-            "observation_id": "sha256:733e57373c529d239dacf5148e60b49c6a450d6e04f85a527b34c9d05f1e88d8"
-          }
-        },
-        "kind": "external-out-of-scope",
-        "description": "the destination is an external URL Amiss never fetches; counted, reported, and left alone",
-        "location": {
-          "path": "docs/guide.md",
-          "side": "candidate",
-          "span": {
-            "end_byte": 154,
-            "end_column": 146,
-            "end_line": 3,
-            "start_byte": 121,
-            "start_column": 113,
-            "start_line": 3
-          }
-        },
-        "observation_ids": [
-          "sha256:733e57373c529d239dacf5148e60b49c6a450d6e04f85a527b34c9d05f1e88d8"
-        ],
-        "policy_trace": [
-          {
-            "after": "record",
-            "before": "record",
-            "rule_id": "scanner-policy-defaults/external-out-of-scope/observe",
-            "source": "built-in"
-          }
-        ],
-        "waiver": null
-      },
-      {
-        "aggregation": {
-          "locations_omitted": 0,
-          "member_count": 1,
-          "representative_rule": "lowest-location-then-observation-id",
-          "strategy": "one-per-finding-key"
-        },
-        "attribution": "not-applicable",
-        "base_fact": null,
-        "base_fact_digest": null,
-        "candidate_fact": {
-          "evidence": {
-            "comparison": {
-              "alternatives": {
-                "base": [],
-                "candidate": []
-              },
               "base": {
                 "adapter_id": "markdown",
                 "block_kind": "paragraph",
@@ -857,7 +721,8 @@
             "start_byte": 121,
             "start_column": 113,
             "start_line": 3
-          }
+          },
+          "external_destination": "https://example.com/manual"
         },
         "correlation": "none",
         "correlation_reason": "new-observation",
@@ -1080,7 +945,7 @@
       "complete": true,
       "error_count": 0,
       "exit_code": 0,
-      "finding_count": 4,
+      "finding_count": 3,
       "status": "pass"
     },
     "schema": "amiss/scanner-report-payload",
@@ -1108,11 +973,11 @@
         "debt_tolerated": 0,
         "fail": 0,
         "introduced": 1,
-        "not_applicable": 3,
+        "not_applicable": 2,
         "pre_existing": 0,
-        "record": 3,
+        "record": 2,
         "resolved": 0,
-        "total": 4,
+        "total": 3,
         "unknown": 0,
         "unsupported_capabilities": 0,
         "waived": 0,
@@ -1131,6 +996,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:9f64ec712aef5b97c1bc32c7833f99c8ef9b5b1b264f2db12bfccd1dfedc7b8a",
+  "payload_digest": "sha256:1c96687e28be8b5ba70e54483f4250838033d53e5ed407c661e1bfefa372ea7c",
   "schema": "amiss/scanner-report-envelope"
 }

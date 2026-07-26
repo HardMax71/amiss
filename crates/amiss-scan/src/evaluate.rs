@@ -444,8 +444,10 @@ const fn boundary_kind(resolution: &crate::resolve::Resolution) -> Option<Findin
         Resolution::UnsupportedSemantics(_) => Some(FindingKind::UnsupportedReferenceSemantics),
         Resolution::UnsupportedVersion(_) => Some(FindingKind::UnsupportedVersionScope),
         Resolution::UnsupportedTarget(_) => Some(FindingKind::UnsupportedTargetKind),
-        Resolution::External(_) => Some(FindingKind::ExternalOutOfScope),
-        Resolution::Resolved(_) | Resolution::Missing(_) | Resolution::TypeMismatch(_) => None,
+        Resolution::Resolved(_)
+        | Resolution::Missing(_)
+        | Resolution::TypeMismatch(_)
+        | Resolution::External(_) => None,
     }
 }
 

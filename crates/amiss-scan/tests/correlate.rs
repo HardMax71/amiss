@@ -100,6 +100,7 @@ fn observation(spec: &Spec) -> Observation {
         node_path: scanned.occurrence.node_path.clone(),
         adapter: Adapter::Markdown,
         construct: SourceConstruct::InlineLink,
+        external_destination: None,
         intent: spec.intent.clone(),
         raw_destination_digest: scanned.raw_destination_digest,
         projection_digest: scanned.projection_digest,

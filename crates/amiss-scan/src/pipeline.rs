@@ -113,6 +113,11 @@ pub(crate) fn side_observations(
                         node_path: occurrence.occurrence.node_path.clone(),
                         adapter,
                         construct: occurrence.occurrence.construct,
+                        external_destination: matches!(
+                            resolution,
+                            amiss_wire::resolution::Resolution::External(_)
+                        )
+                        .then(|| occurrence.occurrence.semantic_destination.clone()),
                         intent,
                         raw_destination_digest: occurrence.raw_destination_digest,
                         projection_digest: occurrence.projection_digest,
