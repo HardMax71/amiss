@@ -64,6 +64,32 @@ of what real renderers do is the honest way to avoid one. Nothing a repository d
 selects a router, because a configuration file in the tree would be a lever the pull
 request under review could pull.
 
-Routers outside the table serve spellings this check will not match. Docusaurus, Hugo, and
-Jekyll are the known cases, each with its own permalink scheme. The fix for any of them is
-another row, harvested and pinned the same way.
+Routers outside the table serve spellings this check will not match. Four repositories built
+on them were scanned on 2026-07-26 to find out what a new row would have to answer, and for
+three of them a row is not the answer. The heads were hugoDocs `620696ab3b07`, jest
+`f49721c78e19`, jekyll `7697d249793d`, and docusaurus `16f537309e35`, each read whole against
+an empty base under the observe profile.
+
+Hugo's own documentation writes `[glob pattern](g)` and lets a link render hook turn `g` into
+the glossary entry, 734 references to a path that exists nowhere, and it pulls headings in
+through `{{% include %}}` shortcodes, which is where 101 of its missing anchors come from.
+Jest, on Docusaurus, links a document by its id rather than by its path: `[configuration](configuration)`
+names `Configuration.md`, 104 references differing from the file in case alone, and matching
+them would mean folding case, which the resolver refuses for the reason
+[Discovery](discovery.md) gives. Docusaurus itself could not be scanned at all: its report
+crosses the output reservation described in [Limits and refusals](limits.md).
+
+Jekyll is the one that looks like a missing row, and the harvest says otherwise. Its own site
+writes `reviewing-a-pull-request/` from a maintaining index, which reaches
+`maintaining/reviewing-a-pull-request.md`, and `../ubuntu/` from an installation page, which
+reaches nothing; jekyllrb.com serves the first and returns 404 for the second, so both of our
+answers match the site. A trailing slash reaching the sibling source file is real there because
+that site's permalinks mirror its paths, which is a configuration and not a property of Jekyll.
+Asked the same destination, mdbook serves nothing, mkdocs rejects it in the source with a
+warning naming the `.md` file, and vitepress emits it verbatim into a build holding only
+`page.html`, dead on any host despite its own dead-link checker accepting it. One router, by
+configuration, is not a rule.
+
+What the other three need is the generated class the [roadmap](roadmap.md) still carries,
+arriving as transclusion, as a repository's own render hook, and as an identifier that was
+never a path.

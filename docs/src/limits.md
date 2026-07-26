@@ -69,7 +69,8 @@ about. `references-per-document` was 4,096 until fastapi's release notes came in
 references in one auto-generated changelog; the next largest documents measured anywhere are
 just's and helix's changelogs, at about 2,900 and still growing. The binding ceiling for a
 large documentation set is not that one but `machine-json-bytes`: fastapi's 1,691 documents
-and 15,385 references serialize to 78 MB against a 64 MiB reservation, so it still refuses.
+and 15,385 references serialize to 78 MB against a 64 MiB reservation, so it still refuses,
+and Docusaurus's own repository refuses at 110 MB.
 Ninety-one percent of those bytes are `external-out-of-scope` rows, one per external URL at
 about 5 KB across the findings and observations arrays, which makes the practical bound
 roughly fourteen thousand findings rather than the million references
