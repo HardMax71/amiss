@@ -70,6 +70,52 @@ into the manpage and `docs/features.md` still links the deleted `escape_support.
 and hyperfine were spotless. On this evidence the rejection classes are a docs-site
 phenomenon; a plain tree yields either zero or the genuinely broken.
 
+## The same ten trees, rescanned
+
+Heading anchors resolve since [What ten renderers call a heading](anchor-rules.md), so the
+ten trees were scanned again on 2026-07-26 with that work's release build. These are not
+rows. Each is a whole-tree count at that day's head against a synthetic empty base, so there
+is no commit range, no changed-line denominator, and no density figure. They are kept
+because the class mix the [roadmap](roadmap.md) argues from moved.
+
+| Repository | Head | References | Missing | Anchor | Other spelling | Absent |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| helix | `079a789e8cb0` | 3,249 | 10 | 9 | 0 | 1 |
+| ripgrep | `f9c05a949d1a` | 766 | 0 | 0 | 0 | 0 |
+| just | `af06bc49df4d` | 3,221 | 0 | 0 | 0 | 0 |
+| mdBook | `4f8c9460977e` | 1,206 | 37 | 1 | 6 | 30 |
+| starship | `eebb9a3c7ddc` | 7,509 | 344 | 103 | 241 | 0 |
+| ruff | `a5cdc6d5813b` | 5,289 | 104 | 2 | 0 | 102 |
+| bat | `78951393e29b` | 451 | 19 | 7 | 0 | 12 |
+| fd | `ca51233d277e` | 96 | 1 | 1 | 0 | 0 |
+| hyperfine | `f12f3d9f86f3` | 48 | 0 | 0 | 0 | 0 |
+| alacritty | `852e971cddfa` | 87 | 1 | 0 | 0 | 1 |
+
+Missing splits three ways, and the July study's two rejection classes are two of them.
+
+247 name a target the tree holds under another spelling: `X` where `X.md` is present, or an
+`.html` output name where the `.md` source is. All 241 of starship's are that, eleven preset
+page names across twenty-two translations, and its `presets/README.md` links the same file
+twice in one paragraph, once as `./plain-text.md` and once as `./plain-text`. mdBook's six
+are its own output extension, inside its guide and its fixtures.
+
+146 name a target no spelling reaches, and 102 of those are ruff's generated pages, 63 of
+them into `docs/settings.md`. That is the class a docs build writes and a tree never holds.
+
+123 are heading anchors no rule publishes, which the July build could not see because it
+resolved none. 122 are real breaks in five repositories: 103 in starship's translated pages,
+where the heading was translated and the English fragment stayed, every one of them checked
+against the rendered page on starship.rs and absent there; 9 in helix from one reference
+definition whose section moved; 7 in bat from case and translation; 2 in ruff and 1 in fd
+from changelog entries that moved out of the file. The remaining one is deliberate, inside
+mdBook's link-handling fixtures.
+
+The rescan also found one false missing, which is a defect and not a class: just's README
+titles itself with `<h1 align=center><code>just</code></h1>`, github.com anchors that, and
+the rule table did not. It got a
+[pinned harvest and a fix](https://github.com/HardMax71/amiss/pull/140), which is why just
+reads zero above.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
