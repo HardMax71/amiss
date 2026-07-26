@@ -107,6 +107,8 @@ fn excluded_trees_are_directory_components() {
         "build",
         ".next",
         "target",
+        "test",
+        "tests",
     ] {
         assert!(
             excluded_by_built_in(format!("{tree}/x.md").as_bytes()),
@@ -122,4 +124,6 @@ fn excluded_trees_are_directory_components() {
     assert!(!excluded_by_built_in(b"TARGET/x.md"));
     assert!(!excluded_by_built_in(b"docs/guide.md"));
     assert!(!excluded_by_built_in(b"targets/x.md"));
+    assert!(!excluded_by_built_in(b"testing/x.md"));
+    assert!(!excluded_by_built_in(b"latest/x.md"));
 }

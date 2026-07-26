@@ -9,17 +9,27 @@ adapter that extracts no references. Every other file is a possible reference ta
 built-in document. These rows come directly from the
 [classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
-Seven directory names are always skipped, wherever they appear in a path:
+Nine directory names are always skipped, wherever they appear in a path:
 
 ```text
-node_modules  vendor  third_party  dist  build  .next  target
+node_modules  vendor  third_party  dist  build  .next  target  test  tests
 ```
 
-The list is fixed and cannot be narrowed by configuration. Skipping is visible in both
-directions: skipped documents still show up in the report's counts, as excluded. This
-repository relies on the rule itself: its vendored parser test corpus lives under
-`corpus/third_party/` exactly so that fixture files full of deliberately broken links are
-never read as prose.
+The names are fixed: no configuration adds one or takes one away. A repository policy can
+still name an exact path inside a skipped directory as a document include, which admits that
+one path and nothing else, because policy adds coverage and never removes it. Skipping is
+visible in both directions: skipped documents still show up in the report's counts, as
+excluded. This repository relies on the rule itself: its vendored parser test corpus lives
+under `corpus/third_party/` exactly so that fixture files full of deliberately broken links
+are never read as prose.
+
+`test` and `tests` joined the list on measurement. Across fifteen public repositories, 391 of
+3,934 discovered documents sat under one of those names and carried 400 references between
+them, about one apiece, while producing 45 of the missing rows, every one a deliberately
+broken fixture. Two were prose: the READMEs explaining pydantic's own test suites. Prettier
+is the case that made it a defect rather than noise, since seven intentionally malformed MDX
+fixtures under `tests/format/` refused its entire run; it scans now, and the first thing it
+reports is a real break in its contributing guide.
 
 Six paths through the classifier:
 

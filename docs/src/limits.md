@@ -54,7 +54,7 @@ judged: its anchors stay unsupported rather than becoming missing.
 | `parser-nodes-per-document` | 250,000 |
 | `parser-nodes-per-snapshot` | 5,000,000 |
 | `aggregate-embedded-code-evaluation-bytes-per-snapshot` | 536,870,912 |
-| `references-per-document` | 4,096 |
+| `references-per-document` | 16,384 |
 | `references-per-snapshot` | 1,000,000 |
 | `organization-policy-entries` | 100,000 |
 | `complete-findings` | 100,000 |
@@ -63,6 +63,17 @@ judged: its anchors stay unsupported rather than becoming missing.
 | `private-temporary-storage-bytes` | 67,108,864 |
 | `evaluator-managed-memory-bytes` | 1,073,741,824 |
 <!-- amiss-doc-contract:limits:end -->
+
+Two of these ceilings have been measured against real repositories rather than reasoned
+about. `references-per-document` was 4,096 until fastapi's release notes came in at 7,075
+references in one auto-generated changelog; the next largest documents measured anywhere are
+just's and helix's changelogs, at about 2,900 and still growing. The binding ceiling for a
+large documentation set is not that one but `machine-json-bytes`: fastapi's 1,691 documents
+and 15,385 references serialize to 78 MB against a 64 MiB reservation, so it still refuses.
+Ninety-one percent of those bytes are `external-out-of-scope` rows, one per external URL at
+about 5 KB across the findings and observations arrays, which makes the practical bound
+roughly fourteen thousand findings rather than the million references
+`references-per-snapshot` admits.
 
 The last two rows are sandbox-descriptor values rather than ordinary scanner counters.
 The CLI applies the managed-memory value as an address-space limit on Unix; the current
