@@ -16,6 +16,12 @@ distinct target identity (path, file mode, and object id) and numeric range. Suc
 and out-of-range results are cached, so repeated identical anchors do not multiply the
 charge. A changed object or mode at the same path is charged again.
 
+Heading-anchor work is charged the same way and by the same rule, once per target identity
+rather than per anchor, because the identities every known renderer would publish are built
+in one parse of the target and then answered from memory. This is the only place the engine
+parses a file it did not discover as a document. A target the budget cannot afford is not
+judged: its anchors stay unsupported rather than becoming missing.
+
 <!-- amiss-doc-contract:limits:start -->
 | Report resource | Limit |
 | --- | ---: |
@@ -41,6 +47,7 @@ charge. A changed object or mode at the same path is charged again.
 | `referenced-target-blob-bytes` | 16,777,216 |
 | `aggregate-referenced-target-bytes-per-snapshot` | 536,870,912 |
 | `aggregate-line-fragment-evaluation-bytes-per-snapshot` | 536,870,912 |
+| `aggregate-heading-anchor-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `aggregate-document-bytes-per-snapshot` | 536,870,912 |
 | `raw-link-destination-bytes` | 16,384 |
 | `parser-nesting` | 256 |

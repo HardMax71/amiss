@@ -75,7 +75,7 @@ And one finding row from a real failing run, abridged to its skeleton:
 ```json
 {
   "kind": "explicit-target-missing",
-  "description": "a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link",
+  "description": "a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link",
   "attribution": "introduced",
   "effective_disposition": "fail",
   "location": {

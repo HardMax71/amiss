@@ -948,7 +948,7 @@ impl FindingKind {
     pub const fn meaning(self) -> &'static str {
         match self {
             Self::ExplicitTargetMissing => {
-                "a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link"
+                "a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link"
             }
             Self::ExplicitTargetTypeMismatch => {
                 "the referenced path exists as a different kind than the reference promises, as when a trailing slash names a regular file; make the spelling match the target"

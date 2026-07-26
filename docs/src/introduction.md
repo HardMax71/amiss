@@ -25,10 +25,11 @@ digraph introduction {
 ## The supported boundary
 
 "Supported explicit reference" is an important boundary. Bare path-like prose is not
-inferred. Raw HTML and MDX code regions are opaque. Site routes, heading semantics, code
-symbols, live URLs, and other repositories need information this engine does not have, so
-they stay visible as declared boundaries instead of being guessed at. Numeric line
-fragments are the narrow exception: they select bytes, not language symbols or meaning.
+inferred. Raw HTML and MDX code regions are opaque. Site routes, code symbols,
+live URLs, and other repositories need information this engine does not have, so they stay
+visible as declared boundaries instead of being guessed at. Line fragments and heading
+anchors are the exceptions: a line fragment selects bytes, and a heading anchor is answered
+against pinned renderer rules rather than guessed.
 [Discovery](discovery.md) and [Resolution](resolution.md) describe the boundary rows, and
 [Project status](status.md) links the classifier and resolver that draw them.
 

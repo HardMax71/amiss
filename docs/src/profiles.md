@@ -51,7 +51,7 @@ machine report carries the same sentence on every finding row, so this page is a
 not a second source of truth.
 
 <!-- amiss-doc-contract:finding-meanings:start -->
-- `explicit-target-missing`: a reference names a repository path, or a line range inside one, that the named tree does not hold; restore the target or correct the link
+- `explicit-target-missing`: a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link
 - `explicit-target-type-mismatch`: the referenced path exists as a different kind than the reference promises, as when a trailing slash names a regular file; make the spelling match the target
 - `invalid-reference`: the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination
 - `unsupported-reference-semantics`: the reference uses semantics Amiss does not evaluate, a heading fragment or a leading-slash site route; the unchecked part is declared instead of guessed

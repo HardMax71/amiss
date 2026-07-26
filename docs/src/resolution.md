@@ -50,7 +50,7 @@ One document, every destination shape:
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
 [lines](../src/lib.rs#L45-L48)         exact inclusive line selection under github or gitea
 [web](https://example.com/manual)     external-out-of-scope: counted, left alone
-[anchor](guide.md#setup)              target read; fragment semantics reported unsupported
+[anchor](guide.md#setup)              resolves when a known renderer publishes that heading identity
 ```
 
 The same decision, drawn:
@@ -92,25 +92,39 @@ may decode to bytes that are not text at all, and those bytes are simply the pat
 `bad-%FF-name.md` resolves against the tree entry carrying that exact byte, because Git
 names files in bytes and so does the resolver.
 
-Fragments split by kind. Query strings and non-line fragments are recorded as digests and
-acquire no semantics here; for a relative path with a heading fragment, the target file is
-resolved but the fragment meaning is not checked, which is `unsupported-reference-semantics`.
-One narrow divergence is deliberate: a fragment whose escapes decode outside UTF-8 is
+Fragments split by kind. Query strings are recorded as digests and acquire no semantics
+here. One narrow divergence is deliberate: a fragment whose escapes decode outside UTF-8 is
 dropped rather than digested, since carrying it would change the recorded identity of
-every existing observation for no resolution gain. A recognized numeric line fragment is
-the exception with teeth. It selects the inclusive raw lines. A range beyond the blob is
-resolution `kind: missing` with `reason: line-fragment-out-of-range`, reported as an
-explicit missing target. A valid range replaces the whole-file projection with only the
-selected bytes and file mode, so a change outside the range does not claim this
-occurrence's dependency changed. Git LFS pointers and trees have no line selection and
-stay unsupported.
+every existing observation for no resolution gain. A recognized numeric line fragment
+selects the inclusive raw lines. A range beyond the blob is resolution `kind: missing` with
+`reason: line-fragment-out-of-range`, reported as an explicit missing target. A valid range
+replaces the whole-file projection with only the selected bytes and file mode, so a change
+outside the range does not claim this occurrence's dependency changed. Git LFS pointers and
+trees have no line selection and stay unsupported.
+
+Every other fragment on a document target is a heading anchor, and a heading identity
+belongs to the renderer rather than to Markdown. GitHub, GitLab, Gitea, Forgejo, mdBook,
+goldmark, MkDocs under either slug function, VitePress and kramdown each build one
+differently, so the resolver asks whether any of those ten would publish the anchor, and
+counts the identities a document's raw HTML declares as well. An anchor no rule publishes
+is `kind: missing` with `reason: heading-anchor-not-found`, an ordinary missing target. The
+union is deliberate: adding a renderer can only grow what an anchor may match, so nothing a
+repository declares can turn a real break into a pass, and the rules are pinned against the
+renderers themselves in
+[heading-anchor vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/heading-anchor-vectors.json).
+
+What the check will not do is judge on a parse that did not happen. A target that is not a
+parsing document class, an LFS pointer, a document the parser rejects, or one the anchor
+budget cannot afford keeps `unsupported-reference-semantics`, which now means exactly
+"not evaluated". The projection stays the whole file: an anchor says where to look, not
+which bytes the reference depends on.
 
 Version scope is equally narrow. Only the candidate version is read.
 `--default-branch-ref` supplies a second trusted spelling so the resolver can split a ref
 from its path without guessing, and a URL naming the default branch while the candidate
 ref differs is still `unsupported-version-scope`. Site generators and language-aware tools
-own route, heading-anchor, and symbol semantics; guessing them here would turn honest
-ignorance into a false pass. The
+still own route and symbol semantics; guessing those here would turn honest ignorance into
+a false pass. The
 [resolver tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
 pin these distinctions.
 

@@ -25,7 +25,9 @@ themselves changed on the way.
 ## Reference-coverage candidates
 
 Candidates, not scheduled milestones. Each enters the roadmap only when its entry
-condition is met.
+condition is met. Heading anchors left this list by meeting theirs: the slugging rules of
+ten renderers are pinned against the renderers themselves, and an anchor no rule publishes
+is now an ordinary missing target, described in [Resolution](resolution.md).
 
 - Declared generated targets. The July 2026 shadow scans made this the largest measured
   adoption blocker: documentation that links pages the docs build generates (ruff's
@@ -35,9 +37,6 @@ condition is met.
   contract is a declared, digested list of generated targets, visible in every report.
   Entry condition: a design that keeps "no suppression" true, plus two design-partner
   repositories from this class.
-- Heading anchors. Entry condition: a pinned slugging corpus for each supported
-  renderer, because checking the file while guessing the anchor would create false
-  passes.
 - reStructuredText or AsciiDoc. Entry condition: a pinned grammar, a conformance corpus,
   extraction goldens, resource accounting, and honest opaque regions, the same set the
   Markdown adapters carry.

@@ -10,10 +10,9 @@ that broke the agreement.
 [lychee](https://lychee.cli.rs/) is the strongest of the checkers and the one worth
 comparing against honestly. It is fast, async, and reads Markdown, HTML, and
 reStructuredText; it checks external URLs, which Amiss never fetches by design; it
-checks local file links, and with `--include-fragments` it verifies heading anchors,
-which Amiss deliberately declares unsupported rather than validate. If your failure mode
-is dead links on a published site, lychee alone is the right tool, and nothing here
-argues otherwise.
+checks local file links, and with `--include-fragments` it verifies heading anchors, which
+Amiss also does, against ten pinned renderer rules. If your failure mode is dead links on a
+published site, lychee alone is the right tool, and nothing here argues otherwise.
 
 What a link checker cannot see is change. It examines one state of the world, so it can
 say a target is missing but not who removed it, whether it was missing before your pull
@@ -24,7 +23,7 @@ are where Amiss lives:
 | | Amiss | lychee |
 | --- | --- | --- |
 | Checks external URLs | never fetches | yes |
-| Checks heading anchors | declared unsupported | with `--include-fragments` |
+| Checks heading anchors | against ten pinned renderer rules | with `--include-fragments` |
 | Compares two snapshots | always | no |
 | Attributes a finding to the change | introduced, pre-existing, resolved | no |
 | Reports changed content under unchanged prose | yes, as advisory | no |

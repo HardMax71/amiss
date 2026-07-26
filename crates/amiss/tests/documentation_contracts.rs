@@ -258,6 +258,9 @@ fn resource_limit(resource: ResourceName) -> u64 {
         ResourceName::AggregateLineFragmentEvaluationBytesPerSnapshot => {
             scan.aggregate_line_fragment_evaluation_bytes_per_snapshot
         }
+        ResourceName::AggregateHeadingAnchorEvaluationBytesPerSnapshot => {
+            scan.aggregate_heading_anchor_evaluation_bytes_per_snapshot
+        }
         ResourceName::AggregateDocumentBytesPerSnapshot => {
             scan.aggregate_document_bytes_per_snapshot
         }

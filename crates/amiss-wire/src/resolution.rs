@@ -90,6 +90,7 @@ impl<P> Target<P> {
 pub enum Missing<P> {
     PathNotFound { path: P },
     LineFragmentOutOfRange { path: P },
+    HeadingAnchorNotFound { path: P },
 }
 
 /// A special Git entry that is present but cannot be followed as an ordinary

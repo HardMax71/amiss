@@ -28,6 +28,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 const POINTER: &str = "version https://git-lfs.github.com/spec/v1\noid sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nsize 42\n";
+const ANCHORS: &[u8] = "# Setup & Config\n\n## Setup & Config\n\n### Résumé draft\n\n<a name=\"declared\"></a>\n\n## Explicit {#custom}\n".as_bytes();
 const MIXED_LINES: &[u8] = b"one\r\ntwo\nthree\rfour";
 const MIXED_LINES_OUTSIDE_CHANGED: &[u8] = b"changed before\r\ntwo\nchanged after\rchanged tail";
 
@@ -39,6 +40,9 @@ fn fixture() -> CommitChain {
         ("llms.txt", Staged::File(b"advisory\n")),
         ("pointer.bin", Staged::File(POINTER.as_bytes())),
         ("docs/guide.md", Staged::File(b"# Guide\n")),
+        ("docs/anchors.md", Staged::File(ANCHORS)),
+        ("docs/pointer.md", Staged::File(POINTER.as_bytes())),
+        ("docs/invalid.md", Staged::File(b"# \xff\n")),
         ("docs/data.json", Staged::File(b"{}\n")),
         ("docs/sub/keep.txt", Staged::File(b"kept\n")),
         // Staged without a worktree file, because a macOS worktree would hand back
@@ -319,13 +323,22 @@ fn empty_destinations_target_the_source_document() {
     }
 
     let row = bed
-        .run(None, "docs/guide.md", false, "#Intro")
-        .unwrap_or_else(|_defect| panic!("resolve fragment"))
+        .run(None, "docs/guide.md", false, "#guide")
+        .unwrap_or_else(|_defect| panic!("resolve self anchor"))
         .1;
-    let Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(blob)) = row else {
+    let Resolution::Resolved(Target::Blob(blob)) = row else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
+
+    let row = bed
+        .run(None, "docs/guide.md", false, "#Intro")
+        .unwrap_or_else(|_defect| panic!("resolve absent anchor"))
+        .1;
+    let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = row else {
+        panic!("unexpected resolution: {row:?}");
+    };
+    assert_eq!(path.as_str(), Some("docs/guide.md"));
 
     let row = bed
         .run(None, "docs/guide.md", false, "#L1")
@@ -374,7 +387,7 @@ fn query_and_fragment_semantics_follow_the_precedence() {
         .1;
     assert!(matches!(
         row,
-        Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
     ));
 
     let row = bed
@@ -442,9 +455,9 @@ fn line_fragments_have_a_hard_grammar() {
         assert!(
             matches!(
                 &row,
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+                Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
             ),
-            "{renderer} is not the line grammar, and the target is a document: {row:?}"
+            "{renderer} is not the line grammar, so it is read as a heading anchor: {row:?}"
         );
     }
 }
@@ -1445,5 +1458,99 @@ fn gitea_recognition_resolves_against_the_tree() {
         path.as_str(),
         Some("docs/guide.md"),
         "with no candidate commit no OID can match, path disclosed"
+    );
+}
+
+/// The identity of a heading belongs to the renderer, so an anchor resolves
+/// when any pinned renderer would publish it. Nothing a repository declares can
+/// narrow that set.
+#[test]
+fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
+    let mut bed = bed();
+    for fragment in [
+        "setup--config",
+        "setup-config",
+        "setup--config-1",
+        "setup-config_1",
+        "r%C3%A9sum%C3%A9-draft",
+        "resume-draft",
+        "declared",
+        "custom",
+        "explicit-custom",
+    ] {
+        let destination = format!("anchors.md#{fragment}");
+        let row = bed
+            .run(None, "docs/guide.md", false, &destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let Resolution::Resolved(Target::Blob(blob)) = &row else {
+            panic!("{fragment} is published by a known renderer: {row:?}");
+        };
+        assert_eq!(blob.path.as_str(), Some("docs/anchors.md"));
+    }
+
+    for fragment in ["Setup--Config", "setup", "résumé", "customid"] {
+        let destination = format!("anchors.md#{fragment}");
+        let row = bed
+            .run(None, "docs/guide.md", false, &destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = &row else {
+            panic!("{fragment} is published by no renderer: {row:?}");
+        };
+        assert_eq!(path.as_str(), Some("docs/anchors.md"));
+    }
+}
+
+/// A target the evaluation cannot read, parse, or afford keeps the unsupported
+/// answer. Reporting it missing would be reporting on a parse that never ran.
+#[test]
+fn an_unevaluable_anchor_target_stays_unsupported_semantics() {
+    let mut bed = bed();
+    for destination in ["pointer.md#any", "invalid.md#any", "../llms.txt#any"] {
+        let row = bed
+            .run(None, "docs/guide.md", false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        assert!(
+            matches!(
+                &row,
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+            ),
+            "{destination}: {row:?}"
+        );
+    }
+
+    let mut starved = bed_with(ScanLimits {
+        aggregate_heading_anchor_evaluation_bytes_per_snapshot: 0,
+        ..ScanLimits::CONTRACT
+    });
+    let row = starved
+        .run(None, "docs/guide.md", false, "anchors.md#setup--config")
+        .unwrap_or_else(|_defect| panic!("resolve under an exhausted anchor budget"))
+        .1;
+    assert!(
+        matches!(
+            &row,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_))
+        ),
+        "an exhausted budget judges nothing: {row:?}"
+    );
+}
+
+/// The identities are built once per target, so repeated anchors into one
+/// document are charged once.
+#[test]
+fn distinct_anchors_into_one_target_are_charged_once() {
+    let mut bed = bed();
+    for fragment in ["setup--config", "resume-draft", "declared"] {
+        let destination = format!("anchors.md#{fragment}");
+        bed.run(None, "docs/guide.md", false, &destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"));
+    }
+    assert_eq!(
+        bed.scan_resources.heading_anchor_bytes(),
+        u64::try_from(ANCHORS.len()).unwrap_or(u64::MAX),
+        "one charge for the one target"
     );
 }
