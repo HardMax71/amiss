@@ -310,3 +310,21 @@ fn assert_refused(output: &Output, path: &Path, reason: &str) {
     assert!(!path.exists());
     assert!(String::from_utf8_lossy(&output.stderr).contains(reason));
 }
+
+#[test]
+fn the_producer_reports_its_version_and_nothing_else() {
+    let output = Command::new(BINARY).arg("--version").output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("amiss-constraint {}\n", env!("CARGO_PKG_VERSION"))
+    );
+
+    let refused = Command::new(BINARY)
+        .args(["--version", "extra"])
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(refused.stdout.is_empty());
+}

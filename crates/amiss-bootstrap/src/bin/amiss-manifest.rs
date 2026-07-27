@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsString;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -20,9 +21,22 @@ use amiss_wire::manifest::RuntimeRole;
 /// `amiss-manifest --tree DIR --version V --host H --owner O --repository R
 ///  --commit OID --action PATH --launcher PATH --lock PATH [--lock PATH]...
 ///  --artifact PATH [...]`
+///
+/// A lone `--version` reports this tool's own version; the `--version V` above
+/// stamps the release under construction and is not an identity query.
 #[expect(clippy::print_stderr, reason = "the build tool's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
+    if let [only] = argv.as_slice()
+        && only.to_str() == Some("--version")
+    {
+        let _ignored = writeln!(
+            std::io::stdout(),
+            "amiss-manifest {}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return ExitCode::SUCCESS;
+    }
     let Some(parsed) = parse_args(&argv) else {
         eprintln!("amiss-manifest: invalid-invocation");
         return ExitCode::from(2);

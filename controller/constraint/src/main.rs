@@ -14,7 +14,8 @@ use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 const GRAMMAR: &str = concat!(
     "usage: amiss-constraint --action-repository PATH ",
     "--action-identity HOST/OWNER/NAME --action-commit OID ",
-    "--bootstrap PATH --required-status-name NAME --output PATH"
+    "--bootstrap PATH --required-status-name NAME --output PATH\n",
+    "       amiss-constraint --version"
 );
 
 #[expect(
@@ -23,6 +24,16 @@ const GRAMMAR: &str = concat!(
 )]
 fn main() -> ExitCode {
     let arguments: Vec<OsString> = env::args_os().skip(1).collect();
+    if let [only] = arguments.as_slice()
+        && only.to_str() == Some("--version")
+    {
+        let _ignored = writeln!(
+            std::io::stdout(),
+            "amiss-constraint {}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return ExitCode::SUCCESS;
+    }
     let Some(args) = parse_args(&arguments) else {
         eprintln!("amiss-constraint: invalid-invocation");
         eprintln!("{GRAMMAR}");

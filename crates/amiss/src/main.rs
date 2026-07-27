@@ -64,6 +64,7 @@ fn main() -> ExitCode {
     }
     let failure = ExitCode::from(ExitClass::Failure.code());
     match invocation::parse(&argv) {
+        Outcome::Version => version(),
         Outcome::MalformedOutputSelection => {
             eprint!("{}", invocation::MALFORMED_OUTPUT_LINE);
             failure
@@ -677,6 +678,19 @@ fn exit_class(code: i64) -> ExitCode {
         1 => ExitCode::from(ExitClass::BlockingFindings.code()),
         _ => ExitCode::from(ExitClass::Failure.code()),
     }
+}
+
+/// The identity query. The second line is the same `engine_digest` the release
+/// manifest pins and every report carries, so an operator can tell which
+/// binary is installed and which one produced a report without running a scan.
+#[expect(clippy::print_stdout, reason = "the identity query's output channel")]
+fn version() -> ExitCode {
+    println!("amiss {}", env!("CARGO_PKG_VERSION"));
+    match engine_provenance() {
+        Some(engine) => println!("engine {}", engine.digest),
+        None => println!("engine unavailable"),
+    }
+    ExitCode::from(ExitClass::Success.code())
 }
 
 fn engine_provenance() -> Option<EngineProvenance> {

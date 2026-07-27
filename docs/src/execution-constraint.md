@@ -37,6 +37,9 @@ target/release/amiss-constraint \
   --output /absolute/path/to/execution-constraint.json
 ```
 
+A lone `--version` reports the tool's own version instead of building anything, which is the way
+to confirm the producer matches the release it is provisioning for.
+
 Use native absolute paths on the deployment system. `--action-identity` is the separately
 supplied logical `host/owner/name`; a nested GitLab owner such as
 `gitlab.example/platform/security/amiss` is valid. The tool does not read a Git remote or compare

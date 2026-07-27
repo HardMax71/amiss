@@ -18,7 +18,10 @@ pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha25
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce>
-            [--explain-scope] [--format <human|json>]";
+            [--explain-scope] [--format <human|json>]
+amiss --version";
+
+const VERSION_FLAG: &str = "--version";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Code {
@@ -99,6 +102,9 @@ pub struct Invocation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
+    /// The standalone identity query. It carries no options of its own, so a
+    /// second token is an ordinary invalid invocation rather than a variant.
+    Version,
     /// Output selection itself is invalid: empty stdout, one fixed stderr
     /// line, exit 2, and no envelope may be chosen by conflicting values.
     MalformedOutputSelection,
@@ -159,6 +165,11 @@ struct Gathered {
 
 #[must_use]
 pub fn parse(argv: &[OsString]) -> Outcome {
+    if let [only] = argv
+        && only.to_str() == Some(VERSION_FLAG)
+    {
+        return Outcome::Version;
+    }
     let gathered = gather(argv);
     let Some(format) = output_selection(&gathered.format) else {
         return Outcome::MalformedOutputSelection;

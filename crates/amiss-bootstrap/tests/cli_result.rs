@@ -127,3 +127,25 @@ fn output_files_must_be_created_by_the_controller() {
     assert!(!result.exists());
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
 }
+
+/// The wrapper ships inside the action tree, so an operator has to be able to
+/// ask an unpacked binary what it is without giving it a job to run.
+#[test]
+fn the_wrapper_reports_its_version_without_running_anything() {
+    let output = Command::new(env!("CARGO_BIN_EXE_amiss-bootstrap"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("amiss-bootstrap {}\n", env!("CARGO_PKG_VERSION"))
+    );
+
+    let refused = Command::new(env!("CARGO_BIN_EXE_amiss-bootstrap"))
+        .args(["--version", "exec"])
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(2));
+}

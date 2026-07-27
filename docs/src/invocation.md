@@ -22,6 +22,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce>
             [--explain-scope] [--format <human|json>]
+amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
 
@@ -42,6 +43,7 @@ and are the ones to trust when the short form reads ambiguous.
 | `--profile` | `observe` or `enforce` | report only, or let blocking findings gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--format` | `human` or `json` | ten grouped items, or the exact report in [The report](report.md) |
+| `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
 `--base` and `--candidate` take full commit IDs, never branch names or short forms: Amiss
 evaluates exactly the trees you name and resolves nothing for you, and `--index` checks the
@@ -75,3 +77,21 @@ behavior pinned by the
 codes are three classes, not detail: 0 means the run completed and nothing blocks, 1 means
 a finding blocks, 2 means nothing trustworthy could be produced. A consumer that closes the
 pipe early, `head` among them, ends the printing and not the verdict.
+
+`amiss --version` is the second form of the grammar and the only one that is not a scan. It
+carries no other flag, prints two lines to stdout, and exits 0:
+
+```text
+amiss <version>
+engine sha256:<64 hex digits>
+```
+
+The first line names the binary and the version it was built from. The second is the same
+`engine_digest` that this binary stamps into every report it writes and that the
+[release manifest](https://github.com/HardMax71/amiss/blob/main/spec/scanner-release-manifest.schema.json)
+pins for each published platform, so an installed binary can be matched against a release
+row, and a report can be matched back to the binary that produced it, without running a
+scan. A binary that cannot read its own file prints `engine unavailable` on the second line
+and still reports its version. The other shipped binaries answer `--version` too, each with
+one line naming itself: `amiss-bootstrap`, `amiss-manifest`, `amiss-constraint`, and the
+three provider services.
