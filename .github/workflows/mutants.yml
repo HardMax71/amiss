@@ -68,7 +68,7 @@ jobs:
           MAX_SHARDS: "16"
         run: |
           set -euo pipefail
-          total=$(cargo mutants --list | grep -c .)
+          total=$(cargo mutants --list | { grep -c . || :; })
           shards=$(( (total + PER_SHARD - 1) / PER_SHARD ))
           if [ "$shards" -gt "$MAX_SHARDS" ]; then shards="$MAX_SHARDS"; fi
           if [ "$shards" -lt 1 ]; then shards=1; fi
