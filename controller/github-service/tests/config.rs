@@ -201,9 +201,7 @@ fn service_command_grammar_is_closed() {
     }
 }
 
-/// The version reported is the service crate's own, not the shared launcher's.
-/// All three services reach it through one `service_main`, and each already
-/// asserts its own name through the offline check.
+/// One service covers the path: all three reach it through one `service_main`.
 #[test]
 fn the_service_reports_its_own_version() {
     let output = Command::new(BINARY).arg("--version").output().unwrap();

@@ -454,8 +454,7 @@ fn classifies_the_forge_dialect_grammar() {
     );
 }
 
-/// The version query is a second form of the grammar, not an option, so it is
-/// recognized only as the whole argument vector.
+/// A second form of the grammar, not an option: only the whole argv matches.
 #[test]
 fn the_version_form_is_the_entire_argument_vector() {
     assert_eq!(parse(&argv(&["--version"])), Outcome::Version);

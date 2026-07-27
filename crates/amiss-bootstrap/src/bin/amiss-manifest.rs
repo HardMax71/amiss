@@ -21,9 +21,7 @@ use amiss_wire::manifest::RuntimeRole;
 /// `amiss-manifest --tree DIR --version V --host H --owner O --repository R
 ///  --commit OID --action PATH --launcher PATH --lock PATH [--lock PATH]...
 ///  --artifact PATH [...]`
-///
-/// A lone `--version` reports this tool's own version; the `--version V` above
-/// stamps the release under construction and is not an identity query.
+/// A lone `--version` asks this tool's version; `--version V` stamps the release.
 #[expect(clippy::print_stderr, reason = "the build tool's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();

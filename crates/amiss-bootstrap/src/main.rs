@@ -42,7 +42,6 @@ const PRIVATE_ENGINE_NAME: &str = "engine";
 /// `amiss-bootstrap exec --action-repository P --repository P --constraint F
 /// --evaluation-request F --snapshot-request F --controls-request F --scratch P
 /// --report F --result F`
-///
 /// `amiss-bootstrap --version`
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
 fn main() -> ExitCode {

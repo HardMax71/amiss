@@ -102,8 +102,7 @@ pub struct Invocation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
-    /// The standalone identity query. It carries no options of its own, so a
-    /// second token is an ordinary invalid invocation rather than a variant.
+    /// Carries no options, so a second token is an ordinary invalid invocation.
     Version,
     /// Output selection itself is invalid: empty stdout, one fixed stderr
     /// line, exit 2, and no envelope may be chosen by conflicting values.

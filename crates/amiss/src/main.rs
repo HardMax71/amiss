@@ -680,9 +680,7 @@ fn exit_class(code: i64) -> ExitCode {
     }
 }
 
-/// The identity query. The second line is the same `engine_digest` the release
-/// manifest pins and every report carries, so an operator can tell which
-/// binary is installed and which one produced a report without running a scan.
+/// The second line is the `engine_digest` the release manifest pins and every report carries.
 #[expect(clippy::print_stdout, reason = "the identity query's output channel")]
 fn version() -> ExitCode {
     println!("amiss {}", env!("CARGO_PKG_VERSION"));
