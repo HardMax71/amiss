@@ -44,10 +44,11 @@ supervised-process cases. The supported service deployments are documented in
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
-[weekly mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
-publishes a non-gating measurement of that property. It runs weekly across every mutant in both
-workspaces, split over eight shards so no single reclaimed runner costs the whole sweep, and a
-pull request additionally measures only the mutants its own diff reaches. Fixture crates are
+[mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
+publishes a non-gating measurement of that property. Before a release, and on request, it covers
+every mutant in both workspaces, split across shards sized from the mutant count rather than a
+fixed number, so no single reclaimed runner costs the whole sweep. A pull request measures only
+the mutants its own diff reaches, and the push hooks ask the same of a branch. Fixture crates are
 excluded, because code that exists to be exercised by its callers says nothing about the tests.
 Neither run gates a merge and neither certifies a global mutation threshold: a surviving mutant
 is a place where a lie would go unnoticed, to be judged against whether the perturbed value is
