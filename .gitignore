@@ -10,3 +10,5 @@ controller/fuzz/artifacts/
 controller/fuzz/coverage/
 /amiss-report.json # where the self-scan job, and anyone rerunning it by hand, drops the report
 /docs/book
+mutants.out/
+mutants.out.old/

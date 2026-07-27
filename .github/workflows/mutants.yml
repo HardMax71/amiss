@@ -1,65 +1,118 @@
 name: mutants
 
 on:
-  schedule:
-    - cron: "17 4 * * 1"
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: mutants-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
 
 jobs:
-  mutants:
+  incremental:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 340
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/tools
+      # A diff of anything but the checked-out tree refuses with exit 5.
+      - run: git diff "origin/$BASE_REF".. > git.diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+      - run: cargo mutants --test-tool nextest --no-shuffle -vV --in-diff git.diff
+        continue-on-error: true
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutants-incremental
+          path: mutants.out/
+
+  # The shards skip their own baseline, so one job has to establish it.
+  baseline:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - run: cargo mutants --exclude 'controller/**'
-        continue-on-error: true
-      - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: mutants-report
-          path: mutants.out/
+      - run: cargo nextest run --workspace --locked
 
-  controller-mutants:
+  # Pin the work per shard, not the shard count, so the split follows the tree.
+  plan:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-')
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 20
+    outputs:
+      shards: ${{ steps.split.outputs.shards }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+      - id: split
+        env:
+          PER_SHARD: "600"
+          MAX_SHARDS: "16"
+        run: |
+          set -euo pipefail
+          total=$(cargo mutants --list | grep -c .)
+          shards=$(( (total + PER_SHARD - 1) / PER_SHARD ))
+          if [ "$shards" -gt "$MAX_SHARDS" ]; then shards="$MAX_SHARDS"; fi
+          if [ "$shards" -lt 1 ]; then shards=1; fi
+          echo "shards=[$(seq -s, 0 $((shards - 1)))]" >> "$GITHUB_OUTPUT"
+          echo "$total mutants over $shards shards" >> "$GITHUB_STEP_SUMMARY"
+
+  sweep:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-')
+    needs: [baseline, plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        focus: [authentication, ownership-publication]
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - if: matrix.focus == 'authentication'
-        run: >-
-          cargo mutants --test-tool nextest
-          --file 'controller/src/ingress/policy.rs'
-          --file 'controller/src/webhook/*.rs'
-          --file 'controller/github/src/lib.rs'
-          --file 'controller/gitea/src/source.rs'
-          --file 'controller/gitlab/src/oidc.rs'
-          --file 'controller/gitlab/src/oidc/claims.rs'
-        continue-on-error: true
-      - if: matrix.focus == 'ownership-publication'
-        run: >-
-          cargo mutants --test-tool nextest
-          --file 'controller/src/orchestration/controller.rs'
-          --file 'controller/src/orchestration/publication.rs'
-          --file 'controller/gitea/src/adapter.rs'
-          --file 'controller/gitlab/src/adapter.rs'
+      # The default slice hands one shard every mutant of the slowest file.
+      - run: >-
+          cargo mutants --test-tool nextest --in-place --no-shuffle
+          --shard "$SHARD/$SHARDS" --sharding round-robin
+          --baseline skip --timeout 300
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
         continue-on-error: true
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: controller-mutants-${{ matrix.focus }}
+          name: mutants-shard-${{ matrix.shard }}
           path: mutants.out/
+
+  collect:
+    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-'))
+    needs: sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/upload-artifact/merge@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutants
+          pattern: mutants-shard-*
+          separate-directories: true
+          delete-merged: true

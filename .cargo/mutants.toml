@@ -1,1 +1,7 @@
-exclude_globs = ["crates/amiss-fixtures/**"]
+exclude_globs = [
+  "crates/amiss-fixtures/**",
+  "controller/fixtures/**",
+  "controller/bootstrap-fixture/**",
+  "controller/tests/fixtures/**",
+  "controller/*/tests/fixtures/**",
+]
