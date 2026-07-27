@@ -86,6 +86,20 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+      # Only the mutants this branch's own diff reaches, and only after
+      # nextest above has established the baseline it skips.
+      - id: mutation-diff
+        name: new code answers to mutation
+        entry: >-
+          sh -c 'set -eu;
+          d="${TMPDIR:-/tmp}/amiss-mutants.diff";
+          git diff origin/main... > "$d";
+          cargo mutants --test-tool nextest --in-diff "$d"
+          --baseline skip --timeout 60 --no-shuffle'
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
       - id: fuzz-smoke
         name: scanner fuzz smoke
         entry: cargo test --manifest-path fuzz/Cargo.toml --locked --release
