@@ -45,10 +45,13 @@ supervised-process cases. The supported service deployments are documented in
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
 [weekly mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
-publishes a non-gating measurement of that property for the root scanner workspace. Two bounded
-controller runs cover authentication and the ownership-to-publication path rather than attempting
-every mutant in the unpublished workspace. These measurements do not certify a global mutation
-threshold.
+publishes a non-gating measurement of that property. It runs weekly across every mutant in both
+workspaces, split over eight shards so no single reclaimed runner costs the whole sweep, and a
+pull request additionally measures only the mutants its own diff reaches. Fixture crates are
+excluded, because code that exists to be exercised by its callers says nothing about the tests.
+Neither run gates a merge and neither certifies a global mutation threshold: a surviving mutant
+is a place where a lie would go unnoticed, to be judged against whether the perturbed value is
+observable through real behavior, not a score to raise.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the
