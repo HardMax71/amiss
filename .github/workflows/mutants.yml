@@ -27,10 +27,15 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/tools
       # A diff of anything but the checked-out tree refuses with exit 5.
-      - run: git diff "origin/$BASE_REF".. > git.diff
+      - if: ${{ !startsWith(github.head_ref, 'release-plz-') }}
+        run: git diff "origin/$BASE_REF".. > git.diff
         env:
           BASE_REF: ${{ github.base_ref }}
-      - run: cargo mutants --test-tool nextest --no-shuffle -vV --in-diff git.diff
+      - if: startsWith(github.head_ref, 'release-plz-')
+        run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
+      - run: >-
+          cargo mutants --test-tool nextest --test-workspace true
+          --no-shuffle -vV --in-diff git.diff
         continue-on-error: true
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -40,7 +45,7 @@ jobs:
 
   # The shards skip their own baseline, so one job has to establish it.
   baseline:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -56,7 +61,7 @@ jobs:
 
   # Pin the work per shard, not the shard count, so the split follows the tree.
   plan:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -80,7 +85,7 @@ jobs:
           echo "$total mutants over $shards shards" >> "$GITHUB_STEP_SUMMARY"
 
   sweep:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-')
+    if: github.event_name == 'workflow_dispatch'
     needs: [baseline, plan]
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -113,7 +118,7 @@ jobs:
           path: mutants.out/
 
   collect:
-    if: always() && (github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release-plz-'))
+    if: always() && github.event_name == 'workflow_dispatch'
     needs: sweep
     runs-on: ubuntu-latest
     timeout-minutes: 10
