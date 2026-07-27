@@ -189,15 +189,30 @@ fn service_command_grammar_is_closed() {
         vec![OsString::from("relative.json")],
         vec![OsString::from("--check"), OsString::from("relative.json")],
         vec![absolute.into_os_string(), OsString::from("extra")],
+        vec![OsString::from("--version"), OsString::from("extra")],
     ] {
         let output = Command::new(BINARY).args(arguments).output().unwrap();
         assert_eq!(output.status.code(), Some(1));
         assert!(output.stdout.is_empty());
         assert_eq!(
             String::from_utf8(output.stderr).unwrap(),
-            "amiss-controller-github: expected ABS_CONFIG or --check ABS_CONFIG\n"
+            "amiss-controller-github: expected ABS_CONFIG, --check ABS_CONFIG, or --version\n"
         );
     }
+}
+
+/// The version reported is the service crate's own, not the shared launcher's.
+/// All three services reach it through one `service_main`, and each already
+/// asserts its own name through the offline check.
+#[test]
+fn the_service_reports_its_own_version() {
+    let output = Command::new(BINARY).arg("--version").output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("amiss-controller-github {}\n", env!("CARGO_PKG_VERSION"))
+    );
 }
 
 #[test]

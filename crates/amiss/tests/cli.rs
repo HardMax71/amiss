@@ -96,6 +96,74 @@ fn a_help_seeker_is_taught_the_closed_grammar() {
     );
 }
 
+/// A version alone would not answer the question the manifest asks. The digest
+/// line is checked against a real report rather than against itself, because
+/// its whole value is being the same `engine_digest` the report stamps.
+#[test]
+fn the_version_query_names_the_engine_that_writes_the_reports() {
+    let (code, stdout, stderr) = amiss(&["--version"]);
+    assert_eq!(code, 0, "an identity query is not a refusal: {stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+    let printed = String::from_utf8_lossy(&stdout).into_owned();
+    let mut lines = printed.lines();
+    let named = lines.next().unwrap_or_default().to_owned();
+    let engine = lines.next().unwrap_or_default().to_owned();
+    assert_eq!(lines.next(), None, "the query prints two lines and stops");
+
+    let fx = fixture();
+    let (_, report, _) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    let stamped = payload(&report).get("engine").cloned().unwrap();
+    let version = stamped
+        .get("engine_version")
+        .and_then(|v| v.as_str())
+        .unwrap();
+    let digest = stamped
+        .get("engine_digest")
+        .and_then(|v| v.as_str())
+        .unwrap();
+    assert_eq!(named, format!("amiss {version}"));
+    assert_eq!(engine, format!("engine {digest}"));
+}
+
+/// The grammar stays closed around the new form: it is not a flag `check`
+/// accepts, and it carries nothing of its own.
+#[test]
+fn the_version_query_stands_alone() {
+    for argv in [
+        ["--version", "--version"].as_slice(),
+        ["check", "--version"].as_slice(),
+    ] {
+        let (code, stdout, stderr) = amiss(argv);
+        assert_eq!(code, 2, "{argv:?} is not a version query");
+        assert!(stdout.is_empty(), "{argv:?} produced stdout");
+        assert!(
+            stderr.contains(amiss::invocation::GRAMMAR),
+            "{argv:?} refusal carries the whole grammar: {stderr}"
+        );
+    }
+    let (code, stdout, _) = amiss(&["--version", "--format", "json"]);
+    assert_eq!(code, 2, "a second token makes it an invalid invocation");
+    let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    assert!(
+        envelope.get("payload").is_some(),
+        "a selected format still refuses through the envelope, never a version"
+    );
+}
+
 #[test]
 fn a_limit_crossing_names_the_resource_and_both_numbers() {
     let dir = TempDir::new().unwrap();

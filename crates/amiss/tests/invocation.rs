@@ -37,7 +37,7 @@ fn parse_tokens(tokens: &[String]) -> Outcome {
 fn rejected_codes(outcome: Outcome) -> Vec<Code> {
     match outcome {
         Outcome::Rejected { codes, .. } => codes.into_iter().collect(),
-        Outcome::Accepted(_) | Outcome::MalformedOutputSelection => {
+        Outcome::Accepted(_) | Outcome::MalformedOutputSelection | Outcome::Version => {
             panic!("expected rejection, got {outcome:?}")
         }
     }
@@ -452,4 +452,23 @@ fn classifies_the_forge_dialect_grammar() {
         ))),
         vec![Code::InvalidInvocation]
     );
+}
+
+/// The version query is a second form of the grammar, not an option, so it is
+/// recognized only as the whole argument vector.
+#[test]
+fn the_version_form_is_the_entire_argument_vector() {
+    assert_eq!(parse(&argv(&["--version"])), Outcome::Version);
+    for tokens in [
+        vec!["--version", "--version"],
+        vec!["--version", "--format", "human"],
+        vec!["check", "--version"],
+        vec!["--Version"],
+    ] {
+        assert_ne!(
+            parse(&argv(&tokens)),
+            Outcome::Version,
+            "{tokens:?} is not the version form"
+        );
+    }
 }

@@ -1,10 +1,12 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 /// Checks or runs one provider service from one absolute config path.
+/// The version is the caller's own, so each service reports itself rather
+/// than the shared launcher crate.
 #[expect(
     clippy::print_stderr,
     clippy::print_stdout,
@@ -12,6 +14,7 @@ use std::process::ExitCode;
 )]
 pub fn service_main<C, LoadError, RunError, RunFuture>(
     name: &str,
+    version: &str,
     load: impl FnOnce(&Path) -> Result<C, LoadError>,
     run: impl FnOnce(C) -> RunFuture,
 ) -> ExitCode
@@ -20,8 +23,15 @@ where
     RunError: Display,
     RunFuture: Future<Output = Result<(), RunError>>,
 {
-    let Some((path, check_only)) = config_path() else {
-        eprintln!("{name}: expected ABS_CONFIG or --check ABS_CONFIG");
+    let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if let [only] = arguments.as_slice()
+        && only.to_str() == Some("--version")
+    {
+        println!("{name} {version}");
+        return ExitCode::SUCCESS;
+    }
+    let Some((path, check_only)) = config_path(&arguments) else {
+        eprintln!("{name}: expected ABS_CONFIG, --check ABS_CONFIG, or --version");
         return ExitCode::FAILURE;
     };
     let config = match load(&path) {
@@ -54,8 +64,8 @@ where
     }
 }
 
-fn config_path() -> Option<(PathBuf, bool)> {
-    let mut arguments = std::env::args_os().skip(1);
+fn config_path(arguments: &[OsString]) -> Option<(PathBuf, bool)> {
+    let mut arguments = arguments.iter();
     let first = arguments.next()?;
     let check_only = first == OsStr::new("--check");
     let path = PathBuf::from(if check_only { arguments.next()? } else { first });

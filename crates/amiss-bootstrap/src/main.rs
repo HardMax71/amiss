@@ -42,9 +42,21 @@ const PRIVATE_ENGINE_NAME: &str = "engine";
 /// `amiss-bootstrap exec --action-repository P --repository P --constraint F
 /// --evaluation-request F --snapshot-request F --controls-request F --scratch P
 /// --report F --result F`
+///
+/// `amiss-bootstrap --version`
 #[expect(clippy::print_stderr, reason = "the bootstrap's diagnostic channel")]
 fn main() -> ExitCode {
     let argv: Vec<OsString> = env::args_os().skip(1).collect();
+    if let [only] = argv.as_slice()
+        && only.to_str() == Some("--version")
+    {
+        let _ignored = writeln!(
+            std::io::stdout(),
+            "amiss-bootstrap {}",
+            env!("CARGO_PKG_VERSION")
+        );
+        return ExitCode::SUCCESS;
+    }
     let Some((parsed, mut output)) = parse_args(&argv)
         .and_then(|parsed| open_output(&parsed).ok().map(|output| (parsed, output)))
     else {

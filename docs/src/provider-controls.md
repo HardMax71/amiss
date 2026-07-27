@@ -94,6 +94,10 @@ ledger state, running the bootstrap, or contacting the provider. Success prints 
 followed by `configuration valid`; failure prints the same configuration error that startup would
 report.
 
+Every service also answers `--version` on its own, with no config path, printing its name and
+version and exiting 0. Use it to confirm which build a host is running before reading anything
+into a lane's behavior.
+
 This is a local preflight, not readiness or provider evidence. It cannot prove that the configured
 address is available, that state roots are writable and healthy, that credentials have the
 required provider permissions, or that the live merge rule matches the documented setup. Those
