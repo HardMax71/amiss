@@ -47,7 +47,8 @@ fn an_inline_link_carries_every_golden() {
     assert_eq!(source.get(6..20), Some("[a](<x y> \"t\")"));
     assert_eq!(entry.node_path, vec![0, 0, 0, 1]);
     assert_eq!(entry.block_kind, BlockKind::ListItem);
-    assert_eq!(entry.block_span.0, 0);
+    assert_eq!(entry.block_span, (0, 20));
+    assert_eq!(source.get(0..20), Some("- see [a](<x y> \"t\")"));
 }
 
 /// Reference forms take the destination token of the first winning
@@ -229,6 +230,10 @@ fn frontmatter_translates_spans_not_paths() {
     assert_eq!(got.occurrences.len(), 1);
     let entry = got.occurrences.first();
     assert_eq!(entry.map(|occurrence| occurrence.span), Some((22, 28)));
+    assert_eq!(
+        entry.map(|occurrence| occurrence.block_span),
+        Some((22, 28))
+    );
     assert_eq!(source.get(22..28), Some("[a](b)"));
     assert_eq!(
         entry.map(|occurrence| occurrence.node_path.clone()),
