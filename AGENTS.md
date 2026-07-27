@@ -29,8 +29,9 @@ green and remote green are the same thing.
   restatement of the code.
 - The wire is one rolling contract. A report change moves the schema in `spec/`, both
   examples (with a recomputed payload digest), the writer, and the docs together.
-- Blocks between `amiss-doc-contract` markers in `docs/` are generated from Rust and
-  compared in CI; edit the Rust source, not the block.
+- Blocks between `amiss-doc-contract` markers in `docs/` copy a value a Rust source owns,
+  and a test asserts the two are equal. Nothing writes the block for you: move the Rust
+  source and the block together, because editing either one alone fails CI.
 - The fixed description sentences live in `FindingKind::meaning` and
   `AnalysisErrorCode::meaning` and nowhere else; every other appearance is a checked
   projection.
