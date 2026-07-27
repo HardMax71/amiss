@@ -33,10 +33,11 @@ jobs:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: prek run --all-files
-      # The suites belong to platform-tests, on every platform rather than this one.
+      # The suites belong to platform-tests, on every platform rather than this
+      # one, and mutation to the incremental job, which fetches enough history.
       - run: prek run --all-files --hook-stage pre-push
         env:
-          SKIP: nextest,fuzz-smoke
+          SKIP: nextest,fuzz-smoke,mutation-diff
 
   # The scanner reads its own repository under enforce, through the very
   # action a consumer pins: the engine is built from this pull request, the
