@@ -264,7 +264,8 @@ fn raw_html_headings_are_recorded_with_their_text_content() {
     let source = concat!(
         "<h1 align=\"center\"><code>tool</code></h1>\n\n",
         "<div>\n  <h2>A &amp; B<!-- note --> <em>c</em></h2>\n</div>\n\n",
-        "<h3>\n  Wrapped\n</h3>\n"
+        "<h3>\n  Wrapped\n</h3>\n\n",
+        "<h4>&lt;b&gt; &quot;q&quot; &apos;a&apos; x&nbsp;y</h4>\n"
     );
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
@@ -272,7 +273,8 @@ fn raw_html_headings_are_recorded_with_their_text_content() {
         vec![
             "tool".to_owned(),
             "A & B c".to_owned(),
-            "\n  Wrapped\n".to_owned()
+            "\n  Wrapped\n".to_owned(),
+            "<b> \"q\" 'a' x\u{a0}y".to_owned()
         ]
     );
     assert!(
