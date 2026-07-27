@@ -53,8 +53,6 @@ fn the_manifest_builder_publishes_its_digest_marker() {
     assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);
 }
 
-/// `--version V` stamps the release under construction; a lone `--version`
-/// asks the builder about itself. The two must not be confused.
 #[test]
 fn a_lone_version_flag_asks_the_builder_not_the_release() {
     let output = Command::new(env!("CARGO_BIN_EXE_amiss-manifest"))

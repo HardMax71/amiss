@@ -4,9 +4,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-/// Checks or runs one provider service from one absolute config path.
-/// The version is the caller's own, so each service reports itself rather
-/// than the shared launcher crate.
+/// The version is the caller's own, so a service names its crate and not this launcher.
 #[expect(
     clippy::print_stderr,
     clippy::print_stdout,

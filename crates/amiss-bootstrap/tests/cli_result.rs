@@ -128,8 +128,6 @@ fn output_files_must_be_created_by_the_controller() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid-invocation"));
 }
 
-/// The wrapper ships inside the action tree, so an operator has to be able to
-/// ask an unpacked binary what it is without giving it a job to run.
 #[test]
 fn the_wrapper_reports_its_version_without_running_anything() {
     let output = Command::new(env!("CARGO_BIN_EXE_amiss-bootstrap"))
