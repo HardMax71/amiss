@@ -33,7 +33,7 @@ jobs:
       - if: startsWith(github.head_ref, 'release-plz-')
         run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
       - run: >-
-          cargo mutants --test-tool nextest --test-workspace true
+          cargo mutants --test-workspace true
           --no-shuffle -vV --in-diff git.diff -- --profile mutants
         continue-on-error: true
       - if: always()
@@ -103,8 +103,8 @@ jobs:
           save-if: "false"
       # The default slice hands one shard every mutant of the slowest file.
       - run: >-
-          cargo mutants --test-tool nextest --in-place --no-shuffle
-          --shard "$SHARD/$SHARDS" --sharding round-robin
+          cargo mutants --in-place --no-shuffle
+          --shard "$SHARD/$SHARDS"
           --baseline skip --timeout 60 -- --profile mutants
         env:
           SHARD: ${{ matrix.shard }}

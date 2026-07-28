@@ -94,7 +94,7 @@ repos:
           sh -c 'set -eu;
           d="${TMPDIR:-/tmp}/amiss-mutants.diff";
           git diff origin/main... > "$d";
-          cargo mutants --test-tool nextest --test-workspace true --in-diff "$d"
+          cargo mutants --test-workspace true --in-diff "$d"
           --baseline skip --timeout 60 --no-shuffle -- --profile mutants'
         language: system
         types: [rust]

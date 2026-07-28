@@ -1,3 +1,6 @@
+test_tool = "nextest"
+sharding = "round-robin"
+
 exclude_globs = [
   "crates/amiss-fixtures/**",
   "controller/fixtures/**",
