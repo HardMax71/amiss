@@ -34,7 +34,7 @@ jobs:
         run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
       - run: >-
           cargo mutants --test-tool nextest --test-workspace true
-          --no-shuffle -vV --in-diff git.diff
+          --no-shuffle -vV --in-diff git.diff -- --profile mutants
         continue-on-error: true
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -105,7 +105,7 @@ jobs:
       - run: >-
           cargo mutants --test-tool nextest --in-place --no-shuffle
           --shard "$SHARD/$SHARDS" --sharding round-robin
-          --baseline skip --timeout 60
+          --baseline skip --timeout 60 -- --profile mutants
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
