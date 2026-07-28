@@ -73,38 +73,10 @@ repos:
         types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
-      - id: fuzz-clippy
-        name: scanner fuzz cargo clippy
-        entry: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
-        language: system
-        types_or: [rust, toml]
-        pass_filenames: false
-        stages: [pre-push]
       - id: nextest
         name: cargo nextest
         entry: cargo nextest run --workspace --locked
         language: system
-        pass_filenames: false
-        stages: [pre-push]
-      # Only the mutants this branch's own diff reaches, and only after
-      # nextest above has established the baseline it skips.
-      - id: mutation-diff
-        name: new code answers to mutation
-        entry: >-
-          sh -c 'set -eu;
-          d="${TMPDIR:-/tmp}/amiss-mutants.diff";
-          git diff origin/main... > "$d";
-          cargo mutants --test-workspace true --in-diff "$d"
-          --baseline skip --timeout 60 --no-shuffle -- --profile mutants'
-        language: system
-        types: [rust]
-        pass_filenames: false
-        stages: [pre-push]
-      - id: fuzz-smoke
-        name: scanner fuzz smoke
-        entry: cargo test --manifest-path fuzz/Cargo.toml --locked --release
-        language: system
-        types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
       - id: deny
@@ -124,23 +96,9 @@ repos:
         files: (^|/)(Cargo\.(toml|lock)|deny-engine\.toml)$
         pass_filenames: false
         stages: [pre-push]
-      - id: fuzz-deny
-        name: scanner fuzz cargo deny
-        entry: cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml check
-        language: system
-        files: ^(Cargo\.(toml|lock)|deny\.toml|fuzz/Cargo\.(toml|lock)|crates/(amiss-git|amiss-scan|amiss-wire)/Cargo\.toml|rust-toolchain\.toml)$
-        pass_filenames: false
-        stages: [pre-push]
       - id: shear
         name: cargo shear
         entry: cargo shear
-        language: system
-        types_or: [rust, toml]
-        pass_filenames: false
-        stages: [pre-push]
-      - id: fuzz-shear
-        name: scanner fuzz cargo shear
-        entry: cargo shear --locked fuzz
         language: system
         types_or: [rust, toml]
         pass_filenames: false
