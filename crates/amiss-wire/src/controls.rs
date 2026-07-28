@@ -351,6 +351,8 @@ pub enum ResourceName {
     DocumentBlobBytes,
     ReferencedTargetBlobBytes,
     AggregateReferencedTargetBytesPerSnapshot,
+    IgnoreDeclarationBlobBytes,
+    AggregateIgnoreDeclarationBytesPerSnapshot,
     AggregateLineFragmentEvaluationBytesPerSnapshot,
     AggregateHeadingAnchorEvaluationBytesPerSnapshot,
     AggregateDocumentBytesPerSnapshot,
@@ -410,6 +412,8 @@ impl ResourceName {
             | Self::ReferencesPerSnapshot => "parse",
             Self::ReferencedTargetBlobBytes
             | Self::AggregateReferencedTargetBytesPerSnapshot
+            | Self::IgnoreDeclarationBlobBytes
+            | Self::AggregateIgnoreDeclarationBytesPerSnapshot
             | Self::AggregateLineFragmentEvaluationBytesPerSnapshot
             | Self::AggregateHeadingAnchorEvaluationBytesPerSnapshot => "resolution",
             Self::CompleteFindings => "policy",
@@ -701,6 +705,7 @@ impl Fact {
             Resolution::Missing(_) => EligibleFindingKind::ExplicitTargetMissing,
             Resolution::TypeMismatch(_) => EligibleFindingKind::ExplicitTargetTypeMismatch,
             Resolution::Resolved(_)
+            | Resolution::DeclaredUntracked(_)
             | Resolution::UnsupportedTarget(_)
             | Resolution::UnsupportedSemantics(_)
             | Resolution::UnsupportedVersion(_)
@@ -1226,6 +1231,7 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
             Ok(Resolution::TypeMismatch(target))
         }
         ResolutionTag::Resolved
+        | ResolutionTag::DeclaredUntracked
         | ResolutionTag::UnsupportedTarget
         | ResolutionTag::UnsupportedSemantics
         | ResolutionTag::UnsupportedVersion

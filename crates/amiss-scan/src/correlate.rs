@@ -554,6 +554,16 @@ fn derive(
                 (TargetChange::NotComparable, Impact::NotApplicable)
             }
         }
+        (
+            WireResolution::DeclaredUntracked(left_declared),
+            WireResolution::DeclaredUntracked(right_declared),
+        ) => {
+            if left_declared == right_declared {
+                (TargetChange::Equal, equal_impact)
+            } else {
+                (TargetChange::NotComparable, Impact::NotApplicable)
+            }
+        }
         (WireResolution::TypeMismatch(left_target), WireResolution::TypeMismatch(right_target)) => {
             if left_target == right_target {
                 (TargetChange::Equal, equal_impact)
@@ -573,6 +583,7 @@ fn derive(
             WireResolution::Resolved(_)
             | WireResolution::Missing(_)
             | WireResolution::TypeMismatch(_)
+            | WireResolution::DeclaredUntracked(_)
             | WireResolution::UnsupportedTarget(_)
             | WireResolution::UnsupportedSemantics(_)
             | WireResolution::UnsupportedVersion(_)
@@ -581,6 +592,7 @@ fn derive(
             WireResolution::Resolved(_)
             | WireResolution::Missing(_)
             | WireResolution::TypeMismatch(_)
+            | WireResolution::DeclaredUntracked(_)
             | WireResolution::UnsupportedTarget(_)
             | WireResolution::UnsupportedSemantics(_)
             | WireResolution::UnsupportedVersion(_)

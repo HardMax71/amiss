@@ -10,7 +10,7 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind};
 use amiss_wire::resolution::{
-    BlobContent, BlobMode, BlobTarget, ExternalReference, Missing, Target,
+    BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing, Target,
 };
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -50,6 +50,13 @@ fn resolved(path: &str, body: &[u8]) -> Resolution {
 
 fn missing(path: &str) -> Resolution {
     Resolution::Missing(Missing::PathNotFound { path: rp(path) })
+}
+
+fn declared(path: &str, declared_by: &str) -> Resolution {
+    Resolution::DeclaredUntracked(DeclaredUntracked {
+        path: rp(path),
+        declared_by: rp(declared_by),
+    })
 }
 
 #[derive(Clone)]
@@ -514,4 +521,35 @@ fn duplicate_identities_within_a_side_are_internal_defects() {
         correlate(&doubled, &Side::default()),
         Err(amiss_scan::Error::Internal)
     );
+}
+
+#[test]
+fn a_declaration_answers_only_for_the_one_it_repeats() {
+    let mut here = basic("d.md", "t.md", "same [x](x)");
+    here.resolution = declared("t.md", ".gitignore");
+    let mut moved = here.clone();
+    moved.resolution = declared("t.md", "docs/.gitignore");
+    let mut elsewhere = here.clone();
+    elsewhere.resolution = declared("other.md", ".gitignore");
+
+    let unchanged = run(
+        &side(vec![observation(&here)]),
+        &side(vec![observation(&here)]),
+    );
+    assert_eq!(
+        unchanged.first().map(|row| (row.target_change, row.impact)),
+        Some((TargetChange::Equal, Impact::None)),
+    );
+
+    for other in [&moved, &elsewhere] {
+        let differing = run(
+            &side(vec![observation(&here)]),
+            &side(vec![observation(other)]),
+        );
+        assert_eq!(
+            differing.first().map(|row| (row.target_change, row.impact)),
+            Some((TargetChange::NotComparable, Impact::NotApplicable)),
+            "a different declaration is not the same fact",
+        );
+    }
 }
