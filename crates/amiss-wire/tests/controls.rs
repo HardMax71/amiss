@@ -1,7 +1,7 @@
 use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact,
     FloorDefect, OrganizationFloor, ResourceName, STATEMENT_TTL_MAX_SECONDS, ScannerPolicy,
-    TrustedTimeStatement, WaiverBundle,
+    SourceConstruct, TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::hj;
@@ -12,6 +12,7 @@ use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Resolution, Target}
 const POLICY: &[u8] = include_bytes!("fixtures/scanner-policy.json");
 const FLOOR: &[u8] = include_bytes!("fixtures/organization-floor.json");
 
+const DEFAULT_CONSTRUCT: &str = "markdown-inline-link";
 const RAW_DIGEST: &str = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 const PROJECTION_DIGEST: &str =
     "sha256:2222222222222222222222222222222222222222222222222222222222222222";
@@ -180,6 +181,45 @@ fn waiver_item(waiver_id: &str, finding_key: &str, fact_digest: &str, issuer: &s
 }}"#,
         fact = fact_json()
     )
+}
+
+#[test]
+fn every_source_construct_survives_the_waiver_round_trip() {
+    for construct in [
+        SourceConstruct::InlineLink,
+        SourceConstruct::FullReferenceLink,
+        SourceConstruct::CollapsedReferenceLink,
+        SourceConstruct::ShortcutReferenceLink,
+        SourceConstruct::Autolink,
+        SourceConstruct::InlineImage,
+        SourceConstruct::FullReferenceImage,
+        SourceConstruct::CollapsedReferenceImage,
+        SourceConstruct::ShortcutReferenceImage,
+    ] {
+        let named = construct.as_str();
+        let key_input = key_input_json("explicit-target-missing").replace(DEFAULT_CONSTRUCT, named);
+        let key = hj(
+            FINDING_KEY_DOMAIN,
+            &json::parse(key_input.as_bytes()).unwrap(),
+        )
+        .to_string();
+        let fact_doc = fact_json().replace(DEFAULT_CONSTRUCT, named);
+        let fact = hj(FACT_DOMAIN, &json::parse(fact_doc.as_bytes()).unwrap()).to_string();
+        let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering")
+            .replace(DEFAULT_CONSTRUCT, named);
+        let bundle = WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
+            .unwrap_or_else(|error| panic!("{named} is a construct the bundle accepts: {error:?}"));
+        let parsed = bundle
+            .items
+            .first()
+            .map(|item| item.authorized_fact.key_input().scope.source_construct);
+        assert_eq!(
+            parsed,
+            Some(construct),
+            "{named} decodes to its own variant"
+        );
+        assert_eq!(construct.is_image(), named.contains("image"), "{named}");
+    }
 }
 
 fn waiver_bundle(items: &[String]) -> String {
