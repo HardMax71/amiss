@@ -151,6 +151,58 @@ fn rejects_delta_chain_past_depth_limit() {
 }
 
 #[test]
+fn a_pack_whose_lengths_need_continuation_bytes_resolves_exactly() {
+    let payload: Vec<u8> = (0..300_u32)
+        .map(|index| u8::try_from(index.wrapping_mul(37).wrapping_add(11) % 251).unwrap_or(0))
+        .collect();
+    let size = u64::try_from(payload.len()).unwrap_or(0);
+    let base = ordinary(3, &payload);
+    let distance = u64::try_from(base.len()).unwrap_or(0);
+    assert!(distance > 127, "the base offset must span two bytes");
+
+    let mut sizes = size_varint(size);
+    sizes.extend_from_slice(&size_varint(size));
+    let delta = entry(
+        6,
+        u64::try_from(sizes.len()).unwrap_or(0),
+        &sizes,
+        &offset(distance),
+    );
+    validate(&pack([base, delta]), limits()).expect("the delta names its base and its sizes");
+}
+
+#[test]
+fn an_entry_declaring_its_size_in_one_byte_still_answers_to_the_object_limit() {
+    let bytes = pack([ordinary(3, b"abcdefghijkl")]);
+    let over = PackLimits {
+        object_bytes: 8,
+        ..limits()
+    };
+    assert!(
+        validate(&bytes, over).is_err(),
+        "twelve bytes exceeds eight"
+    );
+    let exact = PackLimits {
+        object_bytes: 12,
+        ..limits()
+    };
+    validate(&bytes, exact).expect("twelve bytes is within twelve");
+}
+
+fn size_varint(mut size: u64) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    loop {
+        let low = u8::try_from(size & 127).unwrap_or(0);
+        size >>= 7;
+        if size == 0 {
+            bytes.push(low);
+            return bytes;
+        }
+        bytes.push(low | 128);
+    }
+}
+
+#[test]
 fn rejects_missing_and_trailing_checksum_bytes() {
     let mut missing = pack([ordinary(3, b"a")]);
     missing.pop();
