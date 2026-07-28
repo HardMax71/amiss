@@ -12,9 +12,9 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
-amiss-git = { path = "../amiss-git", version = "0.11.0" }
-amiss-scan = { path = "../amiss-scan", version = "0.11.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.11.0" }
+amiss-git = { path = "../amiss-git", version = "0.12.0" }
+amiss-scan = { path = "../amiss-scan", version = "0.12.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.12.0" }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["process"] }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/HardMax71/amiss/compare/v0.11.0...v0.12.0) - 2026-07-28
+
+### Changes
+
+- Trim the review's comments to one constraint line each
+- Let every binary say which version it is, and the engine which build
+- End the hung fixture with its parent, not with a clock
+
 ## [0.11.0](https://github.com/HardMax71/amiss/compare/v0.10.0...v0.11.0) - 2026-07-26
 
 ### Changes
