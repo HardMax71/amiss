@@ -38,6 +38,17 @@ Where a supported construct reaches one of these boundaries, Amiss records the u
 or out-of-scope semantics instead of guessing, because a guessed pass looks exactly like a
 real one until it burns you.
 
+Reading paths out of prose was measured rather than assumed, and it is not close. Across this
+book, ruff, and uv, the strongest available signal is a path-shaped token inside a code span,
+and 55 to 85 percent of those name nothing in the tree; requiring a slash lowers the rate
+rather than raising it. What the non-resolving pile holds is documentation's own teaching
+examples. ruff's twenty-two most frequent are `main.py`, `a.py`, `b.py`, `mypackage/__init__.py`
+and their kind, 564 mentions that were never references and can never be fixed. A tool that
+reported them would file more than a thousand rows against ruff to surface the ten real missing
+targets the explicit checker already finds, and it would be worst exactly where documentation is
+densest, because the pages that teach with examples are the pages full of filenames that do not
+exist. So the engine reads link syntax and stops.
+
 And it accepts no configuration that would let a repository weaken its own check. No
 suppression comments, no severity downgrades, no hooks. The absence is the point.
 
