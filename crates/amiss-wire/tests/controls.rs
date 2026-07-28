@@ -224,6 +224,32 @@ fn every_source_construct_survives_the_waiver_round_trip() {
 }
 
 #[test]
+fn a_run_id_answers_to_every_clause_that_bounds_it() {
+    let with_id = |id: &str| {
+        TrustedTimeStatement::parse(TIME_STATEMENT.replace("pipeline/01J2Z9-7", id).as_bytes())
+    };
+    assert!(with_id(&"a".repeat(129)).is_err(), "over the length bound");
+    assert!(with_id(&"a".repeat(128)).is_ok(), "at the length bound");
+    assert!(with_id("").is_err(), "empty");
+    assert!(with_id("-lead").is_err(), "must open alphanumeric");
+    assert!(with_id("trail-").is_err(), "must close alphanumeric");
+    assert!(with_id("has space").is_err(), "space is not allowed");
+}
+
+#[test]
+fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
+    let doc = String::from_utf8(FLOOR.to_vec())
+        .unwrap()
+        .replace(r#""disposition": "fail""#, r#""disposition": "warn""#);
+    let floor =
+        OrganizationFloor::parse(doc.as_bytes()).expect("warn is a disposition a floor may set");
+    assert_ne!(
+        floor.digest,
+        OrganizationFloor::parse(FLOOR).unwrap().digest
+    );
+}
+
+#[test]
 fn wire_spellings_are_the_ones_the_contract_publishes() {
     assert_eq!(IncludeKind::Document.as_str(), "document");
     assert_eq!(IncludeKind::Tree.as_str(), "tree");
