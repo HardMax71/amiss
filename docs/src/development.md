@@ -45,14 +45,25 @@ supervised-process cases. The supported service deployments are documented in
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
 [mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
-publishes a non-gating measurement of that property. Before a release, and on request, it covers
-every mutant in both workspaces, split across shards sized from the mutant count rather than a
-fixed number, so no single reclaimed runner costs the whole sweep. A pull request measures only
-the mutants its own diff reaches, and the push hooks ask the same of a branch. Fixture crates are
-excluded, because code that exists to be exercised by its callers says nothing about the tests.
-Neither run gates a merge and neither certifies a global mutation threshold: a surviving mutant
-is a place where a lie would go unnoticed, to be judged against whether the perturbed value is
-observable through real behavior, not a score to raise.
+publishes a non-gating measurement of that property, in three sizes.
+
+The push hooks and every pull request measure only the mutants the change itself reaches, which
+is seconds when the diff is documentation and minutes when it is engine code. A release pull
+request measures what the release ships, every change since the last tag, rather than the version
+bump standing in front of it. Both ask the whole workspace whether a mutant lives.
+
+The sweep over every mutant in both workspaces runs only when someone asks for it, through
+`workflow_dispatch`. It is split across shards sized from the mutant count rather than a fixed
+number, it takes tens of minutes, and it exists to find gaps in code that no longer changes,
+which is not something a release should pay for. Fixture crates are excluded, because code that
+exists to be exercised by its callers says nothing about the tests. Unlike the smaller lanes it
+runs each mutant against its own package's tests, which is what makes it affordable and also
+means a mutant that a sibling package covers is reported as surviving. Its output is a list to
+verify, not a verdict.
+
+None of the three gates a merge and none certifies a global mutation threshold: a surviving
+mutant is a place where a lie would go unnoticed, to be judged against whether the perturbed
+value is observable through real behavior, not a score to raise.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the
