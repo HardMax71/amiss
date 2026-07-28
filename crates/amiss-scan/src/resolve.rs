@@ -10,11 +10,12 @@ use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ForgeDialect, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
-    BlobContent, BlobMode, BlobTarget, ExternalReference, InvalidReference, Missing,
-    Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget,
+    BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference,
+    Missing, Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget,
 };
 
 use crate::anchor::anchor_set;
+use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
@@ -77,6 +78,7 @@ fn same_repo_suffix<'a>(path_part: &'a str, host: &str) -> Option<&'a str> {
 pub struct TargetCache {
     scope: Option<Arc<()>>,
     read: BTreeMap<RepoPath, CachedContent>,
+    declarations: BTreeMap<RepoPath, Declarations>,
 }
 
 impl TargetCache {
@@ -89,6 +91,7 @@ impl TargetCache {
             return;
         }
         self.read.clear();
+        self.declarations.clear();
         self.scope = Some(Arc::clone(scope));
     }
 }
@@ -551,6 +554,87 @@ fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind
         .map_or_else(|| path.clone(), |(_, candidate)| candidate)
 }
 
+/// The last question a path the tree does not hold is asked. Only ignore files
+/// on its own ancestor chain can name it, and the nearest one answers, so the
+/// report carries the declaration closest to the target.
+fn declared_untracked(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    path: &RepoPath,
+) -> Result<Resolution, Error> {
+    let raw = path.as_bytes();
+    let mut separators: Vec<usize> = raw
+        .iter()
+        .enumerate()
+        .filter(|(_, byte)| **byte == b'/')
+        .map(|(index, _)| index)
+        .collect();
+    separators.reverse();
+    for split in separators.into_iter().map(Some).chain([None]) {
+        let (directory, relative) = match split {
+            Some(index) => (
+                raw.get(..index).unwrap_or_default(),
+                raw.get(index.saturating_add(1)..).unwrap_or_default(),
+            ),
+            None => ([].as_slice(), raw),
+        };
+        let mut spelled = directory.to_vec();
+        if !spelled.is_empty() {
+            spelled.push(b'/');
+        }
+        spelled.extend_from_slice(b".gitignore");
+        let Some(ignore_path) = RepoPath::from_bytes(spelled) else {
+            continue;
+        };
+        if declares(repo, git, scan, cache, snapshot, &ignore_path, relative)? {
+            return Ok(Resolution::DeclaredUntracked(DeclaredUntracked {
+                path: path.clone(),
+                declared_by: ignore_path,
+            }));
+        }
+    }
+    Ok(Resolution::Missing(Missing::PathNotFound {
+        path: path.clone(),
+    }))
+}
+
+fn declares(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    ignore_path: &RepoPath,
+    relative: &[u8],
+) -> Result<bool, Error> {
+    if let Some(cached) = cache.declarations.get(ignore_path) {
+        return Ok(cached.declares(relative));
+    }
+    let Some(Located::Entry(GitMode::RegularFile | GitMode::ExecutableFile, oid)) =
+        snapshot.locate(ignore_path)
+    else {
+        return Ok(false);
+    };
+    let cap = ValueCap {
+        resource: ResourceName::IgnoreDeclarationBlobBytes,
+        limit: scan.limits().ignore_declaration_blob_bytes,
+    };
+    let object = repo
+        .read_expected_capped(git, oid, ObjectKind::Blob, cap)
+        .map_err(Error::from)?;
+    scan.charge(
+        Aggregate::IgnoreDeclarationBytes,
+        u64::try_from(object.body.len()).unwrap_or(u64::MAX),
+    )?;
+    let parsed = Declarations::parse(&object.body);
+    let answer = parsed.declares(relative);
+    cache.declarations.insert(ignore_path.clone(), parsed);
+    Ok(answer)
+}
+
 fn normalized_native_path(
     document_path: &RepoPath,
     is_image: bool,
@@ -700,9 +784,7 @@ fn lookup(
 ) -> Result<Resolution, Error> {
     let (mode, entry) = match snapshot.locate(path) {
         None => {
-            return Ok(Resolution::Missing(Missing::PathNotFound {
-                path: path.clone(),
-            }));
+            return declared_untracked(repo, git, scan, cache, snapshot, path);
         }
         Some(Located::Entry(GitMode::Symlink, _)) => {
             return Ok(Resolution::UnsupportedTarget(UnsupportedTarget::Symlink {

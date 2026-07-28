@@ -247,6 +247,13 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
                 vec![("path", path.to_value())],
             ),
         },
+        Resolution::DeclaredUntracked(declared) => resolution_object(
+            resolution.discriminant().as_ref(),
+            vec![
+                ("path", declared.path.to_value()),
+                ("declared_by", declared.declared_by.to_value()),
+            ],
+        ),
         Resolution::UnsupportedTarget(target) => {
             unsupported_target_value(resolution.discriminant().as_ref(), target)
         }
@@ -428,6 +435,7 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
         Resolution::Missing(_) => Some(FindingKind::ExplicitTargetMissing),
         Resolution::TypeMismatch(_) => Some(FindingKind::ExplicitTargetTypeMismatch),
         Resolution::Resolved(_)
+        | Resolution::DeclaredUntracked(_)
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedSemantics(_)
         | Resolution::UnsupportedVersion(_)
@@ -444,6 +452,7 @@ const fn boundary_kind(resolution: &crate::resolve::Resolution) -> Option<Findin
         Resolution::UnsupportedSemantics(_) => Some(FindingKind::UnsupportedReferenceSemantics),
         Resolution::UnsupportedVersion(_) => Some(FindingKind::UnsupportedVersionScope),
         Resolution::UnsupportedTarget(_) => Some(FindingKind::UnsupportedTargetKind),
+        Resolution::DeclaredUntracked(_) => Some(FindingKind::TargetDeclaredUntracked),
         Resolution::Resolved(_)
         | Resolution::Missing(_)
         | Resolution::TypeMismatch(_)

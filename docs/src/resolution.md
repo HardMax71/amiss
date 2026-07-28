@@ -81,10 +81,12 @@ recorded not fetched"];
   hit   [label = "target bytes
 and mode read"];
   miss  [label = "explicit-target-missing"];
+  decl  [label = "target-declared-untracked"];
   dest -> rel; dest -> forge [label = "with identity + dialect"]; dest -> route; dest -> other;
   rel -> tree; forge -> scope; scope -> tree [label = "matches"];
   scope -> vers [label = "other version"]; route -> unsup; other -> ext;
-  tree -> hit [label = "found"]; tree -> miss [label = "absent"];
+  tree -> hit [label = "found"]; tree -> decl [label = "absent, declared"];
+  tree -> miss [label = "absent"];
 }
 ```
 
@@ -97,6 +99,19 @@ it can widen what resolves and never invents a target; a promised directory and 
 same-repository forge URL are never re-spelled at all.
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, and what the union costs.
+
+A destination no spelling reaches is asked one last question, against a declaration the
+repository already publishes for Git rather than for this engine. Only the tracked
+`.gitignore` files on the path's own ancestor chain can name it, and a line qualifies only
+when it is anchored with a leading slash, carries no pattern or escape byte, is neither a
+comment nor a negation, and spells a path with no empty, `.`, or `..` segment. The nearest
+file that names the path answers and travels with the result, and a directory line answers for
+its descendants. The result is `target-declared-untracked`, a record under both profiles, so
+the reference stays counted rather than cleared. The engine never asks whether a path is
+ignored; it asks whether a tracked ignore file names exactly that path, because one wildcard
+would let a single line answer for an unbounded number of references. Git applies no ignore
+rule to a file already tracked, and neither does this: a path the tree holds never reaches the
+question.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even

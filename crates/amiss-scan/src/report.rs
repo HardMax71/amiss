@@ -1300,6 +1300,7 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
                     Resolution::Resolved(_) => (resolved.saturating_add(1), missing),
                     Resolution::Missing(_) => (resolved, missing.saturating_add(1)),
                     Resolution::TypeMismatch(_)
+                    | Resolution::DeclaredUntracked(_)
                     | Resolution::UnsupportedTarget(_)
                     | Resolution::UnsupportedSemantics(_)
                     | Resolution::UnsupportedVersion(_)
