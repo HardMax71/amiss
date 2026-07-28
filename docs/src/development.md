@@ -95,6 +95,9 @@ the GitHub release remains a draft. The release workflow then assembles the immu
 `action/vX.Y.Z` tree and exercises both that exact tree and the source-tag dispatcher on Linux,
 both macOS architectures, and Windows. Only a green smoke matrix advances the stable major ref
 without rewriting history and makes the release public; prereleases never advance the major ref.
+The same gate governs the release assets: the four engine binaries, their `SHA256SUMS`, and the
+sigstore bundle attesting that file attach to the draft, so a release that fails the matrix
+never publishes a binary.
 If a forge outage leaves that pull request stale, manually dispatching the
 [release automation](https://github.com/HardMax71/amiss/blob/main/.github/workflows/release-plz.yml) on `main` refreshes its metadata
 without running the publishing job; crate publication remains restricted to pushes on `main`.
