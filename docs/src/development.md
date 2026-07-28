@@ -84,6 +84,11 @@ The scanner runs on its own repository under `--profile enforce` in CI. This doc
 passes through that same gate: every relative link in this book resolves in the tree, or
 the pull request that broke it fails.
 
+Every pull request also dry-runs the publication. `cargo publish --dry-run --workspace --locked`
+packages each publishable crate, resolves its siblings through a temporary local registry, and
+builds every tarball, so a file dropped from a package or a path dependency missing a version
+fails on the pull request instead of halfway through an upload that cannot be taken back.
+
 Releases are automated. A bot keeps a release pull request current with the version bump,
 changelog, and exact Action-dispatch ref. Merging it publishes the crates and source tag while
 the GitHub release remains a draft. The release workflow then assembles the immutable
