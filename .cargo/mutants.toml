@@ -4,4 +4,5 @@ exclude_globs = [
   "controller/bootstrap-fixture/**",
   "controller/tests/fixtures/**",
   "controller/*/tests/fixtures/**",
+  "controller/fuzz/**",
 ]
