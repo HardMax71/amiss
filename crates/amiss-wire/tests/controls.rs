@@ -1,7 +1,8 @@
 use amiss_wire::controls::{
-    DebtSnapshot, ExecutionConstraintDescriptor, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact,
-    FloorDefect, OrganizationFloor, ResourceName, STATEMENT_TTL_MAX_SECONDS, ScannerPolicy,
-    SourceConstruct, TrustedTimeStatement, WaiverBundle,
+    DebtSnapshot, EntryKind, ExecutionConstraintDescriptor, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact,
+    FloorDefect, IncludeKind, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
+    PromotableFindingKind, ResourceName, STATEMENT_TTL_MAX_SECONDS, ScannerPolicy, SourceConstruct,
+    TargetKind, TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::hj;
@@ -222,6 +223,104 @@ fn every_source_construct_survives_the_waiver_round_trip() {
     }
 }
 
+#[test]
+fn wire_spellings_are_the_ones_the_contract_publishes() {
+    assert_eq!(IncludeKind::Document.as_str(), "document");
+    assert_eq!(IncludeKind::Tree.as_str(), "tree");
+    assert_eq!(EntryKind::Blob.as_str(), "blob");
+    assert_eq!(EntryKind::Gitlink.as_str(), "gitlink");
+    assert_eq!(
+        PromotableFindingKind::InvalidReference.as_str(),
+        "invalid-reference"
+    );
+}
+
+#[test]
+fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
+    let bundle_for = |edit: &dyn Fn(String) -> String| {
+        let key_input = edit(key_input_json("explicit-target-missing"));
+        let key = hj(
+            FINDING_KEY_DOMAIN,
+            &json::parse(key_input.as_bytes()).unwrap(),
+        )
+        .to_string();
+        let fact_doc = edit(fact_json());
+        let fact = hj(FACT_DOMAIN, &json::parse(fact_doc.as_bytes()).unwrap()).to_string();
+        let item = edit(waiver_item(
+            "waiver/one",
+            &key,
+            &fact,
+            "team:release-engineering",
+        ));
+        WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
+    };
+
+    for (spelling, expected) in [("blob", TargetKind::Blob), ("tree", TargetKind::Tree)] {
+        let edit = |doc: String| {
+            doc.replace(
+                "\"target_kind\": \"either\"",
+                &format!("\"target_kind\": \"{spelling}\""),
+            )
+        };
+        let bundle = bundle_for(&edit).unwrap_or_else(|e| panic!("{spelling}: {e:?}"));
+        let kind = bundle.items.first().map(|item| {
+            item.authorized_fact
+                .key_input()
+                .scope
+                .normalized_target_intent
+                .target_kind
+        });
+        assert_eq!(kind, Some(expected), "{spelling}");
+    }
+
+    let sha256 =
+        |doc: String| {
+            doc.replace(
+            r#""object_format": "sha1", "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb""#,
+            &format!(r#""object_format": "sha256", "tree_oid": "{}""#, "b".repeat(64)),
+        )
+        };
+    assert!(
+        bundle_for(&sha256).is_ok(),
+        "a sha256 candidate tree is a tree identity"
+    );
+
+    let digest = "sha256:3333333333333333333333333333333333333333333333333333333333333333";
+    let carried = |doc: String| {
+        doc.replace(
+            r#""query_digest": null"#,
+            &format!(r#""query_digest": "{digest}""#),
+        )
+    };
+    let bundle = bundle_for(&carried).expect("a query digest is carried");
+    let got = bundle.items.first().and_then(|item| {
+        item.authorized_fact
+            .key_input()
+            .scope
+            .normalized_target_intent
+            .query_digest
+    });
+    assert!(got.is_some(), "a present digest is not dropped");
+
+    let blank = |doc: String| doc.replace("Release window exception.", "   ");
+    assert!(bundle_for(&blank).is_err(), "whitespace is not a reason");
+    let empty = |doc: String| doc.replace("Release window exception.", "");
+    assert!(
+        bundle_for(&empty).is_err(),
+        "an empty reason is not a reason"
+    );
+    let unknown = |doc: String| {
+        doc.replace(
+            r#""residual_disposition": "warn""#,
+            r#""residual_disposition": "quietly""#,
+        )
+    };
+    assert!(
+        bundle_for(&unknown).is_err(),
+        "only the two dispositions decode"
+    );
+}
+
 fn waiver_bundle(items: &[String]) -> String {
     format!(
         r#"{{
@@ -276,7 +375,7 @@ fn parses_a_floor_declaring_every_resource() {
             } else if resource == ResourceName::TypedAnalysisErrorsRetained {
                 64
             } else {
-                100_000
+                i64::try_from(ORGANIZATION_POLICY_ENTRIES_LIMIT).unwrap_or(i64::MAX)
             };
             (resource.as_str(), maximum)
         })
@@ -424,8 +523,8 @@ fn rejects_floors_over_the_combined_entry_limit() {
     assert_eq!(
         OrganizationFloor::parse(doc.as_bytes()).unwrap_err(),
         FloorDefect::Entries {
-            configured_limit: 100_000,
-            observed_lower_bound: 100_001,
+            configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
+            observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT + 1,
         }
     );
 }
