@@ -173,6 +173,8 @@
         "document-blob-bytes",
         "referenced-target-blob-bytes",
         "aggregate-referenced-target-bytes-per-snapshot",
+        "ignore-declaration-blob-bytes",
+        "aggregate-ignore-declaration-bytes-per-snapshot",
         "aggregate-line-fragment-evaluation-bytes-per-snapshot",
         "aggregate-heading-anchor-evaluation-bytes-per-snapshot",
         "aggregate-document-bytes-per-snapshot",
@@ -2469,6 +2471,26 @@
         }
       }
     },
+    "DeclaredUntrackedResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "declared_by"
+      ],
+      "properties": {
+        "kind": {
+          "const": "declared-untracked"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "declared_by": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
     "TypeMismatchResolution": {
       "type": "object",
       "additionalProperties": false,
@@ -2650,6 +2672,9 @@
         },
         {
           "$ref": "#/$defs/MissingResolution"
+        },
+        {
+          "$ref": "#/$defs/DeclaredUntrackedResolution"
         },
         {
           "$ref": "#/$defs/TypeMismatchResolution"
@@ -3081,6 +3106,7 @@
         "explicit-target-missing",
         "explicit-target-type-mismatch",
         "invalid-reference",
+        "target-declared-untracked",
         "unsupported-reference-semantics",
         "unsupported-document-format",
         "unsupported-target-kind",
