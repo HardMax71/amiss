@@ -178,3 +178,80 @@ fn changed(now: u64, name: &str, value: Value) -> Value {
     set_claim(&mut changed, name, value);
     changed
 }
+
+#[test]
+fn every_clause_binding_the_policy_is_load_bearing() {
+    use amiss_controller_gitlab::PolicyBinding;
+    use support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
+    let valid = |policy: PolicyBinding| accepts(&issuer_url(), &audience(), policy, keys_with(KID));
+    assert!(valid(policy_binding()), "the fixture itself is accepted");
+
+    let refused = |name: &str, break_it: &dyn Fn(PolicyBinding) -> PolicyBinding| {
+        assert!(!valid(break_it(policy_binding())), "{name} is refused");
+    };
+    refused("zero project id", &|mut p: PolicyBinding| {
+        p.project_id = 0;
+        p
+    });
+    refused("path is not canonical", &|mut p: PolicyBinding| {
+        p.project_path = format!("/{}/", p.project_path);
+        p
+    });
+    refused("empty branch", &|mut p: PolicyBinding| {
+        p.target_branch = String::new();
+        p
+    });
+    refused("overlong branch", &|mut p: PolicyBinding| {
+        p.target_branch = "b".repeat(256);
+        p
+    });
+    refused("empty job", &|mut p: PolicyBinding| {
+        p.job_name = String::new();
+        p
+    });
+    refused("overlong job", &|mut p: PolicyBinding| {
+        p.job_name = "j".repeat(256);
+        p
+    });
+    refused("config url off host", &|mut p: PolicyBinding| {
+        p.config_url = "https://elsewhere.example/policy.yml".to_owned();
+        p
+    });
+    refused("no trusted runner", &|mut p: PolicyBinding| {
+        p.runners.gitlab_hosted = false;
+        p.runners.self_hosted_ids.clear();
+        p
+    });
+
+    for issuer in [
+        "http://gitlab.example",
+        "https://elsewhere.example",
+        "https://gitlab.example:8443",
+        "https://user@gitlab.example",
+        "https://gitlab.example/?a=b",
+        "https://gitlab.example/#f",
+    ] {
+        assert!(
+            !accepts(issuer, &audience(), policy_binding(), keys_with(KID)),
+            "{issuer} is refused"
+        );
+    }
+
+    assert!(
+        !accepts(&issuer_url(), "", policy_binding(), keys_with(KID)),
+        "an empty audience is refused"
+    );
+    assert!(
+        !accepts(
+            &issuer_url(),
+            &"a".repeat(2_049),
+            policy_binding(),
+            keys_with(KID)
+        ),
+        "an overlong audience is refused"
+    );
+    assert!(
+        !accepts(&issuer_url(), &audience(), policy_binding(), Vec::new()),
+        "a keyless config is refused"
+    );
+}
