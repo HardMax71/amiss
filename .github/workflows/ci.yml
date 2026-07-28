@@ -133,6 +133,15 @@ jobs:
         run: cargo test --locked --release
         working-directory: controller/fuzz
 
+  packaging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: cargo publish --dry-run --workspace --locked
+
   platform-tests:
     strategy:
       fail-fast: false
