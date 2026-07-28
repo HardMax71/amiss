@@ -36,9 +36,6 @@ ten trees, starship's 241 and mdBook's 6, and moved nothing else. Both are descr
 - reStructuredText or AsciiDoc. Entry condition: a pinned grammar, a conformance corpus,
   extraction goldens, resource accounting, and honest opaque regions, the same set the
   Markdown adapters carry.
-- Bare-path inference. Entry condition: precision measured against a hand-labeled corpus
-  of path-like prose, high enough to justify the ambiguity and reviewer load it
-  introduces. Until measured, it stays advisory research.
 
 ## Research, not committed work
 
