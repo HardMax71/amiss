@@ -12,6 +12,7 @@ use amiss_bootstrap::supervise::{Supervised, supervise};
 fn hung_child() -> Child {
     Command::new(std::env::current_exe().unwrap())
         .args(["outlives_any_watchdog", "--exact", "--ignored"])
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -49,5 +50,6 @@ fn a_prompt_engine_completes_with_its_status() {
 #[test]
 #[ignore = "the hung child the watchdog kills, never run on its own"]
 fn outlives_any_watchdog() {
-    std::thread::sleep(Duration::from_mins(10));
+    let mut sink = Vec::new();
+    let _eof = std::io::Read::read_to_end(&mut std::io::stdin().lock(), &mut sink);
 }
