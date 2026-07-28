@@ -1061,7 +1061,10 @@ fn release_smokes_every_runtime_before_promoting_the_major_ref() {
     let (publish_action, after_smoke_heading) = after_publish_heading
         .split_once("\n  smoke-action:")
         .expect("release workflow has an Action smoke gate");
-    let (smoke_action, publish_release) = after_smoke_heading
+    let (smoke_action, after_assets_heading) = after_smoke_heading
+        .split_once("\n  publish-assets:")
+        .expect("release workflow attaches assets to the draft");
+    let (publish_assets, publish_release) = after_assets_heading
         .split_once("\n  publish-release:")
         .expect("release workflow publishes only after smoke tests");
 
@@ -1077,7 +1080,15 @@ fn release_smokes_every_runtime_before_promoting_the_major_ref() {
     assert!(smoke_action.contains("ref: action/${{ github.ref_name }}"));
     assert!(smoke_action.contains("uses: ./action-under-test"));
     assert!(smoke_action.contains("uses: ./\n"));
-    assert!(publish_release.contains("needs: [publish-action, smoke-action]"));
+    assert!(publish_assets.contains("needs: [publish-action, smoke-action]"));
+    assert!(publish_assets.contains("sha256sum -- amiss-* > SHA256SUMS"));
+    assert!(publish_assets.contains("subject-checksums: assets/SHA256SUMS"));
+    assert!(publish_assets.contains("gh release upload \"$TAG\" --clobber assets/*"));
+    assert!(
+        !publish_assets.contains("bootstrap-"),
+        "the constraint tooling is built from the reviewed source commit, not downloaded"
+    );
+    assert!(publish_release.contains("needs: [publish-action, smoke-action, publish-assets]"));
     assert!(publish_release.contains("group: action-major-promotion"));
     assert!(publish_release.contains(
         "current=\"$(git ls-remote --heads \"$remote\" \"$major_ref\" | awk '{print $1}')\""

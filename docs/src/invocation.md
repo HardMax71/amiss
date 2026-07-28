@@ -6,6 +6,11 @@ Install from [crates.io](https://crates.io), or build from source:
 cargo install amiss
 ```
 
+Every release also carries the engine prebuilt for Linux x86_64, both macOS architectures, and
+Windows x86_64, with a `SHA256SUMS` file and the sigstore bundle that attests it.
+`gh attestation verify <binary> --repo HardMax71/amiss` matches a downloaded binary against the
+build that produced it.
+
 The command line is closed: the grammar below is everything, each option appears at most
 once, order does not matter, and anything else is rejected as an invalid invocation. There
 is no `--help`; a rejected human invocation prints this same grammar under its refusal, so
