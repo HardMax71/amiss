@@ -61,6 +61,12 @@ runs each mutant against its own package's tests, which is what makes it afforda
 means a mutant that a sibling package covers is reported as surviving. Its output is a list to
 verify, not a verdict.
 
+The sweep of 2026-07-28 is the reading to compare against: 6,523 mutants, 4,103 caught, 1,335
+missed, 1,085 unviable, no timeouts. Roughly half of those missed are the scoping artifact
+above, measured at 43% on one file and 62% on another, so the number of real gaps is nearer
+seven hundred. A later sweep that misses far more has either lost tests or gained untested
+code, and the point of writing the figure down is to be able to tell which.
+
 None of the three gates a merge and none certifies a global mutation threshold: a surviving
 mutant is a place where a lie would go unnoticed, to be judged against whether the perturbed
 value is observable through real behavior, not a score to raise.
