@@ -33,11 +33,10 @@ jobs:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: prek run --all-files
-      # The suites belong to platform-tests, on every platform rather than this
-      # one, and mutation to the incremental job, which fetches enough history.
+      # The suites belong to platform-tests, on every platform rather than this one.
       - run: prek run --all-files --hook-stage pre-push
         env:
-          SKIP: nextest,fuzz-smoke,mutation-diff
+          SKIP: nextest
 
   # The scanner reads its own repository under enforce, through the very
   # action a consumer pins: the engine is built from this pull request, the
@@ -113,13 +112,14 @@ jobs:
             --base "$(git rev-parse HEAD^)" --index \
             --profile observe --format json > /dev/null
 
-  fuzz-smoke:
+  fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/tools
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: |
@@ -132,6 +132,10 @@ jobs:
       - name: Run the controller fuzz smoke
         run: cargo test --locked --release
         working-directory: controller/fuzz
+      - run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo clippy --manifest-path controller/fuzz/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml check
+      - run: cargo shear --locked fuzz
 
   packaging:
     runs-on: ubuntu-latest

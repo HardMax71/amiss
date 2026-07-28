@@ -13,9 +13,11 @@ regression, and a cleanup lowers the pinned number in the same change. A last pu
 runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) over `target/`, dropping artifacts and
 incremental sessions older than five days; cargo never collects superseded builds, and this
 repository mints a fresh copy of every test binary on each lockfile or version change. The hook
-is a no-op where cargo-sweep is not installed. CI runs the
-same two hook stages, so passing locally and passing remotely are the same thing unless the
-hook table itself has a bug.
+is a no-op where cargo-sweep is not installed. CI runs the same two hook stages, so a hook
+that passes locally passes remotely unless the hook table itself has a bug. What CI adds on
+top is the work that does not belong on a developer's machine: the fuzz packages, whose
+release builds and separate lockfiles cost minutes, and mutation, which costs ten of them for
+a change of any size. A push should not buy what a pull request already measures.
 
 Two similarly named files point in opposite directions. `.pre-commit-config.yaml` is the hook
 table this repository runs on itself through prek. `.pre-commit-hooks.yaml` is the hook this
@@ -37,7 +39,7 @@ runs need nightly. The trust boundary is a dependency boundary rather than a wor
 HTTP, provider API, Git acquisition, credential, storage, and service-runtime dependencies belong
 to the unpublished crates under `controller/`, and `deny-engine.toml` drops those crates from the
 graph and then bans the network and async stack, so what an `amiss` user downloads cannot acquire
-it. The prek hooks and Linux CI run both sets. The macOS and Windows jobs also run the controller
+it. The prek hooks run the first pair and Linux CI runs both. The macOS and Windows jobs also run the controller
 tests, including the cross-process file stores, provider authentication, worker, and
 supervised-process cases. The supported service deployments are documented in
 [Provider-verified controls](provider-controls.md).
@@ -47,8 +49,8 @@ deliberately broken behavior before they are trusted. The
 [mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
 publishes a non-gating measurement of that property, in three sizes.
 
-The push hooks and every pull request measure only the mutants the change itself reaches, which
-is seconds when the diff is documentation and minutes when it is engine code. A release pull
+Every pull request measures only the mutants the change itself reaches, which is seconds when
+the diff is documentation and minutes when it is engine code. A release pull
 request measures what the release ships, every change since the last tag, rather than the version
 bump standing in front of it. Both ask the whole workspace whether a mutant lives.
 
