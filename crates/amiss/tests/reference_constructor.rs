@@ -490,6 +490,7 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
             );
         }
         Resolution::Missing(_)
+        | Resolution::DeclaredUntracked(_)
         | Resolution::TypeMismatch(_)
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedVersion(_)

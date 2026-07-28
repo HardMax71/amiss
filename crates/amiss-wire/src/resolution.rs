@@ -93,6 +93,15 @@ pub enum Missing<P> {
     HeadingAnchorNotFound { path: P },
 }
 
+/// A target absent from the tree at a path the repository's own ignore rules
+/// name literally. The declaring file travels with the resolution so a report
+/// carries the claim rather than only its effect.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeclaredUntracked<P> {
+    pub path: P,
+    pub declared_by: P,
+}
+
 /// A special Git entry that is present but cannot be followed as an ordinary
 /// repository target. Each diagnostic owns the affected path.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
@@ -174,6 +183,7 @@ pub enum ExternalReference {
 pub enum Resolution<P> {
     Resolved(Target<P>),
     Missing(Missing<P>),
+    DeclaredUntracked(DeclaredUntracked<P>),
     TypeMismatch(Target<P>),
     UnsupportedTarget(UnsupportedTarget<P>),
     UnsupportedSemantics(UnsupportedSemantics<P>),
@@ -189,6 +199,7 @@ impl<P> Resolution<P> {
             Self::Resolved(target) | Self::TypeMismatch(target) => target.is_lfs_pointer(),
             Self::UnsupportedSemantics(semantics) => semantics.is_lfs_pointer(),
             Self::Missing(_)
+            | Self::DeclaredUntracked(_)
             | Self::UnsupportedTarget(_)
             | Self::UnsupportedVersion(_)
             | Self::Invalid(_)

@@ -46,6 +46,8 @@ judged: its anchors stay unsupported rather than becoming missing.
 | `document-blob-bytes` | 4,194,304 |
 | `referenced-target-blob-bytes` | 16,777,216 |
 | `aggregate-referenced-target-bytes-per-snapshot` | 536,870,912 |
+| `ignore-declaration-blob-bytes` | 1,048,576 |
+| `aggregate-ignore-declaration-bytes-per-snapshot` | 16,777,216 |
 | `aggregate-line-fragment-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `aggregate-heading-anchor-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `aggregate-document-bytes-per-snapshot` | 536,870,912 |

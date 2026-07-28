@@ -754,6 +754,7 @@ pub enum FindingKind {
     ExplicitTargetMissing,
     ExplicitTargetTypeMismatch,
     InvalidReference,
+    TargetDeclaredUntracked,
     UnsupportedReferenceSemantics,
     UnsupportedDocumentFormat,
     UnsupportedTargetKind,
@@ -796,6 +797,7 @@ impl FindingKind {
                 FindingScope::Reference
             }
             Self::InvalidReference
+            | Self::TargetDeclaredUntracked
             | Self::UnsupportedReferenceSemantics
             | Self::UnsupportedTargetKind
             | Self::UnsupportedVersionScope
@@ -841,7 +843,8 @@ impl FindingKind {
             | Self::DebtExpired
             | Self::WaiverInvalid => Disposition::Fail,
             Self::DependencyChangedSubjectUnchanged => Disposition::Warn,
-            Self::UnsupportedReferenceSemantics
+            Self::TargetDeclaredUntracked
+            | Self::UnsupportedReferenceSemantics
             | Self::UnsupportedDocumentFormat
             | Self::UnsupportedTargetKind
             | Self::UnsupportedVersionScope
@@ -921,7 +924,8 @@ impl FindingKind {
             Self::DependencyChangedSubjectUnchanged
             | Self::DependencyAndSubjectCochanged
             | Self::SubjectChanged => "impact-observation",
-            Self::ExplicitReferenceRemoved
+            Self::TargetDeclaredUntracked
+            | Self::ExplicitReferenceRemoved
             | Self::DocumentRemoved
             | Self::OpaqueMdxRegion
             | Self::OpaqueHtmlRegion
@@ -951,6 +955,9 @@ impl FindingKind {
             }
             Self::InvalidReference => {
                 "the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination"
+            }
+            Self::TargetDeclaredUntracked => {
+                "a reference names a path a tracked ignore file names literally, so the repository declares it does not keep that target and no tree can answer for the link; the reference is recorded and counted, never cleared"
             }
             Self::UnsupportedReferenceSemantics => {
                 "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, or a fragment on a target it cannot parse; the unchecked part is declared instead of guessed"
@@ -1022,7 +1029,8 @@ impl FindingKind {
             | Self::ExplicitTargetTypeMismatch
             | Self::InvalidReference => "ratcheted",
             Self::UnsupportedCapability => "analysis-integrity",
-            Self::UnsupportedReferenceSemantics
+            Self::TargetDeclaredUntracked
+            | Self::UnsupportedReferenceSemantics
             | Self::UnsupportedDocumentFormat
             | Self::UnsupportedTargetKind
             | Self::UnsupportedVersionScope
