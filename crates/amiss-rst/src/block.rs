@@ -1,22 +1,4 @@
-/// What a block holds. `Literal` is an indented literal block opened by `::`,
-/// whose content is code. `Comment` is an explicit markup block this parser
-/// declines to read into. `Directive` holds a directive's argument and options.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Kind {
-    Text,
-    Literal,
-    Comment,
-    Directive,
-}
-
-/// One block of a document: its byte span, what it holds, and the indent that
-/// opened it, which is the only nesting reStructuredText has.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Block {
-    pub span: (usize, usize),
-    pub kind: Kind,
-    pub indent: usize,
-}
+use crate::{Block, Kind};
 
 /// Splits a document into blocks. Indentation is the whole structure here: an
 /// explicit markup line opens a block that runs until the indent returns, and a
