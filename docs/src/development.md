@@ -11,8 +11,10 @@ transports, the three lane-test harnesses, and the three service runtimes, so th
 twins stay counted as well. Each baseline is exact rather than a ceiling: a new twin fails as a
 regression, and a cleanup lowers the pinned number in the same change. A last push-stage hook
 runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) over `target/`, dropping artifacts and
-incremental sessions older than five days; cargo never collects superseded builds, and this
-repository mints a fresh copy of every test binary on each lockfile or version change. The hook
+incremental sessions older than two days; cargo never collects superseded builds, and this
+repository mints a fresh copy of every test binary on each lockfile or version change. Five days
+held 86 GB and the sweep reclaimed nothing from it, because every generation was inside the
+window. The hook
 is a no-op where cargo-sweep is not installed. CI runs the same two hook stages, so a hook
 that passes locally passes remotely unless the hook table itself has a bug. What CI adds on
 top is the work that does not belong on a developer's machine: the fuzz packages, whose

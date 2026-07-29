@@ -104,11 +104,11 @@ repos:
         pass_filenames: false
         stages: [pre-push]
       - id: sweep
-        name: drop build artifacts older than five days
+        name: drop build artifacts older than two days
         entry: >-
           sh -c 'command -v cargo-sweep >/dev/null || exit 0;
-          cargo sweep --time 5 >/dev/null;
-          find target -mindepth 3 -maxdepth 3 -type d -path "*/incremental/*" -mtime +5
+          cargo sweep --time 2 >/dev/null;
+          find target -mindepth 3 -maxdepth 3 -type d -path "*/incremental/*" -mtime +2
           -exec rm -rf {} + 2>/dev/null;
           exit 0'
         language: system
