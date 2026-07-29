@@ -36,6 +36,7 @@ pub enum Keep {
     LetterNumberUnderscore,
     AlphabeticNumericUnderscore,
     AsciiAlphanumeric,
+    AsciidoctorId,
     AnythingButC0,
 }
 
@@ -92,6 +93,7 @@ pub enum Runs {
 pub enum Edges {
     AsWritten,
     Trim,
+    TrimEnd,
 }
 
 /// Whether a heading's own `{#id}` becomes the identity or stays text.
@@ -115,6 +117,7 @@ pub enum RawHtml {
 pub enum Duplicates {
     Dash,
     Underscore,
+    UnderscoreFromTwo,
     Collide,
 }
 
@@ -134,6 +137,8 @@ pub struct AnchorRule {
     pub runs: Runs,
     pub edges: Edges,
     pub leading_digit_prefix: Option<&'static str>,
+    pub separator: char,
+    pub prefix: Option<&'static str>,
     pub empty: Empty,
     pub duplicates: Duplicates,
     pub attribute: Attribute,
@@ -143,7 +148,7 @@ pub struct AnchorRule {
 /// Every renderer rule the resolver knows. Adding one can only grow the set an
 /// anchor may match, so the set is the union and a missing rule is the only
 /// way to report a live anchor as absent.
-pub const RULES: [AnchorRule; 10] = [
+pub const RULES: [AnchorRule; 11] = [
     AnchorRule {
         name: "github",
         typography: Typography::Plain,
@@ -157,6 +162,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
@@ -175,6 +182,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Drop,
         duplicates: Duplicates::Collide,
         attribute: Attribute::Honored,
@@ -193,6 +202,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Fill("heading"),
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
@@ -211,6 +222,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
@@ -229,6 +242,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
@@ -247,6 +262,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Fill("heading"),
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
@@ -265,6 +282,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::Collapse,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Keep,
         duplicates: Duplicates::Underscore,
         attribute: Attribute::Honored,
@@ -283,6 +302,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Keep,
         duplicates: Duplicates::Underscore,
         attribute: Attribute::Honored,
@@ -301,6 +322,8 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::Collapse,
         edges: Edges::Trim,
         leading_digit_prefix: Some("_"),
+        separator: '-',
+        prefix: None,
         empty: Empty::Keep,
         duplicates: Duplicates::Dash,
         attribute: Attribute::Honored,
@@ -319,8 +342,30 @@ pub const RULES: [AnchorRule; 10] = [
         runs: Runs::AsWritten,
         edges: Edges::AsWritten,
         leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
         empty: Empty::Fill("section"),
         duplicates: Duplicates::Dash,
+        attribute: Attribute::Literal,
+        raw_html: RawHtml::Ignored,
+    },
+    AnchorRule {
+        name: "asciidoctor",
+        typography: Typography::Plain,
+        normalize: Normalize::None,
+        fold: Fold::None,
+        head: Head::AsWritten,
+        trim: Trim::Before,
+        case: Case::SimpleAfterFilter,
+        keep: Keep::AsciidoctorId,
+        separators: Separators::Space,
+        runs: Runs::Collapse,
+        edges: Edges::TrimEnd,
+        leading_digit_prefix: None,
+        separator: '_',
+        prefix: Some("_"),
+        empty: Empty::Drop,
+        duplicates: Duplicates::UnderscoreFromTwo,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
     },
@@ -385,6 +430,15 @@ fn fill(rule: &AnchorRule, base: String, taken: &mut BTreeSet<String>) -> Option
             while taken.contains(&candidate) {
                 count = count.saturating_add(1);
                 candidate = format!("{base}-{count}");
+            }
+            candidate
+        }
+        Duplicates::UnderscoreFromTwo => {
+            let mut count = 1_u32;
+            let mut candidate = base.clone();
+            while taken.contains(&candidate) {
+                count = count.saturating_add(1);
+                candidate = format!("{base}_{count}");
             }
             candidate
         }
@@ -455,7 +509,7 @@ fn slug(rule: &AnchorRule, text: &str) -> String {
 
     let mut retained = String::with_capacity(cased.len());
     for ch in cased.chars() {
-        if ch == '-' || is_separator(rule.separators, ch) {
+        if ch == rule.separator || is_separator(rule.separators, ch) {
             retained.push(ch);
         } else if is_kept(rule.keep, ch) {
             match rule.case {
@@ -471,22 +525,27 @@ fn slug(rule: &AnchorRule, text: &str) -> String {
 
     let mut out = String::with_capacity(retained.len());
     for ch in retained.chars() {
-        if ch == '-' || is_separator(rule.separators, ch) {
-            if rule.runs == Runs::Collapse && out.ends_with('-') {
+        if ch == rule.separator || is_separator(rule.separators, ch) {
+            if rule.runs == Runs::Collapse && out.ends_with(rule.separator) {
                 continue;
             }
-            out.push('-');
+            out.push(rule.separator);
         } else {
             out.push(ch);
         }
     }
     let out = match rule.edges {
-        Edges::Trim => out.trim_matches('-').to_owned(),
+        Edges::Trim => out.trim_matches(rule.separator).to_owned(),
+        Edges::TrimEnd => out.trim_end_matches(rule.separator).to_owned(),
         Edges::AsWritten => out,
     };
-    match rule.leading_digit_prefix {
+    let digit_prefixed = match rule.leading_digit_prefix {
         Some(prefix) if out.starts_with(|ch: char| ch.is_ascii_digit()) => format!("{prefix}{out}"),
         Some(_) | None => out,
+    };
+    match rule.prefix {
+        Some(prefix) if !digit_prefixed.is_empty() => format!("{prefix}{digit_prefixed}"),
+        Some(_) | None => digit_prefixed,
     }
 }
 
@@ -610,6 +669,7 @@ fn is_kept(keep: Keep, ch: char) -> bool {
         Keep::LetterNumberUnderscore => word || ch == '_',
         Keep::AlphabeticNumericUnderscore => ch.is_alphanumeric() || ch == '_',
         Keep::AsciiAlphanumeric => ch.is_ascii_alphanumeric(),
+        Keep::AsciidoctorId => ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.',
         Keep::AnythingButC0 => !matches!(u32::from(ch), 0x0000..=0x001F),
     }
 }

@@ -117,9 +117,10 @@ AsciiDoc destinations reach one rule of their own before anything else. A target
 holding `{name}` cannot be a path, because the value arrives when the site is built and this
 engine reads two trees, so it is `unsupported-reference-semantics` rather than a guess at a
 directory called `{name}`. Across Quarkus that is roughly a quarter of every reference, so
-reporting them as missing would have buried the real breaks. A heading anchor on an AsciiDoc target
-is declared the same way, though a recognized line fragment still selects its bytes: no pinned rule publishes an AsciiDoc heading identity yet, and an
-anchor no rule publishes is not evidence that the section is gone.
+reporting them as missing would have buried the real breaks. A heading anchor on an AsciiDoc target resolves
+through the Asciidoctor rule in
+[What eleven renderers call a heading](anchor-rules.md), which is the only rule whose separator
+is `_` and whose identities all carry a prefix.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even

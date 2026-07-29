@@ -2,9 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
-use amiss_md::analyze;
 use amiss_md::lines::scan;
-use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
+use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ForgeDialect, Oid, RepoPath};
@@ -111,6 +110,7 @@ enum Anchors {
     Unread,
     Unevaluable,
     Published(BTreeSet<String>),
+    Partial(BTreeSet<String>),
 }
 
 #[derive(Debug)]
@@ -914,10 +914,6 @@ fn fragment_resolution(
         return line_resolution(scan, cache, path, mode, blob, range);
     }
     match classify(path.as_bytes()) {
-        // No rule publishes an AsciiDoc heading identity yet, so none is guessed.
-        Some(Classification::StructuredAsciiDoc) => Ok(Resolution::UnsupportedSemantics(
-            UnsupportedSemantics::Fragment(blob),
-        )),
         Some(classification) => match classification.adapter() {
             Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
@@ -967,28 +963,46 @@ fn anchor_resolution(
         );
         let allowance = scan_resources.heading_anchor_allowance();
         *slot = match charged {
-            Ok(()) => analyze(adapter, body, allowance)
+            Ok(()) => crate::scan::parse(adapter, body, allowance)
                 .ok()
                 .and_then(|analysis| analysis.extraction)
                 .map_or(Anchors::Unevaluable, |extraction| {
-                    Anchors::Published(anchor_set(
+                    let identities = anchor_set(
                         &extraction.headings,
                         &extraction.html_anchors,
                         &extraction.declared_anchors,
-                    ))
+                    );
+                    if transcludes(&extraction.occurrences) {
+                        Anchors::Partial(identities)
+                    } else {
+                        Anchors::Published(identities)
+                    }
                 }),
             Err(_crossing) => Anchors::Unevaluable,
         };
     }
-    let Anchors::Published(identities) = slot else {
-        return Ok(unsupported);
+    let (identities, complete) = match slot {
+        Anchors::Published(identities) => (identities, true),
+        Anchors::Partial(identities) => (identities, false),
+        Anchors::Unread | Anchors::Unevaluable => return Ok(unsupported),
     };
     if identities.contains(fragment) {
         return Ok(Resolution::Resolved(Target::Blob(blob)));
     }
+    if !complete {
+        return Ok(unsupported);
+    }
     Ok(Resolution::Missing(Missing::HeadingAnchorNotFound {
         path: path.clone(),
     }))
+}
+
+/// A document that splices another file publishes identities this engine never
+/// read, so an anchor it does not hold is undecided rather than absent.
+fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {
+    occurrences
+        .iter()
+        .any(|occurrence| occurrence.construct == SourceConstruct::AsciidocInclude)
 }
 
 /// An inclusive, one-indexed selection of raw source lines.
