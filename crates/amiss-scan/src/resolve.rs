@@ -568,9 +568,7 @@ fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind
         .map_or_else(|| path.clone(), |(_, candidate)| candidate)
 }
 
-/// A cross reference whose last segment carries no extension names a page in
-/// the site's own catalogue, which this engine does not build, so it is
-/// declared rather than looked up as a file that was never written.
+/// A page identity is answered by a site catalogue this engine does not build.
 fn names_a_page_identity(path_part: &str) -> bool {
     path_part
         .rsplit('/')
@@ -578,9 +576,8 @@ fn names_a_page_identity(path_part: &str) -> bool {
         .is_some_and(|segment| !segment.is_empty() && !segment.contains('.'))
 }
 
-/// A destination still holding `{name}` needs a value that arrives when the
-/// site is built, and this engine reads two trees. An image macro is the same
-/// case without the syntax, since `imagesdir` prepends its directory.
+/// An attribute value, and the `imagesdir` an image macro needs, arrive at
+/// build time.
 fn awaits_attribute(semantic: &str) -> bool {
     let mut rest = semantic;
     while let Some(open) = rest.find('{') {

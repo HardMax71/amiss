@@ -12,7 +12,7 @@ use amiss_scan::{
     Classification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery,
     discover, resolve,
 };
-use amiss_wire::controls::{GitMode, SourceConstruct};
+use amiss_wire::controls::GitMode;
 use amiss_wire::digest::hb;
 use amiss_wire::json::parse;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
@@ -66,13 +66,7 @@ fn snapshot(
             continue;
         };
         for occurrence in &scanned.occurrences {
-            let is_image = matches!(
-                occurrence.occurrence.construct,
-                SourceConstruct::InlineImage
-                    | SourceConstruct::FullReferenceImage
-                    | SourceConstruct::CollapsedReferenceImage
-                    | SourceConstruct::ShortcutReferenceImage
-            );
+            let is_image = occurrence.occurrence.construct.is_image();
             let (intent, resolution) = resolve(
                 repo,
                 git_resources,

@@ -534,9 +534,9 @@ fn oid_hex(object_format: ObjectFormat, raw: &str) -> bool {
 /// scheme) is frozen here so no call site can spell one by hand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
 pub enum Adapter {
+    AsciiDoc,
     Markdown,
     Mdx,
-    AsciiDoc,
     PlainAdvisory,
 }
 
