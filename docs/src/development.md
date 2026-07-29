@@ -49,11 +49,14 @@ deliberately broken behavior before they are trusted. The
 [mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
 publishes a non-gating measurement of that property, in three sizes.
 
-Every pull request measures only the mutants the change itself reaches, across four shards,
-which is seconds when the diff is documentation and a few minutes when it is engine code. The
-shards exist because that lane asks the whole workspace whether each mutant lives, so a mutant
-costs about twenty seconds and a diff reaching seventy of them is otherwise a twenty-four
-minute wait for a non-gating number. A release pull
+Every pull request measures only the mutants the change itself reaches, over shards counted
+from the mutants the diff actually reaches rather than from a guess, because listing them needs
+no build. That lane asks the whole workspace whether each mutant lives, so one mutant costs
+about twenty seconds and a diff reaching seventy of them was a twenty-four minute wait for a
+non-gating number. The floor is the sixty seconds each shard spends building the workspace test
+binaries before it can mutate anything: runners share nothing, and the only ways to remove that
+are a cache warmed by a job the shards must then wait for, or building less than the whole
+workspace, which is the inflation this lane exists to avoid. A release pull
 request measures what the release ships, every change since the last tag, rather than the version
 bump standing in front of it. Both ask the whole workspace whether a mutant lives.
 
