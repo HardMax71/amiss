@@ -5,8 +5,14 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 `structured-mdx`. Six exact extensionless basenames, `README`, `CONTRIBUTING`, `CHANGELOG`,
 `SECURITY`, `SUPPORT`, and `CODE_OF_CONDUCT`, are `extensionless-markdown` and use the
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
-adapter that extracts no references. Every other file is a possible reference target, not a
-built-in document. These rows come directly from the
+adapter that extracts no references. `.rst`, `.adoc`, and `.asciidoc` are `unparsed-markup`:
+this engine has no parser for either markup, so the files are discovered and counted as
+`unsupported-document-format` and their content is never read. Declaring them is the point,
+because a repository whose documentation is written in one of them previously got an answer
+naming no documents at all, which reads like a clean scan rather than an empty one. `.txt`
+stays off that list: the suffix says nothing about what is inside, and Django's
+reStructuredText documentation uses it, so a policy include is the way to name those. Every
+other file is a possible reference target, not a built-in document. These rows come directly from the
 [classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
 Nine directory names are always skipped, wherever they appear in a path:
@@ -31,13 +37,14 @@ is the case that made it a defect rather than noise, since seven intentionally m
 fixtures under `tests/format/` refused its entire run; it scans now, and the first thing it
 reports is a real break in its contributing guide.
 
-Six paths through the classifier:
+Seven paths through the classifier:
 
 ```text
 docs/guide.md               structured-markdown   scanned
 site/page.mdx               structured-mdx        scanned
 README                      extensionless-markdown scanned
 llms.txt                    plain-advisory        scanned, nothing extracted
+docs/guide.rst              unparsed-markup       discovered, never scanned
 vendor/lib/README.md        excluded              the vendor component is in the closed set
 src/parser.rs               not a document        a reference target only
 ```

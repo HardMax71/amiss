@@ -127,3 +127,28 @@ fn excluded_trees_are_directory_components() {
     assert!(!excluded_by_built_in(b"testing/x.md"));
     assert!(!excluded_by_built_in(b"latest/x.md"));
 }
+
+#[test]
+fn a_markup_with_no_parser_is_a_document_that_is_never_read() {
+    for path in [
+        &b"docs/guide.rst"[..],
+        b"docs/guide.adoc",
+        b"docs/guide.asciidoc",
+    ] {
+        assert_eq!(
+            classify(path),
+            Some(Classification::UnparsedMarkup),
+            "{}",
+            String::from_utf8_lossy(path),
+        );
+    }
+    assert_eq!(Classification::UnparsedMarkup.adapter(), None);
+    for path in [&b"docs/guide.txt"[..], b"docs/guide.rst.bak", b"docs/RST"] {
+        assert_ne!(
+            classify(path),
+            Some(Classification::UnparsedMarkup),
+            "{}",
+            String::from_utf8_lossy(path),
+        );
+    }
+}

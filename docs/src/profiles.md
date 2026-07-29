@@ -56,7 +56,7 @@ not a second source of truth.
 - `invalid-reference`: the destination cannot name a repository target: it escapes the repository or carries a backslash, an encoded separator, or control bytes; fix the destination
 - `target-declared-untracked`: a reference names a path a tracked ignore file names literally, so the repository declares it does not keep that target and no tree can answer for the link; the reference is recorded and counted, never cleared
 - `unsupported-reference-semantics`: the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, or a fragment on a target it cannot parse; the unchecked part is declared instead of guessed
-- `unsupported-document-format`: a policy-included document has no parser in this engine; it is discovered and counted, and its content is never scanned
+- `unsupported-document-format`: a document this run discovered has no parser in this engine, whether a markup it does not read or a policy include; it is counted, and its content is never scanned
 - `unsupported-target-kind`: the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed
 - `unsupported-version-scope`: a forge URL names this repository at another version, a different branch, tag, or commit; only the candidate version is read, so the link is recognized and left unresolved
 - `unsupported-capability`: a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim
@@ -90,7 +90,7 @@ API described in [Controls and policy](controls.md).
 | `invalid-reference` | `docs/index.md`: `# Index`. | Append a link whose destination is `../../etc/passwd`, which escapes the repository from `docs/`. |
 | `target-declared-untracked` | `docs/index.md`: `# Index`; `docs/settings.md` is absent and `docs/.gitignore` contains `/settings.md`. | Append `[settings](settings.md)` to `docs/index.md`; the target stays absent and the declaration stands. |
 | `unsupported-reference-semantics` | `docs/index.md`: `[setup](guide.md)`; `docs/guide.md` exists. | Change the link to `[setup](/docs/guide.md)`; a leading slash names a site route, which no tree can answer. |
-| `unsupported-document-format` | Policy includes `docs/spec.rst` as a document; the file is absent. | Add `docs/spec.rst` containing `Title` and an `=====` underline. |
+| `unsupported-document-format` | `docs/spec.rst` is absent. | Add `docs/spec.rst` containing `Title` and an `=====` underline; `.rst` is discovered and has no parser. |
 | `unsupported-target-kind` | `alias` is a Git symlink; `docs/index.md` has no link to it. | Append `[alias](../alias)`; Amiss will not follow the symlink. |
 | `unsupported-version-scope` | Run with forge `github`, repository `github.com/acme/widgets`, candidate ref `refs/heads/feature/x`, and default ref `refs/heads/main`; the link names `blob/feature/x/docs/guide.md`. | Keep that identity context but change the link to name `blob/main/docs/guide.md`. |
 | `unsupported-capability` | `docs/claims.md`: `# Claims`. | Append `[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>`. |

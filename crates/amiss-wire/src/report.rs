@@ -963,7 +963,7 @@ impl FindingKind {
                 "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, or a fragment on a target it cannot parse; the unchecked part is declared instead of guessed"
             }
             Self::UnsupportedDocumentFormat => {
-                "a policy-included document has no parser in this engine; it is discovered and counted, and its content is never scanned"
+                "a document this run discovered has no parser in this engine, whether a markup it does not read or a policy include; it is counted, and its content is never scanned"
             }
             Self::UnsupportedTargetKind => {
                 "the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed"

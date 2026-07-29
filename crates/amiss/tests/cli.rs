@@ -502,7 +502,8 @@ fn repository_policy_includes_raises_and_weakening() {
     fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
     fs::create_dir_all(root.join("specs")).unwrap_or_default();
     fs::write(root.join(".amiss/scanner-policy.json"), strong_policy).unwrap_or_default();
-    fs::write(root.join("specs/design.rst"), "included but unsupported\n").unwrap_or_default();
+    fs::write(root.join("specs/design.tex"), "included but unsupported\n").unwrap_or_default();
+    fs::write(root.join("specs/design.rst"), "intrinsically unparsed\n").unwrap_or_default();
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "policy"]);
     let with_policy = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -572,8 +573,12 @@ fn repository_policy_includes_raises_and_weakening() {
         })
         .unwrap_or_default();
     assert!(
-        documents.contains(&("specs/design.rst", "policy-included")),
+        documents.contains(&("specs/design.tex", "policy-included")),
         "the include is discovered without installing a parser: {documents:?}"
+    );
+    assert!(
+        documents.contains(&("specs/design.rst", "unparsed-markup")),
+        "a markup with no parser is discovered without a policy include: {documents:?}"
     );
 }
 
