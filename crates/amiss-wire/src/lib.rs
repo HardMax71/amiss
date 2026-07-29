@@ -2,6 +2,7 @@ pub mod action;
 pub mod controls;
 pub mod de;
 pub mod digest;
+pub mod extraction;
 pub mod human;
 pub mod json;
 pub mod manifest;

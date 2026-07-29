@@ -1,117 +1,13 @@
 use amiss_wire::controls::SourceConstruct;
+pub use amiss_wire::extraction::{
+    Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
+    HeadingAttribute, HeadingSource, Occurrence, Opaque, Work,
+};
 use amiss_wire::model::Adapter;
 use markdown::mdast::{Node, ReferenceKind};
 
-use crate::accounting::{AnalyzeError, Fault, Work, parsed, plain, walk};
+use crate::accounting::{parsed, plain, walk};
 use crate::frontmatter;
-
-/// The block owner of one occurrence, selected by the override order: the
-/// nearest ancestor list item if any, otherwise the nearest table cell,
-/// otherwise the nearest paragraph, otherwise the document root. Raw HTML can
-/// never own an extracted construct.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BlockKind {
-    Paragraph,
-    ListItem,
-    TableCell,
-    DocumentRoot,
-}
-
-impl BlockKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Paragraph => "paragraph",
-            Self::ListItem => "list-item",
-            Self::TableCell => "table-cell",
-            Self::DocumentRoot => "document-root",
-        }
-    }
-}
-
-/// One extracted reference. `raw_destination` is the exact source-token byte
-/// slice (without syntactic angle brackets, and from the first winning
-/// definition for reference forms); `semantic_destination` is the token after
-/// the construct's own decoding, which is exactly what the parser publishes as
-/// the node's URL. Spans are zero-based half-open byte offsets into the raw
-/// document, while `node_path` is the child-index path from the
-/// post-frontmatter root to the syntax node itself.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Occurrence {
-    pub construct: SourceConstruct,
-    pub raw_destination: String,
-    pub semantic_destination: String,
-    pub span: (usize, usize),
-    pub node_path: Vec<usize>,
-    pub block_kind: BlockKind,
-    pub block_span: (usize, usize),
-}
-
-/// The opaque partition of one document: the frontmatter region's byte count,
-/// then MDX intervals, then raw-HTML intervals on the remaining surface. The
-/// three never overlap.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Opaque {
-    pub frontmatter_bytes: usize,
-    pub mdx: Vec<(usize, usize)>,
-    pub html: Vec<(usize, usize)>,
-}
-
-/// The trailing attribute syntax a heading may carry. Renderers disagree about
-/// it, so `suffix` keeps the exact bytes removed from the text: one group
-/// publishes `id`, the other reads the text and the suffix together.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HeadingAttribute {
-    pub id: String,
-    pub suffix: String,
-}
-
-/// Where a heading was written. Only some renderers build an identity from one
-/// written as raw HTML, so the two are kept apart in one ordered list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HeadingSource {
-    Markdown,
-    RawHtml,
-}
-
-impl HeadingSource {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Markdown => "markdown",
-            Self::RawHtml => "raw-html",
-        }
-    }
-}
-
-/// One heading's rendered text content, in document order with its siblings.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Heading {
-    pub text: String,
-    pub attribute: Option<HeadingAttribute>,
-    pub source: HeadingSource,
-    pub span: (usize, usize),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Extraction {
-    pub occurrences: Vec<Occurrence>,
-    pub opaque: Opaque,
-    pub governed: Vec<GovernedDefinition>,
-    pub headings: Vec<Heading>,
-    pub html_anchors: Vec<String>,
-    pub declared_anchors: Vec<String>,
-}
-
-/// Everything one parse yields: the work charge, the embedded-code bytes the
-/// grammar's candidate-close asks spent, and the extraction for a parsing
-/// adapter. The plain adapter has no spans, addresses, or occurrences.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Analysis {
-    pub work: Work,
-    pub embedded_code_bytes: u64,
-    pub extraction: Option<Extraction>,
-}
 
 /// Charges and extracts one document in a single guarded parse. The lexical
 /// rescans of embedded code stay inside `embedded_code_allowance`: every ask
@@ -162,13 +58,6 @@ struct Definition {
     url: String,
     raw: String,
     reserved: bool,
-}
-
-/// One reserved governed definition: its complete node span, from the opening
-/// bracket through the exclusive end of the destination and title syntax.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GovernedDefinition {
-    pub span: (usize, usize),
 }
 
 /// A definition is reserved exactly when its decoded label scalars, before

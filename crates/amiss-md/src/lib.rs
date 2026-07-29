@@ -6,9 +6,10 @@ mod js;
 pub mod lines;
 pub mod profile;
 
-pub use accounting::{AnalyzeError, Fault, Work, charge};
-pub use extract::{
-    Analysis, BlockKind, Extraction, Heading, HeadingAttribute, HeadingSource, Occurrence, Opaque,
-    analyze,
+pub use accounting::charge;
+pub use amiss_wire::extraction::{
+    Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
+    HeadingAttribute, HeadingSource, Occurrence, Opaque, Work,
 };
+pub use extract::analyze;
 pub use frontmatter::Region;
