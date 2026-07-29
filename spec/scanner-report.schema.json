@@ -2014,7 +2014,8 @@
             "markdown",
             "mdx",
             "plain-advisory",
-            null
+            null,
+            "asciidoc"
           ]
         },
         "byte_count": {
@@ -2063,7 +2064,7 @@
           "enum": [
             "structured-markdown",
             "structured-mdx",
-        "structured-asciidoc",
+            "structured-asciidoc",
             "extensionless-markdown",
             "plain-advisory",
             "policy-included"
@@ -2758,7 +2759,13 @@
         "markdown-inline-image",
         "markdown-full-reference-image",
         "markdown-collapsed-reference-image",
-        "markdown-shortcut-reference-image"
+        "markdown-shortcut-reference-image",
+        "asciidoc-xref-macro",
+        "asciidoc-internal-xref",
+        "asciidoc-link-macro",
+        "asciidoc-block-image",
+        "asciidoc-inline-image",
+        "asciidoc-include"
       ]
     },
     "RepositoryTargetIntent": {
@@ -2810,7 +2817,8 @@
         "address_kind": {
           "enum": [
             "markdown-ast-node-path",
-            "mdx-ast-node-path"
+            "mdx-ast-node-path",
+            "asciidoc-block-path"
           ]
         },
         "node_path": {
@@ -2899,7 +2907,8 @@
         "adapter_id": {
           "enum": [
             "markdown",
-            "mdx"
+            "mdx",
+            "asciidoc"
           ]
         },
         "adapter_contract_digest": {
@@ -2947,7 +2956,8 @@
         "adapter_id": {
           "enum": [
             "markdown",
-            "mdx"
+            "mdx",
+            "asciidoc"
           ]
         },
         "document": {
