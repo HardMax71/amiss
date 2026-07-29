@@ -1,42 +1,4 @@
-/// The reference forms the specification itself defines. Roles are an open
-/// extension point and `:doc:` and `:ref:` belong to Sphinx, so neither appears
-/// here.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReferenceKind {
-    InlineHyperlink,
-    NamedTarget,
-    Image,
-    Include,
-    FileOption,
-}
-
-impl ReferenceKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::InlineHyperlink => "rst-inline-hyperlink",
-            Self::NamedTarget => "rst-named-target",
-            Self::Image => "rst-image-directive",
-            Self::Include => "rst-include-directive",
-            Self::FileOption => "rst-file-option",
-        }
-    }
-
-    #[must_use]
-    pub const fn is_image(self) -> bool {
-        matches!(self, Self::Image)
-    }
-}
-
-/// One recognised reference, with the exact source text of its target.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Reference {
-    pub kind: ReferenceKind,
-    pub target: String,
-    pub span: (usize, usize),
-    pub block: usize,
-    pub block_span: (usize, usize),
-}
+use crate::{Reference, ReferenceKind};
 
 const PATH_DIRECTIVES: [(&str, ReferenceKind); 4] = [
     ("image::", ReferenceKind::Image),
