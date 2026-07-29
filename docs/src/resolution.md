@@ -119,7 +119,7 @@ engine reads two trees, so it is `unsupported-reference-semantics` rather than a
 directory called `{name}`. Across Quarkus that is roughly a quarter of every reference, so
 reporting them as missing would have buried the real breaks. A heading anchor on an AsciiDoc target resolves
 through the Asciidoctor rule in
-[What eleven renderers call a heading](anchor-rules.md), which is the only rule whose separator
+[What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 
 A reStructuredText heading anchor resolves through the Docutils rule in
@@ -145,7 +145,7 @@ outside the range does not claim this occurrence's dependency changed. Git LFS p
 trees have no line selection and stay unsupported.
 
 Every other fragment on a document target is a heading anchor, and a heading identity
-belongs to the renderer rather than to Markdown. Ten rules are pinned, one per renderer or
+belongs to the renderer rather than to Markdown. Twelve rules are pinned, one per renderer or
 per configuration of one, and the resolver asks whether any of them would publish the
 anchor, counting the headings a document writes as raw HTML and the identities it declares
 outright, in raw HTML or in an attribute block, as well. An anchor no rule
@@ -154,7 +154,7 @@ target. The union is deliberate: adding a rule can only grow what an anchor may 
 repository policy narrows it. A document can add to it, by declaring an identity the way it
 would add a heading, which is an edit to the target that a reviewer reads rather than a
 setting that clears a finding.
-[What ten renderers call a heading](anchor-rules.md) holds the rules, what each was checked
+[What twelve renderers call a heading](anchor-rules.md) holds the rules, what each was checked
 against, and how far apart they are.
 
 What the check will not do is judge on a parse that did not happen. A target that is not a

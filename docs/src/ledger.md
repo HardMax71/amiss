@@ -20,7 +20,7 @@ Ten repositories, scanned 2026-07-18 with the v0.5.1 release build under
 `--profile observe`, each from its latest release tag to that day's default-branch head.
 That build resolved no heading anchors, so every reference counted here is a path or a line
 range. The same ten trees later supplied the anchor measurement behind
-[What ten renderers call a heading](anchor-rules.md), which is a separate study and not a
+[What twelve renderers call a heading](anchor-rules.md), which is a separate study and not a
 row on this page.
 Two bases bend that convention: ripgrep tags rarely, so its base is the 150th ancestor
 of its head, and alacritty tags on release branches, so its base is the latest stable
@@ -72,7 +72,7 @@ phenomenon; a plain tree yields either zero or the genuinely broken.
 
 ## The same ten trees, rescanned
 
-Heading anchors resolve since [What ten renderers call a heading](anchor-rules.md), so the
+Heading anchors resolve since [What twelve renderers call a heading](anchor-rules.md), so the
 ten trees were scanned again on 2026-07-26 with that work's release build. These are not
 rows. Each is a whole-tree count at that day's head against a synthetic empty base, so there
 is no commit range, no changed-line denominator, and no density figure. They are kept

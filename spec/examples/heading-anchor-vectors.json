@@ -3,7 +3,7 @@
   "contract": "heading-anchor",
   "reference": {
     "harvested": "2026-07-26",
-    "note": "Every expectation below was produced by the named implementation, not by this repository. A rule with no live pair is marked as transcribed.",
+    "note": "Every expectation below was produced by the named implementation, not by this repository, except where the rule is marked transcribed. A transcribed rule was read from the implementation's source and traced by hand, and its divergences are named.",
     "rules": [
       {
         "name": "github",
@@ -93,6 +93,24 @@
         "expectations": "transcribed from converter/base.rb and executed under ruby",
         "cross_checked": "none; no live pair is pinned",
         "source": "https://github.com/gettalong/kramdown/blob/master/lib/kramdown/converter/base.rb"
+      },
+      {
+        "name": "asciidoctor",
+        "serves": [
+          "Asciidoctor 2 and Antora, at the default idprefix and idseparator"
+        ],
+        "expectations": "transcribed from Asciidoctor's Section.generate_id and InvalidSectionIdCharsRx, then hand-traced case by case",
+        "cross_checked": "not cross-checked against a running Asciidoctor; a title whose every character is filtered publishes nothing here, and a document set overriding idprefix or idseparator publishes identities this rule does not know",
+        "source": "https://github.com/asciidoctor/asciidoctor/blob/main/lib/asciidoctor/section.rb"
+      },
+      {
+        "name": "docutils",
+        "serves": [
+          "Docutils and Sphinx"
+        ],
+        "expectations": "transcribed from docutils.nodes make_id, _non_id_chars and _non_id_at_ends, then hand-traced case by case",
+        "cross_checked": "not cross-checked against a running Docutils; make_id returning nothing is published as no anchor here, where a document assigns a serial id instead",
+        "source": "https://sourceforge.net/p/docutils/code/HEAD/tree/trunk/docutils/docutils/nodes.py"
       }
     ]
   },

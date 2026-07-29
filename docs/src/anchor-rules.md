@@ -83,8 +83,11 @@ Seven rules have a runnable implementation, and against those the table reproduc
 9,049 headings harvested from the ten repositories in [The scan ledger](ledger.md) with no
 mismatch: github-slugger 2.0.0 and comrak 0.54.0 for `github`, goldmark 1.8.4,
 python-markdown 3.10, pymdownx, `@mdit-vue/shared`, and kramdown's own generator. The
-remaining three are transcribed from Gitea's `CleanValue`, Forgejo's `prefixedIDs`, and
-mdBook's `id_from_content`.
+remaining five are transcribed and traced by hand: Gitea's `CleanValue`, Forgejo's
+`prefixedIDs`, mdBook's `id_from_content`, Asciidoctor's `Section.generate_id`, and Docutils'
+`make_id`. The
+[published vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/heading-anchor-vectors.json)
+name which of the twelve is which and what each transcription is not checked against.
 
 Eight documents, in
 [`corpus/third_party/anchor-fixtures/`](https://github.com/HardMax71/amiss/tree/main/corpus/third_party/anchor-fixtures),

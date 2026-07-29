@@ -25,7 +25,7 @@ answering a smaller question.
 It answers a heading anchor against the slugging rules of the renderers it models, and
 reports one that no rule publishes as a missing target. What it cannot say is whether the
 section behind a resolving anchor still means what the prose claims, and a renderer outside
-[What ten renderers call a heading](anchor-rules.md) is outside the answer. A recognized
+[What twelve renderers call a heading](anchor-rules.md) is outside the answer. A recognized
 numeric line fragment is narrower still: Amiss can select and compare those exact bytes, but
 cannot tell whether they still express the idea the prose intended. A relative destination
 the tree does not hold is asked again under
