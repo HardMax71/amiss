@@ -27,6 +27,8 @@ use tower::ServiceExt as _;
 use super::provider::{FakeGitLab, HOST, claims, policy, provider, refresh, sign, source};
 use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
 
+const LEASE_BEYOND_REACH: Duration = Duration::from_hours(1);
+
 const ENDPOINT: &str = "/gitlab/policy/evaluate";
 
 #[derive(Clone, Copy)]
@@ -117,7 +119,7 @@ impl Harness {
         let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
         let ledger = FileLedgerRoot::open_with_clock(
             &ledger_root,
-            FileLedgerConfig::new(Duration::from_secs(2), 64, replay).unwrap(),
+            FileLedgerConfig::new(LEASE_BEYOND_REACH, 64, replay).unwrap(),
             Arc::clone(&clock),
         )
         .unwrap();
