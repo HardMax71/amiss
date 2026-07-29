@@ -1,0 +1,12 @@
+[package]
+name = "amiss-adoc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "AsciiDoc reference extraction for the amiss documentation scanner"
+publish = false
+
+[lints]
+workspace = true
