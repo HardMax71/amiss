@@ -77,7 +77,11 @@ fn a_container_block_does_not_repeat_the_references_inside_it() {
 fn what_the_parser_will_not_read_into_is_declared() {
     let extraction =
         extract(b"++++\n<div>raw</div>\n++++\n\n////\nhidden\n////\n").expect("utf-8 source");
-    assert_eq!(extraction.opaque.len(), 2);
+    assert_eq!(
+        extraction.opaque.len(),
+        1,
+        "only passthrough holds output this parser cannot read; a comment holds nothing",
+    );
     assert!(extraction.references.is_empty());
     let openers: Vec<Option<Delimiter>> = blocks("----\ncode\n----\n")
         .into_iter()

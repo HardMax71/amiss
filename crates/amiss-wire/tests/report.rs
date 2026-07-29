@@ -139,7 +139,7 @@ fn builds_the_fatal_incomplete_envelope() {
         .iter()
         .map(|row| strings(&Value::Array(vec![member(row, "adapter_id").clone()])).remove(0))
         .collect();
-    assert_eq!(ids, vec!["markdown", "mdx", "plain-advisory"]);
+    assert_eq!(ids, vec!["markdown", "mdx", "asciidoc", "plain-advisory"]);
 }
 
 #[test]

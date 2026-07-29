@@ -118,6 +118,7 @@ pub struct HeadingAttribute {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeadingSource {
     Markdown,
+    AsciiDoc,
     RawHtml,
 }
 
@@ -126,6 +127,7 @@ impl HeadingSource {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Markdown => "markdown",
+            Self::AsciiDoc => "asciidoc",
             Self::RawHtml => "raw-html",
         }
     }

@@ -319,7 +319,9 @@ fn unsupported_semantics_value(kind: &str, semantics: &UnsupportedSemantics<Repo
             semantics.discriminant().as_ref(),
             vec![("target", blob_target_value(blob))],
         ),
-        UnsupportedSemantics::SiteRoute | UnsupportedSemantics::NetworkPath => {
+        UnsupportedSemantics::SiteRoute
+        | UnsupportedSemantics::NetworkPath
+        | UnsupportedSemantics::AttributeDependent => {
             reasoned_resolution(kind, semantics.discriminant().as_ref(), Vec::new())
         }
     }

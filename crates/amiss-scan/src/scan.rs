@@ -77,14 +77,16 @@ pub fn scan_bytes(
     adapter: Adapter,
     source: &[u8],
 ) -> Result<Scanned, Error> {
-    let analysis = analyze(adapter, source, resources.embedded_code_allowance()).map_err(
-        |error| match error {
-            AnalyzeError::Fault(fault) => Error::Parse(fault),
-            AnalyzeError::EmbeddedCodeAllowance { spent } => {
-                resources.embedded_code_crossing(spent)
-            }
-        },
-    )?;
+    let parsed = match adapter {
+        Adapter::AsciiDoc => amiss_adoc::analyze(source),
+        Adapter::Markdown | Adapter::Mdx | Adapter::PlainAdvisory => {
+            analyze(adapter, source, resources.embedded_code_allowance())
+        }
+    };
+    let analysis = parsed.map_err(|error| match error {
+        AnalyzeError::Fault(fault) => Error::Parse(fault),
+        AnalyzeError::EmbeddedCodeAllowance { spent } => resources.embedded_code_crossing(spent),
+    })?;
     resources.charge_embedded_code(analysis.embedded_code_bytes);
     resources.charge_work(analysis.work.nodes, analysis.work.nesting)?;
 

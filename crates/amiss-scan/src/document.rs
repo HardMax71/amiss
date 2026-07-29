@@ -7,6 +7,7 @@ use amiss_wire::model::Adapter;
 pub enum Classification {
     StructuredMarkdown,
     StructuredMdx,
+    StructuredAsciiDoc,
     ExtensionlessMarkdown,
     PlainAdvisory,
     UnparsedMarkup,
@@ -40,6 +41,7 @@ impl Classification {
         match self {
             Self::StructuredMarkdown => "structured-markdown",
             Self::StructuredMdx => "structured-mdx",
+            Self::StructuredAsciiDoc => "structured-asciidoc",
             Self::ExtensionlessMarkdown => "extensionless-markdown",
             Self::PlainAdvisory => "plain-advisory",
             Self::UnparsedMarkup => "unparsed-markup",
@@ -54,6 +56,7 @@ impl Classification {
         match self {
             Self::StructuredMarkdown | Self::ExtensionlessMarkdown => Some(Adapter::Markdown),
             Self::StructuredMdx => Some(Adapter::Mdx),
+            Self::StructuredAsciiDoc => Some(Adapter::AsciiDoc),
             Self::PlainAdvisory => Some(Adapter::PlainAdvisory),
             Self::UnparsedMarkup | Self::PolicyIncluded => None,
         }
@@ -72,7 +75,10 @@ pub fn classify(path: &[u8]) -> Option<Classification> {
     if path.ends_with(b".mdx") {
         return Some(Classification::StructuredMdx);
     }
-    if path.ends_with(b".rst") || path.ends_with(b".adoc") || path.ends_with(b".asciidoc") {
+    if path.ends_with(b".adoc") || path.ends_with(b".asciidoc") {
+        return Some(Classification::StructuredAsciiDoc);
+    }
+    if path.ends_with(b".rst") {
         return Some(Classification::UnparsedMarkup);
     }
     let basename = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);

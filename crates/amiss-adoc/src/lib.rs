@@ -1,5 +1,8 @@
+pub mod adapter;
 pub mod block;
 pub mod macros;
+
+pub use adapter::analyze;
 
 pub use block::blocks;
 pub use macros::{Reference, ReferenceKind, references};
@@ -68,11 +71,11 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
     };
     for (index, block) in scanned.iter().enumerate() {
         match block.delimiter {
-            Some(Delimiter::Passthrough | Delimiter::Comment) => {
+            Some(Delimiter::Passthrough) => {
                 extraction.opaque.push(block.span);
                 continue;
             }
-            Some(Delimiter::Compound | Delimiter::Verbatim) => continue,
+            Some(Delimiter::Comment | Delimiter::Compound | Delimiter::Verbatim) => continue,
             None => {}
         }
         let body = text.get(block.span.0..block.span.1).unwrap_or_default();

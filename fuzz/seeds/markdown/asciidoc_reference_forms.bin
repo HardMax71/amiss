@@ -1,0 +1,19 @@
+= Title
+:idprefix:
+
+[[explicit]]
+== Section
+
+See xref:other.adoc#part[Other], link:https://example.com[Site], <<explicit>>.
+
+image::img/logo.png[Logo]
+
+include::{includedir}/shared.adoc[]
+
+----
+xref:not-a-reference.adoc[hidden]
+----
+
+++++
+<div>raw</div>
+++++
