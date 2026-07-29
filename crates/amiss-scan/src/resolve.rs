@@ -914,6 +914,10 @@ fn fragment_resolution(
         return line_resolution(scan, cache, path, mode, blob, range);
     }
     match classify(path.as_bytes()) {
+        // No rule publishes a Docutils heading identity yet, so none is guessed.
+        Some(Classification::StructuredRst) => Ok(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::Fragment(blob),
+        )),
         Some(classification) => match classification.adapter() {
             Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(

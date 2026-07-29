@@ -100,7 +100,12 @@ pub fn requests(bytes: &[u8]) {
 ///
 /// Panics when an accepted document violates a parser invariant.
 pub fn markdown(bytes: &[u8]) {
-    for adapter in [Adapter::Markdown, Adapter::Mdx, Adapter::AsciiDoc] {
+    for adapter in [
+        Adapter::Markdown,
+        Adapter::Mdx,
+        Adapter::AsciiDoc,
+        Adapter::Rst,
+    ] {
         let mut resources = ScanResources::new(ScanLimits::CONTRACT);
         let first = amiss_scan::scan_document(&mut resources, adapter, bytes);
         let mut again = ScanResources::new(ScanLimits::CONTRACT);

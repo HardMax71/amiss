@@ -577,8 +577,8 @@ fn repository_policy_includes_raises_and_weakening() {
         "the include is discovered without installing a parser: {documents:?}"
     );
     assert!(
-        documents.contains(&("specs/design.rst", "unparsed-markup")),
-        "a markup with no parser is discovered without a policy include: {documents:?}"
+        documents.contains(&("specs/design.rst", "structured-rst")),
+        "reStructuredText is discovered without a policy include: {documents:?}"
     );
 }
 
@@ -1684,5 +1684,55 @@ fn a_codeberg_identity_defaults_to_the_gitea_dialect_end_to_end() {
     assert_eq!(
         references["unsupported"], 1,
         "the tag link is an unsupported intent, version-scoped out"
+    );
+}
+
+#[test]
+fn a_restructuredtext_report_is_schema_clean() {
+    let fx = amiss_fixtures::commit_pair(
+        &[(
+            "docs/manual.rst",
+            "Manual\n======\n\n.. _here:\n\nSee `guide <guide.rst>`_ and `gone <missing.rst>`_.\n\n\
+             .. _named: other.rst\n\n.. image:: img/logo.png\n",
+        )],
+        &[(
+            "docs/manual.rst",
+            "Manual\n======\n\n.. _here:\n\nSee `guide <guide.rst>`_ and `gone <missing.rst>`_.\n\n\
+             .. _named: other.rst\n\n.. image:: img/logo.png\n\n.. include:: shared.rst\n",
+        )],
+    )
+    .unwrap();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+
+    let schema_text = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
+    )
+    .unwrap();
+    let schema: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let defects: Vec<String> = validator
+        .iter_errors(&envelope)
+        .map(|error| format!("{}: {error}", error.instance_path()))
+        .collect();
+    assert_eq!(
+        defects,
+        Vec::<String>::new(),
+        "a reStructuredText observation is a schema-clean report"
     );
 }

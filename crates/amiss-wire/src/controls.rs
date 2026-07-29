@@ -181,6 +181,11 @@ pub enum SourceConstruct {
     AsciidocBlockImage,
     AsciidocInlineImage,
     AsciidocInclude,
+    RstInlineHyperlink,
+    RstNamedTarget,
+    RstImageDirective,
+    RstIncludeDirective,
+    RstFileOption,
 }
 
 impl SourceConstruct {
@@ -194,7 +199,8 @@ impl SourceConstruct {
             | Self::CollapsedReferenceImage
             | Self::ShortcutReferenceImage
             | Self::AsciidocBlockImage
-            | Self::AsciidocInlineImage => true,
+            | Self::AsciidocInlineImage
+            | Self::RstImageDirective => true,
             Self::InlineLink
             | Self::FullReferenceLink
             | Self::CollapsedReferenceLink
@@ -203,7 +209,11 @@ impl SourceConstruct {
             | Self::AsciidocCrossReference
             | Self::AsciidocInternalCrossReference
             | Self::AsciidocLinkMacro
-            | Self::AsciidocInclude => false,
+            | Self::AsciidocInclude
+            | Self::RstInlineHyperlink
+            | Self::RstNamedTarget
+            | Self::RstIncludeDirective
+            | Self::RstFileOption => false,
         }
     }
 
@@ -225,6 +235,11 @@ impl SourceConstruct {
             Self::AsciidocBlockImage => "asciidoc-block-image",
             Self::AsciidocInlineImage => "asciidoc-inline-image",
             Self::AsciidocInclude => "asciidoc-include",
+            Self::RstInlineHyperlink => "rst-inline-hyperlink",
+            Self::RstNamedTarget => "rst-named-target",
+            Self::RstImageDirective => "rst-image-directive",
+            Self::RstIncludeDirective => "rst-include-directive",
+            Self::RstFileOption => "rst-file-option",
         }
     }
 
@@ -245,6 +260,11 @@ impl SourceConstruct {
             "asciidoc-block-image" => Ok(Self::AsciidocBlockImage),
             "asciidoc-inline-image" => Ok(Self::AsciidocInlineImage),
             "asciidoc-include" => Ok(Self::AsciidocInclude),
+            "rst-inline-hyperlink" => Ok(Self::RstInlineHyperlink),
+            "rst-named-target" => Ok(Self::RstNamedTarget),
+            "rst-image-directive" => Ok(Self::RstImageDirective),
+            "rst-include-directive" => Ok(Self::RstIncludeDirective),
+            "rst-file-option" => Ok(Self::RstFileOption),
             _ => fail(path, ErrorKind::InvalidValue),
         }
     }

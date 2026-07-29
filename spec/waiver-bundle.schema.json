@@ -162,7 +162,18 @@
         "markdown-inline-image",
         "markdown-full-reference-image",
         "markdown-collapsed-reference-image",
-        "markdown-shortcut-reference-image"
+        "markdown-shortcut-reference-image",
+        "asciidoc-xref-macro",
+        "asciidoc-internal-xref",
+        "asciidoc-link-macro",
+        "asciidoc-block-image",
+        "asciidoc-inline-image",
+        "asciidoc-include",
+        "rst-inline-hyperlink",
+        "rst-named-target",
+        "rst-image-directive",
+        "rst-include-directive",
+        "rst-file-option"
       ]
     },
     "RepositoryTargetIntent": {

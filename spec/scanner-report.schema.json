@@ -642,6 +642,34 @@
           "if": {
             "properties": {
               "adapter_id": {
+                "const": "rst"
+              }
+            },
+            "required": [
+              "adapter_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "grammar_profile": {
+                "const": "docutils-rst"
+              },
+              "frontmatter_contract": {
+                "const": "none"
+              },
+              "source_projection": {
+                "const": "source-projection"
+              },
+              "structural_address": {
+                "const": "rst-block-path"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "adapter_id": {
                 "const": "plain-advisory"
               }
             },
@@ -686,6 +714,7 @@
             "markdown",
             "mdx",
             "asciidoc",
+            "rst",
             "plain-advisory"
           ]
         },
@@ -724,6 +753,7 @@
             "markdown-ast-node-path",
             "mdx-ast-node-path",
             "asciidoc-block-path",
+            "rst-block-path",
             "none"
           ]
         }
@@ -743,6 +773,7 @@
             "markdown",
             "mdx",
             "asciidoc",
+            "rst",
             "plain-advisory"
           ]
         },
@@ -1179,7 +1210,7 @@
         "adapters": {
           "type": "array",
           "minItems": 3,
-          "maxItems": 4,
+          "maxItems": 5,
           "uniqueItems": true,
           "description": "Sorted by adapter_id UTF-8 bytes.",
           "x-amiss-order": [
@@ -2015,7 +2046,8 @@
             "mdx",
             "plain-advisory",
             null,
-            "asciidoc"
+            "asciidoc",
+            "rst"
           ]
         },
         "byte_count": {
@@ -2065,6 +2097,7 @@
             "structured-markdown",
             "structured-mdx",
             "structured-asciidoc",
+            "structured-rst",
             "extensionless-markdown",
             "plain-advisory",
             "policy-included"
@@ -2746,7 +2779,12 @@
         "asciidoc-link-macro",
         "asciidoc-block-image",
         "asciidoc-inline-image",
-        "asciidoc-include"
+        "asciidoc-include",
+        "rst-inline-hyperlink",
+        "rst-named-target",
+        "rst-image-directive",
+        "rst-include-directive",
+        "rst-file-option"
       ]
     },
     "ObservationSourceConstruct": {
@@ -2765,7 +2803,12 @@
         "asciidoc-link-macro",
         "asciidoc-block-image",
         "asciidoc-inline-image",
-        "asciidoc-include"
+        "asciidoc-include",
+        "rst-inline-hyperlink",
+        "rst-named-target",
+        "rst-image-directive",
+        "rst-include-directive",
+        "rst-file-option"
       ]
     },
     "RepositoryTargetIntent": {
@@ -2818,7 +2861,8 @@
           "enum": [
             "markdown-ast-node-path",
             "mdx-ast-node-path",
-            "asciidoc-block-path"
+            "asciidoc-block-path",
+            "rst-block-path"
           ]
         },
         "node_path": {
@@ -2908,7 +2952,8 @@
           "enum": [
             "markdown",
             "mdx",
-            "asciidoc"
+            "asciidoc",
+            "rst"
           ]
         },
         "adapter_contract_digest": {
@@ -2957,7 +3002,8 @@
           "enum": [
             "markdown",
             "mdx",
-            "asciidoc"
+            "asciidoc",
+            "rst"
           ]
         },
         "document": {

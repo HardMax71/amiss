@@ -119,6 +119,7 @@ pub struct HeadingAttribute {
 pub enum HeadingSource {
     Markdown,
     AsciiDoc,
+    Rst,
     RawHtml,
 }
 
@@ -128,6 +129,7 @@ impl HeadingSource {
         match self {
             Self::Markdown => "markdown",
             Self::AsciiDoc => "asciidoc",
+            Self::Rst => "rst",
             Self::RawHtml => "raw-html",
         }
     }

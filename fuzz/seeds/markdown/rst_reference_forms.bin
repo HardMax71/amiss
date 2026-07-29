@@ -1,0 +1,18 @@
+Title
+=====
+
+`guide <guide.rst>`_ and `home <../README>`_
+
+.. _label: other.rst
+
+.. _internal:
+
+.. image:: img/logo.png
+
+.. include:: shared.rst
+
+Example::
+
+   `hidden <x.rst>`_
+
+.. a comment
