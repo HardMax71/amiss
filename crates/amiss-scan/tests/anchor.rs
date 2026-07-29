@@ -4,6 +4,7 @@
     reason = "integration assertions over the published heading-anchor vectors"
 )]
 
+use amiss_md::HeadingSource;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -231,6 +232,7 @@ fn duplicate_headings_diverge_by_suffix_style() {
     for (name, ids) in published {
         let want: Vec<String> = match name {
             "gitea" => vec!["same", "same", "same"],
+            "asciidoctor" => vec!["_same", "_same_2", "_same_3"],
             "python-markdown" | "pymdownx" => vec!["same", "same_1", "same_2"],
             _ => vec!["same", "same-1", "same-2"],
         }
@@ -250,6 +252,8 @@ fn a_raw_html_heading_belongs_to_the_rules_that_anchor_one() {
         let published = identities(rule, &headings);
         let want: Vec<String> = if rule.raw_html == RawHtml::Anchored {
             vec!["twin".to_owned(), "twin-1".to_owned()]
+        } else if rule.name == "asciidoctor" {
+            vec!["_twin".to_owned()]
         } else {
             vec!["twin".to_owned()]
         };
@@ -264,10 +268,41 @@ fn a_heading_that_filters_to_nothing_diverges_by_empty_rule() {
         let published = identities(rule, &headings);
         match rule.name {
             "gitea" => assert!(published.is_empty(), "gitea publishes no anchor"),
+            "asciidoctor" => assert_eq!(published, vec!["_...".to_owned()]),
             "forgejo" | "goldmark" => assert_eq!(published, vec!["heading".to_owned()]),
             "kramdown" => assert_eq!(published, vec!["section".to_owned()]),
             "python-markdown" | "pymdownx" => assert_eq!(published, vec!["_1".to_owned()]),
             _ => assert_eq!(published, vec![String::new()], "{}", rule.name),
         }
+    }
+}
+
+/// The generated identity is what an `AsciiDoc` cross reference actually names,
+/// and a document that splices another file cannot answer for one it lacks.
+#[test]
+fn asciidoctor_publishes_its_generated_identity() {
+    let rule = RULES
+        .iter()
+        .find(|rule| rule.name == "asciidoctor")
+        .expect("the table holds the asciidoctor rule");
+    let cases = [
+        ("Named Part", "_named_part"),
+        ("A -- B", "_a_--_b"),
+        ("a.b.c", "_a.b.c"),
+        ("3D printing", "_3d_printing"),
+        ("Ⅻ chapter", "__chapter"),
+    ];
+    for (text, want) in cases {
+        let heading = Heading {
+            text: text.to_owned(),
+            attribute: None,
+            source: HeadingSource::Markdown,
+            span: (0, text.len()),
+        };
+        assert_eq!(
+            identities(rule, &[heading]),
+            vec![want.to_owned()],
+            "{text}"
+        );
     }
 }

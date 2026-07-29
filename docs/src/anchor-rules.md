@@ -1,4 +1,4 @@
-# What ten renderers call a heading
+# What eleven renderers call a heading
 
 A heading anchor is not a property of Markdown. `## Setup & Config` has no identity until
 something renders it, and the renderers disagree: github.com publishes `setup--config`,
@@ -25,6 +25,14 @@ matches.
 | `pymdownx` | MkDocs configured with `pymdownx.slugs.slugify` | keeps Unicode; one separator per space; repeats take `_1` |
 | `mdit-vue` | VitePress, VuePress | a wide punctuation class collapses to one separator; a leading digit takes `_` |
 | `kramdown` | Jekyll, GitHub Pages | strips the leading run of non-letters; ASCII only; empty becomes `section` |
+| `asciidoctor` | Asciidoctor and Antora, at the default `idprefix` and `idseparator` | the only rule whose separator is `_` and whose every identity carries a fixed prefix; hyphens and dots survive as themselves; repeats number from `_2` |
+
+The AsciiDoc rule is the one pinned to a configuration rather than to a renderer's only
+behaviour. `idprefix` and `idseparator` are document attributes, and this engine evaluates no
+attributes, so the rule holds their defaults and a document set that overrides either publishes
+identities the rule does not know. Two divergences are known and unverified against a running
+Asciidoctor: a title whose every character is filtered away publishes nothing here, and the
+attribute-driven cases above.
 
 An anchor resolves when any of them would publish it, or when the document declares it
 outright. Adding a rule can only grow that set, so a rule missing from the table is the

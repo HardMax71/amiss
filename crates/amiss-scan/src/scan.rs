@@ -1,6 +1,6 @@
 use amiss_md::extract::GovernedDefinition;
 use amiss_md::lines::{Line, scan};
-use amiss_md::{AnalyzeError, Occurrence, Opaque, Work, analyze};
+use amiss_md::{Analysis, AnalyzeError, Occurrence, Opaque, Work, analyze};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Adapter;
 
@@ -67,6 +67,25 @@ pub fn scan_document(
     scan_bytes(resources, adapter, source)
 }
 
+/// The one place an adapter is chosen. Both the document scan and the
+/// resolver's anchor read come through here.
+///
+/// # Errors
+///
+/// Whatever the chosen adapter refuses the bytes with.
+pub(crate) fn parse(
+    adapter: Adapter,
+    source: &[u8],
+    embedded_code_allowance: u64,
+) -> Result<Analysis, AnalyzeError> {
+    match adapter {
+        Adapter::AsciiDoc => amiss_adoc::analyze(source),
+        Adapter::Markdown | Adapter::Mdx | Adapter::PlainAdvisory => {
+            analyze(adapter, source, embedded_code_allowance)
+        }
+    }
+}
+
 /// Parses and extracts one already admitted document body.
 ///
 /// # Errors
@@ -77,16 +96,14 @@ pub fn scan_bytes(
     adapter: Adapter,
     source: &[u8],
 ) -> Result<Scanned, Error> {
-    let parsed = match adapter {
-        Adapter::AsciiDoc => amiss_adoc::analyze(source),
-        Adapter::Markdown | Adapter::Mdx | Adapter::PlainAdvisory => {
-            analyze(adapter, source, resources.embedded_code_allowance())
-        }
-    };
-    let analysis = parsed.map_err(|error| match error {
-        AnalyzeError::Fault(fault) => Error::Parse(fault),
-        AnalyzeError::EmbeddedCodeAllowance { spent } => resources.embedded_code_crossing(spent),
-    })?;
+    let analysis = parse(adapter, source, resources.embedded_code_allowance()).map_err(
+        |error| match error {
+            AnalyzeError::Fault(fault) => Error::Parse(fault),
+            AnalyzeError::EmbeddedCodeAllowance { spent } => {
+                resources.embedded_code_crossing(spent)
+            }
+        },
+    )?;
     resources.charge_embedded_code(analysis.embedded_code_bytes);
     resources.charge_work(analysis.work.nodes, analysis.work.nesting)?;
 

@@ -111,7 +111,8 @@
         "python-markdown": "setup-config",
         "pymdownx": "setup--config",
         "mdit-vue": "setup-config",
-        "kramdown": "setup--config"
+        "kramdown": "setup--config",
+        "asciidoctor": "_setup_config"
       }
     },
     {
@@ -128,7 +129,8 @@
         "python-markdown": "foo_bar-baz",
         "pymdownx": "foo_bar-baz",
         "mdit-vue": "foo-bar-baz",
-        "kramdown": "foobar-baz"
+        "kramdown": "foobar-baz",
+        "asciidoctor": "_foo_bar_baz"
       }
     },
     {
@@ -145,7 +147,8 @@
         "python-markdown": "a-b",
         "pymdownx": "a----b",
         "mdit-vue": "a-b",
-        "kramdown": "a----b"
+        "kramdown": "a----b",
+        "asciidoctor": "_a_--_b"
       }
     },
     {
@@ -162,7 +165,8 @@
         "python-markdown": "a-b",
         "pymdownx": "a--b",
         "mdit-vue": "a-b",
-        "kramdown": "a--b"
+        "kramdown": "a--b",
+        "asciidoctor": "_a_..._b"
       }
     },
     {
@@ -179,7 +183,8 @@
         "python-markdown": "a-b",
         "pymdownx": "a--b",
         "mdit-vue": "a-b",
-        "kramdown": "a--b"
+        "kramdown": "a--b",
+        "asciidoctor": "_a_b"
       }
     },
     {
@@ -196,7 +201,8 @@
         "python-markdown": "100",
         "pymdownx": "100",
         "mdit-vue": "_100",
-        "kramdown": "section"
+        "kramdown": "section",
+        "asciidoctor": "_100"
       }
     },
     {
@@ -213,7 +219,8 @@
         "python-markdown": "2026",
         "pymdownx": "2026",
         "mdit-vue": "_2026",
-        "kramdown": "section"
+        "kramdown": "section",
+        "asciidoctor": "_2026"
       }
     },
     {
@@ -230,7 +237,8 @@
         "python-markdown": "3d-printing",
         "pymdownx": "3d-printing",
         "mdit-vue": "_3d-printing",
-        "kramdown": "d-printing"
+        "kramdown": "d-printing",
+        "asciidoctor": "_3d_printing"
       }
     },
     {
@@ -247,7 +255,8 @@
         "python-markdown": "-hyphen-",
         "pymdownx": "-hyphen-",
         "mdit-vue": "hyphen",
-        "kramdown": "hyphen-"
+        "kramdown": "hyphen-",
+        "asciidoctor": "_-hyphen-"
       }
     },
     {
@@ -264,7 +273,8 @@
         "python-markdown": "abc",
         "pymdownx": "abc",
         "mdit-vue": "a-b-c",
-        "kramdown": "abc"
+        "kramdown": "abc",
+        "asciidoctor": "_a.b.c"
       }
     },
     {
@@ -281,7 +291,8 @@
         "python-markdown": "c-c",
         "pymdownx": "c--c",
         "mdit-vue": "c-c",
-        "kramdown": "c--c"
+        "kramdown": "c--c",
+        "asciidoctor": "_c_c"
       }
     },
     {
@@ -298,7 +309,8 @@
         "python-markdown": "what-is-code",
         "pymdownx": "what-is-code",
         "mdit-vue": "what-is-code",
-        "kramdown": "what-is-code"
+        "kramdown": "what-is-code",
+        "asciidoctor": "_what_is_code"
       }
     },
     {
@@ -315,7 +327,8 @@
         "python-markdown": "resume-cv",
         "pymdownx": "résumé--cv",
         "mdit-vue": "resume-cv",
-        "kramdown": "rsum--cv"
+        "kramdown": "rsum--cv",
+        "asciidoctor": "_rsum_cv"
       }
     },
     {
@@ -332,7 +345,8 @@
         "python-markdown": "cafe-latte",
         "pymdownx": "café-latte",
         "mdit-vue": "cafe-latte",
-        "kramdown": "cafe-latte"
+        "kramdown": "cafe-latte",
+        "asciidoctor": "_cafe_latte"
       }
     },
     {
@@ -349,7 +363,8 @@
         "python-markdown": "istanbul",
         "pymdownx": "istanbul",
         "mdit-vue": "istanbul",
-        "kramdown": "stanbul"
+        "kramdown": "stanbul",
+        "asciidoctor": "_stanbul"
       }
     },
     {
@@ -366,7 +381,8 @@
         "python-markdown": "_1",
         "pymdownx": "日本語の見出し",
         "mdit-vue": "日本語の見出し",
-        "kramdown": "section"
+        "kramdown": "section",
+        "asciidoctor": null
       }
     },
     {
@@ -383,7 +399,8 @@
         "python-markdown": "_1",
         "pymdownx": "ইনসটল",
         "mdit-vue": "ইন্সটল",
-        "kramdown": "section"
+        "kramdown": "section",
+        "asciidoctor": null
       }
     },
     {
@@ -400,7 +417,8 @@
         "python-markdown": "emoji-party",
         "pymdownx": "emoji--party",
         "mdit-vue": "emoji-🎉-party",
-        "kramdown": "emoji--party"
+        "kramdown": "emoji--party",
+        "asciidoctor": "_emoji_party"
       }
     },
     {
@@ -417,7 +435,8 @@
         "python-markdown": "sponsors",
         "pymdownx": "-sponsors",
         "mdit-vue": "❤️-sponsors",
-        "kramdown": "sponsors"
+        "kramdown": "sponsors",
+        "asciidoctor": "__sponsors"
       }
     },
     {
@@ -434,7 +453,8 @@
         "python-markdown": "1",
         "pymdownx": "第-1-章",
         "mdit-vue": "第-1-章",
-        "kramdown": "section"
+        "kramdown": "section",
+        "asciidoctor": "__1"
       }
     },
     {
@@ -451,7 +471,8 @@
         "python-markdown": "_1",
         "pymdownx": "_1",
         "mdit-vue": "",
-        "kramdown": "section"
+        "kramdown": "section",
+        "asciidoctor": "_..."
       }
     },
     {
@@ -468,7 +489,8 @@
         "python-markdown": "unicode-ahnlich",
         "pymdownx": "ünïcödé-ähnlich",
         "mdit-vue": "unicode-ahnlich",
-        "kramdown": "ncd-hnlich"
+        "kramdown": "ncd-hnlich",
+        "asciidoctor": "_ncd_hnlich"
       }
     },
     {
@@ -485,7 +507,8 @@
         "python-markdown": "xii-chapter",
         "pymdownx": "ⅻ-chapter",
         "mdit-vue": "xii-chapter",
-        "kramdown": "chapter"
+        "kramdown": "chapter",
+        "asciidoctor": "__chapter"
       }
     },
     {
@@ -502,7 +525,8 @@
         "python-markdown": "command-duration",
         "pymdownx": "commandduration",
         "mdit-vue": "command-duration",
-        "kramdown": "commandduration"
+        "kramdown": "commandduration",
+        "asciidoctor": "_commandduration"
       }
     }
   ],
