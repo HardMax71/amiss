@@ -86,10 +86,13 @@ The scanner runs on its own repository under `--profile enforce` in CI. This doc
 passes through that same gate: every relative link in this book resolves in the tree, or
 the pull request that broke it fails.
 
-Every pull request also dry-runs the publication. `cargo publish --dry-run --workspace --locked`
-packages each publishable crate, resolves its siblings through a temporary local registry, and
-builds every tarball, so a file dropped from a package or a path dependency missing a version
-fails on the pull request instead of halfway through an upload that cannot be taken back.
+Every pull request also packages what a release would upload. `cargo package` over the
+publishable members resolves their siblings through a temporary local registry and builds every
+tarball, so a file dropped from a package, a path dependency missing a version, or a new crate
+its dependants cannot see fails on the pull request instead of halfway through an upload that
+cannot be taken back. It is `cargo package` rather than `cargo publish --dry-run` because the
+dry run prefers a version already on crates.io over the tree, which makes it blind to exactly
+the crate a change is adding.
 
 Releases are automated. A bot keeps a release pull request current with the version bump,
 changelog, and exact Action-dispatch ref. Merging it publishes the crates and source tag while
