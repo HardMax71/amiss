@@ -137,6 +137,6 @@ pub fn parse_options(
                 meter,
             ))
         }
-        Adapter::AsciiDoc | Adapter::PlainAdvisory => None,
+        Adapter::AsciiDoc | Adapter::Rst | Adapter::PlainAdvisory => None,
     }
 }

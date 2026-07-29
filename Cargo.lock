@@ -381,6 +381,9 @@ dependencies = [
 [[package]]
 name = "amiss-rst"
 version = "0.12.0"
+dependencies = [
+ "amiss-wire",
+]
 
 [[package]]
 name = "amiss-scan"
@@ -390,6 +393,7 @@ dependencies = [
  "amiss-fixtures",
  "amiss-git",
  "amiss-md",
+ "amiss-rst",
  "amiss-wire",
  "dhat",
  "divan",

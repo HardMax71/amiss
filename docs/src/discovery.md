@@ -5,14 +5,11 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 `structured-mdx`. Six exact extensionless basenames, `README`, `CONTRIBUTING`, `CHANGELOG`,
 `SECURITY`, `SUPPORT`, and `CODE_OF_CONDUCT`, are `extensionless-markdown` and use the
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
-adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc` and use the
-AsciiDoc adapter. `.rst` is `unparsed-markup`: this engine has no parser for it, so the file
-is discovered and counted as `unsupported-document-format` and its content is never read.
-Declaring it is the point, because a repository whose documentation is written in a markup
-this engine cannot read previously got an answer naming no documents at all, which reads like
-a clean scan rather than an empty one. `.txt` stays off both lists: the suffix says nothing
-about what is inside, and Django's reStructuredText documentation uses it, so a policy include
-is the way to name those. Every
+adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
+`structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside,
+and Django's reStructuredText documentation uses it, so a policy include is the way to name
+those. `unparsed-markup` now has no built-in suffix and exists for the classification a policy
+include reaches. Every
 other file is a possible reference target, not a built-in document. These rows come directly from the
 [classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
@@ -46,7 +43,7 @@ site/page.mdx               structured-mdx        scanned
 README                      extensionless-markdown scanned
 llms.txt                    plain-advisory        scanned, nothing extracted
 docs/guide.adoc             structured-asciidoc   scanned
-docs/guide.rst              unparsed-markup       discovered, never scanned
+docs/guide.rst              structured-rst        scanned
 vendor/lib/README.md        excluded              the vendor component is in the closed set
 src/parser.rs               not a document        a reference target only
 ```

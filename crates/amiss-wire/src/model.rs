@@ -538,6 +538,7 @@ pub enum Adapter {
     Markdown,
     Mdx,
     PlainAdvisory,
+    Rst,
 }
 
 impl Adapter {
@@ -553,6 +554,7 @@ impl Adapter {
             Self::Markdown => "markdown",
             Self::Mdx => "mdx",
             Self::AsciiDoc => "asciidoc",
+            Self::Rst => "rst",
             Self::PlainAdvisory => "plain-advisory",
         }
     }
@@ -563,6 +565,7 @@ impl Adapter {
             Self::Markdown => "amiss-markdown-adapter",
             Self::Mdx => "amiss-mdx-adapter",
             Self::AsciiDoc => "amiss-asciidoc-adapter",
+            Self::Rst => "amiss-rst-adapter",
             Self::PlainAdvisory => "amiss-plain-advisory",
         }
     }
@@ -573,6 +576,7 @@ impl Adapter {
             Self::Markdown => "commonmark-gfm",
             Self::Mdx => "mdx-source",
             Self::AsciiDoc => "asciidoctor-2",
+            Self::Rst => "docutils-rst",
             Self::PlainAdvisory => "plain-zero-lexer",
         }
     }
@@ -581,14 +585,14 @@ impl Adapter {
     pub const fn frontmatter_contract(self) -> &'static str {
         match self {
             Self::Markdown | Self::Mdx => "frontmatter",
-            Self::AsciiDoc | Self::PlainAdvisory => "none",
+            Self::AsciiDoc | Self::Rst | Self::PlainAdvisory => "none",
         }
     }
 
     #[must_use]
     pub const fn source_projection(self) -> &'static str {
         match self {
-            Self::Markdown | Self::Mdx | Self::AsciiDoc => "source-projection",
+            Self::Markdown | Self::Mdx | Self::AsciiDoc | Self::Rst => "source-projection",
             Self::PlainAdvisory => "none",
         }
     }
@@ -599,6 +603,7 @@ impl Adapter {
             Self::Markdown => "markdown-ast-node-path",
             Self::Mdx => "mdx-ast-node-path",
             Self::AsciiDoc => "asciidoc-block-path",
+            Self::Rst => "rst-block-path",
             Self::PlainAdvisory => "none",
         }
     }

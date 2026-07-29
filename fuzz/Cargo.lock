@@ -57,12 +57,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-rst"
+version = "0.12.0"
+dependencies = [
+ "amiss-wire",
+]
+
+[[package]]
 name = "amiss-scan"
 version = "0.12.0"
 dependencies = [
  "amiss-adoc",
  "amiss-git",
  "amiss-md",
+ "amiss-rst",
  "amiss-wire",
  "strum",
  "unicode-general-category",

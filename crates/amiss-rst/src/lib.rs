@@ -1,5 +1,8 @@
+pub mod adapter;
 pub mod block;
 pub mod directive;
+
+pub use adapter::analyze;
 
 pub use block::blocks;
 pub use directive::{references, target_definition, title_underline};

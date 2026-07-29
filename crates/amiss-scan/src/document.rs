@@ -8,6 +8,7 @@ pub enum Classification {
     StructuredMarkdown,
     StructuredMdx,
     StructuredAsciiDoc,
+    StructuredRst,
     ExtensionlessMarkdown,
     PlainAdvisory,
     UnparsedMarkup,
@@ -42,6 +43,7 @@ impl Classification {
             Self::StructuredMarkdown => "structured-markdown",
             Self::StructuredMdx => "structured-mdx",
             Self::StructuredAsciiDoc => "structured-asciidoc",
+            Self::StructuredRst => "structured-rst",
             Self::ExtensionlessMarkdown => "extensionless-markdown",
             Self::PlainAdvisory => "plain-advisory",
             Self::UnparsedMarkup => "unparsed-markup",
@@ -57,6 +59,7 @@ impl Classification {
             Self::StructuredMarkdown | Self::ExtensionlessMarkdown => Some(Adapter::Markdown),
             Self::StructuredMdx => Some(Adapter::Mdx),
             Self::StructuredAsciiDoc => Some(Adapter::AsciiDoc),
+            Self::StructuredRst => Some(Adapter::Rst),
             Self::PlainAdvisory => Some(Adapter::PlainAdvisory),
             Self::UnparsedMarkup | Self::PolicyIncluded => None,
         }
@@ -79,7 +82,7 @@ pub fn classify(path: &[u8]) -> Option<Classification> {
         return Some(Classification::StructuredAsciiDoc);
     }
     if path.ends_with(b".rst") {
-        return Some(Classification::UnparsedMarkup);
+        return Some(Classification::StructuredRst);
     }
     let basename = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
     if EXTENSIONLESS.iter().any(|name| name.as_bytes() == basename) {

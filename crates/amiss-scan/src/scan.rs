@@ -80,6 +80,7 @@ pub(crate) fn parse(
 ) -> Result<Analysis, AnalyzeError> {
     match adapter {
         Adapter::AsciiDoc => amiss_adoc::analyze(source),
+        Adapter::Rst => amiss_rst::analyze(source),
         Adapter::Markdown | Adapter::Mdx | Adapter::PlainAdvisory => {
             analyze(adapter, source, embedded_code_allowance)
         }

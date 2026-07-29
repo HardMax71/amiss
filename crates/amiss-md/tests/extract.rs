@@ -388,7 +388,7 @@ fn corpus_extraction_invariants_hold() {
                 Adapter::Mdx => {
                     assert_eq!(extraction.opaque.html, Vec::new(), "{}", case.case_id());
                 }
-                Adapter::AsciiDoc | Adapter::PlainAdvisory => {}
+                Adapter::AsciiDoc | Adapter::Rst | Adapter::PlainAdvisory => {}
             }
         }
     }
