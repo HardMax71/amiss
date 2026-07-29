@@ -846,7 +846,7 @@ fn a_policy_tree_include_covers_byte_named_documents() {
     .unwrap();
     let specs = amiss_fixtures::tree_object(
         root,
-        &[("100644", b"design-\xff.rst".as_slice(), hidden.as_str())],
+        &[("100644", b"design-\xff.tex".as_slice(), hidden.as_str())],
     )
     .unwrap();
     let tree = amiss_fixtures::tree_object(
@@ -881,7 +881,7 @@ fn a_policy_tree_include_covers_byte_named_documents() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|row| row["path"]["bytes_hex"] == "73706563732f64657369676e2dff2e727374")
+        .find(|row| row["path"]["bytes_hex"] == "73706563732f64657369676e2dff2e746578")
         .expect("the included byte-named document is published");
     assert_eq!(row["classification"], "policy-included");
 }

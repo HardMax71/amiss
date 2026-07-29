@@ -9,6 +9,7 @@ pub enum Classification {
     StructuredMdx,
     ExtensionlessMarkdown,
     PlainAdvisory,
+    UnparsedMarkup,
     PolicyIncluded,
 }
 
@@ -41,19 +42,20 @@ impl Classification {
             Self::StructuredMdx => "structured-mdx",
             Self::ExtensionlessMarkdown => "extensionless-markdown",
             Self::PlainAdvisory => "plain-advisory",
+            Self::UnparsedMarkup => "unparsed-markup",
             Self::PolicyIncluded => "policy-included",
         }
     }
 
-    /// The native adapter, where one exists: a policy include installs no
-    /// parser.
+    /// The native adapter, where one exists. A policy include installs no
+    /// parser, and neither does a markup this engine does not read.
     #[must_use]
     pub const fn adapter(self) -> Option<Adapter> {
         match self {
             Self::StructuredMarkdown | Self::ExtensionlessMarkdown => Some(Adapter::Markdown),
             Self::StructuredMdx => Some(Adapter::Mdx),
             Self::PlainAdvisory => Some(Adapter::PlainAdvisory),
-            Self::PolicyIncluded => None,
+            Self::UnparsedMarkup | Self::PolicyIncluded => None,
         }
     }
 }
@@ -69,6 +71,9 @@ pub fn classify(path: &[u8]) -> Option<Classification> {
     }
     if path.ends_with(b".mdx") {
         return Some(Classification::StructuredMdx);
+    }
+    if path.ends_with(b".rst") || path.ends_with(b".adoc") || path.ends_with(b".asciidoc") {
+        return Some(Classification::UnparsedMarkup);
     }
     let basename = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
     if EXTENSIONLESS.iter().any(|name| name.as_bytes() == basename) {
