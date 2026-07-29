@@ -7,6 +7,7 @@ members = [
   "crates/amiss-adoc",
   "crates/amiss-git",
   "crates/amiss-md",
+  "crates/amiss-rst",
   "crates/amiss-scan",
   "crates/amiss-wire",
   "controller",
