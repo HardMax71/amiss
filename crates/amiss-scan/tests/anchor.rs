@@ -267,7 +267,9 @@ fn a_heading_that_filters_to_nothing_diverges_by_empty_rule() {
     for rule in &RULES {
         let published = identities(rule, &headings);
         match rule.name {
-            "gitea" => assert!(published.is_empty(), "gitea publishes no anchor"),
+            "gitea" | "docutils" => {
+                assert!(published.is_empty(), "{} publishes no anchor", rule.name);
+            }
             "asciidoctor" => assert_eq!(published, vec!["_...".to_owned()]),
             "forgejo" | "goldmark" => assert_eq!(published, vec!["heading".to_owned()]),
             "kramdown" => assert_eq!(published, vec!["section".to_owned()]),
@@ -293,6 +295,35 @@ fn asciidoctor_publishes_its_generated_identity() {
         ("Ⅻ chapter", "__chapter"),
     ];
     for (text, want) in cases {
+        let heading = Heading {
+            text: text.to_owned(),
+            attribute: None,
+            source: HeadingSource::Markdown,
+            span: (0, text.len()),
+        };
+        assert_eq!(
+            identities(rule, &[heading]),
+            vec![want.to_owned()],
+            "{text}"
+        );
+    }
+}
+
+/// Docutils turns every non-alphanumeric run into one separator, which no other
+/// rule in the table does, and strips a leading digit run rather than prefixing.
+#[test]
+fn docutils_publishes_the_identity_make_id_computes() {
+    let rule = RULES
+        .iter()
+        .find(|rule| rule.name == "docutils")
+        .expect("the table holds the docutils rule");
+    for (text, want) in [
+        ("foo_bar baz", "foo-bar-baz"),
+        ("a.b.c", "a-b-c"),
+        ("3D printing", "d-printing"),
+        ("-hyphen-", "hyphen"),
+        ("Ⅻ chapter", "xii-chapter"),
+    ] {
         let heading = Heading {
             text: text.to_owned(),
             attribute: None,

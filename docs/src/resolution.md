@@ -122,10 +122,9 @@ through the Asciidoctor rule in
 [What eleven renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 
-A reStructuredText heading anchor is declared rather than answered, because no pinned rule
-publishes a Docutils identity yet, and an anchor no rule publishes is not evidence that the
-section is gone. What the adapter does publish is the labels a document declares outright with
-`.. _name:`, which resolve as themselves.
+A reStructuredText heading anchor resolves through the Docutils rule in
+[What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
+outright with `.. _name:` resolve as themselves.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even
