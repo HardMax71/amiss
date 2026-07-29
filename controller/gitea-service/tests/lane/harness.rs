@@ -112,7 +112,7 @@ impl Harness {
         let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
         let ledger = FileLedger::open_with_clock(
             &ledger_root,
-            FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+            FileLedgerConfig::new(LEASE_BEYOND_REACH, 32, replay).unwrap(),
             Arc::clone(&clock),
         )
         .unwrap();
@@ -383,9 +383,13 @@ fn directory(root: &TempDir, name: &str) -> PathBuf {
     path
 }
 
+const LEASE_BEYOND_REACH: Duration = Duration::from_hours(1);
+
 fn inbox_limits() -> InboxLimits {
     InboxLimits {
-        lease_duration: Duration::from_secs(2),
+        // Unreachable rather than generous: these tests measure process physics
+        // and publication, and lease expiry is tested at the receive loop.
+        lease_duration: LEASE_BEYOND_REACH,
         max_records: 16,
         max_bytes: 16_777_216,
         max_record_bytes: 2_097_152,
