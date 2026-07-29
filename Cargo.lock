@@ -379,6 +379,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "amiss-rst"
+version = "0.12.0"
+
+[[package]]
 name = "amiss-scan"
 version = "0.12.0"
 dependencies = [
