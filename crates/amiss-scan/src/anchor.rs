@@ -48,6 +48,7 @@ pub enum Separators {
     Whitespace,
     WhitespaceUnderscore,
     MditVuePunctuation,
+    NonAlphanumeric,
 }
 
 /// When whitespace is trimmed: never, before the filter runs, or after
@@ -148,7 +149,7 @@ pub struct AnchorRule {
 /// Every renderer rule the resolver knows. Adding one can only grow the set an
 /// anchor may match, so the set is the union and a missing rule is the only
 /// way to report a live anchor as absent.
-pub const RULES: [AnchorRule; 11] = [
+pub const RULES: [AnchorRule; 12] = [
     AnchorRule {
         name: "github",
         typography: Typography::Plain,
@@ -366,6 +367,26 @@ pub const RULES: [AnchorRule; 11] = [
         prefix: Some("_"),
         empty: Empty::Drop,
         duplicates: Duplicates::UnderscoreFromTwo,
+        attribute: Attribute::Literal,
+        raw_html: RawHtml::Ignored,
+    },
+    AnchorRule {
+        name: "docutils",
+        typography: Typography::Plain,
+        normalize: Normalize::Nfkd,
+        fold: Fold::AsciiIgnore,
+        head: Head::StripNonLetter,
+        trim: Trim::Before,
+        case: Case::SimpleAfterFilter,
+        keep: Keep::AsciiAlphanumeric,
+        separators: Separators::NonAlphanumeric,
+        runs: Runs::Collapse,
+        edges: Edges::Trim,
+        leading_digit_prefix: None,
+        separator: '-',
+        prefix: None,
+        empty: Empty::Drop,
+        duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
     },
@@ -596,6 +617,7 @@ fn is_separator(separators: Separators, ch: char) -> bool {
         Separators::Space => ch == ' ',
         Separators::Whitespace => ch.is_whitespace(),
         Separators::WhitespaceUnderscore => ch.is_whitespace() || ch == '_',
+        Separators::NonAlphanumeric => !ch.is_ascii_alphanumeric(),
         Separators::MditVuePunctuation => {
             ch.is_whitespace()
                 || matches!(

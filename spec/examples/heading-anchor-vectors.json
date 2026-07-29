@@ -112,7 +112,8 @@
         "pymdownx": "setup--config",
         "mdit-vue": "setup-config",
         "kramdown": "setup--config",
-        "asciidoctor": "_setup_config"
+        "asciidoctor": "_setup_config",
+        "docutils": "setup-config"
       }
     },
     {
@@ -130,7 +131,8 @@
         "pymdownx": "foo_bar-baz",
         "mdit-vue": "foo-bar-baz",
         "kramdown": "foobar-baz",
-        "asciidoctor": "_foo_bar_baz"
+        "asciidoctor": "_foo_bar_baz",
+        "docutils": "foo-bar-baz"
       }
     },
     {
@@ -148,7 +150,8 @@
         "pymdownx": "a----b",
         "mdit-vue": "a-b",
         "kramdown": "a----b",
-        "asciidoctor": "_a_--_b"
+        "asciidoctor": "_a_--_b",
+        "docutils": "a-b"
       }
     },
     {
@@ -166,7 +169,8 @@
         "pymdownx": "a--b",
         "mdit-vue": "a-b",
         "kramdown": "a--b",
-        "asciidoctor": "_a_..._b"
+        "asciidoctor": "_a_..._b",
+        "docutils": "a-b"
       }
     },
     {
@@ -184,7 +188,8 @@
         "pymdownx": "a--b",
         "mdit-vue": "a-b",
         "kramdown": "a--b",
-        "asciidoctor": "_a_b"
+        "asciidoctor": "_a_b",
+        "docutils": "a-b"
       }
     },
     {
@@ -202,7 +207,8 @@
         "pymdownx": "100",
         "mdit-vue": "_100",
         "kramdown": "section",
-        "asciidoctor": "_100"
+        "asciidoctor": "_100",
+        "docutils": null
       }
     },
     {
@@ -220,7 +226,8 @@
         "pymdownx": "2026",
         "mdit-vue": "_2026",
         "kramdown": "section",
-        "asciidoctor": "_2026"
+        "asciidoctor": "_2026",
+        "docutils": null
       }
     },
     {
@@ -238,7 +245,8 @@
         "pymdownx": "3d-printing",
         "mdit-vue": "_3d-printing",
         "kramdown": "d-printing",
-        "asciidoctor": "_3d_printing"
+        "asciidoctor": "_3d_printing",
+        "docutils": "d-printing"
       }
     },
     {
@@ -256,7 +264,8 @@
         "pymdownx": "-hyphen-",
         "mdit-vue": "hyphen",
         "kramdown": "hyphen-",
-        "asciidoctor": "_-hyphen-"
+        "asciidoctor": "_-hyphen-",
+        "docutils": "hyphen"
       }
     },
     {
@@ -274,7 +283,8 @@
         "pymdownx": "abc",
         "mdit-vue": "a-b-c",
         "kramdown": "abc",
-        "asciidoctor": "_a.b.c"
+        "asciidoctor": "_a.b.c",
+        "docutils": "a-b-c"
       }
     },
     {
@@ -292,7 +302,8 @@
         "pymdownx": "c--c",
         "mdit-vue": "c-c",
         "kramdown": "c--c",
-        "asciidoctor": "_c_c"
+        "asciidoctor": "_c_c",
+        "docutils": "c-c"
       }
     },
     {
@@ -310,7 +321,8 @@
         "pymdownx": "what-is-code",
         "mdit-vue": "what-is-code",
         "kramdown": "what-is-code",
-        "asciidoctor": "_what_is_code"
+        "asciidoctor": "_what_is_code",
+        "docutils": "what-is-code"
       }
     },
     {
@@ -328,7 +340,8 @@
         "pymdownx": "résumé--cv",
         "mdit-vue": "resume-cv",
         "kramdown": "rsum--cv",
-        "asciidoctor": "_rsum_cv"
+        "asciidoctor": "_rsum_cv",
+        "docutils": "resume-cv"
       }
     },
     {
@@ -346,7 +359,8 @@
         "pymdownx": "café-latte",
         "mdit-vue": "cafe-latte",
         "kramdown": "cafe-latte",
-        "asciidoctor": "_cafe_latte"
+        "asciidoctor": "_cafe_latte",
+        "docutils": "cafe-latte"
       }
     },
     {
@@ -364,7 +378,8 @@
         "pymdownx": "istanbul",
         "mdit-vue": "istanbul",
         "kramdown": "stanbul",
-        "asciidoctor": "_stanbul"
+        "asciidoctor": "_stanbul",
+        "docutils": "istanbul"
       }
     },
     {
@@ -382,7 +397,8 @@
         "pymdownx": "日本語の見出し",
         "mdit-vue": "日本語の見出し",
         "kramdown": "section",
-        "asciidoctor": null
+        "asciidoctor": null,
+        "docutils": null
       }
     },
     {
@@ -400,7 +416,8 @@
         "pymdownx": "ইনসটল",
         "mdit-vue": "ইন্সটল",
         "kramdown": "section",
-        "asciidoctor": null
+        "asciidoctor": null,
+        "docutils": null
       }
     },
     {
@@ -418,7 +435,8 @@
         "pymdownx": "emoji--party",
         "mdit-vue": "emoji-🎉-party",
         "kramdown": "emoji--party",
-        "asciidoctor": "_emoji_party"
+        "asciidoctor": "_emoji_party",
+        "docutils": "emoji-party"
       }
     },
     {
@@ -436,7 +454,8 @@
         "pymdownx": "-sponsors",
         "mdit-vue": "❤️-sponsors",
         "kramdown": "sponsors",
-        "asciidoctor": "__sponsors"
+        "asciidoctor": "__sponsors",
+        "docutils": "sponsors"
       }
     },
     {
@@ -454,7 +473,8 @@
         "pymdownx": "第-1-章",
         "mdit-vue": "第-1-章",
         "kramdown": "section",
-        "asciidoctor": "__1"
+        "asciidoctor": "__1",
+        "docutils": null
       }
     },
     {
@@ -472,7 +492,8 @@
         "pymdownx": "_1",
         "mdit-vue": "",
         "kramdown": "section",
-        "asciidoctor": "_..."
+        "asciidoctor": "_...",
+        "docutils": null
       }
     },
     {
@@ -490,7 +511,8 @@
         "pymdownx": "ünïcödé-ähnlich",
         "mdit-vue": "unicode-ahnlich",
         "kramdown": "ncd-hnlich",
-        "asciidoctor": "_ncd_hnlich"
+        "asciidoctor": "_ncd_hnlich",
+        "docutils": "unicode-ahnlich"
       }
     },
     {
@@ -508,7 +530,8 @@
         "pymdownx": "ⅻ-chapter",
         "mdit-vue": "xii-chapter",
         "kramdown": "chapter",
-        "asciidoctor": "__chapter"
+        "asciidoctor": "__chapter",
+        "docutils": "xii-chapter"
       }
     },
     {
@@ -526,7 +549,8 @@
         "pymdownx": "commandduration",
         "mdit-vue": "command-duration",
         "kramdown": "commandduration",
-        "asciidoctor": "_commandduration"
+        "asciidoctor": "_commandduration",
+        "docutils": "command-duration"
       }
     }
   ],
