@@ -15,14 +15,49 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Listing needs no build, so the shard count comes from the real mutant
+  # count rather than from a guess about how large a change is.
+  diff-plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      shards: ${{ steps.split.outputs.shards }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/tools
+      # A diff of anything but the checked-out tree refuses with exit 5.
+      - if: ${{ !startsWith(github.head_ref, 'release-plz-') }}
+        run: git diff "origin/$BASE_REF".. > git.diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+      - if: startsWith(github.head_ref, 'release-plz-')
+        run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
+      - id: split
+        env:
+          PER_SHARD: "5"
+          MAX_SHARDS: "8"
+        run: |
+          set -euo pipefail
+          total=$(cargo mutants --list --in-diff git.diff | { grep -c . || :; })
+          shards=$(( (total + PER_SHARD - 1) / PER_SHARD ))
+          if [ "$shards" -gt "$MAX_SHARDS" ]; then shards="$MAX_SHARDS"; fi
+          if [ "$shards" -lt 1 ]; then shards=1; fi
+          echo "shards=[$(seq -s, 0 $((shards - 1)))]" >> "$GITHUB_OUTPUT"
+          echo "$total mutants over $shards shards" >> "$GITHUB_STEP_SUMMARY"
+
   incremental:
     if: github.event_name == 'pull_request'
+    needs: diff-plan
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: ${{ fromJSON(needs.diff-plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
