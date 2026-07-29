@@ -4,6 +4,7 @@ members = [
   "crates/amiss",
   "crates/amiss-bootstrap",
   "crates/amiss-fixtures",
+  "crates/amiss-adoc",
   "crates/amiss-git",
   "crates/amiss-md",
   "crates/amiss-scan",
