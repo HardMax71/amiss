@@ -144,7 +144,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: cargo publish --dry-run --workspace --locked
+      # cargo publish --dry-run prefers a version already on crates.io over the
+      # tree, so it cannot verify a crate this change is adding to.
+      - shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t members < <(cargo metadata --locked --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.publish == null) | "-p\n\(.name)"')
+          cargo package --locked "${members[@]}"
 
   platform-tests:
     strategy:
