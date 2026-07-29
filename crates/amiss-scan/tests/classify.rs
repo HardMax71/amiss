@@ -130,19 +130,23 @@ fn excluded_trees_are_directory_components() {
 
 #[test]
 fn a_markup_with_no_parser_is_a_document_that_is_never_read() {
-    for path in [
-        &b"docs/guide.rst"[..],
-        b"docs/guide.adoc",
-        b"docs/guide.asciidoc",
-    ] {
+    assert_eq!(
+        classify(b"docs/guide.rst"),
+        Some(Classification::UnparsedMarkup),
+    );
+    assert_eq!(Classification::UnparsedMarkup.adapter(), None);
+    for path in [&b"docs/guide.adoc"[..], b"docs/guide.asciidoc"] {
         assert_eq!(
             classify(path),
-            Some(Classification::UnparsedMarkup),
+            Some(Classification::StructuredAsciiDoc),
             "{}",
             String::from_utf8_lossy(path),
         );
     }
-    assert_eq!(Classification::UnparsedMarkup.adapter(), None);
+    assert_eq!(
+        Classification::StructuredAsciiDoc.adapter(),
+        Some(Adapter::AsciiDoc),
+    );
     for path in [&b"docs/guide.txt"[..], b"docs/guide.rst.bak", b"docs/RST"] {
         assert_ne!(
             classify(path),

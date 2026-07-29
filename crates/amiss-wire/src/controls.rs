@@ -175,6 +175,12 @@ pub enum SourceConstruct {
     FullReferenceImage,
     CollapsedReferenceImage,
     ShortcutReferenceImage,
+    AsciidocCrossReference,
+    AsciidocInternalCrossReference,
+    AsciidocLinkMacro,
+    AsciidocBlockImage,
+    AsciidocInlineImage,
+    AsciidocInclude,
 }
 
 impl SourceConstruct {
@@ -186,12 +192,18 @@ impl SourceConstruct {
             Self::InlineImage
             | Self::FullReferenceImage
             | Self::CollapsedReferenceImage
-            | Self::ShortcutReferenceImage => true,
+            | Self::ShortcutReferenceImage
+            | Self::AsciidocBlockImage
+            | Self::AsciidocInlineImage => true,
             Self::InlineLink
             | Self::FullReferenceLink
             | Self::CollapsedReferenceLink
             | Self::ShortcutReferenceLink
-            | Self::Autolink => false,
+            | Self::Autolink
+            | Self::AsciidocCrossReference
+            | Self::AsciidocInternalCrossReference
+            | Self::AsciidocLinkMacro
+            | Self::AsciidocInclude => false,
         }
     }
 
@@ -207,6 +219,12 @@ impl SourceConstruct {
             Self::FullReferenceImage => "markdown-full-reference-image",
             Self::CollapsedReferenceImage => "markdown-collapsed-reference-image",
             Self::ShortcutReferenceImage => "markdown-shortcut-reference-image",
+            Self::AsciidocCrossReference => "asciidoc-xref-macro",
+            Self::AsciidocInternalCrossReference => "asciidoc-internal-xref",
+            Self::AsciidocLinkMacro => "asciidoc-link-macro",
+            Self::AsciidocBlockImage => "asciidoc-block-image",
+            Self::AsciidocInlineImage => "asciidoc-inline-image",
+            Self::AsciidocInclude => "asciidoc-include",
         }
     }
 
@@ -221,6 +239,12 @@ impl SourceConstruct {
             "markdown-full-reference-image" => Ok(Self::FullReferenceImage),
             "markdown-collapsed-reference-image" => Ok(Self::CollapsedReferenceImage),
             "markdown-shortcut-reference-image" => Ok(Self::ShortcutReferenceImage),
+            "asciidoc-xref-macro" => Ok(Self::AsciidocCrossReference),
+            "asciidoc-internal-xref" => Ok(Self::AsciidocInternalCrossReference),
+            "asciidoc-link-macro" => Ok(Self::AsciidocLinkMacro),
+            "asciidoc-block-image" => Ok(Self::AsciidocBlockImage),
+            "asciidoc-inline-image" => Ok(Self::AsciidocInlineImage),
+            "asciidoc-include" => Ok(Self::AsciidocInclude),
             _ => fail(path, ErrorKind::InvalidValue),
         }
     }

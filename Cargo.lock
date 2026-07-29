@@ -80,6 +80,9 @@ dependencies = [
 [[package]]
 name = "amiss-adoc"
 version = "0.12.0"
+dependencies = [
+ "amiss-wire",
+]
 
 [[package]]
 name = "amiss-bootstrap"
@@ -379,6 +382,7 @@ dependencies = [
 name = "amiss-scan"
 version = "0.12.0"
 dependencies = [
+ "amiss-adoc",
  "amiss-fixtures",
  "amiss-git",
  "amiss-md",

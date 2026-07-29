@@ -176,11 +176,19 @@ pub fn resolve(
     cache: &mut TargetCache,
     snapshot: &SnapshotDiscovery,
     context: Option<&ForgeContext>,
+    adapter: Adapter,
     document_path: &RepoPath,
     is_image: bool,
     semantic: &str,
 ) -> Result<(Intent, Resolution), Error> {
     cache.bind(scan.cache_scope());
+    if adapter == Adapter::AsciiDoc && (is_image || awaits_attribute(semantic)) {
+        let (_, query, fragment) = split_components(semantic);
+        return Ok((
+            unsupported_intent(query, fragment),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+        ));
+    }
     let (path_part, query, fragment) = split_components(semantic);
 
     if let Some(raw_fragment) = &fragment
@@ -214,6 +222,12 @@ pub fn resolve(
                 fragment,
             },
             Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
+        ));
+    }
+    if adapter == Adapter::AsciiDoc && names_a_page_identity(&path_part) {
+        return Ok((
+            unsupported_intent(query, fragment),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
         ));
     }
     native(
@@ -554,6 +568,38 @@ fn routed(snapshot: &SnapshotDiscovery, path: &RepoPath, target_kind: TargetKind
         .map_or_else(|| path.clone(), |(_, candidate)| candidate)
 }
 
+/// A cross reference whose last segment carries no extension names a page in
+/// the site's own catalogue, which this engine does not build, so it is
+/// declared rather than looked up as a file that was never written.
+fn names_a_page_identity(path_part: &str) -> bool {
+    path_part
+        .rsplit('/')
+        .next()
+        .is_some_and(|segment| !segment.is_empty() && !segment.contains('.'))
+}
+
+/// A destination still holding `{name}` needs a value that arrives when the
+/// site is built, and this engine reads two trees. An image macro is the same
+/// case without the syntax, since `imagesdir` prepends its directory.
+fn awaits_attribute(semantic: &str) -> bool {
+    let mut rest = semantic;
+    while let Some(open) = rest.find('{') {
+        let after = rest.get(open.saturating_add(1)..).unwrap_or_default();
+        if let Some(close) = after.find('}')
+            && close > 0
+            && after.get(..close).is_some_and(|name| {
+                name.chars().all(|character| {
+                    character.is_alphanumeric() || character == '-' || character == '_'
+                })
+            })
+        {
+            return true;
+        }
+        rest = after;
+    }
+    false
+}
+
 /// The last question a path the tree does not hold is asked. Only ignore files
 /// on its own ancestor chain can name it, and the nearest one answers, so the
 /// report carries the declaration closest to the target.
@@ -871,6 +917,10 @@ fn fragment_resolution(
         return line_resolution(scan, cache, path, mode, blob, range);
     }
     match classify(path.as_bytes()) {
+        // No rule publishes an AsciiDoc heading identity yet, so none is guessed.
+        Some(Classification::StructuredAsciiDoc) => Ok(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::Fragment(blob),
+        )),
         Some(classification) => match classification.adapter() {
             Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(

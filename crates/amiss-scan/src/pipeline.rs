@@ -99,6 +99,7 @@ pub(crate) fn side_observations(
                         &mut cache,
                         discovery,
                         forge,
+                        adapter,
                         &record.path,
                         occurrence.occurrence.construct.is_image(),
                         &occurrence.occurrence.semantic_destination,

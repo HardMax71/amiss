@@ -16,7 +16,7 @@ use amiss_scan::{
     resolve,
 };
 use amiss_wire::controls::SourceConstruct;
-use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     ExternalReference, InvalidReference, Missing, Target, UnsupportedSemantics, VersionScope,
@@ -94,6 +94,7 @@ impl Bed {
             &mut self.cache,
             &self.discovery,
             context,
+            Adapter::Markdown,
             &document,
             is_image,
             destination,

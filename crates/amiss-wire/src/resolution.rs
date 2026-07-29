@@ -125,6 +125,7 @@ pub enum UnsupportedSemantics<P> {
     CodeFragment(Target<P>),
     SiteRoute,
     NetworkPath,
+    AttributeDependent,
 }
 
 impl<P> UnsupportedSemantics<P> {
@@ -133,7 +134,7 @@ impl<P> UnsupportedSemantics<P> {
         match self {
             Self::Query(target) | Self::CodeFragment(target) => target.is_lfs_pointer(),
             Self::Fragment(blob) => blob.content.is_lfs_pointer(),
-            Self::SiteRoute | Self::NetworkPath => false,
+            Self::SiteRoute | Self::NetworkPath | Self::AttributeDependent => false,
         }
     }
 }

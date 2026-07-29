@@ -614,6 +614,34 @@
           "if": {
             "properties": {
               "adapter_id": {
+                "const": "asciidoc"
+              }
+            },
+            "required": [
+              "adapter_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "grammar_profile": {
+                "const": "asciidoctor-2"
+              },
+              "frontmatter_contract": {
+                "const": "none"
+              },
+              "source_projection": {
+                "const": "source-projection"
+              },
+              "structural_address": {
+                "const": "asciidoc-block-path"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "adapter_id": {
                 "const": "plain-advisory"
               }
             },
@@ -657,6 +685,7 @@
           "enum": [
             "markdown",
             "mdx",
+            "asciidoc",
             "plain-advisory"
           ]
         },
@@ -694,6 +723,7 @@
           "enum": [
             "markdown-ast-node-path",
             "mdx-ast-node-path",
+            "asciidoc-block-path",
             "none"
           ]
         }
@@ -712,6 +742,7 @@
           "enum": [
             "markdown",
             "mdx",
+            "asciidoc",
             "plain-advisory"
           ]
         },
@@ -1148,7 +1179,7 @@
         "adapters": {
           "type": "array",
           "minItems": 3,
-          "maxItems": 3,
+          "maxItems": 4,
           "uniqueItems": true,
           "description": "Sorted by adapter_id UTF-8 bytes.",
           "x-amiss-order": [
@@ -2032,6 +2063,7 @@
           "enum": [
             "structured-markdown",
             "structured-mdx",
+        "structured-asciidoc",
             "extensionless-markdown",
             "plain-advisory",
             "policy-included"
@@ -2587,7 +2619,8 @@
         "reason": {
           "enum": [
             "site-route",
-            "network-path"
+            "network-path",
+            "attribute-dependent"
           ]
         }
       }
@@ -2706,7 +2739,13 @@
         "markdown-inline-image",
         "markdown-full-reference-image",
         "markdown-collapsed-reference-image",
-        "markdown-shortcut-reference-image"
+        "markdown-shortcut-reference-image",
+        "asciidoc-xref-macro",
+        "asciidoc-internal-xref",
+        "asciidoc-link-macro",
+        "asciidoc-block-image",
+        "asciidoc-inline-image",
+        "asciidoc-include"
       ]
     },
     "ObservationSourceConstruct": {

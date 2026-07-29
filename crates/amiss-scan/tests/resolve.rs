@@ -15,7 +15,7 @@ use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::ForgeDialect;
-use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, ExternalReference, InvalidReference, Missing, Target,
@@ -137,6 +137,7 @@ impl Bed {
             &mut self.cache,
             &self.snapshot,
             context,
+            Adapter::Markdown,
             &document,
             is_image,
             destination,
@@ -1190,6 +1191,7 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
             &mut cache,
             &from_tree,
             None,
+            Adapter::Markdown,
             &RepoPath::new("docs/guide.md".to_owned()).unwrap(),
             false,
             reference,
@@ -1203,6 +1205,7 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
             &mut cache,
             &from_index,
             None,
+            Adapter::Markdown,
             &RepoPath::new("docs/guide.md".to_owned()).unwrap(),
             false,
             reference,

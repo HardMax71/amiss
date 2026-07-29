@@ -80,6 +80,7 @@ fn snapshot(
                 &mut cache,
                 &discovery,
                 None,
+                adapter,
                 &record.path,
                 is_image,
                 &occurrence.occurrence.semantic_destination,

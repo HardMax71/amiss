@@ -960,7 +960,7 @@ impl FindingKind {
                 "a reference names a path a tracked ignore file names literally, so the repository declares it does not keep that target and no tree can answer for the link; the reference is recorded and counted, never cleared"
             }
             Self::UnsupportedReferenceSemantics => {
-                "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, or a fragment on a target it cannot parse; the unchecked part is declared instead of guessed"
+                "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, a destination that needs a document attribute this run does not evaluate, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed"
             }
             Self::UnsupportedDocumentFormat => {
                 "a document this run discovered has no parser in this engine, whether a markup it does not read or a policy include; it is counted, and its content is never scanned"
