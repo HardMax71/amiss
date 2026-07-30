@@ -22,7 +22,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Snapshots](https://hardmax71.github.io/amiss/snapshots.html): the base and candidate trees, commit and staged-index addressing
 - [Discovery](https://hardmax71.github.io/amiss/discovery.html): which files count as documents and which trees are always skipped
 - [Resolution](https://hardmax71.github.io/amiss/resolution.html): how each destination resolves, the forge dialects, line anchors, and heading anchors
-- [What ten renderers call a heading](https://hardmax71.github.io/amiss/anchor-rules.html): the pinned slugging rules, what each was checked against, and how far apart they are
+- [What twelve renderers call a heading](https://hardmax71.github.io/amiss/anchor-rules.html): the pinned slugging rules, what each was checked against, and how far apart they are
 - [What a documentation router serves](https://hardmax71.github.io/amiss/route-spellings.html): the harvested route spellings, the routers behind them, and what a spelling can never do
 - [Correlation and impact](https://hardmax71.github.io/amiss/correlation.html): pairing occurrences across the comparison and the impact quadrant
 - [The report](https://hardmax71.github.io/amiss/report.html): the canonical JSON wire, row descriptions, and the human projection
@@ -38,6 +38,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [GitLab provider lane](https://hardmax71.github.io/amiss/provider-gitlab.html): merge-train policy job, OIDC binding, service configuration, and job evidence
 - [Gitea and Forgejo provider lane](https://hardmax71.github.io/amiss/provider-gitea.html): dedicated reviewer, strict branch rule, service configuration, and review evidence
 - [Controller delivery](https://hardmax71.github.io/amiss/controller.html): authenticated delivery, temporary ownership, saved results, and retries
+- [The file ledger](https://hardmax71.github.io/amiss/file-ledger.html): the on-disk store behind delivery records, its locks, and what cleanup may remove
 
 ## The project
 
@@ -51,5 +52,10 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Project status](https://hardmax71.github.io/amiss/status.html): what is delivered, source-built, self-asserted, or not yet built
 - [The scan ledger](https://hardmax71.github.io/amiss/ledger.html): the counted shadow scans behind the validation phase, one recorded row per repository
 - [Retained provider runs](https://hardmax71.github.io/amiss/provider-evidence.html): live positive and revoked-control runs per provider, with the version, controller commit, and provider evidence
-- [Completed phases](https://hardmax71.github.io/amiss/completed-phases.html): the closed phases, one page each, stating what every claim defends and where it landed
 - [Roadmap](https://hardmax71.github.io/amiss/roadmap.html): what comes next and in what order
+- [Completed phases](https://hardmax71.github.io/amiss/completed-phases.html): the closed phases, one page each, stating what every claim defends and where it landed
+- [Validation and hardening](https://hardmax71.github.io/amiss/completed/validation-and-hardening.html): generated contract tables, shadow scans over foreign repositories, and the hardening they forced
+- [Delivery record](https://hardmax71.github.io/amiss/completed/delivery-record.html): how the controller keeps one verdict through crashes, retries, and clock movement
+- [Provider-verified controls](https://hardmax71.github.io/amiss/completed/provider-verified-controls.html): how the gate became an object the provider owns and the checked repository cannot forge
+- [Provider operations](https://hardmax71.github.io/amiss/completed/provider-operations.html): deploying, watching, and restarting the provider lanes without losing work
+- [Reference coverage](https://hardmax71.github.io/amiss/completed/reference-coverage.html): the four resolver classes the scan ledger named, answered here or refused with a measurement
