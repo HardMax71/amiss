@@ -3,7 +3,7 @@ use std::time::Duration;
 use amiss_controller::{DeliveryHeader, IngressError, SignedTimePolicy};
 
 use super::support::{
-    BODY, FixedClock, GITHUB_HEADERS, GITLAB_BODY, GITLAB_HEADERS, GITLAB_NOW, delivery,
+    BODY, GITHUB_HEADERS, GITLAB_BODY, GITLAB_HEADERS, GITLAB_NOW, TestClock, delivery,
     github_proof, github_verified, gitlab_verified, opaque, policy, provider, raw, route,
 };
 
@@ -14,7 +14,7 @@ fn route_and_trust_set_must_match_after_authentication() -> Result<(), IngressEr
     let check = policy
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     let wrong_trust = github_verified(check, &route.provider, opaque("other-keyring"));
@@ -42,7 +42,7 @@ fn proof_is_bound_to_every_raw_request_byte() -> Result<(), IngressError> {
     let signed = policy
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     let proof = github_verified(signed, &route.provider, route.trust_set.clone());
@@ -50,7 +50,7 @@ fn proof_is_bound_to_every_raw_request_byte() -> Result<(), IngressError> {
     let changed_body = policy
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, b"{}"),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     assert_eq!(
@@ -65,7 +65,7 @@ fn proof_is_bound_to_every_raw_request_byte() -> Result<(), IngressError> {
     let changed_header = policy
         .pre_auth(
             raw(&route, 1_000, &changed_headers, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     assert_eq!(
@@ -76,13 +76,13 @@ fn proof_is_bound_to_every_raw_request_byte() -> Result<(), IngressError> {
     let changed_receipt = policy
         .pre_auth(
             raw(&route, 1_001, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_001)),
+            &*TestClock::at(1_001),
         )
         .unwrap();
     let original = policy
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     let proof = github_verified(original, &route.provider, route.trust_set.clone());
@@ -102,14 +102,14 @@ fn identical_bytes_on_another_route_do_not_share_a_proof() -> Result<(), Ingress
     let check_a = policy
         .pre_auth(
             raw(&route_a, 1_000, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     let proof_a = github_verified(check_a, &route_b.provider, route_b.trust_set.clone());
     let check_b = policy
         .pre_auth(
             raw(&route_b, 1_000, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
 
@@ -127,7 +127,7 @@ fn replay_identity_is_normalized_only_after_verification() -> Result<(), Ingress
     let signed_check = policy
         .pre_auth(
             raw(&signed_route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
-            &FixedClock(Some(GITLAB_NOW)),
+            &*TestClock::at(GITLAB_NOW),
         )
         .unwrap();
     let signed = policy
@@ -149,7 +149,7 @@ fn replay_identity_is_normalized_only_after_verification() -> Result<(), Ingress
     let exact_check = policy
         .pre_auth(
             raw(&exact_route, GITLAB_NOW, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(GITLAB_NOW)),
+            &*TestClock::at(GITLAB_NOW),
         )
         .unwrap();
     let exact = policy
@@ -181,7 +181,7 @@ fn debug_output_never_contains_raw_credentials_or_body() -> Result<(), IngressEr
     }];
     let request = raw(&route, 1_000, &headers, body);
     let checked = policy(Duration::from_secs(1), Duration::ZERO)?
-        .pre_auth(request, &FixedClock(Some(1_000)))
+        .pre_auth(request, &*TestClock::at(1_000))
         .unwrap();
     let rendered = format!("{request:?} {checked:?} {:?}", headers[0]);
 
@@ -192,7 +192,7 @@ fn debug_output_never_contains_raw_credentials_or_body() -> Result<(), IngressEr
     let valid = policy(Duration::from_secs(1), Duration::ZERO)?
         .pre_auth(
             raw(&route, 1_000, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(1_000)),
+            &*TestClock::at(1_000),
         )
         .unwrap();
     let proof = github_proof(valid, route.trust_set.clone());

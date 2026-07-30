@@ -194,7 +194,7 @@ pub fn accept(
     };
     let policy = ingress();
     let check = policy
-        .pre_auth(raw, &TestClock(now_millis(now)))
+        .pre_auth(raw, &*TestClock::at(now_millis(now)))
         .map_err(|_error| "pre-auth")?;
     let verified = source
         .authenticate(check)
@@ -240,7 +240,7 @@ fn verify_token(
                 headers: &headers,
                 body,
             },
-            &TestClock(now_millis(now)),
+            &*TestClock::at(now_millis(now)),
         )
         .unwrap();
     source.authenticate(check)

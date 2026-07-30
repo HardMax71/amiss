@@ -99,6 +99,7 @@ name = "amiss-controller"
 version = "0.12.0"
 dependencies = [
  "amiss-bootstrap",
+ "amiss-controller-fixtures",
  "amiss-fixtures",
  "amiss-git",
  "amiss-wire",
@@ -198,6 +199,7 @@ name = "amiss-controller-gitea"
 version = "0.12.0"
 dependencies = [
  "amiss-controller",
+ "amiss-controller-fixtures",
  "amiss-wire",
  "hex",
  "hmac",

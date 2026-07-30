@@ -1,19 +1,11 @@
+pub use amiss_controller_fixtures::clock::TestClock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use amiss_controller::{ControllerClock, ProviderIdentity, ProviderInstance, ProviderNamespace};
+use amiss_controller::{ProviderIdentity, ProviderInstance, ProviderNamespace};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 pub const HOST: &str = "gitlab.example";
 pub const PROJECT_PATH: &str = "acme/widget";
-
-#[derive(Clone)]
-pub struct TestClock(pub i64);
-
-impl ControllerClock for TestClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(self.0)
-    }
-}
 
 pub fn now_seconds() -> u64 {
     SystemTime::now()

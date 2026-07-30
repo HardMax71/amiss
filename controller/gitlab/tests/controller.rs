@@ -113,9 +113,8 @@ fn lane(now: u64, transform: fn(RunIdentity) -> RunIdentity) -> Lane {
     register_plan(&mut plans, scope(&delivery), plan()).unwrap();
     let replay = ReplayWindow::new(Duration::from_mins(10), Duration::from_mins(1)).unwrap();
     let root = TestRoot::new();
-    let clock: Arc<dyn amiss_controller::ControllerClock> = Arc::new(TestClock(
-        i64::try_from(now).unwrap().checked_mul(1_000).unwrap(),
-    ));
+    let clock: Arc<dyn amiss_controller::ControllerClock> =
+        TestClock::at(i64::try_from(now).unwrap().checked_mul(1_000).unwrap());
     let ledger = FileLedger::open_with_clock(
         &root.0,
         FileLedgerConfig::new(Duration::from_secs(30), 100, replay).unwrap(),

@@ -5,7 +5,7 @@ use amiss_controller::{
 };
 
 use super::support::{
-    BODY, FixedClock, GITHUB_HEADERS, GITLAB_BODY, GITLAB_HEADERS, GITLAB_NOW, github_verified,
+    BODY, GITHUB_HEADERS, GITLAB_BODY, GITLAB_HEADERS, GITLAB_NOW, TestClock, github_verified,
     gitlab_verified, policy, raw, route,
 };
 
@@ -18,7 +18,7 @@ fn required_signed_time_boundaries_are_inclusive() -> Result<(), IngressError> {
         let check = policy
             .pre_auth(
                 raw(&route, received_at, GITLAB_HEADERS, GITLAB_BODY),
-                &FixedClock(Some(received_at)),
+                &*TestClock::at(received_at),
             )
             .unwrap();
         let verified = gitlab_verified(check, &route.provider);
@@ -29,7 +29,7 @@ fn required_signed_time_boundaries_are_inclusive() -> Result<(), IngressError> {
         let check = policy
             .pre_auth(
                 raw(&route, received_at, GITLAB_HEADERS, GITLAB_BODY),
-                &FixedClock(Some(received_at)),
+                &*TestClock::at(received_at),
             )
             .unwrap();
         let verified = gitlab_verified(check, &route.provider);
@@ -49,7 +49,7 @@ fn signed_time_cannot_be_missing_or_downgraded() -> Result<(), IngressError> {
     let check = policy
         .pre_auth(
             raw(&required_route, GITLAB_NOW, GITHUB_HEADERS, BODY),
-            &FixedClock(Some(GITLAB_NOW)),
+            &*TestClock::at(GITLAB_NOW),
         )
         .unwrap();
     let verified = github_verified(
@@ -66,7 +66,7 @@ fn signed_time_cannot_be_missing_or_downgraded() -> Result<(), IngressError> {
     let check = policy
         .pre_auth(
             raw(&replay_route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
-            &FixedClock(Some(GITLAB_NOW)),
+            &*TestClock::at(GITLAB_NOW),
         )
         .unwrap();
     let verified = gitlab_verified(check, &replay_route.provider);
@@ -81,7 +81,7 @@ fn replay_lifetime_uses_the_fixed_window_ceiling() -> Result<(), IngressError> {
     let check = policy
         .pre_auth(
             raw(&route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
-            &FixedClock(Some(GITLAB_NOW)),
+            &*TestClock::at(GITLAB_NOW),
         )
         .unwrap();
     let accepted = policy
@@ -110,7 +110,7 @@ fn an_unrepresentable_replay_lifetime_fails_closed() {
     let check = policy
         .pre_auth(
             raw(&route, GITLAB_NOW, GITLAB_HEADERS, GITLAB_BODY),
-            &FixedClock(Some(GITLAB_NOW)),
+            &*TestClock::at(GITLAB_NOW),
         )
         .unwrap();
 

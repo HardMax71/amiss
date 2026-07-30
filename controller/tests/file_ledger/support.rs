@@ -1,8 +1,8 @@
+pub(super) use amiss_controller_fixtures::clock::TestClock;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use amiss_controller::{
@@ -29,24 +29,6 @@ pub(super) const FIXTURE_KEY: &str =
 
 const WEBHOOK_SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
 const WEBHOOK_BODY: &[u8] = b"{\"object_kind\":\"pipeline\",\"status\":\"success\"}";
-
-pub(super) struct TestClock(AtomicI64);
-
-impl TestClock {
-    pub(super) const fn new(now: i64) -> Self {
-        Self(AtomicI64::new(now))
-    }
-
-    pub(super) fn set(&self, now: i64) {
-        self.0.store(now, Ordering::SeqCst);
-    }
-}
-
-impl ControllerClock for TestClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(self.0.load(Ordering::SeqCst))
-    }
-}
 
 pub(super) fn open(root: &Path, clock: &Arc<TestClock>) -> FileLedger {
     open_with_max(root, clock, MAX_RECORDS)
@@ -143,7 +125,7 @@ pub(super) fn bounded_delivery_at(
                 headers: &headers,
                 body: WEBHOOK_BODY,
             },
-            &TestClock::new(issued_at),
+            &*TestClock::at(issued_at),
         )
         .unwrap();
     let key = WebhookKey::new(

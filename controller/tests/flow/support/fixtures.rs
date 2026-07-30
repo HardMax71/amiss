@@ -1,13 +1,14 @@
+use amiss_controller_fixtures::clock::TestClock;
 use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
-    CheckBinding, CheckPlan, Controller, ControllerClock, DeliveryId, DeliveryIdentity,
-    DeliveryLedger, IngressLimits, IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope,
-    PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome,
-    check_binding, check_plan, register_plan,
+    CheckBinding, CheckPlan, Controller, DeliveryId, DeliveryIdentity, DeliveryLedger,
+    IngressLimits, IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope, PolicyControls,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
+    ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome, check_binding,
+    check_plan, register_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
@@ -138,14 +139,6 @@ pub(crate) fn binding() -> CheckBinding {
     check_binding(&plan()).unwrap()
 }
 
-struct FixedClock;
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(1_800_000_000_000)
-    }
-}
-
 fn ingress() -> IngressPolicy {
     IngressPolicy::new(
         IngressLimits::new(1_024, 32, 8_192).unwrap(),
@@ -182,6 +175,6 @@ pub(crate) fn controller_with_ledger<L: DeliveryLedger>(
         ledger,
         FakeRunner::new(outcome),
         ingress(),
-        Arc::new(FixedClock),
+        TestClock::new(),
     )
 }

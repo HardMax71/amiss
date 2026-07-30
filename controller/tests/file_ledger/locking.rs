@@ -9,7 +9,7 @@ use super::support::{FIXTURE_KEY, TestClock, check_binding, config, delivery, ex
 #[test]
 fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery("42"), &check_binding()).unwrap()).unwrap();
 
@@ -43,7 +43,7 @@ fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
 #[test]
 fn concurrent_first_claims_choose_one_owner() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let barrier = Arc::new(Barrier::new(2));
     let clock_source: Arc<dyn ControllerClock> = clock;
     let root = FileLedgerRoot::open_with_clock(directory.path(), config(64), clock_source).unwrap();

@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
 use amiss_controller::{
     AcceptedDelivery, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerCleanup,
@@ -16,7 +15,7 @@ use super::support::{
 #[test]
 fn permanent_completion_survives_cleanup() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     let finished = finish(&mut ledger, &delivery);
@@ -44,7 +43,7 @@ fn permanent_completion_survives_cleanup() {
 #[test]
 fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
     let delivery = bounded_delivery("bounded-cutoff", "42");
     let mut ledger = open(directory.path(), &clock);
     let finished = finish(&mut ledger, &delivery);
@@ -82,7 +81,7 @@ fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
 #[test]
 fn an_expired_unseen_delivery_stays_expired_after_clock_rollback() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
     let delivery = bounded_delivery("bounded-unseen", "42");
     let mut ledger = open(directory.path(), &clock);
 
@@ -104,7 +103,7 @@ fn an_expired_unseen_delivery_stays_expired_after_clock_rollback() {
 #[test]
 fn expired_running_and_staged_work_is_never_pruned() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
     let running = bounded_delivery("bounded-running", "41");
     let staged_delivery = bounded_delivery("bounded-staged", "42");
     let mut ledger = open(directory.path(), &clock);
@@ -134,7 +133,7 @@ fn expired_running_and_staged_work_is_never_pruned() {
 #[test]
 fn dead_atomic_write_directories_are_removed_only_in_the_known_shape() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let ledger = open(directory.path(), &clock);
     let empty = directory.path().join(".atomicwrite-empty");
     let with_file = directory.path().join(".atomicwrite-file");
@@ -157,7 +156,7 @@ fn dead_atomic_write_directories_are_removed_only_in_the_known_shape() {
 #[test]
 fn unknown_entries_and_malformed_temporary_directories_fail_closed() {
     let unknown_directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let unknown_ledger = open(unknown_directory.path(), &clock);
     fs::write(unknown_directory.path().join("foreign-file"), b"data").unwrap();
     assert!(matches!(
@@ -180,7 +179,7 @@ fn unknown_entries_and_malformed_temporary_directories_fail_closed() {
 #[test]
 fn corrupt_root_metadata_and_a_renamed_valid_record_fail_closed() {
     let metadata_directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let metadata_ledger = open(metadata_directory.path(), &clock);
     fs::write(
         metadata_directory.path().join(".amiss-root.state"),
@@ -214,7 +213,7 @@ fn symlinks_in_the_record_namespace_fail_closed() {
     use std::os::unix::fs::symlink;
 
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let ledger = open(directory.path(), &clock);
     symlink(
         directory.path().join(".amiss-root.state"),
