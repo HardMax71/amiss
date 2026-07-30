@@ -1,66 +1,34 @@
 # Completed phases
 
-Four phases are closed. Each claim they made has its own page here: what the claim is, what it
-defends against, how it is held, and where it landed. These are dated exit records rather than
-live documentation, so a page states what was true when the phase closed and links the code
-that has to stay true for it to hold. Current work is in the [Roadmap](roadmap.md), the
-factual boundary of the product is in [Project status](status.md), and version history is in
-the [changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md).
+Five phases are closed, one page each. A page is a dated exit record rather than live documentation:
+it states what was true when the phase closed, what each claim defends against, and links the code
+that has to stay true for the claim to hold. Where a fact has moved on since, the page says so and
+points at the live chapter that owns it.
 
-## Validation and hardening
+Current work is in the [Roadmap](roadmap.md), the factual boundary of the product is in
+[Project status](status.md), and version history is in the
+[changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md).
 
-Closed July 2026. The engine was already written; this phase asked whether its claims survive
-contact with repositories nobody here wrote.
+[Validation and hardening](completed/validation-and-hardening.md) asked whether the engine's claims
+survive contact with repositories nobody here wrote. Generated contract tables, a bound on embedded
+code, ten public repositories scanned and kept, no false-positive rate, one reviewer projection, the
+event shapes the self-scan actually runs, and the first mutation and fuzz baselines.
 
-- [The book's contract tables are generated, not written](completed/generated-contract-tables.md)
-- [Embedded code cannot buy unbounded parse time](completed/bounded-embedded-code.md)
-- [Ten public repositories were scanned and the counts kept](completed/shadow-scan-ledger.md)
-- [A false missing target is a bug, not a statistic](completed/false-missing-is-a-bug.md)
-- [Review feedback is grouped, ordered, and bounded](completed/grouped-review-feedback.md)
-- [The self-scan runs the event shapes it claims to support](completed/self-scan-event-coverage.md)
-- [Mutation and fuzz runs are installed with recorded baselines](completed/mutation-and-fuzz-baselines.md)
+[Delivery record](completed/delivery-record.md) made a controller that publishes provider verdicts
+survive crashes, retries, and clock movement without losing a verdict or writing two. One atomic
+claim, a fenced lease shared with the runner, an authenticated replay lifetime, and a durable record
+built from ordinary files with fixed lock growth.
 
-## Delivery record
+[Provider-verified controls](completed/provider-verified-controls.md) turned the gate into an object
+the provider owns and the checked repository cannot forge. One evaluation contract, a sealed bootstrap
+and runner, exact object acquisition, and three provider lanes with their gates checked rather than
+assumed.
 
-Closed July 2026. A controller that publishes provider verdicts has to survive crashes,
-retries, and clock movement without losing a verdict or writing two.
+[Provider operations](completed/provider-operations.md) made a lane deployable, watchable, and
+restartable without losing work. Offline configuration checks, separate liveness and readiness, ten
+label-free counters, a graceful drain, and account-free robustness testing.
 
-- [Claim, lease, result, and completion are one contract](completed/delivery-record-contract.md)
-- [Every accepted delivery carries a replay lifetime](completed/replay-lifetime.md)
-- [The record is ordinary files, not a database](completed/file-ledger-implementation.md)
-- [Lock growth is fixed and admission does not scan](completed/file-ledger-locks.md)
-- [A row is one bounded state file and, briefly, a report](completed/bounded-row-files.md)
-- [Cleanup removes only what is safe to forget](completed/record-cleanup.md)
-
-## Provider-verified controls
-
-Closed July 2026. The engine report is self-asserted, so the gate had to become an object the
-provider owns and the checked repository cannot forge.
-
-- [One evaluation contract, not one per provider](completed/rolling-evaluation-contract.md)
-- [The bootstrap takes canonical documents and nothing else](completed/sealed-bootstrap-inputs.md)
-- [The controller ships as source, not as a crate](completed/unpublished-controller-workspace.md)
-- [Authenticate first, save the raw bytes, then acknowledge](completed/authenticated-ingress.md)
-- [The record and the runner share one lease](completed/shared-lease-contract.md)
-- [The runner seals the job it supervises](completed/sealed-runner.md)
-- [The GitHub lane runs one repository end to end](completed/github-lane.md)
-- [The GitHub source accepts four events and binds them](completed/github-event-source.md)
-- [Objects are fetched by exact name under fixed limits](completed/exact-object-acquisition.md)
-- [The verdict lands on the commit GitHub actually merges](completed/github-publication.md)
-- [The GitLab lane runs as a policy job on the merge train](completed/gitlab-lane.md)
-- [The GitLab gate refuses anything but the exact saved pass](completed/gitlab-merge-train-gate.md)
-- [The Gitea family lane publishes through a dedicated reviewer](completed/gitea-lane.md)
-- [The Gitea family gate is checked, not assumed](completed/gitea-reviewer-gate.md)
-- [The lanes are tested through, and against, themselves](completed/lane-test-coverage.md)
-- [Provider evidence lives in the provider, not in the report](completed/provider-owned-evidence.md)
-
-## Provider operations
-
-Closed July 2026. A lane that cannot be deployed, watched, or restarted without losing work is
-not finished, whatever its verdicts say.
-
-- [Every provider binary can check its configuration offline](completed/offline-configuration-check.md)
-- [Liveness and readiness answer different questions](completed/liveness-and-readiness.md)
-- [Ten counters, no labels, no cardinality surprise](completed/fixed-metric-set.md)
-- [Shutdown finishes the work it already accepted](completed/graceful-drain.md)
-- [Hostile provider input is tested without provider accounts](completed/account-free-robustness.md)
+[Reference coverage](completed/reference-coverage.md) answered the four classes the scan ledger had
+measured and named, and refused a fifth. Heading anchors under twelve renderer rules, router
+spellings, generated targets read from the repository's own declarations, AsciiDoc and
+reStructuredText, and the measurement that killed bare-path inference.
