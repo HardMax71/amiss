@@ -2,10 +2,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, ChangeState, ControllerClock, DeliveryHeader,
-    DeliveryRoute, IngressPolicy, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
-    SystemClock, UntrustedDelivery,
+    AuthenticatedDelivery, ChangeSnapshot, ChangeState, DeliveryHeader, DeliveryRoute,
+    IngressPolicy, OidPair, ProviderError, Publication, RunIdentity, RunRefs, UntrustedDelivery,
 };
+use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestSource};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -64,7 +64,7 @@ impl SignedEvent {
         Self {
             body,
             signature,
-            received_at_unix_millis: SystemClock.now_unix_millis().unwrap(),
+            received_at_unix_millis: TestClock::DEFAULT,
         }
     }
 
@@ -87,7 +87,7 @@ impl SignedEvent {
                     headers: &headers,
                     body: &self.body,
                 },
-                &SystemClock,
+                TestClock::new().as_ref(),
             )
             .unwrap();
         let verified = source.authenticate(checked).unwrap();

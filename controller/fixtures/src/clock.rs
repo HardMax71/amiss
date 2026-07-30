@@ -3,9 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 
 use amiss_controller::ControllerClock;
 
-/// The one controller clock every test uses. It covers both axes the trait has:
-/// an instant a test sets rather than waits for, and whether time is trusted at
-/// all, which is the case no time-mocking crate models.
+/// The one controller clock every test uses.
 #[derive(Debug)]
 pub struct TestClock {
     millis: AtomicI64,
@@ -13,8 +11,7 @@ pub struct TestClock {
 }
 
 impl TestClock {
-    /// A fixed instant well inside the representable range, for a test that
-    /// needs a clock but not a particular reading.
+    /// Far enough from either i64 edge that a test may add or subtract freely.
     pub const DEFAULT: i64 = 1_800_000_000_000;
 
     #[must_use]
@@ -30,7 +27,6 @@ impl TestClock {
         })
     }
 
-    /// A clock that answers that time cannot be trusted.
     #[must_use]
     pub fn untrusted() -> Arc<Self> {
         let clock = Self::at(Self::DEFAULT);

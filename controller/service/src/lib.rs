@@ -33,6 +33,7 @@ pub use delivery::{Delivery, DeliveryHeader, IncomingDelivery, IncomingHeader};
 pub use error::InboxError;
 pub use evaluation::{
     EvaluationConfig, EvaluationConfigError, EvaluationRequest, evaluation_router,
+    evaluation_router_with_clock,
 };
 pub use inbox::{
     ClaimOutcome, ClaimedDelivery, CompleteOutcome, DeliveryLease, EnqueueOutcome, Inbox,
@@ -47,7 +48,7 @@ pub use probe::EndpointDrain;
 pub use queued::{QueuedServiceError, QueuedServiceInput, run_queued_service};
 pub use receiver::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, ReceiverConfig,
-    ReceiverConfigError, router, serve,
+    ReceiverConfigError, router, router_with_clock, serve,
 };
 pub use shutdown::shutdown_signal;
 pub use supervision::{Supervision, SupervisionError, supervise};

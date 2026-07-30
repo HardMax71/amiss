@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use amiss_controller::ControllerClock;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use tokio::sync::Semaphore;
@@ -18,10 +18,11 @@ pub(super) struct ReceiverState {
     pub(super) max_headers: u64,
     pub(super) max_header_bytes: u64,
     pub(super) permits: Arc<Semaphore>,
+    pub(super) clock: Arc<dyn ControllerClock>,
 }
 
 pub(super) async fn receive(State(state): State<ReceiverState>, request: Request) -> StatusCode {
-    let Some(received_at_unix_millis) = controller_time() else {
+    let Some(received_at_unix_millis) = state.clock.now_unix_millis() else {
         return StatusCode::SERVICE_UNAVAILABLE;
     };
     let (parts, body) = request.into_parts();
@@ -130,9 +131,4 @@ fn enqueue(
         Ok(EnqueueOutcome::Stored | EnqueueOutcome::Duplicate) => DispatchOutcome::Accepted,
         Err(error) => DispatchOutcome::Inbox(error),
     }
-}
-
-fn controller_time() -> Option<i64> {
-    let elapsed = SystemTime::now().duration_since(UNIX_EPOCH).ok()?;
-    i64::try_from(elapsed.as_millis()).ok()
 }

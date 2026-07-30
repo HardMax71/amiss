@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use amiss_controller::{DeliveryLedger, Runner};
+use amiss_controller::{ControllerClock, DeliveryLedger, Runner};
 use tokio::net::TcpListener;
 
 use crate::{
     DeliveryAdmission, DeliveryWorker, Inbox, InboxLimits, Operations, ReceiverConfig,
-    ServiceComponent, Supervision, SupervisionError, router, supervise,
+    ServiceComponent, Supervision, SupervisionError, router_with_clock, supervise,
 };
 
 pub struct QueuedServiceInput {
@@ -18,6 +18,7 @@ pub struct QueuedServiceInput {
     pub receiver: ReceiverConfig,
     pub inbox_root: PathBuf,
     pub inbox_limits: InboxLimits,
+    pub clock: Arc<dyn ControllerClock>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,12 +81,13 @@ where
             .map_err(|_defect| QueuedServiceError("delivery inbox cannot be opened"))?,
     ));
     let ready = Arc::new(AtomicBool::new(false));
-    let (receiver, endpoint) = router(
+    let (receiver, endpoint) = router_with_clock(
         &input.receiver,
         Arc::clone(&inbox),
         admission,
         Arc::clone(&ready),
         operations.clone(),
+        Arc::clone(&input.clock),
     )
     .map_err(|_defect| QueuedServiceError("HTTP receiver configuration is invalid"))?;
     let listener = TcpListener::bind(input.listen)

@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use amiss_controller::{
-    AcceptedDelivery, DeliveryHeader as IngressHeader, DeliveryRoute, IngressCheck, IngressPolicy,
-    PlanRegistry, SystemClock, UntrustedDelivery, VerifiedDelivery, resolve_plan,
+    AcceptedDelivery, ControllerClock, DeliveryHeader as IngressHeader, DeliveryRoute,
+    IngressCheck, IngressPolicy, PlanRegistry, UntrustedDelivery, VerifiedDelivery, resolve_plan,
 };
 
 use crate::{AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission};
@@ -10,6 +12,7 @@ pub struct LaneAdmission<F> {
     pub route: DeliveryRoute,
     pub ingress: IngressPolicy,
     pub plans: PlanRegistry,
+    pub clock: Arc<dyn ControllerClock>,
     pub authenticate: F,
 }
 
@@ -18,6 +21,7 @@ pub fn lane_admission<F>(
     route: DeliveryRoute,
     ingress: IngressPolicy,
     plans: PlanRegistry,
+    clock: Arc<dyn ControllerClock>,
     authenticate: F,
 ) -> LaneAdmission<F>
 where
@@ -31,6 +35,7 @@ where
         route,
         ingress,
         plans,
+        clock,
         authenticate,
     }
 }
@@ -46,13 +51,14 @@ pub fn check_lane<'a, F>(
     ingress: &IngressPolicy,
     plans: &PlanRegistry,
     untrusted: UntrustedDelivery<'a>,
+    clock: &dyn ControllerClock,
     authenticate: F,
 ) -> Result<AcceptedDelivery, AdmissionRejection>
 where
     F: FnOnce(IngressCheck<'a>) -> Result<VerifiedDelivery, AdmissionRejection>,
 {
     let checked = ingress
-        .pre_auth(untrusted, &SystemClock)
+        .pre_auth(untrusted, clock)
         .map_err(|_defect| AdmissionRejection::Unauthorized)?;
     let verified = authenticate(checked)?;
     let accepted = ingress
@@ -84,7 +90,13 @@ where
             headers: &headers,
             body: request.body,
         };
-        let accepted = check_lane(&self.ingress, &self.plans, untrusted, &self.authenticate)?;
+        let accepted = check_lane(
+            &self.ingress,
+            &self.plans,
+            untrusted,
+            self.clock.as_ref(),
+            &self.authenticate,
+        )?;
         Ok(AdmittedDelivery {
             route: self.route_id.clone(),
             source_id: accepted.delivery().identity.delivery.as_str().to_owned(),

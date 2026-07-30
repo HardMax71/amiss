@@ -12,7 +12,7 @@ use amiss_controller::{
 };
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EvaluationConfig, Operations, check_lane, evaluation_router,
+    AdmissionRejection, EvaluationConfig, Operations, check_lane, evaluation_router_with_clock,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
 use amiss_wire::digest::hb;
@@ -25,9 +25,8 @@ use tempfile::TempDir;
 use tower::ServiceExt as _;
 
 use super::provider::{FakeGitLab, HOST, claims, policy, provider, refresh, sign, source};
+use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
-
-const LEASE_BEYOND_REACH: Duration = Duration::from_hours(1);
 
 const ENDPOINT: &str = "/gitlab/policy/evaluate";
 
@@ -45,6 +44,7 @@ pub(super) enum LaneCase {
 }
 
 pub(super) struct Harness {
+    clock: Arc<TestClock>,
     _state: TempDir,
     repositories: Repositories,
     router: Router,
@@ -116,10 +116,13 @@ impl Harness {
             plan,
         )
         .unwrap();
-        let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+        // jsonwebtoken checks exp and nbf against wall time, so this lane stops
+        // the clock at the wall rather than at an instant of its own choosing.
+        let test_clock = TestClock::at(SystemClock.now_unix_millis().unwrap());
+        let clock: Arc<dyn ControllerClock> = test_clock.clone();
         let ledger = FileLedgerRoot::open_with_clock(
             &ledger_root,
-            FileLedgerConfig::new(LEASE_BEYOND_REACH, 64, replay).unwrap(),
+            FileLedgerConfig::new(Duration::from_secs(2), 64, replay).unwrap(),
             Arc::clone(&clock),
         )
         .unwrap();
@@ -135,7 +138,7 @@ impl Harness {
             scratch,
             wall_timeout: case.wall_timeout(),
         });
-        let (router, _drain) = evaluation_router(
+        let (router, _drain) = evaluation_router_with_clock(
             &EvaluationConfig {
                 path: ENDPOINT.to_owned(),
                 max_body_bytes: 1_024,
@@ -145,11 +148,16 @@ impl Harness {
             },
             Arc::new(AtomicBool::new(true)),
             Operations::default(),
+            Arc::clone(&lane.clock),
             move |request| evaluate(&lane, request),
         )
         .unwrap();
-        let token = sign(&claims(&repositories.commits().unwrap().candidate));
+        let token = sign(&claims(
+            &repositories.commits().unwrap().candidate,
+            test_clock.now(),
+        ));
         Self {
+            clock: test_clock,
             _state: state,
             repositories,
             router,
@@ -181,7 +189,10 @@ impl Harness {
     }
 
     pub(super) fn claims(&self) -> Value {
-        claims(&self.repositories.commits().unwrap().candidate)
+        claims(
+            &self.repositories.commits().unwrap().candidate,
+            self.clock.now(),
+        )
     }
 
     pub(super) fn cleanup_leftover(&self) -> PathBuf {
@@ -206,11 +217,17 @@ fn evaluate(lane: &Lane, request: amiss_controller_service::EvaluationRequest<'_
         headers: &headers,
         body: request.body,
     };
-    let admitted = check_lane(&lane.ingress, &lane.plans, untrusted, |checked| {
-        lane.adapter
-            .authenticate(checked)
-            .map_err(|_defect| AdmissionRejection::Unauthorized)
-    });
+    let admitted = check_lane(
+        &lane.ingress,
+        &lane.plans,
+        untrusted,
+        lane.clock.as_ref(),
+        |checked| {
+            lane.adapter
+                .authenticate(checked)
+                .map_err(|_defect| AdmissionRejection::Unauthorized)
+        },
+    );
     if let Err(rejection) = admitted {
         return rejection_status(rejection);
     }

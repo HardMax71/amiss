@@ -2,8 +2,8 @@ use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use amiss_controller::{ControllerClock, SystemClock};
 use axum::Router;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
@@ -60,9 +60,11 @@ struct EvaluationState {
     max_headers: u64,
     max_header_bytes: u64,
     permits: Arc<Semaphore>,
+    clock: Arc<dyn ControllerClock>,
 }
 
-/// Builds one bounded synchronous endpoint for a provider-owned policy job.
+/// Builds one bounded synchronous endpoint for a provider-owned policy job,
+/// reading the system clock.
 ///
 /// # Errors
 ///
@@ -71,6 +73,25 @@ pub fn evaluation_router<F>(
     config: &EvaluationConfig,
     ready: Arc<AtomicBool>,
     operations: Operations,
+    evaluate: F,
+) -> Result<(Router, EndpointDrain), EvaluationConfigError>
+where
+    F: for<'a> Fn(EvaluationRequest<'a>) -> StatusCode + Send + Sync + 'static,
+{
+    evaluation_router_with_clock(config, ready, operations, Arc::new(SystemClock), evaluate)
+}
+
+/// Builds one bounded synchronous endpoint for a provider-owned policy job,
+/// reading the clock supplied.
+///
+/// # Errors
+///
+/// The path is not one exact static path or a limit is outside its hard bounds.
+pub fn evaluation_router_with_clock<F>(
+    config: &EvaluationConfig,
+    ready: Arc<AtomicBool>,
+    operations: Operations,
+    clock: Arc<dyn ControllerClock>,
     evaluate: F,
 ) -> Result<(Router, EndpointDrain), EvaluationConfigError>
 where
@@ -85,6 +106,7 @@ where
         max_headers: config.max_headers,
         max_header_bytes: config.max_header_bytes,
         permits,
+        clock,
     };
     let evaluation = post(run)
         .layer::<_, Infallible>(RequestBodyLimitLayer::new(config.max_body_bytes))
@@ -104,7 +126,7 @@ where
 }
 
 async fn run(State(state): State<EvaluationState>, request: Request) -> StatusCode {
-    let Some(received_at_unix_millis) = controller_time() else {
+    let Some(received_at_unix_millis) = state.clock.now_unix_millis() else {
         return StatusCode::SERVICE_UNAVAILABLE;
     };
     let (parts, body) = request.into_parts();
@@ -155,9 +177,4 @@ pub(crate) fn validate(config: &EvaluationConfig) -> Result<(), EvaluationConfig
         && (1..=MAX_CONCURRENT_EVALUATIONS).contains(&config.max_concurrent_evaluations))
     .then_some(())
     .ok_or(EvaluationConfigError)
-}
-
-fn controller_time() -> Option<i64> {
-    let elapsed = SystemTime::now().duration_since(UNIX_EPOCH).ok()?;
-    i64::try_from(elapsed.as_millis()).ok()
 }

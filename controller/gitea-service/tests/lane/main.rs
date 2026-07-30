@@ -113,7 +113,7 @@ fn publication_failure_is_retried_from_the_staged_result() {
         InboxState::Pending { .. }
     ));
 
-    std::thread::sleep(Duration::from_millis(60));
+    harness.clock.advance(60);
     assert_eq!(harness.work(), WorkOutcome::Processed);
     harness.expect_conclusion(Some(CheckConclusion::Pass));
     assert!(harness.inbox.lock().unwrap().entries().unwrap().is_empty());
@@ -126,7 +126,7 @@ fn expired_saved_delivery_is_discarded_before_provider_use() {
         Duration::from_millis(100),
     );
     harness.enqueue();
-    std::thread::sleep(Duration::from_millis(150));
+    harness.clock.advance(150);
 
     assert_eq!(harness.work(), WorkOutcome::Processed);
     assert_eq!(publication_count(&harness.api), 0);
