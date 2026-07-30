@@ -1,3 +1,4 @@
+use amiss_controller_fixtures::clock::TestClock;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -6,14 +7,6 @@ use amiss_controller::{AcquiringRunner, Acquisition, AcquisitionTarget, Controll
 use amiss_fixtures::path_arg;
 
 use super::*;
-
-struct FixedClock(Option<i64>);
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        self.0
-    }
-}
 
 #[derive(Default)]
 struct AcquiredPaths(Mutex<Vec<PathBuf>>);
@@ -88,7 +81,10 @@ fn acquiring_runner<A: Acquisition>(
         harness.scratch.path().to_path_buf(),
         Duration::from_secs(2),
         Duration::from_mins(5),
-        Arc::new(FixedClock(clock)),
+        clock.map_or_else(
+            || -> Arc<dyn ControllerClock> { TestClock::untrusted() },
+            |millis| -> Arc<dyn ControllerClock> { TestClock::at(millis) },
+        ),
     )
     .unwrap()
 }
@@ -182,7 +178,7 @@ fn heartbeat_loss_returns_before_uncooperative_acquisition() {
 #[test]
 fn invalid_time_bounds_are_rejected() {
     let harness = Harness::new("runner-pass", None);
-    let clock: Arc<dyn ControllerClock> = Arc::new(FixedClock(Some(1_753_219_200_000)));
+    let clock: Arc<dyn ControllerClock> = TestClock::at(1_753_219_200_000);
     let build = |validity| {
         AcquiringRunner::new(
             AcquisitionFixture::Reject,

@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -72,7 +71,7 @@ fn concurrent_distinct_claims_enforce_capacity_across_processes() {
     };
     assert_outcomes(&run.outcomes, FULL);
 
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut reopened = open_with_max(&run.ledger_root, &clock, 1);
     assert!(matches!(
         reopened.claim(&delivery_with_id("capacity-third", "43"), &check_binding()),
@@ -169,7 +168,7 @@ fn run_child() {
     let result_path = env_path(RESULT_PATH_ENV);
     let delivery_id = env::var(DELIVERY_ID_ENV).unwrap();
     let max_records = env::var(MAX_RECORDS_ENV).unwrap().parse().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut ledger = open_with_max(&root, &clock, max_records);
 
     fs::write(ready_path, b"ready").unwrap();

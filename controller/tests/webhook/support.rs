@@ -1,10 +1,11 @@
+pub(crate) use amiss_controller_fixtures::clock::TestClock;
 use std::sync::LazyLock;
 use std::time::Duration;
 
 use amiss_controller::{
-    ControllerClock, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,
-    IngressPolicy, ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow,
-    SignedTimePolicy, TrustAnchorId, TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits, IngressPolicy,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy,
+    TrustAnchorId, TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 
 pub(crate) const NOW: i64 = 1_744_578_123_000;
@@ -13,14 +14,6 @@ static REPLAY_ROUTE: LazyLock<DeliveryRoute> =
     LazyLock::new(|| route(SignedTimePolicy::ReplayOnly));
 static SIGNED_ROUTE: LazyLock<DeliveryRoute> =
     LazyLock::new(|| route(SignedTimePolicy::Required(Duration::from_mins(5))));
-
-struct FixedClock(i64);
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(self.0)
-    }
-}
 
 pub(crate) fn anchor(value: &str) -> TrustAnchorId {
     TrustAnchorId::new(value.to_owned()).unwrap()
@@ -87,7 +80,7 @@ fn check<'a>(
             headers,
             body,
         },
-        &FixedClock(received_at_unix_millis),
+        &*TestClock::at(received_at_unix_millis),
     )
 }
 

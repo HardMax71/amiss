@@ -1,9 +1,10 @@
+pub(crate) use amiss_controller_fixtures::clock::TestClock;
 use std::time::Duration;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, ControllerClock, DeliveryHeader, DeliveryId,
-    DeliveryIdentity, DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressError, IngressLimits,
-    IngressPolicy, IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryHeader, DeliveryId, DeliveryIdentity,
+    DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressError, IngressLimits, IngressPolicy,
+    IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
     TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
 };
@@ -32,14 +33,6 @@ pub(crate) const GITLAB_HEADERS: &[DeliveryHeader<'_>] = &[
         value: b"v1,eoSaLtOFqb9PT8wdg5hLQ8m9BxoPEp7HLufb1Anqlzg=",
     },
 ];
-
-pub(crate) struct FixedClock(pub(crate) Option<i64>);
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        self.0
-    }
-}
 
 pub(crate) fn opaque(value: &str) -> OpaqueId {
     OpaqueId::new(value.to_owned()).unwrap()

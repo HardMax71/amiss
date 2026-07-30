@@ -17,7 +17,7 @@ const MEDIAN_SAMPLE: usize = 4;
 #[ignore = "weekly release-mode filesystem measurement"]
 fn admission_cost_is_measured_against_retained_root_entries() {
     let directory = TempDir::new().unwrap();
-    let clock = std::sync::Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut ledger = open_with_max(directory.path(), &clock, MAX_RECORDS);
     let binding = check_binding();
     let mut created = 0_u64;

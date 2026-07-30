@@ -1,7 +1,6 @@
 use std::fs;
 use std::mem::size_of;
 use std::path::Path;
-use std::sync::Arc;
 
 use amiss_controller::{
     DeliveryClaim, DeliveryLedger, FileLedgerError, LeaseCompletion, StageOutcome,
@@ -19,7 +18,7 @@ use super::support::{
 #[test]
 fn state_files_keep_the_existing_frame_contracts() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     ledger.claim(&delivery, &check_binding()).unwrap();
@@ -50,7 +49,7 @@ fn state_files_keep_the_existing_frame_contracts() {
 #[test]
 fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -94,7 +93,7 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
 #[test]
 fn staged_v3_without_a_gate_commit_is_reexecuted_before_publication() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     let original = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -122,7 +121,7 @@ fn staged_v3_without_a_gate_commit_is_reexecuted_before_publication() {
 
 #[test]
 fn corrupt_state_or_report_fails_closed() {
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let state_directory = TempDir::new().unwrap();
     let mut state_ledger = open(state_directory.path(), &clock);
@@ -158,7 +157,7 @@ fn corrupt_state_or_report_fails_closed() {
 #[test]
 fn a_missing_staged_report_is_corrupt() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -176,7 +175,7 @@ fn a_missing_staged_report_is_corrupt() {
 #[test]
 fn oversized_conflicting_completion_is_lost() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -193,7 +192,7 @@ fn oversized_conflicting_completion_is_lost() {
 
 #[test]
 fn impossible_but_checksummed_states_fail_closed() {
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let expiry_directory = TempDir::new().unwrap();
     let mut expiry_ledger = open(expiry_directory.path(), &clock);
@@ -233,7 +232,7 @@ fn impossible_but_checksummed_states_fail_closed() {
 
 #[test]
 fn malformed_record_and_publication_check_bindings_fail_closed() {
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
 
     let record_directory = TempDir::new().unwrap();

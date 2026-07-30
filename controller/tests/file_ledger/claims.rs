@@ -15,7 +15,7 @@ use super::support::{
 #[test]
 fn a_live_claim_resumes_for_its_owner_and_is_busy_for_another() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut first_owner = open(directory.path(), &clock);
     let first = executed(first_owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -39,7 +39,7 @@ fn a_live_claim_resumes_for_its_owner_and_is_busy_for_another() {
 #[test]
 fn the_record_root_must_already_be_a_directory() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let missing = directory.path().join("missing");
     let clock_source: Arc<dyn ControllerClock> = clock.clone();
 
@@ -60,7 +60,7 @@ fn the_record_root_must_already_be_a_directory() {
 #[test]
 fn expiry_reclaims_the_same_evaluation_with_a_higher_fence() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut first_owner = open(directory.path(), &clock);
     let mut second_owner = open(directory.path(), &clock);
@@ -87,7 +87,7 @@ fn expiry_reclaims_the_same_evaluation_with_a_higher_fence() {
 #[test]
 fn renewal_advances_the_deadline_and_rejects_stale_or_rebound_claims() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let rebound = delivery("43");
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
@@ -113,7 +113,7 @@ fn renewal_advances_the_deadline_and_rejects_stale_or_rebound_claims() {
 #[test]
 fn clock_rollback_does_not_shorten_a_persisted_lease() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let mut owner = open(directory.path(), &clock);
     let first = executed(owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -144,7 +144,7 @@ fn clock_rollback_does_not_shorten_a_persisted_lease() {
 #[test]
 fn the_check_binding_is_frozen_for_every_delivery_transition() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery("42");
     let check = check_binding();
     let mut changed = check.clone();

@@ -3,15 +3,16 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
+use amiss_controller_fixtures::clock::TestClock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, CheckConclusion,
-    ControllerClock, ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GiteaWebhook,
-    IngressLimits, IngressPolicy, OidPair, ProviderAdapter, ProviderError, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, Publication, ReplayIdentity, ReplayWindow, RunIdentity,
-    RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GiteaWebhook, IngressLimits,
+    IngressPolicy, OidPair, ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, Publication, ReplayIdentity, ReplayWindow, RunIdentity, RunRefs,
+    SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter,
@@ -51,14 +52,6 @@ const BODY: &[u8] = br#"{
 }"#;
 
 type HmacSha256 = Hmac<Sha256>;
-
-struct FixedClock;
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(NOW)
-    }
-}
 
 #[derive(Clone)]
 struct FakeApi {
@@ -328,7 +321,7 @@ fn authenticate_with_signature(
                 headers: &headers,
                 body,
             },
-            &FixedClock,
+            &*TestClock::at(NOW),
         )
         .unwrap();
     adapter.authenticate(check)

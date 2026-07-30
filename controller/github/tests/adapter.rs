@@ -3,14 +3,15 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
+use amiss_controller_fixtures::clock::TestClock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, CheckConclusion,
-    ControllerClock, ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook,
-    IngressCheck, IngressLimits, IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError,
+    ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook, IngressCheck,
+    IngressLimits, IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError,
     ProviderIdentity, ProviderInstance, ProviderNamespace, Publication, ReplayWindow, RunIdentity,
     RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
@@ -51,14 +52,6 @@ const BODY: &[u8] = br#"{
 }"#;
 
 type HmacSha256 = Hmac<Sha256>;
-
-struct FixedClock;
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(NOW)
-    }
-}
 
 #[derive(Clone)]
 struct FakeApi {
@@ -580,7 +573,7 @@ fn try_authenticate_with_signature(
                 headers: &headers,
                 body,
             },
-            &FixedClock,
+            &*TestClock::at(NOW),
         )
         .unwrap();
     source.authenticate_delivery(check)
@@ -618,7 +611,7 @@ fn authenticate_target(
                 headers: &headers,
                 body,
             },
-            &FixedClock,
+            &*TestClock::at(NOW),
         )
         .unwrap();
     source.authenticate_for_target(check, target)

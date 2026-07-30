@@ -20,7 +20,7 @@ use super::support::{
 #[test]
 fn capacity_rejects_new_records_without_blocking_existing_work() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let admitted = delivery_with_id("admitted", "41");
     let rejected = delivery_with_id("rejected", "42");
     let mut ledger = open_with_max(directory.path(), &clock, 1);
@@ -53,7 +53,7 @@ fn capacity_rejects_new_records_without_blocking_existing_work() {
 #[test]
 fn explicit_cleanup_frees_an_ended_bounded_slot() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
     let bounded = bounded_delivery("bounded-capacity", "41");
     let next_issued_at = BOUNDED_KEEP_THROUGH + 1_000;
     let next = bounded_delivery_at("next", "42", next_issued_at);
@@ -85,7 +85,7 @@ fn explicit_cleanup_frees_an_ended_bounded_slot() {
 #[test]
 fn cleanup_frees_exactly_the_removed_slots_after_reopen() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
     let first = bounded_delivery("bounded-first", "41");
     let second = bounded_delivery("bounded-second", "42");
     let running = bounded_delivery("bounded-running", "43");
@@ -131,7 +131,7 @@ fn cleanup_frees_exactly_the_removed_slots_after_reopen() {
 #[test]
 fn immutable_root_limits_must_match_on_reopen() {
     let lease_directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     drop(open_with_max(lease_directory.path(), &clock, 1));
     let longer_lease = LEASE.checked_add(Duration::from_millis(1)).unwrap();
     let different_lease = FileLedgerConfig::new(longer_lease, 1, replay_window()).unwrap();
@@ -164,7 +164,7 @@ fn immutable_root_limits_must_match_on_reopen() {
 #[test]
 fn rejected_identities_create_only_a_fixed_number_of_lock_files() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let admitted = delivery_with_id("admitted", "1");
     let mut ledger = open_with_max(directory.path(), &clock, 1);
     ledger.claim(&admitted, &check_binding()).unwrap();
@@ -213,7 +213,7 @@ fn rejected_identities_create_only_a_fixed_number_of_lock_files() {
 #[test]
 fn a_missing_root_record_cannot_be_recreated_over_existing_state() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut ledger = open_with_max(directory.path(), &clock, 1);
     ledger
         .claim(&delivery_with_id("admitted", "42"), &check_binding())
@@ -231,7 +231,7 @@ fn a_missing_root_record_cannot_be_recreated_over_existing_state() {
 #[test]
 fn a_v09_root_migrates_without_losing_its_replay_marker() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let delivery = delivery_with_id("migrated", "42");
     let mut ledger = open_with_max(directory.path(), &clock, 1);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -258,7 +258,7 @@ fn a_v09_root_migrates_without_losing_its_replay_marker() {
 #[test]
 fn missing_or_corrupt_capacity_and_a_missing_record_fail_closed() {
     let missing_capacity = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut ledger = open_with_max(missing_capacity.path(), &clock, 1);
     ledger
         .claim(&delivery_with_id("capacity", "41"), &check_binding())
@@ -301,7 +301,7 @@ fn missing_or_corrupt_capacity_and_a_missing_record_fail_closed() {
 #[test]
 fn interrupted_capacity_updates_recover_from_the_exact_pending_path() {
     let absent = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     drop(open_with_max(absent.path(), &clock, 2));
     write_capacity(absent.path(), 2, 1, Some(&"f".repeat(64)), false);
     let mut recovered = open_with_max(absent.path(), &clock, 2);
@@ -333,7 +333,7 @@ fn interrupted_capacity_updates_recover_from_the_exact_pending_path() {
 
 #[test]
 fn interrupted_batch_cleanup_reconciles_only_with_its_marker() {
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let unchanged = TempDir::new().unwrap();
     let delivery = delivery_with_id("kept-by-cleanup", "40");
     let mut ledger = open_with_max(unchanged.path(), &clock, 2);
@@ -371,7 +371,7 @@ fn interrupted_batch_cleanup_reconciles_only_with_its_marker() {
 #[test]
 fn a_wrong_capacity_limit_is_rejected_without_settling_it() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(1_000));
+    let clock = TestClock::at(1_000);
     let mut ledger = open_with_max(directory.path(), &clock, 1);
     write_capacity(directory.path(), 2, 1, Some(&"f".repeat(64)), false);
     let path = directory.path().join(".amiss-capacity.state");
@@ -387,7 +387,7 @@ fn a_wrong_capacity_limit_is_rejected_without_settling_it() {
 #[test]
 fn a_bounded_delivery_from_another_replay_window_is_rejected() {
     let directory = TempDir::new().unwrap();
-    let clock = Arc::new(TestClock::new(BOUNDED_ISSUED_AT));
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
     let delivery = bounded_delivery("bounded-window", "42");
     let replay = ReplayWindow::new(Duration::from_secs(61), Duration::from_secs(10)).unwrap();
     let config = FileLedgerConfig::new(LEASE, 1, replay).unwrap();

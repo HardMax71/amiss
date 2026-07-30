@@ -1,11 +1,12 @@
+use amiss_controller_fixtures::clock::TestClock;
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
 use amiss_controller::{
-    AcceptedDelivery, ControllerClock, DeliveryHeader, DeliveryRoute, GitHubWebhook, GiteaWebhook,
-    IngressLimits, IngressPolicy, OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy,
-    UntrustedDelivery, WebhookKey, WebhookKeyring,
+    AcceptedDelivery, DeliveryHeader, DeliveryRoute, GitHubWebhook, GiteaWebhook, IngressLimits,
+    IngressPolicy, OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery,
+    WebhookKey, WebhookKeyring,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
@@ -83,14 +84,6 @@ static GITLAB_OIDC: LazyLock<GitLabOidc> = LazyLock::new(|| {
 static GITLAB_SIGNING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
     EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).expect("the fixed private key is valid")
 });
-
-struct FixedClock(i64);
-
-impl ControllerClock for FixedClock {
-    fn now_unix_millis(&self) -> Option<i64> {
-        Some(self.0)
-    }
-}
 
 #[expect(
     clippy::expect_used,
@@ -276,7 +269,7 @@ pub fn gitlab_oidc(data: &[u8]) {
             headers: &headers,
             body: &body,
         },
-        &FixedClock(now_millis),
+        &*TestClock::at(now_millis),
     ) else {
         return;
     };
@@ -419,7 +412,7 @@ fn authenticate_webhook<S>(
                 headers: &headers,
                 body: &exercise.body,
             },
-            &FixedClock(NOW),
+            &*TestClock::at(NOW),
         )
         .expect("the generated request is inside the ingress bounds");
     let accepted = authenticate(source, check).is_ok_and(|verified| {
