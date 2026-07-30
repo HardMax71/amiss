@@ -48,6 +48,7 @@ pub struct Scanned {
     pub occurrences: Vec<ScannedOccurrence>,
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
+    pub declared_anchors: Vec<String>,
 }
 
 /// Scans one selected document body under the snapshot's budgets: admission
@@ -115,6 +116,7 @@ pub fn scan_bytes(
             occurrences: Vec::new(),
             opaque: Opaque::default(),
             governed: Vec::new(),
+            declared_anchors: Vec::new(),
         });
     };
 
@@ -172,6 +174,7 @@ pub fn scan_bytes(
         occurrences,
         opaque: extraction.opaque,
         governed,
+        declared_anchors: extraction.declared_anchors,
     })
 }
 

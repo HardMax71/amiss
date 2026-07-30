@@ -59,14 +59,35 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
 }
 
 fn occurrence(reference: &Reference, within: usize) -> Occurrence {
+    let semantic = match reference.kind {
+        ReferenceKind::DocRole => doc_destination(&reference.target),
+        ReferenceKind::InlineHyperlink
+        | ReferenceKind::NamedTarget
+        | ReferenceKind::Image
+        | ReferenceKind::Include
+        | ReferenceKind::FileOption
+        | ReferenceKind::RefRole => reference.target.clone(),
+    };
     Occurrence {
         construct: construct(reference.kind),
         raw_destination: reference.target.clone(),
-        semantic_destination: reference.target.clone(),
+        semantic_destination: semantic,
         span: reference.span,
         node_path: vec![reference.block, within],
         block_kind: BlockKind::Paragraph,
         block_span: reference.block_span,
+    }
+}
+
+/// A `:doc:` target is extensionless in Sphinx, so the source suffix is
+/// appended here; a source-root-absolute target keeps its slash and stays a
+/// declared site route, because the engine does not know the Sphinx root.
+fn doc_destination(target: &str) -> String {
+    let last = target.rsplit('/').next().unwrap_or(target);
+    if target.starts_with('/') || last.contains('.') {
+        target.to_owned()
+    } else {
+        format!("{target}.rst")
     }
 }
 
@@ -77,5 +98,7 @@ const fn construct(kind: ReferenceKind) -> SourceConstruct {
         ReferenceKind::Image => SourceConstruct::RstImageDirective,
         ReferenceKind::Include => SourceConstruct::RstIncludeDirective,
         ReferenceKind::FileOption => SourceConstruct::RstFileOption,
+        ReferenceKind::DocRole => SourceConstruct::RstDocRole,
+        ReferenceKind::RefRole => SourceConstruct::RstRefRole,
     }
 }

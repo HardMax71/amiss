@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::{Adapter, Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in};
 use crate::policy::Includes;
@@ -39,6 +39,32 @@ pub struct DocumentRecord {
     pub raw_digest: Option<amiss_wire::digest::Digest>,
 }
 
+/// The snapshot's label table: every `.. _name:` a scanned reStructuredText
+/// document declares, which is the nearest tree-derivable stand-in for the
+/// index Sphinx builds for `:ref:`. A name declared twice is marked rather
+/// than guessed between.
+fn collect_labels(
+    scan: &mut ScanResources,
+    labels: &mut BTreeMap<String, LabelState>,
+    path: &RepoPath,
+    status: &DocumentStatus,
+) -> Result<(), Error> {
+    let DocumentStatus::Scanned(scanned) = status else {
+        return Ok(());
+    };
+    if scanned.adapter != Adapter::Rst {
+        return Ok(());
+    }
+    for label in &scanned.declared_anchors {
+        scan.charge_label()?;
+        labels
+            .entry(label.clone())
+            .and_modify(|state| *state = LabelState::Duplicated)
+            .or_insert_with(|| LabelState::Declared(path.clone()));
+    }
+    Ok(())
+}
+
 /// One refused path: the defect, and the raw bytes of the name that tripped
 /// it, when the frozen hex field can hold them. An over-length name records
 /// no bytes, because its crossing row already carries both figures and the
@@ -60,6 +86,15 @@ pub struct SnapshotDiscovery {
     pub tree_entries: u64,
     pub path_defects: Vec<PathDefect>,
     pub entries: BTreeMap<RepoPath, (GitMode, Oid)>,
+    pub labels: BTreeMap<String, LabelState>,
+}
+
+/// What the snapshot's documents say about one `.. _name:` label: the one
+/// declaring document, or the fact that more than one claims it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LabelState {
+    Declared(RepoPath),
+    Duplicated,
 }
 
 /// What a path names in a snapshot.
@@ -210,6 +245,7 @@ fn discover_walk(
 ) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = SnapshotDiscovery {
         documents: Vec::new(),
+        labels: BTreeMap::new(),
         outside_document_set: 0,
         tree_entries: 0,
         path_defects: Vec::new(),
@@ -280,6 +316,7 @@ fn discover_walk(
         }
         let (status, byte_count, raw_digest) =
             side_status(repo, git, scan, includes, classification, &path, &entry)?;
+        collect_labels(scan, &mut discovery.labels, &path, &status)?;
         discovery.documents.push(DocumentRecord {
             path,
             classification,
@@ -311,6 +348,7 @@ pub fn discover_index(
 ) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = SnapshotDiscovery {
         documents: Vec::new(),
+        labels: BTreeMap::new(),
         outside_document_set: 0,
         tree_entries: 0,
         path_defects: Vec::new(),
@@ -363,6 +401,7 @@ pub fn discover_index(
             &path,
             &tree_entry,
         )?;
+        collect_labels(scan, &mut discovery.labels, &path, &status)?;
         discovery.documents.push(DocumentRecord {
             path,
             classification,

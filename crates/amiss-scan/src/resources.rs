@@ -18,6 +18,7 @@ pub struct ScanLimits {
     pub aggregate_embedded_code_evaluation_bytes_per_snapshot: u64,
     pub references_per_document: u64,
     pub references_per_snapshot: u64,
+    pub declared_labels_per_snapshot: u64,
     pub referenced_target_blob_bytes: u64,
     pub aggregate_referenced_target_bytes_per_snapshot: u64,
     pub ignore_declaration_blob_bytes: u64,
@@ -46,6 +47,7 @@ impl ScanLimits {
         aggregate_embedded_code_evaluation_bytes_per_snapshot: 536_870_912,
         references_per_document: 16_384,
         references_per_snapshot: 1_000_000,
+        declared_labels_per_snapshot: 1_000_000,
         referenced_target_blob_bytes: 16_777_216,
         aggregate_referenced_target_bytes_per_snapshot: 536_870_912,
         ignore_declaration_blob_bytes: 1_048_576,
@@ -87,6 +89,7 @@ pub struct ScanResources {
     nodes: u64,
     embedded_code_bytes: u64,
     references: u64,
+    labels: u64,
     target_bytes: u64,
     ignore_declaration_bytes: u64,
     line_fragment_bytes: u64,
@@ -100,6 +103,7 @@ impl Clone for ScanResources {
             cache_scope: Arc::new(()),
             limits: self.limits,
             documents: self.documents,
+            labels: self.labels,
             document_bytes: self.document_bytes,
             nodes: self.nodes,
             embedded_code_bytes: self.embedded_code_bytes,
@@ -136,6 +140,7 @@ impl ScanResources {
             nodes: 0,
             embedded_code_bytes: 0,
             references: 0,
+            labels: 0,
             target_bytes: 0,
             ignore_declaration_bytes: 0,
             line_fragment_bytes: 0,
@@ -399,6 +404,23 @@ impl ScanResources {
                 ResourceName::ReferencesPerSnapshot,
                 self.limits.references_per_snapshot,
                 self.limits.references_per_snapshot.saturating_add(1),
+            ));
+        }
+        Ok(())
+    }
+
+    /// One declared label admitted to the snapshot's table.
+    ///
+    /// # Errors
+    ///
+    /// The `declared-labels-per-snapshot` crossing.
+    pub(crate) fn charge_label(&mut self) -> Result<(), Error> {
+        self.labels = self.labels.saturating_add(1);
+        if self.labels > self.limits.declared_labels_per_snapshot {
+            return Err(crossing(
+                ResourceName::DeclaredLabelsPerSnapshot,
+                self.limits.declared_labels_per_snapshot,
+                self.limits.declared_labels_per_snapshot.saturating_add(1),
             ));
         }
         Ok(())

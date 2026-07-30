@@ -147,6 +147,7 @@ fn document_discovery(count: usize) -> SnapshotDiscovery {
         .collect();
     SnapshotDiscovery {
         documents,
+        labels: BTreeMap::new(),
         outside_document_set: 0,
         tree_entries: u64::try_from(count).unwrap_or(u64::MAX),
         path_defects: Vec::new(),

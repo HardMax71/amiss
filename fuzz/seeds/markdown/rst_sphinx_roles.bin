@@ -1,0 +1,8 @@
+Index
+=====
+
+.. _label-one:
+
+See :doc:`guide` and :ref:`label-one` and :ref:`the guide <label-two>`.
+
+.. include:: part.rst

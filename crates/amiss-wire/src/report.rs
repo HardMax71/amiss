@@ -701,6 +701,7 @@ pub enum IntentKind {
     SameRepositoryGitea,
     ExternalUrl,
     SiteRoute,
+    Label,
     Unsupported,
 }
 
@@ -714,6 +715,7 @@ impl IntentKind {
             Self::SameRepositoryGitea => "same-repository-gitea",
             Self::ExternalUrl => "external-url",
             Self::SiteRoute => "site-route",
+            Self::Label => "label",
             Self::Unsupported => "unsupported",
         }
     }

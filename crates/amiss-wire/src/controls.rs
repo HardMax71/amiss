@@ -189,6 +189,8 @@ pub enum SourceConstruct {
     RstImageDirective,
     RstIncludeDirective,
     RstFileOption,
+    RstDocRole,
+    RstRefRole,
 }
 
 impl SourceConstruct {
@@ -216,7 +218,9 @@ impl SourceConstruct {
             | Self::RstInlineHyperlink
             | Self::RstNamedTarget
             | Self::RstIncludeDirective
-            | Self::RstFileOption => false,
+            | Self::RstFileOption
+            | Self::RstDocRole
+            | Self::RstRefRole => false,
         }
     }
 
@@ -243,6 +247,8 @@ impl SourceConstruct {
             Self::RstImageDirective => "rst-image-directive",
             Self::RstIncludeDirective => "rst-include-directive",
             Self::RstFileOption => "rst-file-option",
+            Self::RstDocRole => "rst-doc-role",
+            Self::RstRefRole => "rst-ref-role",
         }
     }
 
@@ -268,6 +274,8 @@ impl SourceConstruct {
             "rst-image-directive" => Ok(Self::RstImageDirective),
             "rst-include-directive" => Ok(Self::RstIncludeDirective),
             "rst-file-option" => Ok(Self::RstFileOption),
+            "rst-doc-role" => Ok(Self::RstDocRole),
+            "rst-ref-role" => Ok(Self::RstRefRole),
             _ => fail(path, ErrorKind::InvalidValue),
         }
     }
@@ -410,6 +418,7 @@ pub enum ResourceName {
     AggregateEmbeddedCodeEvaluationBytesPerSnapshot,
     ReferencesPerDocument,
     ReferencesPerSnapshot,
+    DeclaredLabelsPerSnapshot,
     OrganizationPolicyEntries,
     CompleteFindings,
     TypedAnalysisErrorsRetained,
@@ -456,7 +465,8 @@ impl ResourceName {
             | Self::ParserNodesPerSnapshot
             | Self::AggregateEmbeddedCodeEvaluationBytesPerSnapshot
             | Self::ReferencesPerDocument
-            | Self::ReferencesPerSnapshot => "parse",
+            | Self::ReferencesPerSnapshot
+            | Self::DeclaredLabelsPerSnapshot => "parse",
             Self::ReferencedTargetBlobBytes
             | Self::AggregateReferencedTargetBytesPerSnapshot
             | Self::IgnoreDeclarationBlobBytes
@@ -1258,6 +1268,10 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
             let Ok(reason) = reason_text.parse::<MissingTag>() else {
                 return fail(&reason_path, ErrorKind::InvalidValue);
             };
+            if matches!(reason, MissingTag::LabelNotDeclared) {
+                obj.finish()?;
+                return Ok(Resolution::Missing(Missing::LabelNotDeclared));
+            }
             let resolved_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
             obj.finish()?;
             Ok(Resolution::Missing(match reason {
@@ -1270,6 +1284,7 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                 MissingTag::HeadingAnchorNotFound => Missing::HeadingAnchorNotFound {
                     path: resolved_path,
                 },
+                MissingTag::LabelNotDeclared => Missing::LabelNotDeclared,
             }))
         }
         ResolutionTag::TypeMismatch => {

@@ -34,15 +34,36 @@ fn every_specified_reference_form_is_read_with_its_exact_target() {
 }
 
 #[test]
-fn a_role_is_never_a_reference_because_the_role_set_is_open() {
+fn an_unregistered_role_is_never_a_reference_because_the_role_set_is_open() {
     for source in [
-        "See :doc:`guide` for more.\n",
-        "See :ref:`some-label` for more.\n",
         "See :class:`Model` for more.\n",
         "See :setting:`DEBUG` for more.\n",
+        "See :py:func:`compute` for more.\n",
         "An ordinary `interpreted span` with no underscore.\n",
     ] {
         assert!(kinds(source).is_empty(), "{source:?} produced a reference");
+    }
+}
+
+#[test]
+fn the_two_sphinx_roles_are_modelled_by_name() {
+    assert_eq!(
+        kinds("See :doc:`guide` and :ref:`some-label` for more.\n"),
+        vec![
+            (ReferenceKind::DocRole, "guide".to_owned()),
+            (ReferenceKind::RefRole, "some-label".to_owned()),
+        ],
+    );
+    assert_eq!(
+        kinds("Read :doc:`the guide <../intro/guide>` first.\n"),
+        vec![(ReferenceKind::DocRole, "../intro/guide".to_owned())],
+    );
+    assert_eq!(
+        kinds("Read :ref:`the setup <setup-label>` first.\n"),
+        vec![(ReferenceKind::RefRole, "setup-label".to_owned())],
+    );
+    for empty in [":doc:``\n", ":ref:`has space`\n", ":doc:`x <>`\n"] {
+        assert!(kinds(empty).is_empty(), "{empty:?} produced a reference");
     }
 }
 

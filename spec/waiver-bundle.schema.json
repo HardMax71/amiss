@@ -385,7 +385,35 @@
         }
       ]
     },
+    "LabelMissingResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "properties": {
+        "kind": {
+          "const": "missing"
+        },
+        "reason": {
+          "enum": [
+            "label-not-declared"
+          ]
+        }
+      }
+    },
     "MissingResolution": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PathMissingResolution"
+        },
+        {
+          "$ref": "#/$defs/LabelMissingResolution"
+        }
+      ]
+    },
+    "PathMissingResolution": {
       "type": "object",
       "additionalProperties": false,
       "required": [

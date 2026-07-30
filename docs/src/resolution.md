@@ -124,7 +124,16 @@ is `_` and whose identities all carry a prefix.
 
 A reStructuredText heading anchor resolves through the Docutils rule in
 [What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
-outright with `.. _name:` resolve as themselves. A target that includes another file,
+outright with `.. _name:` resolve as themselves. The two Sphinx roles are modelled by
+name, which is why the grammar profile says `docutils-rst-sphinx-refs`. A relative
+`:doc:` target takes the source suffix and resolves like any repository path, while a
+source-root-absolute one stays a declared site route, because the engine does not know
+the Sphinx root. A `:ref:` resolves against the snapshot's label table, built during
+discovery from every `.. _name:` a scanned reStructuredText document declares and
+bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
+declaring document, a name nobody declares is a missing target, and a name declared
+twice is undecided rather than guessed between. Every other role stays an open
+extension point, declared rather than read into. A target that includes another file,
 through the AsciiDoc include or the reStructuredText `include` and `literalinclude`
 directives, publishes identities this engine never read, so an anchor it does not hold
 stays undecided rather than reported missing.

@@ -185,6 +185,7 @@
         "aggregate-embedded-code-evaluation-bytes-per-snapshot",
         "references-per-document",
         "references-per-snapshot",
+        "declared-labels-per-snapshot",
         "organization-policy-entries",
         "complete-findings",
         "typed-analysis-errors-retained",
@@ -652,7 +653,7 @@
           "then": {
             "properties": {
               "grammar_profile": {
-                "const": "docutils-rst"
+                "const": "docutils-rst-sphinx-refs"
               },
               "frontmatter_contract": {
                 "const": "none"
@@ -2325,6 +2326,7 @@
         "kind": {
           "enum": [
             "site-route",
+            "label",
             "unsupported"
           ]
         },
@@ -2514,7 +2516,35 @@
         }
       }
     },
+    "LabelMissingResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "properties": {
+        "kind": {
+          "const": "missing"
+        },
+        "reason": {
+          "enum": [
+            "label-not-declared"
+          ]
+        }
+      }
+    },
     "MissingResolution": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PathMissingResolution"
+        },
+        {
+          "$ref": "#/$defs/LabelMissingResolution"
+        }
+      ]
+    },
+    "PathMissingResolution": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -2655,7 +2685,8 @@
           "enum": [
             "site-route",
             "network-path",
-            "attribute-dependent"
+            "attribute-dependent",
+            "duplicate-label"
           ]
         }
       }
@@ -2785,7 +2816,9 @@
         "rst-named-target",
         "rst-image-directive",
         "rst-include-directive",
-        "rst-file-option"
+        "rst-file-option",
+        "rst-doc-role",
+        "rst-ref-role"
       ]
     },
     "ObservationSourceConstruct": {
@@ -2809,7 +2842,9 @@
         "rst-named-target",
         "rst-image-directive",
         "rst-include-directive",
-        "rst-file-option"
+        "rst-file-option",
+        "rst-doc-role",
+        "rst-ref-role"
       ]
     },
     "RepositoryTargetIntent": {

@@ -277,6 +277,7 @@ fn resource_limit(resource: ResourceName) -> u64 {
         }
         ResourceName::ReferencesPerDocument => scan.references_per_document,
         ResourceName::ReferencesPerSnapshot => scan.references_per_snapshot,
+        ResourceName::DeclaredLabelsPerSnapshot => scan.declared_labels_per_snapshot,
         ResourceName::OrganizationPolicyEntries => ORGANIZATION_POLICY_ENTRIES_LIMIT,
         ResourceName::CompleteFindings => scan.complete_findings,
         ResourceName::TypedAnalysisErrorsRetained => scan.errors_retained,

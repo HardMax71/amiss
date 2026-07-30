@@ -168,12 +168,14 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent<'_> {
             query,
             fragment,
         },
-        IntentKind::SiteRoute | IntentKind::Unsupported => CorrelationIntent::Other {
-            kind: intent.kind,
-            raw: observation.raw_destination_digest,
-            query,
-            fragment,
-        },
+        IntentKind::SiteRoute | IntentKind::Label | IntentKind::Unsupported => {
+            CorrelationIntent::Other {
+                kind: intent.kind,
+                raw: observation.raw_destination_digest,
+                query,
+                fragment,
+            }
+        }
     }
 }
 
