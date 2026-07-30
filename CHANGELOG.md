@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/HardMax71/amiss/compare/v0.12.0...v0.13.0) - 2026-07-30
+
+### Changes
+
+- update Cargo.toml dependencies
+- Publish the identity Docutils gives a section
+- Read reStructuredText documents, and say what that buys
+- Publish the identity Asciidoctor gives a section
+- Let the schema describe the observations AsciiDoc emits
+- Read AsciiDoc documents, and declare what a tree cannot answer
+- Count the markup this engine cannot read
+- Ask the ignore file the repository already wrote
+- Say the extraction vocabulary once, where both adapters can reach it
+- update Cargo.lock dependencies
+
 ## [0.12.0](https://github.com/HardMax71/amiss/compare/v0.11.0...v0.12.0) - 2026-07-28
 
 ### Changes
