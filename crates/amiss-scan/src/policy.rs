@@ -891,6 +891,7 @@ pub fn tightened_limits(
             }
             ResourceName::ReferencesPerDocument => Some(&mut scan.references_per_document),
             ResourceName::ReferencesPerSnapshot => Some(&mut scan.references_per_snapshot),
+            ResourceName::DeclaredLabelsPerSnapshot => Some(&mut scan.declared_labels_per_snapshot),
             ResourceName::ReferencedTargetBlobBytes => Some(&mut scan.referenced_target_blob_bytes),
             ResourceName::AggregateReferencedTargetBytesPerSnapshot => {
                 Some(&mut scan.aggregate_referenced_target_bytes_per_snapshot)

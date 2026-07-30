@@ -246,6 +246,11 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
                 missing.discriminant().as_ref(),
                 vec![("path", path.to_value())],
             ),
+            Missing::LabelNotDeclared => reasoned_resolution(
+                resolution.discriminant().as_ref(),
+                missing.discriminant().as_ref(),
+                Vec::new(),
+            ),
         },
         Resolution::DeclaredUntracked(declared) => resolution_object(
             resolution.discriminant().as_ref(),
@@ -321,7 +326,8 @@ fn unsupported_semantics_value(kind: &str, semantics: &UnsupportedSemantics<Repo
         ),
         UnsupportedSemantics::SiteRoute
         | UnsupportedSemantics::NetworkPath
-        | UnsupportedSemantics::AttributeDependent => {
+        | UnsupportedSemantics::AttributeDependent
+        | UnsupportedSemantics::DuplicateLabel => {
             reasoned_resolution(kind, semantics.discriminant().as_ref(), Vec::new())
         }
     }

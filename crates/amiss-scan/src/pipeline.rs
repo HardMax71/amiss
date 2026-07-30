@@ -92,18 +92,31 @@ pub(crate) fn side_observations(
                     continue;
                 };
                 for occurrence in &scanned.occurrences {
-                    let (intent, resolution) = resolve(
-                        repo,
-                        git_resources,
-                        scan_resources,
-                        &mut cache,
-                        discovery,
-                        forge,
-                        adapter,
-                        &record.path,
-                        occurrence.occurrence.construct.is_image(),
-                        &occurrence.occurrence.semantic_destination,
-                    )
+                    let (intent, resolution) = if occurrence.occurrence.construct
+                        == amiss_wire::controls::SourceConstruct::RstRefRole
+                    {
+                        crate::resolve::resolve_label(
+                            repo,
+                            git_resources,
+                            scan_resources,
+                            &mut cache,
+                            discovery,
+                            &occurrence.occurrence.semantic_destination,
+                        )
+                    } else {
+                        resolve(
+                            repo,
+                            git_resources,
+                            scan_resources,
+                            &mut cache,
+                            discovery,
+                            forge,
+                            adapter,
+                            &record.path,
+                            occurrence.occurrence.construct.is_image(),
+                            &occurrence.occurrence.semantic_destination,
+                        )
+                    }
                     .map_err(|defect| detail(&defect, Some(&record.path)))?;
                     observations.push(Observation {
                         id: occurrence_id(engine, adapter, &record.path, occurrence, &intent),

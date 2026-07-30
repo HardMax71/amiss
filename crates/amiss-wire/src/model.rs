@@ -576,7 +576,7 @@ impl Adapter {
             Self::Markdown => "commonmark-gfm",
             Self::Mdx => "mdx-source",
             Self::AsciiDoc => "asciidoctor-2",
-            Self::Rst => "docutils-rst",
+            Self::Rst => "docutils-rst-sphinx-refs",
             Self::PlainAdvisory => "plain-zero-lexer",
         }
     }

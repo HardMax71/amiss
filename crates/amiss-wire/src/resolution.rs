@@ -91,6 +91,7 @@ pub enum Missing<P> {
     PathNotFound { path: P },
     LineFragmentOutOfRange { path: P },
     HeadingAnchorNotFound { path: P },
+    LabelNotDeclared,
 }
 
 /// A target absent from the tree at a path the repository's own ignore rules
@@ -126,6 +127,7 @@ pub enum UnsupportedSemantics<P> {
     SiteRoute,
     NetworkPath,
     AttributeDependent,
+    DuplicateLabel,
 }
 
 impl<P> UnsupportedSemantics<P> {
@@ -134,7 +136,10 @@ impl<P> UnsupportedSemantics<P> {
         match self {
             Self::Query(target) | Self::CodeFragment(target) => target.is_lfs_pointer(),
             Self::Fragment(blob) => blob.content.is_lfs_pointer(),
-            Self::SiteRoute | Self::NetworkPath | Self::AttributeDependent => false,
+            Self::SiteRoute
+            | Self::NetworkPath
+            | Self::AttributeDependent
+            | Self::DuplicateLabel => false,
         }
     }
 }

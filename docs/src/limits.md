@@ -58,6 +58,7 @@ judged: its anchors stay unsupported rather than becoming missing.
 | `aggregate-embedded-code-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `references-per-document` | 16,384 |
 | `references-per-snapshot` | 1,000,000 |
+| `declared-labels-per-snapshot` | 1,000,000 |
 | `organization-policy-entries` | 100,000 |
 | `complete-findings` | 100,000 |
 | `typed-analysis-errors-retained` | 64 |

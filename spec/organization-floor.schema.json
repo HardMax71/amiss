@@ -112,7 +112,7 @@
     },
     "resource_limits": {
       "type": "array",
-      "maxItems": 39,
+      "maxItems": 40,
       "description": "Sort by resource UTF-8 bytes. A floor may only tighten the built-in ceiling.",
       "x-amiss-order": [
         "resource"
@@ -249,6 +249,7 @@
         "aggregate-embedded-code-evaluation-bytes-per-snapshot",
         "references-per-document",
         "references-per-snapshot",
+        "declared-labels-per-snapshot",
         "organization-policy-entries",
         "complete-findings",
         "typed-analysis-errors-retained",

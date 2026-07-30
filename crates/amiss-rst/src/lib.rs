@@ -41,9 +41,10 @@ pub struct Block {
     pub indent: usize,
 }
 
-/// The reference forms the specification itself defines. Roles are an open
-/// extension point and `:doc:` and `:ref:` belong to Sphinx, so neither appears
-/// here.
+/// The reference forms the specification defines, plus the two Sphinx roles
+/// every Sphinx project writes. `:doc:` and `:ref:` are modelled by name and
+/// the grammar profile says so; every other role stays an open extension
+/// point, declared rather than guessed at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReferenceKind {
     InlineHyperlink,
@@ -51,6 +52,8 @@ pub enum ReferenceKind {
     Image,
     Include,
     FileOption,
+    DocRole,
+    RefRole,
 }
 
 impl ReferenceKind {
@@ -62,6 +65,8 @@ impl ReferenceKind {
             Self::Image => "rst-image-directive",
             Self::Include => "rst-include-directive",
             Self::FileOption => "rst-file-option",
+            Self::DocRole => "rst-doc-role",
+            Self::RefRole => "rst-ref-role",
         }
     }
 

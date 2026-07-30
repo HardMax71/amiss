@@ -997,6 +997,51 @@ fn anchor_resolution(
     }))
 }
 
+/// Answers a Sphinx `:ref:` against the labels the snapshot's documents
+/// declare. The label rides the intent as its fragment, so identity and
+/// correlation flow through the shapes every other reference already uses;
+/// a unique declaration delegates to the ordinary target lookup of the
+/// declaring document.
+pub(crate) fn resolve_label(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    label: &str,
+) -> Result<(Intent, Resolution), Error> {
+    let intent = Intent {
+        kind: IntentKind::Label,
+        repository_path: None,
+        target_kind: None,
+        external_scheme: None,
+        query: None,
+        fragment: Some(label.to_owned()),
+    };
+    let resolution = match snapshot.labels.get(label) {
+        None => Resolution::Missing(Missing::LabelNotDeclared),
+        Some(crate::discovery::LabelState::Duplicated) => {
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::DuplicateLabel)
+        }
+        Some(crate::discovery::LabelState::Declared(owner)) => {
+            let owner = owner.clone();
+            lookup(
+                repo,
+                git,
+                scan,
+                cache,
+                snapshot,
+                &owner,
+                TargetKind::Blob,
+                None,
+                None,
+                None,
+            )?
+        }
+    };
+    Ok((intent, resolution))
+}
+
 /// A document that splices another file publishes identities this engine never
 /// read, so an anchor it does not hold is undecided rather than absent.
 fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {

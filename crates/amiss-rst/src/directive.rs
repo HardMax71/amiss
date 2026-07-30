@@ -42,8 +42,41 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         found.push(build(ReferenceKind::FileOption, path, at, lead, line.len()));
         return found;
     }
+    roles(line, at, &mut found);
     inline(line, at, &mut found);
+    found.sort_by_key(|reference| reference.span);
     found
+}
+
+const SPHINX_ROLES: [(&str, ReferenceKind); 2] = [
+    (":doc:`", ReferenceKind::DocRole),
+    (":ref:`", ReferenceKind::RefRole),
+];
+
+/// The two Sphinx roles, by name. A `title <target>` body carries its target
+/// in the brackets; a bare body is the target itself.
+fn roles(line: &str, at: usize, found: &mut Vec<Reference>) {
+    for (opener, kind) in SPHINX_ROLES {
+        let mut index = 0_usize;
+        while let Some(hit) = line.get(index..).and_then(|tail| tail.find(opener)) {
+            let start = index.saturating_add(hit);
+            let body_at = start.saturating_add(opener.len());
+            let Some(close) = line.get(body_at..).and_then(|tail| tail.find('`')) else {
+                break;
+            };
+            let end = body_at.saturating_add(close);
+            let body = line.get(body_at..end).unwrap_or_default();
+            let target = body
+                .rsplit_once('<')
+                .and_then(|(_, tail)| tail.strip_suffix('>'))
+                .unwrap_or(body)
+                .trim();
+            if !target.is_empty() && !target.contains(char::is_whitespace) {
+                found.push(build(kind, target, at, start, end.saturating_add(1)));
+            }
+            index = end.saturating_add(1);
+        }
+    }
 }
 
 /// `.. _name: target` names an external hyperlink target. A line with nothing
