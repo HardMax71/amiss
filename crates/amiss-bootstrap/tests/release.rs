@@ -8,14 +8,17 @@ use std::fs;
 use std::process::Command;
 
 use amiss_bootstrap::build::{StagedArtifact, StagedBuild, StagedFile, build_manifest};
+use amiss_bootstrap::result::{BootstrapResult, parse_result};
 use amiss_bootstrap::{Refusal, validate};
+use amiss_fixtures::requests::{RequestPaths, SealedRequests, indent};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::action::host_platform;
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor};
-use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::digest::{Digest, hb, sha256};
+use amiss_wire::json::{Value, canonical, parse as parse_json};
 use amiss_wire::manifest::{ReleaseManifest, RuntimeRole};
 use amiss_wire::model::ObjectFormat;
+use amiss_wire::requests::RequestMode;
 use tempfile::TempDir;
 
 mod support;
@@ -459,4 +462,164 @@ fn a_release_missing_its_lockfile_refuses_on_the_path() {
         Some(Refusal::Tampered("path-not-regular-blob")),
         "a lockfile the manifest records and the tree lacks is not a lockfile"
     );
+}
+
+/// The constraint has to name this exact binary, since the wrapper hashes
+/// itself before it reads a request.
+fn binary_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
+    named_constraint(staged, "amiss / assure")
+}
+
+fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescriptor {
+    let own = fs::read(env!("CARGO_BIN_EXE_amiss-bootstrap")).unwrap();
+    let value = parse_json(
+        format!(
+            r#"{{"schema":"amiss/scanner-execution-constraint","action_repository":{{"host":"git.example.internal","owner":"platform/security","name":"amiss"}},"action_object_format":"sha1","action_commit_oid":"{}","action_tree_oid":"{}","manifest_path":"release-manifest.json","release_manifest_digest":"{}","selected_platform":"{}","required_status_name":"{}","bootstrap_contract":"amiss-action-bootstrap","bootstrap_digest":"{}"}}"#,
+            staged.commit,
+            staged.tree,
+            staged.manifest_digest,
+            staged.platform.as_str(),
+            status,
+            hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    ExecutionConstraintDescriptor::parse(&canonical(&value)).unwrap()
+}
+
+/// Runs the wrapper over one request triple and reports what it settled to.
+/// Every case here is refused while the requests are read, so the engine the
+/// wrapper would launch is never reached and needs no fixture.
+fn settle(
+    staged: &Release,
+    requests: &SealedRequests,
+    edit: impl FnOnce(&RequestPaths),
+) -> Option<BootstrapResult> {
+    let root = tempfile::tempdir().unwrap();
+    let paths = requests.write(root.path());
+    edit(&paths);
+    let report = root.path().join("report");
+    let result = root.path().join("result");
+    fs::write(&report, b"").unwrap();
+    fs::write(&result, b"").unwrap();
+    Command::new(env!("CARGO_BIN_EXE_amiss-bootstrap"))
+        .arg("exec")
+        .arg("--action-repository")
+        .arg(staged.dir.path())
+        .arg("--repository")
+        .arg(staged.dir.path())
+        .arg("--constraint")
+        .arg(&paths.constraint)
+        .arg("--evaluation-request")
+        .arg(&paths.evaluation)
+        .arg("--snapshot-request")
+        .arg(&paths.snapshot)
+        .arg("--controls-request")
+        .arg(&paths.controls)
+        .arg("--scratch")
+        .arg(root.path())
+        .arg("--report")
+        .arg(&report)
+        .arg("--result")
+        .arg(&result)
+        .output()
+        .unwrap();
+    parse_result(&fs::read(result).unwrap())
+}
+
+fn refused(staged: &Release, requests: &SealedRequests) -> bool {
+    settle(staged, requests, |_paths| {}) == Some(BootstrapResult::TamperedRuntime)
+}
+
+/// Each document has to be canonical on its own, so one non-canonical document
+/// is refused whichever of the three carries it.
+#[test]
+fn a_noncanonical_request_is_refused_whichever_document_carries_it() {
+    let staged = release(|_root| {});
+    let requests = SealedRequests::new(binary_constraint(&staged));
+
+    let picks: [fn(&RequestPaths); 3] = [
+        |paths| indent(&paths.evaluation),
+        |paths| indent(&paths.snapshot),
+        |paths| indent(&paths.controls),
+    ];
+    for pick in picks {
+        assert_eq!(
+            settle(&staged, &requests, pick),
+            Some(BootstrapResult::TamperedRuntime)
+        );
+    }
+}
+
+/// The evaluation and the snapshot parse alone, so their pairing law is checked
+/// only here and a disagreement has to refuse rather than scan. The other half
+/// of that law, a commit-pair evaluation carrying no candidate, cannot be built
+/// through the wire type at all, so only a hand-written document reaches it.
+#[test]
+fn an_evaluation_and_snapshot_that_disagree_on_mode_are_refused() {
+    let staged = release(|_root| {});
+
+    let mut wrong_mode = SealedRequests::new(binary_constraint(&staged));
+    wrong_mode.snapshot.materialization = RequestMode::Index;
+
+    assert!(refused(&staged, &wrong_mode));
+}
+
+/// The controls carry a constraint and the digest they claim for it, and the
+/// host carries one of its own. All three have to be the same constraint.
+#[test]
+fn an_execution_constraint_that_disagrees_with_its_digest_or_the_host_is_refused() {
+    let staged = release(|_root| {});
+
+    let mut wrong_digest = SealedRequests::new(binary_constraint(&staged));
+    wrong_digest
+        .controls
+        .execution_constraint
+        .as_mut()
+        .unwrap()
+        .expected_digest = sha256(b"not the constraint");
+    assert!(refused(&staged, &wrong_digest));
+
+    let mut wrong_host = SealedRequests::new(binary_constraint(&staged));
+    wrong_host.constraint = named_constraint(&staged, "amiss / other");
+    assert!(refused(&staged, &wrong_host));
+}
+
+/// The trusted-time statement is bound by four facts at once, and the outer
+/// three exist so a statement cannot be lifted from another run.
+#[test]
+fn a_trusted_time_statement_that_disagrees_on_any_bound_fact_is_refused() {
+    let staged = release(|_root| {});
+
+    let breaks: [fn(&mut SealedRequests); 4] = [
+        |requests| {
+            requests
+                .controls
+                .trusted_time
+                .as_mut()
+                .unwrap()
+                .expected_digest = sha256(b"not the statement");
+        },
+        |requests| {
+            requests.controls.trusted_time.as_mut().unwrap().provider = "github".to_owned();
+        },
+        |requests| {
+            requests
+                .controls
+                .trusted_time
+                .as_mut()
+                .unwrap()
+                .provider_run_id = "pipeline/1:job-1".to_owned();
+        },
+        |requests| {
+            let time = requests.controls.trusted_time.as_mut().unwrap();
+            time.provider_run_attempt = time.provider_run_attempt.saturating_add(1);
+        },
+    ];
+    for break_one in breaks {
+        let mut requests = SealedRequests::new(binary_constraint(&staged));
+        break_one(&mut requests);
+        assert!(refused(&staged, &requests));
+    }
 }
