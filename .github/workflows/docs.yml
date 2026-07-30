@@ -38,9 +38,14 @@ jobs:
       # llms-full.txt is the whole book in one fetch, in reading order, for
       # agents that follow llms.txt to its full form.
       - run: |
+          chapters="$(sed -n 's/.*](\([^)]*\.md\)).*/\1/p' docs/src/SUMMARY.md)"
+          [ "$(printf '%s\n' "$chapters" | wc -l)" -eq "$(grep -c '](' docs/src/SUMMARY.md)" ] || {
+            echo 'SUMMARY.md holds a chapter the llms-full extraction missed' >&2
+            exit 1
+          }
           {
             printf '# Amiss, the whole book\n'
-            grep -oE '\([a-z-]+\.md\)' docs/src/SUMMARY.md | tr -d '()' | while read -r chapter; do
+            for chapter in $chapters; do
               printf '\n---\n\n'
               cat "docs/src/$chapter"
             done
