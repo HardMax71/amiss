@@ -23,7 +23,7 @@
       "const": "amiss/scanner-evaluation-request"
     },
     "profile": {
-      "enum": ["observe", "enforce"]
+      "enum": ["observe", "enforce-introduced", "enforce"]
     },
     "mode": {
       "description": "commit-pair evaluates two explicit commits; index evaluates the base commit against the complete logical staged index. candidate_commit_oid is null exactly when mode is index.",

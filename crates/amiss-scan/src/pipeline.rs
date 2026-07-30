@@ -149,6 +149,7 @@ fn floor_gate(
             setup_shell.repository.as_ref(),
             setup_shell.target_ref.as_deref(),
             setup_shell.enforce,
+            setup_shell.introduced_only,
         )
         .err()
     });
@@ -890,6 +891,7 @@ fn evaluate_tree(
 pub struct SetupShell {
     pub engine: EngineProvenance,
     pub enforce: bool,
+    pub introduced_only: bool,
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
     pub candidate_ref: Option<String>,
@@ -917,6 +919,7 @@ impl SetupShell {
         Setup {
             engine: self.engine.clone(),
             enforce: self.enforce,
+            introduced_only: self.introduced_only,
             repository: self.repository.clone(),
             forge: self.forge,
             candidate_ref: self.candidate_ref.clone(),

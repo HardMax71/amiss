@@ -95,6 +95,7 @@ fn shell(enforce: bool) -> SetupShell {
     SetupShell {
         engine: engine(),
         enforce,
+        introduced_only: false,
         repository: Some(amiss_wire::model::RepositoryIdentity {
             host: "github.com".to_owned(),
             owner: "acme".to_owned(),
@@ -127,6 +128,7 @@ fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
     let setup = Setup {
         engine: engine(),
         enforce,
+        introduced_only: false,
         repository: Some(amiss_wire::model::RepositoryIdentity {
             host: "github.com".to_owned(),
             owner: "acme".to_owned(),

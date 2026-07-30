@@ -65,6 +65,7 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
     SetupShell {
         engine: engine(),
         enforce: false,
+        introduced_only: false,
         repository: Some(identity("acme", "docs")),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
@@ -128,7 +129,13 @@ fn payload(
 fn the_floor_binding_is_repository_ref_and_profile_equality() {
     let input = floor_input(EMPTY_ARRAYS);
     let repository = identity("acme", "docs");
-    let matching = verify_floor(&input, Some(&repository), Some("refs/heads/main"), false);
+    let matching = verify_floor(
+        &input,
+        Some(&repository),
+        Some("refs/heads/main"),
+        false,
+        false,
+    );
     assert!(matching.is_ok());
 
     assert!(
@@ -136,13 +143,23 @@ fn the_floor_binding_is_repository_ref_and_profile_equality() {
             &input,
             Some(&identity("acme", "other")),
             Some("refs/heads/main"),
+            false,
             false
         )
         .is_err()
     );
-    assert!(verify_floor(&input, None, Some("refs/heads/main"), false).is_err());
-    assert!(verify_floor(&input, Some(&repository), Some("refs/heads/dev"), false).is_err());
-    assert!(verify_floor(&input, Some(&repository), None, false).is_err());
+    assert!(verify_floor(&input, None, Some("refs/heads/main"), false, false).is_err());
+    assert!(
+        verify_floor(
+            &input,
+            Some(&repository),
+            Some("refs/heads/dev"),
+            false,
+            false
+        )
+        .is_err()
+    );
+    assert!(verify_floor(&input, Some(&repository), None, false, false).is_err());
 
     let strict = FloorInput {
         floor: OrganizationFloor::parse(
@@ -154,8 +171,48 @@ fn the_floor_binding_is_repository_ref_and_profile_equality() {
         .unwrap(),
         trust_source: TrustSource::OrganizationPolicy,
     };
-    assert!(verify_floor(&strict, Some(&repository), Some("refs/heads/main"), false).is_err());
-    assert!(verify_floor(&strict, Some(&repository), Some("refs/heads/main"), true).is_ok());
+    assert!(
+        verify_floor(
+            &strict,
+            Some(&repository),
+            Some("refs/heads/main"),
+            false,
+            false
+        )
+        .is_err()
+    );
+    assert!(
+        verify_floor(
+            &strict,
+            Some(&repository),
+            Some("refs/heads/main"),
+            true,
+            false
+        )
+        .is_ok()
+    );
+    assert!(
+        verify_floor(
+            &strict,
+            Some(&repository),
+            Some("refs/heads/main"),
+            true,
+            true
+        )
+        .is_err(),
+        "a floor demanding enforce is not satisfied by enforce-introduced"
+    );
+    assert!(
+        verify_floor(
+            &input,
+            Some(&repository),
+            Some("refs/heads/main"),
+            true,
+            true
+        )
+        .is_ok(),
+        "an observe-minimum floor accepts the ramp"
+    );
 }
 
 #[test]

@@ -8,7 +8,7 @@ branding:
 
 inputs:
   profile:
-    description: observe (findings do not block) or enforce (blocking findings fail the run)
+    description: observe (findings do not block), enforce-introduced (introduced findings block, carried ones warn), or enforce (blocking findings fail the run)
     default: enforce
   base:
     description: >-

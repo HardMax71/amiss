@@ -1865,6 +1865,7 @@
         "profile": {
           "enum": [
             "observe",
+            "enforce-introduced",
             "enforce"
           ]
         },

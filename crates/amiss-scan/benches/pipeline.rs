@@ -34,6 +34,7 @@ fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
     let shell = SetupShell {
         engine: engine(),
         enforce: false,
+        introduced_only: false,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -84,7 +85,14 @@ fn lookup_last_document(bencher: Bencher<'_, '_>, count: usize) {
 fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
     let (comparisons, policy) = exception_fixture(count);
     bencher.bench_local(|| {
-        evaluate_with_policy(&[], black_box(&comparisons), true, black_box(&policy), &[])
+        evaluate_with_policy(
+            &[],
+            black_box(&comparisons),
+            true,
+            false,
+            black_box(&policy),
+            &[],
+        )
     });
 }
 
@@ -105,6 +113,7 @@ fn report_setup() -> Setup {
     Setup {
         engine: engine(),
         enforce: false,
+        introduced_only: false,
         repository: None,
         forge: None,
         candidate_ref: None,

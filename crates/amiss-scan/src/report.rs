@@ -120,6 +120,7 @@ pub struct RequestDigests {
 pub struct Setup {
     pub engine: EngineProvenance,
     pub enforce: bool,
+    pub introduced_only: bool,
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
     pub candidate_ref: Option<String>,
@@ -1012,7 +1013,11 @@ fn controls_value(setup: &Setup) -> Value {
     object(vec![
         (
             "profile",
-            string(if setup.enforce { "enforce" } else { "observe" }),
+            string(match (setup.enforce, setup.introduced_only) {
+                (true, true) => "enforce-introduced",
+                (true, false) => "enforce",
+                (false, _) => "observe",
+            }),
         ),
         (
             "base_repository_policy_digest",
@@ -1636,6 +1641,7 @@ fn evaluate_paired(
         &inputs,
         comparisons,
         setup.enforce,
+        setup.introduced_only,
         &setup.policy,
         &governed,
     );

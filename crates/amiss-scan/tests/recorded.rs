@@ -51,6 +51,7 @@ fn shell(enforce: bool) -> SetupShell {
     SetupShell {
         engine: engine(),
         enforce,
+        introduced_only: false,
         repository: Some(RepositoryIdentity {
             host: "github.com".to_owned(),
             owner: "hardmax71".to_owned(),

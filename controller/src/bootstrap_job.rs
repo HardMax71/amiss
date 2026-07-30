@@ -229,6 +229,7 @@ fn plan_value(
             Value::String(
                 match profile {
                     Profile::Observe => "observe",
+                    Profile::EnforceIntroduced => "enforce-introduced",
                     Profile::Enforce => "enforce",
                 }
                 .to_owned(),

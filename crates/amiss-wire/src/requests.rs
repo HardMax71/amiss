@@ -564,6 +564,7 @@ fn evaluation_value(request: &EvaluationRequest) -> Value {
             "profile",
             text(match request.profile {
                 Profile::Observe => "observe",
+                Profile::EnforceIntroduced => "enforce-introduced",
                 Profile::Enforce => "enforce",
             }),
         ),

@@ -206,6 +206,7 @@ fn setup() -> Setup {
             digest: hb("amiss/scanner-engine", b"governed corpus test"),
         },
         enforce: false,
+        introduced_only: false,
         repository: None,
         forge: None,
         candidate_ref: None,

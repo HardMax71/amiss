@@ -207,7 +207,7 @@ impl AnalysisErrorCode {
             Self::InvalidEvent => {
                 "the declared repository, ref, or default-branch identity is not in canonical form; pass a lowercase owner and name and full refs/heads/ references"
             }
-            Self::InvalidProfile => "the profile is not one of observe or enforce",
+            Self::InvalidProfile => "the profile is not observe, enforce-introduced, or enforce",
             Self::RequestUnreadable => {
                 "the machine evaluation request bytes could not be read; nothing was evaluated"
             }
