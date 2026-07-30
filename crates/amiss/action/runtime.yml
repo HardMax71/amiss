@@ -53,11 +53,12 @@ runs:
         set -euo pipefail
         case "${RUNNER_OS}/${RUNNER_ARCH}" in
           Linux/X64) platform=linux-x86_64 ;;
+          Linux/ARM64) platform=linux-aarch64 ;;
           macOS/ARM64) platform=macos-aarch64 ;;
           macOS/X64) platform=macos-x86_64 ;;
           Windows/X64) platform=windows-x86_64 ;;
           *)
-            echo "::error title=amiss::unsupported runner ${RUNNER_OS}/${RUNNER_ARCH}; the release carries linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64"
+            echo "::error title=amiss::unsupported runner ${RUNNER_OS}/${RUNNER_ARCH}; the release carries linux-x86_64, linux-aarch64, macos-aarch64, macos-x86_64, windows-x86_64"
             exit 2
             ;;
         esac
