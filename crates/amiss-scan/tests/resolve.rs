@@ -1676,3 +1676,79 @@ fn distinct_anchors_into_one_target_are_charged_once() {
         "one charge for the one target"
     );
 }
+
+/// A reStructuredText document that includes another file publishes
+/// identities this engine never read, so an anchor it does not hold is
+/// undecided rather than absent, the boundary the `AsciiDoc` include already
+/// declared.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn transclusion_fixture() -> CommitChain {
+    staged_repository(&[
+        (
+            "README.md",
+            Staged::File(b"[a](docs/host.rst#present)\n[b](docs/host.rst#spliced)\n"),
+        ),
+        (
+            "docs/host.rst",
+            Staged::File(b"Present\n=======\n\n.. include:: part.rst\n"),
+        ),
+        ("docs/part.rst", Staged::File(b"Spliced\n=======\n")),
+    ])
+    .unwrap()
+}
+
+#[test]
+fn an_rst_include_leaves_absent_anchors_undecided() {
+    let dir = transclusion_fixture();
+    let tree = Oid::new(
+        ObjectFormat::Sha1,
+        dir.commits.first().unwrap().tree.clone(),
+    )
+    .unwrap();
+    let repo = Repository::open(dir.root(), ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let includes = amiss_scan::Includes::default();
+    let discovery = discover(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &tree,
+    )
+    .unwrap();
+    let mut cache = TargetCache::default();
+
+    let (_intent, held) = resolve(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &mut cache,
+        &discovery,
+        None,
+        Adapter::Markdown,
+        &RepoPath::new("README.md".to_owned()).unwrap(),
+        false,
+        "docs/host.rst#present",
+    )
+    .unwrap();
+    assert!(matches!(held, Resolution::Resolved(_)), "{held:?}");
+
+    let (_intent, spliced) = resolve(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &mut cache,
+        &discovery,
+        None,
+        Adapter::Markdown,
+        &RepoPath::new("README.md".to_owned()).unwrap(),
+        false,
+        "docs/host.rst#spliced",
+    )
+    .unwrap();
+    assert!(
+        matches!(spliced, Resolution::UnsupportedSemantics(_)),
+        "an anchor behind an include is undecided, got {spliced:?}"
+    );
+}

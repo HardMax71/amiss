@@ -124,7 +124,10 @@ is `_` and whose identities all carry a prefix.
 
 A reStructuredText heading anchor resolves through the Docutils rule in
 [What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
-outright with `.. _name:` resolve as themselves.
+outright with `.. _name:` resolve as themselves. A target that includes another file,
+through the AsciiDoc include or the reStructuredText `include` and `literalinclude`
+directives, publishes identities this engine never read, so an anchor it does not hold
+stays undecided rather than reported missing.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even
