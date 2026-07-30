@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use amiss_controller::{
     OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
@@ -115,11 +114,8 @@ pub(super) fn provider() -> ProviderIdentity {
     }
 }
 
-pub(super) fn claims(gate: &Oid) -> Value {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+pub(super) fn claims(gate: &Oid, now_millis: i64) -> Value {
+    let now = u64::try_from(now_millis / 1_000).unwrap();
     json!({
         "iss": format!("https://{HOST}"),
         "sub": "project_path:acme/widget:ref_type:branch:ref:topic",

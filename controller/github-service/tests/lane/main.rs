@@ -76,7 +76,7 @@ fn wrong_tree_and_changed_bootstrap_publish_tampered_runtime() {
 fn expired_saved_delivery_is_discarded_before_provider_use() {
     let mut harness = Harness::new(LaneCase::Pass, Duration::from_millis(100));
     harness.enqueue();
-    std::thread::sleep(Duration::from_millis(150));
+    harness.clock.advance(150);
 
     assert_eq!(harness.work(), WorkOutcome::Processed);
     assert!(harness.api.publications().is_empty());

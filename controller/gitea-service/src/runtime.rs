@@ -94,14 +94,16 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, config.scope.clone(), Arc::clone(&config.plan))
         .map_err(|_defect| ServiceError("check plan cannot be registered"))?;
+    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
     let admission = admission(
         &source,
-        config.target,
+        config.target.clone(),
         config.repository_id,
         config.route_id.clone(),
         config.route.clone(),
         config.ingress,
         plans.clone(),
+        Arc::clone(&clock),
     );
     let ledger_config =
         FileLedgerConfig::new(config.ledger_lease, config.ledger_records, config.replay)
@@ -113,6 +115,7 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
         receiver: config.receiver,
         inbox_root: config.inbox_root,
         inbox_limits: config.inbox,
+        clock,
     };
     let worker = WorkerContext {
         settings: WorkerSettings {
@@ -147,6 +150,10 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one lane's route, ingress, plans, and clock all bind here"
+)]
 fn admission(
     source: &Arc<GiteaPullRequestSource>,
     target: BranchRef,
@@ -155,6 +162,7 @@ fn admission(
     route: DeliveryRoute,
     ingress: IngressPolicy,
     plans: PlanRegistry,
+    clock: Arc<dyn ControllerClock>,
 ) -> Arc<dyn DeliveryAdmission> {
     let source = Arc::clone(source);
     let repository_prefix = format!("repository/{repository_id}/");
@@ -163,6 +171,7 @@ fn admission(
         route,
         ingress,
         plans,
+        clock,
         move |checked| {
             let verified = source
                 .authenticate_for_target(checked, &target)

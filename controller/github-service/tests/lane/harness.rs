@@ -8,8 +8,9 @@ use amiss_controller::{
     ControllerClock, DeliveryRoute, FileLedger, FileLedgerConfig, IngressLimits, IngressPolicy,
     OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter, ProviderError,
     ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy,
-    SystemClock, WebhookKey, WebhookKeyring, check_plan, register_plan,
+    WebhookKey, WebhookKeyring, check_plan, register_plan,
 };
+use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::{GitHubPullRequestAdapter, GitHubPullRequestSource};
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, DeliveryAdmission, DeliveryHeader, DeliveryWorker,
@@ -39,6 +40,7 @@ pub(super) enum LaneCase {
 }
 
 pub(super) struct Harness {
+    pub(super) clock: Arc<TestClock>,
     _state: TempDir,
     repositories: Repositories,
     event: SignedEvent,
@@ -82,6 +84,8 @@ impl Harness {
             Duration::from_secs(5),
         )
         .unwrap();
+        let test_clock = TestClock::new();
+        let clock: Arc<dyn ControllerClock> = test_clock.clone();
         let ProviderSetup {
             route,
             event,
@@ -89,11 +93,10 @@ impl Harness {
             api,
             adapters,
             plans,
-        } = provider_setup(case, &repositories, ingress, plan);
-        let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+        } = provider_setup(case, &repositories, ingress, plan, Arc::clone(&clock));
         let ledger = FileLedger::open_with_clock(
             &ledger_root,
-            FileLedgerConfig::new(LEASE_BEYOND_REACH, 32, replay).unwrap(),
+            FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
             Arc::clone(&clock),
         )
         .unwrap();
@@ -132,6 +135,7 @@ impl Harness {
         })
         .unwrap();
         Self {
+            clock: Arc::clone(&test_clock),
             _state: state,
             repositories,
             event,
@@ -143,7 +147,7 @@ impl Harness {
     }
 
     pub(super) fn enqueue(&self) {
-        let received_at_unix_millis = SystemClock.now_unix_millis().unwrap();
+        let received_at_unix_millis = self.clock.now();
         let headers = [DeliveryHeader {
             name: "x-hub-signature-256".to_owned(),
             value: self.event.signature.clone(),
@@ -215,6 +219,7 @@ fn provider_setup(
     repositories: &Repositories,
     ingress: IngressPolicy,
     plan: Arc<CheckPlan>,
+    clock: Arc<dyn ControllerClock>,
 ) -> ProviderSetup {
     let provider = provider();
     let route = route(&provider);
@@ -258,6 +263,7 @@ fn provider_setup(
         route.clone(),
         ingress,
         plans.clone(),
+        clock,
         move |checked| {
             let verified = source
                 .authenticate_for_target(checked, &target)
@@ -384,13 +390,9 @@ fn directory(root: &TempDir, name: &str) -> PathBuf {
     path
 }
 
-const LEASE_BEYOND_REACH: Duration = Duration::from_hours(1);
-
 fn inbox_limits() -> InboxLimits {
     InboxLimits {
-        // Unreachable rather than generous: these tests measure process physics
-        // and publication, and lease expiry is tested at the receive loop.
-        lease_duration: LEASE_BEYOND_REACH,
+        lease_duration: Duration::from_secs(2),
         max_records: 16,
         max_bytes: 16_777_216,
         max_record_bytes: 2_097_152,

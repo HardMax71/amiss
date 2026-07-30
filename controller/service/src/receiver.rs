@@ -9,6 +9,7 @@ use std::io;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
+use amiss_controller::{ControllerClock, SystemClock};
 use axum::Router;
 use axum::middleware;
 use axum::routing::post;
@@ -54,7 +55,8 @@ impl fmt::Display for ReceiverConfigError {
 
 impl std::error::Error for ReceiverConfigError {}
 
-/// Builds a provider-neutral receiver around one open durable inbox.
+/// Builds a provider-neutral receiver around one open durable inbox, stamping
+/// each arrival from the system clock.
 ///
 /// # Errors
 ///
@@ -67,6 +69,31 @@ pub fn router(
     ready: Arc<AtomicBool>,
     operations: Operations,
 ) -> Result<(Router, EndpointDrain), ReceiverConfigError> {
+    router_with_clock(
+        config,
+        inbox,
+        admission,
+        ready,
+        operations,
+        Arc::new(SystemClock),
+    )
+}
+
+/// Builds a provider-neutral receiver around one open durable inbox, stamping
+/// each arrival from the clock supplied.
+///
+/// # Errors
+///
+/// Returns an error when the delivery path is not an exact static path or a
+/// receiver limit is zero or outside its hard ceiling.
+pub fn router_with_clock(
+    config: &ReceiverConfig,
+    inbox: Arc<Mutex<Inbox>>,
+    admission: Arc<dyn DeliveryAdmission>,
+    ready: Arc<AtomicBool>,
+    operations: Operations,
+    clock: Arc<dyn ControllerClock>,
+) -> Result<(Router, EndpointDrain), ReceiverConfigError> {
     validate(config)?;
     let (permits, drain) =
         work_permits(config.max_concurrent_deliveries).ok_or(ReceiverConfigError::Limits)?;
@@ -78,6 +105,7 @@ pub fn router(
         max_headers: config.max_headers,
         max_header_bytes: config.max_header_bytes,
         permits,
+        clock,
     };
     let delivery = post(receive)
         .layer::<_, Infallible>(RequestBodyLimitLayer::new(config.max_body_bytes))

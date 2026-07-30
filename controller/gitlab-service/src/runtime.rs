@@ -14,7 +14,8 @@ use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
     AdmissionRejection, EndpointDrain, EvaluationRequest, Operations, ServiceComponent,
-    Supervision, SupervisionError, check_lane, evaluation_router, shutdown_signal, supervise,
+    Supervision, SupervisionError, check_lane, evaluation_router_with_clock, shutdown_signal,
+    supervise,
 };
 use axum::Router;
 use axum::http::StatusCode;
@@ -138,10 +139,11 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
     let evaluation = config.evaluation;
     let ready = Arc::new(AtomicBool::new(false));
     let operations = Operations::default();
-    let (router, endpoint) = evaluation_router(
+    let (router, endpoint) = evaluation_router_with_clock(
         &evaluation,
         Arc::clone(&ready),
         operations.clone(),
+        Arc::clone(&lane.clock),
         move |request| evaluate(&lane, request),
     )
     .map_err(|_defect| ServiceError("HTTP evaluation configuration is invalid"))?;
@@ -222,11 +224,17 @@ fn evaluate(lane: &Lane, request: EvaluationRequest<'_>) -> StatusCode {
         headers: &headers,
         body: request.body,
     };
-    match check_lane(&lane.ingress, &lane.plans, untrusted, |checked| {
-        lane.adapter
-            .authenticate(checked)
-            .map_err(|_defect| AdmissionRejection::Unauthorized)
-    }) {
+    match check_lane(
+        &lane.ingress,
+        &lane.plans,
+        untrusted,
+        lane.clock.as_ref(),
+        |checked| {
+            lane.adapter
+                .authenticate(checked)
+                .map_err(|_defect| AdmissionRejection::Unauthorized)
+        },
+    ) {
         Ok(_accepted) => result_status(handle(lane, untrusted)),
         Err(rejection) => rejection_status(rejection),
     }
