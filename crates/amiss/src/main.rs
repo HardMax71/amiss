@@ -649,11 +649,15 @@ fn totals(out: &mut Channel, payload: &View) {
 fn explain(out: &mut Channel, payload: &View) {
     say!(
         out,
-        "scope: built-in documents are *.md, *.mdx, *.markdown, six extensionless"
+        "scope: built-in documents are *.md, *.mdx, *.markdown, *.adoc, *.asciidoc,"
     );
     say!(
         out,
-        "scope: basenames, and .cursorrules and llms.txt as plain advisory"
+        "scope: *.rst, six extensionless basenames, and .cursorrules and llms.txt"
+    );
+    say!(
+        out,
+        "scope: as plain advisory; *.ipynb and *.org are counted, never parsed"
     );
     say!(
         out,

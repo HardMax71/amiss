@@ -156,3 +156,29 @@ fn the_markup_suffixes_reach_their_own_adapters() {
         );
     }
 }
+
+#[test]
+fn a_notebook_or_org_file_is_a_document_that_is_never_read() {
+    for path in [&b"docs/tour.ipynb"[..], b"notes/plan.org"] {
+        assert_eq!(
+            classify(path),
+            Some(Classification::UnparsedMarkup),
+            "{}",
+            String::from_utf8_lossy(path),
+        );
+    }
+    assert_eq!(Classification::UnparsedMarkup.adapter(), None);
+    for path in [
+        &b"docs/tour.IPYNB"[..],
+        b"docs/tour.ipynb.bak",
+        b"planorg",
+        b"docs/notes.txt",
+    ] {
+        assert_ne!(
+            classify(path),
+            Some(Classification::UnparsedMarkup),
+            "{}",
+            String::from_utf8_lossy(path),
+        );
+    }
+}

@@ -8,8 +8,9 @@ Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are s
 adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
 `structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside,
 and Django's reStructuredText documentation uses it, so a policy include is the way to name
-those. `unparsed-markup` now has no built-in suffix and exists for the classification a policy
-include reaches. Every
+those. `.ipynb` and `.org` are `unparsed-markup`: this engine has no parser for a notebook or
+for Org markup, so those files are discovered and counted as `unsupported-document-format`
+and their content is never read, the same honest count a policy include reaches. Every
 other file is a possible reference target, not a built-in document. These rows come directly from the
 [classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
@@ -35,7 +36,7 @@ is the case that made it a defect rather than noise, since seven intentionally m
 fixtures under `tests/format/` refused its entire run; it scans now, and the first thing it
 reports is a real break in its contributing guide.
 
-Eight paths through the classifier:
+Nine paths through the classifier:
 
 ```text
 docs/guide.md               structured-markdown   scanned
@@ -44,6 +45,7 @@ README                      extensionless-markdown scanned
 llms.txt                    plain-advisory        scanned, nothing extracted
 docs/guide.adoc             structured-asciidoc   scanned
 docs/guide.rst              structured-rst        scanned
+notes/plan.org              unparsed-markup       counted, never read
 vendor/lib/README.md        excluded              the vendor component is in the closed set
 src/parser.rs               not a document        a reference target only
 ```
