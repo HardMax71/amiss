@@ -1000,9 +1000,12 @@ fn anchor_resolution(
 /// A document that splices another file publishes identities this engine never
 /// read, so an anchor it does not hold is undecided rather than absent.
 fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {
-    occurrences
-        .iter()
-        .any(|occurrence| occurrence.construct == SourceConstruct::AsciidocInclude)
+    occurrences.iter().any(|occurrence| {
+        matches!(
+            occurrence.construct,
+            SourceConstruct::AsciidocInclude | SourceConstruct::RstIncludeDirective
+        )
+    })
 }
 
 /// An inclusive, one-indexed selection of raw source lines.
