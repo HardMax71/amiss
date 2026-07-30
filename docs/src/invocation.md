@@ -25,7 +25,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
              --ref refs/heads/<name>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
-            --profile <observe|enforce>
+            --profile <observe|enforce-introduced|enforce>
             [--explain-scope] [--format <human|json|sarif>]
 amiss --version
 ```
@@ -45,7 +45,7 @@ and are the ones to trust when the short form reads ambiguous.
 | `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to |
 | `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
 | `--forge` | `github`, `gitlab`, or `gitea` | URL dialect; an explicit flag beats the host table |
-| `--profile` | `observe` or `enforce` | report only, or let blocking findings gate; see [Profiles and findings](profiles.md) |
+| `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--format` | `human`, `json`, or `sarif` | ten grouped items, the exact report in [The report](report.md), or its SARIF projection |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |

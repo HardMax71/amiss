@@ -83,16 +83,19 @@ impl Disposition {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Profile {
     Observe,
+    EnforceIntroduced,
     Enforce,
 }
 
 impl Profile {
     /// # Errors
     ///
-    /// A value outside the closed `observe`/`enforce` pair.
+    /// A value outside the closed `observe`/`enforce-introduced`/`enforce`
+    /// triple.
     pub fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "observe" => Ok(Self::Observe),
+            "enforce-introduced" => Ok(Self::EnforceIntroduced),
             "enforce" => Ok(Self::Enforce),
             _ => fail(path, ErrorKind::InvalidValue),
         }

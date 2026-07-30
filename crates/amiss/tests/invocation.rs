@@ -1,6 +1,7 @@
 use std::ffi::OsString;
 
 use amiss::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};
+use amiss_wire::controls::Profile;
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -243,6 +244,15 @@ fn option_shaped_tokens_are_not_values() {
         vec![Code::InvalidInvocation],
         "--base consumes --candidate as an option, not as a value"
     );
+}
+
+#[test]
+fn the_ramp_profile_parses_between_the_two() {
+    let ramp = replace_value(&valid_pair(), "observe", "enforce-introduced");
+    let Outcome::Accepted(invocation) = parse_tokens(&ramp) else {
+        panic!("expected acceptance");
+    };
+    assert_eq!(invocation.profile, Profile::EnforceIntroduced);
 }
 
 #[test]

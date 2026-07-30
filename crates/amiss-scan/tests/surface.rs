@@ -35,6 +35,7 @@ fn bare_shell() -> SetupShell {
     SetupShell {
         engine: engine(),
         enforce: false,
+        introduced_only: false,
         repository: None,
         forge: None,
         candidate_ref: None,

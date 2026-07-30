@@ -131,7 +131,7 @@ exit-2 log says how to unblock the run without this page open.
 <!-- amiss-doc-contract:error-meanings:start -->
 - `INVALID_INVOCATION`: the command line does not match the closed grammar; each documented option appears at most once and nothing else is accepted
 - `INVALID_EVENT`: the declared repository, ref, or default-branch identity is not in canonical form; pass a lowercase owner and name and full refs/heads/ references
-- `INVALID_PROFILE`: the profile is not one of observe or enforce
+- `INVALID_PROFILE`: the profile is not observe, enforce-introduced, or enforce
 - `REQUEST_UNREADABLE`: the machine evaluation request bytes could not be read; nothing was evaluated
 - `CONFIGURATION_INVALID`: a policy or control input violates its schema; one unknown field or malformed value makes the whole file invalid rather than partly honored
 - `DUPLICATE_JSON_KEY`: a JSON input repeats an object key; strict parsing refuses the file instead of choosing one of the values

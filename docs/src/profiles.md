@@ -14,6 +14,13 @@ are records rather than warnings. The exact table below is generated from
 [`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs)
 and checked in CI.
 
+`enforce-introduced` is the ramp between the two. It applies the enforce column, then
+lowers a failing finding whose attribution is `pre-existing` to `warn`, writing a
+`scanner-policy-defaults/<kind>/enforce-introduced` step into the row's trace, so the
+backlog stays visible and counted while anything the comparison introduced still blocks.
+An attribution the engine cannot establish keeps its enforce disposition, and an
+organization floor whose minimum is `enforce` rejects the ramp as below its minimum.
+
 <!-- amiss-doc-contract:profiles:start -->
 | Finding kind | Observe | Enforce |
 | --- | --- | --- |

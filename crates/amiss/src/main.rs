@@ -109,6 +109,16 @@ fn render(
 
 /// Both machine refusal lanes share one envelope; the error is the code the
 /// caller prints, keeping the two stderr fallbacks distinct.
+/// The one place a profile becomes the evaluation pair: the built-in table
+/// flag and the pre-existing lowering flag.
+fn profile_flags(profile: amiss_wire::controls::Profile) -> (bool, bool) {
+    match profile {
+        amiss_wire::controls::Profile::Observe => (false, false),
+        amiss_wire::controls::Profile::EnforceIntroduced => (true, true),
+        amiss_wire::controls::Profile::Enforce => (true, false),
+    }
+}
+
 fn machine_refusal(codes: &BTreeSet<Code>) -> Result<amiss_wire::json::Value, AnalysisErrorCode> {
     let Some(engine) = engine_provenance() else {
         return Err(AnalysisErrorCode::InternalError);
@@ -170,9 +180,11 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         snapshot: Some(hb(SNAPSHOT_REQUEST_SCHEMA, &streams.snapshot)),
         controls: Some(hb(CONTROLS_REQUEST_SCHEMA, &streams.controls)),
     };
+    let (enforce, introduced_only) = profile_flags(evaluation.profile);
     let shell = SetupShell {
         engine,
-        enforce: matches!(evaluation.profile, amiss_wire::controls::Profile::Enforce),
+        enforce,
+        introduced_only,
         repository: evaluation.repository.clone(),
         forge: evaluation.forge,
         candidate_ref: evaluation
@@ -298,9 +310,11 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         }),
         (None | Some(_), None) | (None, Some(_)) => None,
     };
+    let (enforce, introduced_only) = profile_flags(invocation.profile);
     let shell = SetupShell {
         engine,
-        enforce: matches!(invocation.profile, amiss_wire::controls::Profile::Enforce),
+        enforce,
+        introduced_only,
         repository: invocation
             .identity
             .as_ref()
@@ -369,9 +383,11 @@ fn fatal(
             amiss_scan::report::CandidateBlock::Unavailable(vec!["not-evaluated"])
         }
     };
+    let (enforce, introduced_only) = profile_flags(invocation.profile);
     let setup = Setup {
         engine: engine.clone(),
-        enforce: matches!(invocation.profile, amiss_wire::controls::Profile::Enforce),
+        enforce,
+        introduced_only,
         repository: None,
         forge: None,
         candidate_ref: None,

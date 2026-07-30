@@ -30,6 +30,7 @@ fn representative_repository_latency_and_memory() {
             digest: hb("amiss/scanner-engine", b"measure engine"),
         },
         enforce: false,
+        introduced_only: false,
         repository: None,
         forge: None,
         candidate_ref: None,

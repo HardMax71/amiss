@@ -501,7 +501,8 @@ impl TrustSource {
 
 /// The floor's binding: its repository and full ref must equal the run's,
 /// and the selected profile must be at least the floor minimum under
-/// `observe < enforce`. Any violation is a control-binding mismatch.
+/// `observe < enforce-introduced < enforce`. Any violation is a
+/// control-binding mismatch.
 ///
 /// # Errors
 ///
@@ -511,6 +512,7 @@ pub fn verify_floor(
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
     target_ref: Option<&str>,
     enforce: bool,
+    introduced_only: bool,
 ) -> Result<(), ErrorDetail> {
     let mismatch = ErrorDetail {
         code: AnalysisErrorCode::ControlBindingMismatch,
@@ -532,7 +534,7 @@ pub fn verify_floor(
         floor.minimum_profile,
         amiss_wire::controls::Profile::Enforce
     );
-    if minimum_enforce && !enforce {
+    if minimum_enforce && (!enforce || introduced_only) {
         return Err(mismatch);
     }
     Ok(())

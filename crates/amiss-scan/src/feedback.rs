@@ -5,7 +5,7 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::resolution::Resolution;
 
-use crate::correlate::{Comparison, Observation, Outcome};
+use crate::correlate::{Comparison, Observation};
 use crate::evaluate::{Attribution, Finding, LocationSide};
 use crate::scan::SpanDisplay;
 
@@ -56,7 +56,6 @@ enum Subject {
 
 struct Candidate<'a> {
     observation: &'a Observation,
-    attribution_override: Option<Attribution>,
     check: bool,
 }
 
@@ -145,26 +144,10 @@ fn candidate_index(comparisons: &[Comparison]) -> BTreeMap<Digest, Candidate<'_>
     let mut candidates = BTreeMap::new();
     for comparison in comparisons {
         if let Some(candidate) = &comparison.candidate {
-            let attribution_override =
-                matches!(candidate.resolution, Resolution::Invalid(_)).then(|| {
-                    match comparison.outcome {
-                        Outcome::Ambiguous => Attribution::Unknown,
-                        Outcome::Exact | Outcome::Candidate | Outcome::None => comparison
-                            .base
-                            .as_ref()
-                            .filter(|base| {
-                                matches!(base.resolution, Resolution::Invalid(_))
-                                    && base.raw_destination_digest
-                                        == candidate.raw_destination_digest
-                            })
-                            .map_or(Attribution::Introduced, |_base| Attribution::PreExisting),
-                    }
-                });
             candidates.insert(
                 candidate.id,
                 Candidate {
                     observation: candidate,
-                    attribution_override,
                     check: comparison.impact == crate::Impact::DependencyChangedSubjectUnchanged,
                 },
             );
@@ -174,8 +157,6 @@ fn candidate_index(comparisons: &[Comparison]) -> BTreeMap<Digest, Candidate<'_>
                 candidate.id,
                 Candidate {
                     observation: candidate,
-                    attribution_override: matches!(candidate.resolution, Resolution::Invalid(_))
-                        .then_some(Attribution::Unknown),
                     check: false,
                 },
             );
@@ -189,10 +170,9 @@ fn classify(finding: &Finding, candidates: &BTreeMap<Digest, Candidate<'_>>) -> 
         .observation_ids
         .iter()
         .find_map(|id| candidates.get(id));
-    let (subject, target) = if candidate
-        .and_then(|item| item.attribution_override)
-        .is_some()
-    {
+    let invalid =
+        candidate.is_some_and(|item| matches!(item.observation.resolution, Resolution::Invalid(_)));
+    let (subject, target) = if invalid {
         (Subject::Untargeted, None)
     } else {
         subject(finding, candidate)
@@ -204,10 +184,7 @@ fn classify(finding: &Finding, candidates: &BTreeMap<Digest, Candidate<'_>>) -> 
             target,
         };
     }
-    let attribution = candidate
-        .and_then(|item| item.attribution_override)
-        .unwrap_or(finding.attribution);
-    attributed(attribution, finding.location.side, subject, target)
+    attributed(finding.attribution, finding.location.side, subject, target)
 }
 
 fn attributed(

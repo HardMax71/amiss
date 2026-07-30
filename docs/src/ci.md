@@ -16,7 +16,10 @@ file feedback on the pull request. It is not the provider-authenticated controll
 The published first run uses `observe`: introduced problems appear as Fixes without blocking,
 changed targets appear as summary-only Checks, and pre-existing problems remain Existing
 inventory. An incomplete or untrusted run still fails. Triage the initial report, adopt any
-repository policy it needs, then switch the input to `profile: enforce`.
+repository policy it needs, then switch the input to `profile: enforce`. A repository whose
+backlog outlives its first triage can gate the middle of that road with
+`enforce-introduced`, which blocks what a pull request introduces while the carried
+findings stay warnings in the same reports.
 
 ## What the Action does
 

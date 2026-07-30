@@ -41,6 +41,7 @@ fn setup(candidate: CandidateBlock) -> Setup {
             digest: hb("amiss/scanner-engine", b"identity fixture"),
         },
         enforce: false,
+        introduced_only: false,
         repository: None,
         forge: None,
         candidate_ref: None,

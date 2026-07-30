@@ -512,6 +512,38 @@ fn built_in_step(kind: FindingKind, enforce: bool) -> PolicyStep {
     }
 }
 
+/// The attribution an invalid reference carries on its report row: introduced
+/// when the base held no equal invalid destination, pre-existing when it did,
+/// unknown under an ambiguous pairing or for an alternative occurrence. The
+/// feedback projection used to recompute this and discard it.
+fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribution> {
+    let mut rows = BTreeMap::new();
+    for comparison in comparisons {
+        if let Some(candidate) = &comparison.candidate
+            && matches!(candidate.resolution, Resolution::Invalid(_))
+        {
+            let attribution = match comparison.outcome {
+                Outcome::Ambiguous => Attribution::Unknown,
+                Outcome::Exact | Outcome::Candidate | Outcome::None => comparison
+                    .base
+                    .as_ref()
+                    .filter(|base| {
+                        matches!(base.resolution, Resolution::Invalid(_))
+                            && base.raw_destination_digest == candidate.raw_destination_digest
+                    })
+                    .map_or(Attribution::Introduced, |_base| Attribution::PreExisting),
+            };
+            rows.insert(candidate.id, attribution);
+        }
+        for candidate in &comparison.alternatives_candidate {
+            if matches!(candidate.resolution, Resolution::Invalid(_)) {
+                rows.insert(candidate.id, Attribution::Unknown);
+            }
+        }
+    }
+    rows
+}
+
 /// Every candidate occurrence: primaries plus alternatives on the candidate
 /// side of every comparison.
 fn candidate_occurrences(comparisons: &[Comparison]) -> Vec<&Observation> {
@@ -546,6 +578,7 @@ pub fn evaluate(
         documents,
         comparisons,
         enforce,
+        false,
         &crate::policy::Effects::default(),
         &[],
     );
@@ -674,6 +707,7 @@ pub fn evaluate_with_policy(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     enforce: bool,
+    introduced_only: bool,
     policy: &crate::policy::Effects,
     governed: &[GovernedSeed],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
@@ -692,6 +726,24 @@ pub fn evaluate_with_policy(
             .last()
             .map_or(finding.configured_disposition, |step| step.after);
         finding.effective_disposition = finding.configured_disposition;
+    }
+    if introduced_only {
+        for finding in &mut findings {
+            if finding.effective_disposition == Disposition::Fail
+                && finding.attribution == Attribution::PreExisting
+            {
+                finding.steps.push(PolicyStep {
+                    source: "built-in",
+                    rule_id: format!(
+                        "scanner-policy-defaults/{}/enforce-introduced",
+                        finding.kind.as_str()
+                    ),
+                    before: Disposition::Fail,
+                    after: Disposition::Warn,
+                });
+                finding.effective_disposition = Disposition::Warn;
+            }
+        }
     }
     let (exception_findings, errors) = apply_exceptions(&mut findings, policy, enforce);
     findings.extend(exception_findings);
@@ -1201,12 +1253,21 @@ fn ordinary(
         document_findings(document, enforce, &mut findings);
     }
 
+    let invalid = invalid_attributions(comparisons);
     for observation in candidate_occurrences(comparisons) {
+        let attribution = if matches!(observation.resolution, Resolution::Invalid(_)) {
+            invalid
+                .get(&observation.id)
+                .copied()
+                .unwrap_or(Attribution::Unknown)
+        } else {
+            Attribution::NotApplicable
+        };
         let mut emit = |kind: FindingKind| {
             findings.push(simple(
                 kind,
                 observation_scope(observation.id),
-                Attribution::NotApplicable,
+                attribution,
                 None,
                 vec![observation.id],
                 observation_location(observation, LocationSide::Candidate),

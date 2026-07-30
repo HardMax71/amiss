@@ -17,7 +17,7 @@ pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha25
              --ref refs/heads/<name>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
-            --profile <observe|enforce>
+            --profile <observe|enforce-introduced|enforce>
             [--explain-scope] [--format <human|json|sarif>]
 amiss --version";
 
@@ -63,7 +63,7 @@ impl Code {
                  never abbreviations. --forge is github, gitlab, or gitea, names a dialect the \
                  engine knows, and accompanies the --repository triple."
             }
-            Self::InvalidProfile => "--profile is observe or enforce.",
+            Self::InvalidProfile => "--profile is observe, enforce-introduced, or enforce.",
         }
     }
 }
@@ -321,6 +321,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
 
     let profile = match gathered.profile.unique_value() {
         Some("observe") => Some(Profile::Observe),
+        Some("enforce-introduced") => Some(Profile::EnforceIntroduced),
         Some("enforce") => Some(Profile::Enforce),
         Some(_) => {
             codes.insert(Code::InvalidProfile);

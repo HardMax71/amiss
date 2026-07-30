@@ -81,6 +81,7 @@ fn run(
     let shell = SetupShell {
         engine: engine(),
         enforce: false,
+        introduced_only: false,
         repository: Some(RepositoryIdentity {
             host: host.to_owned(),
             owner: "acme".to_owned(),

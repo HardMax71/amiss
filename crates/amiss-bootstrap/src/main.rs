@@ -324,6 +324,7 @@ fn capture_requests(
     let expected = SealedExpectations {
         profile: match evaluation.profile {
             amiss_wire::controls::Profile::Observe => "observe",
+            amiss_wire::controls::Profile::EnforceIntroduced => "enforce-introduced",
             amiss_wire::controls::Profile::Enforce => "enforce",
         }
         .to_owned(),
