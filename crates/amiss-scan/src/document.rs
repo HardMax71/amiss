@@ -84,6 +84,9 @@ pub fn classify(path: &[u8]) -> Option<Classification> {
     if path.ends_with(b".rst") {
         return Some(Classification::StructuredRst);
     }
+    if path.ends_with(b".ipynb") || path.ends_with(b".org") {
+        return Some(Classification::UnparsedMarkup);
+    }
     let basename = path.rsplit(|byte| *byte == b'/').next().unwrap_or(path);
     if EXTENSIONLESS.iter().any(|name| name.as_bytes() == basename) {
         return Some(Classification::ExtensionlessMarkdown);
