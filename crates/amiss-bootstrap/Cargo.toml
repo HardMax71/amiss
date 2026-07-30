@@ -8,8 +8,8 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
-amiss-git = { path = "../amiss-git", version = "0.12.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.12.0" }
+amiss-git = { path = "../amiss-git", version = "0.13.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.13.0" }
 tempfile.workspace = true
 
 [dev-dependencies]
