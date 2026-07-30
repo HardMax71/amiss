@@ -1,3 +1,6 @@
+mod sarif;
+mod view;
+
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
@@ -11,6 +14,8 @@ use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
     RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA, SnapshotRequest,
 };
+
+use crate::view::View;
 
 /// Self-restriction, in safe Rust only: no child processes (the contract's
 /// zero repository-process budget), no core dumps (the address space holds
@@ -40,20 +45,6 @@ fn apply_sandbox() {
 #[cfg(not(unix))]
 const fn apply_sandbox() {}
 
-/// The wire's lowercase hex back to raw bytes; a malformed digit renders as
-/// zero rather than failing the human projection, which is not the wire.
-fn decode_hex(hex: &str) -> Vec<u8> {
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            std::str::from_utf8(pair)
-                .ok()
-                .and_then(|text| u8::from_str_radix(text, 16).ok())
-                .unwrap_or(0)
-        })
-        .collect()
-}
-
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn main() -> ExitCode {
     apply_sandbox();
@@ -73,20 +64,20 @@ fn main() -> ExitCode {
             format: OutputFormat::Json,
             codes,
         } => {
-            let Some(engine) = engine_provenance() else {
-                eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
-                return failure;
-            };
-            let codes: BTreeSet<AnalysisErrorCode> =
-                codes.iter().map(|code| analysis_code(*code)).collect();
-            let Some(envelope) = report::invocation_failure_envelope(&engine, &codes) else {
-                eprintln!(
-                    "amiss: {}",
-                    AnalysisErrorCode::ReportConstructionFailed.as_str()
-                );
-                return failure;
-            };
-            emit(&mut reserve, &envelope);
+            match machine_refusal(&codes) {
+                Ok(envelope) => emit(&mut reserve, &envelope),
+                Err(code) => eprintln!("amiss: {}", code.as_str()),
+            }
+            failure
+        }
+        Outcome::Rejected {
+            format: OutputFormat::Sarif,
+            codes,
+        } => {
+            match machine_refusal(&codes) {
+                Ok(envelope) => emit(&mut reserve, &sarif::log(&envelope)),
+                Err(code) => eprintln!("amiss: {}", code.as_str()),
+            }
             failure
         }
         Outcome::Rejected {
@@ -102,6 +93,30 @@ fn main() -> ExitCode {
         }
         Outcome::Accepted(invocation) => run(&invocation, &mut reserve),
     }
+}
+
+fn render(
+    built: &amiss_scan::report::Built,
+    invocation: &Invocation,
+    reserve: &mut FatalSerializer,
+) {
+    match invocation.format {
+        OutputFormat::Json => emit(reserve, &built.envelope),
+        OutputFormat::Sarif => emit(reserve, &sarif::log(&built.envelope)),
+        OutputFormat::Human => human(built, invocation.explain_scope),
+    }
+}
+
+/// Both machine refusal lanes share one envelope; the error is the code the
+/// caller prints, keeping the two stderr fallbacks distinct.
+fn machine_refusal(codes: &BTreeSet<Code>) -> Result<amiss_wire::json::Value, AnalysisErrorCode> {
+    let Some(engine) = engine_provenance() else {
+        return Err(AnalysisErrorCode::InternalError);
+    };
+    let codes: BTreeSet<AnalysisErrorCode> =
+        codes.iter().map(|code| analysis_code(*code)).collect();
+    report::invocation_failure_envelope(&engine, &codes)
+        .ok_or(AnalysisErrorCode::ReportConstructionFailed)
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
@@ -328,10 +343,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             &invocation.base,
         ),
     };
-    match invocation.format {
-        OutputFormat::Json => emit(reserve, &built.envelope),
-        OutputFormat::Human => human(&built, invocation.explain_scope),
-    }
+    render(&built, invocation, reserve);
     exit_class(built.exit_code)
 }
 
@@ -372,10 +384,7 @@ fn fatal(
         requests: amiss_scan::report::RequestDigests::default(),
     };
     let built = construct_incomplete(&setup, details);
-    match invocation.format {
-        OutputFormat::Json => emit(reserve, &built.envelope),
-        OutputFormat::Human => human(&built, invocation.explain_scope),
-    }
+    render(&built, invocation, reserve);
     ExitCode::from(ExitClass::Failure.code())
 }
 
@@ -388,97 +397,6 @@ fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
             "amiss: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_str()
         );
-    }
-}
-
-struct View(Vec<(String, amiss_wire::json::Value)>);
-
-impl View {
-    fn of(value: Option<&amiss_wire::json::Value>) -> Self {
-        use amiss_wire::json::Value;
-        match value {
-            Some(Value::Object(members)) => Self(members.clone()),
-            Some(
-                Value::Null
-                | Value::Bool(_)
-                | Value::Integer(_)
-                | Value::String(_)
-                | Value::Array(_),
-            )
-            | None => Self(Vec::new()),
-        }
-    }
-
-    fn field(&self, name: &str) -> Option<&amiss_wire::json::Value> {
-        self.0
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value)
-    }
-
-    fn view(&self, name: &str) -> Self {
-        Self::of(self.field(name))
-    }
-
-    fn text(&self, name: &str) -> String {
-        use amiss_wire::json::Value;
-        match self.field(name) {
-            Some(Value::String(value)) => value.clone(),
-            Some(
-                Value::Null
-                | Value::Bool(_)
-                | Value::Integer(_)
-                | Value::Array(_)
-                | Value::Object(_),
-            )
-            | None => String::new(),
-        }
-    }
-
-    fn atom_or_dash(&self, name: &str) -> String {
-        use amiss_wire::json::Value;
-        match self.field(name) {
-            Some(Value::String(value)) => amiss_wire::human::atom(value),
-            Some(Value::Object(members)) => match members.as_slice() {
-                [(key, Value::String(hex))] if key == "bytes_hex" => {
-                    amiss_wire::human::atom_bytes(&decode_hex(hex))
-                }
-                _ => "-".to_owned(),
-            },
-            Some(Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_)) | None => {
-                "-".to_owned()
-            }
-        }
-    }
-
-    fn number(&self, name: &str) -> i64 {
-        use amiss_wire::json::Value;
-        match self.field(name) {
-            Some(Value::Integer(value)) => *value,
-            Some(
-                Value::Null
-                | Value::Bool(_)
-                | Value::String(_)
-                | Value::Array(_)
-                | Value::Object(_),
-            )
-            | None => 0,
-        }
-    }
-
-    fn rows(&self, name: &str) -> Vec<Self> {
-        use amiss_wire::json::Value;
-        match self.field(name) {
-            Some(Value::Array(rows)) => rows.iter().map(|row| Self::of(Some(row))).collect(),
-            Some(
-                Value::Null
-                | Value::Bool(_)
-                | Value::Integer(_)
-                | Value::String(_)
-                | Value::Object(_),
-            )
-            | None => Vec::new(),
-        }
     }
 }
 

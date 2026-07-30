@@ -26,7 +26,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce>
-            [--explain-scope] [--format <human|json>]
+            [--explain-scope] [--format <human|json|sarif>]
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -47,7 +47,7 @@ and are the ones to trust when the short form reads ambiguous.
 | `--forge` | `github`, `gitlab`, or `gitea` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe` or `enforce` | report only, or let blocking findings gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
-| `--format` | `human` or `json` | ten grouped items, or the exact report in [The report](report.md) |
+| `--format` | `human`, `json`, or `sarif` | ten grouped items, the exact report in [The report](report.md), or its SARIF projection |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
 `--base` and `--candidate` take full commit IDs, never branch names or short forms: Amiss

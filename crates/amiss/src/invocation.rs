@@ -18,7 +18,7 @@ pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha25
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce>
-            [--explain-scope] [--format <human|json>]
+            [--explain-scope] [--format <human|json|sarif>]
 amiss --version";
 
 const VERSION_FLAG: &str = "--version";
@@ -72,6 +72,7 @@ impl Code {
 pub enum OutputFormat {
     Human,
     Json,
+    Sarif,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -250,6 +251,7 @@ fn output_selection(format: &Slot) -> Option<OutputFormat> {
     match format.unique_value() {
         Some("human") => Some(OutputFormat::Human),
         Some("json") => Some(OutputFormat::Json),
+        Some("sarif") => Some(OutputFormat::Sarif),
         Some(_) | None => None,
     }
 }
