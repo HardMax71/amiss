@@ -118,6 +118,10 @@ allow_attributes_without_reason = "deny"
 overflow-checks = true
 panic = "unwind"
 
+[profile.mutants]
+inherits = "test"
+debug = "none"
+
 [profile.release.package.amiss-controller-fuzz]
 debug = 1
 
