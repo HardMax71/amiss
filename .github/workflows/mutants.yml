@@ -72,7 +72,7 @@ jobs:
       - if: startsWith(github.head_ref, 'release-plz-')
         run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
       - run: >-
-          cargo mutants --test-workspace true
+          cargo mutants --test-workspace true --profile=mutants
           --shard "$SHARD/$SHARDS"
           --no-shuffle -vV --in-diff git.diff -- --profile mutants
         env:
@@ -97,9 +97,9 @@ jobs:
       - uses: ./.github/actions/tools
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          shared-key: mutants
+          shared-key: mutants-v2
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo nextest run --workspace --locked
+      - run: cargo nextest run --workspace --locked --cargo-profile mutants
 
   # Pin the work per shard, not the shard count, so the split follows the tree.
   plan:
@@ -136,7 +136,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: [baseline, plan]
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -148,11 +148,11 @@ jobs:
       - uses: ./.github/actions/tools
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          shared-key: mutants
+          shared-key: mutants-v2
           save-if: "false"
       # The default slice hands one shard every mutant of the slowest file.
       - run: >-
-          cargo mutants --in-place --no-shuffle
+          cargo mutants --in-place --no-shuffle --profile=mutants
           --shard "$SHARD/$SHARDS"
           --baseline skip --timeout 60 -- --profile mutants
         env:
@@ -171,16 +171,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Merging deletes the shard artifacts, so it must not run until every
+      # shard has reported; a re-run could not rebuild what it consumed.
+      - if: needs.sweep.result != 'success'
+        run: |
+          echo "a shard did not report, so these counts are not a baseline" \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 1
       - uses: actions/upload-artifact/merge@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutants
           pattern: mutants-shard-*
           separate-directories: true
           delete-merged: true
-      # The merged artifact is kept either way, since a partial sweep is still
-      # evidence. What it must not do is read as a whole one.
-      - if: needs.sweep.result != 'success'
-        run: |
-          echo "a shard did not report, so these counts are not a baseline" \
-            >> "$GITHUB_STEP_SUMMARY"
-          exit 1
