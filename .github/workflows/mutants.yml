@@ -116,12 +116,18 @@ jobs:
       - id: split
         env:
           PER_SHARD: "400"
-          MAX_SHARDS: "16"
+          # One matrix generates at most 256 jobs, so nothing here may ask for more.
+          MAX_SHARDS: "256"
         run: |
           set -euo pipefail
           total=$(cargo mutants --list | { grep -c . || :; })
-          shards=$(( (total + PER_SHARD - 1) / PER_SHARD ))
-          if [ "$shards" -gt "$MAX_SHARDS" ]; then shards="$MAX_SHARDS"; fi
+          wanted=$(( (total + PER_SHARD - 1) / PER_SHARD ))
+          shards="$wanted"
+          if [ "$shards" -gt "$MAX_SHARDS" ]; then
+            shards="$MAX_SHARDS"
+            echo "a matrix cannot hold $wanted jobs, so each shard takes more than $PER_SHARD" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ "$shards" -lt 1 ]; then shards=1; fi
           echo "shards=[$(seq -s, 0 $((shards - 1)))]" >> "$GITHUB_OUTPUT"
           echo "$total mutants over $shards shards" >> "$GITHUB_STEP_SUMMARY"
@@ -171,3 +177,10 @@ jobs:
           pattern: mutants-shard-*
           separate-directories: true
           delete-merged: true
+      # The merged artifact is kept either way, since a partial sweep is still
+      # evidence. What it must not do is read as a whole one.
+      - if: needs.sweep.result != 'success'
+        run: |
+          echo "a shard did not report, so these counts are not a baseline" \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 1
