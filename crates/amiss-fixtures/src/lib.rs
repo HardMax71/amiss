@@ -1,3 +1,5 @@
+pub mod requests;
+
 use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::Path;
