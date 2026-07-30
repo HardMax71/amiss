@@ -23,6 +23,19 @@ themselves changed on the way.
   the newest release, so this waits on GitLab. Local HTTP fixtures remain regression tests, not
   live-provider evidence.
 
+## Toward a settled wire
+
+`compatibility` stays `experimental` while the contract rolls, and the [status
+page](status.md) says so wherever the report is described. It leaves experimental when
+three things hold at once. The GitLab lane holds retained live evidence like the other
+three, so every supported lane's trust story is closed. Two consecutive minor series ship
+without reshaping the report payload, so the contract has shown it can hold still under
+feature work. And the launcher's verifying bootstrap lane either ships or is cut, so the
+release carries no half-built trust path. When all three hold, the next release freezes
+the schema as 1.0, and from then on a payload reshape is a major version rather than a
+rolling change. None of these carries a date; each is checkable from the repository and
+its retained evidence.
+
 ## Research, not committed work
 
 Typed snippet, value, inventory, tree, graph, transcript, narrative, and external claims
@@ -33,7 +46,10 @@ scanner avoids, the same problems that killed the ledger design in
 
 No claim kind becomes a milestone without design-partner demand, a proof-strength model,
 evidence that reviewers find it useful, and experiments covering persistence and concurrent branches.
-Until then these are design vocabulary, not advertised capability.
+Until then these are design vocabulary, not advertised capability. Demand has a place to
+land: open an issue on the repository naming the claim kind and the repository it would
+gate, with one drifted example that reference checking cannot catch. That register is what
+this section reads before anything here becomes work.
 
 The permanent boundaries stay in [What Amiss is not](non-goals.md): no semantic truth
 verdicts about prose, no repository-executed hooks, no live-network validation inside the
