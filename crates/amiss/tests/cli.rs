@@ -1736,3 +1736,130 @@ fn a_restructuredtext_report_is_schema_clean() {
         "a reStructuredText observation is a schema-clean report"
     );
 }
+
+/// The SARIF lane is a projection, so every claim it makes is checked against
+/// the canonical report from the same evaluation rather than asserted twice.
+#[test]
+fn the_sarif_projection_mirrors_the_report_and_stays_deterministic() {
+    let fx = fixture();
+    let args = [
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "sarif",
+    ];
+    let (code, first, stderr) = amiss(&args);
+    assert_eq!((code, stderr.as_str()), (1, ""));
+    let (again, second, _stderr) = amiss(&args);
+    assert_eq!(again, 1);
+    assert_eq!(first, second, "identical inputs, identical SARIF bytes");
+
+    let log: serde_json::Value = serde_json::from_slice(&first).unwrap();
+    assert_eq!(log.get("version").unwrap(), "2.1.0");
+    let run = log.pointer("/runs/0").unwrap();
+    assert_eq!(run.pointer("/tool/driver/name").unwrap(), "amiss");
+    assert_eq!(
+        run.pointer("/invocations/0/executionSuccessful").unwrap(),
+        true
+    );
+    assert_eq!(run.pointer("/invocations/0/exitCode").unwrap(), 1);
+
+    let wire_args = [
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ];
+    let (_code, wire, _stderr) = amiss(&wire_args);
+    let wire_payload = payload(&wire);
+    let findings = wire_payload
+        .get("findings")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .clone();
+    let results = run.get("results").unwrap().as_array().unwrap().clone();
+    assert_eq!(results.len(), findings.len());
+    let rules = run
+        .pointer("/tool/driver/rules")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    for (result, finding) in results.iter().zip(&findings) {
+        assert_eq!(result.get("ruleId"), finding.get("kind"));
+        assert_eq!(
+            result
+                .get("partialFingerprints")
+                .and_then(|prints| prints.get("amissFindingKey/v1")),
+            finding.get("finding_key"),
+        );
+        assert_eq!(
+            result
+                .get("message")
+                .and_then(|message| message.get("text")),
+            finding.get("description")
+        );
+        let level = result.get("level").unwrap().as_str().unwrap();
+        let expected = match finding
+            .get("effective_disposition")
+            .unwrap()
+            .as_str()
+            .unwrap()
+        {
+            "fail" => "error",
+            "warn" => "warning",
+            _ => "note",
+        };
+        assert_eq!(level, expected);
+        let rule_id = result.get("ruleId").unwrap();
+        assert!(rules.iter().any(|rule| rule.get("id") == Some(rule_id)));
+    }
+    let blocking = results
+        .iter()
+        .find(|result| result.get("level").unwrap() == "error")
+        .unwrap();
+    assert!(
+        blocking
+            .pointer("/locations/0/physicalLocation/region/startLine")
+            .is_some(),
+        "the blocking finding carries its candidate location"
+    );
+}
+
+/// A rejected machine invocation answers on the channel it was asked on.
+#[test]
+fn a_sarif_refusal_is_still_sarif() {
+    let (code, refusal, stderr) = amiss(&["check", "--format", "sarif"]);
+    assert_eq!((code, stderr.as_str()), (2, ""));
+    let refusal: serde_json::Value = serde_json::from_slice(&refusal).unwrap();
+    assert_eq!(
+        refusal
+            .pointer("/runs/0/invocations/0/executionSuccessful")
+            .unwrap(),
+        false,
+    );
+    assert!(
+        refusal
+            .pointer("/runs/0/invocations/0/toolExecutionNotifications/0/descriptor/id")
+            .is_some(),
+        "the refusal names its codes in the notification rows"
+    );
+}

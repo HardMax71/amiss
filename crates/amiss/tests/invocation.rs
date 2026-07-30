@@ -256,6 +256,12 @@ fn output_selection_follows_the_format_law() {
     };
     assert_eq!(format, OutputFormat::Json);
 
+    let sarif = with(&valid_pair(), &["--format", "sarif"]);
+    let Outcome::Accepted(invocation) = parse_tokens(&sarif) else {
+        panic!("expected acceptance");
+    };
+    assert_eq!(invocation.format, OutputFormat::Sarif);
+
     for malformed in [
         with(&valid_pair(), &["--format", "yaml"]),
         with(&valid_pair(), &["--format"]),

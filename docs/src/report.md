@@ -111,6 +111,18 @@ cut short: a serialized report that would cross the `machine-json-bytes` ceiling
 ends the run incomplete with `OUTPUT_LIMIT_EXCEEDED` instead of shortening the list, and
 the findings count has its own separate ceiling in [Limits and refusals](limits.md).
 
+`--format sarif` writes exactly one line to stdout: a SARIF 2.1.0 log projected from the
+same payload. Every finding row becomes a result under its kind's rule, `fail` as `error`,
+`warn` as `warning`, and `record` as `note`, with the row's own `description` as the message
+and the finding key riding as the stable `partialFingerprints` entry, so an ingesting
+scanner deduplicates across runs by the same identity the report uses. A location renders
+when the wire path is printable text, percent-encoded into the artifact URI so a hostile
+path cannot break it. Retained analysis errors become tool execution notifications, an
+incomplete run reports `executionSuccessful` false, and a rejected machine invocation
+still answers in SARIF with exit class 2. Like the human form, the projection cannot
+change facts, ordering, totals, or the exit class; the canonical report stays the only
+wire, and consumers that need the full evidence read it there.
+
 The report is evidence of engine evaluation, not a self-authenticating provider attestation. A
 control row with `status: "verified"` means that the engine accepted the supplied digest and
 repository, target-ref, tree, time, or run relationships required for that control. A caller that
