@@ -117,7 +117,7 @@ The mechanical claims are generated, not maintained. Default dispositions in
 [Profiles and findings](profiles.md) and resource ceilings in
 [Limits and refusals](limits.md) come from the Rust constants through a test, so changing
 a constant without the book fails CI. The same
-[documentation contract test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs)
+[documentation contract test](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/documentation_contracts)
 finds every public schema-backed example, validates it against its schema, and feeds it to
 its owning typed reader; a contract without a registered reader fails CI too.
 

@@ -1,0 +1,310 @@
+#![expect(
+    clippy::expect_used,
+    reason = "integration assertions over repository-owned documentation and fixtures"
+)]
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use amiss_wire::controls::{
+    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, ScannerPolicy,
+    TrustedTimeStatement, WaiverBundle,
+};
+use amiss_wire::manifest::ReleaseManifest;
+use amiss_wire::model::BranchRef;
+use amiss_wire::report::{AnalysisErrorCode, ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA};
+use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
+
+use crate::support::{report_schema, repository_root};
+
+const BRANCH_REF_SCHEMA_PATTERN: &str = r"^refs/heads/(?!/)(?![\s\S]*\.\.)(?![\s\S]*@\{)(?![\s\S]*[~^:?*\[\\\u0000-\u001f\u007f ])(?!\.)(?![\s\S]*/\.)(?![^/]*\.lock(?:/|$))(?![\s\S]*/[^/]*\.lock(?:/|$))(?![\s\S]*//)(?![\s\S]*/$)(?![\s\S]*\.$).+$";
+
+fn public_schema_examples() -> Vec<(String, PathBuf, PathBuf)> {
+    let specification_directory = repository_root().join("spec");
+    let examples_directory = specification_directory.join("examples");
+    let mut pairs = Vec::new();
+
+    for entry in
+        fs::read_dir(&specification_directory).expect("specification directory is readable")
+    {
+        let schema_path = entry.expect("specification entry is readable").path();
+        if !schema_path.is_file() {
+            continue;
+        }
+
+        let file_name = schema_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("public schema names are UTF-8");
+        let Some(contract_name) = file_name.strip_suffix(".schema.json") else {
+            continue;
+        };
+        let example_path = examples_directory.join(format!("{contract_name}.json"));
+        assert!(
+            example_path.is_file(),
+            "{} has no matching public example at {}",
+            schema_path.display(),
+            example_path.display(),
+        );
+        pairs.push((contract_name.to_owned(), schema_path, example_path));
+    }
+
+    pairs.sort();
+    assert!(!pairs.is_empty(), "no public JSON Schema contracts found");
+    pairs
+}
+
+fn parse_defect<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<String> {
+    result.err().map(|error| format!("{error:?}"))
+}
+
+fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
+    match contract_name {
+        "debt-snapshot" => parse_defect(DebtSnapshot::parse(bytes)),
+        "organization-floor" => parse_defect(OrganizationFloor::parse(bytes)),
+        "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
+        "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
+        "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
+        "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
+        "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
+        "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
+        "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
+        "scanner-trusted-time-statement" => parse_defect(TrustedTimeStatement::parse(bytes)),
+        "waiver-bundle" => parse_defect(WaiverBundle::parse(bytes)),
+        _ => Some("no authoritative example reader is registered".to_owned()),
+    }
+}
+
+fn check_schema_bounds(
+    value: &serde_json::Value,
+    schema: &Path,
+    branch_count: &mut usize,
+    attempt_count: &mut usize,
+) {
+    match value {
+        serde_json::Value::Object(members) => {
+            if let Some(pattern) = members.get("pattern").and_then(serde_json::Value::as_str)
+                && pattern.starts_with("^refs/heads/")
+            {
+                assert_eq!(
+                    pattern,
+                    BRANCH_REF_SCHEMA_PATTERN,
+                    "{} has a weaker branch-ref grammar",
+                    schema.display(),
+                );
+                assert_eq!(
+                    members.get("minLength").and_then(serde_json::Value::as_u64),
+                    Some(12),
+                    "{} has the wrong branch-ref minimum",
+                    schema.display(),
+                );
+                assert_eq!(
+                    members.get("maxLength").and_then(serde_json::Value::as_u64),
+                    Some(266),
+                    "{} has the wrong branch-ref maximum",
+                    schema.display(),
+                );
+                *branch_count = (*branch_count).saturating_add(1);
+            }
+            if let Some(attempt) = members.get("provider_run_attempt")
+                && attempt.get("type").and_then(serde_json::Value::as_str) == Some("integer")
+            {
+                let safe_max = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER)
+                    .expect("the JSON safe-integer maximum is positive");
+                assert_eq!(
+                    attempt.get("maximum").and_then(serde_json::Value::as_u64),
+                    Some(safe_max),
+                    "{} advertises a provider attempt its strict JSON reader rejects",
+                    schema.display(),
+                );
+                *attempt_count = (*attempt_count).saturating_add(1);
+            }
+            for member in members.values() {
+                check_schema_bounds(member, schema, branch_count, attempt_count);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                check_schema_bounds(item, schema, branch_count, attempt_count);
+            }
+        }
+        serde_json::Value::Null
+        | serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_) => {}
+    }
+}
+
+#[test]
+fn public_schemas_share_the_branch_ref_and_integer_bounds() {
+    let mut branch_patterns = 0_usize;
+    let mut provider_attempts = 0_usize;
+    for (_name, schema_path, _example_path) in public_schema_examples() {
+        let schema: serde_json::Value =
+            serde_json::from_slice(&fs::read(&schema_path).expect("public schema is readable"))
+                .expect("public schema is JSON");
+        check_schema_bounds(
+            &schema,
+            &schema_path,
+            &mut branch_patterns,
+            &mut provider_attempts,
+        );
+    }
+    assert!(
+        branch_patterns >= 12,
+        "every branch-ref schema projection is checked; found {branch_patterns}"
+    );
+    assert!(
+        provider_attempts >= 4,
+        "every provider-run-attempt schema projection is checked; found {provider_attempts}"
+    );
+
+    let branch_schema = serde_json::json!({
+        "type": "string",
+        "minLength": 12,
+        "maxLength": 266,
+        "pattern": BRANCH_REF_SCHEMA_PATTERN,
+    });
+    let branch_validator =
+        jsonschema::validator_for(&branch_schema).expect("branch-ref schema compiles");
+    for reference in ["refs/heads/main", "refs/heads/topic/docs"] {
+        assert!(
+            BranchRef::new(reference.to_owned()).is_some()
+                && branch_validator.is_valid(&serde_json::json!(reference)),
+            "the Rust and schema branch-ref grammars must accept {reference}",
+        );
+    }
+    for reference in [
+        "refs/heads//topic",
+        "refs/heads/topic/",
+        "refs/heads/.topic",
+        "refs/heads/topic.lock",
+        "refs/heads/topic..next",
+    ] {
+        assert!(
+            BranchRef::new(reference.to_owned()).is_none()
+                && !branch_validator.is_valid(&serde_json::json!(reference)),
+            "the Rust and schema branch-ref grammars must reject {reference}",
+        );
+    }
+}
+
+#[test]
+fn active_report_schema_ids_match_the_writer_contract() {
+    let schema = report_schema();
+    assert_eq!(
+        amiss_scan::report::ENVELOPE_SCHEMA,
+        ENVELOPE_SCHEMA,
+        "the scan and wire envelope writers disagree on the active identity"
+    );
+    assert_eq!(
+        schema
+            .pointer("/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(ENVELOPE_SCHEMA),
+        "the active schema and writer disagree on the envelope identity"
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/ReportPayload/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(PAYLOAD_SCHEMA),
+        "the active schema and writer disagree on the payload identity"
+    );
+}
+
+#[test]
+fn all_public_contract_examples_clear_their_schema_and_registered_reader() {
+    let mut defects = Vec::new();
+
+    for (contract_name, schema_path, example_path) in public_schema_examples() {
+        let schema_bytes = fs::read(&schema_path).expect("public schema is readable");
+        let example_bytes = fs::read(&example_path).expect("public example is readable");
+        let schema: serde_json::Value = serde_json::from_slice(&schema_bytes)
+            .unwrap_or_else(|error| panic!("{} is not JSON: {error}", schema_path.display()));
+        let example: serde_json::Value = serde_json::from_slice(&example_bytes)
+            .unwrap_or_else(|error| panic!("{} is not JSON: {error}", example_path.display()));
+        let validator = jsonschema::validator_for(&schema)
+            .unwrap_or_else(|error| panic!("{} does not compile: {error}", schema_path.display()));
+
+        defects.extend(validator.iter_errors(&example).map(|error| {
+            format!(
+                "{} against {} at {}: {error}",
+                example_path.display(),
+                schema_path.display(),
+                error.instance_path(),
+            )
+        }));
+
+        if let Some(error) = example_reader_defect(&contract_name, &example_bytes) {
+            defects.push(format!(
+                "{} was rejected by the {contract_name} example reader: {error}",
+                example_path.display(),
+            ));
+        }
+    }
+
+    assert!(
+        defects.is_empty(),
+        "public contract examples violate their schemas or registered readers:\n{}",
+        defects.join("\n"),
+    );
+}
+
+#[test]
+fn report_example_is_schema_clean_and_matches_its_canonical_form() {
+    let root = repository_root();
+    let pretty = fs::read(root.join("spec/examples/scanner-report.json"))
+        .expect("pretty report example is readable");
+    let canonical_fixture = fs::read(root.join("spec/examples/scanner-report.canonical.json"))
+        .expect("canonical report example is readable");
+
+    let parsed = amiss_wire::json::parse(&pretty).expect("pretty example is strict JSON");
+    let mut canonical = amiss_wire::json::canonical(&parsed);
+    canonical.push(b'\n');
+    assert_eq!(
+        canonical, canonical_fixture,
+        "pretty and canonical report examples drifted"
+    );
+
+    let schema = report_schema();
+    let example: serde_json::Value =
+        serde_json::from_slice(&pretty).expect("report example is JSON");
+    let validator = jsonschema::validator_for(&schema).expect("report schema compiles");
+    let defects: Vec<String> = validator
+        .iter_errors(&example)
+        .map(|error| format!("{}: {error}", error.instance_path()))
+        .collect();
+    assert_eq!(
+        defects,
+        Vec::<String>::new(),
+        "report example violates its schema"
+    );
+
+    let payload = &example["payload"];
+    for row in payload["errors"].as_array().expect("errors is an array") {
+        let code = row["code"].as_str().expect("an error row names its code");
+        let meaning = AnalysisErrorCode::all()
+            .find(|candidate| candidate.as_str() == code)
+            .expect("the example uses schema error codes")
+            .meaning();
+        assert_eq!(
+            row["description"], meaning,
+            "the example description for {code} drifted from the engine text"
+        );
+    }
+    for row in payload["findings"]
+        .as_array()
+        .expect("findings is an array")
+    {
+        let kind = row["kind"].as_str().expect("a finding row names its kind");
+        let meaning = FindingKind::all()
+            .find(|candidate| candidate.as_str() == kind)
+            .expect("the example uses schema finding kinds")
+            .meaning();
+        assert_eq!(
+            row["description"], meaning,
+            "the example description for {kind} drifted from the engine text"
+        );
+    }
+}

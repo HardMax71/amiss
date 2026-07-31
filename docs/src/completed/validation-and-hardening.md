@@ -39,7 +39,7 @@ Aligned in [#46](https://github.com/hardmax71/amiss/pull/46), which also split t
 examples became executable in [#60](https://github.com/hardmax71/amiss/pull/60), semantic vectors
 were enforced in [#62](https://github.com/hardmax71/amiss/pull/62), and the markers were made to
 say what they do in [#155](https://github.com/hardmax71/amiss/pull/155). All of it lives in
-[`crates/amiss/tests/documentation_contracts.rs`](https://github.com/hardmax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs).
+[`crates/amiss/tests/documentation_contracts/`](https://github.com/hardmax71/amiss/tree/main/crates/amiss/tests/documentation_contracts).
 
 ## Embedded code cannot buy unbounded parse time
 
