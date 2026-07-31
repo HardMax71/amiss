@@ -78,7 +78,7 @@ affected-place count, with one fixed `note` line per error code using the senten
 [Limits and refusals](limits.md), while the full findings remain in JSON. `--explain-scope`
 adds its lines to that human output without changing JSON or creating an early exit,
 behavior pinned by the
-[CLI test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/cli.rs). Exit
+[CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli). Exit
 codes are three classes, not detail: 0 means the run completed and nothing blocks, 1 means
 a finding blocks, 2 means nothing trustworthy could be produced. A consumer that closes the
 pipe early, `head` among them, ends the printing and not the verdict.

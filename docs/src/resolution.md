@@ -188,7 +188,7 @@ from its path without guessing, and a URL naming the default branch while the ca
 ref differs is still `unsupported-version-scope`. Site generators and language-aware tools
 still own route and symbol semantics; guessing those here would turn honest ignorance into
 a false pass. The
-[resolver tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
+[resolver tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-scan/tests/resolve)
 pin these distinctions.
 
 Each resolved target is read from the object store and hashed, so the comparison knows the
