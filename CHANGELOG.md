@@ -130,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - End the narration on a closed pipe, never the verdict
 - Host the action metadata at the repository root
+- Meet the agents where they read: AGENTS.md, the Working with agents chapter, the Claude Code plugin marketplace and skill, and the gh-aw repair recipe
 
 ## [0.5.0](https://github.com/HardMax71/amiss/compare/v0.4.0...v0.5.0) - 2026-07-18
 
