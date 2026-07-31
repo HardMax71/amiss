@@ -17,5 +17,6 @@ pub use model::{
     GitLabRefresh, GitLabRefreshQuery, GitLabTrainCar, GitLabTrainSettings,
 };
 pub use oidc::{
-    GitLabConfigError, GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust, public_keys_from_jwks,
+    GitLabConfigError, GitLabOidc, MAX_KEYS, OidcPublicKey, PolicyBinding, RunnerTrust,
+    public_keys_from_jwks,
 };

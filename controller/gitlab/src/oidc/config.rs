@@ -9,7 +9,7 @@ use url::Url;
 
 use crate::identity::{canonical_project_path, exact_sha1};
 
-pub(crate) const MAX_KEYS: usize = 16;
+pub const MAX_KEYS: usize = 16;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunnerTrust {

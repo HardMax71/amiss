@@ -11,10 +11,10 @@ use amiss_controller::{
 use jsonwebtoken::{Algorithm, Validation, decode, decode_header};
 
 use self::claims::{Claims, authenticated_facts};
+use self::config::validate_config;
 pub use self::config::{
-    GitLabConfigError, OidcPublicKey, PolicyBinding, RunnerTrust, public_keys_from_jwks,
+    GitLabConfigError, MAX_KEYS, OidcPublicKey, PolicyBinding, RunnerTrust, public_keys_from_jwks,
 };
-use self::config::{MAX_KEYS, validate_config};
 
 const MAX_TOKEN_BYTES: usize = 16 * 1024;
 

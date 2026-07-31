@@ -7,7 +7,9 @@ use amiss_controller::{
     ProviderError, ReplayWindow, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
-use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
+use amiss_controller_gitlab::{
+    GitLabConfigError, GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust,
+};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde_json::{Value, json};
 
@@ -76,14 +78,15 @@ pub fn audience() -> String {
 }
 
 pub fn keys_with(kid: &str) -> Vec<OidcPublicKey> {
-    vec![
-        OidcPublicKey::from_rsa_pem(
-            kid.to_owned(),
-            OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
-            &RSA_KEYS.public_pem,
-        )
-        .unwrap(),
-    ]
+    vec![try_key(kid).unwrap()]
+}
+
+pub fn try_key(kid: &str) -> Result<OidcPublicKey, GitLabConfigError> {
+    OidcPublicKey::from_rsa_pem(
+        kid.to_owned(),
+        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        &RSA_KEYS.public_pem,
+    )
 }
 
 pub fn accepts(
