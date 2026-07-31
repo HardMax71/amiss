@@ -3,7 +3,6 @@ mod cleanup;
 mod metadata;
 mod report;
 
-use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -231,14 +230,6 @@ fn recover_capacity(
     let capacity = capacity::settle(capacity, present)?;
     save_capacity(root, &capacity)?;
     Ok(capacity)
-}
-
-fn is_state_name(name: &OsStr) -> bool {
-    let Some(name) = name.to_str() else {
-        return false;
-    };
-    name.strip_suffix(".state")
-        .is_some_and(|key| validate_key(key).is_ok())
 }
 
 fn row_lock_name(key: &str) -> Result<String, FileLedgerError> {

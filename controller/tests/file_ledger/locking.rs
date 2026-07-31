@@ -1,10 +1,26 @@
+use std::fs;
 use std::sync::{Arc, Barrier};
 use std::thread;
 
-use amiss_controller::{ControllerClock, DeliveryClaim, DeliveryLedger, FileLedgerRoot};
+use amiss_controller::{
+    ControllerClock, DeliveryClaim, DeliveryLedger, FileLedgerError, FileLedgerRoot,
+};
 use tempfile::TempDir;
 
 use super::support::{FIXTURE_KEY, TestClock, check_binding, config, delivery, executed, open};
+
+#[test]
+fn a_lock_name_held_by_a_directory_is_corrupt() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let mut ledger = open(directory.path(), &clock);
+    fs::create_dir(directory.path().join(".amiss-clock.lock")).unwrap();
+
+    assert!(matches!(
+        ledger.claim(&delivery("42"), &check_binding()),
+        Err(FileLedgerError::Corrupt)
+    ));
+}
 
 #[test]
 fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
