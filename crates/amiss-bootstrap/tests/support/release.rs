@@ -11,8 +11,6 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::manifest::RuntimeRole;
 use tempfile::TempDir;
 
-pub(crate) use amiss_fixtures::executable_bytes as engine_bytes;
-
 pub(crate) const ACTION: &[u8] = include_bytes!("../../../amiss/action/runtime.yml");
 
 pub(crate) struct Release {
@@ -26,11 +24,16 @@ pub(crate) struct Release {
 
 pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     let platform = host_platform().expect("a supported test platform");
+    release_with_engine(&amiss_fixtures::executable_bytes(platform), mutate)
+}
+
+pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> Release {
+    let platform = host_platform().expect("a supported test platform");
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     amiss_fixtures::init_repository(root).expect("initialize repository");
 
-    let binary = amiss_fixtures::executable_bytes(platform);
+    let binary = engine.to_vec();
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_str());
     let mut artifacts = vec![StagedArtifact {

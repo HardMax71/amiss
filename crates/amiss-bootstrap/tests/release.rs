@@ -23,7 +23,9 @@ use tempfile::TempDir;
 
 mod support;
 
-use support::release::{ACTION, Release, engine_bytes, release};
+use amiss_fixtures::executable_bytes as engine_bytes;
+
+use support::release::{ACTION, Release, release};
 
 const BOOTSTRAP: &[u8] = b"the exact protected bootstrap bytes";
 
