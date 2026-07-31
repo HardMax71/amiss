@@ -20,8 +20,12 @@ cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnin
 ```
 
 The first pair covers every crate, engine and provider alike. The second covers the scanner's
-standalone fuzz workspace. The engine crates stay offline: `deny-engine.toml` drops the provider
-crates from the graph and then bans the HTTP and async stack they carry.
+standalone fuzz workspace. Those are the heavy stages; the exact CI loop is the whole hook
+set, `prek run --all-files` and then `prek run --all-files --hook-stage pre-push`, which adds
+the hygiene hooks, typos, zizmor, cargo deny, cargo shear, and the similarity ratchets.
+`prek install` wires the same stages into your own commits and pushes. The engine crates stay
+offline: `deny-engine.toml` drops the provider crates from the graph and then bans the HTTP
+and async stack they carry.
 
 A change is acceptable when it keeps every gate green, adds tests for the
 behavior it adds or changes, and stays inside the boundaries described in

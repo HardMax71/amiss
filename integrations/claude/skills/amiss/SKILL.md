@@ -45,9 +45,6 @@ sentence saying what the row means and what to do. For reference findings,
 `location.path` plus `location.span` name the exact source position. One line to list
 the actionable rows:
 
-`feedback` is the grouped PR presentation: Fixes, summary-only Checks, and an Existing
-count. Use it to orient, but use the raw finding rows below for exact repair evidence.
-
 ```sh
 jq -r '.payload.findings[]
   | select(.effective_disposition != "record")
@@ -56,6 +53,9 @@ jq -r '.payload.findings[]
      ((.key_input.scope.normalized_target_intent.path | strings) // "-")]
   | @tsv' report.json
 ```
+
+`feedback` is the grouped PR presentation: Fixes, summary-only Checks, and an Existing
+count. Use it to orient, but use the raw finding rows above for exact repair evidence.
 
 ## Fixing findings
 
