@@ -180,6 +180,153 @@ fn changed(now: u64, name: &str, value: Value) -> Value {
 }
 
 #[test]
+fn one_trusted_runner_source_is_enough() {
+    use support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
+
+    let mut hosted_only = policy_binding();
+    hosted_only.runners.self_hosted_ids.clear();
+    assert!(
+        accepts(&issuer_url(), &audience(), hosted_only, keys_with(KID)),
+        "gitlab-hosted runners alone are a trusted source"
+    );
+
+    let mut pinned_only = policy_binding();
+    pinned_only.runners.gitlab_hosted = false;
+    assert!(
+        accepts(&issuer_url(), &audience(), pinned_only, keys_with(KID)),
+        "pinned self-hosted runners alone are a trusted source"
+    );
+}
+
+#[test]
+fn the_key_identifier_grammar_is_exact() {
+    use support::oidc::try_key;
+
+    assert!(try_key(&"k".repeat(256)).is_ok(), "the longest legal kid");
+    let overlong = "k".repeat(257);
+    for (kid, reason) in [
+        ("", "empty"),
+        (overlong.as_str(), "overlong"),
+        ("ki\"d", "a quote"),
+        ("ki\\d", "a backslash"),
+        ("ki d", "a space"),
+        ("kid\u{7f}", "a control byte"),
+    ] {
+        assert!(try_key(kid).is_err(), "{reason} is refused");
+    }
+}
+
+const RSA_N: &str = "ofgWCuLjybRlzo0tZWJjNiuSfb4p4fAkd_wWJcyQoTbji9k0l8W26mPddxHmfHQp-Vaw-4qPCJrcS2mJPMEzP1Pt0Bm4d4QlL-yRT-SFd2lZS-pCgNMsD1W_YpRPEwOWvG6b32690r2jZ47soMZo9wGzjb_7OMg0LOL-bSf63kpaSHSXndS5z5rexMdbBYUsLA9e-KXBdQOS-UTo7WTBEMa2R2CapHg665xsmtdVMTBQY4uDZlxvb3qCo5ZwKh9kG4LT6_I5IhlJH7aGhyxXFvUK-DWNmoudF8NAco9_h9iaGNj8q2ethFkMLs91kzk2PAcDTW9gb54h4FRWyuXpoQ";
+
+fn jwks(kids: &[String]) -> jsonwebtoken::jwk::JwkSet {
+    let keys = kids
+        .iter()
+        .map(|kid| json!({"kty": "RSA", "kid": kid, "n": RSA_N, "e": "AQAB"}))
+        .collect::<Vec<_>>();
+    serde_json::from_value(json!({ "keys": keys })).unwrap()
+}
+
+fn anchors(kids: &[String]) -> std::collections::BTreeMap<String, amiss_controller::TrustAnchorId> {
+    use amiss_controller::OpaqueId;
+    kids.iter()
+        .map(|kid| {
+            (
+                kid.clone(),
+                OpaqueId::new(format!("gitlab-key/{kid}")).unwrap(),
+            )
+        })
+        .collect()
+}
+
+fn numbered(count: usize) -> Vec<String> {
+    (0..count).map(|index| format!("kid-{index}")).collect()
+}
+
+#[test]
+fn a_jwks_converts_exactly_within_its_ceiling() {
+    use amiss_controller_gitlab::{MAX_KEYS, public_keys_from_jwks};
+
+    let one = numbered(1);
+    let keys = public_keys_from_jwks(&jwks(&one), &anchors(&one)).unwrap();
+    assert_eq!(keys.len(), 1, "one pinned key comes back as one key");
+
+    let exact = numbered(MAX_KEYS);
+    assert_eq!(
+        public_keys_from_jwks(&jwks(&exact), &anchors(&exact))
+            .unwrap()
+            .len(),
+        MAX_KEYS,
+        "a set exactly at the ceiling converts whole"
+    );
+
+    let over = numbered(MAX_KEYS + 1);
+    assert!(
+        public_keys_from_jwks(&jwks(&over), &anchors(&over)).is_err(),
+        "one key past the ceiling is refused"
+    );
+
+    let none: Vec<String> = Vec::new();
+    assert!(
+        public_keys_from_jwks(&jwks(&none), &anchors(&none)).is_err(),
+        "an empty set is refused"
+    );
+}
+
+#[test]
+fn a_jwks_that_disagrees_with_its_anchors_is_refused() {
+    use amiss_controller_gitlab::public_keys_from_jwks;
+
+    let one = numbered(1);
+    let two = numbered(2);
+    assert!(
+        public_keys_from_jwks(&jwks(&one), &anchors(&two)).is_err(),
+        "an anchor count that differs from the key count"
+    );
+    assert!(
+        public_keys_from_jwks(&jwks(&one), &anchors(&["other".to_owned()])).is_err(),
+        "an anchor set that names a different kid"
+    );
+
+    let duplicated = vec!["kid-0".to_owned(), "kid-0".to_owned()];
+    assert!(
+        public_keys_from_jwks(&jwks(&duplicated), &anchors(&two)).is_err(),
+        "a duplicated kid is refused even when the counts agree"
+    );
+
+    let elliptic: jsonwebtoken::jwk::JwkSet = serde_json::from_value(json!({"keys": [{
+        "kty": "EC",
+        "kid": "kid-0",
+        "crv": "P-256",
+        "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+        "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+    }]}))
+    .unwrap();
+    assert!(
+        public_keys_from_jwks(&elliptic, &anchors(&one)).is_err(),
+        "a key outside the RSA family is refused"
+    );
+
+    let anonymous: jsonwebtoken::jwk::JwkSet =
+        serde_json::from_value(json!({"keys": [{"kty": "RSA", "n": RSA_N, "e": "AQAB"}]})).unwrap();
+    assert!(
+        public_keys_from_jwks(&anonymous, &anchors(&one)).is_err(),
+        "a key without an identifier is refused"
+    );
+}
+
+#[test]
+fn the_config_error_names_itself() {
+    use amiss_controller_gitlab::public_keys_from_jwks;
+
+    let none: Vec<String> = Vec::new();
+    let error = public_keys_from_jwks(&jwks(&none), &anchors(&none)).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "the GitLab OIDC configuration is invalid"
+    );
+}
+
+#[test]
 fn every_clause_binding_the_policy_is_load_bearing() {
     use amiss_controller_gitlab::PolicyBinding;
     use support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
