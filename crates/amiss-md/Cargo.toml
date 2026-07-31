@@ -9,7 +9,7 @@ exclude.workspace = true
 autotests = false
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.15.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.16.0" }
 markdown = "1"
 
 [dev-dependencies]
