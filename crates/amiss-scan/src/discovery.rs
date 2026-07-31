@@ -58,7 +58,7 @@ fn collect_labels(
     for label in &scanned.declared_anchors {
         scan.charge_label()?;
         labels
-            .entry(label.clone())
+            .entry(amiss_rst::normalized_label(label))
             .and_modify(|state| *state = LabelState::Duplicated)
             .or_insert_with(|| LabelState::Declared(path.clone()));
     }

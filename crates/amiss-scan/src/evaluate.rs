@@ -327,7 +327,8 @@ fn unsupported_semantics_value(kind: &str, semantics: &UnsupportedSemantics<Repo
         UnsupportedSemantics::SiteRoute
         | UnsupportedSemantics::NetworkPath
         | UnsupportedSemantics::AttributeDependent
-        | UnsupportedSemantics::DuplicateLabel => {
+        | UnsupportedSemantics::DuplicateLabel
+        | UnsupportedSemantics::ExternalInventory => {
             reasoned_resolution(kind, semantics.discriminant().as_ref(), Vec::new())
         }
     }

@@ -1018,7 +1018,10 @@ pub(crate) fn resolve_label(
         query: None,
         fragment: Some(label.to_owned()),
     };
-    let resolution = match snapshot.labels.get(label) {
+    let resolution = match snapshot.labels.get(&amiss_rst::normalized_label(label)) {
+        None if label.contains(':') => {
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+        }
         None => Resolution::Missing(Missing::LabelNotDeclared),
         Some(crate::discovery::LabelState::Duplicated) => {
             Resolution::UnsupportedSemantics(UnsupportedSemantics::DuplicateLabel)

@@ -1926,7 +1926,7 @@ fn sphinx_fixture() -> (i32, Vec<u8>, String) {
             ("docs/index.rst", "Index\n=====\n\nSee :doc:`guide`.\n"),
             (
                 "docs/guide.rst",
-                ".. _setup:\n\nGuide\n=====\n\nSee :ref:`setup` and :ref:`gone` and :ref:`twice`.\n",
+                ".. _setup:\n\n.. _`Wide  Name`:\n\nGuide\n=====\n\nSee :ref:`setup` and :ref:`gone` and :ref:`twice`.\nAlso :ref:`wide name` and :ref:`python:comparisons`.\n",
             ),
             ("docs/a.rst", ".. _twice:\n\nA\n=\n"),
             ("docs/b.rst", ".. _twice:\n\nB\n=\n"),
@@ -2011,7 +2011,7 @@ fn sphinx_labels_resolve_through_the_label_table() {
             .collect::<Vec<_>>()
     };
     let labels = candidate_side("label");
-    assert_eq!(labels.len(), 3, "three :ref: observations: {labels:?}");
+    assert_eq!(labels.len(), 5, "five :ref: observations: {labels:?}");
     let outcome = |side: &&serde_json::Value| {
         (
             side.pointer("/resolution/kind")
@@ -2031,12 +2031,17 @@ fn sphinx_labels_resolve_through_the_label_table() {
         vec![
             ("missing".to_owned(), "label-not-declared".to_owned()),
             ("resolved".to_owned(), String::new()),
+            ("resolved".to_owned(), String::new()),
             (
                 "unsupported-semantics".to_owned(),
                 "duplicate-label".to_owned()
             ),
+            (
+                "unsupported-semantics".to_owned(),
+                "external-inventory".to_owned()
+            ),
         ],
-        "one held, one dead, one duplicated"
+        "two held including the quoted phrase, one dead, one duplicated, one another project's"
     );
     let held = labels
         .iter()

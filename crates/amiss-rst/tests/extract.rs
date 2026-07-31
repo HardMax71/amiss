@@ -62,9 +62,28 @@ fn the_two_sphinx_roles_are_modelled_by_name() {
         kinds("Read :ref:`the setup <setup-label>` first.\n"),
         vec![(ReferenceKind::RefRole, "setup-label".to_owned())],
     );
-    for empty in [":doc:``\n", ":ref:`has space`\n", ":doc:`x <>`\n"] {
+    assert_eq!(
+        kinds("See :ref:`pytest helpers` for more.\n"),
+        vec![(ReferenceKind::RefRole, "pytest helpers".to_owned())],
+        "a phrase label is a legal :ref: target"
+    );
+    for empty in [
+        ":doc:``\n",
+        ":doc:`has space`\n",
+        ":doc:`x <>`\n",
+        ":ref:``\n",
+    ] {
         assert!(kinds(empty).is_empty(), "{empty:?} produced a reference");
     }
+}
+
+#[test]
+fn a_quoted_label_declaration_sheds_its_backticks() {
+    let read = extract(b".. _`pytest helpers`:\n\n.. _plain:\n").expect("utf-8 source");
+    assert_eq!(
+        read.anchors,
+        vec!["pytest helpers".to_owned(), "plain".to_owned()],
+    );
 }
 
 #[test]

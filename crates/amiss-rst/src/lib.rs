@@ -96,6 +96,17 @@ pub struct Title {
     pub span: (usize, usize),
 }
 
+/// The Docutils simple-name normalization Sphinx stores labels under:
+/// case-folded, with internal whitespace runs collapsed to one space.
+#[must_use]
+pub fn normalized_label(label: &str) -> String {
+    label
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
 /// The reasons a document is refused before anything is extracted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
