@@ -332,6 +332,81 @@ fn interrupted_capacity_updates_recover_from_the_exact_pending_path() {
 }
 
 #[test]
+fn a_pending_key_is_settled_without_reopening_the_root() {
+    let absent = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let mut ledger = open_with_max(absent.path(), &clock, 2);
+    write_capacity(absent.path(), 2, 1, Some(&"e".repeat(64)), false);
+    assert!(matches!(
+        ledger
+            .claim(&delivery_with_id("after-absent", "41"), &check_binding())
+            .unwrap(),
+        DeliveryClaim::Execute(_)
+    ));
+
+    let present = TempDir::new().unwrap();
+    let mut ledger = open_with_max(present.path(), &clock, 2);
+    ledger
+        .claim(&delivery_with_id("delivery-9", "42"), &check_binding())
+        .unwrap();
+    write_capacity(
+        present.path(),
+        2,
+        1,
+        Some(super::support::FIXTURE_KEY),
+        false,
+    );
+    assert!(matches!(
+        ledger
+            .claim(&delivery_with_id("second", "43"), &check_binding())
+            .unwrap(),
+        DeliveryClaim::Execute(_)
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_pending_state_file_is_an_error_not_an_absence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let mut ledger = open_with_max(directory.path(), &clock, 2);
+    ledger
+        .claim(&delivery_with_id("delivery-9", "42"), &check_binding())
+        .unwrap();
+    let state = ledger_file(directory.path(), ".state").unwrap();
+    fs::set_permissions(&state, fs::Permissions::from_mode(0o000)).unwrap();
+    write_capacity(
+        directory.path(),
+        2,
+        1,
+        Some(super::support::FIXTURE_KEY),
+        false,
+    );
+
+    assert!(matches!(
+        ledger.claim(&delivery_with_id("second", "43"), &check_binding()),
+        Err(FileLedgerError::Io(_))
+    ));
+}
+
+#[test]
+fn an_invalid_pending_key_is_corrupt_before_any_recovery() {
+    let sixty_four_but_not_hex = "Z".repeat(64);
+    for pending in ["ab", sixty_four_but_not_hex.as_str()] {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let mut ledger = open_with_max(directory.path(), &clock, 2);
+        write_capacity(directory.path(), 2, 1, Some(pending), false);
+        assert!(matches!(
+            ledger.claim(&delivery_with_id("after-invalid", "41"), &check_binding()),
+            Err(FileLedgerError::Corrupt)
+        ));
+    }
+}
+
+#[test]
 fn interrupted_batch_cleanup_reconciles_only_with_its_marker() {
     let clock = TestClock::at(1_000);
     let unchanged = TempDir::new().unwrap();

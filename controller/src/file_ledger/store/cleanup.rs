@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,8 +6,8 @@ use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use super::{
     ADMISSION_LOCK, CAPACITY_FILE, MAINTENANCE_LOCK, METADATA_FILE, Store, atomic_write, capacity,
-    is_state_name, load_optional_capacity, load_stored_metadata, metadata, open_lock, read_bounded,
-    save_capacity, validate_key,
+    load_optional_capacity, load_stored_metadata, metadata, open_lock, read_bounded, save_capacity,
+    validate_key,
 };
 use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 use crate::file_ledger::format::{self, Record, State};
@@ -247,7 +246,7 @@ fn is_row_lock(name: &str) -> bool {
 
 fn state_key(name: &str) -> Option<&str> {
     let key = name.strip_suffix(".state")?;
-    (is_state_name(OsStr::new(name)) && validate_key(key).is_ok()).then_some(key)
+    validate_key(key).is_ok().then_some(key)
 }
 
 fn report_key(name: &str) -> Option<&str> {

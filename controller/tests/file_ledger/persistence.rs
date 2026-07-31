@@ -1,9 +1,11 @@
 use std::fs;
 use std::mem::size_of;
 use std::path::Path;
+use std::sync::Arc;
 
 use amiss_controller::{
-    DeliveryClaim, DeliveryLedger, FileLedgerError, LeaseCompletion, StageOutcome,
+    ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion,
+    StageOutcome,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -11,8 +13,8 @@ use serde_json::{Map, Value};
 use tempfile::TempDir;
 
 use super::support::{
-    TestClock, assert_frame_contract, check_binding, delivery, executed, ledger_file, open,
-    publication, staged,
+    MAX_RECORDS, TestClock, assert_frame_contract, check_binding, config, delivery, executed,
+    ledger_file, open, publication, staged,
 };
 
 #[test]
@@ -154,6 +156,66 @@ fn corrupt_state_or_report_fails_closed() {
     ));
 }
 
+#[cfg(unix)]
+#[test]
+fn an_unreadable_file_is_an_error_not_an_absence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let unreadable = |path: &Path| {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
+    };
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+
+    let record_directory = TempDir::new().unwrap();
+    let mut record_ledger = open(record_directory.path(), &clock);
+    record_ledger.claim(&delivery, &check_binding()).unwrap();
+    unreadable(&ledger_file(record_directory.path(), ".state").unwrap());
+    assert!(matches!(
+        record_ledger.claim(&delivery, &check_binding()),
+        Err(FileLedgerError::Io(_))
+    ));
+
+    let metadata_directory = TempDir::new().unwrap();
+    drop(open(metadata_directory.path(), &clock));
+    unreadable(&metadata_directory.path().join(".amiss-root.state"));
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(matches!(
+        FileLedger::open_with_clock(metadata_directory.path(), config(MAX_RECORDS), clock_source),
+        Err(FileLedgerError::Io(_))
+    ));
+
+    let capacity_directory = TempDir::new().unwrap();
+    let mut capacity_ledger = open(capacity_directory.path(), &clock);
+    unreadable(&capacity_directory.path().join(".amiss-capacity.state"));
+    assert!(matches!(
+        capacity_ledger.claim(&delivery, &check_binding()),
+        Err(FileLedgerError::Io(_))
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_state_file_replaced_by_a_symlink_is_corrupt_at_claim() {
+    use std::os::unix::fs::symlink;
+
+    let directory = TempDir::new().unwrap();
+    let aside = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), &clock);
+    ledger.claim(&delivery, &check_binding()).unwrap();
+    let state = ledger_file(directory.path(), ".state").unwrap();
+    let target = aside.path().join("record");
+    fs::rename(&state, &target).unwrap();
+    symlink(&target, &state).unwrap();
+
+    assert!(matches!(
+        ledger.claim(&delivery, &check_binding()),
+        Err(FileLedgerError::Corrupt)
+    ));
+}
+
 #[test]
 fn a_missing_staged_report_is_corrupt() {
     let directory = TempDir::new().unwrap();
@@ -170,6 +232,23 @@ fn a_missing_staged_report_is_corrupt() {
         ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
+}
+
+#[test]
+fn a_report_exactly_at_the_ceiling_is_read_back_whole() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), &clock);
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    let mut publication = publication(&delivery, &lease);
+    publication.report = Some(vec![0; usize::try_from(MACHINE_JSON_BYTES).unwrap()]);
+    let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
+
+    assert_eq!(
+        ledger.claim(&delivery, &check_binding()).unwrap(),
+        DeliveryClaim::Publish(frozen)
+    );
 }
 
 #[test]

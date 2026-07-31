@@ -37,6 +37,35 @@ fn a_live_claim_resumes_for_its_owner_and_is_busy_for_another() {
 }
 
 #[test]
+fn the_epoch_instant_is_a_valid_clock_reading() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(0);
+    let mut ledger = open(directory.path(), &clock);
+    assert!(matches!(
+        ledger.claim(&delivery("42"), &check_binding()).unwrap(),
+        DeliveryClaim::Execute(_)
+    ));
+}
+
+#[test]
+fn a_fresh_root_adopts_nothing_it_did_not_write() {
+    let stray_directory = TempDir::new().unwrap();
+    fs::create_dir(stray_directory.path().join("junk")).unwrap();
+    let stray_file = TempDir::new().unwrap();
+    fs::write(stray_file.path().join(".atomicwrite-file"), b"partial").unwrap();
+
+    for directory in [&stray_directory, &stray_file] {
+        let clock_source: Arc<dyn ControllerClock> = TestClock::at(1_000);
+        assert!(matches!(
+            FileLedger::open_with_clock(directory.path(), config(MAX_RECORDS), clock_source),
+            Err(FileLedgerError::Corrupt)
+        ));
+    }
+    assert!(stray_directory.path().join("junk").is_dir());
+    assert!(stray_file.path().join(".atomicwrite-file").is_file());
+}
+
+#[test]
 fn the_record_root_must_already_be_a_directory() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
