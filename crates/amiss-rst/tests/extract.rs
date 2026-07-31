@@ -1,4 +1,4 @@
-use amiss_rst::{Kind, ReferenceKind, Refusal, blocks, extract};
+use amiss_rst::{Kind, ReferenceKind, Refusal, blocks, extract, normalized_label};
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn kinds(source: &str) -> Vec<(ReferenceKind, String)> {
@@ -154,4 +154,11 @@ fn what_the_parser_will_not_read_into_is_declared() {
 #[test]
 fn bytes_that_are_not_text_are_refused_rather_than_guessed_at() {
     assert_eq!(extract(&[0xff, 0xfe]), Err(Refusal::NotUtf8));
+}
+
+#[test]
+fn the_simple_name_folds_case_and_collapses_whitespace() {
+    assert_eq!(normalized_label("Wide  Name"), "wide name");
+    assert_eq!(normalized_label(" plain "), "plain");
+    assert_eq!(normalized_label("UPPER"), "upper");
 }

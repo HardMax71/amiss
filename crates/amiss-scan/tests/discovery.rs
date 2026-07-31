@@ -399,4 +399,13 @@ fn the_label_ceiling_ends_discovery_one_past_the_limit() {
             observed_lower_bound: 3,
         })
     );
+
+    let exact = ScanLimits {
+        declared_labels_per_snapshot: 3,
+        ..ScanLimits::CONTRACT
+    };
+    assert!(
+        run(dir.path(), exact, GitLimits::CONTRACT).is_ok(),
+        "a snapshot sitting exactly on the ceiling passes"
+    );
 }
