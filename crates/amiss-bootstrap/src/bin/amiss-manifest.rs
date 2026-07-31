@@ -13,13 +13,13 @@ use amiss_wire::manifest::RuntimeRole;
 
 /// The release-side manifest builder: it reads the staged action tree,
 /// hashes the exact bytes, and writes the strict manifest plus its digest
-/// marker. The reviewed action definition and launcher are pinned into every
+/// marker. The reviewed action definition is pinned into every
 /// platform's runtime closure, so the bootstrap validates their bytes like
 /// any other runtime file. Every platform row comes from the artifact's own
 /// header, so a mislabeled binary cannot enter the manifest.
 ///
 /// `amiss-manifest --tree DIR --version V --host H --owner O --repository R
-///  --commit OID --action PATH --launcher PATH --lock PATH [--lock PATH]...
+///  --commit OID --action PATH --lock PATH [--lock PATH]...
 ///  --artifact PATH [...]`
 /// A lone `--version` asks this tool's version; `--version V` stamps the release.
 #[expect(clippy::print_stderr, reason = "the build tool's diagnostic channel")]
@@ -57,7 +57,6 @@ struct Args {
     commit: String,
     locks: Vec<String>,
     artifacts: Vec<String>,
-    launcher: String,
     action: String,
 }
 
@@ -67,7 +66,6 @@ fn run(args: &Args) -> Result<(), String> {
         .iter()
         .map(|path| read_at(&args.tree, path).map(|bytes| (path.clone(), bytes)))
         .collect::<Result<_, _>>()?;
-    let launcher_bytes = read_at(&args.tree, &args.launcher)?;
     let action_bytes = read_at(&args.tree, &args.action)?;
     let artifact_bytes: Vec<(String, Vec<u8>)> = args
         .artifacts
@@ -85,12 +83,6 @@ fn run(args: &Args) -> Result<(), String> {
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes,
-            },
-            StagedFile {
-                path: args.launcher.clone(),
-                role: RuntimeRole::Launcher,
-                executable: false,
-                bytes: &launcher_bytes,
             },
             StagedFile {
                 path: args.action.clone(),
@@ -146,7 +138,6 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     let mut owner: Option<String> = None;
     let mut repository: Option<String> = None;
     let mut commit: Option<String> = None;
-    let mut launcher: Option<String> = None;
     let mut action: Option<String> = None;
     let mut locks: Vec<String> = Vec::new();
     let mut artifacts: Vec<String> = Vec::new();
@@ -160,7 +151,6 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
             "--owner" => owner = Some(value),
             "--repository" => repository = Some(value),
             "--commit" => commit = Some(value),
-            "--launcher" => launcher = Some(value),
             "--action" => action = Some(value),
             "--lock" => locks.push(value),
             "--artifact" => artifacts.push(value),
@@ -179,7 +169,6 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
         commit: commit?,
         locks,
         artifacts,
-        launcher: launcher?,
         action: action?,
     })
 }

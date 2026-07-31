@@ -146,7 +146,7 @@ fn derivation_refuses_an_invalid_marker_closure_or_bootstrap() {
     );
 
     let changed = release(|root| {
-        std::fs::write(root.join("dist/launcher.js"), b"changed before commit").unwrap();
+        std::fs::write(root.join("action.yml"), b"changed before commit").unwrap();
     });
     let bootstrap = engine_bytes(changed.platform);
     assert_eq!(

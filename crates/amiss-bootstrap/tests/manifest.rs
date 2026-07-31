@@ -10,7 +10,6 @@ fn the_manifest_builder_publishes_its_digest_marker() {
     let tree = TempDir::new().unwrap();
     std::fs::write(tree.path().join("Cargo.lock"), b"version = 4\n").unwrap();
     std::fs::write(tree.path().join("action.yml"), b"action").unwrap();
-    std::fs::write(tree.path().join("launcher.js"), b"launcher").unwrap();
     std::fs::copy(
         PathBuf::from(env!("CARGO_BIN_EXE_amiss-bootstrap")),
         tree.path().join("engine"),
@@ -33,8 +32,6 @@ fn the_manifest_builder_publishes_its_digest_marker() {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "--action",
             "action.yml",
-            "--launcher",
-            "launcher.js",
             "--lock",
             "Cargo.lock",
             "--artifact",

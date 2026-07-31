@@ -26,7 +26,6 @@ pub struct RuntimeFile {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuntimeRole {
     Executable,
-    Launcher,
     DynamicLibrary,
     RuntimeData,
 }
@@ -36,7 +35,6 @@ impl RuntimeRole {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Executable => "executable",
-            Self::Launcher => "launcher",
             Self::DynamicLibrary => "dynamic-library",
             Self::RuntimeData => "runtime-data",
         }
@@ -45,7 +43,6 @@ impl RuntimeRole {
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "executable" => Ok(Self::Executable),
-            "launcher" => Ok(Self::Launcher),
             "dynamic-library" => Ok(Self::DynamicLibrary),
             "runtime-data" => Ok(Self::RuntimeData),
             _ => fail(path, ErrorKind::InvalidValue),
@@ -178,24 +175,6 @@ impl ReleaseArtifact {
         }
         Some(row)
     }
-
-    /// The single `launcher` row, which the closure law requires to be a
-    /// regular mode-`100644` blob, named by the metadata's `runs.main`. The
-    /// required path never executes it. The closure pins its bytes anyway,
-    /// because `runs.main` is exactly what a `uses:` consumer would run, and a
-    /// row the manifest never mentions is a file nobody reviewed.
-    #[must_use]
-    pub fn launcher(&self) -> Option<&RuntimeFile> {
-        let mut rows = self
-            .runtime_files
-            .iter()
-            .filter(|file| file.role == RuntimeRole::Launcher);
-        let row = rows.next()?;
-        if rows.next().is_some() || row.git_mode != GitMode::RegularFile {
-            return None;
-        }
-        Some(row)
-    }
 }
 
 fn decode_version(path: &str, value: Value) -> Result<String, Error> {
@@ -323,7 +302,7 @@ fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
         engine_digest,
         runtime_files,
     };
-    if artifact.executable().is_none() || artifact.launcher().is_none() {
+    if artifact.executable().is_none() {
         return fail(&files_path, ErrorKind::Inconsistent);
     }
     Ok(artifact)

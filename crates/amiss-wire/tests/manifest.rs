@@ -39,20 +39,12 @@ fn artifact(
 }
 
 fn closed() -> Vec<RuntimeFile> {
-    vec![
-        row(
-            "dist/amiss",
-            RuntimeRole::Executable,
-            GitMode::ExecutableFile,
-            '1',
-        ),
-        row(
-            "dist/launcher.js",
-            RuntimeRole::Launcher,
-            GitMode::RegularFile,
-            '3',
-        ),
-    ]
+    vec![row(
+        "dist/amiss",
+        RuntimeRole::Executable,
+        GitMode::ExecutableFile,
+        '1',
+    )]
 }
 
 #[test]
@@ -74,60 +66,36 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
     let cases = [
         (doubled, "a second executable row"),
         (
-            vec![
-                row(
-                    "dist/other",
-                    RuntimeRole::Executable,
-                    GitMode::ExecutableFile,
-                    '1',
-                ),
-                row(
-                    "dist/launcher.js",
-                    RuntimeRole::Launcher,
-                    GitMode::RegularFile,
-                    '3',
-                ),
-            ],
+            vec![row(
+                "dist/other",
+                RuntimeRole::Executable,
+                GitMode::ExecutableFile,
+                '1',
+            )],
             "a path that is not the tree path",
         ),
         (
-            vec![
-                row(
-                    "dist/amiss",
-                    RuntimeRole::Executable,
-                    GitMode::RegularFile,
-                    '1',
-                ),
-                row(
-                    "dist/launcher.js",
-                    RuntimeRole::Launcher,
-                    GitMode::RegularFile,
-                    '3',
-                ),
-            ],
+            vec![row(
+                "dist/amiss",
+                RuntimeRole::Executable,
+                GitMode::RegularFile,
+                '1',
+            )],
             "a nonexecutable mode",
         ),
         (
-            vec![
-                row(
-                    "dist/amiss",
-                    RuntimeRole::Executable,
-                    GitMode::ExecutableFile,
-                    '9',
-                ),
-                row(
-                    "dist/launcher.js",
-                    RuntimeRole::Launcher,
-                    GitMode::RegularFile,
-                    '3',
-                ),
-            ],
+            vec![row(
+                "dist/amiss",
+                RuntimeRole::Executable,
+                GitMode::ExecutableFile,
+                '9',
+            )],
             "a checksum that is not the binary's",
         ),
         (
             vec![row(
-                "dist/launcher.js",
-                RuntimeRole::Launcher,
+                "Cargo.lock",
+                RuntimeRole::RuntimeData,
                 GitMode::RegularFile,
                 '3',
             )],
@@ -137,52 +105,6 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
     for (files, reason) in cases {
         let broken = artifact(ConstraintPlatform::LinuxX8664, "amiss-linux-x86_64", files);
         assert!(broken.executable().is_none(), "{reason}");
-    }
-}
-
-#[test]
-fn the_launcher_row_is_a_single_regular_blob() {
-    let sound = artifact(
-        ConstraintPlatform::LinuxX8664,
-        "amiss-linux-x86_64",
-        closed(),
-    );
-    assert!(sound.launcher().is_some());
-
-    let mut doubled = closed();
-    doubled.push(row(
-        "dist/second.js",
-        RuntimeRole::Launcher,
-        GitMode::RegularFile,
-        '3',
-    ));
-    let executable_mode = vec![
-        row(
-            "dist/amiss",
-            RuntimeRole::Executable,
-            GitMode::ExecutableFile,
-            '1',
-        ),
-        row(
-            "dist/launcher.js",
-            RuntimeRole::Launcher,
-            GitMode::ExecutableFile,
-            '3',
-        ),
-    ];
-    let absent = vec![row(
-        "dist/amiss",
-        RuntimeRole::Executable,
-        GitMode::ExecutableFile,
-        '1',
-    )];
-    for (files, reason) in [
-        (doubled, "a second launcher row"),
-        (executable_mode, "an executable launcher mode"),
-        (absent, "no launcher row at all"),
-    ] {
-        let broken = artifact(ConstraintPlatform::LinuxX8664, "amiss-linux-x86_64", files);
-        assert!(broken.launcher().is_none(), "{reason}");
     }
 }
 
@@ -241,7 +163,7 @@ fn selection_matches_platform_and_name_together() {
     );
 }
 
-/// All four roles in one parsed manifest, so every decoder arm is load-bearing.
+/// Every runtime role in one parsed manifest, so every decoder arm is load-bearing.
 #[test]
 fn a_complete_manifest_parses_with_every_runtime_role() {
     let lock = r#"{"schema":"amiss/scanner-dependency-lock-input","files":[{"path":"Cargo.lock","raw_digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444"}]}"#;
@@ -262,7 +184,6 @@ fn a_complete_manifest_parses_with_every_runtime_role() {
             r#""runtime_files":["#,
             r#"{{"path":"dist/amiss","role":"executable","git_mode":"100755","file_sha256":"{binary}"}},"#,
             r#"{{"path":"dist/data.bin","role":"runtime-data","git_mode":"100644","file_sha256":"{data}"}},"#,
-            r#"{{"path":"dist/launcher.js","role":"launcher","git_mode":"100644","file_sha256":"{launcher}"}},"#,
             r#"{{"path":"dist/libdep.so","role":"dynamic-library","git_mode":"100644","file_sha256":"{library}"}}"#,
             r#"]}}]}}"#,
         ),
@@ -272,15 +193,13 @@ fn a_complete_manifest_parses_with_every_runtime_role() {
         binary = binary,
         engine = digest('2'),
         data = digest('5'),
-        launcher = digest('3'),
         library = digest('6'),
     );
     let manifest = ReleaseManifest::parse(raw.as_bytes()).expect("the closed manifest parses");
     assert_eq!(manifest.engine_version, "0.5.1");
     let artifact = manifest.artifacts.first().expect("one artifact");
-    assert_eq!(artifact.runtime_files.len(), 4);
+    assert_eq!(artifact.runtime_files.len(), 3);
     assert!(artifact.executable().is_some());
-    assert!(artifact.launcher().is_some());
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
