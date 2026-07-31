@@ -1,0 +1,205 @@
+use amiss_wire::controls::{
+    FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor, ResourceName, ScannerPolicy,
+};
+use amiss_wire::de::ErrorKind;
+use amiss_wire::digest::hj;
+use amiss_wire::json;
+use amiss_wire::model::BranchRef;
+
+use crate::support::{FLOOR, POLICY};
+
+#[test]
+fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
+    let doc = String::from_utf8(FLOOR.to_vec())
+        .unwrap()
+        .replace(r#""disposition": "fail""#, r#""disposition": "warn""#);
+    let floor =
+        OrganizationFloor::parse(doc.as_bytes()).expect("warn is a disposition a floor may set");
+    assert_ne!(
+        floor.digest,
+        OrganizationFloor::parse(FLOOR).unwrap().digest
+    );
+}
+
+#[test]
+fn parses_the_floor_fixture() {
+    let floor = OrganizationFloor::parse(FLOOR).unwrap();
+    assert_eq!(floor.schema(), "amiss/organization-floor");
+    assert_eq!(
+        floor.digest,
+        hj("amiss/organization-floor", &json::parse(FLOOR).unwrap())
+    );
+    assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
+    assert_eq!(floor.ref_name.as_str(), "refs/heads/main");
+    assert_eq!(floor.resource_limits.len(), 2);
+    assert_ne!(floor.digest, ScannerPolicy::parse(POLICY).unwrap().digest);
+}
+
+#[test]
+fn parses_a_floor_declaring_every_resource() {
+    let mut declared: Vec<(&'static str, i64)> = ResourceName::all()
+        .map(|resource| {
+            let maximum = if resource == ResourceName::MachineJsonBytes {
+                268_435_456
+            } else if resource == ResourceName::TypedAnalysisErrorsRetained {
+                64
+            } else {
+                i64::try_from(ORGANIZATION_POLICY_ENTRIES_LIMIT).unwrap_or(i64::MAX)
+            };
+            (resource.as_str(), maximum)
+        })
+        .collect();
+    declared.sort_unstable();
+    let rows: Vec<String> = declared
+        .iter()
+        .map(|(resource, maximum)| {
+            format!("{{ \"resource\": \"{resource}\", \"maximum\": {maximum} }}")
+        })
+        .collect();
+    let doc = format!(
+        r#"{{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/every-resource",
+  "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": [{rows}]
+}}"#,
+        rows = rows.join(",")
+    );
+    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
+    assert_eq!(floor.resource_limits.len(), ResourceName::all().len());
+}
+
+#[expect(clippy::panic, reason = "test helper narrowing the defect family")]
+fn floor_schema_kind(defect: FloorDefect) -> ErrorKind {
+    match defect {
+        FloorDefect::Schema(error) => error.kind,
+        FloorDefect::Entries { .. } => panic!("expected a schema defect, got an entries crossing"),
+    }
+}
+
+#[test]
+fn rejects_floor_bound_defects() {
+    let doc = String::from_utf8(FLOOR.to_vec()).unwrap();
+    let wrong_ceiling = doc.replace("268435456", "268435455");
+    assert_eq!(
+        floor_schema_kind(OrganizationFloor::parse(wrong_ceiling.as_bytes()).unwrap_err()),
+        ErrorKind::InvalidValue
+    );
+
+    let wrong_errors = doc.replace("\"maximum\": 64", "\"maximum\": 65");
+    assert_eq!(
+        floor_schema_kind(OrganizationFloor::parse(wrong_errors.as_bytes()).unwrap_err()),
+        ErrorKind::InvalidValue
+    );
+
+    let unsorted_limits = doc.replace(
+        "{ \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 },\n    { \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 }",
+        "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 }",
+    );
+    assert_eq!(
+        floor_schema_kind(OrganizationFloor::parse(unsorted_limits.as_bytes()).unwrap_err()),
+        ErrorKind::UnsortedSet
+    );
+}
+
+#[test]
+fn rejects_floors_over_the_combined_entry_limit() {
+    let paths = |count: usize, prefix: &str| {
+        let items: Vec<String> = (0..count)
+            .map(|index| format!("\"{prefix}/{index:07}.md\""))
+            .collect();
+        items.join(",")
+    };
+    let doc = format!(
+        r#"{{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/too-big",
+  "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [{inventory}],
+  "protected_control_paths": [{controls}],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": []
+}}"#,
+        inventory = paths(60_000, "docs/a"),
+        controls = paths(45_000, "ops/b"),
+    );
+    assert_eq!(
+        OrganizationFloor::parse(doc.as_bytes()).unwrap_err(),
+        FloorDefect::Entries {
+            configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
+            observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT + 1,
+        }
+    );
+}
+
+#[test]
+fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
+    let doc = br#"{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/self-inconsistent",
+  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": ["docs/a.md", "docs/b.md", "docs/c.md"],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": [
+    { "resource": "organization-policy-entries", "maximum": 3 }
+  ]
+}"#;
+    assert_eq!(
+        OrganizationFloor::parse(doc).unwrap_err(),
+        FloorDefect::Entries {
+            configured_limit: 3,
+            observed_lower_bound: 4,
+        }
+    );
+}
+
+#[test]
+fn branch_refs_follow_ref_format() {
+    let valid = [
+        "refs/heads/main",
+        "refs/heads/feature/a+b",
+        "refs/heads/\u{e9}",
+        "refs/heads/@",
+        "refs/heads/-dash",
+    ];
+    for case in valid {
+        assert!(BranchRef::new(case.to_owned()).is_some(), "{case}");
+    }
+    let invalid = [
+        "refs/heads/".to_owned(),
+        "refs/heads//main".to_owned(),
+        "refs/heads/.hidden".to_owned(),
+        "refs/heads/main.lock".to_owned(),
+        "refs/heads/a..b".to_owned(),
+        "refs/heads/a b".to_owned(),
+        "refs/heads/a~b".to_owned(),
+        "refs/heads/a?b".to_owned(),
+        "refs/heads/a[b".to_owned(),
+        "refs/heads/a\\b".to_owned(),
+        "refs/heads/a@{b".to_owned(),
+        "refs/heads/a.".to_owned(),
+        format!("refs/heads/{}", "a".repeat(256)),
+    ];
+    for case in invalid {
+        assert!(BranchRef::new(case.clone()).is_none(), "{case}");
+    }
+}

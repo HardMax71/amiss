@@ -150,7 +150,7 @@ The machine contract is the
 [canonical bytes](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-report.canonical.json). The test suite validates
 emitted bytes with an independent schema validator, checks the canonical example, and checks
 that the schema identifiers match the writer constants in the
-[documentation contract test](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/documentation_contracts.rs).
+[documentation contract test](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/documentation_contracts).
 
 This is one rolling, unversioned wire contract during the pre-1.0 `experimental` series.
 Only the unsuffixed schema and examples linked above describe public report output. The

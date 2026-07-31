@@ -43,7 +43,7 @@ target. The
 [debt-snapshot](https://github.com/HardMax71/amiss/blob/main/spec/debt-snapshot.schema.json), and
 [waiver-bundle](https://github.com/HardMax71/amiss/blob/main/spec/waiver-bundle.schema.json) schemas, the
 [control parsers](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls.rs), and their
-[open-forge contract tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/tests/controls.rs) pin that grammar and
+[open-forge contract tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-wire/tests/controls) pin that grammar and
 the exact repository/target-ref binding. The execution constraint additionally pins the action
 tree, release manifest, platform, declared required-status name, and bootstrap in its
 [dedicated parser](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/controls/execution_constraint.rs).
@@ -85,7 +85,7 @@ everything lines up, active unchanged debt records tolerance at `warn`, and an a
 waiver changes only `fail` to `warn`. Invalid, expired, worsened, or overlapping items
 suppress nothing, and an overlap makes evaluation incomplete.
 
-The [wrapper tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/wrapper.rs)
+The [wrapper tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-scan/tests/wrapper)
 pin binding, trusted-time, expiry, fact-drift, wrong-tree selection, resolved-target, and
 overlap behavior. The published [`complete-findings`, `debt-items`, and `waiver-items`
 ceilings](limits.md) bound the accepted sets, and the `amiss-scan` `pipeline` benchmark
