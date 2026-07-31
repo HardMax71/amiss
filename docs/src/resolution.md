@@ -132,8 +132,11 @@ the Sphinx root. A `:ref:` resolves against the snapshot's label table, built du
 discovery from every `.. _name:` a scanned reStructuredText document declares and
 bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
 declaring document, a name nobody declares is a missing target, and a name declared
-twice is undecided rather than guessed between. Every other role stays an open
-extension point, declared rather than read into. A target that includes another file,
+twice is undecided rather than guessed between. Labels follow the Docutils simple-name
+rule, case-folded with whitespace runs collapsed, a phrase declaration may arrive
+backtick-quoted, and an undeclared name carrying a colon is treated as another
+project's inventory, declared unsupported rather than reported missing. Every other
+role stays an open extension point, declared rather than read into. A target that includes another file,
 through the AsciiDoc include or the reStructuredText `include` and `literalinclude`
 directives, publishes identities this engine never read, so an anchor it does not hold
 stays undecided rather than reported missing.

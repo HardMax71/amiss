@@ -71,7 +71,11 @@ fn roles(line: &str, at: usize, found: &mut Vec<Reference>) {
                 .and_then(|(_, tail)| tail.strip_suffix('>'))
                 .unwrap_or(body)
                 .trim();
-            if !target.is_empty() && !target.contains(char::is_whitespace) {
+            let phrase_allowed = matches!(kind, ReferenceKind::RefRole);
+            let acceptable = !target.is_empty()
+                && (phrase_allowed || !target.contains(char::is_whitespace))
+                && !target.contains('`');
+            if acceptable {
                 found.push(build(kind, target, at, start, end.saturating_add(1)));
             }
             index = end.saturating_add(1);
@@ -140,10 +144,16 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
 }
 
 /// An internal label a document declares, which publishes an anchor identity.
+/// A phrase label arrives backtick-quoted, `.. _`name`:`, and the quotes are
+/// spelling, not name.
 #[must_use]
 pub fn target_definition(line: &str) -> Option<String> {
     let rest = line.trim_start().strip_prefix(".. _")?;
     let label = rest.strip_suffix(':')?.trim();
+    let label = label
+        .strip_prefix('`')
+        .and_then(|inner| inner.strip_suffix('`'))
+        .map_or(label, str::trim);
     (!label.is_empty()).then(|| label.to_owned())
 }
 

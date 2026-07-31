@@ -128,6 +128,7 @@ pub enum UnsupportedSemantics<P> {
     NetworkPath,
     AttributeDependent,
     DuplicateLabel,
+    ExternalInventory,
 }
 
 impl<P> UnsupportedSemantics<P> {
@@ -139,7 +140,8 @@ impl<P> UnsupportedSemantics<P> {
             Self::SiteRoute
             | Self::NetworkPath
             | Self::AttributeDependent
-            | Self::DuplicateLabel => false,
+            | Self::DuplicateLabel
+            | Self::ExternalInventory => false,
         }
     }
 }

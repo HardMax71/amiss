@@ -2686,7 +2686,8 @@
             "site-route",
             "network-path",
             "attribute-dependent",
-            "duplicate-label"
+            "duplicate-label",
+            "external-inventory"
           ]
         }
       }
