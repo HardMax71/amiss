@@ -1,0 +1,247 @@
+use std::fs;
+
+use tempfile::TempDir;
+
+use crate::support::{amiss, fixture, git, payload};
+
+#[test]
+fn human_output_projects_the_same_result() {
+    let fx = fixture();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.starts_with("amiss: pass (fix 1, check 1, existing 0, errors 0, exit 0)"),
+        "got: {text}"
+    );
+    assert!(
+        text.contains("Fix target \"docs/missing.md\" affected places 1"),
+        "the grouped item names its target and affected-place count: {text}"
+    );
+    assert!(
+        text.contains("Check target \"docs/guide.md\" affected places 1"),
+        "the unchanged backlink becomes one check: {text}"
+    );
+    assert!(
+        !text.contains("explicit-target-missing"),
+        "internal finding kinds stay out of the focused human projection: {text}"
+    );
+    assert!(
+        text.contains("references: extracted "),
+        "totals close the projection"
+    );
+    assert!(!text.contains('\r'), "LF-only stdout");
+}
+
+#[test]
+fn human_output_keeps_existing_findings_out_of_feedback_and_notes() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::write(root.join("source.rs"), "pub fn untouched() {}\n").unwrap_or_default();
+    git(root, &["add", "source.rs"]);
+    git(root, &["commit", "-qm", "unrelated"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.starts_with("amiss: pass (fix 0, check 0, existing 1, errors 0, exit 0)"),
+        "got: {text}"
+    );
+    assert!(!text.lines().any(|line| line.starts_with("Fix ")), "{text}");
+    assert!(
+        !text.contains("note explicit-target-missing:"),
+        "background findings do not expand the focused projection: {text}"
+    );
+    assert!(
+        text.contains("findings: total "),
+        "raw totals still expose the inventory: {text}"
+    );
+}
+
+#[test]
+fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
+    let fx = fixture();
+    let root = fx.root();
+    let mut links = Vec::new();
+    for index in 0..201 {
+        links.push(format!("[l{index}](absent-{index}.md)"));
+    }
+    let body = format!("# Many\n\n{}\n", links.join("\n\n"));
+    fs::write(root.join("docs/many.md"), body).unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "many"]);
+    let many = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &many,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    let detail_lines = text.lines().filter(|line| line.starts_with("Fix ")).count();
+    assert_eq!(
+        detail_lines, 10,
+        "only the first ten grouped feedback items are shown"
+    );
+    assert!(
+        text.starts_with("amiss: pass (fix 201, check 0, existing 1, errors 0, exit 0)"),
+        "the header counts the complete grouped projection: {text}"
+    );
+    assert!(
+        text.contains("feedback overflow: 191 more in the full report"),
+        "{text}"
+    );
+    assert_eq!(
+        text.matches("explicit-target-missing").count(),
+        0,
+        "machine finding kinds stay out of the focused human projection"
+    );
+
+    let (_code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &many,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    let payload = payload(&stdout);
+    assert_eq!(
+        payload["feedback"]["items"].as_array().map(Vec::len),
+        Some(201),
+        "the report retains every item; only presentation is capped"
+    );
+}
+
+/// A repository path is untrusted bytes, and the human projection is a place those
+/// bytes could become terminal control sequences, a forged workflow command, or a
+/// second log line. Feedback prints a grouped target instead of every source path,
+/// and every repository-derived value it does print still passes through the
+/// `human-atom` law. This drives a genuinely hostile source path through the binary
+/// and proves it cannot leak control bytes into the focused projection.
+#[test]
+fn a_hostile_document_path_is_rendered_inert_and_round_trips_in_json() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    // ESC, an ANSI colour run, a forged GitHub Actions command, a bell, and a
+    // carriage return, all valid UTF-8 and all valid in a RepoPath.
+    let hostile = "docs/\u{1b}[31m::error::forged\u{7}\u{d}.md";
+    let name = hostile.as_bytes().strip_prefix(b"docs/").unwrap();
+    let blob = amiss_fixtures::loose_object(root, "blob", b"# X\n\n[b](nowhere.md)\n").unwrap();
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
+        .trim()
+        .to_owned();
+    let docs = amiss_fixtures::tree_object(root, &[("100644", name, blob.as_str())]).unwrap();
+    let tree = amiss_fixtures::tree_object(
+        root,
+        &[
+            ("100644", b"README.md".as_slice(), readme.as_str()),
+            ("40000", b"docs".as_slice(), docs.as_str()),
+        ],
+    )
+    .unwrap();
+    let candidate = amiss_fixtures::commit_object(root, &tree, &[&base], "hostile").unwrap();
+
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, human, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "human",
+    ]);
+    assert_eq!(code, 0, "a hostile path is still an ordinary document");
+    for raw in [0x1b_u8, 0x0d, 0x07] {
+        assert!(
+            !human.contains(&raw),
+            "raw control byte {raw:#04x} reached the human output"
+        );
+    }
+    let human_text = String::from_utf8(human).expect("human output is utf-8");
+    assert!(
+        human_text.contains("Fix target \"docs/nowhere.md\" affected places 1"),
+        "the feedback names the normalized target, not the hostile source: {human_text}"
+    );
+
+    let (code, json, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let payload = payload(&json);
+    let paths: Vec<&str> = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["path"].as_str())
+        .collect();
+    assert!(
+        paths.contains(&hostile),
+        "json carries the exact bytes as a string, losing nothing: {paths:?}"
+    );
+}

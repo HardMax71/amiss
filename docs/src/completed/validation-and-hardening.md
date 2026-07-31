@@ -123,7 +123,7 @@ readable: a nonzero missing count in a row is either a real break or a named cla
 tolerated error margin, so nobody has to guess which.
 
 Holding that line costs a large test surface, because every supported reference shape needs a case.
-[`crates/amiss-scan/tests/resolve.rs`](https://github.com/hardmax71/amiss/blob/main/crates/amiss-scan/tests/resolve.rs)
+[`crates/amiss-scan/tests/resolve/`](https://github.com/hardmax71/amiss/tree/main/crates/amiss-scan/tests/resolve)
 runs to around 1,450 lines for that reason, covering component splitting in RFC order,
 line-selection bounds as structural outcomes, LFS pointer targets, exact target digests,
 directories resolved identically through a commit and through the index, paths compared as bytes
