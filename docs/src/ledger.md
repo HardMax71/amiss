@@ -126,6 +126,41 @@ the rule table did not. It got a
 [pinned harvest and a fix](https://github.com/HardMax71/amiss/pull/140), which is why just
 reads zero above.
 
+## The Sphinx yield, measured
+
+The v0.14 release taught the reStructuredText adapter the two Sphinx roles and the label
+table behind `:ref:`. These are that work's counts, taken 2026-07-31 on two Sphinx-native
+trees with the main build carrying the two lexer fixes below, engine
+`sha256:5d1df7f8a4756f23aa7a78330ebc030438dc246f89cb06a7bb676062abc81c92`. Like the rescan
+above these are whole-tree counts at that day's head, base one commit back, so there is no
+range and no density figure. Django, the tree that motivated the adapter, stays
+unmeasurable by design: its reStructuredText lives in `.txt`, which
+[discovery](discovery.md) refuses and a policy include cannot parse.
+
+| Repository | Head | Documents | References | Labels | Resolved | Duplicate | Inventory | Missing |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| pytest | `f306da747e70` | 305 | 1,408 | 460 | 449 | 0 | 6 | 5 |
+| cpython | `ac8ba0ca5a04` | 1,307 | 4,704 | 3,366 | 3,365 | 1 | 0 | 0 |
+
+CPython's Doc tree reads clean: every one of its 3,366 `:ref:` uses resolves through the
+label table except a single genuine duplicate declaration. pytest's five label misses split
+two ways: `package_env`, twice in its changelog, is a tox setting no pytest label can
+satisfy and renders unresolved in its own Sphinx build, a real break found live; the other
+three are prefixless references an intersphinx inventory satisfies at build time, which no
+tree-only scanner can tell from drift, the boundary
+[resolution](resolution.md) states. The six inventory rows are the colon-prefixed form,
+declared unsupported rather than missing. The remaining missing counts in each tree's
+summary, twenty and forty-two, are ordinary path references outside this study's question.
+
+The measurement earned its keep the way the `just` defect above did, twice over. The
+v0.14 build's first pass read 131 of pytest's labels as missing, and triage proved the
+docs innocent both times: pytest declares 180 labels in the backtick-quoted phrase form
+the lexer kept quotes on, and CPython's three "dead" labels were declarations sitting in
+grid-table cells and a list item. Both false-missing classes got pinned fixes
+([#203](https://github.com/HardMax71/amiss/pull/203),
+[#205](https://github.com/HardMax71/amiss/pull/205)), which is why the table reads as it
+does.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
