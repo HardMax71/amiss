@@ -71,10 +71,11 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
       - if: startsWith(github.head_ref, 'release-plz-')
         run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
-      - run: >-
-          cargo mutants --test-workspace true --profile=mutants
-          --shard "$SHARD/$SHARDS"
-          --no-shuffle -vV --in-diff git.diff -- --profile mutants
+      - run: |
+          ulimit -v $((8 * 1024 * 1024))
+          cargo mutants --test-workspace true --profile=mutants \
+            --shard "$SHARD/$SHARDS" \
+            --no-shuffle -vV --in-diff git.diff -- --profile mutants
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
@@ -151,10 +152,12 @@ jobs:
           shared-key: mutants-v2
           save-if: "false"
       # The default slice hands one shard every mutant of the slowest file.
-      - run: >-
-          cargo mutants --in-place --no-shuffle --profile=mutants
-          --shard "$SHARD/$SHARDS"
-          --baseline skip --timeout 60 -- --profile mutants
+      # Uncapped, an allocation-runaway mutant kills the runner before any timeout.
+      - run: |
+          ulimit -v $((8 * 1024 * 1024))
+          cargo mutants --in-place --no-shuffle --profile=mutants \
+            --shard "$SHARD/$SHARDS" \
+            --baseline skip --timeout 60 -- --profile mutants
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
