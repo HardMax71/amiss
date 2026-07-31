@@ -9,7 +9,7 @@ description = "AsciiDoc reference extraction for the amiss documentation scanner
 exclude.workspace = true
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.14.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.15.0" }
 
 [lints]
 workspace = true

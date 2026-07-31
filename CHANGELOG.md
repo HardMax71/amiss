@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0](https://github.com/HardMax71/amiss/compare/v0.14.0...v0.15.0) - 2026-07-31
+
+### Changes
+
+- Split the remaining four test monoliths
+- Split the two test monoliths into directory tests
+- Break the fixture monocultures the sweep named
+- Read labels the way Docutils does
+
 ## [0.14.0](https://github.com/HardMax71/amiss/compare/v0.13.0...v0.14.0) - 2026-07-31
 
 ### Changes
