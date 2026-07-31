@@ -13,7 +13,9 @@ use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 mod support;
 
-use support::release::{Release, engine_bytes, release};
+use amiss_fixtures::executable_bytes as engine_bytes;
+
+use support::release::{Release, release};
 
 fn identity() -> RepositoryIdentity {
     RepositoryIdentity::new(

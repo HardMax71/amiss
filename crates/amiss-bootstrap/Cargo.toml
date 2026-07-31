@@ -16,5 +16,11 @@ tempfile.workspace = true
 amiss-fixtures = { path = "../amiss-fixtures" }
 tempfile.workspace = true
 
+# The end-to-end wrapper test doubles as the engine the wrapper launches, so
+# it needs its own main instead of the test harness.
+[[test]]
+name = "wrapper"
+harness = false
+
 [lints]
 workspace = true
