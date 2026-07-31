@@ -134,8 +134,12 @@ bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
 declaring document, a name nobody declares is a missing target, and a name declared
 twice is undecided rather than guessed between. Labels follow the Docutils simple-name
 rule, case-folded with whitespace runs collapsed, a phrase declaration may arrive
-backtick-quoted, and an undeclared name carrying a colon is treated as another
-project's inventory, declared unsupported rather than reported missing. Every other
+backtick-quoted or sit inside a list item or grid-table cell, and an undeclared name
+carrying a colon is treated as another project's inventory, declared unsupported rather
+than reported missing. One boundary stays open by nature: a prefixless `:ref:` that a
+Sphinx build would satisfy through an intersphinx inventory is indistinguishable in the
+tree from a dead label, so it reports missing, and under observe that is a signal for a
+person rather than a verdict. Every other
 role stays an open extension point, declared rather than read into. A target that includes another file,
 through the AsciiDoc include or the reStructuredText `include` and `literalinclude`
 directives, publishes identities this engine never read, so an anchor it does not hold
