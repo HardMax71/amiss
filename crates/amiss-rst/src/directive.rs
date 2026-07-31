@@ -54,12 +54,24 @@ const SPHINX_ROLES: [(&str, ReferenceKind); 2] = [
 ];
 
 /// The two Sphinx roles, by name. A `title <target>` body carries its target
-/// in the brackets; a bare body is the target itself.
+/// in the brackets; a bare body is the target itself. A byte that could
+/// continue a role path before the opener means a longer role, `:std:ref:` or
+/// `:external+python:std:ref:`, whose meaning the name prefix changes.
 fn roles(line: &str, at: usize, found: &mut Vec<Reference>) {
     for (opener, kind) in SPHINX_ROLES {
         let mut index = 0_usize;
         while let Some(hit) = line.get(index..).and_then(|tail| tail.find(opener)) {
             let start = index.saturating_add(hit);
+            let prefixed = start
+                .checked_sub(1)
+                .and_then(|before| line.as_bytes().get(before))
+                .is_some_and(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'.' | b'-' | b':')
+                });
+            if prefixed {
+                index = start.saturating_add(1);
+                continue;
+            }
             let body_at = start.saturating_add(opener.len());
             let Some(close) = line.get(body_at..).and_then(|tail| tail.find('`')) else {
                 break;
@@ -145,16 +157,33 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
 
 /// An internal label a document declares, which publishes an anchor identity.
 /// A phrase label arrives backtick-quoted, `.. _`name`:`, and the quotes are
-/// spelling, not name.
+/// spelling, not name. Docutils allows a target wherever block content goes,
+/// so a declaration also counts as the body of a list item or alone in a
+/// grid-table cell.
 #[must_use]
 pub fn target_definition(line: &str) -> Option<String> {
-    let rest = line.trim_start().strip_prefix(".. _")?;
+    let trimmed = line.trim_start();
+    let unbulleted = ["* ", "- ", "+ "]
+        .iter()
+        .find_map(|marker| trimmed.strip_prefix(marker))
+        .map_or(trimmed, str::trim_start);
+    if let Some(label) = bare_target(unbulleted) {
+        return Some(label);
+    }
+    if trimmed.starts_with('|') {
+        return trimmed.split('|').find_map(|cell| bare_target(cell.trim()));
+    }
+    None
+}
+
+fn bare_target(text: &str) -> Option<String> {
+    let rest = text.strip_prefix(".. _")?;
     let label = rest.strip_suffix(':')?.trim();
     let label = label
         .strip_prefix('`')
         .and_then(|inner| inner.strip_suffix('`'))
         .map_or(label, str::trim);
-    (!label.is_empty()).then(|| label.to_owned())
+    (!label.is_empty() && !label.contains('|')).then(|| label.to_owned())
 }
 
 /// A section underline: a run of one punctuation character at least as long as

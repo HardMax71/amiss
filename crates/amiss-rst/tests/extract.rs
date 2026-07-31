@@ -87,6 +87,32 @@ fn a_quoted_label_declaration_sheds_its_backticks() {
 }
 
 #[test]
+fn a_target_declares_from_a_list_item_or_a_table_cell() {
+    let source = b"*  .. _from-bullet:\n\n| ``'n'`` | .. _from-cell:      |\n";
+    let read = extract(source).expect("utf-8 source");
+    assert_eq!(
+        read.anchors,
+        vec!["from-bullet".to_owned(), "from-cell".to_owned()],
+    );
+}
+
+#[test]
+fn a_prefixed_role_is_the_longer_role_it_belongs_to() {
+    for source in [
+        "See :external+python:std:ref:`context manager <context-managers>`.\n",
+        "See :std:ref:`something <target>`.\n",
+        "See :my-ext.ref:`x`.\n",
+    ] {
+        assert!(kinds(source).is_empty(), "{source:?} produced a reference");
+    }
+    assert_eq!(
+        kinds("(:ref:`parenthesised`)\n"),
+        vec![(ReferenceKind::RefRole, "parenthesised".to_owned())],
+        "a non-name byte before the opener is not a prefix"
+    );
+}
+
+#[test]
 fn a_section_level_comes_from_the_order_its_underline_first_appears() {
     let source = "First\n=====\n\nSecond\n------\n\nThird\n=====\n\nFourth\n~~~~~~\n";
     let levels: Vec<(usize, String)> = extract(source.as_bytes())
