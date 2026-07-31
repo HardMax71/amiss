@@ -345,3 +345,58 @@ fn a_shared_subtree_expands_at_every_path() {
         "two roots, two shared dup trees, two blobs: the shared subtree charges at each path"
     );
 }
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn label_fixture() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(
+        root.join("a.rst"),
+        ".. _`Wide  Name`:\n\n.. _shared:\n\nA\n=\n",
+    )
+    .unwrap();
+    fs::write(root.join("b.rst"), ".. _shared:\n\nB\n=\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "labels"]);
+    dir
+}
+
+/// The table stores the Docutils simple name, so a quoted wide declaration
+/// answers a folded lookup, and a name two documents claim is marked rather
+/// than guessed between.
+#[test]
+fn the_label_table_normalizes_and_marks_duplicates() {
+    let dir = label_fixture();
+    let got = run(dir.path(), ScanLimits::CONTRACT, GitLimits::CONTRACT).unwrap();
+    assert_eq!(
+        got.labels.get("wide name"),
+        Some(&amiss_scan::LabelState::Declared(
+            amiss_wire::model::RepoPath::new("a.rst".to_owned()).unwrap()
+        )),
+    );
+    assert_eq!(
+        got.labels.get("shared"),
+        Some(&amiss_scan::LabelState::Duplicated),
+    );
+    assert_eq!(got.labels.len(), 2, "{:?}", got.labels);
+}
+
+/// The third declared label crosses a two-label ceiling, and the crossing
+/// carries the resource name and both figures.
+#[test]
+fn the_label_ceiling_ends_discovery_one_past_the_limit() {
+    let dir = label_fixture();
+    let tight = ScanLimits {
+        declared_labels_per_snapshot: 2,
+        ..ScanLimits::CONTRACT
+    };
+    assert_eq!(
+        run(dir.path(), tight, GitLimits::CONTRACT),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::DeclaredLabelsPerSnapshot,
+            configured_limit: 2,
+            observed_lower_bound: 3,
+        })
+    );
+}

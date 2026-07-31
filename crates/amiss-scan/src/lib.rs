@@ -23,7 +23,8 @@ use amiss_wire::report::AnalysisErrorCode;
 
 pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
 pub use discovery::{
-    DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind, discover, discover_index,
+    DocumentRecord, DocumentStatus, LabelState, SnapshotDiscovery, UnsupportedKind, discover,
+    discover_index,
 };
 pub use document::{Classification, classify, excluded_by_built_in};
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};

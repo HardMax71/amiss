@@ -1021,3 +1021,120 @@ fn a_text_repository_has_a_reproducible_finding_key() {
         "the pinned repository fixes the current rolling-contract identity"
     );
 }
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn byte_named_index(content: &[u8]) -> (TempDir, String) {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let readme = git(root, &["rev-parse", "HEAD:README.md"])
+        .trim()
+        .to_owned();
+    let blob = amiss_fixtures::loose_object(root, "blob", content).unwrap();
+    amiss_fixtures::index_file(
+        root,
+        &[
+            (b"README.md".as_slice(), readme.as_str()),
+            (b"bad-\xff-doc.md".as_slice(), blob.as_str()),
+        ],
+    )
+    .unwrap();
+    (dir, base)
+}
+
+const BYTE_NAME_HEX: &str = "6261642dff2d646f632e6d64";
+
+/// A byte-named document whose bytes will not decode ends the run at exit 2,
+/// the human note teaches the code, and the wire carries the name as hex.
+#[test]
+fn a_byte_named_invalid_document_refuses_with_its_name_in_hex() {
+    let (dir, base) = byte_named_index(b"# \xff\n");
+    let repo = amiss_fixtures::path_arg(dir.path());
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 2);
+    let text = String::from_utf8(stdout).unwrap();
+    assert!(
+        text.contains(r#"error parse DOCUMENT_INVALID "bad-\u00ff-doc.md""#),
+        "the error line speaks the name through the bytes atom: {text:?}"
+    );
+    assert!(
+        text.contains("cannot be decoded"),
+        "the note teaches the meaning: {text:?}"
+    );
+
+    let (json_code, wire) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(json_code, 2);
+    let errors = payload(&wire)["errors"].clone();
+    let row = errors
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["path"]["bytes_hex"] == BYTE_NAME_HEX)
+        .unwrap_or_else(|| panic!("no bytes row in {errors}"));
+    assert_eq!(row["code"], "DOCUMENT_INVALID");
+}
+
+/// A finding located in a byte-named document keeps its fingerprint in the
+/// SARIF projection and simply carries no artifact location, because raw
+/// bytes name no URI.
+#[test]
+fn a_bytes_located_sarif_result_keeps_its_fingerprint_without_a_location() {
+    let (dir, base) = byte_named_index(b"# H\n\n[g](gone.md)\n");
+    let repo = amiss_fixtures::path_arg(dir.path());
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "enforce",
+        "--format",
+        "sarif",
+    ]);
+    assert_eq!(code, 1);
+    let log: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let results = log.pointer("/runs/0/results").unwrap().as_array().unwrap();
+    let row = results
+        .iter()
+        .find(|result| result["ruleId"] == "explicit-target-missing")
+        .unwrap();
+    assert!(row.get("locations").is_none(), "{row}");
+    assert!(
+        row.pointer("/partialFingerprints/amissFindingKey~1v1")
+            .and_then(|key| key.as_str())
+            .is_some_and(|key| key.starts_with("sha256:")),
+        "{row}"
+    );
+}
