@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0](https://github.com/HardMax71/amiss/compare/v0.13.0...v0.14.0) - 2026-07-31
+
+### Changes
+
+- Resolve the references Sphinx actually writes
+- Block only what the change introduced
+- Speak SARIF where the scanners listen
+- Build the engine where the arm runners live
+- Count the notebooks and Org files this engine cannot read
+- Mark reStructuredText includes as transclusion
+
 ## [0.13.0](https://github.com/HardMax71/amiss/compare/v0.12.0...v0.13.0) - 2026-07-30
 
 ### Changes
