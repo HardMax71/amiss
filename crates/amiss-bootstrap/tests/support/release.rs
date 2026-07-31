@@ -13,7 +13,6 @@ use tempfile::TempDir;
 
 pub(crate) use amiss_fixtures::executable_bytes as engine_bytes;
 
-pub(crate) const LAUNCHER: &[u8] = include_bytes!("../../../amiss/action/launcher.js");
 pub(crate) const ACTION: &[u8] = include_bytes!("../../../amiss/action/runtime.yml");
 
 pub(crate) struct Release {
@@ -32,7 +31,6 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     amiss_fixtures::init_repository(root).expect("initialize repository");
 
     let binary = amiss_fixtures::executable_bytes(platform);
-    let launcher = LAUNCHER.to_vec();
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_str());
     let mut artifacts = vec![StagedArtifact {
@@ -44,12 +42,6 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes: &binary,
-            },
-            StagedFile {
-                path: "dist/launcher.js".to_owned(),
-                role: RuntimeRole::Launcher,
-                executable: false,
-                bytes: &launcher,
             },
             StagedFile {
                 path: "action.yml".to_owned(),
@@ -79,7 +71,6 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
         format!("{manifest_digest}\n"),
     )
     .unwrap();
-    fs::write(root.join("dist/launcher.js"), &launcher).unwrap();
     fs::write(root.join(&binary_path), &binary).unwrap();
     fs::write(root.join("Cargo.lock"), &lock).unwrap();
     mutate(root);

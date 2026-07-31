@@ -148,3 +148,35 @@ storage rules, freshness and retry limits, rotation, and report distinction. No 
 is atomic with the local ledger; each provider page states its reconciliation limit. The GitHub
 convenience Action still invokes the public scanner directly and does not gain this trust
 boundary.
+
+## Verified consumption
+
+The convenience Action's manifest check is a coherence check, not a boundary: the manifest
+and the binaries arrive in the same tag tree, so whoever could rewrite one could rewrite
+both. The boundary a workflow can hold without operating a provider lane is the release
+attestation, whose trust root is sigstore and GitHub's build records rather than anything
+this repository ships. Every release binary is attested at build, the release workflow
+verifies its own uploads before finishing, and with immutable releases the tag and its
+assets are locked at the platform after publication.
+
+To run only what the attestation vouches for:
+
+```yaml
+- env:
+    GH_TOKEN: ${{ github.token }}
+  run: |
+    gh release download v<reviewed-version> --repo HardMax71/amiss --pattern amiss-linux-x86_64
+    gh attestation verify amiss-linux-x86_64 --repo HardMax71/amiss \
+      --signer-workflow HardMax71/amiss/.github/workflows/release.yml
+    chmod +x amiss-linux-x86_64
+    ./amiss-linux-x86_64 check --repo . --object-format sha1 \
+      --base "$(git rev-parse HEAD^)" --candidate "$(git rev-parse HEAD)" \
+      --profile enforce --format json > amiss-report.json
+```
+
+The verification proves the binary came from this repository's release workflow on
+GitHub's runners, byte for byte. It does not authenticate what the workflow around it
+does: a required check whose inputs and selection an opposing author cannot influence is
+still the [provider lanes'](provider-controls.md) job. There is no launcher in the action
+tree; a verifier the artifact itself supplies could never vouch for the artifact, which
+is why this lane is a recipe over platform primitives rather than a file in the release.

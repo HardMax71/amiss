@@ -10,7 +10,6 @@ use amiss_wire::manifest::RuntimeRole;
 use tempfile::TempDir;
 
 const ACTION: &[u8] = include_bytes!("../../../../crates/amiss/action/runtime.yml");
-const LAUNCHER: &[u8] = include_bytes!("../../../../crates/amiss/action/launcher.js");
 
 pub(crate) struct Release {
     pub(crate) dir: TempDir,
@@ -36,12 +35,6 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes: &binary,
-            },
-            StagedFile {
-                path: "dist/launcher.js".to_owned(),
-                role: RuntimeRole::Launcher,
-                executable: false,
-                bytes: LAUNCHER,
             },
             StagedFile {
                 path: "action.yml".to_owned(),
@@ -70,7 +63,6 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
         format!("{digest}\n"),
     )
     .unwrap();
-    fs::write(root.join("dist/launcher.js"), LAUNCHER).unwrap();
     fs::write(root.join(&binary_path), binary).unwrap();
     fs::write(root.join("Cargo.lock"), lock).unwrap();
     mutate(root);

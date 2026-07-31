@@ -82,7 +82,7 @@ The rest comes from those exact bytes:
 | Bootstrap digest | The domain-separated digest of the bootstrap bytes. |
 | Schema, bootstrap contract, descriptor digest | The existing wire constructor and canonical writer. |
 
-The tool resolves the manifest, dependency locks, engine, launcher, and action metadata from the
+The tool resolves the manifest, dependency locks, engine, and action metadata from the
 pinned Git tree. It checks every dependency-lock digest and every mode and digest in the selected
 platform's runtime closure, then requires the engine and bootstrap headers to name the same
 platform. It also requires `release-manifest.digest` to reproduce the parsed manifest digest.

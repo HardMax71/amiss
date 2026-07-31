@@ -37,7 +37,9 @@
       "minItems": 1,
       "maxItems": 6,
       "description": "Sorted and unique by platform UTF-8 bytes.",
-      "x-amiss-order": ["platform"],
+      "x-amiss-order": [
+        "platform"
+      ],
       "items": {
         "$ref": "#/$defs/ReleaseArtifact"
       }
@@ -64,7 +66,11 @@
       "type": "object",
       "description": "An opaque caller-canonical host, slash-joined owner segments, and repository name.",
       "additionalProperties": false,
-      "required": ["host", "owner", "name"],
+      "required": [
+        "host",
+        "owner",
+        "name"
+      ],
       "properties": {
         "host": {
           "type": "string",
@@ -97,32 +103,57 @@
     "BuildSource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "object_format", "commit_oid"],
+      "required": [
+        "repository",
+        "object_format",
+        "commit_oid"
+      ],
       "properties": {
         "repository": {
           "$ref": "#/$defs/RepositoryIdentity"
         },
         "object_format": {
-          "enum": ["sha1", "sha256"]
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
         },
         "commit_oid": {
           "oneOf": [
-            {"$ref": "#/$defs/Sha1Oid"},
-            {"$ref": "#/$defs/Sha256Oid"}
+            {
+              "$ref": "#/$defs/Sha1Oid"
+            },
+            {
+              "$ref": "#/$defs/Sha256Oid"
+            }
           ]
         }
       },
       "allOf": [
         {
           "if": {
-            "properties": {"object_format": {"const": "sha1"}},
-            "required": ["object_format"]
+            "properties": {
+              "object_format": {
+                "const": "sha1"
+              }
+            },
+            "required": [
+              "object_format"
+            ]
           },
           "then": {
-            "properties": {"commit_oid": {"$ref": "#/$defs/Sha1Oid"}}
+            "properties": {
+              "commit_oid": {
+                "$ref": "#/$defs/Sha1Oid"
+              }
+            }
           },
           "else": {
-            "properties": {"commit_oid": {"$ref": "#/$defs/Sha256Oid"}}
+            "properties": {
+              "commit_oid": {
+                "$ref": "#/$defs/Sha256Oid"
+              }
+            }
           }
         }
       ]
@@ -130,7 +161,10 @@
     "DependencyLockInput": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema", "files"],
+      "required": [
+        "schema",
+        "files"
+      ],
       "properties": {
         "schema": {
           "const": "amiss/scanner-dependency-lock-input"
@@ -140,14 +174,23 @@
           "minItems": 1,
           "maxItems": 32,
           "description": "Sorted and unique by path UTF-8 bytes.",
-          "x-amiss-order": ["path"],
+          "x-amiss-order": [
+            "path"
+          ],
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "raw_digest"],
+            "required": [
+              "path",
+              "raw_digest"
+            ],
             "properties": {
-              "path": {"$ref": "#/$defs/RepoPath"},
-              "raw_digest": {"$ref": "#/$defs/Digest"}
+              "path": {
+                "$ref": "#/$defs/RepoPath"
+              },
+              "raw_digest": {
+                "$ref": "#/$defs/Digest"
+              }
             }
           }
         }
@@ -167,33 +210,40 @@
       "oneOf": [
         {
           "allOf": [
-            {"$ref": "#/$defs/RuntimeFileBase"},
+            {
+              "$ref": "#/$defs/RuntimeFileBase"
+            },
             {
               "properties": {
-                "role": {"const": "executable"},
-                "git_mode": {"const": "100755"}
+                "role": {
+                  "const": "executable"
+                },
+                "git_mode": {
+                  "const": "100755"
+                }
               }
             }
           ]
         },
         {
           "allOf": [
-            {"$ref": "#/$defs/RuntimeFileBase"},
+            {
+              "$ref": "#/$defs/RuntimeFileBase"
+            },
             {
               "properties": {
-                "role": {"const": "launcher"},
-                "git_mode": {"const": "100644"}
-              }
-            }
-          ]
-        },
-        {
-          "allOf": [
-            {"$ref": "#/$defs/RuntimeFileBase"},
-            {
-              "properties": {
-                "role": {"enum": ["dynamic-library", "runtime-data"]},
-                "git_mode": {"enum": ["100644", "100755"]}
+                "role": {
+                  "enum": [
+                    "dynamic-library",
+                    "runtime-data"
+                  ]
+                },
+                "git_mode": {
+                  "enum": [
+                    "100644",
+                    "100755"
+                  ]
+                }
               }
             }
           ]
@@ -203,16 +253,32 @@
     "RuntimeFileBase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "role", "git_mode", "file_sha256"],
+      "required": [
+        "path",
+        "role",
+        "git_mode",
+        "file_sha256"
+      ],
       "properties": {
-        "path": {"$ref": "#/$defs/RepoPath"},
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
         "role": {
-          "enum": ["executable", "launcher", "dynamic-library", "runtime-data"]
+          "enum": [
+            "executable",
+            "dynamic-library",
+            "runtime-data"
+          ]
         },
         "git_mode": {
-          "enum": ["100644", "100755"]
+          "enum": [
+            "100644",
+            "100755"
+          ]
         },
-        "file_sha256": {"$ref": "#/$defs/Digest"}
+        "file_sha256": {
+          "$ref": "#/$defs/Digest"
+        }
       }
     },
     "ReleaseArtifact": {
@@ -229,35 +295,50 @@
         "runtime_files"
       ],
       "properties": {
-        "platform": {"$ref": "#/$defs/Platform"},
-        "artifact_name": {"$ref": "#/$defs/ArtifactId"},
-        "tree_path": {"$ref": "#/$defs/RepoPath"},
-        "binary_sha256": {"$ref": "#/$defs/Digest"},
-        "engine_digest": {"$ref": "#/$defs/Digest"},
-        "runtime_contract": {"const": "manifest-closed"},
-        "environment_contract": {"const": "scanner-process-env"},
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "artifact_name": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "tree_path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "binary_sha256": {
+          "$ref": "#/$defs/Digest"
+        },
+        "engine_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "runtime_contract": {
+          "const": "manifest-closed"
+        },
+        "environment_contract": {
+          "const": "scanner-process-env"
+        },
         "runtime_files": {
           "type": "array",
           "minItems": 1,
           "maxItems": 256,
-          "description": "Sorted and unique by path UTF-8 bytes, with exactly one executable and one launcher.",
-          "x-amiss-order": ["path"],
-          "items": {"$ref": "#/$defs/RuntimeFile"},
+          "description": "Sorted and unique by path UTF-8 bytes, with exactly one executable.",
+          "x-amiss-order": [
+            "path"
+          ],
+          "items": {
+            "$ref": "#/$defs/RuntimeFile"
+          },
           "allOf": [
             {
               "contains": {
                 "type": "object",
-                "required": ["role"],
-                "properties": {"role": {"const": "executable"}}
-              },
-              "minContains": 1,
-              "maxContains": 1
-            },
-            {
-              "contains": {
-                "type": "object",
-                "required": ["role"],
-                "properties": {"role": {"const": "launcher"}}
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "const": "executable"
+                  }
+                }
               },
               "minContains": 1,
               "maxContains": 1

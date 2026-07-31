@@ -30,8 +30,10 @@ page](status.md) says so wherever the report is described. It leaves experimenta
 three things hold at once. The GitLab lane holds retained live evidence like the other
 three, so every supported lane's trust story is closed. Two consecutive minor series ship
 without reshaping the report payload, so the contract has shown it can hold still under
-feature work. And the launcher's verifying bootstrap lane either ships or is cut, so the
-release carries no half-built trust path. When all three hold, the next release freezes
+feature work. And the release carries no half-built trust path: the launcher placeholder
+is cut, since a verifier the artifact supplies can never vouch for the artifact, and the
+verified-consumption lane is the attestation recipe in [Security model](security.md),
+checked against every release the workflow publishes. When all three hold, the next release freezes
 the schema as 1.0, and from then on a payload reshape is a major version rather than a
 rolling change. None of these carries a date; each is checkable from the repository and
 its retained evidence.

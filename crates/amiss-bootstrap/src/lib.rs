@@ -139,9 +139,6 @@ pub(crate) fn validate_release(
     if executable_platform(&binary) != Some(platform) {
         return Err(tampered("platform-binding-mismatch"));
     }
-    let _launcher = artifact
-        .launcher()
-        .ok_or(tampered("runtime-closure-mismatch"))?;
     // the one runnable file at the tree root must be a pinned closure row,
     // or the action a workflow executes is the one file nothing checks
     let action_pinned = artifact.runtime_files.iter().any(|file| {
