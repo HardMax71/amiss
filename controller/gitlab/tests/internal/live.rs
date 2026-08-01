@@ -85,7 +85,10 @@ fn a_project_without_the_merge_train_settings_is_below_the_supported_floor() {
 
 type QueryDeviation = fn(&mut crate::GitLabRefreshQuery);
 
-/// Every field of the refresh query is load-bearing on its own.
+/// Every falsifiable field of the refresh query is load-bearing on its own.
+/// The gate commit is an `Oid`, and `exact_sha1` is that same grammar, so no
+/// constructible value can deviate; the valid case pins that clause's
+/// polarity instead.
 #[test]
 fn the_refresh_query_is_exact_in_every_field() {
     use amiss_wire::model::{ObjectFormat, Oid};
