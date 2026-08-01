@@ -414,6 +414,30 @@ fn a_version_three_pack_reads_back() {
     assert_eq!(read(dir.path(), &entries[0].oid).unwrap(), payload);
 }
 
+/// The dot entries the platform yields are filtered before counting, so a
+/// limit of two admits exactly one pack pair.
+#[test]
+fn the_directory_entry_ceiling_counts_only_real_names() {
+    let dir = forged_repo();
+    let payload = b"counted exactly\n".to_vec();
+    let entries = [Entry::blob(&payload)];
+    let (pack, offsets) = write_pack(&entries);
+    let idx = write_idx_v1(&sorted_rows(&entries, &offsets), &pack, None);
+    install(dir.path(), &pack, &idx);
+
+    ceiling_holds(
+        dir.path(),
+        &entries[0].oid,
+        &payload,
+        |value| GitLimits {
+            pack_directory_entries: value,
+            ..GitLimits::CONTRACT
+        },
+        2,
+        ResourceName::GitPackDirectoryEntries,
+    );
+}
+
 #[test]
 fn a_junk_name_beside_a_pack_pair_is_ignored() {
     let dir = forged_repo();
