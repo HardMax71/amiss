@@ -1,6 +1,7 @@
 use amiss_scan::Resolution;
 use amiss_scan::resolve::ForgeContext;
 use amiss_wire::controls::TargetKind;
+use amiss_wire::model::Adapter;
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{ExternalReference, Target, VersionScope};
 
@@ -15,7 +16,8 @@ fn gitea_recognition_resolves_against_the_tree() {
     let mut bed = bed();
     let context = gitea_context();
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -30,7 +32,7 @@ fn gitea_recognition_resolves_against_the_tree() {
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 
     let (_intent, pinned) = bed
-        .run(
+        .run_as(Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -43,7 +45,8 @@ fn gitea_recognition_resolves_against_the_tree() {
     );
 
     let (_intent, tag) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -57,7 +60,8 @@ fn gitea_recognition_resolves_against_the_tree() {
     );
 
     let (_intent, untyped) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -70,7 +74,7 @@ fn gitea_recognition_resolves_against_the_tree() {
     );
 
     let (_intent, index_mode) = bed
-        .run(
+        .run_as(Adapter::Markdown,
             Some(&ForgeContext {
                 candidate_oid: None,
                 ..gitea_context()
@@ -123,7 +127,13 @@ fn one_wrong_fact_makes_a_foreign_url() {
     ];
     for (context, destination) in cases {
         let (intent, _row) = bed
-            .run(Some(&context), "docs/guide.md", false, destination)
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                destination,
+            )
             .unwrap();
         assert_eq!(intent.kind, IntentKind::ExternalUrl, "{destination}");
     }
@@ -140,7 +150,8 @@ fn a_commit_selector_is_an_exact_oid() {
         "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
     ] {
         let (intent, _row) = bed
-            .run(
+            .run_as(
+                Adapter::Markdown,
                 Some(&context),
                 "docs/guide.md",
                 false,
@@ -165,7 +176,8 @@ fn nested_group_owners_match_segment_by_segment() {
         ..gitlab_context()
     };
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&nested),
             "docs/guide.md",
             false,
@@ -176,7 +188,8 @@ fn nested_group_owners_match_segment_by_segment() {
     assert!(matches!(row, Resolution::Resolved(_)));
 
     let (foreign, _row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&nested),
             "docs/guide.md",
             false,
@@ -196,7 +209,8 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
     let mut bed = bed();
     let context = gitlab_context();
     let (tree, tree_row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -211,7 +225,8 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
     );
 
     let (_blob, blob_row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -231,7 +246,8 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
     let mut bed = bed();
     let context = gitea_context();
     let (hinted, hinted_row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -246,7 +262,8 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
     );
 
     let (bare, bare_row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -260,7 +277,8 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
     );
 
     let (github, github_row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&github_context()),
             "docs/guide.md",
             false,

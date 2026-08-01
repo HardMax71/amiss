@@ -3,6 +3,7 @@ use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
+use amiss_wire::model::Adapter;
 use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Target, UnsupportedSemantics};
 
 use crate::support::{MIXED_LINES, bed, bed_with, gitea_context, github_context, gitlab_context};
@@ -12,7 +13,7 @@ fn line_fragments_have_a_hard_grammar() {
     let mut bed = bed();
     for destination in ["guide.md#L1", "guide.md#L1-L1"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -21,7 +22,13 @@ fn line_fragments_have_a_hard_grammar() {
         );
     }
     let row = bed
-        .run(None, "docs/guide.md", false, "guide.md#L10-L20")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "guide.md#L10-L20",
+        )
         .unwrap_or_else(|_defect| panic!("resolve out-of-range lines"))
         .1;
     assert!(matches!(
@@ -32,7 +39,13 @@ fn line_fragments_have_a_hard_grammar() {
     for renderer in ["L0", "l5", "L5-L2", "L", "L5x", "L05"] {
         let destination = format!("guide.md#{renderer}");
         let row = bed
-            .run(None, "docs/guide.md", false, &destination)
+            .run_as(
+                Adapter::Markdown,
+                None,
+                "docs/guide.md",
+                false,
+                &destination,
+            )
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -75,7 +88,8 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
 
     for (fragment, selected) in selections {
         let row = bed
-            .run(
+            .run_as(
+                Adapter::Markdown,
                 None,
                 "docs/guide.md",
                 false,
@@ -106,11 +120,23 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
     }
 
     let complete = bed
-        .run(None, "docs/guide.md", false, "../src/lines.rs")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs",
+        )
         .unwrap_or_else(|_defect| panic!("resolve complete target"))
         .1;
     let all_lines = bed
-        .run(None, "docs/guide.md", false, "../src/lines.rs#L1-L4")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L1-L4",
+        )
         .unwrap_or_else(|_defect| panic!("resolve all lines"))
         .1;
     let Resolution::Resolved(Target::Blob(complete)) = complete else {
@@ -134,11 +160,18 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
 fn line_projection_ignores_bytes_outside_the_selected_slice() {
     let mut bed = bed();
     let original = bed
-        .run(None, "docs/guide.md", false, "../src/lines.rs#L2")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L2",
+        )
         .unwrap_or_else(|_defect| panic!("resolve original"))
         .1;
     let outside_changed = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             None,
             "docs/guide.md",
             false,
@@ -180,7 +213,13 @@ fn line_projection_ignores_bytes_outside_the_selected_slice() {
 fn executable_line_selections_bind_the_executable_mode() {
     let mut bed = bed();
     let row = bed
-        .run(None, "docs/guide.md", false, "../src/executable.sh#L2")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/executable.sh#L2",
+        )
         .unwrap_or_else(|_defect| panic!("resolve executable line"))
         .1;
     let Resolution::Resolved(Target::Blob(blob)) = row else {
@@ -198,7 +237,8 @@ fn line_selection_bounds_are_structural_missing_outcomes() {
     let mut bed = bed();
     for fragment in ["L5", "L4-L5", "L5-L5", "L9007199254740991"] {
         let row = bed
-            .run(
+            .run_as(
+                Adapter::Markdown,
                 None,
                 "docs/guide.md",
                 false,
@@ -213,7 +253,13 @@ fn line_selection_bounds_are_structural_missing_outcomes() {
     }
 
     let empty = bed
-        .run(None, "docs/guide.md", false, "../src/empty.rs#L1")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/empty.rs#L1",
+        )
         .unwrap_or_else(|_defect| panic!("resolve empty target"))
         .1;
     assert!(matches!(
@@ -223,7 +269,8 @@ fn line_selection_bounds_are_structural_missing_outcomes() {
 
     for malformed in ["L0", "l2", "L", "L02", "L2-L1", "L2-3", "L9007199254740992"] {
         let row = bed
-            .run(
+            .run_as(
+                Adapter::Markdown,
                 None,
                 "docs/guide.md",
                 false,
@@ -257,7 +304,8 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
 
     for (context, accepted, rejected) in native_cases {
         let row = bed
-            .run(
+            .run_as(
+                Adapter::Markdown,
                 Some(context),
                 "docs/guide.md",
                 false,
@@ -271,7 +319,8 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
         assert_eq!(blob.content.projection_digest(), expected, "{accepted}");
 
         let row = bed
-            .run(
+            .run_as(
+                Adapter::Markdown,
                 Some(context),
                 "docs/guide.md",
                 false,
@@ -288,7 +337,13 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
         );
 
         let out_of_range = bed
-            .run(Some(context), "docs/guide.md", false, "../src/lines.rs#L5")
+            .run_as(
+                Adapter::Markdown,
+                Some(context),
+                "docs/guide.md",
+                false,
+                "../src/lines.rs#L5",
+            )
             .unwrap_or_else(|_defect| panic!("resolve out of range"))
             .1;
         assert!(matches!(
@@ -313,7 +368,13 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
     ];
     for (context, destination) in absolute_cases {
         let row = bed
-            .run(Some(context), "docs/guide.md", false, destination)
+            .run_as(
+                Adapter::Markdown,
+                Some(context),
+                "docs/guide.md",
+                false,
+                destination,
+            )
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         let Resolution::Resolved(Target::Blob(blob)) = row else {
@@ -332,13 +393,25 @@ fn distinct_line_selections_are_bounded_and_cached() {
     });
 
     assert!(
-        bed.run(None, "docs/guide.md", false, "../src/lines.rs#L2")
-            .is_ok()
+        bed.run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L2"
+        )
+        .is_ok()
     );
     assert_eq!(bed.scan_resources.line_fragment_bytes(), target_bytes);
     assert!(
-        bed.run(None, "docs/guide.md", false, "../src/lines.rs#L2")
-            .is_ok()
+        bed.run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L2"
+        )
+        .is_ok()
     );
     assert_eq!(
         bed.scan_resources.line_fragment_bytes(),
@@ -346,7 +419,13 @@ fn distinct_line_selections_are_bounded_and_cached() {
         "an identical selection reuses its cached projection"
     );
 
-    let crossing = bed.run(None, "docs/guide.md", false, "../src/lines.rs#L3");
+    let crossing = bed.run_as(
+        Adapter::Markdown,
+        None,
+        "docs/guide.md",
+        false,
+        "../src/lines.rs#L3",
+    );
     assert_eq!(
         crossing,
         Err(Error::ResourceLimit {
@@ -361,10 +440,22 @@ fn distinct_line_selections_are_bounded_and_cached() {
         ..ScanLimits::CONTRACT
     });
     let first_missing = missing_bed
-        .run(None, "docs/guide.md", false, "../src/lines.rs#L5")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L5",
+        )
         .unwrap_or_else(|_defect| panic!("resolve first out-of-range selection"));
     let repeated_missing = missing_bed
-        .run(None, "docs/guide.md", false, "../src/lines.rs#L5")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "../src/lines.rs#L5",
+        )
         .unwrap_or_else(|_defect| panic!("resolve cached out-of-range selection"));
     assert_eq!(first_missing, repeated_missing);
     assert_eq!(
