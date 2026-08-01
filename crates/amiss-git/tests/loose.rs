@@ -297,3 +297,118 @@ fn parses_tree_and_commit_grammar() {
         );
     }
 }
+
+fn commit_body(extensions: &str) -> Vec<u8> {
+    format!(
+        "tree {}\nauthor A <a@b> 0 +0000\ncommitter C <c@d> 0 +0000\n{extensions}\n",
+        "a".repeat(40)
+    )
+    .into_bytes()
+}
+
+#[test]
+fn every_kind_token_reads_its_object() {
+    let dir = make_repo();
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits::CONTRACT);
+
+    let mut tree_body = b"40000 d\0".to_vec();
+    tree_body.extend_from_slice(&[0xaa; 20]);
+    for (kind, body, expected) in [
+        ("commit", commit_body(""), ObjectKind::Commit),
+        ("tag", b"tagged".to_vec(), ObjectKind::Tag),
+        ("tree", tree_body, ObjectKind::Tree),
+    ] {
+        let oid = write_loose(dir.path(), kind, &body);
+        let object = repo.read_object(&mut res, &oid).unwrap();
+        assert_eq!(object.kind, expected, "{kind}");
+    }
+}
+
+#[test]
+fn a_size_with_no_digits_is_unreadable() {
+    let dir = make_repo();
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits::CONTRACT);
+    let bytes = b"blob \0".to_vec();
+    let hex = sha1_hex(&bytes);
+    place(dir.path(), &hex, &compress(&bytes));
+    let oid = Oid::new(ObjectFormat::Sha1, hex).unwrap();
+    assert_eq!(
+        repo.read_object(&mut res, &oid).unwrap_err(),
+        Error::ObjectUnreadable
+    );
+}
+
+#[test]
+fn an_absurd_size_saturates_to_the_safe_bound() {
+    let dir = make_repo();
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits::CONTRACT);
+    let bytes = b"blob 9007199254740992\0".to_vec();
+    let hex = sha1_hex(&bytes);
+    place(dir.path(), &hex, &compress(&bytes));
+    let oid = Oid::new(ObjectFormat::Sha1, hex).unwrap();
+    assert_eq!(
+        repo.read_object(&mut res, &oid).unwrap_err(),
+        Error::ResourceLimit {
+            resource: ResourceName::GitObjectBytes,
+            configured_limit: GitLimits::CONTRACT.inflated_object_bytes,
+            observed_lower_bound: 9_007_199_254_740_991,
+        },
+        "the observed bound is the saturation point, not the written number"
+    );
+}
+
+#[test]
+fn an_object_at_exactly_the_inflated_cap_is_within_it() {
+    let dir = make_repo();
+    let oid = write_loose(dir.path(), "blob", &[b'x'; 16]);
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits {
+        inflated_object_bytes: 16,
+        ..GitLimits::CONTRACT
+    });
+    assert_eq!(repo.read_object(&mut res, &oid).unwrap().body.len(), 16);
+}
+
+#[test]
+fn commit_extensions_are_validated_headers() {
+    let commit = parse_commit(ObjectFormat::Sha1, &commit_body("encoding utf-8\n")).unwrap();
+    assert_eq!(commit.tree.as_str(), "a".repeat(40));
+    assert!(commit.parents.is_empty());
+
+    for (reason, extensions) in [
+        ("a control byte in the key", "k\u{1}k v\n"),
+        ("a reserved key after the headers", "tree value\n"),
+        ("a carriage return in the value", "k va\rlue\n"),
+    ] {
+        assert_eq!(
+            parse_commit(ObjectFormat::Sha1, &commit_body(extensions)).unwrap_err(),
+            Error::ObjectUnreadable,
+            "{reason}"
+        );
+    }
+}
+
+#[test]
+fn every_tree_mode_names_its_entry_kind() {
+    let mut body = Vec::new();
+    for (mode, name) in [
+        (b"100755".as_slice(), b"a".as_slice()),
+        (b"120000", b"b"),
+        (b"160000", b"c"),
+    ] {
+        body.extend_from_slice(mode);
+        body.push(b' ');
+        body.extend_from_slice(name);
+        body.push(0);
+        body.extend_from_slice(&[0xbb; 20]);
+    }
+    let entries = parse_tree(ObjectFormat::Sha1, &body).unwrap();
+    let modes: Vec<GitMode> = entries.iter().map(|entry| entry.mode).collect();
+    assert_eq!(
+        modes,
+        [GitMode::ExecutableFile, GitMode::Symlink, GitMode::Gitlink]
+    );
+}

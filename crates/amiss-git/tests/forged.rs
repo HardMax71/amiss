@@ -284,6 +284,34 @@ fn a_forged_pack_reads_back_from_every_bucket_shape() {
 }
 
 #[test]
+fn a_packed_tag_is_a_tag() {
+    let dir = forged_repo();
+    let payload = b"tagged object".to_vec();
+    let mut preimage = format!("tag {}\0", payload.len()).into_bytes();
+    preimage.extend_from_slice(&payload);
+    let entry = Entry {
+        type_code: 4,
+        payload: payload.clone(),
+        oid: sha1(&preimage),
+        header_pad: 0,
+        ofs_distance: None,
+    };
+    let (pack, offsets) = write_pack(std::slice::from_ref(&entry));
+    let idx = write_idx_v1(
+        &sorted_rows(std::slice::from_ref(&entry), &offsets),
+        &pack,
+        None,
+    );
+    install(dir.path(), &pack, &idx);
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let mut res = GitResources::new(GitLimits::CONTRACT);
+    let oid = Oid::new(ObjectFormat::Sha1, to_hex(&entry.oid)).unwrap();
+    let object = repo.read_object(&mut res, &oid).unwrap();
+    assert_eq!(object.kind, ObjectKind::Tag);
+    assert_eq!(object.body, payload);
+}
+
+#[test]
 fn an_empty_pack_is_exactly_its_frame() {
     let dir = forged_repo();
     let (pack, _) = write_pack(&[]);
