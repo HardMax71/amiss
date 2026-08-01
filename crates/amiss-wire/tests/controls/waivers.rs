@@ -1,5 +1,5 @@
 use amiss_wire::controls::{
-    EntryKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, IncludeKind, PromotableFindingKind,
+    EntryKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, FindingScope, IncludeKind, PromotableFindingKind,
     SourceConstruct, TargetKind, WaiverBundle,
 };
 use amiss_wire::de::ErrorKind;
@@ -10,43 +10,91 @@ use crate::support::{
     DEFAULT_CONSTRUCT, computed_digests, fact_json, key_input_json, waiver_bundle, waiver_item,
 };
 
+#[expect(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "roundtrip helper on known-valid templates"
+)]
+fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingScope {
+    let key_input = edit(key_input_json("explicit-target-missing"));
+    let key = hj(
+        FINDING_KEY_DOMAIN,
+        &json::parse(key_input.as_bytes()).unwrap(),
+    )
+    .to_string();
+    let fact_doc = edit(fact_json());
+    let fact = hj(FACT_DOMAIN, &json::parse(fact_doc.as_bytes()).unwrap()).to_string();
+    let item = edit(waiver_item(
+        "waiver/one",
+        &key,
+        &fact,
+        "team:release-engineering",
+    ));
+    let bundle = WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
+        .unwrap_or_else(|error| panic!("{context} is a scope the bundle accepts: {error:?}"));
+    bundle
+        .items
+        .first()
+        .unwrap()
+        .authorized_fact
+        .key_input()
+        .scope
+        .clone()
+}
+
 #[test]
-fn every_source_construct_survives_the_waiver_round_trip() {
-    for construct in [
-        SourceConstruct::InlineLink,
-        SourceConstruct::FullReferenceLink,
-        SourceConstruct::CollapsedReferenceLink,
-        SourceConstruct::ShortcutReferenceLink,
-        SourceConstruct::Autolink,
-        SourceConstruct::InlineImage,
-        SourceConstruct::FullReferenceImage,
-        SourceConstruct::CollapsedReferenceImage,
-        SourceConstruct::ShortcutReferenceImage,
-    ] {
+fn every_scope_spelling_survives_the_waiver_round_trip() {
+    for construct in SourceConstruct::all() {
         let named = construct.as_str();
-        let key_input = key_input_json("explicit-target-missing").replace(DEFAULT_CONSTRUCT, named);
-        let key = hj(
-            FINDING_KEY_DOMAIN,
-            &json::parse(key_input.as_bytes()).unwrap(),
-        )
-        .to_string();
-        let fact_doc = fact_json().replace(DEFAULT_CONSTRUCT, named);
-        let fact = hj(FACT_DOMAIN, &json::parse(fact_doc.as_bytes()).unwrap()).to_string();
-        let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering")
-            .replace(DEFAULT_CONSTRUCT, named);
-        let bundle = WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
-            .unwrap_or_else(|error| panic!("{named} is a construct the bundle accepts: {error:?}"));
-        let parsed = bundle
-            .items
-            .first()
-            .map(|item| item.authorized_fact.key_input().scope.source_construct);
-        assert_eq!(
-            parsed,
-            Some(construct),
-            "{named} decodes to its own variant"
-        );
+        let scope = roundtrip_scope(named, &|doc| doc.replace(DEFAULT_CONSTRUCT, named));
+        assert_eq!(scope.source_construct, construct, "{named}");
         assert_eq!(construct.is_image(), named.contains("image"), "{named}");
     }
+    for target_kind in TargetKind::all() {
+        let named = target_kind.as_str();
+        let scope = roundtrip_scope(named, &|doc| {
+            doc.replace(
+                r#""target_kind": "either""#,
+                &format!(r#""target_kind": "{named}""#),
+            )
+        });
+        assert_eq!(
+            scope.normalized_target_intent.target_kind, target_kind,
+            "{named}"
+        );
+    }
+}
+
+#[test]
+fn waiver_instants_bind_at_their_exact_boundaries() {
+    let (key, fact) = computed_digests();
+    let item = |created: &str, not_before: &str| {
+        waiver_item("waiver/one", &key, &fact, "team:release-engineering")
+            .replace("2026-07-01T00:00:00Z", created)
+            .replace("2026-07-02T00:00:00Z", not_before)
+    };
+
+    let at_activation = waiver_bundle(&[item("2026-07-02T00:00:00Z", "2026-07-02T00:00:00Z")]);
+    WaiverBundle::parse(at_activation.as_bytes())
+        .expect("a waiver active from its creation instant is consistent");
+
+    let at_bundle_instant = waiver_bundle(&[item("2026-07-03T00:00:00Z", "2026-07-03T00:00:00Z")]);
+    WaiverBundle::parse(at_bundle_instant.as_bytes())
+        .expect("an item created at the bundle instant is not from the future");
+
+    let backdated = waiver_bundle(&[item("2026-07-02T00:00:01Z", "2026-07-02T00:00:00Z")]);
+    assert_eq!(
+        WaiverBundle::parse(backdated.as_bytes()).unwrap_err().kind,
+        ErrorKind::Inconsistent
+    );
+
+    let from_the_future = waiver_bundle(&[item("2026-07-04T00:00:00Z", "2026-07-05T00:00:00Z")]);
+    assert_eq!(
+        WaiverBundle::parse(from_the_future.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::Inconsistent
+    );
 }
 
 #[test]

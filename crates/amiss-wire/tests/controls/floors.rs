@@ -1,5 +1,6 @@
 use amiss_wire::controls::{
-    FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor, ResourceName, ScannerPolicy,
+    EligibleFindingKind, FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
+    ResourceName, ScannerPolicy,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -32,6 +33,28 @@ fn parses_the_floor_fixture() {
     assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
     assert_eq!(floor.ref_name.as_str(), "refs/heads/main");
     assert_eq!(floor.resource_limits.len(), 2);
+    let owners: Vec<&str> = floor
+        .authorized_debt_owners
+        .iter()
+        .map(amiss_wire::model::OwnerId::as_str)
+        .collect();
+    assert_eq!(owners, ["team:docs-platform"]);
+    let issuers: Vec<&str> = floor
+        .authorized_waiver_issuers
+        .iter()
+        .map(amiss_wire::model::OwnerId::as_str)
+        .collect();
+    assert_eq!(issuers, ["team:release-engineering"]);
+    let waivable: Vec<&str> = floor
+        .waivable_finding_kinds
+        .iter()
+        .map(|kind| kind.as_str())
+        .collect();
+    assert_eq!(
+        waivable,
+        [EligibleFindingKind::ExplicitTargetMissing.as_str()]
+    );
+    assert_eq!(waivable, ["explicit-target-missing"]);
     assert_ne!(floor.digest, ScannerPolicy::parse(POLICY).unwrap().digest);
 }
 
@@ -143,6 +166,64 @@ fn rejects_floors_over_the_combined_entry_limit() {
             observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT + 1,
         }
     );
+}
+
+#[test]
+fn accepts_a_floor_at_exactly_the_combined_entry_limit() {
+    let paths = |count: usize, prefix: &str| {
+        let items: Vec<String> = (0..count)
+            .map(|index| format!("\"{prefix}/{index:07}.md\""))
+            .collect();
+        items.join(",")
+    };
+    let doc = format!(
+        r#"{{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/at-the-brim",
+  "repository": {{ "host": "github.com", "owner": "acme", "name": "docs" }},
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [{inventory}],
+  "protected_control_paths": [{controls}],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": []
+}}"#,
+        inventory = paths(60_000, "docs/a"),
+        controls = paths(40_000, "ops/b"),
+    );
+    let floor = OrganizationFloor::parse(doc.as_bytes())
+        .expect("a floor whose entries sum to the limit exactly is within it");
+    assert_eq!(
+        u64::try_from(floor.protected_inventory.len() + floor.protected_control_paths.len())
+            .expect("entry counts fit"),
+        ORGANIZATION_POLICY_ENTRIES_LIMIT
+    );
+}
+
+#[test]
+fn accepts_a_floor_meeting_its_own_declared_entry_limit_exactly() {
+    let doc = br#"{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/self-consistent",
+  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": ["docs/a.md", "docs/b.md", "docs/c.md"],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": [
+    { "resource": "organization-policy-entries", "maximum": 4 }
+  ]
+}"#;
+    let floor = OrganizationFloor::parse(doc)
+        .expect("three paths and one limit row meet a declared maximum of four exactly");
+    assert_eq!(floor.protected_inventory.len(), 3);
 }
 
 #[test]
