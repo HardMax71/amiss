@@ -91,6 +91,25 @@ fn a_reparse_point_in_the_object_path_is_unreadable_not_absent() {
 }
 
 #[test]
+fn a_directory_at_the_loose_object_path_is_not_an_object() {
+    let dir = TempDir::new().unwrap();
+    repository(dir.path());
+    fs::create_dir_all(
+        dir.path()
+            .join(format!(".git/objects/aa/{}", "b".repeat(38))),
+    )
+    .unwrap();
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let oid = Oid::new(ObjectFormat::Sha1, format!("aa{}", "b".repeat(38))).unwrap();
+    assert_eq!(
+        repo.has_object(&mut resources, &oid),
+        Ok(false),
+        "an entry that is not an ordinary file is not an object"
+    );
+}
+
+#[test]
 fn a_git_directory_that_is_a_file_is_refused() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join(".git"), "gitdir: elsewhere\n").unwrap();
