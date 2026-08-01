@@ -23,10 +23,16 @@ repos:
         language: system
         types: [text]
         exclude: (^|/)Cargo\.lock$|\.md$|(^|/)llms\.txt$
+      # The one sanctioned appearance of cfg(test) in src is guarding a #[path]
+      # include of an out-of-src test module, which published packaging strips
+      # before it resolves the excluded file.
       - id: no-tests-in-src
         name: tests live outside src/
         entry: >-
-          awk '/#\[test\]|#\[cfg\(test\)\]/{print FILENAME": test code inside implementation";e=1} END{exit e}'
+          awk '/#\[test\]/{print FILENAME": test code inside implementation";e=1}
+          held{if(!/#\[path = "\.\.\/tests\//){print FILENAME": test code inside implementation";e=1} held=0}
+          /#\[cfg\(test\)\]/{held=1}
+          END{if(held){print FILENAME": test code inside implementation";e=1} exit e}'
         language: system
         files: ^(crates/[^/]+|controller(/[^/]+)?)/src/.*\.rs$
       # The README says the engine never runs anything and never shells out to

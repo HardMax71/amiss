@@ -201,5 +201,6 @@ fn positioned_read(file: &File, slice: &mut [u8], at: u64) -> io::Result<usize> 
     file.seek_read(slice, at)
 }
 
+#[cfg(test)]
 #[path = "../tests/internal/handle.rs"]
 mod tests;
