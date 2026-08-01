@@ -1,10 +1,8 @@
 nextest-version = { required = "0.9.98" }
 experimental = ["wrapper-scripts"]
 
-# Address space per test process; a storming mutant aborts alone instead of
-# drowning the machine.
 [scripts.wrapper.confine]
-command = ["/bin/sh", "-c", 'ulimit -v $((2 * 1024 * 1024)); exec "$@"', "confine"]
+command = ["/bin/sh", "-c", 'ulimit -v $((2 * 1024 * 1024)) && exec "$@"', "confine"]
 
 [profile.default]
 slow-timeout = { period = "30s", terminate-after = 4 }
