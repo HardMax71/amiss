@@ -119,3 +119,96 @@ fn interrupted_atomic_writes_are_removed_only_in_the_known_shape() {
     ));
     assert!(malformed.exists());
 }
+
+/// The store admits deliveries until its byte budget is spent, then names
+/// Full; the record-side bound is proven by the limits contract itself,
+/// since the reservation is the worst case an admissible delivery encodes.
+#[test]
+fn the_store_fills_and_refuses() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut inbox = open(directory.path());
+    let body = vec![b'x'; 4_000];
+    let mut admitted = 0_u32;
+    for index in 0..64 {
+        let source = format!("delivery-{index}");
+        match inbox.enqueue(incoming(&source, &body)) {
+            Ok(_) => admitted += 1,
+            Err(InboxError::Full) => break,
+            Err(other) => panic!("unexpected refusal: {other:?}"),
+        }
+    }
+    assert!(
+        (1..64).contains(&admitted),
+        "the store admits some and then fills: {admitted}"
+    );
+}
+
+#[test]
+fn reopening_with_other_limits_is_a_configuration_error() {
+    let directory = tempfile::tempdir().unwrap();
+    drop(open(directory.path()));
+    let mut changed = limits();
+    changed.max_records += 1;
+    assert!(matches!(
+        Inbox::open(directory.path(), changed),
+        Err(InboxError::Configuration)
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unreadable_metadata_file_is_an_error_not_an_absence() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    drop(open(directory.path()));
+    let metadata = directory.path().join(".amiss-inbox.state");
+    fs::set_permissions(&metadata, fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(
+        matches!(
+            Inbox::open(directory.path(), limits()),
+            Err(InboxError::Io(_))
+        ),
+        "an unreadable metadata file must not read as a fresh root"
+    );
+}
+
+/// A fresh root adopts nothing it did not write: a stray directory, a file
+/// wearing the atomic prefix, and a directory wearing the lock name each
+/// refuse rather than vanish.
+#[test]
+fn a_fresh_root_adopts_nothing_it_did_not_write() {
+    for plant in [
+        |root: &Path| fs::create_dir(root.join("junk")).unwrap(),
+        |root: &Path| fs::write(root.join(".atomicwrite-file"), b"partial").unwrap(),
+        |root: &Path| fs::create_dir(root.join(".amiss-inbox.lock")).unwrap(),
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        plant(directory.path());
+        assert!(
+            Inbox::open(directory.path(), limits()).is_err(),
+            "a foreign entry in a fresh root must refuse"
+        );
+    }
+}
+
+/// A directory squatting on the exact row target is a corrupt store, not a
+/// write destination.
+#[test]
+fn a_directory_on_the_row_target_is_corrupt() {
+    let sized = tempfile::tempdir().unwrap();
+    let mut inbox = open(sized.path());
+    inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+    let name = row_file(sized.path()).file_name().unwrap().to_owned();
+
+    let squatted = tempfile::tempdir().unwrap();
+    let mut fresh = open(squatted.path());
+    fs::create_dir(squatted.path().join(&name)).unwrap();
+    assert!(
+        matches!(
+            fresh.enqueue(incoming("delivery-1", b"body")),
+            Err(InboxError::Corrupt)
+        ),
+        "the row target is occupied by a directory"
+    );
+}

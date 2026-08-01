@@ -200,3 +200,186 @@ fn removed_references_are_recorded_facts() {
         "a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong"
     );
 }
+
+/// Every closed string projection produces a distinct, non-empty name; the
+/// class projections repeat legitimately, so they are held to non-emptiness
+/// and to naming more than one class across the table.
+#[test]
+fn the_string_projections_are_populated_and_distinct() {
+    use std::collections::BTreeSet;
+
+    use amiss_wire::report::ErrorDetail;
+
+    let error_codes = [
+        AnalysisErrorCode::InvalidInvocation,
+        AnalysisErrorCode::InvalidEvent,
+        AnalysisErrorCode::InvalidProfile,
+        AnalysisErrorCode::RequestUnreadable,
+        AnalysisErrorCode::ConfigurationInvalid,
+        AnalysisErrorCode::DuplicateJsonKey,
+        AnalysisErrorCode::InvalidUtf8,
+        AnalysisErrorCode::InvalidJson,
+        AnalysisErrorCode::UnknownSchema,
+        AnalysisErrorCode::UnknownField,
+        AnalysisErrorCode::NoncanonicalArray,
+        AnalysisErrorCode::DigestMismatch,
+        AnalysisErrorCode::ControlBindingMismatch,
+        AnalysisErrorCode::ExceptionOverlap,
+        AnalysisErrorCode::UnsupportedCapability,
+        AnalysisErrorCode::GitRepositoryUnavailable,
+        AnalysisErrorCode::GitObjectMissing,
+        AnalysisErrorCode::GitObjectWrongKind,
+        AnalysisErrorCode::GitObjectUnreadable,
+        AnalysisErrorCode::GitIndexInvalid,
+        AnalysisErrorCode::GitIndexUnmerged,
+        AnalysisErrorCode::GitIntentToAdd,
+        AnalysisErrorCode::GitSnapshotChanged,
+        AnalysisErrorCode::UnrepresentablePath,
+        AnalysisErrorCode::DocumentInvalid,
+        AnalysisErrorCode::ParserError,
+        AnalysisErrorCode::ParserPanic,
+        AnalysisErrorCode::InvalidSourceSpan,
+        AnalysisErrorCode::ResolutionError,
+        AnalysisErrorCode::ResourceLimitExceeded,
+        AnalysisErrorCode::OutputLimitExceeded,
+        AnalysisErrorCode::TooManyErrors,
+        AnalysisErrorCode::ReportConstructionFailed,
+        AnalysisErrorCode::SandboxViolation,
+        AnalysisErrorCode::TrustedTimeInvalid,
+        AnalysisErrorCode::InternalError,
+    ];
+    let meanings: BTreeSet<&str> = error_codes.iter().map(|code| code.meaning()).collect();
+    assert_eq!(meanings.len(), error_codes.len(), "meanings are distinct");
+    assert!(meanings.iter().all(|text| !text.is_empty()));
+    let phases: BTreeSet<&str> = error_codes
+        .iter()
+        .map(|code| {
+            ErrorDetail {
+                code: *code,
+                path: None,
+                path_bytes: None,
+                resource: None,
+            }
+            .phase()
+        })
+        .collect();
+    assert!(phases.len() > 1, "phases name more than one partition");
+    assert!(phases.iter().all(|text| !text.is_empty()));
+}
+
+/// The kind and intent tables, held to the same distinctness law.
+#[test]
+fn the_kind_projections_are_populated_and_distinct() {
+    use std::collections::BTreeSet;
+
+    use amiss_wire::report::{Disposition, FindingKind, IntentKind};
+
+    let intents = [
+        IntentKind::RepositoryPath,
+        IntentKind::SameRepositoryGithub,
+        IntentKind::SameRepositoryGitlab,
+        IntentKind::SameRepositoryGitea,
+        IntentKind::ExternalUrl,
+        IntentKind::SiteRoute,
+        IntentKind::Label,
+        IntentKind::Unsupported,
+    ];
+    let intent_names: BTreeSet<&str> = intents.iter().map(|kind| kind.as_str()).collect();
+    assert_eq!(intent_names.len(), intents.len());
+    assert!(intent_names.iter().all(|text| !text.is_empty()));
+
+    let dispositions = [Disposition::Record, Disposition::Warn, Disposition::Fail];
+    let disposition_names: BTreeSet<&str> =
+        dispositions.iter().map(|value| value.as_str()).collect();
+    assert_eq!(disposition_names.len(), dispositions.len());
+    assert!(disposition_names.iter().all(|text| !text.is_empty()));
+
+    let kinds = [
+        FindingKind::ExplicitTargetMissing,
+        FindingKind::ExplicitTargetTypeMismatch,
+        FindingKind::InvalidReference,
+        FindingKind::TargetDeclaredUntracked,
+        FindingKind::UnsupportedReferenceSemantics,
+        FindingKind::UnsupportedDocumentFormat,
+        FindingKind::UnsupportedTargetKind,
+        FindingKind::UnsupportedVersionScope,
+        FindingKind::UnsupportedCapability,
+        FindingKind::DependencyChangedSubjectUnchanged,
+        FindingKind::DependencyAndSubjectCochanged,
+        FindingKind::SubjectChanged,
+        FindingKind::ExplicitReferenceRemoved,
+        FindingKind::DocumentRemoved,
+        FindingKind::OpaqueMdxRegion,
+        FindingKind::OpaqueHtmlRegion,
+        FindingKind::ObservationCorrelationAmbiguous,
+        FindingKind::UnlinkedDocument,
+        FindingKind::PolicyWeakened,
+        FindingKind::CoverageReduced,
+        FindingKind::ControlPlaneChanged,
+        FindingKind::DebtWorsened,
+        FindingKind::DebtExpired,
+        FindingKind::WaiverInvalid,
+    ];
+    let kind_names: BTreeSet<&str> = kinds.iter().map(|kind| kind.as_str()).collect();
+    assert_eq!(kind_names.len(), kinds.len());
+    assert!(kind_names.iter().all(|text| !text.is_empty()));
+    let evidence: BTreeSet<&str> = kinds.iter().map(|kind| kind.evidence_class()).collect();
+    assert!(evidence.len() > 1 && evidence.iter().all(|text| !text.is_empty()));
+    let invariants: BTreeSet<&str> = kinds.iter().map(|kind| kind.invariant_class()).collect();
+    assert!(invariants.len() > 1 && invariants.iter().all(|text| !text.is_empty()));
+}
+
+/// The fatal serializer's bytes are exactly the canonical wire and a newline,
+/// whatever the piece sizes, and its count is the byte count.
+#[test]
+fn the_fatal_serializer_writes_the_canonical_wire_exactly() {
+    use amiss_wire::json::{Value, canonical};
+    use amiss_wire::report::{FATAL_SCRATCH_BYTES, FatalSerializer};
+
+    let mut serializer = FatalSerializer::default();
+    for length in [
+        1,
+        FATAL_SCRATCH_BYTES - 1,
+        FATAL_SCRATCH_BYTES,
+        FATAL_SCRATCH_BYTES + 1,
+    ] {
+        let members: Vec<(String, Value)> = (0..8)
+            .map(|index| {
+                (
+                    format!("k{index}"),
+                    Value::String("v".repeat(length / 4 + 1)),
+                )
+            })
+            .chain(std::iter::once((
+                "big".to_owned(),
+                Value::String("x".repeat(length)),
+            )))
+            .collect();
+        let envelope = Value::Object(members);
+        let mut expected = canonical(&envelope);
+        expected.push(b'\n');
+
+        let wire = serializer.wire_bytes(&envelope);
+        assert_eq!(wire, expected, "piece length {length}");
+
+        let mut out = Vec::new();
+        let written = serializer.emit(&envelope, &mut out).unwrap();
+        assert_eq!(out, expected);
+        assert_eq!(written, u64::try_from(expected.len()).unwrap());
+    }
+}
+
+#[test]
+fn a_failure_envelope_exists_exactly_when_a_reason_does() {
+    use std::collections::BTreeSet;
+
+    use amiss_wire::report::invocation_failure_envelope;
+
+    let mut codes = BTreeSet::new();
+    assert!(
+        invocation_failure_envelope(&engine(), &codes).is_none(),
+        "no code, no envelope"
+    );
+    codes.insert(AnalysisErrorCode::InvalidInvocation);
+    assert!(invocation_failure_envelope(&engine(), &codes).is_some());
+}
