@@ -5,6 +5,7 @@ use amiss_wire::controls::{
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json;
+use strum::IntoEnumIterator;
 
 use crate::support::{
     DEFAULT_CONSTRUCT, computed_digests, fact_json, key_input_json, waiver_bundle, waiver_item,
@@ -44,13 +45,13 @@ fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingSco
 
 #[test]
 fn every_scope_spelling_survives_the_waiver_round_trip() {
-    for construct in SourceConstruct::all() {
+    for construct in SourceConstruct::iter() {
         let named = construct.as_str();
         let scope = roundtrip_scope(named, &|doc| doc.replace(DEFAULT_CONSTRUCT, named));
         assert_eq!(scope.source_construct, construct, "{named}");
         assert_eq!(construct.is_image(), named.contains("image"), "{named}");
     }
-    for target_kind in TargetKind::all() {
+    for target_kind in TargetKind::iter() {
         let named = target_kind.as_str();
         let scope = roundtrip_scope(named, &|doc| {
             doc.replace(
