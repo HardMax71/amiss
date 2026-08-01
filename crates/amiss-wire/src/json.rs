@@ -221,11 +221,6 @@ fn write_string<S: Sink + ?Sized>(sink: &mut S, s: &str) {
         let escape: Option<&str> = match c {
             '"' => Some("\\\""),
             '\\' => Some("\\\\"),
-            '\u{8}' => Some("\\b"),
-            '\t' => Some("\\t"),
-            '\n' => Some("\\n"),
-            '\u{c}' => Some("\\f"),
-            '\r' => Some("\\r"),
             c if u32::from(c) < 0x20 => Some(control_escape(c)),
             _ => None,
         };
