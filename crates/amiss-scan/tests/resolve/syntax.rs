@@ -1,5 +1,6 @@
 use amiss_scan::Resolution;
 use amiss_wire::controls::TargetKind;
+use amiss_wire::model::Adapter;
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, ExternalReference, InvalidReference, Missing, Target,
@@ -12,7 +13,13 @@ use crate::support::bed;
 fn component_splitting_follows_rfc_order() {
     let mut bed = bed();
     let (intent, row) = bed
-        .run(None, "docs/guide.md", false, "https://e.com/a?x?y#z?u")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "https://e.com/a?x?y#z?u",
+        )
         .unwrap_or_else(|_defect| panic!("resolve"));
     assert!(matches!(row, Resolution::External(ExternalReference::Url)));
     assert_eq!(intent.kind, IntentKind::ExternalUrl);
@@ -26,7 +33,7 @@ fn schemes_classify_external_and_uris_validate() {
     let mut bed = bed();
     for destination in ["MAILTO:a@b.example", "custom+x.y:anything"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -42,7 +49,7 @@ fn schemes_classify_external_and_uris_validate() {
         "https://e.com/a%zz",
     ] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -52,7 +59,13 @@ fn schemes_classify_external_and_uris_validate() {
     }
 
     let row = bed
-        .run(None, "docs/guide.md", false, "//cdn.e.com/x")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "//cdn.e.com/x",
+        )
         .unwrap_or_else(|_defect| panic!("resolve network path"))
         .1;
     assert!(matches!(
@@ -61,7 +74,13 @@ fn schemes_classify_external_and_uris_validate() {
     ));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "/guide/start")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "/guide/start",
+        )
         .unwrap_or_else(|_defect| panic!("resolve site route"))
         .1;
     assert!(matches!(
@@ -84,14 +103,14 @@ fn native_paths_decode_once_and_stay_contained() {
         ("sub//", InvalidReference::Syntax),
     ] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert_eq!(row, Resolution::Invalid(reason), "{destination}");
     }
     for destination in ["guide.md", "./guide.md", "%2E%2E/README"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -100,7 +119,7 @@ fn native_paths_decode_once_and_stay_contained() {
         );
     }
     let row = bed
-        .run(None, "docs/guide.md", false, "absent.md")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "absent.md")
         .unwrap_or_else(|_defect| panic!("resolve absent path"))
         .1;
     let Resolution::Missing(Missing::PathNotFound { path }) = row else {
@@ -114,7 +133,7 @@ fn native_paths_decode_once_and_stay_contained() {
     // signs in it, and none of them is a path.
     for destination in ["%252E%252E/README", "docs%252Fguide.md", "a%252Fb.md"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -128,7 +147,7 @@ fn native_paths_decode_once_and_stay_contained() {
 fn terminal_slashes_author_trees_and_break_images() {
     let mut bed = bed();
     let (intent, row) = bed
-        .run(None, "docs/guide.md", false, "sub/")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "sub/")
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.target_kind, Some(TargetKind::Tree));
     let Resolution::Resolved(Target::Tree { path }) = row else {
@@ -137,12 +156,12 @@ fn terminal_slashes_author_trees_and_break_images() {
     assert_eq!(path.as_str(), Some("docs/sub"));
 
     let (_intent, image) = bed
-        .run(None, "docs/guide.md", true, "sub/")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", true, "sub/")
         .unwrap_or_else(|_d| panic!());
     assert_eq!(image, Resolution::Invalid(InvalidReference::Syntax));
 
     let (intent, mismatch) = bed
-        .run(None, "docs/guide.md", false, "guide.md/")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "guide.md/")
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.target_kind, Some(TargetKind::Tree));
     let Resolution::TypeMismatch(Target::Blob(blob)) = mismatch else {
@@ -157,7 +176,7 @@ fn terminal_slashes_author_trees_and_break_images() {
 fn special_entries_are_never_followed() {
     let mut bed = bed();
     let (_i, sym) = bed
-        .run(None, "docs/guide.md", false, "../alias")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "../alias")
         .unwrap_or_else(|_d| panic!());
     let Resolution::UnsupportedTarget(UnsupportedTarget::Symlink { path }) = sym else {
         panic!("unexpected resolution: {sym:?}");
@@ -165,7 +184,7 @@ fn special_entries_are_never_followed() {
     assert_eq!(path.as_str(), Some("alias"));
 
     let (_i, gitlink) = bed
-        .run(None, "docs/guide.md", false, "../module")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "../module")
         .unwrap_or_else(|_d| panic!());
     let Resolution::UnsupportedTarget(UnsupportedTarget::Gitlink { path }) = gitlink else {
         panic!("unexpected resolution: {gitlink:?}");
@@ -178,7 +197,7 @@ fn empty_destinations_target_the_source_document() {
     let mut bed = bed();
     for destination in ["", "?q", "#"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         let Resolution::Resolved(Target::Blob(blob)) = row else {
@@ -188,7 +207,7 @@ fn empty_destinations_target_the_source_document() {
     }
 
     let row = bed
-        .run(None, "docs/guide.md", false, "#guide")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#guide")
         .unwrap_or_else(|_defect| panic!("resolve self anchor"))
         .1;
     let Resolution::Resolved(Target::Blob(blob)) = row else {
@@ -197,7 +216,7 @@ fn empty_destinations_target_the_source_document() {
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "#Intro")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#Intro")
         .unwrap_or_else(|_defect| panic!("resolve absent anchor"))
         .1;
     let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = row else {
@@ -206,7 +225,7 @@ fn empty_destinations_target_the_source_document() {
     assert_eq!(path.as_str(), Some("docs/guide.md"));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "#L1")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#L1")
         .unwrap_or_else(|_defect| panic!("resolve line fragment"))
         .1;
     let Resolution::Resolved(Target::Blob(blob)) = row else {
@@ -215,7 +234,7 @@ fn empty_destinations_target_the_source_document() {
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "#L2")
+        .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#L2")
         .unwrap_or_else(|_defect| panic!("resolve out-of-range line fragment"))
         .1;
     let Resolution::Missing(Missing::LineFragmentOutOfRange { path }) = row else {
@@ -234,7 +253,7 @@ fn query_and_fragment_semantics_follow_the_precedence() {
         "../llms.txt?x",
     ] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -247,7 +266,13 @@ fn query_and_fragment_semantics_follow_the_precedence() {
     }
 
     let row = bed
-        .run(None, "docs/guide.md", false, "guide.md?x#Intro")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "guide.md?x#Intro",
+        )
         .unwrap_or_else(|_defect| panic!("resolve document fragment"))
         .1;
     assert!(matches!(
@@ -256,13 +281,25 @@ fn query_and_fragment_semantics_follow_the_precedence() {
     ));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "guide.md?x")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "guide.md?x",
+        )
         .unwrap_or_else(|_defect| panic!("resolve ignored query"))
         .1;
     assert!(matches!(row, Resolution::Resolved(_)));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "data.json#anything")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "data.json#anything",
+        )
         .unwrap_or_else(|_defect| panic!("resolve code fragment"))
         .1;
     assert!(matches!(
@@ -271,13 +308,25 @@ fn query_and_fragment_semantics_follow_the_precedence() {
     ));
 
     let row = bed
-        .run(None, "docs/guide.md", false, "guide.md#%zz")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "guide.md#%zz",
+        )
         .unwrap_or_else(|_defect| panic!("resolve invalid fragment"))
         .1;
     assert_eq!(row, Resolution::Invalid(InvalidReference::FragmentEncoding));
 
     let (_i, retained) = bed
-        .run(None, "docs/guide.md", false, "data.json?x")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "data.json?x",
+        )
         .unwrap_or_else(|_d| panic!());
     let Resolution::UnsupportedSemantics(UnsupportedSemantics::Query(Target::Blob(blob))) =
         retained
@@ -304,7 +353,7 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
 
     for destination in ["guide.md", "../README"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -314,7 +363,7 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
     }
     for destination in ["Guide.md", "GUIDE.MD", "../readme"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -325,17 +374,81 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
 
     // U+00E9, the precomposed accent the tree actually carries.
     let row = bed
-        .run(None, "docs/guide.md", false, "\u{e9}t\u{e9}.txt")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "\u{e9}t\u{e9}.txt",
+        )
         .unwrap_or_else(|_defect| panic!("resolve precomposed path"))
         .1;
     assert!(matches!(row, Resolution::Resolved(_)));
     // The same two accents decomposed into e + U+0301: the same text, other bytes.
     let row = bed
-        .run(None, "docs/guide.md", false, "e\u{301}te\u{301}.txt")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "e\u{301}te\u{301}.txt",
+        )
         .unwrap_or_else(|_defect| panic!("resolve decomposed path"))
         .1;
     assert!(matches!(
         row,
         Resolution::Missing(Missing::PathNotFound { .. })
     ));
+}
+
+#[test]
+fn a_lowercase_hex_escape_decodes_like_its_uppercase_twin() {
+    let mut bed = bed();
+    let row = bed
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/index.md",
+            false,
+            "guide.%6dd",
+        )
+        .unwrap_or_else(|_defect| panic!("resolve lowercase escape"))
+        .1;
+    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+        panic!("%6d spells m in either case: {row:?}");
+    };
+    assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
+}
+
+#[test]
+fn an_authority_is_judged_by_its_exact_grammar() {
+    let mut bed = bed();
+    for accepted in [
+        "https://example.com/x",
+        "https://[::1]/x",
+        "https://[::1]:8080/x",
+    ] {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/index.md", false, accepted)
+            .unwrap_or_else(|_defect| panic!("resolve {accepted}"))
+            .1;
+        assert!(
+            matches!(row, Resolution::External(_)),
+            "{accepted}: {row:?}"
+        );
+    }
+    for refused in [
+        "https://ex\u{e4}mple.com/x",
+        "https://[]:8080/x",
+        "https://a[b/x",
+    ] {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/index.md", false, refused)
+            .unwrap_or_else(|_defect| panic!("resolve {refused}"))
+            .1;
+        assert!(
+            matches!(row, Resolution::Invalid(InvalidReference::Uri)),
+            "{refused}: {row:?}"
+        );
+    }
 }

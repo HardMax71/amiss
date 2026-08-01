@@ -301,3 +301,31 @@ fn a_document_with_raw_html_reports_the_regions_it_cannot_see_into() {
         "the scan says out loud that it could not read the HTML: {emitted:?}"
     );
 }
+
+/// An undeclared label is missing only when it could have been declared here;
+/// a colon says another project's inventory owns it.
+#[test]
+fn an_undeclared_label_is_missing_unless_a_colon_names_another_inventory() {
+    let (built, payload) = scan(|root| {
+        fs::write(
+            root.join("docs.rst"),
+            "See :ref:`nowhere` and :ref:`ext:inv`.\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+    });
+    complete(&built, &payload);
+
+    assert_eq!(count(&payload, "references", "extracted"), 2);
+    let observations = payload["observations"].as_array().unwrap();
+    let mut resolutions: Vec<&str> = observations
+        .iter()
+        .map(|row| row["candidate"]["resolution"]["kind"].as_str().unwrap())
+        .collect();
+    resolutions.sort_unstable();
+    assert_eq!(
+        resolutions,
+        ["missing", "unsupported-semantics"],
+        "the bare label is missing here, the colon label is another inventory's"
+    );
+}

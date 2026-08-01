@@ -117,8 +117,9 @@ pub(crate) fn github_context() -> ForgeContext {
 }
 
 impl Bed {
-    pub(crate) fn run(
+    pub(crate) fn run_as(
         &mut self,
+        adapter: Adapter,
         context: Option<&ForgeContext>,
         document: &str,
         is_image: bool,
@@ -133,7 +134,7 @@ impl Bed {
             &mut self.cache,
             &self.snapshot,
             context,
-            Adapter::Markdown,
+            adapter,
             &document,
             is_image,
             destination,
@@ -147,7 +148,8 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
     let context = github_context();
 
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -166,7 +168,8 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -185,7 +188,8 @@ fn github_with_a_different_trusted_identity_is_foreign() {
     let mut bed = bed();
     let context = github_context();
     let (intent, foreign) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -199,7 +203,8 @@ fn github_with_a_different_trusted_identity_is_foreign() {
     );
 
     let row = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -214,7 +219,8 @@ fn github_with_a_different_trusted_identity_is_foreign() {
     );
 
     let row = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -225,7 +231,8 @@ fn github_with_a_different_trusted_identity_is_foreign() {
     assert_eq!(row, Resolution::Invalid(InvalidReference::PathTraversal));
 
     let row = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -239,7 +246,8 @@ fn github_with_a_different_trusted_identity_is_foreign() {
     );
 
     let row = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -255,7 +263,8 @@ fn github_candidate_urls_resolve_targets_and_fragments() {
     let mut bed = bed();
     let context = github_context();
     let (_i, tree) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -268,7 +277,8 @@ fn github_candidate_urls_resolve_targets_and_fragments() {
     assert_eq!(path.as_str(), Some("docs"));
 
     let (_i, lines) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -282,7 +292,8 @@ fn github_candidate_urls_resolve_targets_and_fragments() {
     assert!(matches!(blob.content, BlobContent::Available { .. }));
 
     let (_i, tree_fragment) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -310,7 +321,8 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
         candidate_oid: None,
     };
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -335,7 +347,7 @@ fn forge_urls_without_a_declared_context_are_external() {
 
     for url in urls {
         let (intent, row) = bed
-            .run(None, "docs/guide.md", false, url)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, url)
             .unwrap_or_else(|_defect| panic!());
         assert_eq!(intent.kind, IntentKind::ExternalUrl, "{url}");
         assert_eq!(intent.external_scheme.as_deref(), Some("https"), "{url}");
@@ -351,7 +363,8 @@ fn a_host_prefix_lookalike_authority_stays_external() {
     let mut bed = bed();
     let context = github_context();
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -382,7 +395,8 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
     let mut bed = bed();
     let context = gitlab_context();
     let (intent, row) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -396,7 +410,8 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 
     let (_intent, encoded) = bed
-        .run(
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
@@ -409,7 +424,7 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
     );
 
     let (_intent, pinned) = bed
-        .run(
+        .run_as(Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,

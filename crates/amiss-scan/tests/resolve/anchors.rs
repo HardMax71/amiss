@@ -29,7 +29,13 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
     ] {
         let destination = format!("anchors.md#{fragment}");
         let row = bed
-            .run(None, "docs/guide.md", false, &destination)
+            .run_as(
+                Adapter::Markdown,
+                None,
+                "docs/guide.md",
+                false,
+                &destination,
+            )
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         let Resolution::Resolved(Target::Blob(blob)) = &row else {
@@ -41,7 +47,13 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
     for fragment in ["Setup--Config", "setup", "résumé", "customid"] {
         let destination = format!("anchors.md#{fragment}");
         let row = bed
-            .run(None, "docs/guide.md", false, &destination)
+            .run_as(
+                Adapter::Markdown,
+                None,
+                "docs/guide.md",
+                false,
+                &destination,
+            )
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = &row else {
@@ -58,7 +70,7 @@ fn an_unevaluable_anchor_target_stays_unsupported_semantics() {
     let mut bed = bed();
     for destination in ["pointer.md#any", "invalid.md#any", "../llms.txt#any"] {
         let row = bed
-            .run(None, "docs/guide.md", false, destination)
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
@@ -75,7 +87,13 @@ fn an_unevaluable_anchor_target_stays_unsupported_semantics() {
         ..ScanLimits::CONTRACT
     });
     let row = starved
-        .run(None, "docs/guide.md", false, "anchors.md#setup--config")
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            "anchors.md#setup--config",
+        )
         .unwrap_or_else(|_defect| panic!("resolve under an exhausted anchor budget"))
         .1;
     assert!(
@@ -94,8 +112,14 @@ fn distinct_anchors_into_one_target_are_charged_once() {
     let mut bed = bed();
     for fragment in ["setup--config", "resume-draft", "declared"] {
         let destination = format!("anchors.md#{fragment}");
-        bed.run(None, "docs/guide.md", false, &destination)
-            .unwrap_or_else(|_defect| panic!("resolve {destination}"));
+        bed.run_as(
+            Adapter::Markdown,
+            None,
+            "docs/guide.md",
+            false,
+            &destination,
+        )
+        .unwrap_or_else(|_defect| panic!("resolve {destination}"));
     }
     assert_eq!(
         bed.scan_resources.heading_anchor_bytes(),
