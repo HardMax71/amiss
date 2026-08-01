@@ -5,7 +5,8 @@ edition.workspace = true
 description = "Document parsers for Amiss, pinned to the CommonMark and GFM corpora"
 license.workspace = true
 repository.workspace = true
-exclude.workspace = true
+# /tests/internal ships so the src include resolves; consumers compile it empty.
+exclude = ["/tests/*.rs", "/tests/fixtures", "/benches"]
 autotests = false
 
 [dependencies]
