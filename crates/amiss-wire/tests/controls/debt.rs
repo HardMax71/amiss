@@ -21,6 +21,22 @@ fn parses_a_valid_debt_snapshot() {
 }
 
 #[test]
+fn an_item_born_at_the_snapshot_instant_is_consistent() {
+    let (key, fact) = computed_digests();
+    let item = debt_item(
+        "debt/readme",
+        &key,
+        &fact,
+        "2026-07-02T00:00:00Z",
+        "2026-08-01T00:00:00Z",
+    );
+    let doc = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
+    let snapshot = DebtSnapshot::parse(doc.as_bytes())
+        .expect("an item created at the snapshot instant is not from the future");
+    assert_eq!(snapshot.items.len(), 1);
+}
+
+#[test]
 fn rejects_debt_digest_and_order_defects() {
     let (key, fact) = computed_digests();
 

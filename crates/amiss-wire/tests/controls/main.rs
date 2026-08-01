@@ -5,4 +5,5 @@ mod floors;
 mod policy;
 mod support;
 mod time;
+mod vocabulary;
 mod waivers;
