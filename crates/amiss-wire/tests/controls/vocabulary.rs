@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use amiss_wire::controls::{ContentAvailability, GitMode, Profile, ResourceName};
 use amiss_wire::json::Value;
+use strum::IntoEnumIterator;
 
 #[test]
 fn the_profile_vocabulary_is_the_closed_triple() {
@@ -21,23 +22,23 @@ fn the_profile_vocabulary_is_the_closed_triple() {
 
 #[test]
 fn git_modes_project_distinct_nonempty_spellings() {
-    let spellings: BTreeSet<&str> = GitMode::all().map(GitMode::as_str).collect();
+    let spellings: BTreeSet<&str> = GitMode::iter().map(GitMode::as_str).collect();
     assert!(spellings.iter().all(|mode| !mode.is_empty()));
-    assert_eq!(spellings.len(), GitMode::all().len());
+    assert_eq!(spellings.len(), GitMode::iter().len());
 }
 
 #[test]
 fn availability_states_project_distinct_nonempty_spellings() {
-    let spellings: BTreeSet<&str> = ContentAvailability::all()
+    let spellings: BTreeSet<&str> = ContentAvailability::iter()
         .map(ContentAvailability::as_str)
         .collect();
     assert!(spellings.iter().all(|state| !state.is_empty()));
-    assert_eq!(spellings.len(), ContentAvailability::all().len());
+    assert_eq!(spellings.len(), ContentAvailability::iter().len());
 }
 
 #[test]
 fn resource_phases_are_a_nonempty_partition_with_more_than_one_class() {
-    let phases: BTreeSet<&str> = ResourceName::all().map(ResourceName::phase).collect();
+    let phases: BTreeSet<&str> = ResourceName::iter().map(ResourceName::phase).collect();
     assert!(phases.iter().all(|phase| !phase.is_empty()));
     assert!(phases.len() > 1);
 }

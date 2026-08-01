@@ -155,12 +155,6 @@ pub enum EligibleFindingKind {
 }
 
 impl EligibleFindingKind {
-    /// Every eligible kind in wire-contract order.
-    #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
     #[must_use]
     pub fn as_str(self) -> &'static str {
         self.into()
@@ -200,12 +194,6 @@ pub enum SourceConstruct {
 }
 
 impl SourceConstruct {
-    /// Every source construct in wire-contract order.
-    #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
     /// Whether the consuming syntax node is an image form, which fixes the
     /// authored target kind.
     #[must_use]
@@ -301,12 +289,6 @@ pub enum TargetKind {
 }
 
 impl TargetKind {
-    /// Every target kind in wire-contract order.
-    #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -356,12 +338,6 @@ pub enum GitMode {
 }
 
 impl GitMode {
-    /// Every git mode in wire-contract order.
-    #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -383,12 +359,6 @@ pub enum ContentAvailability {
 }
 
 impl ContentAvailability {
-    /// Every availability state in wire-contract order.
-    #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {

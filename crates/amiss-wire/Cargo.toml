@@ -16,6 +16,7 @@ strum.workspace = true
 
 [dev-dependencies]
 divan.workspace = true
+strum.workspace = true
 
 [[bench]]
 name = "wire"
