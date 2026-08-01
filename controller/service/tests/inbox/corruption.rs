@@ -7,7 +7,7 @@ use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use tempfile::TempDir;
 
-use super::support::{incoming, limits, open, row_file};
+use super::support::{incoming, limits, open, reseal_row, row_file};
 
 #[test]
 fn truncated_and_tampered_rows_fail_closed() {
@@ -216,4 +216,134 @@ fn a_directory_on_the_row_target_is_corrupt() {
         ),
         "the row target is occupied by a directory"
     );
+}
+
+type PayloadEdit = fn(&str) -> String;
+
+/// Each row carries one semantic defect behind a valid seal, so the refusal
+/// is the record validator's own, not the frame digest's.
+#[test]
+fn resealed_semantic_defects_fail_closed() {
+    let edits: [(&str, PayloadEdit); 5] = [
+        ("foreign schema", |payload| {
+            payload.replace("inbox-record-v1", "inbox-record-v2")
+        }),
+        ("fence ahead of attempts", |payload| {
+            payload.replace("\"attempts\":0,\"fence\":0", "\"attempts\":0,\"fence\":1")
+        }),
+        ("generation behind attempts", |payload| {
+            payload.replace(
+                "\"generation\":0,\"attempts\":0,\"fence\":0",
+                "\"generation\":0,\"attempts\":1,\"fence\":1",
+            )
+        }),
+        ("negative availability", |payload| {
+            payload.replace(
+                "\"available_at_unix_millis\":0",
+                "\"available_at_unix_millis\":-1",
+            )
+        }),
+        ("re-pointed content digest", |payload| {
+            let prefix = "\"content_digest\":\"";
+            let at = payload.find(prefix).unwrap().saturating_add(prefix.len());
+            let flipped = if payload.get(at..=at) == Some("0") {
+                "1"
+            } else {
+                "0"
+            };
+            let mut edited = payload.to_owned();
+            edited.replace_range(at..=at, flipped);
+            edited
+        }),
+    ];
+    for (reason, edit) in edits {
+        let directory = TempDir::new().unwrap();
+        let mut inbox = open(directory.path());
+        inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+        reseal_row(directory.path(), |payload| {
+            let edited = edit(payload);
+            assert_ne!(edited, payload, "{reason}: the edit must land");
+            edited
+        });
+        assert!(
+            matches!(inbox.entries(), Err(InboxError::Corrupt)),
+            "{reason}"
+        );
+    }
+}
+
+/// The stored key is the file's name, so a renamed row claims an identity
+/// its payload does not hash to.
+#[test]
+fn a_row_under_a_foreign_key_fails_closed() {
+    let directory = TempDir::new().unwrap();
+    let mut inbox = open(directory.path());
+    inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+    let path = row_file(directory.path());
+    fs::rename(
+        &path,
+        path.with_file_name(format!("{}.row", "0".repeat(64))),
+    )
+    .unwrap();
+    assert!(matches!(inbox.entries(), Err(InboxError::Corrupt)));
+}
+
+const CLAIMED_COUNTERS: &str = "\"generation\":1,\"attempts\":1,\"fence\":1";
+const CLAIMED_STATE: &str = "{\"state\":\"claimed\",\"owner\":\"0123456789abcdef0123456789abcdef\",\"expires_at_unix_millis\":5000}";
+
+fn claimed_row<'edit>(counters: &'edit str, state: &'edit str) -> impl Fn(&str) -> String + 'edit {
+    move |payload: &str| {
+        let edited = payload
+            .replace("\"generation\":0,\"attempts\":0,\"fence\":0", counters)
+            .replace(
+                "{\"state\":\"pending\",\"available_at_unix_millis\":0}",
+                state,
+            );
+        assert_ne!(edited, payload, "both claimed edits must land");
+        edited
+    }
+}
+
+/// A claimed row is held to its whole lease grammar: a well-formed one is
+/// readable, and each broken leg fails closed on its own.
+#[test]
+fn a_claimed_row_answers_for_its_lease_grammar() {
+    let sound = TempDir::new().unwrap();
+    let mut inbox = open(sound.path());
+    inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+    reseal_row(sound.path(), claimed_row(CLAIMED_COUNTERS, CLAIMED_STATE));
+    assert!(inbox.entries().is_ok(), "the well-formed claimed row reads");
+
+    let broken: [(&str, &str, &str); 4] = [
+        (
+            "short owner",
+            CLAIMED_COUNTERS,
+            "{\"state\":\"claimed\",\"owner\":\"0123456789abcdef0123456789abcde\",\"expires_at_unix_millis\":5000}",
+        ),
+        (
+            "owner outside the hex alphabet",
+            CLAIMED_COUNTERS,
+            "{\"state\":\"claimed\",\"owner\":\"0123456789abcdefg123456789abcdef\",\"expires_at_unix_millis\":5000}",
+        ),
+        (
+            "expiry at the epoch",
+            CLAIMED_COUNTERS,
+            "{\"state\":\"claimed\",\"owner\":\"0123456789abcdef0123456789abcdef\",\"expires_at_unix_millis\":0}",
+        ),
+        (
+            "claimed without an attempt",
+            "\"generation\":1,\"attempts\":0,\"fence\":0",
+            CLAIMED_STATE,
+        ),
+    ];
+    for (reason, counters, state) in broken {
+        let directory = TempDir::new().unwrap();
+        let mut inbox = open(directory.path());
+        inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+        reseal_row(directory.path(), claimed_row(counters, state));
+        assert!(
+            matches!(inbox.entries(), Err(InboxError::Corrupt)),
+            "{reason}"
+        );
+    }
 }

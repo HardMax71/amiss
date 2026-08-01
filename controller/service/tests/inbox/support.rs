@@ -73,3 +73,27 @@ pub(crate) fn row_file(root: &Path) -> PathBuf {
 pub(crate) fn open(root: &Path) -> Inbox {
     Inbox::open(root, limits()).unwrap()
 }
+
+/// Rewrites the one row frame around an edited payload, resealing the
+/// length and domain digest so only the semantic defect under test remains.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+pub(crate) fn reseal_row(root: &Path, edit: impl FnOnce(&str) -> String) {
+    use sha2::{Digest as _, Sha256};
+    let path = row_file(root);
+    let bytes = fs::read(&path).unwrap();
+    let magic = b"AMISS-INBOX-ROW";
+    let payload_start = magic.len().checked_add(1 + 8 + 32).unwrap();
+    let payload = std::str::from_utf8(bytes.get(payload_start..).unwrap()).unwrap();
+    let edited = edit(payload);
+    let mut hasher = Sha256::new();
+    hasher.update(b"amiss/controller-inbox-row-frame-v1");
+    hasher.update([0]);
+    hasher.update(edited.as_bytes());
+    let mut frame = Vec::new();
+    frame.extend_from_slice(magic);
+    frame.push(1);
+    frame.extend_from_slice(&u64::try_from(edited.len()).unwrap().to_be_bytes());
+    frame.extend_from_slice(&hasher.finalize());
+    frame.extend_from_slice(edited.as_bytes());
+    fs::write(path, frame).unwrap();
+}
