@@ -1,18 +1,20 @@
 #![cfg(test)]
 
 use std::io::Cursor;
-use std::sync::LazyLock;
-use std::time::Duration;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use amiss_controller::ProviderError;
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
-use secrecy::{ExposeSecret as _, SecretSlice};
+use reqwest::blocking::Client;
+use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::Deserialize;
 
 use super::{
-    AppCredential, MAX_RESPONSE_BYTES, OperationDeadline, Transport, app_jwt, bounded_bytes,
-    map_status, mint_status, validate_api_base,
+    AppCredential, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken, OperationDeadline,
+    Transport, app_jwt, bounded_bytes, map_error, map_status, mint_status, settled,
+    validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
 
@@ -157,5 +159,125 @@ fn an_expired_deadline_fails_before_any_transport_io() {
             .get::<serde_json::Value>("/rate_limit", deadline)
             .err(),
         Some(ProviderError::Unavailable)
+    );
+}
+
+fn offline_transport(minted: Option<MintedToken>) -> Transport {
+    Transport {
+        client: Client::new(),
+        api_base: "https://api.github.com".to_owned(),
+        app: AppCredential {
+            key: EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
+            app_id: 99,
+            installation_id: 7,
+        },
+        minted: Mutex::new(minted),
+        operation_timeout: Duration::ZERO,
+    }
+}
+
+#[test]
+fn the_ceilings_are_the_documented_values() {
+    assert_eq!(MAX_RESPONSE_BYTES, 8_388_608);
+    assert_eq!(MAX_API_BASE_BYTES, 2_048);
+}
+
+#[test]
+fn a_body_at_exactly_the_ceiling_is_within_it() {
+    assert_eq!(
+        bounded_bytes(
+            Some(MAX_RESPONSE_BYTES),
+            Cursor::new(vec![0_u8; MAX_RESPONSE_BYTES])
+        )
+        .map(|bytes| bytes.len()),
+        Ok(MAX_RESPONSE_BYTES)
+    );
+}
+
+#[test]
+fn only_the_success_range_settles() {
+    assert_eq!(settled(200, map_status), Ok(()));
+    assert_eq!(settled(299, mint_status), Ok(()));
+    assert_eq!(
+        settled(199, map_status),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        settled(300, map_status),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        settled(401, mint_status),
+        Err(ProviderError::Authentication)
+    );
+}
+
+#[test]
+fn a_route_is_one_absolute_unrepeated_path() {
+    let transport = offline_transport(None);
+    assert!(
+        transport
+            .url("/rate_limit")
+            .is_ok_and(|url| url.as_str().ends_with("/rate_limit"))
+    );
+    assert_eq!(
+        transport.url("rate_limit").err(),
+        Some(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        transport.url("//attacker.invalid").err(),
+        Some(ProviderError::InvalidResponse)
+    );
+}
+
+#[test]
+fn a_fresh_token_is_reused_and_an_empty_cache_must_mint() {
+    let cached = offline_transport(Some(MintedToken {
+        token: SecretString::from("cached"),
+        minted_at: Instant::now(),
+    }));
+    let deadline = OperationDeadline::after(Duration::ZERO).unwrap();
+    assert_eq!(
+        cached
+            .token(deadline)
+            .map(|token| token.expose_secret().to_owned()),
+        Ok("cached".to_owned())
+    );
+
+    let empty = offline_transport(None);
+    assert_eq!(
+        empty.installation_access_token().err(),
+        Some(ProviderError::Unavailable),
+        "an empty cache mints, and the elapsed deadline refuses before any io"
+    );
+}
+
+#[test]
+fn a_request_that_cannot_even_build_is_an_invalid_response() {
+    let defect = Client::new().get("no-scheme").build().unwrap_err();
+    assert!(defect.is_builder());
+    assert_eq!(map_error(&defect), ProviderError::InvalidResponse);
+}
+
+#[test]
+fn the_api_base_length_bounds_are_exact() {
+    assert_eq!(
+        validate_api_base("", "github.example"),
+        Err(GitHubClientError::Configuration(
+            "the API base length is out of bounds"
+        ))
+    );
+    let prefix = "https://github.example/";
+    let at_limit = format!("{prefix}{}", "a".repeat(MAX_API_BASE_BYTES - prefix.len()));
+    assert!(validate_api_base(&at_limit, "github.example").is_ok());
+    let past_limit = format!(
+        "{prefix}{}",
+        "a".repeat(MAX_API_BASE_BYTES - prefix.len() + 1)
+    );
+    assert_eq!(
+        validate_api_base(&past_limit, "github.example"),
+        Err(GitHubClientError::Configuration(
+            "the API base length is out of bounds"
+        ))
     );
 }
