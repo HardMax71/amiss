@@ -178,16 +178,21 @@ fn an_unreadable_metadata_file_is_an_error_not_an_absence() {
 /// refuse rather than vanish.
 #[test]
 fn a_fresh_root_adopts_nothing_it_did_not_write() {
-    for plant in [
-        |root: &Path| fs::create_dir(root.join("junk")).unwrap(),
-        |root: &Path| fs::write(root.join(".atomicwrite-file"), b"partial").unwrap(),
-        |root: &Path| fs::create_dir(root.join(".amiss-inbox.lock")).unwrap(),
-    ] {
+    type Plant = fn(&Path);
+    let plants: [Plant; 3] = [
+        |root| fs::create_dir(root.join("junk")).unwrap(),
+        |root| fs::write(root.join(".atomicwrite-file"), b"partial").unwrap(),
+        |root| fs::create_dir(root.join(".amiss-inbox.lock")).unwrap(),
+    ];
+    for plant in plants {
         let directory = tempfile::tempdir().unwrap();
         plant(directory.path());
         assert!(
-            Inbox::open(directory.path(), limits()).is_err(),
-            "a foreign entry in a fresh root must refuse"
+            matches!(
+                Inbox::open(directory.path(), limits()),
+                Err(InboxError::Corrupt)
+            ),
+            "a foreign entry in a fresh root is corrupt"
         );
     }
 }

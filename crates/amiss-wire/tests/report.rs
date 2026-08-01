@@ -210,44 +210,7 @@ fn the_string_projections_are_populated_and_distinct() {
 
     use amiss_wire::report::ErrorDetail;
 
-    let error_codes = [
-        AnalysisErrorCode::InvalidInvocation,
-        AnalysisErrorCode::InvalidEvent,
-        AnalysisErrorCode::InvalidProfile,
-        AnalysisErrorCode::RequestUnreadable,
-        AnalysisErrorCode::ConfigurationInvalid,
-        AnalysisErrorCode::DuplicateJsonKey,
-        AnalysisErrorCode::InvalidUtf8,
-        AnalysisErrorCode::InvalidJson,
-        AnalysisErrorCode::UnknownSchema,
-        AnalysisErrorCode::UnknownField,
-        AnalysisErrorCode::NoncanonicalArray,
-        AnalysisErrorCode::DigestMismatch,
-        AnalysisErrorCode::ControlBindingMismatch,
-        AnalysisErrorCode::ExceptionOverlap,
-        AnalysisErrorCode::UnsupportedCapability,
-        AnalysisErrorCode::GitRepositoryUnavailable,
-        AnalysisErrorCode::GitObjectMissing,
-        AnalysisErrorCode::GitObjectWrongKind,
-        AnalysisErrorCode::GitObjectUnreadable,
-        AnalysisErrorCode::GitIndexInvalid,
-        AnalysisErrorCode::GitIndexUnmerged,
-        AnalysisErrorCode::GitIntentToAdd,
-        AnalysisErrorCode::GitSnapshotChanged,
-        AnalysisErrorCode::UnrepresentablePath,
-        AnalysisErrorCode::DocumentInvalid,
-        AnalysisErrorCode::ParserError,
-        AnalysisErrorCode::ParserPanic,
-        AnalysisErrorCode::InvalidSourceSpan,
-        AnalysisErrorCode::ResolutionError,
-        AnalysisErrorCode::ResourceLimitExceeded,
-        AnalysisErrorCode::OutputLimitExceeded,
-        AnalysisErrorCode::TooManyErrors,
-        AnalysisErrorCode::ReportConstructionFailed,
-        AnalysisErrorCode::SandboxViolation,
-        AnalysisErrorCode::TrustedTimeInvalid,
-        AnalysisErrorCode::InternalError,
-    ];
+    let error_codes: Vec<AnalysisErrorCode> = AnalysisErrorCode::all().collect();
     let meanings: BTreeSet<&str> = error_codes.iter().map(|code| code.meaning()).collect();
     assert_eq!(meanings.len(), error_codes.len(), "meanings are distinct");
     assert!(meanings.iter().all(|text| !text.is_empty()));
@@ -294,32 +257,7 @@ fn the_kind_projections_are_populated_and_distinct() {
     assert_eq!(disposition_names.len(), dispositions.len());
     assert!(disposition_names.iter().all(|text| !text.is_empty()));
 
-    let kinds = [
-        FindingKind::ExplicitTargetMissing,
-        FindingKind::ExplicitTargetTypeMismatch,
-        FindingKind::InvalidReference,
-        FindingKind::TargetDeclaredUntracked,
-        FindingKind::UnsupportedReferenceSemantics,
-        FindingKind::UnsupportedDocumentFormat,
-        FindingKind::UnsupportedTargetKind,
-        FindingKind::UnsupportedVersionScope,
-        FindingKind::UnsupportedCapability,
-        FindingKind::DependencyChangedSubjectUnchanged,
-        FindingKind::DependencyAndSubjectCochanged,
-        FindingKind::SubjectChanged,
-        FindingKind::ExplicitReferenceRemoved,
-        FindingKind::DocumentRemoved,
-        FindingKind::OpaqueMdxRegion,
-        FindingKind::OpaqueHtmlRegion,
-        FindingKind::ObservationCorrelationAmbiguous,
-        FindingKind::UnlinkedDocument,
-        FindingKind::PolicyWeakened,
-        FindingKind::CoverageReduced,
-        FindingKind::ControlPlaneChanged,
-        FindingKind::DebtWorsened,
-        FindingKind::DebtExpired,
-        FindingKind::WaiverInvalid,
-    ];
+    let kinds: Vec<FindingKind> = FindingKind::all().collect();
     let kind_names: BTreeSet<&str> = kinds.iter().map(|kind| kind.as_str()).collect();
     assert_eq!(kind_names.len(), kinds.len());
     assert!(kind_names.iter().all(|text| !text.is_empty()));
