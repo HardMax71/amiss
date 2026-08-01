@@ -1021,5 +1021,6 @@ fn validate(
     Ok(())
 }
 
+#[cfg(test)]
 #[path = "../tests/internal/extract.rs"]
 mod tests;
