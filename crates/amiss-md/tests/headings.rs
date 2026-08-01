@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::{Extraction, Heading, HeadingSource, analyze};
 use amiss_wire::model::Adapter;
 

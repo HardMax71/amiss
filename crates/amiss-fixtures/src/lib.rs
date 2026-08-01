@@ -1,5 +1,7 @@
 pub mod requests;
 
+pub use cap;
+
 use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::Path;
@@ -838,4 +840,22 @@ pub fn configure_git_command(command: &mut Command, dir: &Path) {
         .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
         .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
         .stdin(Stdio::null());
+}
+
+/// Live-allocation ceiling for every test binary in the workspace.
+pub const MEMORY_CEILING: usize = 2 * 1024 * 1024 * 1024;
+
+/// Caps the binary's global allocator, so a runaway allocation fails the one
+/// test that made it on any machine, instead of relying on the environment to
+/// contain what the work budget no longer does.
+#[macro_export]
+macro_rules! bounded_memory {
+    () => {
+        $crate::bounded_memory!(::std::alloc::System, ::std::alloc::System);
+    };
+    ($inner_type:ty, $inner:expr) => {
+        #[global_allocator]
+        static BOUNDED: $crate::cap::Cap<$inner_type> =
+            $crate::cap::Cap::new($inner, $crate::MEMORY_CEILING);
+    };
 }

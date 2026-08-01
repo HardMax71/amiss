@@ -4,6 +4,8 @@
     reason = "scripted lease fixtures must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::sync::mpsc;
 use std::time::Duration;
 

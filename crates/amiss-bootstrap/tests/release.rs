@@ -4,6 +4,8 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::process::Command;
 

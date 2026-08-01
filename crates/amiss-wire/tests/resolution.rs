@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_wire::resolution::{
     BlobContentTag, BlobMode, ExternalReference, InvalidReference, Missing, MissingTag, Resolution,
     ResolutionTag, Target, TargetTag, UnsupportedSemantics, UnsupportedTarget, VersionScope,

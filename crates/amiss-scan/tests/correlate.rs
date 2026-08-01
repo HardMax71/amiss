@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::extract::{BlockKind, Occurrence};
 use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, Side, SourceChange, TargetChange, correlate,

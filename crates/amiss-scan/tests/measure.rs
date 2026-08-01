@@ -7,8 +7,7 @@ use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
-#[global_allocator]
-static ALLOC: dhat::Alloc = dhat::Alloc;
+amiss_fixtures::bounded_memory!(dhat::Alloc, dhat::Alloc);
 
 /// The promotion-evidence measurement: incremental latency and heap peak
 /// for one evaluation of the representative repository, printed for the

@@ -4,6 +4,8 @@
     reason = "fixed pagination boundaries must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use amiss_controller::ProviderError;
 
 use super::model::ProjectResponse;

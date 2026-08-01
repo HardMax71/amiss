@@ -4,6 +4,8 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use amiss_bootstrap::constraint::{ConstraintError, derive_execution_constraint};
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, validate};
 use amiss_git::{GitLimits, GitResources, Repository};

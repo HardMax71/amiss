@@ -3,6 +3,8 @@
     reason = "fixed provider records and identities must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 mod support;
 
 use std::collections::VecDeque;

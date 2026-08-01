@@ -11,5 +11,8 @@ exclude.workspace = true
 [dependencies]
 amiss-wire = { path = "../amiss-wire", version = "0.16.0" }
 
+[dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
+
 [lints]
 workspace = true

@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 mod fixtures;
 
 use amiss_md::{Analysis, BlockKind, Extraction, analyze};

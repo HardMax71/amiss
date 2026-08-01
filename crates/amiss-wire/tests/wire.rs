@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_wire::ExitClass;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};

@@ -3,6 +3,8 @@
     reason = "integration assertions over repository-owned JSON Schemas"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::any::type_name;
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;

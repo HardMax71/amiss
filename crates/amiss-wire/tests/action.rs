@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_wire::action::{executable_platform, host_platform};
 use amiss_wire::controls::ConstraintPlatform;
 

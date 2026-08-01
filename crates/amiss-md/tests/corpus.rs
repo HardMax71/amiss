@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 mod fixtures;
 
 use std::fs;

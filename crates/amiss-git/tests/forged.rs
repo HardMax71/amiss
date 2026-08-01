@@ -4,6 +4,8 @@
     reason = "hand-forged byte fixtures must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::io::Write as _;
 use std::path::Path;

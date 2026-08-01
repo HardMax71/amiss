@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::model::{Adapter, ForgeDialect, OwnerId, RepoPath, RepositoryIdentity, UtcInstant};

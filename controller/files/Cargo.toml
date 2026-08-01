@@ -13,6 +13,7 @@ cap-fs-ext.workspace = true
 cap-std.workspace = true
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 tempfile.workspace = true
 
 [lints]

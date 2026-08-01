@@ -19,6 +19,7 @@ serde_json.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 amiss-controller-fixtures.workspace = true
 hex.workspace = true
 hmac.workspace = true

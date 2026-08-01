@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_controller_fixtures::rsa_keys;
 use aws_lc_rs::rsa::{KeyPair, PublicKey};
 

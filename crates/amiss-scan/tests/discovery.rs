@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::path::Path;
 

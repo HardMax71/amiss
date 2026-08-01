@@ -3,6 +3,8 @@
     reason = "integration assertions over repository-owned manifests"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

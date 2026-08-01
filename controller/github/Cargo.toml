@@ -22,6 +22,7 @@ serde_urlencoded = "0.7"
 url.workspace = true
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 amiss-controller-fixtures.workspace = true
 hex.workspace = true
 hmac.workspace = true

@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::Fault;
 use amiss_scan::{
     Error, RAW_DESTINATION_DOMAIN, SOURCE_PROJECTION_DOMAIN, ScanLimits, ScanResources,

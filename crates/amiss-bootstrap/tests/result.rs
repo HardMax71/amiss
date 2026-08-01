@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_bootstrap::result::{
     BootstrapResult, RESULT_BYTES, parse_result, result_bytes, result_exit_code,
 };

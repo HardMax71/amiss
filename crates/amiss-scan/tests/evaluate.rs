@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::extract::BlockKind;
 use amiss_md::extract::Occurrence;
 use amiss_scan::Observation;

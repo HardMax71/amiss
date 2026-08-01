@@ -3,6 +3,8 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;

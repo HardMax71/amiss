@@ -3,6 +3,8 @@
     reason = "fixed cryptographic fixtures and protocol identities must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 mod support;
 
 use amiss_controller::{ProviderError, ReplayIdentity};

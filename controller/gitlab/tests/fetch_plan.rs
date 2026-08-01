@@ -3,6 +3,8 @@
     reason = "fixed provider identities and constraints must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 mod support;
 
 use std::sync::Arc;

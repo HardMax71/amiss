@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::profile::parse_options;
 use amiss_md::{AnalyzeError, Fault, Work, analyze, charge};
 use amiss_wire::model::Adapter;

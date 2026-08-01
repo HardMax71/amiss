@@ -3,6 +3,8 @@
     reason = "integration fixtures construct known-valid identities"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::sync::Arc;
 
 use amiss_controller::{

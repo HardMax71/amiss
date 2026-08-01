@@ -4,6 +4,8 @@
     reason = "integration assertions over the published route-spelling vectors"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};

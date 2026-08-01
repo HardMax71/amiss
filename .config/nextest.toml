@@ -3,7 +3,3 @@ slow-timeout = { period = "30s", terminate-after = 4 }
 
 [profile.mutants]
 slow-timeout = { period = "30s", terminate-after = 1 }
-# Two workers bound the parallel sum: a budget-bypassing mutant can storm
-# allocations in every running test at once, and four capped processes still
-# out-sum the runner's memory.
-test-threads = 2

@@ -5,6 +5,8 @@
     reason = "end-to-end harness over asserted fixture shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 mod support;
 
 use std::ffi::OsStr;

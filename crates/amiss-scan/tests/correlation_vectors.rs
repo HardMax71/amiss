@@ -4,6 +4,8 @@
     reason = "integration assertions over repository-owned correlation vectors"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_md::extract::BlockKind;

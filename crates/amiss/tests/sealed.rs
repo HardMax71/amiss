@@ -4,6 +4,8 @@
     reason = "black-box harness over asserted fixture shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 

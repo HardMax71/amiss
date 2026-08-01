@@ -3,6 +3,8 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::{Command, Output};

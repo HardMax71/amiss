@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::sync::atomic::AtomicBool;
 
 use amiss_controller_git::{

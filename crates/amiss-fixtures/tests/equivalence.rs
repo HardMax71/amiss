@@ -3,6 +3,8 @@
     reason = "a fixture that cannot be built is a test failure"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use amiss_fixtures::{commit_pair, git};
 
 #[test]

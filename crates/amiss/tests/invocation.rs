@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::ffi::OsString;
 
 use amiss::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};

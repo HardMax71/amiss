@@ -1,5 +1,7 @@
 #![expect(clippy::unwrap_used, reason = "integration process fixture")]
 
+amiss_fixtures::bounded_memory!();
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 

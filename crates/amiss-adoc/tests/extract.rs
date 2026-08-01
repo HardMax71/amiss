@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_adoc::{Delimiter, ReferenceKind, Refusal, blocks, extract};
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]

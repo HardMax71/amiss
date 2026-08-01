@@ -4,6 +4,8 @@
     reason = "integration assertions over a repository-owned semantic corpus"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;

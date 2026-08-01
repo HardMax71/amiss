@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::path::Path;
 
 use amiss_controller_files::read_bounded;

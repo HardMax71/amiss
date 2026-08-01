@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
 
 /// Every short escape on the write side, byte for byte, and back through the

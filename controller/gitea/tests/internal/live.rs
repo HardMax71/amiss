@@ -4,6 +4,8 @@
     reason = "fixed provider records and protocol identities must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 #[path = "live/publication.rs"]
 mod publication;
 #[path = "live/refresh.rs"]

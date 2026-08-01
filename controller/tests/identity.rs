@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_controller::{DeliveryId, ProviderIdentity, ProviderNamespace, ProviderRunAttempt};
 
 #[test]

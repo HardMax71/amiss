@@ -3,6 +3,8 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use amiss_controller_fixtures::clock::TestClock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

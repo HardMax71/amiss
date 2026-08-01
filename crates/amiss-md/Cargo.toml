@@ -13,6 +13,7 @@ amiss-wire = { path = "../amiss-wire", version = "0.16.0" }
 markdown = "1"
 
 [dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
 sha2.workspace = true
 
 [[test]]

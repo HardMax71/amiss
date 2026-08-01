@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::{AnalyzeError, Fault, Work, charge};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;

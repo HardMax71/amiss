@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::collections::BTreeSet;
 use std::hint::black_box;
 use std::time::{Duration, Instant};

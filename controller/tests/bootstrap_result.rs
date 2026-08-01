@@ -3,6 +3,8 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::sync::Arc;
 
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, result_bytes};

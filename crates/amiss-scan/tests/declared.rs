@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::declared::Declarations;

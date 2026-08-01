@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+amiss_fixtures::bounded_memory!();
+
 use std::time::Duration;
 
 use amiss_controller::ProviderError;

@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+amiss_fixtures::bounded_memory!();
+
 use super::remaining_timeout;
 use std::time::Duration;
 

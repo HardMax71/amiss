@@ -4,6 +4,8 @@
     reason = "conformance harness over asserted vector shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;

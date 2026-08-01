@@ -43,6 +43,7 @@ atomicwrites = "0.4.4"
 aws-lc-rs = "1.17.3"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
 base64 = "0.22"
+cap = "0.1.2"
 cap-fs-ext = "4.0.2"
 cap-std = "4.0.2"
 divan = "0.1.21"

@@ -3,6 +3,8 @@
     reason = "fixed provider identities and constraints must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::sync::Arc;
 
 use amiss_controller::{

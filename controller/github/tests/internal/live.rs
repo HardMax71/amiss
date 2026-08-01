@@ -4,6 +4,8 @@
     reason = "fixed provider fixtures must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

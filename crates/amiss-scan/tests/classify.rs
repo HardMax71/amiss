@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_scan::{Classification, classify, excluded_by_built_in};
 use amiss_wire::model::Adapter;
 

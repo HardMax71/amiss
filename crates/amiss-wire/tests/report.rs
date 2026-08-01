@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::collections::BTreeSet;
 
 use amiss_wire::digest::{hb, hj};

@@ -16,8 +16,7 @@ use amiss_wire::report::{
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
-#[global_allocator]
-static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
+amiss_fixtures::bounded_memory!(&'static StatsAlloc<System>, &INSTRUMENTED_SYSTEM);
 
 const WIRE_CAP: u64 = MACHINE_JSON_BYTES;
 
@@ -326,7 +325,7 @@ fn prove_streamed_emission(maximal: &Value, wire: &[u8]) {
 
     let mut reserve = FatalSerializer::new();
     let mut streamed: Vec<u8> = Vec::with_capacity(wire.len());
-    let region = Region::new(GLOBAL);
+    let region = Region::new(&INSTRUMENTED_SYSTEM);
     let emitted = reserve.emit(maximal, &mut streamed).unwrap();
     let stats = region.change();
     assert_eq!(

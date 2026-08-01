@@ -3,6 +3,8 @@
     reason = "integration harness over asserted fixture and process shapes"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
 use std::fs;

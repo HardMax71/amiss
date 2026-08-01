@@ -3,6 +3,8 @@
     reason = "integration assertions over repository-owned identity goldens"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use amiss_scan::report::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
     SnapshotIdentity, candidate_identity_digest, synthetic_candidate,

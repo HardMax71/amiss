@@ -33,6 +33,14 @@ repos:
       # git, and until now the only thing holding that up was everyone
       # remembering. The bootstrap is the one crate that may spawn: launching the
       # engine is its whole job, and it is deliberately outside this filter.
+      - id: bounded-test-binaries
+        name: every test binary carries the memory ceiling
+        entry: >-
+          awk 'FNR==1{if(seen&&!found){print prev": test binary without amiss_fixtures::bounded_memory!()";e=1}
+          found=0;seen=1;prev=FILENAME} /bounded_memory!/{found=1}
+          END{if(seen&&!found){print prev": test binary without amiss_fixtures::bounded_memory!()";e=1} exit e}'
+        language: system
+        files: ^(crates/[^/]+|controller(/[^/]+)?)/tests/[^/]+\.rs$
       - id: no-subprocess-in-engine
         name: the engine spawns nothing
         entry: >-

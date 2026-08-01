@@ -4,6 +4,8 @@
     reason = "integration assertions over a controlled report fixture"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::path::Path;
 

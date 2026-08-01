@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
 

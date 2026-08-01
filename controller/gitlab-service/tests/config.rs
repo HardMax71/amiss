@@ -3,6 +3,8 @@
     reason = "fixed configuration fixtures must fail loudly"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::process::Command;
 use std::sync::LazyLock;
 

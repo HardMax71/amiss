@@ -3,6 +3,8 @@
     reason = "test fixture reader reports malformed published vectors"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;

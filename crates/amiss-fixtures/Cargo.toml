@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 amiss-wire = { path = "../amiss-wire", version = "0.16.0" }
+cap.workspace = true
 flate2.workspace = true
 sha1-checked.workspace = true
 tempfile.workspace = true

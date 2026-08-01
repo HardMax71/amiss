@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json;

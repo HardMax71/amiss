@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::path::PathBuf;
 use std::process::Command;
 

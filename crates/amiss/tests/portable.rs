@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::process::Command;
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

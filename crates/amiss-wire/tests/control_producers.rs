@@ -3,6 +3,8 @@
     reason = "tests build known-valid typed fixtures and inspect expected failures"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::fs;
 use std::path::Path;
 

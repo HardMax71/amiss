@@ -1,3 +1,5 @@
+amiss_fixtures::bounded_memory!();
+
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

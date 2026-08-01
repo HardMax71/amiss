@@ -4,6 +4,8 @@
     reason = "integration assertions over the published heading-anchor vectors"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use amiss_md::HeadingSource;
 use std::collections::BTreeSet;
 use std::fs;

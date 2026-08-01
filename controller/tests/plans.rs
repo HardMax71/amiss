@@ -3,6 +3,8 @@
     reason = "integration fixtures construct known-valid controller identities"
 )]
 
+amiss_fixtures::bounded_memory!();
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
