@@ -335,3 +335,32 @@ fn a_document_without_headings_records_none() {
     assert!(got.headings.is_empty());
     assert!(got.html_anchors.is_empty());
 }
+
+/// The raw-html heading scanner is exact about its opener: the tag must be
+/// h1 through h6, and a lookalike must not poison the unclosed flags that a
+/// real heading later depends on.
+#[test]
+fn only_a_real_heading_tag_opens_a_raw_html_heading() {
+    let lookalike = extraction(
+        Adapter::Markdown,
+        "<div><x2 y></x2>Fake<h2>Real</h2></div>\n",
+    );
+    assert_eq!(
+        texts(&lookalike),
+        vec!["Real".to_owned()],
+        "a non-heading tag with a digit neither shadows nor widens the real one"
+    );
+
+    let seventh = extraction(Adapter::Markdown, "<div><h7>x</h7></div>\n");
+    assert!(
+        texts(&seventh).is_empty(),
+        "there is no seventh heading level"
+    );
+
+    let self_closed = extraction(Adapter::Markdown, "<div><h1/>x</h1></div>\n");
+    assert_eq!(
+        texts(&self_closed),
+        vec!["x".to_owned()],
+        "a slash after the level still opens the heading scan"
+    );
+}
