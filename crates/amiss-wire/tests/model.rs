@@ -101,13 +101,7 @@ type Projection = fn(Adapter) -> &'static str;
 /// while the shared contracts must still name more than one value.
 #[test]
 fn the_adapter_tables_are_populated_and_distinct() {
-    let adapters = [
-        Adapter::AsciiDoc,
-        Adapter::Markdown,
-        Adapter::Mdx,
-        Adapter::PlainAdvisory,
-        Adapter::Rst,
-    ];
+    let adapters: Vec<Adapter> = Adapter::all().collect();
     let parser_names: BTreeSet<&str> = adapters.iter().map(|a| a.parser_name()).collect();
     assert_eq!(parser_names.len(), adapters.len());
     assert!(parser_names.iter().all(|text| !text.is_empty()));

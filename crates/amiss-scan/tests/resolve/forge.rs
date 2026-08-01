@@ -124,7 +124,7 @@ fn one_wrong_fact_makes_a_foreign_url() {
     for (context, destination) in cases {
         let (intent, _row) = bed
             .run(Some(&context), "docs/guide.md", false, destination)
-            .unwrap_or_else(|_defect| panic!());
+            .unwrap();
         assert_eq!(intent.kind, IntentKind::ExternalUrl, "{destination}");
     }
 }
@@ -146,7 +146,7 @@ fn a_commit_selector_is_an_exact_oid() {
                 false,
                 &format!("https://codeberg.org/acme/widgets/src/commit/{selector}/docs/guide.md"),
             )
-            .unwrap_or_else(|_defect| panic!());
+            .unwrap();
         assert_eq!(
             intent.kind,
             IntentKind::ExternalUrl,
@@ -171,7 +171,7 @@ fn nested_group_owners_match_segment_by_segment() {
             false,
             "https://gitlab.com/group/sub/widgets/-/blob/feature/x/docs/guide.md",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert_eq!(intent.kind, IntentKind::SameRepositoryGitlab);
     assert!(matches!(row, Resolution::Resolved(_)));
 
@@ -182,7 +182,7 @@ fn nested_group_owners_match_segment_by_segment() {
             false,
             "https://gitlab.com/group/other/widgets/-/blob/feature/x/docs/guide.md",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert_eq!(
         foreign.kind,
         IntentKind::ExternalUrl,
@@ -202,8 +202,9 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
             false,
             "https://gitlab.com/acme/widgets/-/tree/feature/x/docs/",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert_eq!(tree.kind, IntentKind::SameRepositoryGitlab);
+    assert_eq!(tree.target_kind, Some(TargetKind::Tree));
     assert!(
         matches!(tree_row, Resolution::Resolved(_)),
         "a tree with a directory-hint slash resolves: {tree_row:?}"
@@ -216,7 +217,7 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
             false,
             "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md/",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert!(
         !matches!(blob_row, Resolution::Resolved(_)),
         "a blob does not tolerate the hint: {blob_row:?}"
@@ -236,7 +237,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
             false,
             "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert_eq!(hinted.kind, IntentKind::SameRepositoryGitea);
     assert_eq!(hinted.target_kind, Some(TargetKind::Tree));
     assert!(
@@ -251,7 +252,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
             false,
             "https://codeberg.org/acme/widgets/src/branch/feature/x/",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert_eq!(bare.target_kind, None, "no hint from a bare slash");
     assert!(
         !matches!(bare_row, Resolution::Resolved(_)),
@@ -265,7 +266,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
             false,
             "https://github.com/acme/widgets/tree/feature/x/",
         )
-        .unwrap_or_else(|_defect| panic!());
+        .unwrap();
     assert_eq!(
         github.kind,
         IntentKind::Unsupported,
