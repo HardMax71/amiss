@@ -157,15 +157,15 @@ fn root_options() -> OpenOptions {
 /// # Errors
 ///
 /// A short read at end of file, or the underlying read error.
-#[cfg(unix)]
 pub(crate) fn read_exact_at(file: &File, buf: &mut [u8], offset: u64) -> io::Result<()> {
-    use std::os::unix::fs::FileExt as _;
-    file.read_exact_at(buf, offset)
+    read_full(|slice, at| positioned_read(file, slice, at), buf, offset)
 }
 
-#[cfg(windows)]
-pub(crate) fn read_exact_at(file: &File, buf: &mut [u8], offset: u64) -> io::Result<()> {
-    use std::os::windows::fs::FileExt as _;
+fn read_full(
+    mut read_at: impl FnMut(&mut [u8], u64) -> io::Result<usize>,
+    buf: &mut [u8],
+    offset: u64,
+) -> io::Result<()> {
     let mut written = 0_usize;
     while written < buf.len() {
         let at = offset
@@ -174,7 +174,7 @@ pub(crate) fn read_exact_at(file: &File, buf: &mut [u8], offset: u64) -> io::Res
         let slice = buf
             .get_mut(written..)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "buffer overflow"))?;
-        match file.seek_read(slice, at) {
+        match read_at(slice, at) {
             Ok(0) => {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
@@ -188,3 +188,18 @@ pub(crate) fn read_exact_at(file: &File, buf: &mut [u8], offset: u64) -> io::Res
     }
     Ok(())
 }
+
+#[cfg(unix)]
+fn positioned_read(file: &File, slice: &mut [u8], at: u64) -> io::Result<usize> {
+    use std::os::unix::fs::FileExt as _;
+    file.read_at(slice, at)
+}
+
+#[cfg(windows)]
+fn positioned_read(file: &File, slice: &mut [u8], at: u64) -> io::Result<usize> {
+    use std::os::windows::fs::FileExt as _;
+    file.seek_read(slice, at)
+}
+
+#[path = "../tests/internal/handle.rs"]
+mod tests;
