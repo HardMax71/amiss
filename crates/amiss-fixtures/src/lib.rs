@@ -848,6 +848,11 @@ pub const MEMORY_CEILING: usize = 2 * 1024 * 1024 * 1024;
 /// Caps the binary's global allocator, so a runaway allocation fails the one
 /// test that made it on any machine, instead of relying on the environment to
 /// contain what the work budget no longer does.
+///
+/// The ceiling is a crash barrier, not exact accounting: cap subtracts before
+/// it checks, so while one oversize rejection is being rolled back a racing
+/// thread can slip an allocation past the wrapped counter. The first
+/// rejection still aborts the whole test process.
 #[macro_export]
 macro_rules! bounded_memory {
     () => {
