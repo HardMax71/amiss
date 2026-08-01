@@ -215,7 +215,7 @@ pub(super) fn validated_repository_url(
         .ok_or(ProviderError::InvalidResponse)
 }
 
-fn validate_query(query: &GitLabRefreshQuery) -> Result<(), ProviderError> {
+pub(super) fn validate_query(query: &GitLabRefreshQuery) -> Result<(), ProviderError> {
     let valid = query.project_id > 0
         && query.merge_request_iid > 0
         && query.pipeline_id > 0
