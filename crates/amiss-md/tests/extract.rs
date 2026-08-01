@@ -462,3 +462,95 @@ fn reserved_duplicates_follow_first_winner_precedence() {
     assert_eq!(reserved_first.occurrences.len(), 0, "suppressed");
     assert_eq!(reserved_first.governed.len(), 1);
 }
+
+/// Escapes hide the byte that would otherwise end the token: a `\>` inside an
+/// angle destination, a `\]` inside an image label.
+#[test]
+fn an_escape_hides_the_closing_byte_from_its_token() {
+    let angled = extraction(Adapter::Markdown, "[a](<x\\>y>)\n");
+    assert_eq!(
+        triples(&angled)
+            .first()
+            .map(|(_, raw, _)| raw.clone())
+            .unwrap_or_default(),
+        "x\\>y",
+        "the escaped angle stays inside the destination"
+    );
+
+    let bracketed = extraction(Adapter::Markdown, "![a\\]b](x.md)\n");
+    assert_eq!(
+        triples(&bracketed)
+            .first()
+            .map(|(_, raw, _)| raw.clone())
+            .unwrap_or_default(),
+        "x.md",
+        "the escaped bracket does not end the image label"
+    );
+}
+
+/// A code span inside an image label protects a bracket only up to a closing
+/// run of exactly the opening length, and an unmatched run is literal even
+/// when a matching run exists past the label.
+#[test]
+fn a_code_span_in_an_image_label_measures_its_runs() {
+    let doubled = extraction(Adapter::Markdown, "![a ``]`` b](x.md)\n");
+    assert_eq!(
+        triples(&doubled)
+            .first()
+            .map(|(_, raw, _)| raw.clone())
+            .unwrap_or_default(),
+        "x.md",
+        "a double-backtick span protects the bracket inside it"
+    );
+
+    let unmatched = extraction(Adapter::Markdown, "![`x](a.md)\n");
+    assert_eq!(
+        triples(&unmatched)
+            .first()
+            .map(|(_, raw, _)| raw.clone())
+            .unwrap_or_default(),
+        "a.md",
+        "an unmatched backtick is literal and the label still closes"
+    );
+}
+
+/// A definition inside a blockquote continues onto the next line through at
+/// most three spaces of indent before the marker; four break the lazy chain.
+#[test]
+fn a_blockquote_definition_continues_through_three_spaces_at_most() {
+    let continued = extraction(Adapter::Markdown, "[u][r]\n\n> [r]:\n  > /dest.md\n");
+    assert_eq!(
+        triples(&continued)
+            .first()
+            .map(|(_, raw, _)| raw.clone())
+            .unwrap_or_default(),
+        "/dest.md",
+        "two spaces before the marker continue the definition"
+    );
+
+    let broken = extraction(Adapter::Markdown, "[u][r]\n\n> [r]:\n    > /dest.md\n");
+    assert!(
+        triples(&broken).is_empty(),
+        "four spaces before the marker end the definition unresolved"
+    );
+}
+
+/// Adjacent opaque constructs coalesce into one region, and block regions
+/// are newline-separated, which is why the overlap check in span validation
+/// can never see two touching regions.
+#[test]
+fn adjacent_opaque_constructs_coalesce() {
+    let inline = extraction(Adapter::Markdown, "a <b></b><i></i> c\n");
+    assert_eq!(
+        inline.opaque.html.len(),
+        1,
+        "back-to-back inline html merges"
+    );
+
+    let mixed = extraction(Adapter::Mdx, "a {expr}<b>t</b> c\n");
+    assert_eq!(
+        mixed.opaque.mdx.len(),
+        1,
+        "an expression and a jsx element touching merge"
+    );
+}
