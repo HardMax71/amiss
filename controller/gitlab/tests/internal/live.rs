@@ -82,3 +82,41 @@ fn a_project_without_the_merge_train_settings_is_below_the_supported_floor() {
     assert!(serde_json::from_str::<ProjectResponse>(BELOW_THE_FLOOR).is_err());
     assert!(serde_json::from_str::<ProjectResponse>(AT_THE_FLOOR).is_ok());
 }
+
+type QueryDeviation = fn(&mut crate::GitLabRefreshQuery);
+
+/// Every field of the refresh query is load-bearing on its own.
+#[test]
+fn the_refresh_query_is_exact_in_every_field() {
+    use amiss_wire::model::{ObjectFormat, Oid};
+
+    use super::refresh::validate_query;
+    use crate::GitLabRefreshQuery;
+
+    let valid = || GitLabRefreshQuery {
+        project_id: 1,
+        merge_request_iid: 42,
+        pipeline_id: 202,
+        job_id: 303,
+        runner_id: 77,
+        gate_commit: Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),
+    };
+    assert!(validate_query(&valid()).is_ok());
+
+    let deviations: [(&str, QueryDeviation); 5] = [
+        ("project", |query| query.project_id = 0),
+        ("merge request", |query| query.merge_request_iid = 0),
+        ("pipeline", |query| query.pipeline_id = 0),
+        ("job", |query| query.job_id = 0),
+        ("runner", |query| query.runner_id = 0),
+    ];
+    for (reason, deviate) in deviations {
+        let mut query = valid();
+        deviate(&mut query);
+        assert_eq!(
+            validate_query(&query),
+            Err(ProviderError::InvalidResponse),
+            "{reason}"
+        );
+    }
+}

@@ -119,10 +119,7 @@ impl HttpRest {
             };
             let route = query_route(&route, &query)?;
             let batch: Vec<BranchRule> = self.transport.get(&route, deadline)?;
-            if batch.len() > PAGE_SIZE {
-                return Err(ProviderError::InvalidResponse);
-            }
-            let complete = batch.len() < PAGE_SIZE;
+            let complete = page_complete(batch.len())?;
             rules.extend(batch);
             if complete {
                 return Ok(rules);
@@ -254,23 +251,12 @@ impl GitHubRest for HttpRest {
             let response: CheckRunPage = self.transport.get(&route, deadline)?;
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
-            let maximum = u64::from(PAGE_SIZE_U8)
-                .checked_mul(u64::from(MAX_PAGES))
-                .ok_or(ProviderError::InvalidResponse)?;
-            if response.check_runs.len() > PAGE_SIZE
-                || response.total_count < count
-                || response.total_count > maximum
-            {
-                return Err(ProviderError::InvalidResponse);
-            }
+            check_page(count, response.check_runs.len(), response.total_count)?;
             runs.extend(response.check_runs);
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
-            if count == response.total_count {
+            if runs_settled(count, response.total_count)? {
                 return Ok(runs);
-            }
-            if count > response.total_count {
-                return Err(ProviderError::InvalidResponse);
             }
         }
         Err(ProviderError::InvalidResponse)
@@ -305,6 +291,30 @@ struct CheckRunQuery {
     app_id: u64,
 }
 
+fn page_complete(batch: usize) -> Result<bool, ProviderError> {
+    if batch > PAGE_SIZE {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(batch < PAGE_SIZE)
+}
+
+fn check_page(collected: u64, page_len: usize, total: u64) -> Result<(), ProviderError> {
+    let maximum = u64::from(PAGE_SIZE_U8)
+        .checked_mul(u64::from(MAX_PAGES))
+        .ok_or(ProviderError::InvalidResponse)?;
+    if page_len > PAGE_SIZE || total < collected || total > maximum {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(())
+}
+
+fn runs_settled(collected: u64, total: u64) -> Result<bool, ProviderError> {
+    if collected > total {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(collected == total)
+}
+
 fn path_segment(raw: &str) -> String {
     utf8_percent_encode(raw, NON_ALPHANUMERIC).to_string()
 }
@@ -314,3 +324,6 @@ fn query_route(route: &str, query: &impl Serialize) -> Result<String, ProviderEr
         serde_urlencoded::to_string(query).map_err(|_defect| ProviderError::InvalidResponse)?;
     Ok(format!("{route}?{query}"))
 }
+
+#[path = "../../tests/internal/rest_pages.rs"]
+mod tests;

@@ -326,3 +326,145 @@ fn assert_revoked(fixture: &Fixture) {
         ChangeState::AuthorizationRevoked
     );
 }
+
+type RequestDeviation = for<'a> fn(&mut crate::GiteaPullRequest<'a>);
+type DataDeviation = fn(&mut RefreshData);
+
+/// Every field of the request binding is load-bearing on its own, asserted
+/// exactly rather than as any-failure.
+#[test]
+fn the_request_binding_is_exact_in_every_field() {
+    use super::super::refresh::validate_request;
+    use super::support::{provider, reviewer};
+
+    let fixture = Fixture::new("gitea");
+    let config = |namespace: &str| super::super::Config {
+        provider: provider(namespace),
+        reviewer: reviewer(),
+        review_name: "amiss".to_owned(),
+    };
+    assert!(validate_request(&config("gitea"), fixture.pull_request()).is_ok());
+    assert_eq!(
+        validate_request(&config("forgejo"), fixture.pull_request()),
+        Err(ProviderError::InvalidResponse),
+        "another provider identity"
+    );
+
+    let deviations: [(&str, RequestDeviation); 6] = [
+        ("reviewer", |request| request.reviewer_id = 78),
+        ("repository id", |request| request.repository_id = 0),
+        ("pull id", |request| request.pull_request_id = 0),
+        ("number", |request| request.number = 0),
+        ("owner", |request| request.repository_owner = "other"),
+        ("name", |request| request.repository_name = "other"),
+    ];
+    for (reason, deviate) in deviations {
+        let mut request = fixture.pull_request();
+        deviate(&mut request);
+        assert_eq!(
+            validate_request(&config("gitea"), request),
+            Err(ProviderError::InvalidResponse),
+            "{reason}"
+        );
+    }
+}
+
+#[test]
+fn an_open_pull_request_that_claims_merged_is_invalid() {
+    let fixture = Fixture::mutated("gitea", |data| data.pull_request.merged = true);
+    assert_eq!(
+        fixture.client.refresh(fixture.pull_request()).unwrap_err(),
+        ProviderError::InvalidResponse
+    );
+}
+
+/// One inconsistent fact per case, each asserted as the exact refusal; a
+/// consistent drift is superseded, an inconsistent response is invalid.
+#[test]
+fn each_consistency_fact_refuses_alone() {
+    let cases: [(&str, DataDeviation); 3] = [
+        ("fetched head disagrees with the embedded head", |data| {
+            data.current_head = commit('e', &['a']);
+        }),
+        ("embedded base disagrees with the target", |data| {
+            data.pull_request.base.sha = oid('e').as_str().to_owned();
+        }),
+        ("branch tip disagrees with the target", |data| {
+            data.target_branch.commit.as_mut().unwrap().id = oid('e').as_str().to_owned();
+        }),
+    ];
+    for (reason, mutate) in cases {
+        let fixture = Fixture::mutated("gitea", mutate);
+        assert_eq!(
+            fixture.client.refresh(fixture.pull_request()).unwrap_err(),
+            ProviderError::InvalidResponse,
+            "{reason}"
+        );
+    }
+    let resolver = Fixture::resolving("gitea", |objects| {
+        objects.candidate.id = oid('e').as_str().to_owned();
+    });
+    assert_eq!(
+        resolver
+            .client
+            .refresh(resolver.pull_request())
+            .unwrap_err(),
+        ProviderError::InvalidResponse,
+        "the resolver disagrees with the rest body"
+    );
+}
+
+/// A closed pull request whose head repository is gone is still a closed
+/// verdict; an open one with a zero head repository id is an invalid response.
+#[test]
+fn the_head_repository_gates_open_and_spares_closed() {
+    let closed = Fixture::mutated("gitea", |data| {
+        data.pull_request.state = "closed".to_owned();
+        data.pull_request.merged = false;
+        data.pull_request.mergeable = false;
+        data.pull_request.head.repo = None;
+    });
+    assert_eq!(
+        closed.client.refresh(closed.pull_request()).unwrap().state,
+        ChangeState::Closed,
+        "an absent head repository cannot unclose a closed pull request"
+    );
+
+    let zero = Fixture::mutated("gitea", |data| {
+        data.pull_request.head.repo.as_mut().unwrap().id = 0;
+    });
+    assert_eq!(
+        zero.client.refresh(zero.pull_request()).unwrap_err(),
+        ProviderError::InvalidResponse,
+        "a zero head repository id on an open pull request"
+    );
+}
+
+#[test]
+fn the_reviewer_whitelist_matches_case_insensitively_but_exactly_once() {
+    let cased = Fixture::mutated("gitea", |data| {
+        data.protection.approvals.approvals_whitelist_usernames =
+            vec!["Amiss-Controller".to_owned()];
+    });
+    assert_eq!(
+        cased.client.refresh(cased.pull_request()).unwrap().state,
+        ChangeState::Active,
+        "a case-differing single-entry whitelist still authorizes"
+    );
+}
+
+#[test]
+fn an_injected_allowlist_revokes_the_forgejo_shape() {
+    let injected = Fixture::mutated("forgejo", |data| {
+        data.protection.force.force_push_allowlist_usernames = Some(Vec::new());
+    });
+    assert_eq!(
+        injected
+            .client
+            .refresh(injected.pull_request())
+            .unwrap()
+            .state,
+        ChangeState::AuthorizationRevoked,
+        "a forgejo shape carrying any gitea allowlist is not trusted"
+    );
+}
