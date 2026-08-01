@@ -116,10 +116,7 @@ impl Transport {
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        let status = response.status().as_u16();
-        if !(200..300).contains(&status) {
-            return Err(map_status(status));
-        }
+        settled(response.status().as_u16(), map_status)?;
         decode_body(response)
     }
 
@@ -149,10 +146,7 @@ impl Transport {
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        let status = response.status().as_u16();
-        if !(200..300).contains(&status) {
-            return Err(mint_status(status));
-        }
+        settled(response.status().as_u16(), mint_status)?;
         let minted: InstallationToken = decode_body(response)?;
         Ok(SecretString::from(minted.token))
     }
@@ -296,6 +290,14 @@ fn map_error(error: &reqwest::Error) -> ProviderError {
         ProviderError::InvalidResponse
     } else {
         ProviderError::Unavailable
+    }
+}
+
+fn settled(status: u16, refuse: fn(u16) -> ProviderError) -> Result<(), ProviderError> {
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(refuse(status))
     }
 }
 
