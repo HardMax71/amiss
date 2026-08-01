@@ -1020,3 +1020,6 @@ fn validate(
     }
     Ok(())
 }
+
+#[path = "../tests/internal/extract.rs"]
+mod tests;
