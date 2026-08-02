@@ -13,8 +13,8 @@ use tempfile::TempDir;
 use super::support::{
     BOUNDED_ISSUED_AT, BOUNDED_KEEP_THROUGH, LEASE, TestClock, bounded_delivery,
     bounded_delivery_at, check_binding, config, delivery_with_id, downgrade_root_metadata,
-    executed, is_delivery_file, ledger_file, open_with_max, publication, replay_window, staged,
-    write_capacity,
+    executed, is_delivery_file, ledger_file, open_with_max, publication, replay_window,
+    rewrite_root_metadata, staged, write_capacity, write_capacity_frame,
 };
 
 #[test]
@@ -506,4 +506,93 @@ fn an_impossible_capacity_shape_fails_closed() {
             "{reason}"
         );
     }
+}
+
+/// The frame answers for each of its parts alone: a version it does not
+/// speak, a length that lies about its payload, and a digest gone stale.
+#[test]
+fn a_frame_part_is_never_excused_by_its_neighbours() {
+    let payload = concat!(
+        r#"{"schema":"amiss/controller-file-capacity-v1","max_records":2,"#,
+        r#""records":0,"pending_key":null,"cleanup_pending":false}"#
+    );
+    let length = u64::try_from(payload.len()).unwrap();
+    let stale = payload.replace("\"records\":0", "\"records\":1");
+    let rows: [(&str, u8, u64, &[u8]); 3] = [
+        ("a version it does not speak", 2, length, payload.as_bytes()),
+        (
+            "a length that lies",
+            1,
+            length.saturating_add(1),
+            payload.as_bytes(),
+        ),
+        ("a digest gone stale", 1, length, stale.as_bytes()),
+    ];
+    for (reason, version, declared, digest_over) in rows {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        drop(open_with_max(directory.path(), &clock, 2));
+        write_capacity_frame(directory.path(), version, declared, digest_over);
+        let clock_source: Arc<dyn ControllerClock> = clock.clone();
+        assert!(
+            matches!(
+                FileLedger::open_with_clock(directory.path(), config(2), clock_source),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "{reason}"
+        );
+    }
+}
+
+/// The root metadata holds no impossible value, and a defect there is
+/// corruption rather than a configuration disagreement.
+#[test]
+fn impossible_root_metadata_is_corrupt_not_misconfigured() {
+    type Defect = fn(&str) -> String;
+    let rows: [(&str, Defect); 5] = [
+        ("no lease at all", |text| {
+            replace_number(text, "lease_millis", "0")
+        }),
+        ("no records at all", |text| {
+            replace_number(text, "max_records", "0")
+        }),
+        ("no signed age", |text| {
+            replace_number(text, "max_signed_age_millis", "0")
+        }),
+        ("no queue age", |text| {
+            replace_number(text, "max_queue_age_millis", "0")
+        }),
+        ("a high water before the epoch", |text| {
+            replace_number(text, "clock_high_water_unix_millis", "-1")
+        }),
+    ];
+    for (reason, edit) in rows {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        drop(open_with_max(directory.path(), &clock, 2));
+        rewrite_root_metadata(directory.path(), edit);
+        let clock_source: Arc<dyn ControllerClock> = clock.clone();
+        assert!(
+            matches!(
+                FileLedger::open_with_clock(directory.path(), config(2), clock_source),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "{reason}"
+        );
+    }
+}
+
+fn replace_number(text: &str, key: &str, value: &str) -> String {
+    let needle = format!("\"{key}\":");
+    let start = text.find(&needle).unwrap();
+    let value_start = start.saturating_add(needle.len());
+    let rest = text.get(value_start..).unwrap();
+    let end = rest
+        .find(|character: char| !character.is_ascii_digit() && character != '-')
+        .unwrap();
+    format!(
+        "{}{needle}{value}{}",
+        text.get(..start).unwrap(),
+        rest.get(end..).unwrap()
+    )
 }
