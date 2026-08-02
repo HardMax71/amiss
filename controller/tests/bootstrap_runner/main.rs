@@ -453,7 +453,9 @@ fn a_signalled_leader_is_not_a_timeout() {
 fn leader_exit_stops_descendants_before_accepting_the_report() {
     let harness = Harness::new("runner-exit-child", None);
     let mut heartbeat = Heartbeat::renewing();
-    let outcome = harness.run(Duration::from_millis(300), &mut heartbeat);
+    // Long enough that the leader's exit, not the wall clock, is what stops
+    // the descendant, and that a slow spawn cannot look like a timeout.
+    let outcome = harness.run(Duration::from_secs(30), &mut heartbeat);
     assert_eq!(
         outcome,
         RunnerOutcome::Complete {
