@@ -2,10 +2,13 @@ use std::fs;
 use std::sync::Arc;
 
 use amiss_controller::{
-    ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion,
-    LeaseRenewal, StageOutcome,
+    ChangeId, ControllerClock, ControllerEvaluationId, DeliveryClaim, DeliveryLease,
+    DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, StageOutcome,
+    StagedPublication,
 };
 use amiss_wire::digest::hb;
+use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
 
 use super::support::{
@@ -214,4 +217,134 @@ fn the_check_binding_is_frozen_for_every_delivery_transition() {
         ledger.complete(&delivery, &frozen).unwrap(),
         LeaseCompletion::Completed
     );
+}
+
+type Deviation = fn(&mut DeliveryLease);
+type Deviate = fn(&mut Publication);
+type Restage = fn(&mut StagedPublication);
+
+/// A renewal is refused unless the lease matches the row in every field, and
+/// a staged publication is refused unless it names the run the row holds.
+#[test]
+fn a_lease_and_a_publication_are_matched_field_by_field() {
+    let leases: [(&str, Deviation); 2] = [
+        ("another fence", |lease| {
+            lease.fence = LeaseFence::new(lease.fence.get().saturating_add(1)).unwrap();
+        }),
+        ("another deadline", |lease| {
+            lease.expires_at_unix_millis = lease.expires_at_unix_millis.saturating_add(1);
+        }),
+    ];
+    for (reason, deviate) in leases {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let delivery = delivery("42");
+        let mut ledger = open(directory.path(), &clock);
+        let mut lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+        deviate(&mut lease);
+        assert_eq!(
+            ledger.renew(&delivery, &lease).unwrap(),
+            LeaseRenewal::Lost,
+            "{reason}"
+        );
+    }
+
+    let publications: [(&str, Deviate); 4] = [
+        ("another evaluation", |publication| {
+            publication.evaluation_id =
+                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+        }),
+        ("another provider run", |publication| {
+            publication.provider_run = ProviderRunIdentity::new(
+                ProviderRunId::new("other-run".to_owned()).unwrap(),
+                ProviderRunAttempt::new(1).unwrap(),
+                ObjectFormat::Sha1,
+                publication.provider_run.candidate_commit.clone(),
+            )
+            .unwrap();
+        }),
+        ("another change", |publication| {
+            publication.run.change.change = ChangeId::new("99".to_owned()).unwrap();
+        }),
+        ("another candidate commit", |publication| {
+            publication.run.commits.candidate =
+                Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
+        }),
+    ];
+    for (reason, deviate) in publications {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let delivery = delivery("42");
+        let mut ledger = open(directory.path(), &clock);
+        let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+        let mut publication = publication(&delivery, &lease);
+        deviate(&mut publication);
+        assert_eq!(
+            ledger.stage(&delivery, &lease, &publication).unwrap(),
+            StageOutcome::Lost,
+            "{reason}"
+        );
+    }
+}
+
+/// Another owner holding the same evaluation, fence, and deadline still does
+/// not own the row.
+#[test]
+fn a_lease_belongs_to_the_owner_that_took_it() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+    let mut owner = open(directory.path(), &clock);
+    let lease = executed(owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    drop(owner);
+
+    let mut stranger = open(directory.path(), &clock);
+    assert_eq!(
+        stranger.renew(&delivery, &lease).unwrap(),
+        LeaseRenewal::Lost,
+        "the lease names another owner"
+    );
+}
+
+/// Completion is refused unless the staged publication is the one the row
+/// froze, in its evaluation, its fence, and its bytes.
+#[test]
+fn completion_answers_for_the_staged_publication_alone() {
+    let rows: [(&str, bool, Restage); 5] = [
+        ("another evaluation", false, |staged| {
+            staged.evaluation_id =
+                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+        }),
+        ("another fence", false, |staged| {
+            staged.fence = LeaseFence::new(staged.fence.get().saturating_add(1)).unwrap();
+        }),
+        ("another report", false, |staged| {
+            staged.publication.report = Some(vec![9, 9, 9, 9, 9]);
+        }),
+        ("another report after completion", true, |staged| {
+            staged.publication.report = Some(vec![9, 9, 9, 9, 9]);
+        }),
+        ("another evaluation after completion", true, |staged| {
+            staged.evaluation_id =
+                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+        }),
+    ];
+    for (reason, complete_first, deviate) in rows {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let delivery = delivery("42");
+        let mut ledger = open(directory.path(), &clock);
+        let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+        let publication = publication(&delivery, &lease);
+        let mut frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
+        if complete_first {
+            ledger.complete(&delivery, &frozen).unwrap();
+        }
+        deviate(&mut frozen);
+        assert_eq!(
+            ledger.complete(&delivery, &frozen).unwrap(),
+            LeaseCompletion::Lost,
+            "{reason}"
+        );
+    }
 }
