@@ -53,6 +53,22 @@ fn rejects_wrong_host_identity_change_and_object_format() {
         Err(GitHubAcquireError::InvalidRequest)
     );
 
+    let mut zero_integration = request();
+    let zero = IntegrationId::new("0".to_owned()).unwrap();
+    zero_integration.provider_run = provider_run(
+        &zero,
+        &zero_integration.run.change,
+        &zero_integration.run.commits.candidate,
+        &zero_integration.run.refs.candidate,
+        &zero_integration.run.refs.target,
+    );
+    zero_integration.delivery.integration = zero;
+    assert_eq!(
+        github_fetch_plan(&zero_integration),
+        Err(GitHubAcquireError::InvalidRequest),
+        "a zero installation is refused on its own, with its run echo intact"
+    );
+
     let mut wrong_change = request();
     wrong_change.run.change.change = ChangeId::new("pull/42".to_owned()).unwrap();
     assert_eq!(
