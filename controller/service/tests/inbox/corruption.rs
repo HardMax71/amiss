@@ -220,6 +220,34 @@ fn a_directory_on_the_row_target_is_corrupt() {
 
 type PayloadEdit = fn(&str) -> String;
 
+/// A root that was never an inbox is adopted only when it holds nothing;
+/// anything already living there is somebody else's data.
+#[test]
+fn a_fresh_root_with_a_stray_entry_fails_closed() {
+    let directory = TempDir::new().unwrap();
+    fs::write(directory.path().join("stray"), b"not ours").unwrap();
+    assert!(matches!(
+        Inbox::open(directory.path(), limits()),
+        Err(InboxError::Corrupt)
+    ));
+}
+
+/// An interrupted atomic write leaves one known directory shape, and adopting
+/// a fresh root means finishing that funeral: the debris is gone afterwards.
+#[test]
+fn a_fresh_root_recovers_an_interrupted_write() {
+    let directory = TempDir::new().unwrap();
+    let debris = directory.path().join(".atomicwrite-interrupted");
+    fs::create_dir(&debris).unwrap();
+    fs::write(debris.join("tmpfile.tmp"), b"half a row").unwrap();
+    let inbox = Inbox::open(directory.path(), limits());
+    assert!(inbox.is_ok());
+    assert!(
+        !debris.exists(),
+        "the interrupted write is removed on adoption"
+    );
+}
+
 /// Each row carries one semantic defect behind a valid seal, so the refusal
 /// is the record validator's own, not the frame digest's.
 #[test]
