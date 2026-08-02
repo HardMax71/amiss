@@ -311,6 +311,16 @@ impl Fixture {
 }
 
 pub(crate) fn enqueue(inbox: &Arc<Mutex<Inbox>>, admission: &Arc<Admission>, source_id: &str) {
+    enqueue_stored(inbox, admission, source_id, source_id);
+}
+
+pub(crate) fn enqueue_stored(
+    inbox: &Arc<Mutex<Inbox>>,
+    admission: &Arc<Admission>,
+    header_source: &str,
+    stored_source: &str,
+) {
+    let source_id = header_source;
     let received_at = now();
     let signature = signature(BODY);
     let headers = [
@@ -345,7 +355,7 @@ pub(crate) fn enqueue(inbox: &Arc<Mutex<Inbox>>, admission: &Arc<Admission>, sou
         .unwrap()
         .enqueue(IncomingDelivery {
             route: &admitted.route,
-            source_id: &admitted.source_id,
+            source_id: stored_source,
             received_at_unix_millis: received_at,
             headers: &incoming_headers,
             body: BODY,

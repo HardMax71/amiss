@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use amiss_controller::ProviderError;
 use amiss_controller_service::{ClaimOutcome, InboxState, WorkOutcome};
 
-use support::{Fixture, Refresh, SOURCE_ID, enqueue};
+use support::{Fixture, Refresh, SOURCE_ID, enqueue, enqueue_stored};
 
 #[test]
 fn admitted_row_is_reauthenticated_run_and_completed() {
@@ -72,6 +72,17 @@ fn failed_reauthentication_discards_the_raw_row() {
     assert_eq!(fixture.adapter.authentications.load(Ordering::Relaxed), 0);
     assert_eq!(fixture.operations.delivery_attempts.get(), 1);
     assert_eq!(fixture.operations.delivery_completions.get(), 1);
+    assert_eq!(fixture.operations.delivery_discards.get(), 1);
+}
+
+#[test]
+fn a_row_stored_under_a_foreign_source_is_discarded() {
+    let mut fixture = Fixture::new([Refresh::Active, Refresh::Active], Duration::ZERO);
+    enqueue_stored(&fixture.inbox, &fixture.admission, SOURCE_ID, "foreign");
+
+    assert_eq!(fixture.worker.work_once().unwrap(), WorkOutcome::Processed);
+    assert!(fixture.inbox.lock().unwrap().entries().unwrap().is_empty());
+    assert_eq!(fixture.adapter.authentications.load(Ordering::Relaxed), 0);
     assert_eq!(fixture.operations.delivery_discards.get(), 1);
 }
 

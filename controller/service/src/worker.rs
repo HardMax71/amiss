@@ -416,3 +416,6 @@ fn trusted_time(clock: &dyn ControllerClock) -> Result<i64, DeliveryWorkerError>
         .filter(|now| *now >= 0)
         .ok_or(DeliveryWorkerError("controller time is unavailable"))
 }
+
+#[path = "../tests/internal/worker.rs"]
+mod tests;
