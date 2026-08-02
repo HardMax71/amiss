@@ -96,10 +96,7 @@ impl HttpRest {
                 ),
                 deadline,
             )?;
-            if batch.len() > PAGE_SIZE {
-                return Err(ProviderError::InvalidResponse);
-            }
-            let complete = batch.len() < PAGE_SIZE;
+            let complete = page_complete(batch.len())?;
             reviews.extend(batch);
             if complete {
                 return Ok(reviews);
@@ -201,6 +198,13 @@ pub(super) fn protection_rule_path(branch: &BranchRecord) -> Result<String, Prov
         .then_some(branch.effective_branch_protection_name.as_str())
         .map(path_segment)
         .ok_or(ProviderError::InvalidResponse)
+}
+
+fn page_complete(batch: usize) -> Result<bool, ProviderError> {
+    if batch > PAGE_SIZE {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(batch < PAGE_SIZE)
 }
 
 fn repository_route(pull_request: GiteaPullRequest<'_>) -> String {
