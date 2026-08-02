@@ -596,3 +596,52 @@ fn replace_number(text: &str, key: &str, value: &str) -> String {
         rest.get(end..).unwrap()
     )
 }
+
+/// The root scan refuses what it cannot account for: a state entry that is
+/// not a file, a lock whose shard is not two hex digits, and a legacy root
+/// whose capacity names another maximum.
+#[test]
+fn the_root_scan_refuses_what_it_cannot_account_for() {
+    let state_directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    drop(open_with_max(state_directory.path(), &clock, 2));
+    fs::create_dir(
+        state_directory
+            .path()
+            .join(format!("{}.state", "a".repeat(64))),
+    )
+    .unwrap();
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(
+        matches!(
+            FileLedger::open_with_clock(state_directory.path(), config(2), clock_source),
+            Err(FileLedgerError::Corrupt)
+        ),
+        "a directory wearing a state name"
+    );
+
+    let lock_directory = TempDir::new().unwrap();
+    drop(open_with_max(lock_directory.path(), &clock, 2));
+    fs::write(lock_directory.path().join(".amiss-row-zz.lock"), b"").unwrap();
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(
+        matches!(
+            FileLedger::open_with_clock(lock_directory.path(), config(2), clock_source),
+            Err(FileLedgerError::Corrupt)
+        ),
+        "a shard that is not hex"
+    );
+
+    let legacy_directory = TempDir::new().unwrap();
+    drop(open_with_max(legacy_directory.path(), &clock, 2));
+    downgrade_root_metadata(legacy_directory.path());
+    write_capacity(legacy_directory.path(), 3, 0, None, false);
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(
+        matches!(
+            FileLedger::open_with_clock(legacy_directory.path(), config(2), clock_source),
+            Err(FileLedgerError::Corrupt)
+        ),
+        "a legacy root whose capacity names another maximum"
+    );
+}

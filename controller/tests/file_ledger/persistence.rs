@@ -191,6 +191,44 @@ fn an_unreadable_file_is_an_error_not_an_absence() {
         capacity_ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Io(_))
     ));
+
+    let report_directory = TempDir::new().unwrap();
+    let mut report_ledger = open(report_directory.path(), &clock);
+    let lease = executed(report_ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    let staged_publication = publication(&delivery, &lease);
+    report_ledger
+        .stage(&delivery, &lease, &staged_publication)
+        .unwrap();
+    unreadable(&ledger_file(report_directory.path(), ".report").unwrap());
+    assert!(
+        matches!(
+            report_ledger.claim(&delivery, &check_binding()),
+            Err(FileLedgerError::Io(_))
+        ),
+        "an unreadable report is an error, not a missing one"
+    );
+}
+
+/// A staged row without its report is corrupt at the root scan, before any
+/// claim asks for the bytes.
+#[test]
+fn a_staged_row_without_its_report_is_corrupt_at_reopen() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), &clock);
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    ledger
+        .stage(&delivery, &lease, &publication(&delivery, &lease))
+        .unwrap();
+    drop(ledger);
+    fs::remove_file(ledger_file(directory.path(), ".report").unwrap()).unwrap();
+
+    let clock_source: Arc<dyn ControllerClock> = clock.clone();
+    assert!(matches!(
+        FileLedger::open_with_clock(directory.path(), config(MAX_RECORDS), clock_source),
+        Err(FileLedgerError::Corrupt)
+    ));
 }
 
 #[cfg(unix)]
