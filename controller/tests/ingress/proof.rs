@@ -4,7 +4,8 @@ use amiss_controller::{DeliveryHeader, IngressError, SignedTimePolicy};
 
 use super::support::{
     BODY, GITHUB_HEADERS, GITLAB_BODY, GITLAB_HEADERS, GITLAB_NOW, TestClock, delivery,
-    github_proof, github_verified, gitlab_verified, opaque, policy, provider, raw, route,
+    github_proof, github_verified, github_verified_split, gitlab_verified, opaque, policy,
+    provider, raw, route,
 };
 
 #[test]
@@ -31,6 +32,22 @@ fn route_and_trust_set_must_match_after_authentication() -> Result<(), IngressEr
     assert_eq!(
         policy.post_auth(check, wrong_provider),
         Err(IngressError::Route)
+    );
+
+    let elsewhere = provider("other.example.test");
+    let wrong_identity =
+        github_verified_split(check, &elsewhere, &route.provider, route.trust_set.clone());
+    assert_eq!(
+        policy.post_auth(check, wrong_identity),
+        Err(IngressError::Route),
+        "the delivery identity alone names another provider"
+    );
+    let wrong_change =
+        github_verified_split(check, &route.provider, &elsewhere, route.trust_set.clone());
+    assert_eq!(
+        policy.post_auth(check, wrong_change),
+        Err(IngressError::Route),
+        "the change alone names another provider"
     );
     Ok(())
 }

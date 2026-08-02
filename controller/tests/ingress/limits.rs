@@ -110,3 +110,57 @@ fn invalid_policy_values_fail_closed() -> Result<(), IngressError> {
     );
     Ok(())
 }
+
+#[test]
+fn ceilings_report_what_they_were_given() {
+    let limits = IngressLimits::new(4_096, 8, 2_048).expect("valid ceilings");
+    assert_eq!(limits.max_body_bytes(), 4_096);
+    assert_eq!(limits.max_header_count(), 8);
+    assert_eq!(limits.max_header_bytes(), 2_048);
+}
+
+/// The epoch is an ordinary instant, and only a clock behind it is untrusted.
+#[test]
+fn the_epoch_is_trusted_and_a_clock_behind_it_is_not() -> Result<(), IngressError> {
+    let route = route(SignedTimePolicy::ReplayOnly);
+    let policy = policy(Duration::from_millis(100), Duration::from_millis(10))?;
+    assert!(
+        policy
+            .pre_auth(raw(&route, 0, GITHUB_HEADERS, BODY), &*TestClock::at(0))
+            .is_ok(),
+        "a receipt at the epoch under a clock at the epoch"
+    );
+    assert_eq!(
+        policy.pre_auth(raw(&route, 0, GITHUB_HEADERS, BODY), &*TestClock::at(-1)),
+        Err(IngressError::Clock),
+        "a clock behind the epoch is not a time"
+    );
+    Ok(())
+}
+
+#[test]
+fn every_ingress_refusal_names_itself() {
+    for (error, message) in [
+        (IngressError::Clock, "controller time cannot be trusted"),
+        (
+            IngressError::Limits,
+            "provider delivery exceeds an ingress ceiling",
+        ),
+        (IngressError::Policy, "provider ingress policy is invalid"),
+        (
+            IngressError::Request,
+            "provider proof does not bind this request",
+        ),
+        (
+            IngressError::Route,
+            "authenticated delivery does not match its route",
+        ),
+        (
+            IngressError::Freshness,
+            "provider delivery is outside its freshness window",
+        ),
+        (IngressError::Replay, "provider replay identity is invalid"),
+    ] {
+        assert_eq!(error.to_string(), message);
+    }
+}
