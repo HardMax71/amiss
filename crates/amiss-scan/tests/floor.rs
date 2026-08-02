@@ -448,6 +448,71 @@ fn a_verified_floor_tightens_the_policy_entry_budget() {
     assert_eq!(crossing["observed_lower_bound"], 3);
 }
 
+#[test]
+fn a_policy_at_exactly_the_entry_budget_is_within_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "base\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::create_dir_all(root.join(".amiss")).unwrap();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{
+  "schema": "amiss/scanner-policy",
+  "document_includes": [
+    { "path": "docs/a.rst", "kind": "document" },
+    { "path": "docs/b.rst", "kind": "document" }
+  ],
+  "protected_inventory": [ "README.md" ],
+  "finding_dispositions": []
+}"#,
+    )
+    .unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let extra = EMPTY_ARRAYS.replace(
+        "\"resource_limits\": []",
+        "\"resource_limits\": [ { \"resource\": \"repository-policy-entries\", \"maximum\": 3 } ]",
+    );
+    let report = payload(&shell(Some(floor_input(&extra))), &repo, &base, &candidate);
+    assert_eq!(report["exit_code"], 0);
+    assert!(
+        report["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["resource"] != "repository-policy-entries"),
+        "three entries meet a declared maximum of three exactly"
+    );
+}
+
+#[test]
+fn a_malformed_policy_names_the_anchor_and_the_specific_defect() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "base\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::create_dir_all(root.join(".amiss")).unwrap();
+    fs::write(root.join(".amiss/scanner-policy.json"), b"{").unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let report = payload(&shell(None), &repo, &base, &candidate);
+    assert_eq!(report["exit_code"], 2);
+    let codes: Vec<&str> = report["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["path"] == ".amiss/scanner-policy.json")
+        .map(|row| row["code"].as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"CONFIGURATION_INVALID"), "{codes:?}");
+    assert!(codes.contains(&"INVALID_JSON"), "{codes:?}");
+}
+
 /// The complete-findings ceiling is the one array bound in the report with no
 /// resource counter behind it until now: documents and observations snapshot
 /// charged limits, and findings relied on arithmetic, every finding being too
