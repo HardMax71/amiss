@@ -260,3 +260,6 @@ fn wildcard_matches(pattern: &str, value: &str) -> bool {
 fn exact_oid(raw: &str) -> Result<Oid, ProviderError> {
     exact_sha1(raw).ok_or(ProviderError::InvalidResponse)
 }
+
+#[path = "../tests/internal/snapshot.rs"]
+mod tests;
