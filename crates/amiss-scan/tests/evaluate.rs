@@ -3,9 +3,10 @@ use amiss_md::extract::Occurrence;
 use amiss_scan::Observation;
 use amiss_scan::correlate::{Comparison, Side, correlate};
 use amiss_scan::evaluate::{
-    Attribution, DocumentInput, DocumentSide, Finding, LocationSide, evaluate,
+    Attribution, DocumentInput, DocumentSide, Finding, LocationSide, evaluate, evaluate_with_policy,
 };
 use amiss_scan::observe::occurrence_id;
+use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{SourceConstruct, TargetKind};
@@ -431,4 +432,210 @@ fn findings_sort_by_canonical_key() {
     let mut sorted = keys.clone();
     sorted.sort_unstable();
     assert_eq!(keys, sorted);
+}
+
+fn invalid_spec(document: &str, target: &str) -> Spec {
+    spec(
+        document,
+        target,
+        Resolution::Invalid(InvalidReference::PathTraversal),
+    )
+}
+
+/// A pre-existing invalid reference is the same invalid destination, not
+/// merely another invalid one at the same place.
+#[test]
+fn an_invalid_attribution_needs_the_same_destination() {
+    let same = invalid_spec("d.md", "../out.md");
+    let paired = comparisons(vec![observation(&same)], vec![observation(&same)]);
+    let finding = only(evaluate(&[], &paired, false), FindingKind::InvalidReference);
+    assert_eq!(finding.attribution, Attribution::PreExisting);
+
+    let mut base = observation(&same);
+    base.raw_destination_digest = hb("amiss/scanner-raw-destination", b"elsewhere");
+    let moved = comparisons(vec![base], vec![observation(&same)]);
+    let finding = only(evaluate(&[], &moved, false), FindingKind::InvalidReference);
+    assert_eq!(
+        finding.attribution,
+        Attribution::Introduced,
+        "an invalid base pointing elsewhere never carried this reference"
+    );
+}
+
+/// Enforce-introduced demotes exactly the pre-existing failures.
+#[test]
+fn introduced_only_demotes_pre_existing_failures_alone() {
+    let carried = missing_spec("d.md", "absent.md");
+    let mut fresh = missing_spec("d.md", "new.md");
+    fresh.node_path = vec![3, 1];
+    fresh.intent = repo_intent("new.md");
+    let comparisons = comparisons(
+        vec![observation(&carried)],
+        vec![observation(&carried), observation(&fresh)],
+    );
+    let (findings, errors) =
+        evaluate_with_policy(&[], &comparisons, true, true, &Effects::default(), &[]);
+    assert!(errors.is_empty());
+
+    let mut demoted: Vec<(Attribution, Disposition)> = findings
+        .iter()
+        .filter(|finding| finding.kind == FindingKind::ExplicitTargetMissing)
+        .map(|finding| (finding.attribution, finding.effective_disposition))
+        .collect();
+    demoted.sort_by_key(|(attribution, _)| format!("{attribution:?}"));
+    assert_eq!(
+        demoted,
+        vec![
+            (Attribution::Introduced, Disposition::Fail),
+            (Attribution::PreExisting, Disposition::Warn),
+        ],
+        "the carried failure warns while the fresh one still fails"
+    );
+    let untouched = findings
+        .iter()
+        .filter(|finding| finding.kind != FindingKind::ExplicitTargetMissing)
+        .all(|finding| {
+            finding
+                .steps
+                .iter()
+                .all(|step| !step.rule_id.contains("enforce-introduced"))
+        });
+    assert!(untouched, "nothing below fail is demoted");
+}
+
+/// A raise names a stronger disposition or says nothing at all.
+#[test]
+fn a_raise_to_the_standing_disposition_adds_no_step() {
+    let missing = missing_spec("d.md", "absent.md");
+    let comparisons = comparisons(Vec::new(), vec![observation(&missing)]);
+    let policy = Effects {
+        raised: vec![(FindingKind::ExplicitTargetMissing, Disposition::Fail)],
+        ..Effects::default()
+    };
+    let (findings, _errors) = evaluate_with_policy(&[], &comparisons, true, false, &policy, &[]);
+    let finding = only(findings, FindingKind::ExplicitTargetMissing);
+    assert_eq!(finding.effective_disposition, Disposition::Fail);
+    assert_eq!(
+        finding.steps.len(),
+        1,
+        "enforce already fails, so the repository raise is silent"
+    );
+}
+
+/// A document on both sides was not removed, and a document with no opaque
+/// regions has none to report.
+#[test]
+fn a_present_document_is_neither_removed_nor_opaque() {
+    let documents = vec![DocumentInput {
+        path: RepoPath::new("page.md".to_owned()).unwrap(),
+        base: Some(DocumentSide::Scanned {
+            mdx_regions: 0,
+            html_regions: 0,
+            extracted_references: 1,
+        }),
+        candidate: Some(DocumentSide::Scanned {
+            mdx_regions: 0,
+            html_regions: 0,
+            extracted_references: 1,
+        }),
+    }];
+    let got = kinds(&evaluate(&documents, &[], false));
+    assert!(!got.contains(&FindingKind::DocumentRemoved));
+    assert!(!got.contains(&FindingKind::OpaqueMdxRegion));
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn owner(raw: &str) -> amiss_wire::model::OwnerId {
+    amiss_wire::model::OwnerId::new(raw.to_owned()).expect("an owner id")
+}
+
+fn tree() -> amiss_wire::model::TreeIdentity {
+    amiss_wire::model::TreeIdentity {
+        object_format: amiss_wire::model::ObjectFormat::Sha1,
+        tree_oid: "a".repeat(40),
+    }
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn moment(raw: &str) -> amiss_wire::model::UtcInstant {
+    amiss_wire::model::UtcInstant::new(raw.to_owned()).expect("an instant")
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn waived_fact() -> amiss_wire::controls::Fact {
+    let scope = amiss_wire::controls::FindingScope {
+        document: amiss_wire::model::RepoPathText::new("d.md".to_owned()).expect("path"),
+        source_construct: SourceConstruct::InlineLink,
+        normalized_target_intent: amiss_wire::controls::TargetIntent {
+            path: amiss_wire::model::RepoPathText::new("absent.md".to_owned()).expect("path"),
+            target_kind: TargetKind::Either,
+            query_digest: None,
+            fragment_digest: None,
+        },
+        source_projection_digest: hb("amiss/scanner-source-projection", b"block"),
+    };
+    amiss_wire::controls::Fact::new(
+        amiss_wire::controls::FindingKeyInput {
+            finding_kind: amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing,
+            scope,
+        },
+        amiss_wire::resolution::Resolution::Missing(Missing::PathNotFound {
+            path: amiss_wire::model::RepoPathText::new("absent.md".to_owned()).expect("path"),
+        }),
+    )
+    .expect("a structural fact")
+}
+
+/// A waiver is live from its activation instant, not one tick after it.
+#[test]
+fn a_waiver_active_at_this_very_instant_is_not_early() {
+    let instant = moment("2026-07-02T00:00:00Z");
+    let item = amiss_wire::controls::WaiverItem {
+        waiver_id: amiss_wire::model::ArtifactId::new("waiver/one".to_owned()).expect("id"),
+        finding_key: hb("amiss/scanner-finding-key", b"key"),
+        authorized_fact: waived_fact(),
+        authorized_fact_digest: hb("amiss/scanner-fact", b"fact"),
+        candidate_tree: tree(),
+        owner: owner("team:docs"),
+        issuer: owner("team:release"),
+        reason: "window".to_owned(),
+        created_at: moment("2026-07-01T00:00:00Z"),
+        not_before: instant.clone(),
+        expires_at: moment("2026-08-01T00:00:00Z"),
+    };
+    let policy = Effects {
+        waiver: Some(WaiverContext {
+            digest: hb("amiss/raw-evidence", b"bundle"),
+            trust_source: "organization-policy",
+            candidate_tree: tree(),
+            items: vec![item],
+            authorized_issuers: vec![owner("team:release")],
+            waivable_kinds: vec![amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing],
+        }),
+        time: Some(TimeContext {
+            statement: amiss_wire::controls::TrustedTimeStatement {
+                digest: hb("amiss/raw-evidence", b"time"),
+                repository: amiss_wire::model::RepositoryIdentity::github(
+                    "acme".to_owned(),
+                    "widget".to_owned(),
+                )
+                .expect("identity"),
+                ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned())
+                    .expect("ref"),
+                candidate_identity_digest: hb("amiss/raw-evidence", b"candidate"),
+                provider: "github-actions".to_owned(),
+                provider_run_id: "run/1".to_owned(),
+                provider_run_attempt: 1,
+                evaluation_instant: instant,
+                valid_until: moment("2026-07-02T00:10:00Z"),
+            },
+            digest: hb("amiss/raw-evidence", b"time"),
+        }),
+        ..Effects::default()
+    };
+    let (findings, _errors) = evaluate_with_policy(&[], &[], true, false, &policy, &[]);
+    assert!(
+        !kinds(&findings).contains(&FindingKind::WaiverInvalid),
+        "a waiver live from this instant carries no defect"
+    );
 }
