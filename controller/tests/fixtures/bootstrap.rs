@@ -65,6 +65,7 @@ enum Mode {
     RenewedPass,
     ExitWithChild,
     ReplaceOutputs,
+    Signalled,
 }
 
 fn runner_args(mut argv: impl Iterator<Item = OsString>) -> Option<RunnerArgs> {
@@ -160,6 +161,7 @@ fn read_mode(path: &Path) -> Option<Mode> {
         "runner-renewed-pass" => Some(Mode::RenewedPass),
         "runner-exit-child" => Some(Mode::ExitWithChild),
         "runner-replace-outputs" => Some(Mode::ReplaceOutputs),
+        "runner-signalled" => Some(Mode::Signalled),
         _ => None,
     }
 }
@@ -194,6 +196,8 @@ fn run(mode: Mode, args: &RunnerArgs) -> ExitCode {
             b"{\"runner\":\"pass\"}\n",
         ),
         Mode::ExitWithChild => exit_with_child(args),
+        // Neither an exit code nor a timeout: the third termination.
+        Mode::Signalled => std::process::abort(),
         Mode::ReplaceOutputs => replace_outputs(args),
         Mode::MalformedResult | Mode::ClearedEnvironment | Mode::RenewedPass => {
             malformed(&args.result)

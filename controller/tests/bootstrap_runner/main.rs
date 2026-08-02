@@ -434,6 +434,21 @@ fn wall_timeout_stops_contained_descendants() {
     assert!(!harness.escaped());
 }
 
+/// A signal leaves neither an exit code nor a timeout, and only a unix
+/// process can end that way.
+#[cfg(unix)]
+#[test]
+fn a_signalled_leader_is_not_a_timeout() {
+    let harness = Harness::new("runner-signalled", None);
+    let mut heartbeat = Heartbeat::renewing();
+
+    assert_eq!(
+        harness.run(Duration::from_secs(30), &mut heartbeat),
+        RunnerOutcome::Unavailable,
+        "a signal is not a timeout"
+    );
+}
+
 #[test]
 fn leader_exit_stops_descendants_before_accepting_the_report() {
     let harness = Harness::new("runner-exit-child", None);
