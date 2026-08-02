@@ -25,6 +25,7 @@ struct Entry {
     oid: [u8; 20],
     header_pad: usize,
     ofs_distance: Option<u64>,
+    base_ref: Option<[u8; 20]>,
 }
 
 impl Entry {
@@ -35,6 +36,7 @@ impl Entry {
             oid: blob_oid(payload),
             header_pad: 0,
             ofs_distance: None,
+            base_ref: None,
         }
     }
 }
@@ -150,6 +152,9 @@ fn write_pack(entries: &[Entry]) -> (Vec<u8>, Vec<u64>) {
         ));
         if let Some(distance) = entry.ofs_distance {
             pack.extend_from_slice(&ofs_distance(distance));
+        }
+        if let Some(base) = entry.base_ref {
+            pack.extend_from_slice(&base);
         }
         pack.extend_from_slice(&deflate(&entry.payload));
     }
@@ -295,6 +300,7 @@ fn a_packed_tag_is_a_tag() {
         oid: sha1(&preimage),
         header_pad: 0,
         ofs_distance: None,
+        base_ref: None,
     };
     let (pack, offsets) = write_pack(std::slice::from_ref(&entry));
     let idx = write_idx_v1(
@@ -576,6 +582,7 @@ fn delta_pair(base: &[u8], target: &[u8], leb_pad: usize) -> [Entry; 2] {
         oid: blob_oid(target),
         header_pad: 0,
         ofs_distance: None,
+        base_ref: None,
     };
     [base_entry, delta]
 }
@@ -657,6 +664,7 @@ fn install_copy_delta(dir: &Path, base: &[u8], suffix: &[u8]) -> ([u8; 20], Vec<
             oid: blob_oid(&target),
             header_pad: 0,
             ofs_distance: None,
+            base_ref: None,
         },
     ];
     let (probe, base_offsets) = write_pack(&entries[..1]);
@@ -742,4 +750,29 @@ fn an_unreadable_pack_directory_is_not_an_absent_one() {
         Err(Error::ObjectUnreadable),
         "an unreadable pack directory is an error, not an empty one"
     );
+}
+
+const REF_DELTA: u8 = 7;
+
+#[test]
+fn a_delta_against_a_named_base_reconstructs() {
+    let dir = forged_repo();
+    let base = b"the base object\n";
+    let target = b"the target object\n";
+    let base_entry = Entry::blob(base);
+    let delta = Entry {
+        type_code: REF_DELTA,
+        payload: insert_script(base.len(), target, 0),
+        oid: blob_oid(target),
+        header_pad: 0,
+        ofs_distance: None,
+        base_ref: Some(base_entry.oid),
+    };
+    let entries = [base_entry, delta];
+    let (pack, offsets) = write_pack(&entries);
+    let idx = write_idx_v1(&sorted_rows(&entries, &offsets), &pack, None);
+    install(dir.path(), &pack, &idx);
+
+    let delta_oid = entries.get(1).map(|entry| entry.oid).unwrap();
+    assert_eq!(read(dir.path(), &delta_oid).unwrap(), target);
 }
