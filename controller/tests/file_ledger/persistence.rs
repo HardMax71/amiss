@@ -4,12 +4,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion,
-    StageOutcome,
+    AcceptedDelivery, ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError,
+    LeaseCompletion, StageOutcome,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::report::MACHINE_JSON_BYTES;
-use serde_json::{Map, Value};
 use tempfile::TempDir;
 
 use super::support::{
@@ -276,16 +275,9 @@ fn impossible_but_checksummed_states_fail_closed() {
     let expiry_directory = TempDir::new().unwrap();
     let mut expiry_ledger = open(expiry_directory.path(), &clock);
     expiry_ledger.claim(&delivery, &check_binding()).unwrap();
-    rewrite_state(expiry_directory.path(), |record| {
-        let last_seen = record
-            .get("last_seen_unix_millis")
-            .and_then(Value::as_i64)
-            .unwrap();
-        record
-            .get_mut("state")
-            .and_then(Value::as_object_mut)
-            .unwrap()
-            .insert("expires_at_unix_millis".to_owned(), last_seen.into());
+    rewrite_state(expiry_directory.path(), |text| {
+        let last_seen = field(text, "last_seen_unix_millis");
+        replace_field(text, "expires_at_unix_millis", &last_seen.to_string())
     });
     assert!(matches!(
         expiry_ledger.claim(&delivery, &check_binding()),
@@ -295,13 +287,9 @@ fn impossible_but_checksummed_states_fail_closed() {
     let fence_directory = TempDir::new().unwrap();
     let mut fence_ledger = open(fence_directory.path(), &clock);
     fence_ledger.claim(&delivery, &check_binding()).unwrap();
-    rewrite_state(fence_directory.path(), |record| {
-        let generation = record.get("generation").and_then(Value::as_u64).unwrap();
-        record
-            .get_mut("state")
-            .and_then(Value::as_object_mut)
-            .unwrap()
-            .insert("fence".to_owned(), (generation + 1).into());
+    rewrite_state(fence_directory.path(), |text| {
+        let generation = field(text, "generation");
+        replace_field(text, "fence", &generation.saturating_add(1).to_string())
     });
     assert!(matches!(
         fence_ledger.claim(&delivery, &check_binding()),
@@ -317,12 +305,12 @@ fn malformed_record_and_publication_check_bindings_fail_closed() {
     let record_directory = TempDir::new().unwrap();
     let mut record_ledger = open(record_directory.path(), &clock);
     record_ledger.claim(&delivery, &check_binding()).unwrap();
-    rewrite_state(record_directory.path(), |record| {
-        *record
-            .get_mut("check")
-            .and_then(Value::as_object_mut)
-            .and_then(|check| check.get_mut("required_status_name"))
-            .unwrap() = " invalid".into();
+    rewrite_state(record_directory.path(), |text| {
+        replace_string(
+            text,
+            r#""required_status_name":""#,
+            r#""required_status_name":" "#,
+        )
     });
     assert!(matches!(
         record_ledger.claim(&delivery, &check_binding()),
@@ -340,16 +328,17 @@ fn malformed_record_and_publication_check_bindings_fail_closed() {
     publication_ledger
         .stage(&delivery, &lease, &publication(&delivery, &lease))
         .unwrap();
-    rewrite_state(publication_directory.path(), |record| {
-        *record
-            .get_mut("state")
-            .and_then(Value::as_object_mut)
-            .and_then(|state| state.get_mut("publication"))
-            .and_then(Value::as_object_mut)
-            .and_then(|publication| publication.get_mut("check"))
-            .and_then(Value::as_object_mut)
-            .and_then(|check| check.get_mut("required_status_name"))
-            .unwrap() = "invalid ".into();
+    rewrite_state(publication_directory.path(), |text| {
+        let last = text.rfind(r#""required_status_name":""#).unwrap();
+        let (head, tail) = text.split_at(last);
+        format!(
+            "{head}{}",
+            replace_string(
+                tail,
+                r#""required_status_name":""#,
+                r#""required_status_name":" "#
+            )
+        )
     });
     assert!(matches!(
         publication_ledger.claim(&delivery, &check_binding()),
@@ -357,12 +346,46 @@ fn malformed_record_and_publication_check_bindings_fail_closed() {
     ));
 }
 
-fn rewrite_state(root: &Path, change: impl FnOnce(&mut Map<String, Value>)) {
+/// Rewrites the record payload as text. A serde roundtrip would reorder the
+/// members and fail the frame's canonical check before any field is read, so
+/// every state edit splices bytes in place instead.
+fn rewrite_state(root: &Path, change: impl FnOnce(&str) -> String) {
     rewrite_payload(root, |payload| {
-        let mut value: Value = serde_json::from_slice(payload).unwrap();
-        change(value.as_object_mut().unwrap());
-        serde_json::to_vec(&value).unwrap()
+        let text = std::str::from_utf8(payload).unwrap();
+        let edited = change(text);
+        assert_ne!(edited, text, "the edit must land");
+        edited.into_bytes()
     });
+}
+
+fn field(text: &str, key: &str) -> i64 {
+    let needle = format!("\"{key}\":");
+    let start = text.find(&needle).unwrap().saturating_add(needle.len());
+    let rest = text.get(start..).unwrap();
+    let end = rest
+        .find(|character: char| !character.is_ascii_digit() && character != '-')
+        .unwrap();
+    rest.get(..end).unwrap().parse().unwrap()
+}
+
+fn replace_field(text: &str, key: &str, value: &str) -> String {
+    let needle = format!("\"{key}\":");
+    let start = text.find(&needle).unwrap();
+    let value_start = start.saturating_add(needle.len());
+    let rest = text.get(value_start..).unwrap();
+    let end = rest
+        .find(|character: char| !character.is_ascii_digit() && character != '-')
+        .unwrap();
+    format!(
+        "{}{needle}{value}{}",
+        text.get(..start).unwrap(),
+        rest.get(end..).unwrap()
+    )
+}
+
+fn replace_string(text: &str, from: &str, to: &str) -> String {
+    assert!(text.contains(from), "{from} is present");
+    text.replacen(from, to, 1)
 }
 
 fn remove_gate_commit(root: &Path) {
@@ -412,4 +435,113 @@ fn rewrite_payload(root: &Path, change: impl FnOnce(&[u8]) -> Vec<u8>) {
     frame.extend_from_slice(hb(DOMAIN, &payload).as_bytes());
     frame.extend_from_slice(&payload);
     fs::write(path, frame).unwrap();
+}
+
+fn claimed_ledger(directory: &TempDir, clock: &Arc<TestClock>) -> (FileLedger, AcceptedDelivery) {
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), clock);
+    ledger.claim(&delivery, &check_binding()).unwrap();
+    (ledger, delivery)
+}
+
+/// Each row carries one impossible field behind a valid seal, so the refusal
+/// is the record validator's own.
+#[test]
+fn a_running_record_answers_for_every_field_alone() {
+    type Defect = fn(&str) -> String;
+    let edits: [(&str, Defect); 4] = [
+        ("a foreign schema", |text| {
+            replace_string(text, "file-record-v3", "file-record-v0")
+        }),
+        ("a generation before the first", |text| {
+            replace_field(text, "generation", "0")
+        }),
+        ("a last-seen instant before the epoch", |text| {
+            replace_field(text, "last_seen_unix_millis", "-1")
+        }),
+        ("a fence nobody issued", |text| {
+            replace_field(text, "fence", "0")
+        }),
+    ];
+    for (reason, edit) in edits {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let (mut ledger, delivery) = claimed_ledger(&directory, &clock);
+        rewrite_state(directory.path(), edit);
+        assert!(
+            matches!(
+                ledger.claim(&delivery, &check_binding()),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "{reason}"
+        );
+    }
+}
+
+/// A fence at its generation is the one the row holds, in every state; the
+/// natural flow advances the generation past it, so it is written here.
+#[test]
+fn a_fence_at_its_generation_is_current_when_staged_or_done() {
+    for complete_it in [false, true] {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let delivery = delivery("42");
+        let mut ledger = open(directory.path(), &clock);
+        let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+        let publication = publication(&delivery, &lease);
+        let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
+        if complete_it {
+            ledger.complete(&delivery, &frozen).unwrap();
+        }
+        rewrite_state(directory.path(), |text| {
+            let generation = field(text, "generation");
+            replace_field(text, "fence", &generation.to_string())
+        });
+        assert!(
+            !matches!(
+                ledger.claim(&delivery, &check_binding()),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "completed: {complete_it}"
+        );
+    }
+}
+
+/// The staged and done states hold the same fence law as running.
+#[test]
+fn staged_and_done_records_hold_their_fences() {
+    type Defect = fn(&str) -> String;
+    let zero_fence: Defect = |text| replace_field(text, "fence", "0");
+    let past_generation: Defect = |text| {
+        let generation = field(text, "generation");
+        replace_field(text, "fence", &generation.saturating_add(1).to_string())
+    };
+    let foreign_digest: Defect = |text| replace_string(text, "sha256:", "sha256!");
+
+    for (reason, stage_it, edit) in [
+        ("a staged fence nobody issued", true, zero_fence),
+        ("a staged fence past its generation", true, past_generation),
+        ("a done fence nobody issued", false, zero_fence),
+        ("a done fence past its generation", false, past_generation),
+        ("a done digest off the wire", false, foreign_digest),
+    ] {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        let delivery = delivery("42");
+        let mut ledger = open(directory.path(), &clock);
+        let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+        let publication = publication(&delivery, &lease);
+        let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
+        if !stage_it {
+            ledger.complete(&delivery, &frozen).unwrap();
+        }
+        rewrite_state(directory.path(), edit);
+        assert!(
+            matches!(
+                ledger.claim(&delivery, &check_binding()),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "{reason}"
+        );
+    }
 }
