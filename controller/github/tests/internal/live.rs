@@ -756,3 +756,134 @@ fn change_id() -> ChangeId {
 fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }
+
+#[test]
+fn refresh_rejects_a_request_wrong_in_one_field() {
+    let fixture = Fixture::new();
+    assert!(super::refresh::validate_request(&fixture.config, fixture.request()).is_ok());
+
+    let elsewhere = ChangeLocator {
+        provider: ProviderIdentity {
+            namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+            instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
+        },
+        repository: fixture.change.repository.clone(),
+        change: change_id(),
+    };
+    let mut provider_request = fixture.request();
+    provider_request.change = &elsewhere;
+    assert_eq!(
+        super::refresh::validate_request(&fixture.config, provider_request),
+        Err(ProviderError::InvalidResponse),
+        "a foreign provider"
+    );
+
+    let foreign_host = ChangeLocator {
+        provider: provider(),
+        repository: RepositoryIdentity::new(
+            "gitlab.com".to_owned(),
+            "acme".to_owned(),
+            "widget".to_owned(),
+        )
+        .unwrap(),
+        change: change_id(),
+    };
+    let mut host_request = fixture.request();
+    host_request.change = &foreign_host;
+    assert_eq!(
+        super::refresh::validate_request(&fixture.config, host_request),
+        Err(ProviderError::InvalidResponse),
+        "a foreign host"
+    );
+
+    let mut owner_request = fixture.request();
+    owner_request.repository_owner = "other";
+    assert_eq!(
+        super::refresh::validate_request(&fixture.config, owner_request),
+        Err(ProviderError::InvalidResponse),
+        "a foreign owner"
+    );
+
+    let mut name_request = fixture.request();
+    name_request.repository_name = "gadget";
+    assert_eq!(
+        super::refresh::validate_request(&fixture.config, name_request),
+        Err(ProviderError::InvalidResponse),
+        "a foreign name"
+    );
+}
+
+#[test]
+fn refresh_pins_the_fetched_head_and_the_base_echo() {
+    let fixture = Fixture::new();
+    let mut diverged = fixture.data.clone();
+    diverged.current_head.sha = oid('e').as_str().to_owned();
+    assert_eq!(
+        super::refresh::snapshot(&fixture.config, fixture.request(), &diverged),
+        Err(ProviderError::InvalidResponse),
+        "the fetched head must equal the recorded head"
+    );
+
+    let mut wandering_base = fixture.data.clone();
+    wandering_base.pull_request.base.sha = oid('f').as_str().to_owned();
+    assert_eq!(
+        super::refresh::snapshot(&fixture.config, fixture.request(), &wandering_base),
+        Err(ProviderError::InvalidResponse),
+        "the recorded base must echo the fetched target"
+    );
+}
+
+#[test]
+fn a_publication_target_is_current_only_in_every_field() {
+    let fixture = Fixture::new();
+    let publication = fixture.publication(CheckConclusion::Pass);
+    let current = |authoritative: &PullRequestRecord| {
+        super::refresh::publication_target_is_current(
+            &fixture.config,
+            fixture.request(),
+            &publication,
+            authoritative,
+        )
+    };
+
+    let authoritative = fixture.data.pull_request.clone();
+    assert_eq!(current(&authoritative), Ok(true));
+
+    let mut moved_head = authoritative.clone();
+    moved_head.head.sha = oid('e').as_str().to_owned();
+    assert_eq!(current(&moved_head), Ok(false));
+
+    let mut moved_base = authoritative.clone();
+    moved_base.base.sha = oid('f').as_str().to_owned();
+    assert_eq!(current(&moved_base), Ok(false));
+
+    let mut lost_gate = authoritative.clone();
+    lost_gate.merge_commit_sha = None;
+    assert_eq!(current(&lost_gate), Ok(false));
+
+    let mut zero_head_repo = authoritative.clone();
+    if let Some(repository) = zero_head_repo.head.repo.as_mut() {
+        repository.id = 0;
+    }
+    assert_eq!(
+        current(&zero_head_repo),
+        Err(ProviderError::InvalidResponse)
+    );
+
+    let mut closed_absent = authoritative.clone();
+    closed_absent.state = "closed".to_owned();
+    closed_absent.head.repo = None;
+    assert_eq!(
+        current(&closed_absent),
+        Ok(true),
+        "a closed pull request may have lost its head repository"
+    );
+
+    let mut open_absent = authoritative;
+    open_absent.head.repo = None;
+    assert_eq!(
+        current(&open_absent),
+        Err(ProviderError::InvalidResponse),
+        "an open pull request always names its head repository"
+    );
+}
