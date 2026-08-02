@@ -248,6 +248,25 @@ fn a_fresh_root_recovers_an_interrupted_write() {
     );
 }
 
+/// Recovery is the scan's own duty on an established root, where the fresh
+/// adoption path never runs; a stray directory has no such amnesty.
+#[test]
+fn an_established_root_recovers_debris_and_refuses_squatters() {
+    let recovered = TempDir::new().unwrap();
+    drop(open(recovered.path()));
+    let debris = recovered.path().join(".atomicwrite-interrupted");
+    fs::create_dir(&debris).unwrap();
+    fs::write(debris.join("tmpfile.tmp"), b"half a row").unwrap();
+    let mut inbox = open(recovered.path());
+    assert!(inbox.entries().is_ok());
+    assert!(!debris.exists(), "the scan finishes the interrupted write");
+
+    let squatted = TempDir::new().unwrap();
+    let mut inbox = open(squatted.path());
+    fs::create_dir(squatted.path().join("squatters")).unwrap();
+    assert!(matches!(inbox.entries(), Err(InboxError::Corrupt)));
+}
+
 /// Each row carries one semantic defect behind a valid seal, so the refusal
 /// is the record validator's own, not the frame digest's.
 #[test]
