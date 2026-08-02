@@ -281,6 +281,37 @@ pub(super) fn is_delivery_file(name: &str, suffix: &str) -> bool {
 }
 
 pub(super) fn downgrade_root_metadata(root: &Path) {
+    rewrite_root_metadata(root, |payload| {
+        payload.replace(
+            "amiss/controller-file-root-v2",
+            "amiss/controller-file-root-v1",
+        )
+    });
+    fs::remove_file(root.join(".amiss-capacity.state")).unwrap();
+}
+
+/// Writes a capacity frame with its parts chosen independently, so a test may
+/// break exactly one of the version, the length, and the digest.
+pub(super) fn write_capacity_frame(root: &Path, version: u8, length: u64, digest_over: &[u8]) {
+    const MAGIC: &[u8] = b"AMISS-DELIVERY-CAPACITY";
+    const DOMAIN: &str = "amiss/controller-file-capacity-frame-v1";
+
+    let payload = concat!(
+        r#"{"schema":"amiss/controller-file-capacity-v1","max_records":2,"#,
+        r#""records":0,"pending_key":null,"cleanup_pending":false}"#
+    );
+    let mut frame = Vec::new();
+    frame.extend_from_slice(MAGIC);
+    frame.push(version);
+    frame.extend_from_slice(&length.to_be_bytes());
+    frame.extend_from_slice(hb(DOMAIN, digest_over).as_bytes());
+    frame.extend_from_slice(payload.as_bytes());
+    fs::write(root.join(".amiss-capacity.state"), frame).unwrap();
+}
+
+/// Rewrites the root metadata payload as text, resealing the frame, so a test
+/// may present one impossible value at a time.
+pub(super) fn rewrite_root_metadata(root: &Path, change: impl FnOnce(&str) -> String) {
     const MAGIC: &[u8] = b"AMISS-DELIVERY-ROOT";
     const DOMAIN: &str = "amiss/controller-file-root-frame-v1";
 
@@ -293,13 +324,9 @@ pub(super) fn downgrade_root_metadata(root: &Path) {
         .and_then(|length| length.checked_add(32))
         .unwrap();
     let payload = std::str::from_utf8(bytes.get(header..).unwrap()).unwrap();
-    let legacy = payload.replace(
-        "amiss/controller-file-root-v2",
-        "amiss/controller-file-root-v1",
-    );
-    assert_ne!(legacy, payload);
-    fs::write(path, test_frame(MAGIC, DOMAIN, legacy.as_bytes())).unwrap();
-    fs::remove_file(root.join(".amiss-capacity.state")).unwrap();
+    let edited = change(payload);
+    assert_ne!(edited, payload, "the edit must land");
+    fs::write(path, test_frame(MAGIC, DOMAIN, edited.as_bytes())).unwrap();
 }
 
 pub(super) fn write_capacity(
