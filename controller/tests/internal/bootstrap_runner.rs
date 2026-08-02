@@ -9,8 +9,15 @@ use std::time::Duration;
 
 use processkit::CancellationToken;
 
-use super::{receive, renewal_wait};
+use std::path::Path;
+
+use super::{
+    directory, read_bounded, receive, regular_file, renewal_wait, reserve_bounded, valid_run,
+};
+use crate::BootstrapRun;
 use crate::{BootstrapTermination, HeartbeatOutcome, RunHeartbeat};
+use amiss_wire::model::UtcInstant;
+use amiss_wire::report::WATCHDOG_MILLISECONDS;
 
 type Delivery = std::io::Result<BootstrapTermination>;
 
@@ -138,4 +145,127 @@ fn a_closed_channel_is_a_supervision_defect() {
 
     assert!(outcome.is_err());
     assert_eq!(heartbeat.calls, 0);
+}
+
+fn instant(raw: &str) -> UtcInstant {
+    UtcInstant::new(raw.to_owned()).unwrap()
+}
+
+fn run<'a>(
+    executable: &'a Path,
+    directory: &'a Path,
+    wall_timeout: Duration,
+    evaluation_instant: &'a UtcInstant,
+    valid_until: &'a UtcInstant,
+) -> BootstrapRun<'a> {
+    BootstrapRun {
+        executable,
+        repository: directory,
+        action_repository: directory,
+        scratch: directory,
+        evaluation_instant,
+        valid_until,
+        wall_timeout,
+    }
+}
+
+#[test]
+fn a_run_is_valid_only_within_the_watchdog_and_over_real_paths() {
+    let root = tempfile::TempDir::new().unwrap();
+    let executable = root.path().join("bootstrap");
+    std::fs::write(&executable, b"#!/bin/sh\n").unwrap();
+    let evaluation = instant("2026-07-01T00:00:00Z");
+    let until = instant("2026-07-01T00:10:00Z");
+    let watchdog = Duration::from_millis(WATCHDOG_MILLISECONDS);
+
+    assert!(valid_run(&run(
+        &executable,
+        root.path(),
+        watchdog,
+        &evaluation,
+        &until
+    )));
+    assert!(
+        !valid_run(&run(
+            &executable,
+            root.path(),
+            watchdog.saturating_add(Duration::from_millis(1)),
+            &evaluation,
+            &until
+        )),
+        "a timeout past the watchdog"
+    );
+    assert!(
+        !valid_run(&run(
+            &executable,
+            root.path(),
+            Duration::ZERO,
+            &evaluation,
+            &until
+        )),
+        "no time at all"
+    );
+    assert!(
+        !valid_run(&run(
+            root.path(),
+            root.path(),
+            watchdog,
+            &evaluation,
+            &until
+        )),
+        "a directory where the executable belongs"
+    );
+    assert!(
+        !valid_run(&run(
+            &executable,
+            &executable,
+            watchdog,
+            &evaluation,
+            &until
+        )),
+        "a file where a directory belongs"
+    );
+}
+
+#[test]
+fn a_path_must_be_absolute_and_of_its_own_kind() {
+    let root = tempfile::TempDir::new().unwrap();
+    let file = root.path().join("bootstrap");
+    std::fs::write(&file, b"#!/bin/sh\n").unwrap();
+
+    assert!(regular_file(&file));
+    assert!(!regular_file(root.path()), "a directory is not a file");
+    assert!(
+        !regular_file(Path::new("bootstrap")),
+        "a relative path names nothing certain"
+    );
+    assert!(directory(root.path()));
+    assert!(!directory(&file), "a file is not a directory");
+    assert!(
+        !directory(Path::new("scratch")),
+        "a relative path names nothing certain"
+    );
+}
+
+#[test]
+fn a_bounded_read_admits_exactly_its_limit() {
+    let root = tempfile::TempDir::new().unwrap();
+    let path = root.path().join("payload");
+    std::fs::write(&path, b"0123456789").unwrap();
+
+    assert_eq!(read_bounded(&path, 10).unwrap(), b"0123456789");
+    assert!(read_bounded(&path, 9).is_err(), "one byte past the limit");
+    assert_eq!(read_bounded(&path, 64).unwrap().len(), 10);
+}
+
+#[test]
+fn a_reservation_stops_at_its_bound() {
+    let mut bytes = Vec::new();
+    assert!(reserve_bounded(&mut bytes, 8, 16).is_ok());
+    assert!(bytes.capacity() >= 8);
+    let mut full = Vec::new();
+    assert!(
+        reserve_bounded(&mut full, 32, 16).is_err(),
+        "a reservation past the bound"
+    );
 }
