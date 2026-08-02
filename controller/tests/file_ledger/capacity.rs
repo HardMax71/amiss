@@ -478,3 +478,32 @@ fn a_bounded_delivery_from_another_replay_window_is_rejected() {
 fn has_extension(name: &str, extension: &str) -> bool {
     Path::new(name).extension() == Some(OsStr::new(extension))
 }
+
+/// The capacity record holds one shape at a time, and every combination the
+/// state machine cannot produce is refused when the root reopens.
+#[test]
+fn an_impossible_capacity_shape_fails_closed() {
+    let key = "f".repeat(64);
+    let rows: [(&str, u64, u64, Option<&str>, bool); 6] = [
+        ("no records at all", 0, 0, None, false),
+        ("more records than the maximum", 2, 3, None, false),
+        ("a pending key over an empty root", 2, 0, Some(&key), false),
+        ("a cleanup with a pending key", 2, 1, Some(&key), true),
+        ("a cleanup over an empty root", 2, 0, None, true),
+        ("a pending key off the wire", 2, 1, Some("not-a-key"), false),
+    ];
+    for (reason, maximum, records, pending, cleanup) in rows {
+        let directory = TempDir::new().unwrap();
+        let clock = TestClock::at(1_000);
+        drop(open_with_max(directory.path(), &clock, 2));
+        write_capacity(directory.path(), maximum, records, pending, cleanup);
+        let clock_source: Arc<dyn ControllerClock> = clock.clone();
+        assert!(
+            matches!(
+                FileLedger::open_with_clock(directory.path(), config(2), clock_source),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "{reason}"
+        );
+    }
+}
