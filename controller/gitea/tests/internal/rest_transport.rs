@@ -112,3 +112,63 @@ fn the_api_base_grammar_names_each_refusal() {
         "the API base must not carry a query or fragment",
     );
 }
+
+#[test]
+fn a_review_page_is_complete_exactly_under_its_size() {
+    use super::super::{PAGE_SIZE, page_complete};
+
+    assert_eq!(page_complete(0), Ok(true));
+    assert_eq!(page_complete(PAGE_SIZE - 1), Ok(true));
+    assert_eq!(page_complete(PAGE_SIZE), Ok(false));
+    assert_eq!(
+        page_complete(PAGE_SIZE + 1),
+        Err(ProviderError::InvalidResponse)
+    );
+}
+
+#[test]
+fn a_repository_route_names_its_owner_and_repository() {
+    use amiss_controller::{
+        ChangeId, ChangeLocator, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    };
+    use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+
+    let change = ChangeLocator {
+        provider: ProviderIdentity {
+            namespace: ProviderNamespace::new("gitea".to_owned()).unwrap(),
+            instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        },
+        repository: RepositoryIdentity::new(
+            "forge.example".to_owned(),
+            "acme".to_owned(),
+            "widget".to_owned(),
+        )
+        .unwrap(),
+        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+    };
+    let candidate = Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap();
+    let route = super::super::repository_route(crate::GiteaPullRequest {
+        change: &change,
+        reviewer_id: 77,
+        repository_id: 101,
+        repository_owner: "acme",
+        repository_name: "widget",
+        pull_request_id: 4201,
+        number: 42,
+        candidate_commit: &candidate,
+    });
+    assert_eq!(route, "/repos/acme/widget");
+}
+
+#[test]
+fn a_deadline_keeps_a_positive_remainder_or_refuses() {
+    use super::super::OperationDeadline;
+
+    let open = OperationDeadline::after(Duration::from_mins(1)).unwrap();
+    assert!(
+        open.remaining().unwrap() > Duration::ZERO,
+        "a fresh deadline has time left"
+    );
+    let spent = OperationDeadline::after(Duration::ZERO).unwrap();
+    assert_eq!(spent.remaining(), Err(ProviderError::Unavailable));
+}
