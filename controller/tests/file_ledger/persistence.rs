@@ -4,8 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    AcceptedDelivery, ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError,
-    LeaseCompletion, StageOutcome,
+    ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion,
+    StageOutcome,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -383,6 +383,23 @@ fn replace_field(text: &str, key: &str, value: &str) -> String {
     )
 }
 
+/// Swaps the first character of a value for another hex digit, so the field
+/// stays well formed and only its identity changes.
+fn retint(text: &str, needle: &str) -> String {
+    let at = text.find(needle).unwrap().saturating_add(needle.len());
+    let next = at.saturating_add(1);
+    let replacement = if text.get(at..next) == Some("a") {
+        "b"
+    } else {
+        "a"
+    };
+    format!(
+        "{}{replacement}{}",
+        text.get(..at).unwrap(),
+        text.get(next..).unwrap()
+    )
+}
+
 fn replace_string(text: &str, from: &str, to: &str) -> String {
     assert!(text.contains(from), "{from} is present");
     text.replacen(from, to, 1)
@@ -437,45 +454,116 @@ fn rewrite_payload(root: &Path, change: impl FnOnce(&[u8]) -> Vec<u8>) {
     fs::write(path, frame).unwrap();
 }
 
-fn claimed_ledger(directory: &TempDir, clock: &Arc<TestClock>) -> (FileLedger, AcceptedDelivery) {
-    let delivery = delivery("42");
-    let mut ledger = open(directory.path(), clock);
-    ledger.claim(&delivery, &check_binding()).unwrap();
-    (ledger, delivery)
+/// How far to drive a row before its bytes are edited.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reached {
+    Running,
+    Staged,
+    Done,
 }
 
-/// Each row carries one impossible field behind a valid seal, so the refusal
-/// is the record validator's own.
+fn refuses_edited_state(reached: Reached, edit: fn(&str) -> String, reason: &str) {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+    let mut ledger = open(directory.path(), &clock);
+    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+    if reached != Reached::Running {
+        let publication = publication(&delivery, &lease);
+        let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
+        if reached == Reached::Done {
+            ledger.complete(&delivery, &frozen).unwrap();
+        }
+    }
+    rewrite_state(directory.path(), edit);
+    assert!(
+        matches!(
+            ledger.claim(&delivery, &check_binding()),
+            Err(FileLedgerError::Corrupt)
+        ),
+        "{reason}"
+    );
+}
+
+/// Every row carries one impossible field behind a valid seal, so the refusal
+/// is the record validator's own rather than the frame's.
 #[test]
-fn a_running_record_answers_for_every_field_alone() {
+fn one_impossible_field_fails_the_record_closed() {
     type Defect = fn(&str) -> String;
-    let edits: [(&str, Defect); 4] = [
-        ("a foreign schema", |text| {
+    let rows: [(&str, Reached, Defect); 15] = [
+        ("a foreign schema", Reached::Running, |text| {
             replace_string(text, "file-record-v3", "file-record-v0")
         }),
-        ("a generation before the first", |text| {
+        ("a generation before the first", Reached::Running, |text| {
             replace_field(text, "generation", "0")
         }),
-        ("a last-seen instant before the epoch", |text| {
-            replace_field(text, "last_seen_unix_millis", "-1")
-        }),
-        ("a fence nobody issued", |text| {
+        (
+            "a last-seen instant before the epoch",
+            Reached::Running,
+            |text| replace_field(text, "last_seen_unix_millis", "-1"),
+        ),
+        ("a running fence nobody issued", Reached::Running, |text| {
             replace_field(text, "fence", "0")
         }),
+        ("a staged fence nobody issued", Reached::Staged, |text| {
+            replace_field(text, "fence", "0")
+        }),
+        (
+            "a staged fence past its generation",
+            Reached::Staged,
+            |text| {
+                let generation = field(text, "generation");
+                replace_field(text, "fence", &generation.saturating_add(1).to_string())
+            },
+        ),
+        ("a done fence nobody issued", Reached::Done, |text| {
+            replace_field(text, "fence", "0")
+        }),
+        ("a done fence past its generation", Reached::Done, |text| {
+            let generation = field(text, "generation");
+            replace_field(text, "fence", &generation.saturating_add(1).to_string())
+        }),
+        ("a done digest off the wire", Reached::Done, |text| {
+            replace_string(text, "sha256:", "sha256!")
+        }),
+        (
+            "a gate commit off the object format",
+            Reached::Staged,
+            |text| replace_last(text, r#""gate_commit":""#, r#""gate_commit":"z"#),
+        ),
+        ("another evaluation", Reached::Staged, |text| {
+            replace_last(text, r#""evaluation_id":""#, r#""evaluation_id":"other-"#)
+        }),
+        ("another provider run", Reached::Staged, |text| {
+            replace_last(text, r#""run_id":""#, r#""run_id":"other-"#)
+        }),
+        ("another change", Reached::Staged, |text| {
+            replace_last(text, r#""change":""#, r#""change":"9"#)
+        }),
+        ("a run naming another candidate", Reached::Staged, |text| {
+            let at = text.find(r#""commits":"#).unwrap();
+            let (head, tail) = text.split_at(at);
+            format!("{head}{}", retint(tail, r#""candidate":""#))
+        }),
+        ("another status name", Reached::Staged, |text| {
+            replace_last(
+                text,
+                r#""required_status_name":""#,
+                r#""required_status_name":"other/"#,
+            )
+        }),
     ];
-    for (reason, edit) in edits {
-        let directory = TempDir::new().unwrap();
-        let clock = TestClock::at(1_000);
-        let (mut ledger, delivery) = claimed_ledger(&directory, &clock);
-        rewrite_state(directory.path(), edit);
-        assert!(
-            matches!(
-                ledger.claim(&delivery, &check_binding()),
-                Err(FileLedgerError::Corrupt)
-            ),
-            "{reason}"
-        );
+    for (reason, reached, edit) in rows {
+        refuses_edited_state(reached, edit, reason);
     }
+}
+
+/// Replaces the last occurrence, which is the publication's own copy of a
+/// member the record also carries.
+fn replace_last(text: &str, from: &str, to: &str) -> String {
+    let at = text.rfind(from).unwrap();
+    let (head, tail) = text.split_at(at);
+    format!("{head}{}", replace_string(tail, from, to))
 }
 
 /// A fence at its generation is the one the row holds, in every state; the
@@ -507,41 +595,26 @@ fn a_fence_at_its_generation_is_current_when_staged_or_done() {
     }
 }
 
-/// The staged and done states hold the same fence law as running.
+/// A stored report reference is held to its own length and digest, and the
+/// report on disk must answer both.
 #[test]
-fn staged_and_done_records_hold_their_fences() {
+fn a_report_reference_binds_length_and_digest() {
     type Defect = fn(&str) -> String;
-    let zero_fence: Defect = |text| replace_field(text, "fence", "0");
-    let past_generation: Defect = |text| {
-        let generation = field(text, "generation");
-        replace_field(text, "fence", &generation.saturating_add(1).to_string())
-    };
-    let foreign_digest: Defect = |text| replace_string(text, "sha256:", "sha256!");
-
-    for (reason, stage_it, edit) in [
-        ("a staged fence nobody issued", true, zero_fence),
-        ("a staged fence past its generation", true, past_generation),
-        ("a done fence nobody issued", false, zero_fence),
-        ("a done fence past its generation", false, past_generation),
-        ("a done digest off the wire", false, foreign_digest),
-    ] {
-        let directory = TempDir::new().unwrap();
-        let clock = TestClock::at(1_000);
-        let delivery = delivery("42");
-        let mut ledger = open(directory.path(), &clock);
-        let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
-        let publication = publication(&delivery, &lease);
-        let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
-        if !stage_it {
-            ledger.complete(&delivery, &frozen).unwrap();
-        }
-        rewrite_state(directory.path(), edit);
-        assert!(
-            matches!(
-                ledger.claim(&delivery, &check_binding()),
-                Err(FileLedgerError::Corrupt)
-            ),
-            "{reason}"
-        );
+    let edits: [(&str, Defect); 3] = [
+        ("a length past the wire ceiling", |text| {
+            let length = field(text, "length");
+            assert!(length > 0, "the fixture report has bytes");
+            replace_field(text, "length", "268435457")
+        }),
+        ("a digest off the wire", |text| {
+            replace_last(text, r#""digest":"sha256:"#, r#""digest":"sha256!"#)
+        }),
+        ("a length the report does not have", |text| {
+            let length = field(text, "length");
+            replace_field(text, "length", &length.saturating_add(1).to_string())
+        }),
+    ];
+    for (reason, edit) in edits {
+        refuses_edited_state(Reached::Staged, edit, reason);
     }
 }
