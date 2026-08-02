@@ -1,6 +1,10 @@
-use amiss_controller::{CheckConclusion, ProviderError, RunFailure};
+use amiss_controller::{ChangeId, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure};
+use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
-use super::support::{Fixture, oid};
+use super::super::Config;
+use super::super::model::{CreateReview, ReviewRecord, UserRecord};
+use super::super::publication::{validate_created, validate_publication};
+use super::support::{Fixture, oid, provider, reviewer};
 
 #[test]
 fn reviews_are_exact_commit_bound_and_idempotent() {
@@ -139,4 +143,108 @@ fn a_revoked_control_withholds_an_approval() {
         Ok(())
     );
     assert!(revoked.rest.state.lock().unwrap().created.is_empty());
+}
+
+fn config() -> Config {
+    Config {
+        provider: provider("gitea"),
+        reviewer: reviewer(),
+        review_name: "amiss".to_owned(),
+    }
+}
+
+#[test]
+fn a_publication_is_validated_in_every_field() {
+    let fixture = Fixture::new("gitea");
+    let fresh = || {
+        let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
+        fixture.publication(snapshot, "evaluation-1", CheckConclusion::Pass)
+    };
+    assert_eq!(
+        validate_publication(&config(), fixture.pull_request(), &fresh()),
+        Ok(())
+    );
+
+    let mut wrong_gate = fresh();
+    wrong_gate.gate_commit = oid('9');
+    let mut wrong_attempt = fresh();
+    wrong_attempt.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    let mut wrong_change = fresh();
+    wrong_change.run.change.change =
+        ChangeId::new("repository/101/pull/4201/number/43".to_owned()).unwrap();
+    let mut wrong_format = fresh();
+    wrong_format.run.object_format = ObjectFormat::Sha256;
+    let mut wrong_forge = fresh();
+    wrong_forge.run.refs.forge = ForgeDialect::Github;
+    let mut wrong_candidate = fresh();
+    wrong_candidate.run.commits.candidate = oid('9');
+    let mut wrong_name = fresh();
+    wrong_name.check.required_status_name = "other".to_owned();
+    for (reason, wrong) in [
+        ("gate", wrong_gate),
+        ("attempt", wrong_attempt),
+        ("change", wrong_change),
+        ("format", wrong_format),
+        ("forge", wrong_forge),
+        ("candidate", wrong_candidate),
+        ("status name", wrong_name),
+    ] {
+        assert_eq!(
+            validate_publication(&config(), fixture.pull_request(), &wrong),
+            Err(ProviderError::InvalidResponse),
+            "{reason}"
+        );
+    }
+}
+
+#[test]
+fn a_created_review_is_exact_fresh_and_owned() {
+    let expected = CreateReview {
+        event: "APPROVED".to_owned(),
+        body: "body".to_owned(),
+        commit_id: oid('b').as_str().to_owned(),
+        comments: Vec::new(),
+    };
+    let review = |id: u64, user: u64, login: &str, stale: bool, dismissed: bool| ReviewRecord {
+        id,
+        user: Some(UserRecord {
+            id: user,
+            login: login.to_owned(),
+        }),
+        state: "APPROVED".to_owned(),
+        body: "body".to_owned(),
+        commit_id: oid('b').as_str().to_owned(),
+        stale,
+        dismissed,
+    };
+
+    let sound = review(9, 77, "amiss-controller", false, false);
+    assert_eq!(validate_created(&config(), &expected, &sound), Ok(()));
+    let loud_login = review(9, 77, "AMISS-CONTROLLER", false, false);
+    assert_eq!(validate_created(&config(), &expected, &loud_login), Ok(()));
+
+    for (reason, broken) in [
+        (
+            "an unissued id",
+            review(0, 77, "amiss-controller", false, false),
+        ),
+        (
+            "a stale review",
+            review(9, 77, "amiss-controller", true, false),
+        ),
+        (
+            "a dismissed review",
+            review(9, 77, "amiss-controller", false, true),
+        ),
+        (
+            "a foreign reviewer",
+            review(9, 78, "amiss-controller", false, false),
+        ),
+    ] {
+        assert_eq!(
+            validate_created(&config(), &expected, &broken),
+            Err(ProviderError::InvalidResponse),
+            "{reason}"
+        );
+    }
 }
