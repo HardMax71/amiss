@@ -68,6 +68,14 @@ pub(crate) fn raw<'a>(
 }
 
 pub(crate) fn delivery(provider: &ProviderIdentity) -> AuthenticatedDelivery {
+    split_delivery(provider, provider)
+}
+
+pub(crate) fn split_delivery(
+    identity_provider: &ProviderIdentity,
+    change_provider: &ProviderIdentity,
+) -> AuthenticatedDelivery {
+    let provider = identity_provider;
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
@@ -75,7 +83,7 @@ pub(crate) fn delivery(provider: &ProviderIdentity) -> AuthenticatedDelivery {
             delivery: DeliveryId::new("untrusted-placeholder".to_owned()).unwrap(),
         },
         change: ChangeLocator {
-            provider: provider.clone(),
+            provider: change_provider.clone(),
             repository: RepositoryIdentity::new(
                 "forge.example.test".to_owned(),
                 "owner".to_owned(),
@@ -100,6 +108,15 @@ pub(crate) fn github_verified(
     trust_set: TrustSetId,
 ) -> VerifiedDelivery {
     github_proof(check, trust_set).bind(delivery(provider))
+}
+
+pub(crate) fn github_verified_split(
+    check: amiss_controller::IngressCheck<'_>,
+    identity_provider: &ProviderIdentity,
+    change_provider: &ProviderIdentity,
+    trust_set: TrustSetId,
+) -> VerifiedDelivery {
+    github_proof(check, trust_set).bind(split_delivery(identity_provider, change_provider))
 }
 
 pub(crate) fn github_proof(
