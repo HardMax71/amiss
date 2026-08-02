@@ -108,3 +108,22 @@ fn packed_and_deltified_objects_honor_the_cap() {
         body(2).into_bytes()
     );
 }
+
+#[test]
+fn a_packed_object_at_exactly_the_cap_is_within_it() {
+    let dir = TempDir::new().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    fs::write(dir.path().join("doc.md"), body(1)).unwrap();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "one"]);
+    let blob = git(dir.path(), &["rev-parse", "HEAD:doc.md"])
+        .trim()
+        .to_owned();
+    git(dir.path(), &["repack", "-adfq"]);
+    let declared = u64::try_from(body(1).len()).unwrap();
+    assert_eq!(
+        read_capped(dir.path(), &blob, declared).unwrap(),
+        body(1).into_bytes(),
+        "a declared size equal to the cap is under it"
+    );
+}

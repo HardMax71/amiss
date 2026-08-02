@@ -412,3 +412,33 @@ fn every_tree_mode_names_its_entry_kind() {
         [GitMode::ExecutableFile, GitMode::Symlink, GitMode::Gitlink]
     );
 }
+
+#[test]
+fn an_object_and_an_index_at_exactly_their_caps_are_read() {
+    let dir = make_repo();
+    let oid = write_loose(dir.path(), "blob", b"exactly this much\n");
+    let stream = fs::metadata(loose_path(dir.path(), oid.as_str()))
+        .unwrap()
+        .len();
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits {
+        compressed_stream_bytes: stream,
+        ..GitLimits::CONTRACT
+    });
+    assert_eq!(
+        repo.read_object(&mut res, &oid).unwrap().body,
+        b"exactly this much\n",
+        "a compressed stream equal to the cap is under it"
+    );
+}
+
+#[test]
+fn an_absent_object_is_never_claimed_present() {
+    let dir = make_repo();
+    let present = write_loose(dir.path(), "blob", b"here\n");
+    let repo = open(dir.path());
+    let mut res = GitResources::new(GitLimits::CONTRACT);
+    let absent = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
+    assert_eq!(repo.has_object(&mut res, &absent), Ok(false));
+    assert_eq!(repo.has_object(&mut res, &present), Ok(true));
+}

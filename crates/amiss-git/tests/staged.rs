@@ -303,3 +303,20 @@ fn index_extensions_are_skipped_or_refused_by_their_case() {
         "an extension may not overrun the file"
     );
 }
+
+#[test]
+fn an_index_at_exactly_the_cap_is_read() {
+    let dir = TempDir::new().unwrap();
+    base(dir.path());
+    let bytes = fs::metadata(dir.path().join(".git/index")).unwrap().len();
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits {
+        index_bytes: bytes,
+        ..GitLimits::CONTRACT
+    });
+    assert_eq!(
+        u64::try_from(repo.read_index_bytes(&mut resources).unwrap().len()).unwrap(),
+        bytes,
+        "an index the size of its ceiling is under it"
+    );
+}
