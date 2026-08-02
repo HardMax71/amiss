@@ -166,3 +166,140 @@ fn corruption_and_race_detection() {
         "a staged content change is solely a snapshot change"
     );
 }
+
+fn entry_bytes(path: &[u8], flags: u16, extended: Option<u16>) -> Vec<u8> {
+    let mut entry = vec![0_u8; 24];
+    entry.extend_from_slice(&0o100_644_u32.to_be_bytes());
+    entry.extend_from_slice(&[0; 12]);
+    entry.extend_from_slice(&[0xaa; 20]);
+    entry.extend_from_slice(&flags.to_be_bytes());
+    if let Some(word) = extended {
+        entry.extend_from_slice(&word.to_be_bytes());
+    }
+    entry.extend_from_slice(path);
+    entry.push(0);
+    while !entry.len().is_multiple_of(8) {
+        entry.push(0);
+    }
+    entry
+}
+
+fn raw_entry(path: &[u8], flags: u16) -> Vec<u8> {
+    entry_bytes(path, flags, None)
+}
+
+fn named_entry(path: &[u8]) -> Vec<u8> {
+    raw_entry(path, u16::try_from(path.len()).unwrap_or(0x0fff))
+}
+
+fn extended_entry(path: &[u8], extended: u16) -> Vec<u8> {
+    let flags = 0x4000 | u16::try_from(path.len()).unwrap_or(0);
+    entry_bytes(path, flags, Some(extended))
+}
+
+fn raw_index_v(version: u32, entries: &[Vec<u8>], extensions: &[u8]) -> Vec<u8> {
+    use sha1_checked::Digest as _;
+    let mut content = b"DIRC".to_vec();
+    content.extend_from_slice(&version.to_be_bytes());
+    content.extend_from_slice(&u32::try_from(entries.len()).unwrap_or(0).to_be_bytes());
+    for entry in entries {
+        content.extend_from_slice(entry);
+    }
+    content.extend_from_slice(extensions);
+    let mut hasher = sha1_checked::Sha1::builder().build();
+    hasher.update(&content);
+    content.extend_from_slice(hasher.try_finalize().hash().as_slice());
+    content
+}
+
+fn raw_index(entries: &[Vec<u8>], extensions: &[u8]) -> Vec<u8> {
+    raw_index_v(2, entries, extensions)
+}
+
+#[test]
+fn an_extended_entry_is_skip_worktree_only_by_its_bit() {
+    let clear = raw_index_v(3, &[extended_entry(b"a", 0)], b"");
+    let parsed = parse_index_file(ObjectFormat::Sha1, &clear).expect("a clear extended word");
+    assert_eq!(
+        parsed.entries.first().map(|entry| entry.skip_worktree),
+        Some(false)
+    );
+
+    let set = raw_index_v(3, &[extended_entry(b"a", 0x4000)], b"");
+    let parsed = parse_index_file(ObjectFormat::Sha1, &set).expect("the skip-worktree bit");
+    assert_eq!(
+        parsed.entries.first().map(|entry| entry.skip_worktree),
+        Some(true)
+    );
+}
+
+#[test]
+fn a_crafted_index_holds_order_prefixes_and_name_lengths() {
+    let sound = parse_index_file(ObjectFormat::Sha1, &raw_index(&[named_entry(b"a")], b""))
+        .expect("one plain row parses");
+    assert_eq!(sound.entries.len(), 1);
+
+    let shadowed = raw_index(&[named_entry(b"a"), named_entry(b"a/b")], b"");
+    assert_eq!(
+        parse_index_file(ObjectFormat::Sha1, &shadowed).unwrap_err(),
+        Error::IndexInvalid,
+        "a file row shadows every path below it"
+    );
+
+    let misordered = raw_index(&[named_entry(b"b"), named_entry(b"a")], b"");
+    assert_eq!(
+        parse_index_file(ObjectFormat::Sha1, &misordered).unwrap_err(),
+        Error::IndexInvalid,
+        "rows must ascend"
+    );
+
+    let lying = raw_index(&[raw_entry(b"ab", 1)], b"");
+    assert_eq!(
+        parse_index_file(ObjectFormat::Sha1, &lying).unwrap_err(),
+        Error::IndexInvalid,
+        "the flag length must match the path"
+    );
+
+    let long_marker = parse_index_file(
+        ObjectFormat::Sha1,
+        &raw_index(&[raw_entry(b"a", 0x0fff)], b""),
+    )
+    .expect("the long-name marker skips length verification");
+    assert_eq!(long_marker.entries.len(), 1);
+}
+
+#[test]
+fn index_extensions_are_skipped_or_refused_by_their_case() {
+    let entry = named_entry(b"a");
+
+    let mut mandatory = b"link".to_vec();
+    mandatory.extend_from_slice(&0_u32.to_be_bytes());
+    assert_eq!(
+        parse_index_file(
+            ObjectFormat::Sha1,
+            &raw_index(std::slice::from_ref(&entry), &mandatory)
+        )
+        .unwrap_err(),
+        Error::IndexInvalid,
+        "a lowercase-initial extension is mandatory and unknown"
+    );
+
+    let mut optional = b"TREE".to_vec();
+    optional.extend_from_slice(&4_u32.to_be_bytes());
+    optional.extend_from_slice(b"tree");
+    let skipped = parse_index_file(
+        ObjectFormat::Sha1,
+        &raw_index(std::slice::from_ref(&entry), &optional),
+    )
+    .expect("an exactly-fitting optional extension is skipped");
+    assert_eq!(skipped.entries.len(), 1);
+
+    let mut overrun = b"TREE".to_vec();
+    overrun.extend_from_slice(&8_u32.to_be_bytes());
+    overrun.extend_from_slice(b"tree");
+    assert_eq!(
+        parse_index_file(ObjectFormat::Sha1, &raw_index(&[entry], &overrun)).unwrap_err(),
+        Error::IndexInvalid,
+        "an extension may not overrun the file"
+    );
+}
