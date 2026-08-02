@@ -3,7 +3,8 @@ use amiss_md::extract::Occurrence;
 use amiss_scan::Observation;
 use amiss_scan::correlate::{Comparison, Side, correlate};
 use amiss_scan::evaluate::{
-    Attribution, DocumentInput, DocumentSide, Finding, LocationSide, evaluate, evaluate_with_policy,
+    Attribution, DocumentInput, DocumentSide, Finding, GovernedSeed, LocationSide, evaluate,
+    evaluate_with_policy,
 };
 use amiss_scan::observe::occurrence_id;
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
@@ -473,8 +474,21 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
         vec![observation(&carried)],
         vec![observation(&carried), observation(&fresh)],
     );
-    let (findings, errors) =
-        evaluate_with_policy(&[], &comparisons, true, true, &Effects::default(), &[]);
+    let governed = GovernedSeed {
+        document: repo_path("governed.md"),
+        member_count: 1,
+        sources: vec![(hb("amiss/scanner-source-projection", b"governed"), 1)],
+        representative_span: None,
+        representative_display: None,
+    };
+    let (findings, errors) = evaluate_with_policy(
+        &[],
+        &comparisons,
+        true,
+        true,
+        &Effects::default(),
+        std::slice::from_ref(&governed),
+    );
     assert!(errors.is_empty());
 
     let mut demoted: Vec<(Attribution, Disposition)> = findings
@@ -491,16 +505,20 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
         ],
         "the carried failure warns while the fresh one still fails"
     );
-    let untouched = findings
-        .iter()
-        .filter(|finding| finding.kind != FindingKind::ExplicitTargetMissing)
-        .all(|finding| {
-            finding
-                .steps
-                .iter()
-                .all(|step| !step.rule_id.contains("enforce-introduced"))
-        });
-    assert!(untouched, "nothing below fail is demoted");
+    let control = only(findings, FindingKind::UnsupportedCapability);
+    assert_eq!(
+        control.effective_disposition,
+        Disposition::Fail,
+        "a failure nobody carried in is not pre-existing"
+    );
+    assert!(
+        control
+            .steps
+            .iter()
+            .all(|step| !step.rule_id.contains("enforce-introduced")),
+        "{:?}",
+        control.steps
+    );
 }
 
 /// A raise names a stronger disposition or says nothing at all.
