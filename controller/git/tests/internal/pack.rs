@@ -428,9 +428,16 @@ fn a_pack_at_its_ceilings_is_within_them() {
         "a pack whose stream, count, and object all sit on their limits"
     );
 
-    let base = ordinary(3, b"a");
+    // base size 6, result size 6, then one copy of all six bytes.
+    let delta_stream = [6_u8, 6, 0x90, 6];
+    let base = ordinary(3, b"aaaaaa");
     let delta_offset = 12_u64.saturating_add(u64::try_from(base.len()).unwrap_or(u64::MAX));
-    let delta = entry(6, 2, &[1, 6], &offset(delta_offset.saturating_sub(12)));
+    let delta = entry(
+        6,
+        u64::try_from(delta_stream.len()).unwrap_or(u64::MAX),
+        &delta_stream,
+        &offset(delta_offset.saturating_sub(12)),
+    );
     let chain = pack([base, delta]);
     let at_result = PackLimits {
         object_bytes: 6,
@@ -439,6 +446,14 @@ fn a_pack_at_its_ceilings_is_within_them() {
     assert!(
         validate(&chain, at_result).is_ok(),
         "a delta result exactly at the object ceiling"
+    );
+    let below_result = PackLimits {
+        object_bytes: 5,
+        ..limits()
+    };
+    assert!(
+        validate(&chain, below_result).is_err(),
+        "and one byte below it is not"
     );
 }
 
