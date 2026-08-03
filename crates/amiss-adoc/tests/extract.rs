@@ -214,6 +214,11 @@ fn a_fence_is_a_run_of_four_or_its_own_word() {
         "four characters open a fence"
     );
     assert_eq!(
+        shapes("-----\ncode\n-----\n"),
+        vec![(Some(Delimiter::Verbatim), false)],
+        "and so do five, since the rule is four or more"
+    );
+    assert_eq!(
         shapes("---\ncode\n---\n"),
         vec![(None, false)],
         "three do not"
