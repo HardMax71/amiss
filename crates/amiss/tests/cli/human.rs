@@ -43,6 +43,52 @@ fn human_output_projects_the_same_result() {
         "totals close the projection"
     );
     assert!(!text.contains('\r'), "LF-only stdout");
+    assert!(
+        !text.contains("feedback overflow"),
+        "two items are not an overflow: {text}"
+    );
+}
+
+/// One note per code, however many rows carry it.
+#[test]
+fn repeated_error_codes_are_explained_once() {
+    let fx = fixture();
+    let root = fx.root();
+    let governed = "A claim [here][amiss:claim].\n\n\
+         [amiss:claim]: ./subject.md \"claim\"\n\
+         [amiss:claim]: ./subject.md \"claim\"\n";
+    fs::write(root.join("docs/first.md"), governed).unwrap_or_default();
+    fs::write(root.join("docs/second.md"), governed).unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "two governed documents"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 2, "reserved directives leave the run incomplete");
+    let text = String::from_utf8_lossy(&stdout);
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("error policy UNSUPPORTED_CAPABILITY"))
+            .count(),
+        2,
+        "both documents report their own error row: {text}"
+    );
+    assert_eq!(
+        text.matches("note UNSUPPORTED_CAPABILITY:").count(),
+        1,
+        "the meaning is stated once for the code, not once per row: {text}"
+    );
 }
 
 #[test]

@@ -79,3 +79,6 @@ impl View {
         }
     }
 }
+
+#[path = "../tests/internal/view.rs"]
+mod tests;

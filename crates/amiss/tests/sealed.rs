@@ -67,6 +67,97 @@ fn malformed_and_trailing_frames_never_reach_the_command_grammar() {
     }
 }
 
+fn framed(streams: &RequestStreams) -> Vec<u8> {
+    let mut frame = Vec::new();
+    streams.write_to(&mut frame).unwrap();
+    frame
+}
+
+/// Byte-different, same value: the gate reads bytes, not meaning.
+fn spaced(canonical: &[u8]) -> Vec<u8> {
+    let mut loosened = canonical.to_vec();
+    loosened.insert(1, b' ');
+    loosened
+}
+
+/// Each stream arrives in canonical form and the two modes agree, checked
+/// stream by stream so no clause rides on another.
+#[test]
+fn a_sealed_frame_is_canonical_in_every_stream_and_agrees_on_the_mode() {
+    let elsewhere = tempfile::tempdir().expect("a directory that is no repository");
+    let root = amiss_fixtures::path_arg(elsewhere.path());
+    let mut cases: Vec<(&str, RequestStreams)> = Vec::new();
+    for name in ["evaluation", "snapshot", "controls"] {
+        let mut streams = example_streams();
+        let stream = match name {
+            "evaluation" => &mut streams.evaluation,
+            "snapshot" => &mut streams.snapshot,
+            _ => &mut streams.controls,
+        };
+        *stream = spaced(stream);
+        cases.push((name, streams));
+    }
+    let mut mismatched = example_streams();
+    mismatched.snapshot = SnapshotRequest::index().canonical_bytes().unwrap();
+    cases.push(("the snapshot mode", mismatched));
+
+    for (name, streams) in cases {
+        let output = run(Some(&root), &framed(&streams));
+        assert_eq!(output.status.code(), Some(2), "{name}");
+        assert!(output.stdout.is_empty(), "{name}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("INVALID_INVOCATION"),
+            "{name} is refused before the run reaches a repository: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+/// The identity in the frame is the one resolution works with, so a URL on
+/// the declared host is this repository and not a foreign site.
+#[test]
+fn a_sealed_run_resolves_against_the_identity_it_was_given() {
+    let fixture = amiss_fixtures::commit_pair(
+        &[("docs/guide.md", "# Guide\n")],
+        &[(
+            "docs/guide.md",
+            "# Guide\n\n[self](https://ghes.example/acme/widget/blob/main/docs/guide.md)\n",
+        )],
+    )
+    .unwrap();
+    let format = ObjectFormat::Sha1;
+    let mut evaluation = EvaluationRequest::commit_pair(
+        Profile::Observe,
+        format,
+        Oid::new(format, fixture.base.clone()).unwrap(),
+        Oid::new(format, fixture.candidate.clone()).unwrap(),
+    );
+    evaluation.repository = RepositoryIdentity::new(
+        "ghes.example".to_owned(),
+        "acme".to_owned(),
+        "widget".to_owned(),
+    );
+    evaluation.forge = Some(ForgeDialect::Github);
+    evaluation.candidate_ref = BranchRef::new("refs/heads/main".to_owned());
+    evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
+    evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+
+    let streams = RequestStreams {
+        evaluation: evaluation.canonical_bytes().unwrap(),
+        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
+        controls: ControlsRequest::default().canonical_bytes().unwrap(),
+    };
+    let output = run(Some(&fixture.repo), &framed(&streams));
+    assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let references = &envelope["payload"]["summary"]["references"];
+    assert_eq!(
+        references["same_repository"], 1,
+        "the declared host's own URL: {references}"
+    );
+    assert_eq!(references["external_out_of_scope"], 0);
+}
+
 #[test]
 fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     let fixture =
