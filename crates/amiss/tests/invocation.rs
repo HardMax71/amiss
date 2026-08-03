@@ -244,6 +244,36 @@ fn option_shaped_tokens_are_not_values() {
         vec![Code::InvalidInvocation],
         "--base consumes --candidate as an option, not as a value"
     );
+
+    let starved = with(
+        &without_value(&valid_pair(), "--profile"),
+        &["--explain-scope"],
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&starved)),
+        vec![Code::InvalidInvocation],
+        "--profile that swallowed --explain-scope would name the flag as its profile instead"
+    );
+}
+
+/// Each duplicate rule stands on its own, and an option that arrived without
+/// its value is defective rather than absent.
+#[test]
+fn every_repetition_refuses_by_itself() {
+    let index_only = without_option(&valid_pair(), "--candidate");
+    let cases = [
+        with(&index_only, &["--index", "--index"]),
+        with(&valid_pair(), &["--explain-scope", "--explain-scope"]),
+        with(&valid_pair(), &["--candidate", HEAD_B]),
+        without_value(&valid_pair(), "--candidate"),
+    ];
+    for tokens in cases {
+        assert_eq!(
+            rejected_codes(parse_tokens(&tokens)),
+            vec![Code::InvalidInvocation],
+            "tokens {tokens:?}"
+        );
+    }
 }
 
 #[test]
@@ -350,6 +380,14 @@ fn without_option(base: &[String], option: &str) -> Vec<String> {
     let mut tokens = base.to_vec();
     if let Some(at) = tokens.iter().position(|token| token == option) {
         tokens.drain(at..=at.saturating_add(1));
+    }
+    tokens
+}
+
+fn without_value(base: &[String], option: &str) -> Vec<String> {
+    let mut tokens = base.to_vec();
+    if let Some(at) = tokens.iter().position(|token| token == option) {
+        tokens.remove(at.saturating_add(1));
     }
     tokens
 }
