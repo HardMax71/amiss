@@ -170,3 +170,6 @@ fn separate_roots<const N: usize>(
     });
     (!overlap).then_some(()).ok_or(overlap_error)
 }
+
+#[path = "../../tests/internal/paths.rs"]
+mod tests;

@@ -321,6 +321,7 @@ dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
  "amiss-controller-files",
+ "amiss-controller-fixtures",
  "amiss-controller-git",
  "amiss-fixtures",
  "amiss-git",
