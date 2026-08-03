@@ -12,7 +12,8 @@ use amiss_wire::digest::hj;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL,
-    RequestMode, RequestStreams, RequestTrust, SnapshotRequest, commit_candidate_identity_digest,
+    REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust, SnapshotRequest,
+    commit_candidate_identity_digest,
 };
 
 fn request_example(name: &str) -> Vec<u8> {
@@ -345,5 +346,101 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
         ControlsRequest::parse(empty).unwrap(),
         ControlsRequest::default(),
         "supplying no controls is lawful"
+    );
+}
+
+/// Both words of the mode vocabulary and both of the object-format vocabulary
+/// are requests the engine has to accept, not just the pair the example spells.
+#[test]
+fn the_other_lawful_evaluation_words_parse() {
+    let example = String::from_utf8(request_example("scanner-evaluation-request.json")).unwrap();
+
+    let staged = example
+        .replace(r#""mode": "commit-pair""#, r#""mode": "index""#)
+        .replace(
+            r#""candidate_commit_oid": "3e19afc65b2704d8ce8b1f09a4de6273550d914b""#,
+            r#""candidate_commit_oid": null"#,
+        );
+    let request = EvaluationRequest::parse(staged.as_bytes()).expect("a staged run is lawful");
+    assert_eq!(request.mode, RequestMode::Index);
+    assert!(request.candidate_commit.is_none());
+
+    let wider = example
+        .replace(r#""object_format": "sha1""#, r#""object_format": "sha256""#)
+        .replace("8d7f2c31a09b64e5dd10fcab7e93245160c8ba72", &"a".repeat(64))
+        .replace("3e19afc65b2704d8ce8b1f09a4de6273550d914b", &"b".repeat(64));
+    let request = EvaluationRequest::parse(wider.as_bytes()).expect("the other object format");
+    assert_eq!(request.object_format, ObjectFormat::Sha256);
+    assert_eq!(request.base_commit.as_str(), "a".repeat(64));
+}
+
+/// The other authority in the closed pair is an authority.
+#[test]
+fn a_control_from_the_required_check_is_a_control() {
+    let example = String::from_utf8(request_example("scanner-controls-request.json")).unwrap();
+    let checked = example.replace(
+        r#""trust_source": "organization-policy""#,
+        r#""trust_source": "external-required-check""#,
+    );
+    let request = ControlsRequest::parse(checked.as_bytes()).expect("both sources are lawful");
+    assert_eq!(
+        request
+            .organization_floor
+            .expect("the example supplies a floor")
+            .trust_source,
+        RequestTrust::ExternalRequiredCheck
+    );
+}
+
+/// The stream ceiling is a ceiling: a request that reaches it is written and
+/// read, and one byte more is refused on both sides of the frame.
+#[test]
+fn a_stream_may_reach_the_ceiling_and_not_pass_it() {
+    let ceiling = usize::try_from(REQUEST_STREAM_BYTES).expect("the ceiling fits this host");
+    let at_ceiling = RequestStreams {
+        evaluation: vec![b' '; ceiling],
+        snapshot: Vec::new(),
+        controls: Vec::new(),
+    };
+    let mut frame = Vec::new();
+    at_ceiling
+        .write_to(&mut frame)
+        .expect("a stream of exactly the ceiling is writable");
+    assert_eq!(
+        RequestStreams::read_from(&mut frame.as_slice()).expect("and readable"),
+        at_ceiling
+    );
+
+    let past_ceiling = RequestStreams {
+        evaluation: vec![b' '; ceiling.saturating_add(1)],
+        snapshot: Vec::new(),
+        controls: Vec::new(),
+    };
+    assert_eq!(
+        past_ceiling
+            .write_to(&mut Vec::new())
+            .expect_err("one byte past the ceiling is not writable")
+            .kind(),
+        std::io::ErrorKind::InvalidData
+    );
+
+    let declared = |length: u64| {
+        let mut claim = Vec::new();
+        claim.extend_from_slice(b"AMISSRQ1");
+        claim.extend_from_slice(&length.to_be_bytes());
+        claim
+    };
+    assert_eq!(
+        RequestStreams::read_from(&mut declared(REQUEST_STREAM_BYTES).as_slice())
+            .expect_err("the body is missing")
+            .kind(),
+        std::io::ErrorKind::UnexpectedEof,
+        "a declared length at the ceiling is a length the reader accepts"
+    );
+    assert_eq!(
+        RequestStreams::read_from(&mut declared(REQUEST_STREAM_BYTES.saturating_add(1)).as_slice())
+            .expect_err("one byte past the ceiling")
+            .kind(),
+        std::io::ErrorKind::InvalidData
     );
 }
