@@ -22,9 +22,7 @@ where
     RunFuture: Future<Output = Result<(), RunError>>,
 {
     let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
-    if let [only] = arguments.as_slice()
-        && only.to_str() == Some("--version")
-    {
+    if version_request(&arguments) {
         println!("{name} {version}");
         return ExitCode::SUCCESS;
     }
@@ -62,6 +60,10 @@ where
     }
 }
 
+fn version_request(arguments: &[OsString]) -> bool {
+    matches!(arguments, [only] if only.to_str() == Some("--version"))
+}
+
 fn config_path(arguments: &[OsString]) -> Option<(PathBuf, bool)> {
     let mut arguments = arguments.iter();
     let first = arguments.next()?;
@@ -69,3 +71,6 @@ fn config_path(arguments: &[OsString]) -> Option<(PathBuf, bool)> {
     let path = PathBuf::from(if check_only { arguments.next()? } else { first });
     (arguments.next().is_none() && path.is_absolute()).then_some((path, check_only))
 }
+
+#[path = "../tests/internal/launcher.rs"]
+mod tests;
