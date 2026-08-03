@@ -116,8 +116,17 @@ fn snapshot(
     )
 }
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn report_between(root: &Path, base_commit: &str, candidate_commit: &str) -> Built {
+    report_retaining(root, base_commit, candidate_commit, 64)
+}
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn report_retaining(
+    root: &Path,
+    base_commit: &str,
+    candidate_commit: &str,
+    errors_retained: u64,
+) -> Built {
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     let (base_identity, base_discovery, base_side) = snapshot(&repo, &mut resources, base_commit);
@@ -135,7 +144,10 @@ fn report_between(root: &Path, base_commit: &str, candidate_commit: &str) -> Bui
         default_branch_ref: None,
         base: base_identity,
         candidate: CandidateBlock::Commit(candidate_identity),
-        policy: amiss_scan::Effects::default(),
+        policy: amiss_scan::Effects {
+            errors_retained,
+            ..amiss_scan::Effects::default()
+        },
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
@@ -354,6 +366,93 @@ fn invalid_references_split_new_existing_and_ambiguous_feedback() {
     assert!(items[1]["annotation"].is_null());
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn mixed_findings(root: &Path) -> serde_json::Value {
+    git(root, &["init", "-q"]);
+    fs::write(root.join("hub.md"), "[b](b.md) and [gone](missing.md)\n").unwrap();
+    fs::write(root.join("b.md"), "# B\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join("hub.md"),
+        "[b](b.md) and [gone](missing.md) and [fresh](fresh.md)\n",
+    )
+    .unwrap();
+    fs::write(root.join("orphan.md"), "# Orphan\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let built = report_between(root, &base, &candidate);
+    serde_json::from_slice(&built.wire()).unwrap()
+}
+
+/// A document-scope finding embeds the row of the document it stands on, not
+/// whichever row the search happened to reach first.
+#[test]
+fn a_document_fact_carries_its_own_document_row() {
+    let dir = TempDir::new().unwrap();
+    let wire = mixed_findings(dir.path());
+    let rows = wire["payload"]["findings"].as_array().unwrap();
+    let pairs: Vec<(&str, &str)> = rows
+        .iter()
+        .filter(|row| row["candidate_fact"]["evidence"]["kind"] == "document")
+        .map(|row| {
+            (
+                row["location"]["path"].as_str().unwrap(),
+                row["candidate_fact"]["evidence"]["document_result"]["path"]
+                    .as_str()
+                    .unwrap(),
+            )
+        })
+        .collect();
+    assert!(
+        pairs.len() >= 2,
+        "the fixture leaves more than one document unlinked: {pairs:?}"
+    );
+    for (finding_path, fact_path) in pairs {
+        assert_eq!(finding_path, fact_path);
+    }
+}
+
+/// Every attribution counter counts its own class.
+#[test]
+fn the_summary_counts_each_attribution_it_names() {
+    let dir = TempDir::new().unwrap();
+    let wire = mixed_findings(dir.path());
+    let payload = &wire["payload"];
+    let rows = payload["findings"].as_array().unwrap();
+    let counted = |attribution: &str| {
+        rows.iter()
+            .filter(|row| row["attribution"] == attribution)
+            .count()
+    };
+    let reported = |name: &str| payload["summary"]["findings"][name].as_u64().unwrap();
+
+    let classes = [
+        ("introduced", "introduced"),
+        ("pre_existing", "pre-existing"),
+        ("resolved", "resolved"),
+        ("unknown", "unknown"),
+        ("not_applicable", "not-applicable"),
+    ];
+    let present = classes
+        .iter()
+        .filter(|(_, attribution)| counted(attribution) > 0)
+        .count();
+    assert!(
+        present >= 2,
+        "the fixture mixes attributions, or the counts prove nothing: {rows:?}"
+    );
+    for (name, attribution) in classes {
+        assert_eq!(
+            reported(name),
+            u64::try_from(counted(attribution)).unwrap(),
+            "{name}"
+        );
+    }
+}
+
 fn bare_setup(errors_retained: u64) -> Setup {
     let oid = "a".repeat(40);
     let identity = SnapshotIdentity {
@@ -433,6 +532,33 @@ fn document_rows_merge_both_sides_in_strict_raw_path_order() {
     );
 }
 
+/// A document standing on both sides is unchanged only when both sides say
+/// the same thing, so an entry that moved reads as changed.
+#[test]
+fn a_document_that_moved_is_not_unchanged() {
+    let base = excluded_discovery(&["moved.md", "still.md"]);
+    let mut candidate = excluded_discovery(&["moved.md", "still.md"]);
+    let moved = candidate.documents.first_mut().unwrap();
+    moved.oid = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
+
+    let built = construct(&bare_setup(64), &base, &candidate, &[]);
+    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let rows = wire["payload"]["documents"].as_array().unwrap();
+    let changes: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|row| {
+            (
+                row["path"].as_str().unwrap(),
+                row["change"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        changes,
+        [("moved.md", "changed"), ("still.md", "unchanged")]
+    );
+}
+
 fn missing_detail(path: &str) -> ErrorDetail {
     ErrorDetail {
         code: AnalysisErrorCode::GitObjectMissing,
@@ -492,6 +618,48 @@ fn a_ceiling_of_one_emits_only_the_sentinel() {
     assert_eq!(errors[0]["code"], "TOO_MANY_ERRORS");
     assert_eq!(errors[0]["configured_limit"], 1);
     assert_eq!(errors[0]["observed_lower_bound"], 2);
+}
+
+/// A run whose errors reach the retained ceiling still ships its detail; one
+/// error past it there is no report to trim.
+#[test]
+fn the_error_ceiling_is_crossed_above_it_and_not_at_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let claim = "A claim [here][amiss:claim].\n\n[amiss:claim]: ./subject.md \"claim\"\n";
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    for name in ["one", "two", "three"] {
+        fs::write(root.join(format!("{name}.md")), claim).unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "governed"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let at_ceiling = report_retaining(root, &base, &candidate, 3);
+    let wire: serde_json::Value = serde_json::from_slice(&at_ceiling.wire()).unwrap();
+    let payload = &wire["payload"];
+    assert_eq!(
+        payload["errors"].as_array().unwrap().len(),
+        3,
+        "the fixture governs three documents: {payload}"
+    );
+    assert!(
+        !payload["documents"].as_array().unwrap().is_empty(),
+        "errors at the ceiling keep the detail arrays: {payload}"
+    );
+
+    let over_ceiling = report_retaining(root, &base, &candidate, 1);
+    let wire: serde_json::Value = serde_json::from_slice(&over_ceiling.wire()).unwrap();
+    let payload = &wire["payload"];
+    assert!(
+        payload["documents"].as_array().unwrap().is_empty(),
+        "past the ceiling there is no report to detail: {payload}"
+    );
+    assert_eq!(payload["errors"][0]["code"], "TOO_MANY_ERRORS");
 }
 
 #[expect(
