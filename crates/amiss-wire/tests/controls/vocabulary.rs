@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use amiss_wire::controls::{ContentAvailability, GitMode, Profile, ResourceName};
+use amiss_wire::controls::{
+    ConstraintPlatform, ContentAvailability, GitMode, Profile, ResourceName,
+};
 use amiss_wire::json::Value;
 use strum::IntoEnumIterator;
 
@@ -18,6 +20,35 @@ fn the_profile_vocabulary_is_the_closed_triple() {
         );
     }
     assert!(Profile::decode("$.minimum_profile", Value::String("enforced".to_owned())).is_err());
+}
+
+/// Every platform in the closed table answers to its own spelling, since a
+/// constraint that named one and decoded to another would bind the run to a
+/// host it was never written for.
+#[test]
+fn the_platform_vocabulary_is_the_closed_six() {
+    let table = [
+        ConstraintPlatform::LinuxX8664,
+        ConstraintPlatform::LinuxAarch64,
+        ConstraintPlatform::MacosX8664,
+        ConstraintPlatform::MacosAarch64,
+        ConstraintPlatform::WindowsX8664,
+        ConstraintPlatform::WindowsAarch64,
+    ];
+    for platform in table {
+        let name = platform.as_str();
+        assert_eq!(
+            ConstraintPlatform::decode("$.selected_platform", Value::String(name.to_owned())),
+            Ok(platform),
+            "{name}"
+        );
+    }
+    let spellings: BTreeSet<&str> = table.iter().map(|platform| platform.as_str()).collect();
+    assert_eq!(spellings.len(), table.len(), "no two share a spelling");
+    assert!(
+        ConstraintPlatform::decode("$.selected_platform", Value::String("linux-x86".to_owned()))
+            .is_err()
+    );
 }
 
 #[test]
