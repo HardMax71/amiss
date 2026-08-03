@@ -549,14 +549,28 @@ fn a_verified_floor_tightens_the_complete_findings_ceiling() {
         "the fixture produces findings to count: {produced}"
     );
 
-    let ceiling = produced - 1;
-    let extra = EMPTY_ARRAYS.replace(
-        "\"resource_limits\": []",
-        &format!(
-            "\"resource_limits\": [ {{ \"resource\": \"complete-findings\", \"maximum\": {ceiling} }} ]"
-        ),
+    let tightened = |ceiling: u64| {
+        let extra = EMPTY_ARRAYS.replace(
+            "\"resource_limits\": []",
+            &format!(
+                "\"resource_limits\": [ {{ \"resource\": \"complete-findings\", \"maximum\": {ceiling} }} ]"
+            ),
+        );
+        payload(&shell(Some(floor_input(&extra))), &repo, &base, &candidate)
+    };
+
+    let at_ceiling = tightened(produced);
+    assert_eq!(
+        at_ceiling["result"]["complete"], true,
+        "a ceiling the run reaches exactly is a ceiling it stays under"
     );
-    let report = payload(&shell(Some(floor_input(&extra))), &repo, &base, &candidate);
+    assert_eq!(
+        at_ceiling["result"]["finding_count"].as_u64(),
+        Some(produced)
+    );
+
+    let ceiling = produced - 1;
+    let report = tightened(ceiling);
 
     assert_eq!(
         report["exit_code"], 2,
