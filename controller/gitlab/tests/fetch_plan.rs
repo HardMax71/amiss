@@ -7,9 +7,9 @@ mod support;
 
 use std::sync::Arc;
 
-use amiss_controller::{ChangeId, DeliveryId, ProviderInstance, ProviderRunId};
-use amiss_controller_gitlab::{GitLabMergeTrainAdapter, gitlab_fetch_plan};
-use amiss_wire::model::{ForgeDialect, ObjectFormat};
+use amiss_controller::{ChangeId, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
+use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 
 use support::identity::now_seconds;
 use support::oidc::{accept, claims, oidc};
@@ -99,6 +99,35 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     ] {
         assert!(gitlab_fetch_plan(&changed).is_err());
     }
+}
+
+/// The binding is three clauses over the same run: a first attempt, a
+/// candidate the delivery agrees with, and object IDs that are exactly
+/// SHA-1. Each one is broken alone.
+#[test]
+fn every_binding_clause_of_the_plan_stands_alone() {
+    let (delivery, snapshot) = fixture();
+    let request = run_request(&delivery, &snapshot);
+    assert!(gitlab_fetch_plan(&request).is_ok());
+
+    let mut retried = request.clone();
+    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    let mut other_candidate = request.clone();
+    other_candidate.run.commits.candidate = Oid::new(ObjectFormat::Sha1, "d".repeat(40)).unwrap();
+    let mut wider_tree = request;
+    wider_tree.run.trees.base = Oid::new(ObjectFormat::Sha256, "e".repeat(64)).unwrap();
+
+    for broken in [retried, other_candidate, wider_tree] {
+        assert_eq!(gitlab_fetch_plan(&broken), Err(GitLabPlanError));
+    }
+}
+
+#[test]
+fn the_plan_refusal_names_itself() {
+    assert_eq!(
+        GitLabPlanError.to_string(),
+        "the GitLab acquisition request is inconsistent"
+    );
 }
 
 fn fixture() -> (

@@ -176,6 +176,33 @@ pub fn verify_signed(
     verify_token(source, token, body, now, duplicate_header)
 }
 
+/// Authenticates the standard signed delivery over a caller-chosen route, so
+/// one clause of the route contract can be broken at a time.
+pub fn verify_routed(
+    source: &GitLabOidc,
+    route: &DeliveryRoute,
+    now: u64,
+) -> Result<VerifiedDelivery, ProviderError> {
+    let token = sign(&claims(now));
+    let authorization = format!("Bearer {token}");
+    let headers = [DeliveryHeader {
+        name: "authorization",
+        value: authorization.as_bytes(),
+    }];
+    let check = ingress()
+        .pre_auth(
+            UntrustedDelivery {
+                route,
+                received_at_unix_millis: now_millis(now),
+                headers: &headers,
+                body: br#"{"merge_request_iid":42}"#,
+            },
+            &*TestClock::at(now_millis(now)),
+        )
+        .unwrap();
+    source.authenticate(check)
+}
+
 pub fn accept(
     source: &GitLabOidc,
     claims: &Value,
@@ -249,7 +276,7 @@ fn verify_token(
     source.authenticate(check)
 }
 
-fn route() -> DeliveryRoute {
+pub fn route() -> DeliveryRoute {
     DeliveryRoute {
         provider: provider(),
         trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),

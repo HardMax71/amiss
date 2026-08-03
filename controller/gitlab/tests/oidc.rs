@@ -5,11 +5,13 @@
 
 mod support;
 
-use amiss_controller::{ProviderError, ReplayIdentity};
+use amiss_controller::{OpaqueId, ProviderError, ReplayIdentity, SignedTimePolicy};
 use serde_json::{Value, json};
 
 use support::identity::now_seconds;
-use support::oidc::{accept, claims, oidc, set_claim, sign, verify, verify_signed};
+use support::oidc::{
+    accept, claims, oidc, route, set_claim, sign, verify, verify_routed, verify_signed,
+};
 
 const BODY: &[u8] = br#"{"merge_request_iid":42}"#;
 
@@ -459,4 +461,58 @@ fn a_numeric_identifier_is_the_same_identifier() {
             .starts_with("oidc/runner/77/jti/"),
         "the number it read is the runner it names"
     );
+}
+
+/// The route contract is three separate clauses: the provider, the trust set,
+/// and a signed-time policy that actually demands signed time. Each is broken
+/// alone, since a run that passes two of three is not routed here.
+#[test]
+fn every_route_clause_stands_alone() {
+    let now = now_seconds();
+    let source = oidc();
+    assert!(verify_routed(&source, &route(), now).is_ok());
+
+    let mut other_trust_set = route();
+    other_trust_set.trust_set = OpaqueId::new("gitlab-webhook".to_owned()).unwrap();
+    let mut replay_only = route();
+    replay_only.signed_time = SignedTimePolicy::ReplayOnly;
+
+    for broken in [other_trust_set, replay_only] {
+        assert_eq!(
+            verify_routed(&source, &broken, now),
+            Err(ProviderError::Authentication),
+            "{broken:?}"
+        );
+    }
+}
+
+/// A token past the header ceiling is refused for its length, whatever it
+/// would have proved: the bearer grammar runs before any signature does.
+#[test]
+fn a_token_past_the_ceiling_is_refused_before_it_is_verified() {
+    let now = now_seconds();
+    let source = oidc();
+    let mut padded = claims(now);
+    padded.as_object_mut().unwrap().insert(
+        "padding".to_owned(),
+        serde_json::json!("p".repeat(16 * 1024)),
+    );
+    let oversized = sign(&padded);
+    assert!(
+        oversized.len() > 16 * 1024,
+        "the fixture has to cross the ceiling: {}",
+        oversized.len()
+    );
+    assert_eq!(
+        verify_signed(&source, &oversized, BODY, now, false),
+        Err(ProviderError::Authentication)
+    );
+}
+
+/// The source prints what it is without printing what it holds.
+#[test]
+fn the_source_names_itself_without_its_keys() {
+    let printed = format!("{:?}", oidc());
+    assert!(printed.contains("GitLabOidc"), "{printed}");
+    assert!(printed.contains("gitlab.example"), "{printed}");
 }

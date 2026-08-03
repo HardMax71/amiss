@@ -9,7 +9,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use amiss_controller::{
-    ChangeState, CheckConclusion, HandleOutcome, OpaqueId, ProviderAdapter, ProviderError,
+    ChangeId, ChangeState, CheckConclusion, HandleOutcome, OpaqueId, ProviderAdapter,
+    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
     RunFailure,
 };
 use amiss_controller_gitlab::{
@@ -17,7 +18,9 @@ use amiss_controller_gitlab::{
     GitLabRefreshQuery, policy_job_accepted,
 };
 
-use support::identity::now_seconds;
+use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
+
+use support::identity::{HOST, now_seconds};
 use support::oidc::{accept, claims, oidc};
 use support::refresh::{publication, valid_refresh};
 
@@ -118,6 +121,51 @@ fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
         assert_eq!(
             adapter.refresh(&delivery),
             Err(ProviderError::InvalidResponse)
+        );
+    }
+}
+
+/// The refresh query binds the delivery to the policy on eight separate
+/// clauses, so each one is broken alone and the run has to refuse.
+#[test]
+fn every_binding_clause_of_the_refresh_query_stands_alone() {
+    let (source, delivery, valid) = fixture();
+    let elsewhere = ProviderIdentity {
+        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
+        instance: ProviderInstance::new("other.example".to_owned()).unwrap(),
+    };
+
+    let mut foreign_identity = delivery.clone();
+    foreign_identity.identity.provider = elsewhere.clone();
+    let mut foreign_change = delivery.clone();
+    foreign_change.change.provider = elsewhere;
+    let mut other_integration = delivery.clone();
+    other_integration.identity.integration = OpaqueId::new("policy/2".to_owned()).unwrap();
+    let mut other_repository = delivery.clone();
+    other_repository.change.repository =
+        RepositoryIdentity::new(HOST.to_owned(), "acme".to_owned(), "other".to_owned()).unwrap();
+    let mut other_project = delivery.clone();
+    other_project.change.change = ChangeId::new("project/102/merge-request/42".to_owned()).unwrap();
+    let mut retried = delivery.clone();
+    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    let mut wider_format = delivery.clone();
+    wider_format.provider_run.object_format = ObjectFormat::Sha256;
+
+    for broken in [
+        foreign_identity,
+        foreign_change,
+        other_integration,
+        other_repository,
+        other_project,
+        retried,
+        wider_format,
+    ] {
+        let adapter =
+            GitLabMergeTrainAdapter::new(Arc::clone(&source), FakeApi::new([valid.clone()]));
+        assert_eq!(
+            adapter.refresh(&broken),
+            Err(ProviderError::InvalidResponse),
+            "{broken:?}"
         );
     }
 }
