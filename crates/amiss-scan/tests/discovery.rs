@@ -409,3 +409,152 @@ fn the_label_ceiling_ends_discovery_one_past_the_limit() {
         "a snapshot sitting exactly on the ceiling passes"
     );
 }
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn index_of(dir: &Path) -> (Repository, amiss_git::LogicalIndex) {
+    let repo = Repository::open(dir, ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let bytes = repo.read_index_bytes(&mut git_resources).unwrap();
+    let index = amiss_git::parse_index_file(ObjectFormat::Sha1, &bytes).unwrap();
+    (repo, index)
+}
+
+fn discovered_paths(discovery: &amiss_scan::SnapshotDiscovery) -> Vec<String> {
+    discovery
+        .documents
+        .iter()
+        .filter_map(|record| record.path.as_str().map(str::to_owned))
+        .collect()
+}
+
+/// Every snapshot ceiling admits its own value, from either side of the walk.
+#[test]
+fn discovery_admits_a_snapshot_exactly_at_its_ceilings() {
+    let dir = fixture();
+    let entries = match run(dir.path(), ScanLimits::CONTRACT, GitLimits::CONTRACT) {
+        Ok(discovery) => discovery.tree_entries,
+        Err(defect) => panic!("the fixture discovers: {defect:?}"),
+    };
+    assert!(entries > 0, "the fixture holds entries");
+
+    let at_ceiling = GitLimits {
+        tree_entries_per_snapshot: entries,
+        ..GitLimits::CONTRACT
+    };
+    assert!(
+        run(dir.path(), ScanLimits::CONTRACT, at_ceiling).is_ok(),
+        "a tree walk at exactly its entry ceiling"
+    );
+
+    let (repo, index) = index_of(dir.path());
+    let index_walk = |limits: GitLimits| {
+        let mut git_resources = GitResources::new(limits);
+        let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+        discover_index(
+            &repo,
+            &mut git_resources,
+            &mut scan_resources,
+            &amiss_scan::Includes::default(),
+            &index,
+        )
+    };
+    let index_entries = index_walk(GitLimits::CONTRACT)
+        .expect("the fixture index discovers")
+        .tree_entries;
+    let index_ceiling = GitLimits {
+        tree_entries_per_snapshot: index_entries,
+        ..GitLimits::CONTRACT
+    };
+    assert!(
+        index_walk(index_ceiling).is_ok(),
+        "an index walk at exactly its entry ceiling"
+    );
+    let index_short = GitLimits {
+        tree_entries_per_snapshot: index_entries.saturating_sub(1),
+        ..GitLimits::CONTRACT
+    };
+    assert!(
+        index_walk(index_short).is_err(),
+        "one entry past the index ceiling"
+    );
+
+    let longest =
+        discovered_paths(&run(dir.path(), ScanLimits::CONTRACT, GitLimits::CONTRACT).unwrap())
+            .into_iter()
+            .map(|path| u64::try_from(path.len()).unwrap())
+            .max()
+            .expect("the fixture holds documents");
+    let at_path_ceiling = GitLimits {
+        raw_path_bytes: longest,
+        ..GitLimits::CONTRACT
+    };
+    let discovery = run(dir.path(), ScanLimits::CONTRACT, at_path_ceiling).unwrap();
+    assert!(
+        discovery.path_defects.is_empty(),
+        "a path exactly at its byte ceiling is admitted"
+    );
+}
+
+/// A path the classifier does not know is admitted when policy names it, on
+/// both walks, and a gitlink is never asked for its object.
+#[test]
+fn policy_includes_and_gitlinks_survive_both_walks() {
+    let dir = fixture();
+    let includes = amiss_scan::Includes {
+        documents: [amiss_wire::model::RepoPath::new("notes.txt".to_owned()).unwrap()]
+            .into_iter()
+            .collect(),
+        trees: std::collections::BTreeSet::new(),
+    };
+
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let from_tree = discover(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &head_tree(dir.path()),
+    )
+    .unwrap();
+    assert!(
+        discovered_paths(&from_tree).contains(&"notes.txt".to_owned()),
+        "policy admits what the classifier does not know"
+    );
+
+    let (repo, index) = index_of(dir.path());
+    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let from_index = discover_index(
+        &repo,
+        &mut git_resources,
+        &mut scan_resources,
+        &includes,
+        &index,
+    )
+    .expect("the index walk holds a gitlink whose object nobody has");
+    assert!(discovered_paths(&from_index).contains(&"notes.txt".to_owned()));
+}
+
+/// A defect the document owns fails that document; a defect the snapshot owns
+/// ends the run.
+#[test]
+fn a_snapshot_scoped_defect_ends_the_walk() {
+    let dir = fixture();
+    let tight = ScanLimits {
+        parser_nodes_per_snapshot: 1,
+        ..ScanLimits::CONTRACT
+    };
+    let got = run(dir.path(), tight, GitLimits::CONTRACT);
+    assert!(
+        matches!(
+            got,
+            Err(Error::ResourceLimit {
+                resource: ResourceName::ParserNodesPerSnapshot,
+                ..
+            })
+        ),
+        "a snapshot budget is nobody's document: {got:?}"
+    );
+}
