@@ -273,6 +273,39 @@ fn action_repository_stays_on_the_github_lane() {
     );
 }
 
+/// The instance and the repository spelling are each several clauses, and a
+/// configuration that trips two proves neither, so each is bent alone. The
+/// message matters as much as the refusal: a later stage refuses these too,
+/// and a run that answers with its message is a run that skipped this one.
+#[test]
+fn every_canonical_spelling_clause_stands_alone() {
+    let instance = "GitHub instance is not canonical";
+    let repository = "GitHub repository spelling is not canonical";
+    let identity = "GitHub numeric identity must be positive";
+    let cases = [
+        ("/github/instance", json!("GitHub.com"), instance),
+        ("/github/instance", json!("github.com/enterprise"), instance),
+        ("/github/instance", json!(""), instance),
+        ("/repository/owner", json!("HardMax71"), repository),
+        ("/repository/name", json!("Amiss"), repository),
+        ("/repository/owner", json!("nested/group"), repository),
+        ("/repository/id", json!(0), identity),
+    ];
+    for (pointer, value, message) in cases {
+        let mut fixture = Fixture::new();
+        *fixture.field(pointer) = value.clone();
+        fixture.save();
+        let defect = ServiceConfig::load(&fixture.config)
+            .err()
+            .unwrap_or_else(|| panic!("{pointer} of {value} loaded"));
+        assert_eq!(defect.to_string(), message, "{pointer} of {value}");
+    }
+
+    let fixture = Fixture::new();
+    fixture.save();
+    assert!(ServiceConfig::load(&fixture.config).is_ok());
+}
+
 #[test]
 fn writable_roots_must_not_overlap() {
     let mut fixture = Fixture::new();

@@ -12,8 +12,9 @@ use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, CheckConclusion,
     ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook, IngressCheck,
     IngressLimits, IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, Publication, ReplayWindow, RunIdentity,
-    RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, Publication,
+    ReplayWindow, RunIdentity, RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey,
+    WebhookKeyring,
 };
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
@@ -483,6 +484,58 @@ fn publication_is_delegated_only_under_the_authenticated_identity() {
     cancelled.report = None;
     assert_eq!(adapter.publish(&delivery, &cancelled), Ok(()));
     assert_eq!(api.state.publications.lock().unwrap().len(), 2);
+}
+
+/// The delivery is bound to the source on eight separate clauses, so each is
+/// broken alone: a run that fails two of them proves neither.
+#[test]
+fn every_clause_binding_the_delivery_stands_alone() {
+    let seed = adapter(FakeApi::new(dummy_snapshot()));
+    let verified =
+        authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
+    let delivery = verified.delivery().clone();
+    let elsewhere = ProviderIdentity {
+        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
+    };
+
+    let mut foreign_identity = delivery.clone();
+    foreign_identity.identity.provider = elsewhere.clone();
+    let mut foreign_change = delivery.clone();
+    foreign_change.change.provider = elsewhere;
+    let mut other_host = delivery.clone();
+    other_host.change.repository.host = "github.example".to_owned();
+    let mut shouting_owner = delivery.clone();
+    shouting_owner.change.repository.owner = "HardMax71".to_owned();
+    let mut retried = delivery.clone();
+    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    let mut wider_format = delivery.clone();
+    wider_format.provider_run.object_format = ObjectFormat::Sha256;
+    let mut wider_candidate = delivery;
+    wider_candidate.provider_run.candidate_commit =
+        Oid::new(ObjectFormat::Sha256, "b".repeat(64)).unwrap();
+
+    for broken in [
+        foreign_identity,
+        foreign_change,
+        other_host,
+        shouting_owner,
+        retried,
+        wider_format,
+        wider_candidate,
+    ] {
+        let api = FakeApi::new(dummy_snapshot());
+        assert_eq!(
+            adapter(api.clone()).refresh(&broken),
+            Err(ProviderError::InvalidResponse),
+            "{broken:?}"
+        );
+        assert_eq!(
+            api.state.refreshes.load(Ordering::Relaxed),
+            0,
+            "a delivery that fails its binding never reaches the provider"
+        );
+    }
 }
 
 fn adapter(api: FakeApi) -> GitHubPullRequestAdapter<FakeApi> {

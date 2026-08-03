@@ -273,6 +273,131 @@ fn publication_reuses_only_one_exact_owned_check() {
     ));
 }
 
+/// A credential is scoped to the installation it was configured for, and the
+/// refusal happens before any request leaves. What the App carries out is
+/// whatever its client answers, so against a host that does not resolve every
+/// call it delegates has to fail rather than report success.
+#[test]
+fn a_token_answers_only_for_its_own_installation() {
+    use std::time::Duration;
+
+    use amiss_controller_fixtures::rsa_keys;
+
+    use super::{GitHubApp, GitHubTimeouts};
+    use crate::{GitHubApi as _, GitHubTokenSource as _};
+
+    let app = GitHubApp::new(
+        ProviderIdentity {
+            namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+            instance: ProviderInstance::new("ghes.invalid".to_owned()).unwrap(),
+        },
+        APP_ID,
+        INSTALLATION_ID,
+        rsa_keys().unwrap().private_pem,
+        "https://ghes.invalid",
+        "amiss / documentation assurance".to_owned(),
+        GitHubTimeouts::new(Duration::from_millis(1), Duration::from_millis(2)).unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        app.installation_token(INSTALLATION_ID.saturating_add(1))
+            .err(),
+        Some(ProviderError::Authentication)
+    );
+
+    let fixture = Fixture::new();
+    assert!(app.installation_access_token().is_err());
+    assert!(
+        app.publish(
+            fixture.request(),
+            &fixture.publication(CheckConclusion::Pass)
+        )
+        .is_err()
+    );
+}
+
+/// Both client refusals say which one they are.
+#[test]
+fn the_client_refusals_name_themselves() {
+    use super::GitHubClientError;
+
+    assert_eq!(
+        GitHubClientError::Configuration("the App private key size is out of bounds").to_string(),
+        "the GitHub App configuration is invalid: the App private key size is out of bounds"
+    );
+    assert_eq!(
+        GitHubClientError::Client.to_string(),
+        "the GitHub App client could not be created"
+    );
+}
+
+/// A check run this App owns is either the exact one or a refusal, and the
+/// three things that make it not exact are broken one at a time.
+#[test]
+fn an_owned_check_run_is_exact_in_every_field_that_names_it() {
+    let fixture = Fixture::new();
+    let publication = fixture.publication(CheckConclusion::Pass);
+    let expected =
+        created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
+    let exact = check_run(APP_ID, &expected);
+
+    let mut unnumbered = exact.clone();
+    unnumbered.id = 0;
+    let mut other_name = exact.clone();
+    other_name.name = format!("{} (retry)", expected.name);
+    let mut other_head = exact.clone();
+    other_head.head_sha = "f".repeat(40);
+    let mut other_name_and_evaluation = exact;
+    other_name_and_evaluation.name = format!("{} (retry)", expected.name);
+    other_name_and_evaluation.external_id = Some("evaluation-older".to_owned());
+
+    for broken in [
+        unnumbered,
+        other_name,
+        other_head,
+        other_name_and_evaluation,
+    ] {
+        assert_eq!(
+            decision_error(&fixture, &publication, std::slice::from_ref(&broken)),
+            ProviderError::InvalidResponse,
+            "{}",
+            broken.name
+        );
+    }
+}
+
+/// What GitHub says it created has to be the check that was asked for, owned
+/// by this App and carrying a real identifier.
+#[test]
+fn a_created_check_run_answers_on_every_clause() {
+    let fixture = Fixture::new();
+    let publication = fixture.publication(CheckConclusion::Pass);
+    let expected =
+        created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
+    assert_eq!(
+        validate_created(&fixture.config, &expected, &check_run(APP_ID, &expected)),
+        Ok(())
+    );
+
+    let mut unnumbered = check_run(APP_ID, &expected);
+    unnumbered.id = 0;
+    let another_app = check_run(APP_ID.saturating_add(1), &expected);
+    let mut appless = check_run(APP_ID, &expected);
+    appless.app = None;
+    let mut other_summary = check_run(APP_ID, &expected);
+    other_summary.output.summary = Some("something else entirely".to_owned());
+
+    for broken in [unnumbered, another_app, appless, other_summary] {
+        assert_eq!(
+            validate_created(&fixture.config, &expected, &broken),
+            Err(ProviderError::InvalidResponse),
+            "{}",
+            broken.name
+        );
+    }
+}
+
 #[test]
 fn publication_conclusions_and_create_response_are_exact() {
     let fixture = Fixture::new();
