@@ -10,7 +10,10 @@ use amiss_controller::{ProviderError, ProviderInstance, ProviderNamespace};
 use reqwest::StatusCode;
 use secrecy::SecretString;
 
-use super::{Budget, GitLabTimeouts, Transport, body_limit, consume_bytes, map_status};
+use super::{
+    Budget, GitLabClientError, GitLabTimeouts, Transport, body_limit, consume_bytes, map_error,
+    map_status,
+};
 
 const TOKEN: &str = "glpat-never-print-this";
 
@@ -118,4 +121,60 @@ fn provider() -> amiss_controller::ProviderIdentity {
         namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
         instance: ProviderInstance::new("gitlab.example".to_owned()).unwrap(),
     }
+}
+
+/// A budget that has run out refuses rather than handing back nothing.
+#[test]
+fn a_spent_budget_refuses_the_next_request() {
+    let live = Budget {
+        deadline: Instant::now() + Duration::from_secs(1),
+        response_bytes: 10,
+    };
+    let remaining = live.remaining().expect("a live budget has time");
+    assert!(!remaining.is_zero() && remaining <= Duration::from_secs(1));
+
+    let spent = Budget {
+        deadline: Instant::now(),
+        response_bytes: 10,
+    };
+    assert_eq!(spent.remaining(), Err(ProviderError::Unavailable));
+}
+
+/// The transport reports the instance it was built for, and says what a
+/// misconfiguration was.
+#[test]
+fn a_transport_names_its_instance_and_its_refusals() {
+    let transport = Transport::new(
+        provider(),
+        "https://gitlab.example/api/v4",
+        SecretString::from(TOKEN.to_owned()),
+        GitLabTimeouts::default(),
+    )
+    .expect("a root-mounted https base");
+    assert_eq!(transport.provider_instance(), "gitlab.example");
+
+    assert_eq!(
+        GitLabClientError("the API base must use https").to_string(),
+        "the GitLab client configuration is invalid: the API base must use https"
+    );
+}
+
+/// A request that never reached the server is unavailable; one that came back
+/// wrong is an invalid response.
+#[test]
+fn transport_failures_separate_the_wire_from_the_answer() {
+    let unreachable = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(1))
+        .build()
+        .expect("a client")
+        .get("https://127.0.0.1:1/never")
+        .send()
+        .expect_err("a closed port refuses");
+    assert_eq!(map_error(&unreachable), ProviderError::Unavailable);
+
+    let decode = reqwest::blocking::Client::new()
+        .get("not-a-url")
+        .build()
+        .expect_err("a relative url cannot build");
+    assert_eq!(map_error(&decode), ProviderError::InvalidResponse);
 }

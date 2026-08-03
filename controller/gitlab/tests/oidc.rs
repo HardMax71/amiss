@@ -101,6 +101,10 @@ fn runner_jti_time_and_request_hint_fail_closed() {
         changed(now, "jti", json!("")),
         changed(now, "jti", json!("x".repeat(1_025))),
         changed(now, "jti", json!("line\nbreak")),
+        changed(now, "aud", json!("")),
+        changed(now, "sub", json!("")),
+        changed(now, "iat", json!(now.saturating_add(301))),
+        changed(now, "nbf", json!(now.saturating_add(301))),
     ];
     for case in cases {
         assert_eq!(
@@ -400,5 +404,59 @@ fn every_clause_binding_the_policy_is_load_bearing() {
     assert!(
         !accepts(&issuer_url(), &audience(), policy_binding(), Vec::new()),
         "a keyless config is refused"
+    );
+}
+
+/// The bounds are inclusive: a token issued at its own expiry, valid from it,
+/// and carrying an identifier of exactly the ceiling length still verifies.
+#[test]
+fn a_token_at_its_own_bounds_is_still_authentic() {
+    let now = now_seconds();
+    let source = oidc();
+
+    let mut at_jti_ceiling = claims(now);
+    set_claim(&mut at_jti_ceiling, "jti", json!("x".repeat(1_024)));
+    assert!(
+        accept(&source, &at_jti_ceiling, BODY, now).is_ok(),
+        "an identifier exactly at its ceiling"
+    );
+
+    // The expiry comes down to meet the issue time, since an issue time in the
+    // future is refused for freshness before these claims are compared.
+    let mut at_expiry = claims(now);
+    set_claim(&mut at_expiry, "exp", json!(now));
+    assert!(
+        accept(&source, &at_expiry, BODY, now).is_ok(),
+        "issued at its own expiry"
+    );
+
+    let mut valid_from_expiry = claims(now);
+    set_claim(&mut valid_from_expiry, "exp", json!(now));
+    set_claim(&mut valid_from_expiry, "nbf", json!(now));
+    assert!(
+        accept(&source, &valid_from_expiry, BODY, now).is_ok(),
+        "valid from its own expiry"
+    );
+}
+
+/// GitLab spells its identifiers as strings, but a number is the same
+/// identifier and the run must read it as one.
+#[test]
+fn a_numeric_identifier_is_the_same_identifier() {
+    let now = now_seconds();
+    let source = oidc();
+    let mut numeric = claims(now);
+    set_claim(&mut numeric, "runner_id", json!(77));
+    set_claim(&mut numeric, "pipeline_id", json!(202));
+    set_claim(&mut numeric, "job_id", json!(303));
+    let delivery = accept(&source, &numeric, BODY, now).expect("a numeric identifier verifies");
+    assert!(
+        delivery
+            .delivery()
+            .identity
+            .delivery
+            .as_str()
+            .starts_with("oidc/runner/77/jti/"),
+        "the number it read is the runner it names"
     );
 }
