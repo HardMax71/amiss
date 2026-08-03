@@ -197,3 +197,62 @@ fn a_declared_anchor_is_one_whitespace_free_id() {
     );
     assert!(extract(b"[[a b]]\n").expect("utf-8").anchors.is_empty());
 }
+
+fn shapes(source: &str) -> Vec<(Option<Delimiter>, bool)> {
+    blocks(source)
+        .into_iter()
+        .map(|block| (block.delimiter, block.list_item))
+        .collect()
+}
+
+/// A fence is four or more of one character, or the table's own spelling.
+#[test]
+fn a_fence_is_a_run_of_four_or_its_own_word() {
+    assert_eq!(
+        shapes("----\ncode\n----\n"),
+        vec![(Some(Delimiter::Verbatim), false)],
+        "four characters open a fence"
+    );
+    assert_eq!(
+        shapes("---\ncode\n---\n"),
+        vec![(None, false)],
+        "three do not"
+    );
+    assert_eq!(
+        shapes("--=-\ncode\n--=-\n"),
+        vec![(None, false)],
+        "a mixed run is no fence"
+    );
+    assert_eq!(
+        shapes("|===\ncell\n|===\n"),
+        vec![(Some(Delimiter::Compound), false), (None, false)],
+        "the table names itself exactly, and its cell is read"
+    );
+    assert_eq!(
+        shapes("|====\ncell\n|====\n"),
+        vec![(None, false)],
+        "and nothing longer is that name"
+    );
+}
+
+/// A list item is a marker run followed by a space, and an empty paragraph is
+/// no block at all.
+#[test]
+fn a_list_item_is_a_marker_and_a_space() {
+    for (reason, source) in [
+        ("a bullet", "* item\n"),
+        ("a dash", "- item\n"),
+        ("a numbered marker", ". item\n"),
+        ("a deeper marker", "** item\n"),
+    ] {
+        assert_eq!(shapes(source), vec![(None, true)], "{reason}");
+    }
+    for (reason, source) in [
+        ("a marker with no space", "*item\n"),
+        ("a marker alone", "*\n"),
+        ("ordinary prose", "item\n"),
+    ] {
+        assert_eq!(shapes(source), vec![(None, false)], "{reason}");
+    }
+    assert_eq!(shapes("\n\n"), Vec::new(), "blank lines are no block");
+}
