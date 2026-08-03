@@ -1,4 +1,4 @@
-use amiss_rst::{Kind, ReferenceKind, Refusal, blocks, extract, normalized_label};
+use amiss_rst::{Kind, ReferenceKind, Refusal, blocks, extract, normalized_label, title_underline};
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn kinds(source: &str) -> Vec<(ReferenceKind, String)> {
@@ -161,4 +161,77 @@ fn the_simple_name_folds_case_and_collapses_whitespace() {
     assert_eq!(normalized_label("Wide  Name"), "wide name");
     assert_eq!(normalized_label(" plain "), "plain");
     assert_eq!(normalized_label("UPPER"), "upper");
+}
+
+/// Every target is one word: empty targets and targets carrying whitespace
+/// are not references at all.
+#[test]
+fn a_target_is_one_word_or_nothing() {
+    for (reason, source) in [
+        ("a directive with no argument", ".. image::\n"),
+        (
+            "a directive argument with a space",
+            ".. image:: img/a b.png\n",
+        ),
+        ("an include with no argument", ".. include::\n"),
+        ("a named target with no value", ".. _named:\n"),
+        ("a named target with a space", ".. _named: other file.rst\n"),
+        ("a file option with no value", ".. csv-table::\n   :file:\n"),
+        (
+            "a file option with a space",
+            ".. csv-table::\n   :file: data rows.csv\n",
+        ),
+        (
+            "an inline target with a space",
+            "See `the guide <a b.rst>`_.\n",
+        ),
+        ("an inline target that is empty", "See `the guide <>`_.\n"),
+    ] {
+        assert_eq!(kinds(source), Vec::new(), "{reason}");
+    }
+}
+
+/// A label declares itself only when it names something without a table rule.
+#[test]
+fn a_label_names_something_that_is_not_a_rule() {
+    assert_eq!(
+        amiss_rst::target_definition(".. _`quoted label`:"),
+        Some("quoted label".to_owned())
+    );
+    assert_eq!(
+        amiss_rst::target_definition(".. _``:"),
+        None,
+        "backticks around nothing name nothing"
+    );
+    assert_eq!(
+        amiss_rst::target_definition(".. _`a|b`:"),
+        None,
+        "a table rule is not part of a label"
+    );
+}
+
+/// An underline is one punctuation run, at least as long as its title.
+#[test]
+fn an_underline_is_one_run_no_shorter_than_its_title() {
+    assert_eq!(title_underline("=====", "Title"), Some('='));
+    assert_eq!(title_underline("======", "Title"), Some('='));
+    assert_eq!(
+        title_underline("====", "Title"),
+        None,
+        "shorter than its title"
+    );
+    assert_eq!(title_underline("==-==", "Title"), None, "more than one run");
+    assert_eq!(title_underline("=", "T"), None, "a single character");
+    assert_eq!(
+        title_underline("==", "Ti"),
+        Some('='),
+        "two characters are a run"
+    );
+    assert_eq!(title_underline("aaaaa", "Title"), None, "alphanumeric");
+    assert_eq!(title_underline("   ", "Title"), None, "whitespace");
+    assert_eq!(
+        title_underline("=====", "Title   "),
+        Some('='),
+        "the title's trailing space is not part of its length"
+    );
 }
