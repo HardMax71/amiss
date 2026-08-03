@@ -5,7 +5,9 @@
 
 mod support;
 
-use amiss_controller::{OpaqueId, ProviderError, ReplayIdentity, SignedTimePolicy};
+use amiss_controller::{
+    OpaqueId, ProviderError, ProviderInstance, ReplayIdentity, SignedTimePolicy,
+};
 use serde_json::{Value, json};
 
 use support::identity::now_seconds;
@@ -472,12 +474,14 @@ fn every_route_clause_stands_alone() {
     let source = oidc();
     assert!(verify_routed(&source, &route(), now).is_ok());
 
+    let mut other_provider = route();
+    other_provider.provider.instance = ProviderInstance::new("other.example".to_owned()).unwrap();
     let mut other_trust_set = route();
     other_trust_set.trust_set = OpaqueId::new("gitlab-webhook".to_owned()).unwrap();
     let mut replay_only = route();
     replay_only.signed_time = SignedTimePolicy::ReplayOnly;
 
-    for broken in [other_trust_set, replay_only] {
+    for broken in [other_provider, other_trust_set, replay_only] {
         assert_eq!(
             verify_routed(&source, &broken, now),
             Err(ProviderError::Authentication),
@@ -515,4 +519,5 @@ fn the_source_names_itself_without_its_keys() {
     let printed = format!("{:?}", oidc());
     assert!(printed.contains("GitLabOidc"), "{printed}");
     assert!(printed.contains("gitlab.example"), "{printed}");
+    assert!(printed.contains("current"), "the key identifier: {printed}");
 }
