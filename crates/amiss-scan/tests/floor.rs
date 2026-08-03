@@ -626,3 +626,104 @@ fn a_floor_for_another_host_fails_its_binding() {
         "the run keeps its own identity claim while the foreign floor fails"
     );
 }
+
+fn limited(resources: &str, extra: &str) -> String {
+    EMPTY_ARRAYS.replace(
+        "\"resource_limits\": []",
+        &format!("\"resource_limits\": [ {resources} ]{extra}"),
+    )
+}
+
+/// A tightened error ceiling has to reach the fatal projections too, since
+/// those are where a failing run states its errors.
+#[test]
+fn a_tightened_error_ceiling_reaches_the_fatal_projection() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "base\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::create_dir_all(root.join(".amiss")).unwrap();
+    fs::write(root.join(".amiss/scanner-policy.json"), b"{").unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let open = payload(
+        &shell(Some(floor_input(EMPTY_ARRAYS))),
+        &repo,
+        &base,
+        &candidate,
+    );
+    assert!(
+        open["errors"].as_array().unwrap().len() >= 2,
+        "a policy that will not parse states both the anchor and the defect: {open}"
+    );
+
+    let floor = limited(
+        "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 1 }",
+        "",
+    );
+    let report = payload(&shell(Some(floor_input(&floor))), &repo, &base, &candidate);
+    let errors = report["errors"].as_array().unwrap();
+    assert_eq!(
+        errors.len(),
+        1,
+        "the tightened ceiling leaves room only for the sentinel: {errors:?}"
+    );
+    assert_eq!(errors[0]["code"], "TOO_MANY_ERRORS");
+    assert_eq!(errors[0]["configured_limit"], 1);
+}
+
+/// A control the run could not read names its path only when the crossing was
+/// that one blob; a snapshot aggregate belongs to no single file.
+#[test]
+fn a_control_crossing_names_a_path_only_when_one_blob_crossed() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("guarded.md"), "guarded\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::write(root.join("guarded.md"), "guarded again\n").unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let protected = "  \"protected_control_paths\": [\"guarded.md\"],";
+    let blob_floor = limited(
+        "{ \"resource\": \"selected-control-blob-bytes\", \"maximum\": 1 }",
+        "",
+    )
+    .replace("  \"protected_control_paths\": [],", protected);
+    let report = payload(
+        &shell(Some(floor_input(&blob_floor))),
+        &repo,
+        &base,
+        &candidate,
+    );
+    let row = &report["errors"][0];
+    assert_eq!(row["resource"], "selected-control-blob-bytes");
+    assert_eq!(
+        row["path"], "guarded.md",
+        "one blob crossed, and the report can say which"
+    );
+
+    let aggregate_floor = limited(
+        "{ \"resource\": \"aggregate-selected-control-bytes-per-snapshot\", \"maximum\": 1 }",
+        "",
+    )
+    .replace("  \"protected_control_paths\": [],", protected);
+    let report = payload(
+        &shell(Some(floor_input(&aggregate_floor))),
+        &repo,
+        &base,
+        &candidate,
+    );
+    let row = &report["errors"][0];
+    assert_eq!(
+        row["resource"],
+        "aggregate-selected-control-bytes-per-snapshot"
+    );
+    assert!(
+        row["path"].is_null(),
+        "a snapshot total is nobody's single file: {row}"
+    );
+}
