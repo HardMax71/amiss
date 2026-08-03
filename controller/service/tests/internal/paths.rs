@@ -68,24 +68,27 @@ fn roots_are_separate_in_both_directions() {
     );
 }
 
+fn plan_over(constraint: &[u8]) -> amiss_controller::CheckPlan {
+    use amiss_controller::{PolicyControls, check_plan};
+    use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+
+    let descriptor = ExecutionConstraintDescriptor::parse(constraint).expect("a constraint");
+    check_plan(Profile::Enforce, PolicyControls::default(), descriptor).expect("a check plan")
+}
+
 /// The bootstrap on disk must be the one the constraint names, and the
 /// constraint must target this host.
 #[test]
 fn execution_paths_bind_the_bootstrap_and_the_host() {
-    use amiss_controller::{PolicyControls, check_plan};
-    use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+    use amiss_wire::action::host_platform;
 
     let trust =
         amiss_controller_fixtures::config::TrustFiles::new("forge.example", "acme", "widget")
             .expect("trust files");
     let scratch = trust.directory("scratch").expect("scratch");
     let ledger = trust.directory("ledger").expect("ledger");
-    let constraint = ExecutionConstraintDescriptor::parse(
-        &std::fs::read(&trust.constraint).expect("constraint bytes"),
-    )
-    .expect("a constraint");
-    let plan =
-        check_plan(Profile::Enforce, PolicyControls::default(), constraint).expect("a check plan");
+    let bytes = std::fs::read(&trust.constraint).expect("constraint bytes");
+    let plan = plan_over(&bytes);
 
     assert!(
         resolve_execution_paths(&trust.bootstrap, &scratch, &ledger, &plan).is_ok(),
@@ -100,5 +103,27 @@ fn execution_paths_bind_the_bootstrap_and_the_host() {
             "bootstrap does not match the execution constraint"
         )),
         "another bootstrap under the same constraint"
+    );
+
+    let here = host_platform().expect("a platform for this host");
+    let there = ["linux-x86_64", "macos-aarch64"]
+        .into_iter()
+        .find(|name| *name != here.as_str())
+        .expect("a platform this host is not");
+    let elsewhere = String::from_utf8(bytes)
+        .expect("constraint text")
+        .replace(here.as_str(), there);
+    assert_eq!(
+        resolve_execution_paths(
+            &trust.bootstrap,
+            &scratch,
+            &ledger,
+            &plan_over(elsewhere.as_bytes())
+        )
+        .err(),
+        Some(ConfigError(
+            "execution constraint does not target this host"
+        )),
+        "the same bootstrap under a constraint aimed elsewhere"
     );
 }
