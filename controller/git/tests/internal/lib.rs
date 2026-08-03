@@ -49,8 +49,25 @@ fn http_options_are_strict_and_quiet() {
     );
     assert!(options.ssl_verify);
     assert!(!options.verbose);
+    let backend = options.backend.expect("a backend carries the deadline");
+    let mut guard = backend.lock().expect("the backend lock");
+    let reqwest_options = guard
+        .downcast_mut::<http::reqwest::Options>()
+        .expect("the reqwest backend");
+    let configure = reqwest_options
+        .configure_request
+        .as_mut()
+        .expect("a request hook");
+    let mut request = reqwest::blocking::Request::new(
+        reqwest::Method::GET,
+        "https://git.example/acme/widget.git"
+            .parse()
+            .expect("a url"),
+    );
+    configure(&mut request).expect("the hook configures the request");
+    let deadline = request.timeout().copied().expect("a request deadline");
     assert!(
-        options.backend.is_some(),
-        "the request deadline is installed"
+        !deadline.is_zero() && deadline <= Duration::from_secs(30),
+        "the hook installs what remains of the fetch budget: {deadline:?}"
     );
 }

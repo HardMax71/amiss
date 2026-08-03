@@ -73,7 +73,10 @@ fn rejects_declared_object_count_before_allocating_entries() {
         objects: 1,
         ..limits()
     };
-    assert!(validate(&bytes, limits).is_err());
+    assert_eq!(
+        validate(&bytes, limits).unwrap_err().to_string(),
+        "the pack declares too many objects"
+    );
 }
 
 #[test]
@@ -457,20 +460,5 @@ fn a_pack_header_answers_for_its_magic_and_its_version() {
     assert!(
         validate(&wrong_version, limits()).is_err(),
         "a version this reader does not speak"
-    );
-}
-
-#[test]
-fn every_pack_refusal_names_itself() {
-    let refusals = [
-        super::PackError("the pack declares too many objects"),
-        super::PackError("reference deltas are not accepted"),
-    ];
-    for refusal in refusals {
-        assert!(!refusal.to_string().is_empty());
-    }
-    assert_eq!(
-        super::PackError("a delta omits its result size").to_string(),
-        "a delta omits its result size"
     );
 }
