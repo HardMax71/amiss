@@ -190,6 +190,7 @@ dependencies = [
  "flate2",
  "gix",
  "gix-pack",
+ "reqwest",
  "secrecy",
  "tempfile",
 ]
