@@ -5,6 +5,14 @@ use std::path::PathBuf;
 
 use super::{config_path, version_request};
 
+/// The host decides what counts as rooted, so the test asks it rather than
+/// spelling a path of its own.
+fn rooted() -> PathBuf {
+    std::env::current_dir()
+        .expect("a working directory")
+        .join("service.json")
+}
+
 fn arguments(raw: &[&str]) -> Vec<OsString> {
     raw.iter().map(|value| OsString::from(*value)).collect()
 }
@@ -13,13 +21,16 @@ fn arguments(raw: &[&str]) -> Vec<OsString> {
 /// nothing else.
 #[test]
 fn the_command_line_is_one_absolute_path() {
+    let rooted = rooted();
+    let text = rooted.to_str().expect("a printable working directory");
+
     assert_eq!(
-        config_path(&arguments(&["/etc/amiss/service.json"])),
-        Some((PathBuf::from("/etc/amiss/service.json"), false))
+        config_path(&arguments(&[text])),
+        Some((rooted.clone(), false))
     );
     assert_eq!(
-        config_path(&arguments(&["--check", "/etc/amiss/service.json"])),
-        Some((PathBuf::from("/etc/amiss/service.json"), true))
+        config_path(&arguments(&["--check", text])),
+        Some((rooted.clone(), true))
     );
 
     for (reason, raw) in [
@@ -30,13 +41,10 @@ fn the_command_line_is_one_absolute_path() {
             "a check flag over a relative path",
             vec!["--check", "service.json"],
         ),
-        (
-            "one argument too many",
-            vec!["/etc/amiss/service.json", "extra"],
-        ),
+        ("one argument too many", vec![text, "extra"]),
         (
             "one argument too many behind the flag",
-            vec!["--check", "/etc/amiss/service.json", "extra"],
+            vec!["--check", text, "extra"],
         ),
     ] {
         assert_eq!(config_path(&arguments(&raw)), None, "{reason}");
@@ -51,7 +59,7 @@ fn a_version_request_stands_alone() {
         ("nothing at all", vec![]),
         ("a word beside it", vec!["--version", "extra"]),
         ("another word", vec!["--help"]),
-        ("a config path", vec!["/etc/amiss/service.json"]),
+        ("a config path", vec!["service.json"]),
     ] {
         assert!(!version_request(&arguments(&raw)), "{reason}");
     }
