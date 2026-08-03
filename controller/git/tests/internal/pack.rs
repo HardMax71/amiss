@@ -107,7 +107,24 @@ fn rejects_aggregate_inflation() {
 #[test]
 fn rejects_reference_delta_without_reading_an_external_base() {
     let bytes = pack([entry(7, 0, b"", &[0_u8; 20])]);
-    assert!(validate(&bytes, limits()).is_err());
+    assert_eq!(
+        validate(&bytes, limits()).unwrap_err().to_string(),
+        "reference deltas are not accepted",
+        "refused by name, not as an unknown type"
+    );
+}
+
+/// A delta may not name itself as its own base.
+#[test]
+fn rejects_a_delta_whose_base_is_its_own_offset() {
+    let base = ordinary(3, b"a");
+    let delta = entry(6, 2, &[1, 1], &offset(0));
+    let bytes = pack([base, delta]);
+    assert_eq!(
+        validate(&bytes, limits()).unwrap_err().to_string(),
+        "the delta base offset is invalid",
+        "a zero distance names the entry itself"
+    );
 }
 
 #[test]
@@ -390,4 +407,70 @@ fn offset(mut distance: u64) -> Vec<u8> {
     }
     bytes.reverse();
     bytes
+}
+
+/// Every pack ceiling admits its own value; only the next one is refused.
+#[test]
+fn a_pack_at_its_ceilings_is_within_them() {
+    let bytes = pack([ordinary(3, b"hello")]);
+    let exact = PackLimits {
+        pack_bytes: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
+        objects: 1,
+        object_bytes: 5,
+        inflated_bytes: 5,
+        ..limits()
+    };
+    assert!(
+        validate(&bytes, exact).is_ok(),
+        "a pack whose stream, count, and object all sit on their limits"
+    );
+
+    let base = ordinary(3, b"a");
+    let delta_offset = 12_u64.saturating_add(u64::try_from(base.len()).unwrap_or(u64::MAX));
+    let delta = entry(6, 2, &[1, 6], &offset(delta_offset.saturating_sub(12)));
+    let chain = pack([base, delta]);
+    let at_result = PackLimits {
+        object_bytes: 6,
+        ..limits()
+    };
+    assert!(
+        validate(&chain, at_result).is_ok(),
+        "a delta result exactly at the object ceiling"
+    );
+}
+
+/// A pack names itself and its version, and one wrong word is enough.
+#[test]
+fn a_pack_header_answers_for_its_magic_and_its_version() {
+    let sound = pack([ordinary(3, b"hello")]);
+    assert!(validate(&sound, limits()).is_ok());
+
+    let mut wrong_magic = sound.clone();
+    wrong_magic[0] = b'X';
+    assert!(
+        validate(&wrong_magic, limits()).is_err(),
+        "another word where PACK belongs"
+    );
+
+    let mut wrong_version = sound;
+    wrong_version[7] = 3;
+    assert!(
+        validate(&wrong_version, limits()).is_err(),
+        "a version this reader does not speak"
+    );
+}
+
+#[test]
+fn every_pack_refusal_names_itself() {
+    let refusals = [
+        super::PackError("the pack declares too many objects"),
+        super::PackError("reference deltas are not accepted"),
+    ];
+    for refusal in refusals {
+        assert!(!refusal.to_string().is_empty());
+    }
+    assert_eq!(
+        super::PackError("a delta omits its result size").to_string(),
+        "a delta omits its result size"
+    );
 }
