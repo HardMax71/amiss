@@ -9,6 +9,7 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryId
 
 use super::{event_bound_run, validate_delivery};
 use crate::DedicatedReviewer;
+use crate::identity::{canonical_host, canonical_segment};
 
 fn oid(fill: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, fill.to_string().repeat(40)).expect("an object id")
@@ -175,4 +176,44 @@ fn a_run_answers_for_every_echoed_field() {
         Err(ProviderError::InvalidResponse),
         "another candidate commit"
     );
+}
+
+/// A segment is one lowercase word within its length, and a host is
+/// lowercase dns with bounded labels.
+#[test]
+fn identity_grammars_answer_from_both_sides() {
+    assert_eq!(canonical_segment("Acme").as_deref(), Some("acme"));
+    assert_eq!(
+        canonical_segment(&"a".repeat(100)).as_deref(),
+        Some("a".repeat(100).as_str()),
+        "a segment exactly at its ceiling"
+    );
+    assert_eq!(canonical_segment(""), None, "a segment naming nothing");
+    assert_eq!(
+        canonical_segment(&"a".repeat(101)),
+        None,
+        "one character past the ceiling"
+    );
+    assert_eq!(
+        canonical_segment("group/acme"),
+        None,
+        "a segment is not a path"
+    );
+
+    for valid in ["forge.example", "my-host.example", "a1.io", "x"] {
+        assert!(canonical_host(valid), "{valid}");
+    }
+    let overlong = format!("{}a", "a.".repeat(127));
+    let long_label = format!("{}.com", "a".repeat(64));
+    for invalid in [
+        "UPPER.example",
+        overlong.as_str(),
+        long_label.as_str(),
+        "-ab.example",
+        "ab-.example",
+        "a..b",
+        "",
+    ] {
+        assert!(!canonical_host(invalid), "{invalid}");
+    }
 }
