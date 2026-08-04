@@ -235,3 +235,42 @@ fn an_underline_is_one_run_no_shorter_than_its_title() {
         "the title's trailing space is not part of its length"
     );
 }
+
+/// Every reference form answers to its own spelling, and exactly one of them
+/// is an image.
+#[test]
+fn the_reference_vocabulary_is_distinct_and_names_one_image() {
+    let table = [
+        ReferenceKind::InlineHyperlink,
+        ReferenceKind::NamedTarget,
+        ReferenceKind::Image,
+        ReferenceKind::Include,
+        ReferenceKind::FileOption,
+        ReferenceKind::DocRole,
+        ReferenceKind::RefRole,
+    ];
+    let spellings: std::collections::BTreeSet<&str> =
+        table.iter().map(|kind| kind.as_str()).collect();
+    assert_eq!(spellings.len(), table.len(), "no two share a spelling");
+    assert!(spellings.iter().all(|name| !name.is_empty()));
+
+    let images: Vec<&str> = table
+        .iter()
+        .filter(|kind| kind.is_image())
+        .map(|kind| kind.as_str())
+        .collect();
+    assert_eq!(images, ["rst-image-directive"]);
+}
+
+/// The extraction counts the blocks it read and how deep they nested, which
+/// is what the resource meters are charged against.
+#[test]
+fn an_extraction_reports_its_block_count_and_deepest_nesting() {
+    let flat = extract(b"One\n\nTwo\n").expect("utf-8");
+    assert_eq!(flat.blocks, 2);
+    assert_eq!(flat.nesting, 0);
+
+    let nested = extract(b"Top\n\n  Middle\n\n      Deep\n").expect("utf-8");
+    assert_eq!(nested.blocks, 3);
+    assert_eq!(nested.nesting, 6, "the deepest indent, not the last one");
+}
