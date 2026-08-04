@@ -97,3 +97,13 @@ pub(crate) fn reseal_row(root: &Path, edit: impl FnOnce(&str) -> String) {
     frame.extend_from_slice(edited.as_bytes());
     fs::write(path, frame).unwrap();
 }
+
+/// The claim owner the row states on disk, which no public type exposes.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+pub(crate) fn owner_of(root: &Path) -> String {
+    let bytes = fs::read(row_file(root)).unwrap();
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    let (_, stated) = text.split_once("\"owner\":\"").unwrap();
+    let (owner, _) = stated.split_once('"').unwrap();
+    owner.to_owned()
+}

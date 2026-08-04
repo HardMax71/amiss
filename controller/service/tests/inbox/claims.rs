@@ -1,9 +1,10 @@
 use amiss_controller_service::{
-    ClaimOutcome, CompleteOutcome, EnqueueOutcome, InboxState, RenewOutcome, RetryOutcome,
+    ClaimOutcome, CompleteOutcome, EnqueueOutcome, InboxError, InboxState, RenewOutcome,
+    RetryOutcome,
 };
 use tempfile::TempDir;
 
-use super::support::{claimed, incoming, open};
+use super::support::{claimed, incoming, open, owner_of};
 
 #[test]
 fn expired_claim_is_recovered_after_restart() {
@@ -119,5 +120,64 @@ fn completion_removes_raw_bytes_and_replay_returns_to_the_delivery_ledger() {
     assert_eq!(
         inbox.enqueue(incoming("delivery-1", b"body")).unwrap(),
         EnqueueOutcome::Stored
+    );
+}
+
+/// The requested time may be now, and may not be behind it.
+#[test]
+fn a_retry_may_be_scheduled_for_this_instant_and_not_before_it() {
+    let directory = TempDir::new().unwrap();
+    let mut inbox = open(directory.path());
+    inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+    let lease = claimed(inbox.claim(10).unwrap()).lease;
+    assert_eq!(
+        inbox.retry(&lease, 50, 50).unwrap(),
+        RetryOutcome::Scheduled,
+        "at once is a lawful next attempt"
+    );
+
+    let lease = claimed(inbox.claim(50).unwrap()).lease;
+    assert!(
+        matches!(inbox.retry(&lease, 60, 59), Err(InboxError::Clock)),
+        "a next attempt in the past is a clock the run cannot trust"
+    );
+}
+
+/// Time before the epoch is not a time this inbox reads.
+#[test]
+fn a_negative_clock_is_refused_before_any_row_is_read() {
+    let directory = TempDir::new().unwrap();
+    let mut inbox = open(directory.path());
+    inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+    assert!(matches!(inbox.claim(-1), Err(InboxError::Clock)));
+    let lease = claimed(inbox.claim(10).unwrap()).lease;
+    assert!(matches!(
+        inbox.retry(&lease, -1, 500),
+        Err(InboxError::Clock)
+    ));
+    assert!(matches!(inbox.complete(&lease, -1), Err(InboxError::Clock)));
+}
+
+/// A claim owner is the whole of the randomness it was built from: two
+/// halves, both varying, or two processes could hold one delivery.
+#[test]
+fn a_claim_owner_carries_both_halves_of_its_randomness() {
+    let mut leading = std::collections::BTreeSet::new();
+    for _process in 0..4 {
+        let directory = TempDir::new().unwrap();
+        let mut inbox = open(directory.path());
+        inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+        claimed(inbox.claim(10).unwrap());
+        let owner = owner_of(directory.path());
+        assert_eq!(owner.len(), 32, "{owner}");
+        assert!(
+            owner.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "{owner}"
+        );
+        leading.insert(owner.get(..16).unwrap_or_default().to_owned());
+    }
+    assert!(
+        leading.len() > 1,
+        "the high half is randomness too: {leading:?}"
     );
 }
