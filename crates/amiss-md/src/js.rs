@@ -116,3 +116,6 @@ fn close(frames: &mut Vec<Frame>, expected: Frame) {
         frames.pop();
     }
 }
+
+#[path = "../tests/internal/js.rs"]
+mod tests;
