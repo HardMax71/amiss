@@ -23,7 +23,7 @@ base64.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 hmac.workspace = true
-processkit = { version = "=2.3.1", features = ["stats"] }
+processkit = { version = "=3.0.2", features = ["stats"] }
 same-file = "1"
 secrecy.workspace = true
 serde.workspace = true

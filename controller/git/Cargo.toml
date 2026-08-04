@@ -12,11 +12,11 @@ publish = false
 amiss-controller = { path = ".." }
 amiss-wire = { path = "../../crates/amiss-wire" }
 flate2.workspace = true
-gix = { version = "0.85", default-features = false, features = [
+gix = { version = "0.86", default-features = false, features = [
   "blocking-http-transport-reqwest-rust-tls",
   "sha1",
 ] }
-gix-pack = { version = "0.72", features = ["sha1"] }
+gix-pack = { version = "0.73", features = ["sha1"] }
 secrecy.workspace = true
 tempfile.workspace = true
 

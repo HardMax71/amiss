@@ -42,7 +42,7 @@ amiss-controller-fixtures = { path = "controller/fixtures" }
 atomicwrites = "0.4.4"
 aws-lc-rs = "1.17.3"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
-base64 = "0.22"
+base64 = "0.23"
 cap-fs-ext = "4.0.2"
 cap-std = "4.0.2"
 divan = "0.1.21"
@@ -50,9 +50,9 @@ flate2 = "1"
 getrandom = "0.4.3"
 hex = "0.4"
 hmac = "0.13"
-jsonschema = { version = "0.48", default-features = false, features = ["resolve-file"] }
-jsonwebtoken = { version = "10.4", default-features = false, features = ["aws_lc_rs", "use_pem"] }
-pem = "3.0.6"
+jsonschema = { version = "0.49", default-features = false, features = ["resolve-file"] }
+jsonwebtoken = { version = "11.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+pem = "4.0.0"
 percent-encoding = "2"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 secrecy = "0.10"
