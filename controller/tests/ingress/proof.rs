@@ -161,6 +161,11 @@ fn replay_identity_is_normalized_only_after_verification() -> Result<(), Ingress
         signed.replay_keep_through_unix_millis(),
         Some(GITLAB_NOW + 300_000)
     );
+    assert_eq!(
+        gitlab_verified(signed_check, &signed_route.provider).issued_at_unix_millis(),
+        Some(GITLAB_NOW),
+        "a signed route carries the time the sender signed, to the millisecond"
+    );
 
     let exact_route = route(SignedTimePolicy::ReplayOnly);
     let exact_check = policy
@@ -205,6 +210,25 @@ fn debug_output_never_contains_raw_credentials_or_body() -> Result<(), IngressEr
     assert!(rendered.contains("[REDACTED]"));
     assert!(!rendered.contains("legacy-credential"));
     assert!(!rendered.contains("body-secret"));
+
+    assert_eq!(
+        format!("{:?}", headers[0]),
+        format!(
+            "DeliveryHeader {{ name: \"x-gitlab-token\", value: [REDACTED], value_bytes: {} }}",
+            secret.len()
+        ),
+        "a header prints its name and its size, and never its value"
+    );
+    let raw_rendered = format!("{request:?}");
+    assert!(
+        raw_rendered.starts_with("UntrustedDelivery {"),
+        "{raw_rendered}"
+    );
+    assert!(raw_rendered.contains("header_count: 1"), "{raw_rendered}");
+    assert!(
+        raw_rendered.contains(&format!("body_bytes: {}", body.len())),
+        "{raw_rendered}"
+    );
 
     let valid = policy(Duration::from_secs(1), Duration::ZERO)?
         .pre_auth(
