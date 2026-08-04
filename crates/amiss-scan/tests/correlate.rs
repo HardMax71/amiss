@@ -303,6 +303,42 @@ fn the_derivation_table_is_total() {
     );
 }
 
+/// A wrong-kind target compares only against the same wrong-kind target.
+#[test]
+fn a_type_mismatch_is_comparable_only_against_the_same_target() {
+    let mismatched = |path: &str| {
+        let mut spec = basic("d.md", "t.md", "same [x](x)");
+        spec.resolution = Resolution::TypeMismatch(Target::Blob(BlobTarget {
+            path: rp(path),
+            mode: BlobMode::Regular,
+            content: BlobContent::LfsPointer {
+                raw_digest: hb("amiss/raw-evidence", path.as_bytes()),
+            },
+        }));
+        spec
+    };
+    let same_kind = mismatched("t.md");
+    let got = run(
+        &side(vec![observation(&same_kind)]),
+        &side(vec![observation(&same_kind)]),
+    );
+    assert_eq!(
+        got.first().map(|row| (row.target_change, row.impact)),
+        Some((TargetChange::Equal, Impact::None)),
+        "the same wrong kind on both sides is unchanged"
+    );
+
+    let got = run(
+        &side(vec![observation(&same_kind)]),
+        &side(vec![observation(&mismatched("other.md"))]),
+    );
+    assert_eq!(
+        got.first().map(|row| (row.target_change, row.impact)),
+        Some((TargetChange::NotComparable, Impact::NotApplicable)),
+        "a different target of the wrong kind is not the same mismatch"
+    );
+}
+
 #[test]
 fn ambiguity_selects_smallest_primaries_and_keeps_alternatives() {
     let base = basic("d.md", "t.md", "one [x](x)");
