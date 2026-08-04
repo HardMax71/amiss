@@ -1,7 +1,10 @@
 use amiss_controller::{GitLabWebhook, IngressError, ReplayIdentity, WebhookError, WebhookKeyring};
 use secrecy::SecretString;
 
-use super::{BODY, ID, NEW_SECRET, NEW_SIGNATURE, SECRET, SIGNATURE, TIMESTAMP, headers};
+use super::{
+    BODY, EPOCH_SIGNATURE, FILLER, ID, NEW_SECRET, NEW_SIGNATURE, SECRET, SIGNATURE, TIMESTAMP,
+    headers,
+};
 use crate::support::{NOW, anchor, header, key, ring, signed_check, trust_set};
 
 #[test]
@@ -110,5 +113,39 @@ fn rejects_a_signature_from_an_unconfigured_secret() -> Result<(), IngressError>
         verifier.verify(signed_check(&headers, BODY, NOW)?),
         Err(WebhookError::Authentication)
     );
+    Ok(())
+}
+
+/// The epoch is the one timestamp whose leading zero is the whole number, so
+/// it is canonical and verifies like any other.
+#[test]
+fn a_timestamp_of_zero_is_canonical() -> Result<(), IngressError> {
+    let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
+    let headers = [
+        header("webhook-id", ID),
+        header("webhook-timestamp", b"0"),
+        header("webhook-signature", EPOCH_SIGNATURE),
+    ];
+    let proof = verifier.verify(signed_check(&headers, BODY, NOW)?).unwrap();
+    assert_eq!(proof.issued_at_unix_millis(), Some(0));
+    Ok(())
+}
+
+/// A rotation may state every signature the header has room for, and the
+/// ceiling is the exact width of that many entries.
+#[test]
+fn a_full_signature_header_reaches_the_ceiling_exactly() -> Result<(), IngressError> {
+    let mut stated = Vec::new();
+    for entry in FILLER {
+        stated.extend_from_slice(entry);
+        stated.push(b' ');
+    }
+    stated.extend_from_slice(SIGNATURE);
+    assert_eq!(stated.len(), 383, "eight entries and the seven spaces");
+
+    let verifier = GitLabWebhook::new(ring("gitlab-current", SECRET));
+    let headers = headers(&stated);
+    let proof = verifier.verify(signed_check(&headers, BODY, NOW)?).unwrap();
+    assert_eq!(proof.anchor(), &anchor("gitlab-current"));
     Ok(())
 }
