@@ -134,15 +134,12 @@ fn every_line_that_could_clear_more_than_it_names_is_refused() {
         b"/\n",
         b"\n",
     ] {
-        let declarations = Declarations::parse(line);
-        for probe in [&b"settings.md"[..], b"rules", b"rules/E501.md", b"a/b.md"] {
-            assert!(
-                !declarations.declares(probe),
-                "{} declared {}",
-                String::from_utf8_lossy(line),
-                String::from_utf8_lossy(probe),
-            );
-        }
+        assert_eq!(
+            Declarations::parse(line),
+            Declarations::default(),
+            "{} declared something",
+            String::from_utf8_lossy(line),
+        );
     }
 }
 
