@@ -162,7 +162,7 @@ fn a_negative_clock_is_refused_before_any_row_is_read() {
 /// halves, both varying, or two processes could hold one delivery.
 #[test]
 fn a_claim_owner_carries_both_halves_of_its_randomness() {
-    let mut leading = std::collections::BTreeSet::new();
+    let mut halves: [std::collections::BTreeSet<String>; 2] = Default::default();
     for _process in 0..4 {
         let directory = TempDir::new().unwrap();
         let mut inbox = open(directory.path());
@@ -174,10 +174,14 @@ fn a_claim_owner_carries_both_halves_of_its_randomness() {
             owner.bytes().all(|byte| byte.is_ascii_hexdigit()),
             "{owner}"
         );
-        leading.insert(owner.get(..16).unwrap_or_default().to_owned());
+        let (high, low) = owner.split_at_checked(16).expect("a full owner");
+        halves[0].insert(high.to_owned());
+        halves[1].insert(low.to_owned());
     }
-    assert!(
-        leading.len() > 1,
-        "the high half is randomness too: {leading:?}"
-    );
+    for (name, seen) in [("high", &halves[0]), ("low", &halves[1])] {
+        assert!(
+            seen.len() > 1,
+            "the {name} half is randomness too: {seen:?}"
+        );
+    }
 }
