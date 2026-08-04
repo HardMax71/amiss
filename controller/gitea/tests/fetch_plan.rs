@@ -195,3 +195,72 @@ fn branch(name: &str) -> BranchRef {
 fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }
+
+fn rebound(mut request: RunRequest) -> RunRequest {
+    request.provider_run = provider_run(
+        &request.delivery.integration,
+        &request.run.change,
+        &request.run.commits.candidate,
+        &request.run.refs.candidate,
+        &request.run.refs.target,
+    );
+    request
+}
+
+/// The repository identity has three separate demands, and a request that
+/// breaks one of them breaks it alone.
+#[test]
+fn each_demand_on_a_repository_identity_refuses_by_itself() {
+    let mut nested = request("gitea");
+    nested.run.change.repository.owner = "group/sub".to_owned();
+    assert_eq!(
+        gitea_fetch_plan(&rebound(nested)),
+        Err(GiteaPlanError::InvalidRequest),
+        "a nested owner is a GitLab group path, not a Gitea owner"
+    );
+
+    let mut shouted = request("gitea");
+    shouted.run.change.repository.owner = "Acme".to_owned();
+    assert_eq!(
+        gitea_fetch_plan(&rebound(shouted)),
+        Err(GiteaPlanError::InvalidRequest),
+        "an owner that does not survive its own constructor"
+    );
+
+    let mut underscored = request("gitea");
+    let instance = ProviderInstance::new("forge_example".to_owned()).unwrap();
+    underscored.delivery.provider.instance = instance.clone();
+    underscored.run.change.provider.instance = instance;
+    underscored.run.change.repository.host = "forge_example".to_owned();
+    Arc::make_mut(&mut underscored.plan)
+        .execution
+        .action_repository
+        .host = "forge_example".to_owned();
+    assert_eq!(
+        gitea_fetch_plan(&rebound(underscored)),
+        Err(GiteaPlanError::InvalidRequest),
+        "a host no forge label may spell, agreed on by every party"
+    );
+}
+
+/// Every object the plan carries or names is exactly a SHA-1, trees
+/// included, though the plan itself never states them.
+#[test]
+fn an_object_outside_the_sha1_grammar_refuses_the_plan() {
+    let mut wider = request("forgejo");
+    wider.run.trees.candidate = Oid::new(ObjectFormat::Sha256, "d".repeat(64)).unwrap();
+    assert_eq!(
+        gitea_fetch_plan(&wider),
+        Err(GiteaPlanError::InvalidRequest),
+        "a tree the plan never states is still an object it answers for"
+    );
+}
+
+/// The one refusal this crate can state says what it means.
+#[test]
+fn the_refusal_states_what_it_refused() {
+    assert_eq!(
+        GiteaPlanError::InvalidRequest.to_string(),
+        "the Gitea-family acquisition request is inconsistent"
+    );
+}
