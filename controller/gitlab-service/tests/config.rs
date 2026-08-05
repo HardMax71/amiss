@@ -157,6 +157,29 @@ fn api_oidc_and_git_credentials_are_independent_and_strict() {
             .to_string(),
         "GitLab token is invalid"
     );
+
+    for (reason, token) in [
+        (
+            "too short to be a token, printable throughout",
+            "glpat-abcdef".as_bytes(),
+        ),
+        (
+            "long enough, with a byte no header may carry",
+            b"glpat-0123456789 abcdefghij".as_slice(),
+        ),
+    ] {
+        let short_or_blank = Fixture::new();
+        std::fs::write(&short_or_blank.api_token, token).unwrap();
+        short_or_blank.save();
+        assert_eq!(
+            ServiceConfig::load(&short_or_blank.config)
+                .err()
+                .unwrap()
+                .to_string(),
+            "GitLab token is invalid",
+            "{reason}"
+        );
+    }
 }
 
 #[test]
