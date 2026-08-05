@@ -325,7 +325,7 @@ fn command(run: &BootstrapRun<'_>, prepared: &PreparedRun) -> Command {
 }
 
 fn process_failure(error: &ProcessError) -> BootstrapTermination {
-    if let ProcessError::Cancelled { .. } = error {
+    if error.is_cancelled() {
         BootstrapTermination::HeartbeatStopped
     } else {
         BootstrapTermination::SpawnUnavailable

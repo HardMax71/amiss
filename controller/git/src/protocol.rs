@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::num::NonZeroU32;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -60,7 +59,7 @@ fn active(fetch: &ExactFetch<'_>, started: Instant) -> Result<(), GitFetchError>
 }
 
 fn exact_https_url(url: &str) -> Result<gix::Url, GitFetchError> {
-    let parsed = gix::url::parse(url.as_bytes().into()).map_err(fetch_error)?;
+    let parsed = gix::url::parse(url.as_bytes()).map_err(fetch_error)?;
     let valid = url.starts_with("https://")
         && !url.contains(['?', '#'])
         && parsed.scheme == gix::url::Scheme::Https
@@ -195,7 +194,7 @@ fn receive_pack(
         gix::protocol::fetch::Context {
             handshake,
             transport,
-            user_agent: ("agent", Some(Cow::Owned(gix::protocol::agent(USER_AGENT)))),
+            user_agent: ("agent", Some(gix::protocol::agent(USER_AGENT))),
             trace_packetlines: false,
         },
         gix::protocol::fetch::Options {

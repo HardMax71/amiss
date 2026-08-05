@@ -75,7 +75,7 @@ pub(super) fn validate_and_install(
             progress,
             interrupted,
             None::<gix::objs::find::Never>,
-            index_options(),
+            index_options(PackLimits::DEFAULT),
         )
         .map_err(pack_error)
     })?;
@@ -138,12 +138,14 @@ fn watch_index(
     }
 }
 
-fn index_options() -> gix_pack::bundle::write::Options {
+fn index_options(limits: PackLimits) -> gix_pack::bundle::write::Options {
     gix_pack::bundle::write::Options {
         thread_limit: Some(1),
         iteration_mode: gix_pack::data::input::Mode::Verify,
         index_version: gix_pack::index::Version::default(),
         object_hash: gix::hash::Kind::Sha1,
+        alloc_limit_bytes: Some(usize::try_from(limits.object_bytes).unwrap_or(usize::MAX)),
+        compression: gix::zlib::Compression::BEST_SPEED,
     }
 }
 

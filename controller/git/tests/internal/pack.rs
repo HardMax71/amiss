@@ -22,10 +22,15 @@ fn fixed_limits_and_indexing_are_advertised() {
     assert_eq!(limits.resolved_bytes, 4_294_967_296);
     assert_eq!(limits.delta_depth, 128);
 
-    let options = index_options();
+    let options = index_options(limits);
     assert_eq!(options.thread_limit, Some(1));
     assert_eq!(options.iteration_mode, gix_pack::data::input::Mode::Verify);
     assert_eq!(options.object_hash, gix::hash::Kind::Sha1);
+    assert_eq!(
+        options.alloc_limit_bytes,
+        Some(134_217_728),
+        "the indexer allocates under the same object ceiling the stream enforces"
+    );
 }
 
 #[test]
