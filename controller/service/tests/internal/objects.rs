@@ -138,3 +138,21 @@ fn a_deadline_already_reached_is_not_active() {
     assert_eq!(active(Instant::now() + Duration::from_secs(30)), Ok(()));
     assert_eq!(active(Instant::now()), Err(ProviderError::Unavailable));
 }
+
+/// A source with no credential cannot authenticate, so it is refused where
+/// it is built rather than at the first fetch.
+#[test]
+fn a_source_needs_a_credential_to_present() {
+    let scratch = tempfile::tempdir().expect("a scratch directory");
+    assert!(
+        GitObjectSource::new(
+            scratch.path().to_owned(),
+            "objects",
+            "https://forge.example/acme/widget.git".to_owned(),
+            "amiss".to_owned(),
+            SecretString::from(String::new()),
+            Duration::from_secs(30),
+        )
+        .is_none()
+    );
+}

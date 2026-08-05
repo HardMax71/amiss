@@ -53,6 +53,7 @@ impl GitObjectSource {
         (repository_url.starts_with("https://")
             && !prefix.is_empty()
             && valid_username
+            && !secrecy::ExposeSecret::expose_secret(&token).is_empty()
             && GitFetchBounds::new(maximum).is_some())
         .then_some(Self {
             scratch,

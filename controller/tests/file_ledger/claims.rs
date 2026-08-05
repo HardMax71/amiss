@@ -12,7 +12,8 @@ use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
 
 use super::support::{
-    MAX_RECORDS, TestClock, check_binding, config, delivery, executed, open, publication, staged,
+    MAX_RECORDS, TestClock, check_binding, config, delivery, delivery_with_id, executed, open,
+    publication, staged,
 };
 
 #[test]
@@ -87,6 +88,52 @@ fn the_record_root_must_already_be_a_directory() {
         FileLedger::open_with_clock(file, config(MAX_RECORDS), clock_source),
         Err(FileLedgerError::Corrupt)
     ));
+}
+
+/// A refusal states what went wrong, and one that wraps an I/O failure keeps
+/// the failure reachable behind it.
+#[test]
+fn every_refusal_says_what_it_is_and_keeps_its_cause() {
+    use std::error::Error as _;
+
+    for (error, message) in [
+        (
+            FileLedgerError::Configuration,
+            "delivery record configuration differs",
+        ),
+        (FileLedgerError::Full, "delivery record capacity is full"),
+        (
+            FileLedgerError::Expired,
+            "delivery replay lifetime has ended",
+        ),
+        (FileLedgerError::Clock, "controller time cannot be trusted"),
+        (
+            FileLedgerError::Random,
+            "controller owner identity could not be created",
+        ),
+        (
+            FileLedgerError::ReportTooLarge,
+            "saved report exceeds the report ceiling",
+        ),
+        (FileLedgerError::Corrupt, "delivery record is corrupt"),
+    ] {
+        assert_eq!(error.to_string(), message);
+        assert!(error.source().is_none(), "{message}");
+    }
+
+    let wrapped = FileLedgerError::Io(std::io::Error::new(
+        std::io::ErrorKind::PermissionDenied,
+        "the record root refused",
+    ));
+    assert_eq!(
+        wrapped.to_string(),
+        "delivery record I/O failed: the record root refused"
+    );
+    assert_eq!(
+        wrapped.source().map(ToString::to_string).as_deref(),
+        Some("the record root refused"),
+        "the I/O failure stays reachable"
+    );
 }
 
 #[test]
@@ -345,6 +392,36 @@ fn completion_answers_for_the_staged_publication_alone() {
             ledger.complete(&delivery, &frozen).unwrap(),
             LeaseCompletion::Lost,
             "{reason}"
+        );
+    }
+}
+
+/// An evaluation identity carries the whole nonce it was minted from, so two
+/// runs never share one because half of it stopped varying.
+#[test]
+fn an_evaluation_identity_varies_across_both_halves_of_its_nonce() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(1_000);
+    let mut ledger = open(directory.path(), &clock);
+    let mut halves: [std::collections::BTreeSet<String>; 2] = Default::default();
+
+    for index in 0..4 {
+        let delivery = delivery_with_id(&format!("delivery-{index}"), "42");
+        let DeliveryClaim::Execute(lease) = ledger.claim(&delivery, &check_binding()).unwrap()
+        else {
+            panic!("a fresh delivery is claimed for execution");
+        };
+        let identity = lease.evaluation_id.as_str().to_owned();
+        let nonce = identity.rsplit(':').next().expect("a minted nonce");
+        assert_eq!(nonce.len(), 32, "{identity}");
+        let (high, low) = nonce.split_at_checked(16).expect("a full nonce");
+        halves[0].insert(high.to_owned());
+        halves[1].insert(low.to_owned());
+    }
+    for (name, seen) in [("high", &halves[0]), ("low", &halves[1])] {
+        assert!(
+            seen.len() > 1,
+            "the {name} half is randomness too: {seen:?}"
         );
     }
 }

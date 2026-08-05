@@ -255,3 +255,53 @@ fn impossible_limits_are_configuration_errors() {
         ));
     }
 }
+
+/// A header name and a header value each have their own grammar, and a
+/// delivery that breaks one of them breaks it alone.
+#[test]
+fn a_header_the_wire_cannot_carry_is_refused_clause_by_clause() {
+    let directory = TempDir::new().unwrap();
+    let mut inbox = open(directory.path());
+    for (reason, name, value) in [
+        ("a name of nothing", "", b"value".as_slice()),
+        ("a space in a name", "X Test", b"value".as_slice()),
+        ("a colon in a name", "X:Test", b"value".as_slice()),
+        (
+            "a carriage return in a value",
+            "X-Test",
+            b"one\rtwo".as_slice(),
+        ),
+        ("a newline in a value", "X-Test", b"one\ntwo".as_slice()),
+        ("a nul in a value", "X-Test", b"one\0two".as_slice()),
+    ] {
+        let headers = [IncomingHeader { name, value }];
+        let delivery = IncomingDelivery {
+            route: "github-main",
+            source_id: "delivery-1",
+            received_at_unix_millis: 1_000,
+            headers: &headers,
+            body: b"body",
+        };
+        assert!(
+            matches!(inbox.enqueue(delivery), Err(InboxError::InvalidDelivery)),
+            "{reason}"
+        );
+    }
+
+    let headers = [IncomingHeader {
+        name: "X-Test",
+        value: b"one two",
+    }];
+    assert!(
+        inbox
+            .enqueue(IncomingDelivery {
+                route: "github-main",
+                source_id: "delivery-1",
+                received_at_unix_millis: 1_000,
+                headers: &headers,
+                body: b"body",
+            })
+            .is_ok(),
+        "a space is lawful inside a value"
+    );
+}
