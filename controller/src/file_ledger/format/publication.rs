@@ -154,7 +154,7 @@ pub(in crate::file_ledger) struct ReportRef {
 }
 
 impl ReportRef {
-    fn new(report: &[u8]) -> Result<Self, FileLedgerError> {
+    pub(in crate::file_ledger) fn new(report: &[u8]) -> Result<Self, FileLedgerError> {
         let length = report_length(report)?;
         Ok(Self {
             digest: hb(REPORT_DOMAIN, report).to_string(),

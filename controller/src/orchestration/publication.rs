@@ -98,3 +98,6 @@ fn runner_conclusion(
         }
     }
 }
+
+#[path = "../../tests/internal/publication.rs"]
+mod tests;
