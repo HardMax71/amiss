@@ -78,6 +78,25 @@ fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
     );
 }
 
+/// The keep-through instant is still inside the lifetime, so a delivery
+/// nothing has seen may start its run at exactly that millisecond.
+#[test]
+fn an_unseen_delivery_may_start_at_the_last_instant_of_its_lifetime() {
+    let directory = TempDir::new().unwrap();
+    let clock = TestClock::at(BOUNDED_ISSUED_AT);
+    let delivery = bounded_delivery("bounded-edge", "42");
+    let mut ledger = open(directory.path(), &clock);
+
+    clock.set(BOUNDED_KEEP_THROUGH);
+    assert!(
+        matches!(
+            ledger.claim(&delivery, &check_binding()).unwrap(),
+            DeliveryClaim::Execute(_)
+        ),
+        "the cutoff is inclusive on the way in as well"
+    );
+}
+
 #[test]
 fn an_expired_unseen_delivery_stays_expired_after_clock_rollback() {
     let directory = TempDir::new().unwrap();
