@@ -72,3 +72,6 @@ impl Row {
         self.root.join(format!("{}.report", self.key))
     }
 }
+
+#[path = "../../../tests/internal/report_row.rs"]
+mod tests;
