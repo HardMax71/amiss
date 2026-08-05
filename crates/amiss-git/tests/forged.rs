@@ -261,9 +261,10 @@ fn read(root: &Path, oid: &[u8; 20]) -> Result<Vec<u8>, Error> {
 }
 
 /// A payload whose blob oid starts with the wanted byte, found by nonce.
-fn blob_with_first_byte(wanted: u8, salt: &str) -> Vec<u8> {
+/// The prefix only keeps call sites searching disjoint payloads.
+fn blob_with_first_byte(wanted: u8, prefix: &str) -> Vec<u8> {
     (0..100_000_u32)
-        .map(|nonce| format!("{salt} {nonce}\n").into_bytes())
+        .map(|nonce| format!("{prefix} {nonce}\n").into_bytes())
         .find(|payload| blob_oid(payload).first() == Some(&wanted))
         .expect("a nonce reaches the bucket")
 }
@@ -372,8 +373,8 @@ fn ceiling_holds(
 #[test]
 fn the_pack_pair_ceiling_is_inclusive() {
     let dir = forged_repo();
-    for salt in ["pair one\n", "pair two\n"] {
-        let entries = [Entry::blob(salt.as_bytes())];
+    for body in ["pair one\n", "pair two\n"] {
+        let entries = [Entry::blob(body.as_bytes())];
         let (pack, offsets) = write_pack(&entries);
         let idx = write_idx_v1(&sorted_rows(&entries, &offsets), &pack, None);
         install(dir.path(), &pack, &idx);
