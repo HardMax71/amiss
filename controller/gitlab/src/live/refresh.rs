@@ -159,14 +159,7 @@ impl GitLabClient {
             ],
             budget,
         )?;
-        let base_commit = commit
-            .parent_ids
-            .first()
-            .and_then(|parent| exact_sha1(parent))
-            .ok_or(ProviderError::InvalidResponse)?;
-        if commit.id != gate_commit.as_str() {
-            return Err(ProviderError::InvalidResponse);
-        }
+        let base_commit = claimed_base(&commit, &gate_commit)?;
         let objects = self.objects.resolve(&crate::GitLabObjectRequest {
             project_id: query.project_id,
             repository_url,
@@ -175,17 +168,7 @@ impl GitLabClient {
             timeout: budget.remaining()?,
         })?;
         budget.remaining()?;
-        let resolved_base = objects
-            .gate
-            .parents
-            .first()
-            .ok_or(ProviderError::InvalidResponse)?;
-        if objects.gate.id != commit.id
-            || objects.gate.parents != commit.parent_ids
-            || &objects.base.id != resolved_base
-        {
-            return Err(ProviderError::InvalidResponse);
-        }
+        resolved_matches_claim(&objects, &commit)?;
         Ok(objects)
     }
 
@@ -213,6 +196,42 @@ pub(super) fn validated_repository_url(
     (project_id == expected_project_id && reported_url == canonical)
         .then_some(canonical)
         .ok_or(ProviderError::InvalidResponse)
+}
+
+/// The REST answer must be the gate it was asked about, carrying an exact
+/// first parent to fetch the run's base by.
+pub(super) fn claimed_base(
+    commit: &CommitResponse,
+    gate_commit: &amiss_wire::model::Oid,
+) -> Result<amiss_wire::model::Oid, ProviderError> {
+    let base = commit
+        .parent_ids
+        .first()
+        .and_then(|parent| exact_sha1(parent))
+        .ok_or(ProviderError::InvalidResponse)?;
+    if commit.id != gate_commit.as_str() {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(base)
+}
+
+/// The Git-resolved objects must repeat the REST claim exactly.
+pub(super) fn resolved_matches_claim(
+    objects: &GitLabObjects,
+    commit: &CommitResponse,
+) -> Result<(), ProviderError> {
+    let resolved_base = objects
+        .gate
+        .parents
+        .first()
+        .ok_or(ProviderError::InvalidResponse)?;
+    if objects.gate.id != commit.id
+        || objects.gate.parents != commit.parent_ids
+        || &objects.base.id != resolved_base
+    {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(())
 }
 
 pub(super) fn validate_query(query: &GitLabRefreshQuery) -> Result<(), ProviderError> {
