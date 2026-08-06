@@ -241,6 +241,20 @@ fn frontmatter_translates_spans_not_paths() {
     );
 }
 
+/// A governed definition behind frontmatter publishes its translated span,
+/// so the slice it names in the raw document is the definition itself.
+#[test]
+fn frontmatter_translates_governed_spans_too() {
+    let source = "---\nt: x\n---\n\n[amiss:a]: ./t.md \"v\"\n";
+    let got = extraction(Adapter::Markdown, source);
+    let spans: Vec<&str> = got
+        .governed
+        .iter()
+        .filter_map(|definition| source.get(definition.span.0..definition.span.1))
+        .collect();
+    assert_eq!(spans, vec!["[amiss:a]: ./t.md \"v\""]);
+}
+
 /// A JSX element's outer span is opaque, so nothing inside it is extracted;
 /// constructs outside it still are. ESM and expressions contribute their own
 /// intervals.
@@ -434,6 +448,64 @@ fn reserved_definitions_surface_and_suppress() {
             "[amiss&colon;entity]: ./other.md",
         ],
         "the span runs from the opening bracket through the title, excluding the ending"
+    );
+    let words: Vec<(&str, Option<&str>, &str, bool)> = got
+        .governed
+        .iter()
+        .map(|definition| {
+            (
+                definition.label.as_str(),
+                definition.title.as_deref(),
+                definition.url.as_str(),
+                definition.angled,
+            )
+        })
+        .collect();
+    assert_eq!(
+        words,
+        vec![
+            ("amiss:claim-one", Some("claim"), "./subject.md", false),
+            ("amiss:entity", None, "./other.md", false),
+        ],
+        "the governed words are the parser's decoded label, title, and url"
+    );
+}
+
+/// The decoded words survive the syntax that hides them: an angled
+/// destination sheds its brackets but keeps its flag, entities decode in the
+/// title, and a missing title is absent rather than empty.
+#[test]
+fn a_governed_definition_carries_its_decoded_words() {
+    let got = extraction(
+        Adapter::Markdown,
+        "[amiss:angled]: <amiss:value?path=a.md&line=L1> \"one\"\n\n\
+         [amiss:bare]: amiss:future\n\n\
+         [amiss:titled]: ./x.md \"a &amp; b\"\n",
+    );
+    let words: Vec<(&str, Option<&str>, &str, bool)> = got
+        .governed
+        .iter()
+        .map(|definition| {
+            (
+                definition.label.as_str(),
+                definition.title.as_deref(),
+                definition.url.as_str(),
+                definition.angled,
+            )
+        })
+        .collect();
+    assert_eq!(
+        words,
+        vec![
+            (
+                "amiss:angled",
+                Some("one"),
+                "amiss:value?path=a.md&line=L1",
+                true
+            ),
+            ("amiss:bare", None, "amiss:future", false),
+            ("amiss:titled", Some("a & b"), "./x.md", false),
+        ]
     );
 }
 
