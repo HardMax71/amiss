@@ -257,6 +257,53 @@ fn an_attested_value_claim_passes_and_is_counted() {
     );
 }
 
+/// A claim only the base holds is invisible: evaluation is candidate-side,
+/// so a broken claim the candidate deletes leaves no count and no finding.
+#[test]
+fn a_base_side_claim_is_not_evaluated() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "# Docs\n\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("docs.md"), "# Docs\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "stripped"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(built.exit_code, 0, "{payload}");
+    assert_eq!(payload["summary"]["governed_claims"], 0);
+    assert_eq!(payload["summary"]["unattested_claims"], 0);
+    assert!(
+        payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "claim-broken"
+                && row["kind"] != "claim-target-missing"
+                && row["kind"] != "unsupported-capability"),
+        "the base-side claim leaks nothing: {}",
+        payload["findings"]
+    );
+}
+
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn claimed_run(claim_line: &str, enforce: bool) -> (i64, serde_json::Value) {
     let dir = TempDir::new().unwrap();
