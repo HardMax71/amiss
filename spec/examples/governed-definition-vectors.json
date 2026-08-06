@@ -136,6 +136,150 @@
           "multiplicity": 1
         }
       ]
+    },
+    {
+      "id": "GD-009-value-bare-destination",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v9]: amiss:value?path=docs/a.md&line=L1 \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:b920bd50d392278c2cdd20347c8460ad8e695037d21a696f381cf1bb884a0749",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-010-value-params-reordered",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v10]: <amiss:value?line=L1&path=docs/a.md> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:636c5166b8b4cbf17d6371858328cfdb03eea91ca1eb244b8a5334bddbe6c0a8",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-011-value-title-missing",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v11]: <amiss:value?path=docs/a.md&line=L1>"
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:f5e069d165df42a840a546f4345a65448be4c6a9ba07ed0ed17111868ef9d1b3",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-012-value-line-zero",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v12]: <amiss:value?path=docs/a.md&line=L0> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:db20e2bd762822cbe104832914ac41dc6b66dfb112e0fbcbaf2f00fdeab8e91e",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-013-value-line-past-safe",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v13]: <amiss:value?path=docs/a.md&line=L9007199254740992> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:d50e1fe4b34bcb7b29b2545f29dab56a86c34fd5b0ee3fc061c7d2302e4aa7e6",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-014-value-kind-unknown",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v14]: <amiss:value2?path=docs/a.md&line=L1> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:330ec17df04986218167a8fe3ccf643aed20f26c33f6d18f9f1fe8d2097f2a85",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-015-value-name-slashed",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v/15]: <amiss:value?path=docs/a.md&line=L1> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:0a7ddb6bd3287c85813663b6ee89605d4ab216cf1a1a14d64ee54474a2950572",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-016-value-path-traversal",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v16]: <amiss:value?path=../a.md&line=L1> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:85e0891d7e80150fda4f22ad9db250e11a52d456aa152f8368604c19e521a305",
+          "multiplicity": 1
+        }
+      ]
+    },
+    {
+      "id": "GD-017-value-extra-param",
+      "base_definitions": [],
+      "candidate_definitions": [
+        {
+          "source": "[amiss:v17]: <amiss:value?path=docs/a.md&line=L1&x=1> \"x\""
+        }
+      ],
+      "expected_member_count": 1,
+      "expected_sources": [
+        {
+          "digest": "sha256:3018b25aedd66e150f18432f99de001823d1ba344d194e03e09236eaae1b8a0a",
+          "multiplicity": 1
+        }
+      ]
     }
   ]
 }

@@ -25,7 +25,7 @@ mod support;
 use support::assert_report as assert_schema_clean;
 
 const DOCUMENT_PATH: &str = "docs/governed.md";
-const EXPECTED_IDS: [&str; 8] = [
+const EXPECTED_IDS: [&str; 17] = [
     "GD-001-canonical-candidate",
     "GD-002-decoded-colon",
     "GD-003-uppercase-not-reserved",
@@ -34,6 +34,15 @@ const EXPECTED_IDS: [&str; 8] = [
     "GD-006-losing-reserved-does-not-suppress",
     "GD-007-backslash-decoded-colon",
     "GD-008-distinct-sources-sort-by-digest",
+    "GD-009-value-bare-destination",
+    "GD-010-value-params-reordered",
+    "GD-011-value-title-missing",
+    "GD-012-value-line-zero",
+    "GD-013-value-line-past-safe",
+    "GD-014-value-kind-unknown",
+    "GD-015-value-name-slashed",
+    "GD-016-value-path-traversal",
+    "GD-017-value-extra-param",
 ];
 
 fn corpus() -> Value {

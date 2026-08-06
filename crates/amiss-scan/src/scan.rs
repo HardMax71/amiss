@@ -1,4 +1,3 @@
-use amiss_md::extract::GovernedDefinition;
 use amiss_md::lines::{Line, scan};
 use amiss_md::{Analysis, AnalyzeError, Occurrence, Opaque, Work, analyze};
 use amiss_wire::digest::{Digest, hb};
@@ -31,12 +30,14 @@ pub struct ScannedOccurrence {
 }
 
 /// One reserved governed definition with its raw span, display positions,
-/// and the digest of its exact contributing source bytes.
+/// the digest of its exact contributing source bytes, and the claim form
+/// its words spell.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GovernedSource {
     pub span: (usize, usize),
     pub display: SpanDisplay,
     pub digest: Digest,
+    pub form: crate::claim::GovernedForm,
 }
 
 pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source";
@@ -150,14 +151,15 @@ pub fn scan_bytes(
     }
 
     let mut governed = Vec::with_capacity(extraction.governed.len());
-    for GovernedDefinition { span, .. } in &extraction.governed {
+    for definition in &extraction.governed {
+        let span = definition.span;
         document_references = document_references.saturating_add(1);
         resources.charge_reference(0, document_references)?;
         let bytes = source
             .get(span.0..span.1)
             .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
         governed.push(GovernedSource {
-            span: *span,
+            span,
             display: SpanDisplay {
                 start_line: position(source, &lines, span.0).0,
                 start_column: position(source, &lines, span.0).1,
@@ -165,6 +167,7 @@ pub fn scan_bytes(
                 end_column: position(source, &lines, span.1).1,
             },
             digest: hb(GOVERNED_SOURCE_DOMAIN, bytes),
+            form: crate::claim::classify(definition),
         });
     }
 
