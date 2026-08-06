@@ -732,9 +732,18 @@ pub struct ClaimGroup {
 /// least location as the representative. Attested claims group nothing.
 #[must_use]
 pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> {
+    use std::collections::BTreeMap;
+
     use crate::claim::{ClaimMissingReason, ClaimVerdict};
 
-    let mut groups: Vec<ClaimGroup> = Vec::new();
+    struct Keyed<'outcome> {
+        outcome: &'outcome crate::claim::ClaimOutcome,
+        kind: FindingKind,
+        observed: &'static str,
+        observed_digest: Option<Digest>,
+    }
+
+    let mut keyed: BTreeMap<(&RepoPath, &str, FindingKind), Vec<Keyed<'_>>> = BTreeMap::new();
     for outcome in outcomes {
         let (kind, observed, observed_digest) = match &outcome.verdict {
             ClaimVerdict::Attested => continue,
@@ -754,53 +763,48 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                 None,
             ),
         };
-        let existing = groups.iter_mut().find(|group| {
-            group.kind == kind && group.document == outcome.document && group.name == outcome.name
-        });
-        match existing {
-            Some(group) => {
-                group.member_count = group.member_count.saturating_add(1);
-                match group
-                    .sources
-                    .iter_mut()
-                    .find(|(digest, _)| *digest == outcome.source_digest)
-                {
-                    Some((_, multiplicity)) => *multiplicity = multiplicity.saturating_add(1),
-                    None => group.sources.push((outcome.source_digest, 1)),
-                }
-                group.sources.sort_by_key(|(digest, _)| *digest);
-                if group.representative_span.is_none()
-                    || group.representative_span > Some(outcome.span)
-                {
-                    group.representative_span = Some(outcome.span);
-                    group.representative_display = Some(outcome.display);
-                    group.target_path = outcome.path.clone();
-                    group.line = outcome.line;
-                    group.expected_digest = outcome.expected_digest;
-                    group.observed = observed;
-                    group.observed_digest = observed_digest;
-                }
-            }
-            None => groups.push(ClaimGroup {
+        keyed
+            .entry((&outcome.document, outcome.name.as_str(), kind))
+            .or_default()
+            .push(Keyed {
+                outcome,
                 kind,
-                document: outcome.document.clone(),
-                name: outcome.name.clone(),
-                member_count: 1,
-                sources: vec![(outcome.source_digest, 1)],
-                representative_span: Some(outcome.span),
-                representative_display: Some(outcome.display),
-                target_path: outcome.path.clone(),
-                line: outcome.line,
-                expected_digest: outcome.expected_digest,
                 observed,
                 observed_digest,
-            }),
-        }
+            });
     }
-    groups.sort_by(|left, right| {
-        (&left.document, &left.name, left.kind).cmp(&(&right.document, &right.name, right.kind))
-    });
-    groups
+    keyed
+        .into_values()
+        .filter_map(|mut members| {
+            members.sort_by_key(|member| member.outcome.span);
+            let mut sources: Vec<(Digest, u64)> = Vec::new();
+            for member in &members {
+                match sources
+                    .iter_mut()
+                    .find(|(digest, _)| *digest == member.outcome.source_digest)
+                {
+                    Some((_, multiplicity)) => *multiplicity = multiplicity.saturating_add(1),
+                    None => sources.push((member.outcome.source_digest, 1)),
+                }
+            }
+            sources.sort_by_key(|(digest, _)| *digest);
+            let member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
+            members.first().map(|representative| ClaimGroup {
+                kind: representative.kind,
+                document: representative.outcome.document.clone(),
+                name: representative.outcome.name.clone(),
+                member_count,
+                sources,
+                representative_span: Some(representative.outcome.span),
+                representative_display: Some(representative.outcome.display),
+                target_path: representative.outcome.path.clone(),
+                line: representative.outcome.line,
+                expected_digest: representative.outcome.expected_digest,
+                observed: representative.observed,
+                observed_digest: representative.observed_digest,
+            })
+        })
+        .collect()
 }
 
 /// One defective claim group as a control-scoped finding carrying the claim

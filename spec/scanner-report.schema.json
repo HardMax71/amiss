@@ -3823,6 +3823,11 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 16384,
+          "uniqueItems": true,
+          "description": "Sorted by digest UTF-8 bytes; digest keys are unique and multiplicity preserves duplicate evidence.",
+          "x-amiss-order": [
+            "digest"
+          ],
           "items": {
             "$ref": "#/$defs/ControlStateSource"
           }

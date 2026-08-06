@@ -408,3 +408,21 @@ fn a_staged_claim_attests_like_a_committed_one() {
     assert_eq!(payload["summary"]["governed_claims"], 1);
     assert_eq!(payload["summary"]["unattested_claims"], 0);
 }
+
+/// Duplicates under one name aggregate per outcome kind: a broken member and
+/// an unanswered member are two findings, not one blurred verdict.
+#[test]
+fn mixed_verdicts_under_one_name_split_by_kind() {
+    let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n[amiss:v]: <amiss:value?path=absent.txt&line=L1> \"x\"";
+    let (_code, payload) = claimed_run(claim, false);
+    let kinds: Vec<&str> = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["kind"].as_str())
+        .filter(|kind| kind.starts_with("claim-"))
+        .collect();
+    assert_eq!(kinds, ["claim-broken", "claim-target-missing"], "{payload}");
+    assert_eq!(payload["summary"]["governed_claims"], 2);
+    assert_eq!(payload["summary"]["unattested_claims"], 2);
+}

@@ -58,5 +58,7 @@ enforce profiles:
   absent, the target is not a blob, the target is an LFS pointer, or the line is out of
   range.
 
-Claims sharing one name in one document aggregate into a single finding with every
-contributing source digest, the way governed boundaries already aggregate.
+Claims sharing one name in one document aggregate per outcome kind: every broken
+member joins one `claim-broken` finding and every unanswered member joins one
+`claim-target-missing` finding, each carrying its contributing source digests, the
+way governed boundaries already aggregate.
