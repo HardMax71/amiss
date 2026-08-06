@@ -212,3 +212,35 @@ fn a_staged_policy_raises_the_disposition_of_the_run_that_stages_it() {
         raised[0]
     );
 }
+
+/// Until the report consumes claim outcomes, a well-formed value claim keeps
+/// the unsupported-capability boundary: evaluated, and still refused.
+#[test]
+fn a_well_formed_value_claim_still_refuses_at_the_boundary() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(
+        root.join("docs.md"),
+        "# Docs\n\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"# R\"\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "claimed"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(built.exit_code, 2);
+    assert_eq!(payload["result"]["status"], "incomplete");
+    assert_eq!(payload["errors"][0]["code"], "UNSUPPORTED_CAPABILITY");
+    assert_eq!(payload["summary"]["governed_claims"], 0);
+}

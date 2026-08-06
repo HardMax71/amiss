@@ -1455,6 +1455,7 @@ pub fn construct(
     base: &SnapshotDiscovery,
     candidate: &SnapshotDiscovery,
     comparisons: &[Comparison],
+    _claims: &[crate::claim::ClaimOutcome],
 ) -> Built {
     let paired = paired_documents(base, candidate);
     let (governed, findings, exception_errors) =

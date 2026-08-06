@@ -357,7 +357,7 @@ fn assert_report(
     );
     let base = discovery(base_scanned, base_source, '1');
     let candidate = discovery(candidate_scanned, candidate_source, '2');
-    let built = construct(&setup(), &base, &candidate, &[]);
+    let built = construct(&setup(), &base, &candidate, &[], &[]);
     let wire = built.wire();
     parse(&wire).expect("the emitted report clears the strict JSON reader");
     let envelope: Value = serde_json::from_slice(&wire).expect("the emitted report is JSON");

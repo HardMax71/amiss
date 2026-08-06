@@ -727,3 +727,39 @@ fn a_control_crossing_names_a_path_only_when_one_blob_crossed() {
         "a snapshot total is nobody's single file: {row}"
     );
 }
+
+/// A value claim spends the same line-fragment budget a reference would, so
+/// a floor one byte short refuses the run before any boundary is reached.
+#[test]
+fn a_claim_evaluation_pays_the_fragment_meter() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("target.txt"), b"pinned value\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::write(
+        root.join("docs.md"),
+        "# Docs\n\n[amiss:v]: <amiss:value?path=target.txt&line=L1> \"pinned value\"\n",
+    )
+    .unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let floor = limited(
+        "{ \"resource\": \"aggregate-line-fragment-evaluation-bytes-per-snapshot\", \"maximum\": 12 }",
+        "",
+    );
+    let report = payload(&shell(Some(floor_input(&floor))), &repo, &base, &candidate);
+    assert_eq!(report["result"]["status"], "incomplete");
+    let row = report["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["code"] == "RESOURCE_LIMIT_EXCEEDED")
+        .expect("the claim's selection is what crossed");
+    assert_eq!(
+        row["resource"],
+        "aggregate-line-fragment-evaluation-bytes-per-snapshot"
+    );
+    assert_eq!(row["observed_lower_bound"], 13, "the whole target body");
+}

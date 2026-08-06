@@ -55,7 +55,8 @@ pub fn reproduce(
     let discovery =
         crate::discovery::discover_scoped(repo, git, &mut scan, &includes, &tree, &documents)
             .map_err(|defect| detail(&defect, None))?;
-    let (side, failures) = side_observations(repo, git, &mut scan, engine, forge, &discovery)?;
+    let (side, failures) =
+        side_observations(repo, git, &mut scan, engine, forge, &discovery, None)?;
     if let Some(first) = failures.into_iter().next() {
         return Err(first);
     }
