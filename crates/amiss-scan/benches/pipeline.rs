@@ -93,6 +93,7 @@ fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
             false,
             black_box(&policy),
             &[],
+            &[],
         )
     });
 }

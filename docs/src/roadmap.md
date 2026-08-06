@@ -40,7 +40,9 @@ its retained evidence.
 
 ## Research, not committed work
 
-Typed snippet, value, inventory, tree, graph, transcript, narrative, and external claims
+Value claims shipped as the first evaluated kind: [Claims](claims.md) states the closed
+grammar, and everything outside it keeps the unsupported-capability boundary. Typed
+snippet, inventory, tree, graph, transcript, narrative, and external claims
 remain research. Persistent acceptance records and governed review state reopen the
 storage, concurrency, ownership, expiry, and cheapest-bypass problems the stateless
 scanner avoids, the same problems that killed the ledger design in

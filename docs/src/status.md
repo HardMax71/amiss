@@ -133,7 +133,8 @@ through the [recognizer](https://github.com/HardMax71/amiss/blob/main/crates/ami
 [correlation vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json)
 through the [intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlation_vectors.rs), and
 [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
-through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
+through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs),
+value-grammar refusals included.
 
 Published CI snippets must pin upstream Actions immutably, name an explicit reviewed crate
 version, and advertise the current release major. Version strings inside example fixtures

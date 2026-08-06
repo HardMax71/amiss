@@ -18,6 +18,7 @@
   - [What twelve renderers call a heading](anchor-rules.md)
   - [What a documentation router serves](route-spellings.md)
 - [Correlation and impact](correlation.md)
+- [Claims](claims.md)
 - [The report](report.md)
 - [Limits and refusals](limits.md)
 

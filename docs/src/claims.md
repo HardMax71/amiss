@@ -1,0 +1,62 @@
+# Claims
+
+A document can do more than point at a file: it can pin what the file says. A value claim
+is a reserved reference definition asserting that one line of one repository file,
+terminator aside, is exactly one expected text. The scanner evaluates the claim on every
+run, so the page that states a version number or a default stops being a promise and
+becomes a checked fact.
+
+## The grammar
+
+```markdown
+[amiss:release-version]: <amiss:value?path=Cargo.toml&line=L3> "version = \"0.16.0\""
+```
+
+The grammar is closed, and every clause of it is load-bearing:
+
+- The label after `amiss:` names the claim. A name starts with an ASCII letter or digit,
+  continues in letters, digits, `.`, `_`, or `-`, and holds at most 120 bytes. The name
+  heads the finding's rule id, `claim/value/<name>`, so it carries no slash.
+- The destination is angle-bracketed and spells `amiss:value` with exactly two
+  parameters, `path` then `line`. The path is repository-root relative, taken byte for
+  byte with no percent decoding, and must satisfy the repository path grammar. The line
+  is `L` followed by a number with a nonzero first digit, at most sixteen digits, within
+  the safe integer range.
+- The title carries the expected text, decoded by the CommonMark title rules. An empty
+  title is lawful and claims an empty line.
+
+A reserved definition that misses any clause is not a lesser claim: it stays an
+unsupported capability, and the run ends incomplete with exit 2, exactly as before the
+value kind existed. A reference definition is invisible in rendered output, so a claim
+adds nothing to the page a reader sees.
+
+## Evaluation
+
+The claim's target must be a regular or executable blob in the candidate snapshot. The
+line answers without the terminator that ended it, whatever spelling that terminator
+used, and the answer must equal the expected text byte for byte. Reading the target
+charges the same referenced-target and line-fragment budgets a reference line fragment
+charges, through the same cache, so a claim and a link to the same file cost one read.
+
+Claims are evaluated on the candidate side only. A claim speaks in the present tense
+about the tree it rides with, so there is no pre-existing exemption to ramp away: its
+attribution is `not-applicable`, and the enforce-introduced profile treats a broken
+claim exactly as enforce does.
+
+## Outcomes
+
+An attested claim produces no finding. The summary counts it in `governed_claims`, and
+`unattested_claims` counts the claims that failed, so the two numbers say how much of
+the document's asserted surface held.
+
+A claim that fails produces one of two findings, warn under observe and fail under both
+enforce profiles:
+
+- `claim-broken`: the target line exists and says something else. The finding's evidence
+  carries the expected and observed digests.
+- `claim-target-missing`: nothing can answer, and the evidence names why: the path is
+  absent, the target is not a blob, the target is an LFS pointer, or the line is out of
+  range.
+
+Claims sharing one name in one document aggregate into a single finding with every
+contributing source digest, the way governed boundaries already aggregate.

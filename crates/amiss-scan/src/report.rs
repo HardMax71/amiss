@@ -1437,7 +1437,7 @@ fn summary_counts(
             ),
         ),
         ("analysis_errors", integer(0)),
-        ("unsupported_capabilities", integer(0)),
+        ("unsupported_capabilities", capability_count(findings)),
     ]);
     Counts {
         documents,
@@ -1455,11 +1455,11 @@ pub fn construct(
     base: &SnapshotDiscovery,
     candidate: &SnapshotDiscovery,
     comparisons: &[Comparison],
-    _claims: &[crate::claim::ClaimOutcome],
+    claims: &[crate::claim::ClaimOutcome],
 ) -> Built {
     let paired = paired_documents(base, candidate);
     let (governed, findings, exception_errors) =
-        evaluate_paired(setup, &paired, candidate, comparisons);
+        evaluate_paired(setup, &paired, candidate, comparisons, claims);
 
     if let Some(crossing) = findings_ceiling_crossing(setup, &findings) {
         let mut details = logical_error_set(&governed, &exception_errors);
@@ -1521,8 +1521,8 @@ pub fn construct(
                 ("documents", counts.documents),
                 ("references", counts.references),
                 ("findings", counts.findings),
-                ("governed_claims", integer(0)),
-                ("unattested_claims", integer(0)),
+                claim_counters(claims).0,
+                claim_counters(claims).1,
             ]),
         ),
         (
@@ -1631,13 +1631,15 @@ fn evaluate_paired(
     paired: &[PairedDocument<'_>],
     candidate: &SnapshotDiscovery,
     comparisons: &[Comparison],
+    claims: &[crate::claim::ClaimOutcome],
 ) -> (
     Vec<crate::evaluate::GovernedSeed>,
     Vec<Finding>,
     Vec<ErrorDetail>,
 ) {
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
-    let governed = governed_seeds(candidate);
+    let governed = governed_seeds(candidate, claims);
+    let groups = crate::evaluate::claim_groups(claims);
     let (findings, exception_errors) = crate::evaluate::evaluate_with_policy(
         &inputs,
         comparisons,
@@ -1645,6 +1647,7 @@ fn evaluate_paired(
         setup.introduced_only,
         &setup.policy,
         &governed,
+        &groups,
     );
     (governed, findings, exception_errors)
 }
@@ -1713,20 +1716,37 @@ fn run_result(findings: &[Finding], governed_errors: &[Value]) -> (bool, &'stati
     }
 }
 
-/// One seed per candidate document holding reserved definitions: equal source
-/// digests grouped with exact multiplicity, member count as the total node
-/// count, and the least location as the representative.
-fn governed_seeds(candidate: &SnapshotDiscovery) -> Vec<crate::evaluate::GovernedSeed> {
+/// One seed per candidate document still holding unanswered reserved
+/// definitions: unknown forms always, and recognized claims only when no
+/// evaluated outcome answers for their exact span, so a caller that supplies
+/// no outcomes keeps the full boundary and never a silent pass. Equal source
+/// digests group with exact multiplicity and the least location represents.
+fn governed_seeds(
+    candidate: &SnapshotDiscovery,
+    claims: &[crate::claim::ClaimOutcome],
+) -> Vec<crate::evaluate::GovernedSeed> {
+    let answered: std::collections::BTreeSet<(&RepoPath, (usize, usize))> = claims
+        .iter()
+        .map(|outcome| (&outcome.document, outcome.span))
+        .collect();
     let mut seeds = Vec::new();
     for record in &candidate.documents {
         let DocumentStatus::Scanned(scanned) = &record.status else {
             continue;
         };
-        if scanned.governed.is_empty() {
+        let unanswered: Vec<&crate::scan::GovernedSource> = scanned
+            .governed
+            .iter()
+            .filter(|governed| {
+                matches!(governed.form, crate::claim::GovernedForm::Unknown)
+                    || !answered.contains(&(&record.path, governed.span))
+            })
+            .collect();
+        if unanswered.is_empty() {
             continue;
         }
         let mut sources: Vec<(Digest, u64)> = Vec::new();
-        for governed in &scanned.governed {
+        for governed in &unanswered {
             match sources
                 .iter_mut()
                 .find(|(digest, _)| *digest == governed.digest)
@@ -1736,16 +1756,50 @@ fn governed_seeds(candidate: &SnapshotDiscovery) -> Vec<crate::evaluate::Governe
             }
         }
         sources.sort_by_key(|(digest, _)| *digest);
-        let representative = scanned.governed.iter().min_by_key(|governed| governed.span);
+        let representative = unanswered.iter().min_by_key(|governed| governed.span);
         seeds.push(crate::evaluate::GovernedSeed {
             document: record.path.clone(),
-            member_count: u64::try_from(scanned.governed.len()).unwrap_or(u64::MAX),
+            member_count: u64::try_from(unanswered.len()).unwrap_or(u64::MAX),
             sources,
             representative_span: representative.map(|governed| governed.span),
             representative_display: representative.map(|governed| governed.display),
         });
     }
     seeds
+}
+
+/// How many findings crossed the unsupported-capability boundary.
+fn capability_count(findings: &[Finding]) -> Value {
+    integer(
+        u64::try_from(
+            findings
+                .iter()
+                .filter(|finding| finding.kind == FindingKind::UnsupportedCapability)
+                .count(),
+        )
+        .unwrap_or(u64::MAX),
+    )
+}
+
+/// The two summary claim counters: evaluated claims, and the defective
+/// subset that did not attest.
+fn claim_counters(
+    claims: &[crate::claim::ClaimOutcome],
+) -> ((&'static str, Value), (&'static str, Value)) {
+    let unattested = claims
+        .iter()
+        .filter(|outcome| outcome.verdict != crate::claim::ClaimVerdict::Attested)
+        .count();
+    (
+        (
+            "governed_claims",
+            integer(u64::try_from(claims.len()).unwrap_or(u64::MAX)),
+        ),
+        (
+            "unattested_claims",
+            integer(u64::try_from(unattested).unwrap_or(u64::MAX)),
+        ),
+    )
 }
 
 fn zero_counts() -> Counts {

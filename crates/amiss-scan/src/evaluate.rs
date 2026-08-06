@@ -588,8 +588,60 @@ pub fn evaluate(
         false,
         &crate::policy::Effects::default(),
         &[],
+        &[],
     );
     findings
+}
+
+/// One control-scoped, candidate-only finding: the shared shell of the
+/// governed boundary and the claim kinds, differing only in evidence.
+fn control_fact_finding(
+    kind: FindingKind,
+    document: &RepoPath,
+    rule_id: &str,
+    evidence: Value,
+    member_count: u64,
+    representative: (Option<(usize, usize)>, Option<SpanDisplay>),
+    enforce: bool,
+) -> Finding {
+    let scope = Value::Object(vec![
+        ("kind".to_owned(), Value::String("control".to_owned())),
+        ("control_path".to_owned(), document.to_value()),
+        ("rule_id".to_owned(), Value::String(rule_id.to_owned())),
+    ]);
+    let (key_value, digest) = key_input(kind, scope);
+    let fact = Value::Object(vec![
+        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
+        (
+            "finding_kind".to_owned(),
+            Value::String(kind.as_str().to_owned()),
+        ),
+        ("key_input".to_owned(), key_value.clone()),
+        ("evidence".to_owned(), evidence),
+    ]);
+    let fact_digest = hj(FACT_DOMAIN, &fact);
+    let configured = kind.built_in_disposition(enforce);
+    Finding {
+        kind,
+        key_input: key_value,
+        finding_key: digest,
+        attribution: Attribution::NotApplicable,
+        base_fact: None,
+        candidate_fact: Some((fact, fact_digest)),
+        member_count,
+        observation_ids: Vec::new(),
+        location: Location {
+            side: LocationSide::Candidate,
+            path: Some(document.clone()),
+            span: representative.0,
+            display: representative.1,
+        },
+        configured_disposition: configured,
+        effective_disposition: configured,
+        debt: None,
+        waiver: None,
+        steps: vec![built_in_step(kind, enforce)],
+    }
 }
 
 /// The reserved governed declaration boundary: control-scoped at the affected
@@ -597,98 +649,198 @@ pub fn evaluate(
 /// `unsupported`, exact node multiplicity, and the sorted distinct source
 /// digests.
 fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
-    let scope = Value::Object(vec![
+    let rule_id = "unsupported/governed-claim";
+    let evidence = Value::Object(vec![
         ("kind".to_owned(), Value::String("control".to_owned())),
         ("control_path".to_owned(), seed.document.to_value()),
+        ("rule_id".to_owned(), Value::String(rule_id.to_owned())),
+        ("base_control_state".to_owned(), Value::Null),
+        ("base_control_digest".to_owned(), Value::Null),
         (
-            "rule_id".to_owned(),
-            Value::String("unsupported/governed-claim".to_owned()),
-        ),
-    ]);
-    let (key_value, digest) = key_input(FindingKind::UnsupportedCapability, scope);
-    let sources: Vec<Value> = seed
-        .sources
-        .iter()
-        .map(|(source_digest, multiplicity)| {
+            "candidate_control_state".to_owned(),
             Value::Object(vec![
                 (
-                    "multiplicity".to_owned(),
-                    Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
+                    "schema".to_owned(),
+                    Value::String("amiss/scanner-control-state".to_owned()),
                 ),
+                ("rule_id".to_owned(), Value::String(rule_id.to_owned())),
                 (
-                    "digest".to_owned(),
-                    Value::String(source_digest.to_string()),
+                    "path".to_owned(),
+                    seed.document
+                        .as_str()
+                        .map_or(Value::Null, |path| Value::String(path.to_owned())),
                 ),
-            ])
-        })
-        .collect();
-    let fact = Value::Object(vec![
-        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
-        (
-            "finding_kind".to_owned(),
-            Value::String(FindingKind::UnsupportedCapability.as_str().to_owned()),
-        ),
-        ("key_input".to_owned(), key_value.clone()),
-        (
-            "evidence".to_owned(),
-            Value::Object(vec![
-                ("kind".to_owned(), Value::String("control".to_owned())),
-                ("control_path".to_owned(), seed.document.to_value()),
-                (
-                    "rule_id".to_owned(),
-                    Value::String("unsupported/governed-claim".to_owned()),
-                ),
-                ("base_control_state".to_owned(), Value::Null),
-                ("base_control_digest".to_owned(), Value::Null),
-                (
-                    "candidate_control_state".to_owned(),
-                    Value::Object(vec![
-                        (
-                            "schema".to_owned(),
-                            Value::String("amiss/scanner-control-state".to_owned()),
-                        ),
-                        (
-                            "rule_id".to_owned(),
-                            Value::String("unsupported/governed-claim".to_owned()),
-                        ),
-                        (
-                            "path".to_owned(),
-                            seed.document
-                                .as_str()
-                                .map_or(Value::Null, |path| Value::String(path.to_owned())),
-                        ),
-                        ("sources".to_owned(), Value::Array(sources)),
-                        ("state".to_owned(), Value::String("unsupported".to_owned())),
-                    ]),
-                ),
-                ("candidate_control_digest".to_owned(), Value::Null),
-                ("exception".to_owned(), Value::Null),
+                ("sources".to_owned(), sources_value(&seed.sources)),
+                ("state".to_owned(), Value::String("unsupported".to_owned())),
             ]),
         ),
+        ("candidate_control_digest".to_owned(), Value::Null),
+        ("exception".to_owned(), Value::Null),
     ]);
-    let fact_digest = hj(FACT_DOMAIN, &fact);
-    let configured = FindingKind::UnsupportedCapability.built_in_disposition(enforce);
-    Finding {
-        kind: FindingKind::UnsupportedCapability,
-        key_input: key_value,
-        finding_key: digest,
-        attribution: Attribution::NotApplicable,
-        base_fact: None,
-        candidate_fact: Some((fact, fact_digest)),
-        member_count: seed.member_count,
-        observation_ids: Vec::new(),
-        location: Location {
-            side: LocationSide::Candidate,
-            path: Some(seed.document.clone()),
-            span: seed.representative_span,
-            display: seed.representative_display,
-        },
-        configured_disposition: configured,
-        effective_disposition: configured,
-        debt: None,
-        waiver: None,
-        steps: vec![built_in_step(FindingKind::UnsupportedCapability, enforce)],
+    control_fact_finding(
+        FindingKind::UnsupportedCapability,
+        &seed.document,
+        rule_id,
+        evidence,
+        seed.member_count,
+        (seed.representative_span, seed.representative_display),
+        enforce,
+    )
+}
+
+/// The sorted distinct source digests with their multiplicities, in the
+/// wire's control-source shape.
+fn sources_value(sources: &[(Digest, u64)]) -> Value {
+    Value::Array(
+        sources
+            .iter()
+            .map(|(source_digest, multiplicity)| {
+                Value::Object(vec![
+                    (
+                        "multiplicity".to_owned(),
+                        Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
+                    ),
+                    (
+                        "digest".to_owned(),
+                        Value::String(source_digest.to_string()),
+                    ),
+                ])
+            })
+            .collect(),
+    )
+}
+
+/// One document's defective value claims under one name: the group a claim
+/// finding stands for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaimGroup {
+    pub kind: FindingKind,
+    pub document: RepoPath,
+    pub name: String,
+    pub member_count: u64,
+    pub sources: Vec<(Digest, u64)>,
+    pub representative_span: Option<(usize, usize)>,
+    pub representative_display: Option<SpanDisplay>,
+    pub target_path: RepoPath,
+    pub line: u64,
+    pub expected_digest: Digest,
+    pub observed: &'static str,
+    pub observed_digest: Option<Digest>,
+}
+
+/// Groups defective outcomes by kind, document, and claim name, keeping the
+/// least location as the representative. Attested claims group nothing.
+#[must_use]
+pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> {
+    use crate::claim::{ClaimMissingReason, ClaimVerdict};
+
+    let mut groups: Vec<ClaimGroup> = Vec::new();
+    for outcome in outcomes {
+        let (kind, observed, observed_digest) = match &outcome.verdict {
+            ClaimVerdict::Attested => continue,
+            ClaimVerdict::Broken { observed_digest } => (
+                FindingKind::ClaimBroken,
+                "line-differs",
+                Some(*observed_digest),
+            ),
+            ClaimVerdict::TargetMissing(reason) => (
+                FindingKind::ClaimTargetMissing,
+                match reason {
+                    ClaimMissingReason::Absent => "target-absent",
+                    ClaimMissingReason::NotABlob => "target-not-a-blob",
+                    ClaimMissingReason::LfsPointer => "target-lfs-pointer",
+                    ClaimMissingReason::LineOutOfRange => "line-out-of-range",
+                },
+                None,
+            ),
+        };
+        let existing = groups.iter_mut().find(|group| {
+            group.kind == kind && group.document == outcome.document && group.name == outcome.name
+        });
+        match existing {
+            Some(group) => {
+                group.member_count = group.member_count.saturating_add(1);
+                match group
+                    .sources
+                    .iter_mut()
+                    .find(|(digest, _)| *digest == outcome.source_digest)
+                {
+                    Some((_, multiplicity)) => *multiplicity = multiplicity.saturating_add(1),
+                    None => group.sources.push((outcome.source_digest, 1)),
+                }
+                group.sources.sort_by_key(|(digest, _)| *digest);
+                if group.representative_span.is_none()
+                    || group.representative_span > Some(outcome.span)
+                {
+                    group.representative_span = Some(outcome.span);
+                    group.representative_display = Some(outcome.display);
+                    group.target_path = outcome.path.clone();
+                    group.line = outcome.line;
+                    group.expected_digest = outcome.expected_digest;
+                    group.observed = observed;
+                    group.observed_digest = observed_digest;
+                }
+            }
+            None => groups.push(ClaimGroup {
+                kind,
+                document: outcome.document.clone(),
+                name: outcome.name.clone(),
+                member_count: 1,
+                sources: vec![(outcome.source_digest, 1)],
+                representative_span: Some(outcome.span),
+                representative_display: Some(outcome.display),
+                target_path: outcome.path.clone(),
+                line: outcome.line,
+                expected_digest: outcome.expected_digest,
+                observed,
+                observed_digest,
+            }),
+        }
     }
+    groups.sort_by(|left, right| {
+        (&left.document, &left.name, left.kind).cmp(&(&right.document, &right.name, right.kind))
+    });
+    groups
+}
+
+/// One defective claim group as a control-scoped finding carrying the claim
+/// evidence family.
+fn claim_finding(group: &ClaimGroup, enforce: bool) -> Finding {
+    let rule_id = format!("claim/value/{}", group.name);
+    let evidence = Value::Object(vec![
+        ("kind".to_owned(), Value::String("claim".to_owned())),
+        ("claim_kind".to_owned(), Value::String("value".to_owned())),
+        ("name".to_owned(), Value::String(group.name.clone())),
+        ("target_path".to_owned(), group.target_path.to_value()),
+        (
+            "line".to_owned(),
+            Value::Integer(i64::try_from(group.line).unwrap_or(i64::MAX)),
+        ),
+        (
+            "expected_digest".to_owned(),
+            Value::String(group.expected_digest.to_string()),
+        ),
+        (
+            "observed".to_owned(),
+            Value::String(group.observed.to_owned()),
+        ),
+        (
+            "observed_digest".to_owned(),
+            group
+                .observed_digest
+                .map_or(Value::Null, |value| Value::String(value.to_string())),
+        ),
+        ("sources".to_owned(), sources_value(&group.sources)),
+    ]);
+    control_fact_finding(
+        group.kind,
+        &group.document,
+        &rule_id,
+        evidence,
+        group.member_count,
+        (group.representative_span, group.representative_display),
+        enforce,
+    )
 }
 
 /// One candidate document's reserved governed definitions: the exact node
@@ -717,10 +869,14 @@ pub fn evaluate_with_policy(
     introduced_only: bool,
     policy: &crate::policy::Effects,
     governed: &[GovernedSeed],
+    claims: &[ClaimGroup],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
     let mut findings = ordinary(documents, comparisons, enforce);
     for seed in governed {
         findings.push(governed_finding(seed, enforce));
+    }
+    for group in claims {
+        findings.push(claim_finding(group, enforce));
     }
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {

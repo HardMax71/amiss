@@ -213,10 +213,10 @@ fn a_staged_policy_raises_the_disposition_of_the_run_that_stages_it() {
     );
 }
 
-/// Until the report consumes claim outcomes, a well-formed value claim keeps
-/// the unsupported-capability boundary: evaluated, and still refused.
+/// A well-formed value claim whose target agrees is attested: no finding,
+/// no boundary, and the summary counts it.
 #[test]
-fn a_well_formed_value_claim_still_refuses_at_the_boundary() {
+fn an_attested_value_claim_passes_and_is_counted() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     let base = base_commit(root);
@@ -239,8 +239,172 @@ fn a_well_formed_value_claim_still_refuses_at_the_boundary() {
         &oid(&candidate),
     );
     let payload = payload(&built);
-    assert_eq!(built.exit_code, 2);
+    assert_eq!(built.exit_code, 0, "{payload}");
+    assert_eq!(payload["result"]["status"], "pass");
+    assert_eq!(payload["summary"]["governed_claims"], 1);
+    assert_eq!(payload["summary"]["unattested_claims"], 0);
+    assert_eq!(payload["errors"].as_array().map(Vec::len), Some(0));
+    assert!(
+        payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "claim-broken"
+                && row["kind"] != "claim-target-missing"
+                && row["kind"] != "unsupported-capability"),
+        "an attested claim leaves no claim finding behind: {}",
+        payload["findings"]
+    );
+}
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn claimed_run(claim_line: &str, enforce: bool) -> (i64, serde_json::Value) {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(root.join("docs.md"), format!("# Docs\n\n{claim_line}\n")).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "claimed"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut setup = shell();
+    setup.enforce = enforce;
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &setup,
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let code = built.exit_code;
+    (code, payload(&built))
+}
+
+/// A broken claim warns under observe and fails under enforce, carrying the
+/// claim evidence family with both digests.
+#[test]
+fn a_broken_claim_warns_then_fails_by_profile() {
+    let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"";
+    let (code, payload) = claimed_run(claim, false);
+    assert_eq!(code, 0, "observe never blocks: {payload}");
+    let row = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "claim-broken")
+        .expect("the broken claim is found");
+    assert_eq!(row["effective_disposition"], "warn");
+    assert_eq!(row["attribution"], "not-applicable");
+    assert_eq!(payload["summary"]["governed_claims"], 1);
+    assert_eq!(payload["summary"]["unattested_claims"], 1);
+    let evidence = &row["candidate_fact"]["evidence"];
+    assert_eq!(evidence["kind"], "claim");
+    assert_eq!(evidence["claim_kind"], "value");
+    assert_eq!(evidence["name"], "v");
+    assert_eq!(evidence["target_path"], "README.md");
+    assert_eq!(evidence["line"], 1);
+    assert_eq!(evidence["observed"], "line-differs");
+    assert!(evidence["observed_digest"].is_string());
+    assert_eq!(
+        row["key_input"]["scope"]["rule_id"], "claim/value/v",
+        "the claim name heads the rule id"
+    );
+
+    let (code, payload) = claimed_run(claim, true);
+    assert_eq!(code, 1, "enforce blocks on a broken claim: {payload}");
+}
+
+/// A claim over a target nothing can answer is its own kind, and the reason
+/// is named.
+#[test]
+fn a_claim_target_nothing_answers_is_missing_by_name() {
+    let claim = "[amiss:v]: <amiss:value?path=absent.txt&line=L1> \"x\"";
+    let (code, payload) = claimed_run(claim, false);
+    assert_eq!(code, 0, "{payload}");
+    let row = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "claim-target-missing")
+        .expect("the missing target is found");
+    assert_eq!(
+        row["candidate_fact"]["evidence"]["observed"],
+        "target-absent"
+    );
+    assert!(row["candidate_fact"]["evidence"]["observed_digest"].is_null());
+    assert_eq!(payload["summary"]["unattested_claims"], 1);
+}
+
+/// A document holding one lawful claim and one unknown capability still ends
+/// at the boundary, with the claim finding standing beside the refusal.
+#[test]
+fn an_unknown_capability_beside_a_claim_keeps_the_boundary() {
+    let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n[amiss:future]: <amiss:region>";
+    let (code, payload) = claimed_run(claim, false);
+    assert_eq!(code, 2, "the unknown kind is still a boundary: {payload}");
     assert_eq!(payload["result"]["status"], "incomplete");
-    assert_eq!(payload["errors"][0]["code"], "UNSUPPORTED_CAPABILITY");
-    assert_eq!(payload["summary"]["governed_claims"], 0);
+    let kinds: Vec<&str> = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row["kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"unsupported-capability"), "{kinds:?}");
+    assert!(kinds.contains(&"claim-broken"), "{kinds:?}");
+    let capability = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "unsupported-capability")
+        .expect("the unknown form");
+    assert_eq!(
+        capability["aggregation"]["member_count"], 1,
+        "only the unanswered node seeds the boundary"
+    );
+}
+
+/// Two claims under one name aggregate into one finding with both sources.
+#[test]
+fn duplicate_claim_names_aggregate() {
+    let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wronger\"";
+    let (_code, payload) = claimed_run(claim, false);
+    let rows: Vec<&serde_json::Value> = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "claim-broken")
+        .collect();
+    assert_eq!(rows.len(), 1, "one finding for the shared name: {payload}");
+    assert_eq!(rows[0]["aggregation"]["member_count"], 2);
+    assert_eq!(payload["summary"]["governed_claims"], 2);
+    assert_eq!(payload["summary"]["unattested_claims"], 2);
+    assert_eq!(
+        rows[0]["candidate_fact"]["evidence"]["sources"]
+            .as_array()
+            .map(Vec::len),
+        Some(2),
+        "two distinct sources under one name"
+    );
+}
+
+/// The staged path attests the same claim the commit path does.
+#[test]
+fn a_staged_claim_attests_like_a_committed_one() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(
+        root.join("docs.md"),
+        "# Docs\n\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"# R\"\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let payload = payload(&built);
+    assert_eq!(built.exit_code, 0, "{payload}");
+    assert_eq!(payload["summary"]["governed_claims"], 1);
+    assert_eq!(payload["summary"]["unattested_claims"], 0);
 }
