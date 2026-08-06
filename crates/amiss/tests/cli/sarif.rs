@@ -1,4 +1,4 @@
-use crate::support::{amiss, fixture, payload};
+use crate::support::{amiss, claim_fixture, fixture, payload};
 
 /// The SARIF lane is a projection, so every claim it makes is checked against
 /// the canonical report from the same evaluation rather than asserted twice.
@@ -215,5 +215,66 @@ fn a_sarif_refusal_is_still_sarif() {
             .pointer("/runs/0/invocations/0/toolExecutionNotifications/0/descriptor/id")
             .is_some(),
         "the refusal names its codes in the notification rows"
+    );
+}
+
+/// A claim finding rides the projection like any other kind: its rule row
+/// carries the fixed meaning, and the result points at the definition line.
+#[test]
+fn a_claim_finding_carries_its_rule_into_sarif() {
+    let fx = claim_fixture();
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "sarif",
+    ]);
+    assert_eq!((code, stderr.as_str()), (1, ""));
+    let log: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let run = log.pointer("/runs/0").unwrap();
+    let result = run
+        .get("results")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result.get("ruleId") == Some(&serde_json::json!("claim-broken")))
+        .unwrap();
+    assert_eq!(result.get("level").unwrap(), "error");
+    assert_eq!(
+        result
+            .pointer("/locations/0/physicalLocation/artifactLocation/uri")
+            .unwrap(),
+        "docs/claims.md"
+    );
+    assert_eq!(
+        result
+            .pointer("/locations/0/physicalLocation/region/startLine")
+            .unwrap(),
+        3,
+        "the result points at the reference definition, not the consumer"
+    );
+    let rule = run
+        .pointer("/tool/driver/rules")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|rule| rule.get("id") == Some(&serde_json::json!("claim-broken")))
+        .unwrap();
+    assert!(
+        rule.pointer("/shortDescription/text")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|text| text.contains("no longer says what the document claims")),
+        "the rule carries the fixed meaning sentence"
     );
 }

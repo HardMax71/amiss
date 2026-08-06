@@ -80,6 +80,11 @@ fn fixture(with_governed: bool) -> amiss_fixtures::CommitPair {
             "docs/guide.md",
             "# Guide\n\n[home](../README) and [gone](missing.md)\n",
         ),
+        ("subject.txt", "alpha\n"),
+        (
+            "docs/claims.md",
+            "The subject holds [alpha][amiss:pin].\n\n[amiss:pin]: <amiss:value?path=subject.txt&line=L1> \"alpha\"\n",
+        ),
         (
             ".amiss/scanner-policy.json",
             r#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":["docs/guide.md"],"finding_dispositions":[]}"#,
@@ -258,4 +263,10 @@ fn a_read_only_repository_scans_completely() {
         index, 0,
         "staged-index mode needs no write access: {index_out}"
     );
+    let report: serde_json::Value = serde_json::from_str(&pair_out).unwrap_or_default();
+    assert_eq!(
+        report["payload"]["summary"]["governed_claims"], 1,
+        "the claim was evaluated without write access"
+    );
+    assert_eq!(report["payload"]["summary"]["unattested_claims"], 0);
 }

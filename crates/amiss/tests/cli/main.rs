@@ -1,3 +1,4 @@
+mod claims;
 mod forge;
 mod formats;
 mod grammar;

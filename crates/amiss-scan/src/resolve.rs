@@ -1208,11 +1208,6 @@ fn line_resolution(
     Ok(Resolution::Resolved(Target::Blob(blob)))
 }
 
-/// Line-fragment syntax after one decode, in the dialect's spelling:
-/// `L<n>` alone, or the range form the forge renders. First digit nonzero,
-/// at most sixteen digits, each number within the safe range, and a range
-/// end at least its start. A native reference uses the declared run dialect,
-/// falling back to the GitHub/Gitea spelling when no forge context exists.
 /// One safe line number: nonzero first digit, at most sixteen digits, and
 /// within the range every consumer of the report can hold exactly.
 pub(crate) fn safe_line_number(text: &str) -> Option<u64> {
@@ -1226,6 +1221,11 @@ pub(crate) fn safe_line_number(text: &str) -> Option<u64> {
     text.parse::<u64>().ok().filter(|value| *value <= MAX_SAFE)
 }
 
+/// Line-fragment syntax after one decode, in the dialect's spelling:
+/// `L<n>` alone, or the range form the forge renders. Each number safe, and
+/// a range end at least its start. A native reference uses the declared run
+/// dialect, falling back to the GitHub/Gitea spelling when no forge context
+/// exists.
 fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> Option<LineRange> {
     let number = safe_line_number;
     let rest = decoded.strip_prefix('L')?;
