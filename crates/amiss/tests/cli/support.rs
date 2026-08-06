@@ -23,18 +23,10 @@ pub(crate) fn fixture() -> amiss_fixtures::CommitPair {
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 pub(crate) fn claim_fixture() -> amiss_fixtures::CommitPair {
-    amiss_fixtures::commit_pair(
-        &[
-            ("subject.txt", "alpha\n"),
-            (
-                "docs/claims.md",
-                "The subject holds [alpha][amiss:subject-line].\n\n\
-                 [amiss:subject-line]: <amiss:value?path=subject.txt&line=L1> \"alpha\"\n",
-            ),
-        ],
-        &[("subject.txt", "beta\n")],
-    )
-    .unwrap()
+    let claim = "The subject holds [alpha][amiss:subject-line].\n\n\
+                 [amiss:subject-line]: <amiss:value?path=subject.txt&line=L1> \"alpha\"\n";
+    let base = [("subject.txt", "alpha\n"), ("docs/claims.md", claim)];
+    amiss_fixtures::commit_pair(&base, &[("subject.txt", "beta\n")]).unwrap()
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
