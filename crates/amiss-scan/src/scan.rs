@@ -150,7 +150,7 @@ pub fn scan_bytes(
     }
 
     let mut governed = Vec::with_capacity(extraction.governed.len());
-    for GovernedDefinition { span } in &extraction.governed {
+    for GovernedDefinition { span, .. } in &extraction.governed {
         document_references = document_references.saturating_add(1);
         resources.charge_reference(0, document_references)?;
         let bytes = source

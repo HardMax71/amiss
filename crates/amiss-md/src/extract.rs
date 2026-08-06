@@ -72,7 +72,7 @@ fn extract_tree(
     raw: &[u8],
     frontmatter_bytes: usize,
 ) -> Result<Extraction, Fault> {
-    let (resolved, governed_spans) = definitions(tree, suffix)?;
+    let (resolved, governed) = definitions(tree, suffix)?;
     let mut sweep = Sweep {
         suffix,
         definitions: resolved,
@@ -136,10 +136,11 @@ fn extract_tree(
             mdx: opaque.mdx.iter().map(|span| translate(*span)).collect(),
             html: opaque.html.iter().map(|span| translate(*span)).collect(),
         },
-        governed: governed_spans
+        governed: governed
             .into_iter()
-            .map(|span| GovernedDefinition {
-                span: translate(span),
+            .map(|definition| GovernedDefinition {
+                span: translate(definition.span),
+                ..definition
             })
             .collect(),
         headings: sweep
@@ -456,10 +457,11 @@ fn run_length(bytes: &[u8], at: usize, limit: usize) -> usize {
 
 /// Collects reference definitions in document order; the first with a matching
 /// normalized identifier wins.
-type ResolvedDefinitions = (Vec<Definition>, Vec<(usize, usize)>);
+type ResolvedDefinitions = (Vec<Definition>, Vec<GovernedDefinition>);
 
 fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> {
     let mut out = Vec::new();
+    let mut governed = Vec::new();
     let mut stack = vec![tree];
     while let Some(node) = stack.pop() {
         if let Node::Definition(definition) = node {
@@ -468,13 +470,24 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
                 .label
                 .as_deref()
                 .unwrap_or(definition.identifier.as_str());
+            let (raw, angled) = definition_destination(suffix, span)?;
+            let reserved = label.starts_with(RESERVED_LABEL_PREFIX);
+            if reserved {
+                governed.push(GovernedDefinition {
+                    span,
+                    url: definition.url.clone(),
+                    title: definition.title.clone(),
+                    label: label.to_owned(),
+                    angled,
+                });
+            }
             out.push((
                 span,
                 Definition {
                     identifier: definition.identifier.clone(),
                     url: definition.url.clone(),
-                    raw: definition_destination(suffix, span)?,
-                    reserved: label.starts_with(RESERVED_LABEL_PREFIX),
+                    raw,
+                    reserved,
                 },
             ));
         }
@@ -483,11 +496,7 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
         }
     }
     out.sort_by_key(|(span, _)| *span);
-    let governed = out
-        .iter()
-        .filter(|(_, definition)| definition.reserved)
-        .map(|(span, _)| *span)
-        .collect();
+    governed.sort_by_key(|definition| definition.span);
     Ok((
         out.into_iter().map(|(_, definition)| definition).collect(),
         governed,
@@ -501,7 +510,8 @@ fn winning<'a>(definitions: &'a [Definition], identifier: &str) -> Result<&'a De
         .ok_or(Fault::ParserError)
 }
 
-fn definition_destination(suffix: &str, span: (usize, usize)) -> Result<String, Fault> {
+/// The raw destination token and whether it was written in angle brackets.
+fn definition_destination(suffix: &str, span: (usize, usize)) -> Result<(String, bool), Fault> {
     let bytes = suffix.as_bytes();
     let mut label = span.0;
     while matches!(bytes.get(label), Some(&(b' ' | b'\t'))) {
@@ -525,8 +535,9 @@ fn definition_destination(suffix: &str, span: (usize, usize)) -> Result<String, 
         return Err(Fault::InvalidSourceSpan);
     }
     let start = skip_whitespace(bytes, at.saturating_add(2));
+    let angled = bytes.get(start) == Some(&b'<');
     let token_span = destination_token(bytes, start)?;
-    token(suffix, token_span)
+    Ok((token(suffix, token_span)?, angled))
 }
 
 fn token(suffix: &str, span: (usize, usize)) -> Result<String, Fault> {

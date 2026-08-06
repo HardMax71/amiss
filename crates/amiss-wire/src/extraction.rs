@@ -165,8 +165,15 @@ pub struct Analysis {
 }
 
 /// One reserved governed definition: its complete node span, from the opening
-/// bracket through the exclusive end of the destination and title syntax.
+/// bracket through the exclusive end of the destination and title syntax,
+/// with the words the parser decoded from it. `angled` records whether the
+/// destination was written in angle brackets, which the decoded url no
+/// longer shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GovernedDefinition {
     pub span: (usize, usize),
+    pub url: String,
+    pub title: Option<String>,
+    pub label: String,
+    pub angled: bool,
 }
