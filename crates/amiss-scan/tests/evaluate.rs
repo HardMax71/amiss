@@ -488,6 +488,7 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
         true,
         &Effects::default(),
         std::slice::from_ref(&governed),
+        &[],
     );
     assert!(errors.is_empty());
 
@@ -530,7 +531,8 @@ fn a_raise_to_the_standing_disposition_adds_no_step() {
         raised: vec![(FindingKind::ExplicitTargetMissing, Disposition::Fail)],
         ..Effects::default()
     };
-    let (findings, _errors) = evaluate_with_policy(&[], &comparisons, true, false, &policy, &[]);
+    let (findings, _errors) =
+        evaluate_with_policy(&[], &comparisons, true, false, &policy, &[], &[]);
     let finding = only(findings, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.effective_disposition, Disposition::Fail);
     assert_eq!(
@@ -651,7 +653,7 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         }),
         ..Effects::default()
     };
-    let (findings, _errors) = evaluate_with_policy(&[], &[], true, false, &policy, &[]);
+    let (findings, _errors) = evaluate_with_policy(&[], &[], true, false, &policy, &[], &[]);
     assert!(
         !kinds(&findings).contains(&FindingKind::WaiverInvalid),
         "a waiver live from this instant carries no defect"

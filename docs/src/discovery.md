@@ -63,11 +63,14 @@ A reference definition whose decoded label begins with exact lowercase `amiss:` 
 reserved governed claim. Entity and escape decoding happens before that test; case is not
 folded. Every reserved definition node contributes its exact source digest, including a
 losing normalized duplicate, and only the first normalized definition controls whether a
-consumer becomes an ordinary reference. A governed claim on the candidate side is an
-unsupported capability boundary: the run ends incomplete with exit 2. A base-only claim
-does not. The [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
+consumer becomes an ordinary reference. A governed definition spelling the closed value
+grammar is evaluated as a claim, described in [Claims](claims.md). Everything else in the
+namespace on the candidate side is an unsupported capability boundary: the run ends
+incomplete with exit 2. A base-only definition does neither. The
+[governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
 drive extraction, source hashing, candidate-only grouping, and report construction in the
-[governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs).
+[governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs),
+including one refusal vector per clause of the value grammar.
 
 Every count is reported: discovered, scanned, unsupported, excluded, unlinked. Despite its
 historical name, `unlinked-document` means a scanned document from which Amiss extracted

@@ -3258,7 +3258,9 @@
         "control-plane-changed",
         "debt-worsened",
         "debt-expired",
-        "waiver-invalid"
+        "waiver-invalid",
+        "claim-broken",
+        "claim-target-missing"
       ]
     },
     "FeedbackAction": {
@@ -3769,6 +3771,64 @@
         }
       }
     },
+    "ClaimFactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "claim_kind",
+        "name",
+        "target_path",
+        "line",
+        "expected_digest",
+        "observed",
+        "observed_digest",
+        "sources"
+      ],
+      "properties": {
+        "kind": {
+          "const": "claim"
+        },
+        "claim_kind": {
+          "const": "value"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 121,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "target_path": {
+          "$ref": "#/$defs/RepoPathText"
+        },
+        "line": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "expected_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "observed": {
+          "enum": [
+            "line-differs",
+            "target-absent",
+            "target-not-a-blob",
+            "target-lfs-pointer",
+            "line-out-of-range"
+          ]
+        },
+        "observed_digest": {
+          "$ref": "#/$defs/NullableDigest"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16384,
+          "items": {
+            "$ref": "#/$defs/ControlStateSource"
+          }
+        }
+      }
+    },
     "ControlFactEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -3868,6 +3928,9 @@
             },
             {
               "$ref": "#/$defs/ControlFactEvidence"
+            },
+            {
+              "$ref": "#/$defs/ClaimFactEvidence"
             }
           ]
         }
@@ -4497,10 +4560,10 @@
           "$ref": "#/$defs/FindingCounts"
         },
         "governed_claims": {
-          "const": 0
+          "$ref": "#/$defs/SafeUInt"
         },
         "unattested_claims": {
-          "const": 0
+          "$ref": "#/$defs/SafeUInt"
         }
       }
     },

@@ -777,6 +777,8 @@ pub enum FindingKind {
     DebtWorsened,
     DebtExpired,
     WaiverInvalid,
+    ClaimBroken,
+    ClaimTargetMissing,
 }
 
 impl FindingKind {
@@ -819,7 +821,9 @@ impl FindingKind {
             | Self::ControlPlaneChanged
             | Self::DebtWorsened
             | Self::DebtExpired
-            | Self::WaiverInvalid => FindingScope::Control,
+            | Self::WaiverInvalid
+            | Self::ClaimBroken
+            | Self::ClaimTargetMissing => FindingScope::Control,
         }
     }
 
@@ -830,7 +834,9 @@ impl FindingKind {
         match self {
             Self::ExplicitTargetMissing
             | Self::ExplicitTargetTypeMismatch
-            | Self::InvalidReference => {
+            | Self::InvalidReference
+            | Self::ClaimBroken
+            | Self::ClaimTargetMissing => {
                 if enforce {
                     Disposition::Fail
                 } else {
@@ -917,7 +923,9 @@ impl FindingKind {
         match self {
             Self::ExplicitTargetMissing
             | Self::ExplicitTargetTypeMismatch
-            | Self::InvalidReference => "deterministic-structural",
+            | Self::InvalidReference
+            | Self::ClaimBroken
+            | Self::ClaimTargetMissing => "deterministic-structural",
             Self::UnsupportedCapability
             | Self::UnsupportedReferenceSemantics
             | Self::UnsupportedDocumentFormat
@@ -1021,6 +1029,12 @@ impl FindingKind {
             Self::WaiverInvalid => {
                 "a waiver item cannot apply, expired against trusted time or issued outside the floor's authority; an invalid waiver suppresses nothing"
             }
+            Self::ClaimBroken => {
+                "a value claim's target line no longer says what the document claims it says; update the claim or the target so the two agree"
+            }
+            Self::ClaimTargetMissing => {
+                "a value claim names a target line no regular file in the candidate can answer; point the claim at a tracked file and a line inside it"
+            }
         }
     }
 
@@ -1029,7 +1043,9 @@ impl FindingKind {
         match self {
             Self::ExplicitTargetMissing
             | Self::ExplicitTargetTypeMismatch
-            | Self::InvalidReference => "ratcheted",
+            | Self::InvalidReference
+            | Self::ClaimBroken
+            | Self::ClaimTargetMissing => "ratcheted",
             Self::UnsupportedCapability => "analysis-integrity",
             Self::TargetDeclaredUntracked
             | Self::UnsupportedReferenceSemantics

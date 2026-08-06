@@ -48,6 +48,8 @@ organization floor whose minimum is `enforce` rejects the ramp as below its mini
 | `debt-worsened` | `fail` | `fail` |
 | `debt-expired` | `fail` | `fail` |
 | `waiver-invalid` | `fail` | `fail` |
+| `claim-broken` | `warn` | `fail` |
+| `claim-target-missing` | `warn` | `fail` |
 <!-- amiss-doc-contract:profiles:end -->
 
 ## What each kind means
@@ -82,6 +84,8 @@ not a second source of truth.
 - `debt-worsened`: the finding an accepted debt item names no longer matches the recorded fact; debt tolerates exactly the recorded state, so any drift fails
 - `debt-expired`: trusted time reached a debt item's expiry while its finding persists; fix the finding or renew the debt in a reviewed change
 - `waiver-invalid`: a waiver item cannot apply, expired against trusted time or issued outside the floor's authority; an invalid waiver suppresses nothing
+- `claim-broken`: a value claim's target line no longer says what the document claims it says; update the claim or the target so the two agree
+- `claim-target-missing`: a value claim names a target line no regular file in the candidate can answer; point the claim at a tracked file and a line inside it
 <!-- amiss-doc-contract:finding-meanings:end -->
 
 ## Before and after
@@ -116,6 +120,8 @@ API described in [Controls and policy](controls.md).
 | `debt-worsened` | Verified debt accepts one occurrence of `see [gone](missing.md)`. | Keep the debt item and duplicate that occurrence, changing the finding fact. |
 | `debt-expired` | Debt expires at `2026-07-10T00:00:00Z`; trusted time is `2026-07-09T00:00:00Z`. | Keep the finding and debt unchanged; trusted time advances to `2026-07-10T00:00:00Z`. |
 | `waiver-invalid` | Waiver expires at `2026-08-01T00:00:00Z`; trusted time is `2026-07-12T10:00:00Z`. | Keep the finding and trusted time unchanged; set `expires_at` to `2026-07-10T00:00:00Z`. |
+| `claim-broken` | `Cargo.toml` line 3 is `version = "0.16.0"` and a claim expects exactly that. | Bump line 3 to `version = "0.17.0"` and leave the claim unchanged. |
+| `claim-target-missing` | A claim names `Cargo.toml` line 3, which exists. | Delete `Cargo.toml` or point the claim at line 9999. |
 <!-- amiss-doc-contract:finding-examples:end -->
 
 The control families exist so that loosening rules and presenting invalid outside
