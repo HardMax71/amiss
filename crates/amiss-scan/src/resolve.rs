@@ -1126,17 +1126,21 @@ fn line_resolution(
 /// at most sixteen digits, each number within the safe range, and a range
 /// end at least its start. A native reference uses the declared run dialect,
 /// falling back to the GitHub/Gitea spelling when no forge context exists.
-fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> Option<LineRange> {
-    fn number(text: &str) -> Option<u64> {
-        let bytes = text.as_bytes();
-        if bytes.is_empty() || bytes.len() > 16 || bytes.first() == Some(&b'0') {
-            return None;
-        }
-        if !bytes.iter().all(u8::is_ascii_digit) {
-            return None;
-        }
-        text.parse::<u64>().ok().filter(|value| *value <= MAX_SAFE)
+/// One safe line number: nonzero first digit, at most sixteen digits, and
+/// within the range every consumer of the report can hold exactly.
+pub(crate) fn safe_line_number(text: &str) -> Option<u64> {
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || bytes.len() > 16 || bytes.first() == Some(&b'0') {
+        return None;
     }
+    if !bytes.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    text.parse::<u64>().ok().filter(|value| *value <= MAX_SAFE)
+}
+
+fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> Option<LineRange> {
+    let number = safe_line_number;
     let rest = decoded.strip_prefix('L')?;
     let range = match forge {
         None | Some(ForgeDialect::Github | ForgeDialect::Gitea) => rest.split_once("-L"),

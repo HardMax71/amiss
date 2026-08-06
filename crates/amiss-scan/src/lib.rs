@@ -1,5 +1,6 @@
 pub mod adoption;
 pub mod anchor;
+pub mod claim;
 pub mod correlate;
 pub mod declared;
 pub mod discovery;
