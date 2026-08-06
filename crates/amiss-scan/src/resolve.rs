@@ -1056,6 +1056,93 @@ fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {
     })
 }
 
+/// Answers one value claim against the snapshot: the target must be a
+/// readable regular blob whose claimed line, terminator aside, is exactly
+/// the expected text.
+///
+/// # Errors
+///
+/// A Git defect or a crossed resource ceiling while reading the target.
+pub fn resolve_claim(
+    repo: &Repository,
+    git: &mut GitResources,
+    scan_resources: &mut ScanResources,
+    cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
+    claim: &crate::claim::ValueClaim,
+) -> Result<crate::claim::ClaimVerdict, Error> {
+    use crate::claim::{ClaimMissingReason, ClaimVerdict};
+
+    cache.bind(scan_resources.cache_scope());
+    let Some((mode, oid)) = snapshot.entries.get(claim.path.as_bytes()) else {
+        return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::Absent));
+    };
+    match mode {
+        GitMode::Tree | GitMode::Gitlink | GitMode::Symlink => {
+            return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::NotABlob));
+        }
+        GitMode::RegularFile | GitMode::ExecutableFile => {}
+    }
+    let evidence = read_target(repo, git, scan_resources, cache, &claim.path, *mode, oid)?;
+    if matches!(evidence, BlobContent::LfsPointer { .. }) {
+        return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::LfsPointer));
+    }
+    let Some(cached) = cache.read.get_mut(&claim.path) else {
+        return Err(Error::Internal);
+    };
+    if cached.mode != *mode || cached.content.evidence() != evidence {
+        return Err(Error::Internal);
+    }
+    let Content::Ordinary {
+        body,
+        line_projections,
+        ..
+    } = &mut cached.content
+    else {
+        return Err(Error::Internal);
+    };
+    let range = LineRange {
+        first: claim.line,
+        last: claim.line,
+    };
+    if let std::collections::btree_map::Entry::Vacant(slot) = line_projections.entry(range) {
+        scan_resources.charge(
+            Aggregate::LineFragmentBytes,
+            u64::try_from(body.len()).unwrap_or(u64::MAX),
+        )?;
+        let projection = selected_line_bytes(body, range).map(|selected| {
+            target_projection(
+                TARGET_LINE_PROJECTION_DOMAIN,
+                *mode,
+                hb(RAW_EVIDENCE_DOMAIN, selected),
+            )
+        });
+        slot.insert(projection);
+    }
+    let Some(selected) = selected_line_bytes(body, range) else {
+        return Ok(ClaimVerdict::TargetMissing(
+            ClaimMissingReason::LineOutOfRange,
+        ));
+    };
+    let observed = line_content(selected);
+    if observed == claim.expected.as_bytes() {
+        Ok(ClaimVerdict::Attested)
+    } else {
+        Ok(ClaimVerdict::Broken {
+            observed_digest: hb(RAW_EVIDENCE_DOMAIN, observed),
+        })
+    }
+}
+
+/// One line without the terminator that ended it.
+fn line_content(selected: &[u8]) -> &[u8] {
+    selected
+        .strip_suffix(b"\r\n")
+        .or_else(|| selected.strip_suffix(b"\n"))
+        .or_else(|| selected.strip_suffix(b"\r"))
+        .unwrap_or(selected)
+}
+
 /// An inclusive, one-indexed selection of raw source lines.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct LineRange {

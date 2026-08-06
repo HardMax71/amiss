@@ -64,6 +64,7 @@ fn construct_same_documents(bencher: Bencher<'_, '_>, count: usize) {
             black_box(&discovery),
             black_box(&discovery),
             black_box(&[]),
+            black_box(&[]),
         )
     });
 }

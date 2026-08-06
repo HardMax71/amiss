@@ -66,6 +66,7 @@ pub(crate) fn side_observations(
     engine: &EngineProvenance,
     forge: Option<&ForgeContext>,
     discovery: &SnapshotDiscovery,
+    mut claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,
 ) -> Result<(Side, Vec<ErrorDetail>), ErrorDetail> {
     let mut failures: Vec<ErrorDetail> = discovery
         .path_defects
@@ -138,6 +139,17 @@ pub(crate) fn side_observations(
                         resolution,
                     });
                 }
+                if let Some(outcomes) = claims.as_deref_mut() {
+                    document_claims(
+                        repo,
+                        git_resources,
+                        scan_resources,
+                        &mut cache,
+                        discovery,
+                        (&record.path, scanned),
+                        outcomes,
+                    )?;
+                }
             }
         }
     }
@@ -191,6 +203,49 @@ fn effective_limits(
     )
 }
 
+/// Evaluates one scanned document's value claims into outcomes; unknown
+/// forms stay for the governed boundary.
+fn document_claims(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    scan_resources: &mut ScanResources,
+    cache: &mut TargetCache,
+    discovery: &SnapshotDiscovery,
+    document: (&RepoPath, &crate::scan::Scanned),
+    outcomes: &mut Vec<crate::claim::ClaimOutcome>,
+) -> Result<(), ErrorDetail> {
+    let (path, scanned) = document;
+    for governed in &scanned.governed {
+        let crate::claim::GovernedForm::Value(claim) = &governed.form else {
+            continue;
+        };
+        let verdict = crate::resolve::resolve_claim(
+            repo,
+            git_resources,
+            scan_resources,
+            cache,
+            discovery,
+            claim,
+        )
+        .map_err(|defect| detail(&defect, Some(path)))?;
+        outcomes.push(crate::claim::ClaimOutcome {
+            document: path.clone(),
+            name: claim.name.clone(),
+            span: governed.span,
+            display: governed.display,
+            source_digest: governed.digest,
+            path: claim.path.clone(),
+            line: claim.line,
+            expected_digest: amiss_wire::digest::hb(
+                crate::resolve::RAW_EVIDENCE_DOMAIN,
+                claim.expected.as_bytes(),
+            ),
+            verdict,
+        });
+    }
+    Ok(())
+}
+
 /// The shell reissued with the floor-effective error ceiling, so every
 /// fatal projection built downstream honors it.
 fn effective_shell(shell: &SetupShell, limits: &ScanLimits) -> SetupShell {
@@ -233,13 +288,14 @@ fn conclude(
     setup: &Setup,
     base: (&SnapshotDiscovery, &Side),
     candidate: (&SnapshotDiscovery, &Side),
+    claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
 ) -> Built {
     if !failures.is_empty() {
         return construct_incomplete(setup, failures);
     }
     match correlate(base.1, candidate.1) {
-        Ok(comparisons) => construct(setup, base.0, candidate.0, &comparisons),
+        Ok(comparisons) => construct(setup, base.0, candidate.0, &comparisons, claims),
         Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
     }
 }
@@ -412,22 +468,14 @@ pub fn commit_pair(
     };
     let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
 
-    let base = evaluate_tree(
+    let (base, candidate, claims) = evaluated_pair(
         repo,
         &mut git_resources,
-        &mut base_scan,
+        (&mut base_scan, &mut candidate_scan),
         engine,
         forge,
         &includes,
         base_tree,
-    );
-    let candidate = evaluate_tree(
-        repo,
-        &mut git_resources,
-        &mut candidate_scan,
-        engine,
-        forge,
-        &includes,
         candidate_tree,
     );
     match (base, candidate) {
@@ -456,6 +504,7 @@ pub fn commit_pair(
                 &setup,
                 (&base.discovery, &base.side),
                 (&candidate.discovery, &candidate.side),
+                &claims,
                 &failures,
             )
         }
@@ -680,6 +729,7 @@ fn staged_candidate(
     includes: &crate::policy::Includes,
     index: &amiss_git::LogicalIndex,
     base_failures: Vec<ErrorDetail>,
+    claims: &mut Vec<crate::claim::ClaimOutcome>,
 ) -> Result<(SnapshotDiscovery, Option<Side>, Vec<ErrorDetail>), Box<Built>> {
     let discovery =
         crate::discovery::discover_index(repo, git_resources, candidate_scan, includes, index)
@@ -698,12 +748,17 @@ fn staged_candidate(
         forge,
         &discovery,
         base_failures,
+        claims,
     );
     Ok((discovery, side, failures))
 }
 
 /// The staged candidate's observations plus every accumulated failure row;
 /// a side that cannot be built at all is `None` with its defect appended.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
 fn staged_sides(
     repo: &Repository,
     git_resources: &mut GitResources,
@@ -712,6 +767,7 @@ fn staged_sides(
     forge: Option<&ForgeContext>,
     candidate_discovery: &SnapshotDiscovery,
     base_failures: Vec<ErrorDetail>,
+    claims: &mut Vec<crate::claim::ClaimOutcome>,
 ) -> (Option<Side>, Vec<ErrorDetail>) {
     let mut failures = base_failures;
     match side_observations(
@@ -721,6 +777,7 @@ fn staged_sides(
         engine,
         forge,
         candidate_discovery,
+        Some(claims),
     ) {
         Ok((side, candidate_failures)) => {
             failures.extend(candidate_failures);
@@ -764,6 +821,55 @@ fn pinned_index(
     Ok((initial, index, skip_worktree_paths))
 }
 
+type StagedAcquisition = (
+    crate::policy::PolicySide,
+    crate::policy::PolicySide,
+    crate::policy::Includes,
+    (Evaluated, Vec<ErrorDetail>),
+);
+
+/// Both staged policies and the evaluated base, or the fatal projection of
+/// whichever stage refused first.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
+fn staged_acquisition(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    scans: (&mut ScanResources, &mut ScanResources),
+    engine: &EngineProvenance,
+    forge: Option<&ForgeContext>,
+    setup_shell: &SetupShell,
+    base_placeholder: SnapshotIdentity,
+    base_tree: (Oid, SnapshotIdentity),
+    index: &amiss_git::LogicalIndex,
+) -> Result<StagedAcquisition, Box<Built>> {
+    let (base_scan, candidate_scan) = scans;
+    let (base_policy, candidate_policy, includes) = staged_policy(
+        repo,
+        git_resources,
+        base_scan,
+        candidate_scan,
+        setup_shell,
+        &base_placeholder,
+        &base_tree.0,
+        index,
+    )?;
+    let evaluated = staged_base(
+        repo,
+        git_resources,
+        base_scan,
+        engine,
+        forge,
+        &includes,
+        setup_shell,
+        base_placeholder,
+        base_tree,
+    )?;
+    Ok((base_policy, candidate_policy, includes, evaluated))
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "the staged pipeline context is the contract's"
@@ -787,6 +893,7 @@ fn staged_base(
         forge,
         includes,
         base_tree,
+        None,
     )
     .map_err(|defect_detail| {
         let setup = setup_shell.with(
@@ -867,6 +974,53 @@ fn resolve_tree(
     ))
 }
 
+type Evaluation = Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail>;
+
+/// Both snapshot evaluations, with claim outcomes gathered on the candidate
+/// side alone: a claim speaks for what the candidate asserts today.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
+fn evaluated_pair(
+    repo: &Repository,
+    git_resources: &mut GitResources,
+    scans: (&mut ScanResources, &mut ScanResources),
+    engine: &EngineProvenance,
+    forge: Option<&ForgeContext>,
+    includes: &crate::policy::Includes,
+    base_tree: (Oid, SnapshotIdentity),
+    candidate_tree: (Oid, SnapshotIdentity),
+) -> (Evaluation, Evaluation, Vec<crate::claim::ClaimOutcome>) {
+    let (base_scan, candidate_scan) = scans;
+    let base = evaluate_tree(
+        repo,
+        git_resources,
+        base_scan,
+        engine,
+        forge,
+        includes,
+        base_tree,
+        None,
+    );
+    let mut claims: Vec<crate::claim::ClaimOutcome> = Vec::new();
+    let candidate = evaluate_tree(
+        repo,
+        git_resources,
+        candidate_scan,
+        engine,
+        forge,
+        includes,
+        candidate_tree,
+        Some(&mut claims),
+    );
+    (base, candidate, claims)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the staged pipeline context is the contract's"
+)]
 fn evaluate_tree(
     repo: &Repository,
     git_resources: &mut GitResources,
@@ -875,6 +1029,7 @@ fn evaluate_tree(
     forge: Option<&ForgeContext>,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
+    claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
     let (tree_oid, identity) = tree;
     let discovery = discover(repo, git_resources, scan_resources, includes, &tree_oid)
@@ -886,6 +1041,7 @@ fn evaluate_tree(
         engine,
         forge,
         &discovery,
+        claims,
     )?;
     Ok((
         Evaluated {
@@ -1218,34 +1374,24 @@ pub fn staged_index(
     };
     let mut base_scan = ScanResources::new(scan_limits);
     let mut candidate_scan = ScanResources::new(scan_limits);
-    let (base_policy, candidate_policy, includes) = match staged_policy(
+    let acquired = staged_acquisition(
         repo,
         &mut git_resources,
-        &mut base_scan,
-        &mut candidate_scan,
-        setup_shell,
-        &base_placeholder,
-        &base_tree.0,
-        &index,
-    ) {
-        Ok(acquired) => acquired,
-        Err(built) => return *built,
-    };
-    let (base_evaluated, base_failures) = match staged_base(
-        repo,
-        &mut git_resources,
-        &mut base_scan,
+        (&mut base_scan, &mut candidate_scan),
         engine,
         forge,
-        &includes,
         setup_shell,
         base_placeholder,
         base_tree,
-    ) {
-        Ok(evaluated) => evaluated,
+        &index,
+    );
+    let (base_policy, candidate_policy, includes, (base_evaluated, base_failures)) = match acquired
+    {
+        Ok(parts) => parts,
         Err(built) => return *built,
     };
 
+    let mut claims: Vec<crate::claim::ClaimOutcome> = Vec::new();
     let staged = staged_candidate(
         repo,
         &mut git_resources,
@@ -1257,6 +1403,7 @@ pub fn staged_index(
         &includes,
         &index,
         base_failures,
+        &mut claims,
     );
     let (candidate_discovery, candidate_side, mut failures) = match staged {
         Ok(parts) => parts,
@@ -1286,6 +1433,7 @@ pub fn staged_index(
         &setup,
         &base_evaluated,
         (&candidate_discovery, candidate_side.as_ref()),
+        &claims,
         &failures,
         &initial,
     )
@@ -1304,6 +1452,7 @@ fn staged_finish(
     setup: &Setup,
     base_evaluated: &Evaluated,
     candidate: (&SnapshotDiscovery, Option<&Side>),
+    claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
     initial: &[u8],
 ) -> Built {
@@ -1312,6 +1461,7 @@ fn staged_finish(
             setup,
             (&base_evaluated.discovery, &base_evaluated.side),
             (candidate.0, side),
+            claims,
             &[],
         ),
         _ => construct_incomplete(setup, failures),

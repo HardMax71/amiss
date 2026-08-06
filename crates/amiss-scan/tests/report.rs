@@ -151,7 +151,13 @@ fn report_retaining(
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    construct(&setup, &base_discovery, &candidate_discovery, &comparisons)
+    construct(
+        &setup,
+        &base_discovery,
+        &candidate_discovery,
+        &comparisons,
+        &[],
+    )
 }
 
 #[expect(
@@ -508,7 +514,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
 fn document_rows_merge_both_sides_in_strict_raw_path_order() {
     let base = excluded_discovery(&["a-.md", "a/base.md", "a0.md"]);
     let candidate = excluded_discovery(&["a/candidate.md", "a0.md", "a1.md"]);
-    let built = construct(&bare_setup(64), &base, &candidate, &[]);
+    let built = construct(&bare_setup(64), &base, &candidate, &[], &[]);
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
     let actual: Vec<(String, String)> = rows
@@ -541,7 +547,7 @@ fn a_document_that_moved_is_not_unchanged() {
     let moved = candidate.documents.first_mut().unwrap();
     moved.oid = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
 
-    let built = construct(&bare_setup(64), &base, &candidate, &[]);
+    let built = construct(&bare_setup(64), &base, &candidate, &[], &[]);
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
     let changes: Vec<(&str, &str)> = rows
@@ -836,7 +842,13 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, &inflated);
+    let built = construct(
+        &setup,
+        &base_discovery,
+        &candidate_discovery,
+        &inflated,
+        &[],
+    );
 
     assert_eq!(built.status, "incomplete");
     assert_eq!(built.exit_code, 2);
@@ -905,7 +917,13 @@ fn a_finding_location_carries_the_real_display_positions() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, &comparisons);
+    let built = construct(
+        &setup,
+        &base_discovery,
+        &candidate_discovery,
+        &comparisons,
+        &[],
+    );
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let span = envelope["payload"]["findings"]
         .as_array()
