@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0](https://github.com/HardMax71/amiss/compare/v0.16.0...v0.17.0) - 2026-08-07
+
+### Changes
+
+- Fold the artifact naming out of its twin
+- Project the fix onto every machine surface
+- Fold the claim fixture out of its twin shape
+- Prove the claim on every surface the binary shows
+- Make the command line answer below its surface
+- Close the engine tail at its own boundaries
+- Call the bucket prefix what it is
+- A delta may name its base
+- Craft what git refuses to write
+- Every kind of object answers to its name
+- Implementation is separate from tests
+- Packaging strips what the guard never opens
+- One loop reads for both platforms
+- Answer the last two lints
+- Answer the last two lints
+- Give every dialect the fragment it can prove
+- Turn the neighbor into the finding's fix
+- Let the destination name its own bytes
+- Let the neighbor step forward alone
+- Give the missing anchor a place for its neighbor
+- Hold the rewrite guard to its own clauses
+- Let a broken claim carry its own repair
+- Teach the wire a fix it does not yet emit
+- Answer the scan group's twelve boundaries
+- Pin the run id the gate carries through
+- Give the tail's engine files their first direct answers
+- Seed the unanswered claim, count the boundary you emit
+- Group claims by key, and say the split out loud
+- Let a value claim speak on the wire
+- Carry every claim's answer to the report's door
+- Teach the grammar its one claim kind
+- Let a governed definition carry its decoded words
+- Delete the guard that proof already held
+- Keep the autolink hash out of the fragment gate
+- Teach the dialect scanners their own clauses
+- Break one opener at a time in the embedded lexer
+- Hand the warden what the parser never writes
+- Spell the near decode through the house idiom
+- Spell the near decode and ratchet the twins down
+- Trim the one clause that restated its fields
+- Parse every lawful word, not just the spelled one
+- The pointer answer survives every wrapper
+- Every ceiling answers at its exact edge
+- The derive is the declaration
+- Walk the vocabulary to its end
+- Let the enums enumerate themselves
+- Close the worklist where the ledger says why
+- Round-trip the bytes nobody ever wrote
+- Let the artifact case reach the guard it tests
+- Close the engine tail at its own boundaries
+- Let the wrapper meet an engine that answers
+
 ## [0.16.0](https://github.com/HardMax71/amiss/compare/v0.15.0...v0.16.0) - 2026-07-31
 
 ### Changes
