@@ -314,3 +314,30 @@ fn unknown_nested_limit_fields_are_rejected() {
         );
     }
 }
+
+/// Each clause of the token and repository grammars refuses alone: a token of
+/// lawful length with one non-graphic byte, and a repository id of zero.
+#[test]
+fn token_alphabet_and_repository_identity_refuse_alone() {
+    let nongraphic = Fixture::new("gitea");
+    std::fs::write(&nongraphic.token, b"valid-length-token\x07x").unwrap();
+    nongraphic.save();
+    assert_eq!(
+        ServiceConfig::load(&nongraphic.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "provider token is invalid"
+    );
+
+    let mut zero_repository = Fixture::new("gitea");
+    *zero_repository.field("/repository/id") = json!(0);
+    zero_repository.save();
+    assert_eq!(
+        ServiceConfig::load(&zero_repository.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "Gitea-family numeric identity must be positive"
+    );
+}

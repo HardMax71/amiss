@@ -15,7 +15,7 @@ use amiss_controller::{
     SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 use amiss_controller_gitea::{
-    DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter,
+    DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter, GiteaPullRequestSource,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
@@ -448,4 +448,59 @@ fn replaced_once(source: &[u8], from: &str, to: &str) -> Vec<u8> {
         .unwrap()
         .replacen(from, to, 1)
         .into_bytes()
+}
+
+/// The lane binds the signed target: the payload's base ref must be the
+/// configured branch, and a foreign target is revoked rather than unsigned.
+#[test]
+fn the_signed_target_binds_the_lane() {
+    let source = GiteaPullRequestSource::new(provider("gitea"), reviewer(), webhook()).unwrap();
+    let attempt = |target: &str| -> Result<(), ProviderError> {
+        let route = DeliveryRoute {
+            provider: provider("gitea"),
+            trust_set: amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+            signed_time: SignedTimePolicy::ReplayOnly,
+        };
+        let signed = signature(BODY);
+        let headers = [DeliveryHeader {
+            name: "x-gitea-signature",
+            value: &signed,
+        }];
+        let check = policy()
+            .pre_auth(
+                UntrustedDelivery {
+                    route: &route,
+                    received_at_unix_millis: NOW,
+                    headers: &headers,
+                    body: BODY,
+                },
+                &*TestClock::at(NOW),
+            )
+            .unwrap();
+        let bound = BranchRef::new(target.to_owned()).unwrap();
+        source
+            .authenticate_for_target(check, &bound)
+            .map(|_proof| ())
+    };
+    assert!(attempt("refs/heads/main").is_ok());
+    assert_eq!(
+        attempt("refs/heads/other").err(),
+        Some(ProviderError::AuthorizationRevoked)
+    );
+}
+
+/// The base repository must agree with the delivery repository beyond its id:
+/// one drifted field inside the base repo object refuses on that clause alone.
+#[test]
+fn a_base_repository_that_disagrees_beyond_its_id_is_refused() {
+    let adapter = adapter("gitea", dummy_snapshot("gitea"));
+    let body = replaced_once(
+        BODY,
+        r#""repo":{"id":101,"name":"widget""#,
+        r#""repo":{"id":101,"name":"widgex""#,
+    );
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
 }
