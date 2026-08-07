@@ -11,6 +11,11 @@ fn reads_only_absolute_bounded_regular_files() {
     let regular = root.path().join("regular");
     std::fs::write(&regular, b"trusted").unwrap();
     assert_eq!(read_bounded(&regular, 7).unwrap(), b"trusted");
+    assert_eq!(
+        read_bounded(&regular, 32).unwrap(),
+        b"trusted",
+        "room under the bound reads the same bytes"
+    );
     assert!(read_bounded(&regular, 6).is_err());
     assert!(read_bounded(Path::new("relative"), 32).is_err());
 

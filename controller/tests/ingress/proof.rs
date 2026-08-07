@@ -208,6 +208,10 @@ fn debug_output_never_contains_raw_credentials_or_body() -> Result<(), IngressEr
     let rendered = format!("{request:?} {checked:?} {:?}", headers[0]);
 
     assert!(rendered.contains("[REDACTED]"));
+    assert!(
+        format!("{checked:?}").contains("RequestBinding([REDACTED])"),
+        "the binding names itself redacted: {checked:?}"
+    );
     assert!(!rendered.contains("legacy-credential"));
     assert!(!rendered.contains("body-secret"));
 
@@ -242,5 +246,46 @@ fn debug_output_never_contains_raw_credentials_or_body() -> Result<(), IngressEr
     let combined = format!("{proof_rendered} {verified_rendered}");
     assert!(!combined.contains("event"));
     assert!(!combined.contains("ac6a6901"));
+    Ok(())
+}
+
+/// The binding frames every field by length: shifting one byte across a
+/// header boundary is a different request even though the raw bytes agree.
+#[test]
+fn a_boundary_shift_is_a_different_request() -> Result<(), IngressError> {
+    let route = route(SignedTimePolicy::ReplayOnly);
+    let policy = policy(Duration::from_secs(1), Duration::ZERO)?;
+    let signature = DeliveryHeader {
+        name: "x-hub-signature-256",
+        value: b"sha256=ac6a690197321dcf9b6291614f70f95fc93f096f646a1209c6d9de950ba0cb43",
+    };
+    let left_headers = [
+        signature,
+        DeliveryHeader {
+            name: "a",
+            value: b"bc",
+        },
+    ];
+    let left = policy
+        .pre_auth(
+            raw(&route, 1_000, &left_headers, BODY),
+            &*TestClock::at(1_000),
+        )
+        .unwrap();
+    let proof = github_verified(left, &route.provider, route.trust_set.clone());
+    let right_headers = [
+        signature,
+        DeliveryHeader {
+            name: "ab",
+            value: b"c",
+        },
+    ];
+    let right = policy
+        .pre_auth(
+            raw(&route, 1_000, &right_headers, BODY),
+            &*TestClock::at(1_000),
+        )
+        .unwrap();
+    assert_eq!(policy.post_auth(right, proof), Err(IngressError::Request));
     Ok(())
 }
