@@ -1284,7 +1284,11 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                     path: resolved_path,
                     near: match obj.take("near")? {
                         Value::Null => None,
-                        value => Some(de::string(&obj.field("near"), value)?),
+                        value @ (Value::Bool(_)
+                        | Value::Integer(_)
+                        | Value::String(_)
+                        | Value::Array(_)
+                        | Value::Object(_)) => Some(de::string(&obj.field("near"), value)?),
                     },
                 },
                 MissingTag::LabelNotDeclared => Missing::LabelNotDeclared,
