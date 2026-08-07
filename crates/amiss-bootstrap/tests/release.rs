@@ -205,6 +205,61 @@ fn a_manifest_that_omits_the_action_row_is_refused() {
     );
 }
 
+fn rename_action_rows(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            for item in items.iter_mut() {
+                rename_action_rows(item);
+            }
+        }
+        Value::Object(_) => {
+            let renamed = is_action_row(value);
+            let Value::Object(members) = value else {
+                return;
+            };
+            for (key, member) in members.iter_mut() {
+                if renamed && key == "path" {
+                    *member = Value::String("assets.yml".to_owned());
+                } else {
+                    rename_action_rows(member);
+                }
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
+    }
+}
+
+/// Runtime data alone is not a pin: the closure row must sit at the action
+/// metadata path, not merely exist somewhere in the artifact.
+#[test]
+fn runtime_data_off_the_action_path_is_not_a_pin() {
+    let mut renamed: Option<Digest> = None;
+    let mut release = release(|root| {
+        let path = root.join("release-manifest.json");
+        let bytes = fs::read(&path).unwrap();
+        let mut value =
+            amiss_wire::json::parse(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
+                .expect("the manifest parses");
+        rename_action_rows(&mut value);
+        renamed = Some(amiss_wire::digest::hj(
+            amiss_wire::manifest::MANIFEST_DOMAIN,
+            &value,
+        ));
+        let mut out = canonical(&value);
+        out.push(b'\n');
+        fs::write(&path, out).unwrap();
+        fs::rename(root.join("action.yml"), root.join("assets.yml")).unwrap();
+    });
+    release.manifest_digest = renamed.expect("the renamed manifest was digested");
+
+    let outcome = attempt(&release, BOOTSTRAP);
+    assert_eq!(
+        outcome.err(),
+        Some(Refusal::Tampered("action-metadata-invalid")),
+        "a data row off the action path pins nothing"
+    );
+}
+
 #[test]
 fn a_tampered_runtime_file_refuses_on_its_checksum() {
     let release = release(|root| {

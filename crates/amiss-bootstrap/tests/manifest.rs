@@ -69,3 +69,36 @@ fn a_lone_version_flag_asks_the_builder_not_the_release() {
     assert_eq!(refused.status.code(), Some(2));
     assert!(refused.stdout.is_empty());
 }
+
+/// Each staged list is required on its own: locks without artifacts is the
+/// same usage refusal as artifacts without locks.
+#[test]
+fn a_half_empty_staging_list_is_refused() {
+    let tree = TempDir::new().unwrap();
+    std::fs::write(tree.path().join("Cargo.lock"), b"version = 4\n").unwrap();
+    std::fs::write(tree.path().join("action.yml"), b"action").unwrap();
+    let common = [
+        "--version",
+        "0.9.0",
+        "--host",
+        "git.example",
+        "--owner",
+        "platform",
+        "--repository",
+        "amiss",
+        "--commit",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "--action",
+        "action.yml",
+    ];
+    for extra in [["--lock", "Cargo.lock"], ["--artifact", "engine"]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_amiss-manifest"))
+            .arg("--tree")
+            .arg(tree.path())
+            .args(common)
+            .args(extra)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{extra:?}: {output:?}");
+    }
+}

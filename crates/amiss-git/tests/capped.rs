@@ -127,3 +127,33 @@ fn a_packed_object_at_exactly_the_cap_is_within_it() {
         "a declared size equal to the cap is under it"
     );
 }
+
+/// The two aggregate meters admit a charge landing exactly on the cap and
+/// refuse the next byte, each on its own resource.
+#[test]
+fn aggregate_charges_fill_to_the_cap_exactly() {
+    let limits = GitLimits {
+        aggregate_compressed_bytes: 10,
+        aggregate_pack_index_bytes: 10,
+        ..GitLimits::CONTRACT
+    };
+    let mut resources = GitResources::new(limits);
+    resources.charge_compressed("a", 6).unwrap();
+    resources
+        .charge_compressed("b", 4)
+        .expect("exactly the aggregate cap still fits");
+    let over = resources.charge_compressed("c", 1).unwrap_err();
+    assert!(
+        format!("{over:?}").contains("AggregateGitCompressedObjectBytesPerEvaluation"),
+        "{over:?}"
+    );
+    resources.charge_index("a", 6).unwrap();
+    resources
+        .charge_index("b", 4)
+        .expect("exactly the aggregate cap still fits");
+    let over = resources.charge_index("c", 1).unwrap_err();
+    assert!(
+        format!("{over:?}").contains("AggregateGitPackIndexBytes"),
+        "{over:?}"
+    );
+}
