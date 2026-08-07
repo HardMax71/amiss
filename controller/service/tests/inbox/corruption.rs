@@ -271,7 +271,10 @@ fn an_established_root_recovers_debris_and_refuses_squatters() {
 /// is the record validator's own, not the frame digest's.
 #[test]
 fn resealed_semantic_defects_fail_closed() {
-    let edits: [(&str, PayloadEdit); 7] = [
+    let edits: [(&str, PayloadEdit); 8] = [
+        ("uppercase stored header name", |payload| {
+            payload.replace("\"name\":\"x-delivery\"", "\"name\":\"X-delivery\"")
+        }),
         ("uppercase content digest", |payload| {
             digest_respelled(payload, &"F".repeat(64))
         }),

@@ -384,3 +384,21 @@ fn a_queued_service_error_displays_its_reason() {
         "delivery inbox cannot be opened"
     );
 }
+
+/// The three service-side errors name themselves distinctly.
+#[test]
+fn service_errors_name_themselves() {
+    use amiss_controller_service::{EvaluationConfigError, ReceiverConfigError, SupervisionError};
+    let receiver = [ReceiverConfigError::Path, ReceiverConfigError::Limits];
+    let messages: Vec<String> = receiver.iter().map(ToString::to_string).collect();
+    assert!(messages.iter().all(|message| !message.is_empty()));
+    assert_ne!(messages[0], messages[1]);
+    assert_eq!(
+        EvaluationConfigError.to_string(),
+        "evaluation endpoint configuration is invalid"
+    );
+    assert_eq!(
+        SupervisionError("delivery worker stopped").to_string(),
+        "delivery worker stopped"
+    );
+}

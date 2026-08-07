@@ -5,8 +5,8 @@ mod runner;
 
 pub(crate) use adapter::FakeAdapter;
 pub(crate) use fixtures::{
-    complete, controller, controller_with_ledger, delivery, locator, oid, provider, repository,
-    run, run_with_resolution, snapshot,
+    binding, complete, controller, controller_with_ledger, delivery, locator, oid, provider,
+    repository, run, run_with_resolution, snapshot,
 };
 pub(crate) use ledger::{LedgerError, MemoryLedger, ScriptedLedger, lease, renewal_script};
 pub(crate) use runner::FakeRunner;
