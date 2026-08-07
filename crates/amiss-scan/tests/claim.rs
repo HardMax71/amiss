@@ -133,6 +133,11 @@ fn a_rewrite_is_proved_or_refused_on_each_gate() {
     );
     assert_eq!(claim::rewrite("v", &path("README.md"), 1, b"\xff"), None);
     assert_eq!(
+        claim::rewrite("v", &path("README.md"), 1, b"a\\b"),
+        None,
+        "a backslash is refused by the guard's own clause, conservatively"
+    );
+    assert_eq!(
         claim::rewrite("v", &path("README.md"), 1, b"&amp;"),
         None,
         "an entity decodes to different expected words, which only the field proof sees"
