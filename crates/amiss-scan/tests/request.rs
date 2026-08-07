@@ -105,6 +105,7 @@ fn a_verified_time_statement_lands_with_its_run_context() {
     let landed = inputs.time.expect("the statement lands typed");
     assert_eq!(landed.statement.digest, statement.digest);
     assert_eq!(landed.provider, "gitlab-ci");
+    assert_eq!(landed.provider_run_id, "pipeline/01J2Z9-7");
     assert_eq!(landed.provider_run_attempt, 2);
 }
 
