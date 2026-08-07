@@ -76,6 +76,7 @@ fn occurrence(reference: &Reference, within: usize) -> Occurrence {
         node_path: vec![reference.block, within],
         block_kind: BlockKind::Paragraph,
         block_span: reference.block_span,
+        fragment_span: None,
     }
 }
 

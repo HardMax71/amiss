@@ -79,6 +79,7 @@ fn occurrence(reference: &Reference, within: usize) -> Occurrence {
             BlockKind::Paragraph
         },
         block_span: reference.block_span,
+        fragment_span: None,
     }
 }
 
