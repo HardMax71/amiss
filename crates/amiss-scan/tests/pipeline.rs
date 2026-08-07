@@ -398,7 +398,7 @@ fn a_case_drifted_anchor_carries_its_fix() {
     assert_eq!(&source.as_bytes()[start..end], b"Setup");
     assert_eq!(
         fix["description"],
-        "replace the fragment with the one published anchor it matches under case folding"
+        "replace the fragment with the one published anchor it matches apart from case and separator style"
     );
 
     let same_block = run("[a](sections.md#Setup) and [b](sections.md#Setup)\n");
@@ -446,6 +446,44 @@ fn a_case_drifted_anchor_carries_its_fix() {
     assert!(
         row["fix"].is_null(),
         "a percent spelling names no bytes: {row}"
+    );
+}
+
+/// Separator drift is a fix too: a fragment spelled with the underscore
+/// another renderer would have used names the published identity.
+#[test]
+fn a_separator_drifted_anchor_carries_its_fix() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    fs::write(root.join("sections.md"), "# Setup Config\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("guide.md"), "[s](sections.md#setup_config)\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "linked"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base_commit),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    let row = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(
+        row["fix"]["replacement"], "setup-config",
+        "the separator the renderers disagree on folds away: {row}"
     );
 }
 

@@ -992,23 +992,30 @@ fn anchor_resolution(
     if !complete {
         return Ok(unsupported);
     }
-    let near = case_fold_neighbor(identities, fragment);
+    let near = typography_neighbor(identities, fragment);
     Ok(Resolution::Missing(Missing::HeadingAnchorNotFound {
         path: path.clone(),
         near,
     }))
 }
 
-/// The one published identity equal to the fragment under case folding, when
+/// The one published identity the fragment names apart from typography, when
 /// exactly one exists: two candidates name a real ambiguity, zero a genuine
 /// miss, and both stay bare.
-fn case_fold_neighbor(identities: &BTreeSet<String>, fragment: &str) -> Option<String> {
-    let folded = fragment.to_lowercase();
+fn typography_neighbor(identities: &BTreeSet<String>, fragment: &str) -> Option<String> {
+    let folded = fold_typography(fragment);
     let mut matches = identities
         .iter()
-        .filter(|identity| identity.to_lowercase() == folded);
+        .filter(|identity| fold_typography(identity) == folded);
     let candidate = matches.next()?;
     matches.next().is_none().then(|| candidate.clone())
+}
+
+/// The comparison key for a heading identity: the two spellings the pinned
+/// renderer rules disagree on, case and the separator character, folded away.
+/// Duplicate suffixes ride the separator, so `x_1` and `x-1` fold together.
+fn fold_typography(text: &str) -> String {
+    text.to_lowercase().replace('_', "-")
 }
 
 /// Answers a Sphinx `:ref:` against the labels the snapshot's documents

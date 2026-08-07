@@ -467,8 +467,7 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
 }
 
 /// The one sentence an anchor fix carries.
-const ANCHOR_FIX_DESCRIPTION: &str =
-    "replace the fragment with the one published anchor it matches under case folding";
+const ANCHOR_FIX_DESCRIPTION: &str = "replace the fragment with the one published anchor it matches apart from case and separator style";
 
 /// The provable rewrite for a lone missing heading anchor: exactly one
 /// candidate member, a resolver-named neighbor, and a fragment span the
