@@ -99,7 +99,11 @@ And one finding row from a real failing run, abridged to its skeleton:
 Findings are sorted by finding key, a domain-separated hash of kind plus scope. Every
 finding and error row carries a `description`: the fixed engine-owned sentence for its
 kind or code, stating what the row means and what to do about it, so no consumer needs a
-second source to act on a report. The sentences live in one place,
+second source to act on a report. Beside it sits `fix`, a machine-applicable rewrite or
+null: when the engine can prove the exact edit, the field names the candidate document,
+the byte span to replace, and the replacement text, and a finding whose correct content
+is not derivable carries null rather than a guess. No kind emits one yet; the first
+producers arrive with the claim rewrites. The sentences live in one place,
 [`FindingKind::meaning` and `AnalysisErrorCode::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
 the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
 and the shipped example are checked against that source in CI. The human format prints

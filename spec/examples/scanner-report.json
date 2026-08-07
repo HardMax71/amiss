@@ -302,6 +302,7 @@
         "effective_disposition": "warn",
         "evidence_class": "deterministic-structural",
         "finding_key": "sha256:244f7d31256a965ff15458fa06ca44fa79b18f3b47080f4814c7356eb6a82a26",
+        "fix": null,
         "invariant_class": "ratcheted",
         "key_input": {
           "finding_kind": "explicit-target-missing",
@@ -423,6 +424,7 @@
         "effective_disposition": "record",
         "evidence_class": "coverage-boundary",
         "finding_key": "sha256:313ef1f52df3990af3444d3ccd2885c5f082cdaea38bda3f98266e5394ae42d3",
+        "fix": null,
         "invariant_class": "advisory",
         "key_input": {
           "finding_kind": "unlinked-document",
@@ -623,6 +625,7 @@
         "effective_disposition": "record",
         "evidence_class": "impact-observation",
         "finding_key": "sha256:f5a429c59415b176fbd1019dfbe29828674e9b52a9ed8376ef7b9fa94ae1e393",
+        "fix": null,
         "invariant_class": "advisory",
         "key_input": {
           "finding_kind": "dependency-and-subject-cochanged",
@@ -996,6 +999,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:1c96687e28be8b5ba70e54483f4250838033d53e5ed407c661e1bfefa372ea7c",
+  "payload_digest": "sha256:759cbc9133b6b7800f1b882059b93bed954cb3d6ae522607fffb21d2eb4d52aa",
   "schema": "amiss/scanner-report-envelope"
 }

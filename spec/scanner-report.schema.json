@@ -3263,6 +3263,45 @@
         "claim-target-missing"
       ]
     },
+    "FindingFix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "span",
+        "replacement",
+        "description"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/RepoPathText"
+        },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start_byte",
+            "end_byte"
+          ],
+          "properties": {
+            "start_byte": {
+              "$ref": "#/$defs/SafeUInt"
+            },
+            "end_byte": {
+              "$ref": "#/$defs/SafeUInt"
+            }
+          }
+        },
+        "replacement": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "One machine-applicable rewrite the engine can prove: replacing the span's bytes in the named candidate document with the replacement resolves the finding. Emitted only when the correct content is derivable; a finding that cannot prove its edit carries null."
+    },
     "FeedbackAction": {
       "enum": [
         "fix",
@@ -4161,7 +4200,8 @@
         "effective_disposition",
         "policy_trace",
         "debt",
-        "waiver"
+        "waiver",
+        "fix"
       ],
       "properties": {
         "key_input": {
@@ -4178,6 +4218,16 @@
           "minLength": 1,
           "maxLength": 400,
           "description": "The fixed engine-owned sentence for this kind: what it means and what to do."
+        },
+        "fix": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/FindingFix"
+            }
+          ]
         },
         "coverage_requirement": {
           "enum": [
