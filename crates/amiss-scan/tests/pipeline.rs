@@ -257,6 +257,50 @@ fn an_attested_value_claim_passes_and_is_counted() {
     );
 }
 
+/// Two same-subject defects fold into one item annotated at the least
+/// location, whatever order the fold visits the findings.
+#[test]
+fn a_grouped_item_annotates_its_least_location() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    fs::write(root.join("target.md"), "# One\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join("README.md"),
+        "[b](target.md#also-gone)\n\n[a](target.md#nope)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "links"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    let items = payload["feedback"]["items"].as_array().unwrap();
+    let item = items
+        .iter()
+        .find(|item| item["action"] == "fix" && item["target"] == "target.md")
+        .unwrap_or_else(|| panic!("one grouped fix item: {items:?}"));
+    assert_eq!(item["location_count"], 2, "{item}");
+    assert_eq!(item["annotation"]["path"], "README.md");
+    assert_eq!(
+        item["annotation"]["span"]["start_line"], 1,
+        "the earliest defect owns the annotation: {item}"
+    );
+}
+
 /// A claim only the base holds is invisible: evaluation is candidate-side,
 /// so a broken claim the candidate deletes leaves no count and no finding.
 #[test]

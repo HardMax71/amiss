@@ -120,6 +120,10 @@ fn excluded_trees_are_directory_components() {
         );
     }
     assert!(!excluded_by_built_in(b"vendor.md"));
+    assert!(
+        !excluded_by_built_in(b"targets"),
+        "a slashless name is never a directory component, even one byte over a tree name"
+    );
     assert!(!excluded_by_built_in(b"a/my-target/x.md"));
     assert!(!excluded_by_built_in(b"TARGET/x.md"));
     assert!(!excluded_by_built_in(b"docs/guide.md"));
