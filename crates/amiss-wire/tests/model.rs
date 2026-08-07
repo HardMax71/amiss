@@ -119,3 +119,13 @@ fn the_adapter_tables_are_populated_and_distinct() {
         assert!(values.iter().all(|text| !text.is_empty()));
     }
 }
+
+/// The digest's debug form is its display form: one spelling on every
+/// channel, `sha256:` plus sixty-four hex bytes.
+#[test]
+fn a_digest_debugs_as_it_displays() {
+    let digest = amiss_wire::digest::hb("test/domain", b"payload");
+    let shown = format!("{digest}");
+    assert_eq!(format!("{digest:?}"), shown);
+    assert!(shown.starts_with("sha256:") && shown.len() == 71, "{shown}");
+}

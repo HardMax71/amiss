@@ -162,3 +162,12 @@ fn derivation_refuses_an_invalid_marker_closure_or_bootstrap() {
         "bootstrap-platform-mismatch"
     );
 }
+
+/// The error's display is its stable reason, verbatim.
+#[test]
+fn a_constraint_error_displays_its_reason() {
+    let error = ConstraintError {
+        reason: "engine-artifact-missing",
+    };
+    assert_eq!(error.to_string(), "engine-artifact-missing");
+}
