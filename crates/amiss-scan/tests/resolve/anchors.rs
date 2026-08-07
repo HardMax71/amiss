@@ -203,3 +203,39 @@ fn an_rst_include_leaves_absent_anchors_undecided() {
         "an anchor behind an include is undecided, got {spliced:?}"
     );
 }
+
+/// The neighbor steps forward only alone: one case-fold match names itself,
+/// two stay bare as a real ambiguity, and an unrelated miss stays bare.
+#[test]
+fn a_case_fold_neighbor_steps_forward_alone() {
+    let mut bed = bed();
+    let near_of = |bed: &mut crate::support::Bed, destination: &str| {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let Resolution::Missing(Missing::HeadingAnchorNotFound { near, .. }) = row else {
+            panic!("{destination} is not a missing anchor: {row:?}");
+        };
+        near
+    };
+    assert_eq!(
+        near_of(&mut bed, "anchors.md#Setup--Config"),
+        Some("setup--config".to_owned()),
+        "one case-fold neighbor names itself"
+    );
+    assert_eq!(
+        near_of(&mut bed, "anchors.md#DECLARED"),
+        Some("declared".to_owned())
+    );
+    assert_eq!(
+        near_of(&mut bed, "anchors.md#customid"),
+        None,
+        "an unrelated miss stays bare"
+    );
+    assert_eq!(
+        near_of(&mut bed, "case.md#DUP"),
+        None,
+        "two case variants are a real ambiguity"
+    );
+}
