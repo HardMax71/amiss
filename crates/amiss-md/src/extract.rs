@@ -128,8 +128,13 @@ fn extract_tree(
             .map(|entry| Occurrence {
                 span: translate(entry.span),
                 block_span: translate(entry.block_span),
-                fragment_span: fragment_span(suffix.as_bytes(), entry.span, &entry.raw_destination)
-                    .map(translate),
+                fragment_span: fragment_span(
+                    suffix.as_bytes(),
+                    entry.span,
+                    &entry.raw_destination,
+                    entry.construct,
+                )
+                .map(translate),
                 ..entry
             })
             .collect(),
@@ -1046,7 +1051,12 @@ fn fragment_span(
     source: &[u8],
     span: (usize, usize),
     raw_destination: &str,
+    construct: SourceConstruct,
 ) -> Option<(usize, usize)> {
+    // An autolink's hash can sit in an email local part, never a fragment.
+    if construct == SourceConstruct::Autolink {
+        return None;
+    }
     let (prefix, fragment) = raw_destination.split_once('#')?;
     if fragment.is_empty()
         || fragment.contains(['#', '%', '&', '\\'])
