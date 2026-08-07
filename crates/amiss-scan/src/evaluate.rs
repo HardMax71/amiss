@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::{Disposition, ErrorDetail, FindingKind};
+use amiss_wire::report::{Disposition, ErrorDetail, FindingKind, FixKind};
 use amiss_wire::resolution::{
     BlobContent, BlobTarget, Missing, Resolution, Target, TargetTag, UnsupportedSemantics,
     UnsupportedTarget, VersionScope,
@@ -466,9 +466,6 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
     }
 }
 
-/// The one sentence an anchor fix carries.
-const ANCHOR_FIX_DESCRIPTION: &str = "replace the fragment with the one published anchor it matches apart from case and separator style";
-
 /// The provable rewrite for a lone missing heading anchor: exactly one
 /// candidate member, a resolver-named neighbor, and a fragment span the
 /// adapter located verbatim. The resolution match is the kind gate, since
@@ -503,7 +500,7 @@ fn anchor_fix(candidates: &[&Observation]) -> Option<Value> {
         ("replacement".to_owned(), Value::String(near.clone())),
         (
             "description".to_owned(),
-            Value::String(ANCHOR_FIX_DESCRIPTION.to_owned()),
+            Value::String(FixKind::AnchorRespelling.meaning().to_owned()),
         ),
     ]))
 }
@@ -943,7 +940,7 @@ fn claim_fix(group: &ClaimGroup) -> Option<Value> {
         ("replacement".to_owned(), Value::String(replacement)),
         (
             "description".to_owned(),
-            Value::String(crate::claim::CLAIM_FIX_DESCRIPTION.to_owned()),
+            Value::String(FixKind::ClaimValueRewrite.meaning().to_owned()),
         ),
     ]))
 }

@@ -32,9 +32,9 @@ green and remote green are the same thing.
 - Blocks between `amiss-doc-contract` markers in `docs/` copy a value a Rust source owns,
   and a test asserts the two are equal. Nothing writes the block for you: move the Rust
   source and the block together, because editing either one alone fails CI.
-- The fixed description sentences live in `FindingKind::meaning` and
-  `AnalysisErrorCode::meaning` and nowhere else; every other appearance is a checked
-  projection.
+- The fixed description sentences live in `FindingKind::meaning`,
+  `AnalysisErrorCode::meaning`, and `FixKind::meaning` and nowhere else; every other
+  appearance is a checked projection.
 - New function twins move the similarity baseline in `.pre-commit-config.yaml`; bump it
   in the same change, or better, deduplicate.
 - The scanner's repository I/O stays inside the repository, and it spawns nothing. Its

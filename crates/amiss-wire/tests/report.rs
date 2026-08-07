@@ -4,7 +4,7 @@ use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind,
-    PAYLOAD_SCHEMA, invocation_failure_wire,
+    FixKind, PAYLOAD_SCHEMA, invocation_failure_wire,
 };
 
 #[expect(clippy::panic, reason = "test navigation helper")]
@@ -320,4 +320,14 @@ fn a_failure_envelope_exists_exactly_when_a_reason_does() {
     );
     codes.insert(AnalysisErrorCode::InvalidInvocation);
     assert!(invocation_failure_envelope(&engine(), &codes).is_some());
+}
+
+/// The fix vocabulary answers like the other fixed-sentence tables: every
+/// rewrite names itself, and no two share a sentence.
+#[test]
+fn every_fix_kind_states_its_own_sentence() {
+    let sentences = [FixKind::ClaimValueRewrite, FixKind::AnchorRespelling].map(FixKind::meaning);
+    assert!(sentences.iter().all(|sentence| !sentence.is_empty()));
+    let unique: BTreeSet<&str> = sentences.iter().copied().collect();
+    assert_eq!(unique.len(), sentences.len(), "{sentences:?}");
 }
