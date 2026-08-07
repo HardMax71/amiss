@@ -949,7 +949,33 @@ impl FindingKind {
             | Self::WaiverInvalid => "control-plane",
         }
     }
+}
 
+/// The closed set of machine-applicable rewrites the engine can prove. A
+/// finding carries at most one, and every producer names its kind here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FixKind {
+    ClaimValueRewrite,
+    AnchorRespelling,
+}
+
+impl FixKind {
+    /// One fixed engine-owned sentence per rewrite: what applying it does.
+    /// The wire carries this text as the fix's `description`.
+    #[must_use]
+    pub const fn meaning(self) -> &'static str {
+        match self {
+            Self::ClaimValueRewrite => {
+                "replace the definition so the claim expects the target's current line"
+            }
+            Self::AnchorRespelling => {
+                "replace the fragment with the one published anchor it matches apart from case and separator style"
+            }
+        }
+    }
+}
+
+impl FindingKind {
     /// One fixed engine-owned sentence per kind: what the finding means and
     /// what to do about it. The human projection prints it as a `note` line
     /// and the documentation renders the same text, so the sentence a reader

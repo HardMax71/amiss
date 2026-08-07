@@ -106,10 +106,6 @@ pub struct ClaimOutcome {
     pub verdict: ClaimVerdict,
 }
 
-/// The one sentence a claim fix carries.
-pub const CLAIM_FIX_DESCRIPTION: &str =
-    "replace the definition so the claim expects the target's current line";
-
 /// The canonical respelling that would attest a broken claim: the whole
 /// definition rewritten with the observed line as its expected words. None
 /// when the observed line cannot be spelled as a quoted title, or when the
