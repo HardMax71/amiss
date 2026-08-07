@@ -3,15 +3,15 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use amiss_controller::{
-    ChangeState, CheckConclusion, ControllerError, ControllerEvaluationId, DeliveryClaim,
-    DeliveryLease, LeaseCompletion, LeaseFence, LeaseRenewal, Publication, StageOutcome,
-    StagedPublication,
+    AuthenticatedDelivery, ChangeState, CheckConclusion, ControllerError, ControllerEvaluationId,
+    DeliveryClaim, DeliveryLease, LeaseCompletion, LeaseFence, LeaseRenewal, Publication,
+    RunIdentity, StageOutcome, StagedPublication,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::support::{
-    FakeAdapter, LedgerError, ScriptedLedger, complete, controller_with_ledger, delivery, lease,
-    locator, provider, renewal_script, repository, run, snapshot,
+    FakeAdapter, LedgerError, ScriptedLedger, binding, complete, controller_with_ledger, delivery,
+    lease, locator, provider, renewal_script, repository, run, snapshot,
 };
 
 #[test]
@@ -253,4 +253,107 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
         assert!(controller.runner.requests.is_empty());
         assert!(adapter.publications().is_empty());
     }
+}
+
+fn submitted_publication(run: &RunIdentity, delivery: &AuthenticatedDelivery) -> Publication {
+    Publication {
+        provider_run: delivery.provider_run.clone(),
+        evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        check: binding(),
+        run: run.clone(),
+        gate_commit: run.commits.candidate.clone(),
+        conclusion: CheckConclusion::Pass,
+        report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+    }
+}
+
+/// A staged row must echo the lease and the submitted publication exactly:
+/// the aligned row completes, and one drifted field at a time loses the
+/// lease, whether the drift sits in the evaluation, the publication body, or
+/// the claim's check binding.
+#[test]
+fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let expected = lease();
+    let scripted = |staged: Option<StagedPublication>, claim: DeliveryLease| {
+        (
+            Arc::new(FakeAdapter::new(
+                delivery(&provider, change.clone(), 'b'),
+                [
+                    Ok(snapshot(ChangeState::Active, run.clone())),
+                    Ok(snapshot(ChangeState::Active, run.clone())),
+                ],
+            )),
+            ScriptedLedger {
+                claim: Some(DeliveryClaim::Execute(claim)),
+                renewals: renewal_script([
+                    LeaseRenewal::Renewed(expected.clone()),
+                    LeaseRenewal::Renewed(expected.clone()),
+                    LeaseRenewal::Renewed(expected.clone()),
+                ]),
+                stage: staged.map(StageOutcome::Staged),
+                completion: LeaseCompletion::Completed,
+            },
+        )
+    };
+    let aligned = |publication: Publication| StagedPublication {
+        evaluation_id: expected.evaluation_id.clone(),
+        fence: expected.fence,
+        publication: Box::new(publication),
+    };
+
+    let staged_publication = {
+        let delivery = delivery(&provider, change.clone(), 'b');
+        aligned(submitted_publication(&run, &delivery))
+    };
+    let (adapter, ledger) = scripted(Some(staged_publication.clone()), expected.clone());
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    assert!(
+        controller.handle(adapter.input()).is_ok(),
+        "the aligned staging completes"
+    );
+
+    let mut wrong_evaluation = staged_publication.clone();
+    wrong_evaluation.evaluation_id =
+        ControllerEvaluationId::new("evaluation-02".to_owned()).unwrap();
+    let (adapter, ledger) = scripted(Some(wrong_evaluation), expected.clone());
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::LeaseLost)
+    ));
+
+    let mut wrong_fence = staged_publication.clone();
+    wrong_fence.fence = LeaseFence::new(3).unwrap();
+    let (adapter, ledger) = scripted(Some(wrong_fence), expected.clone());
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::LeaseLost)
+    ));
+
+    let mut wrong_publication = staged_publication.clone();
+    wrong_publication.publication.report = Some(b"{}".to_vec());
+    let (adapter, ledger) = scripted(Some(wrong_publication), expected.clone());
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::LeaseLost)
+    ));
+
+    let mut drifted_check = expected.clone();
+    drifted_check.check.required_status_name = "amiss / elsewhere".to_owned();
+    let (adapter, mut ledger) = scripted(None, drifted_check.clone());
+    ledger.renewals = renewal_script([
+        LeaseRenewal::Renewed(drifted_check.clone()),
+        LeaseRenewal::Renewed(drifted_check.clone()),
+        LeaseRenewal::Renewed(drifted_check),
+    ]);
+    let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
+    assert!(matches!(
+        controller.handle(adapter.input()),
+        Err(ControllerError::LeaseLost)
+    ));
 }

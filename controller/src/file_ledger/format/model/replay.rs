@@ -35,3 +35,6 @@ impl StoredReplayKeep {
         }
     }
 }
+
+#[path = "../../../../tests/internal/replay_keep.rs"]
+mod tests;
