@@ -9,7 +9,10 @@ fn all_distinct_and_nonempty(messages: &[String]) {
     assert_eq!(unique.len(), messages.len(), "{messages:?}");
 }
 
-/// Every controller-facing error names itself, and no two share a sentence.
+/// Every controller-facing error names itself, distinct within its own
+/// type, which is what a stubbed Display flattens. Types may share a
+/// sentence across layers on purpose: the plan registry and the bootstrap
+/// job both say "the check plan changed after validation".
 #[test]
 fn every_error_message_is_its_own_sentence() {
     let acquire = [
@@ -29,6 +32,7 @@ fn every_error_message_is_its_own_sentence() {
         BootstrapJobError::ControlBinding,
         BootstrapJobError::ExecutionConstraint,
         BootstrapJobError::TrustedTime,
+        BootstrapJobError::RequestEncoding,
     ];
     all_distinct_and_nonempty(
         &bootstrap
