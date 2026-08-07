@@ -9,7 +9,7 @@ description = "reStructuredText reference extraction for the amiss documentation
 exclude.workspace = true
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.16.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.17.0" }
 
 [lints]
 workspace = true
