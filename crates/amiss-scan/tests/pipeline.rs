@@ -379,6 +379,10 @@ fn a_broken_claim_warns_then_fails_by_profile() {
     let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"";
     let (code, payload) = claimed_run(claim, false);
     assert_eq!(code, 0, "observe never blocks: {payload}");
+    assert!(
+        payload["findings"][0]["fix"].is_null(),
+        "no producer emits a fix yet: {payload}"
+    );
     let row = payload["findings"]
         .as_array()
         .unwrap()

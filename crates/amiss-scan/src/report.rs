@@ -598,6 +598,7 @@ fn finding_value(
         ("finding_key", digest_value(finding.finding_key)),
         ("kind", string(finding.kind.as_str())),
         ("description", string(finding.kind.meaning())),
+        ("fix", Value::Null),
         ("coverage_requirement", string(coverage)),
         ("evidence_class", string(finding.kind.evidence_class())),
         ("invariant_class", string(finding.kind.invariant_class())),
