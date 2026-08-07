@@ -1282,14 +1282,9 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                 },
                 MissingTag::HeadingAnchorNotFound => Missing::HeadingAnchorNotFound {
                     path: resolved_path,
-                    near: match obj.take("near")? {
-                        Value::Null => None,
-                        value @ (Value::Bool(_)
-                        | Value::Integer(_)
-                        | Value::String(_)
-                        | Value::Array(_)
-                        | Value::Object(_)) => Some(de::string(&obj.field("near"), value)?),
-                    },
+                    near: de::nullable(obj.take("near")?)
+                        .map(|value| de::string(&obj.field("near"), value))
+                        .transpose()?,
                 },
                 MissingTag::LabelNotDeclared => Missing::LabelNotDeclared,
             };
