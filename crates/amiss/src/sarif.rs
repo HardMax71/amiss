@@ -120,9 +120,7 @@ fn result_value(row: &View, present: &[FindingKind]) -> Value {
 /// A wire fix renders as one SARIF fix: the byte region to delete and the
 /// replacement text, under the engine's own fix description.
 fn fix_value(fix: &View) -> Option<Value> {
-    let Some(Value::String(path)) = fix.field("path") else {
-        return None;
-    };
+    let location = artifact_location(fix)?;
     let Some(Value::String(replacement)) = fix.field("replacement") else {
         return None;
     };
@@ -133,10 +131,7 @@ fn fix_value(fix: &View) -> Option<Value> {
         (
             "artifactChanges",
             Value::Array(vec![object(vec![
-                (
-                    "artifactLocation",
-                    object(vec![("uri", string(&uri(path)))]),
-                ),
+                ("artifactLocation", location),
                 (
                     "replacements",
                     Value::Array(vec![object(vec![
@@ -165,13 +160,7 @@ fn fix_value(fix: &View) -> Option<Value> {
 /// A location renders only when the wire path is printable text; a
 /// `bytes_hex` path names no artifact URI, and the row still carries it.
 fn location_value(location: &View) -> Option<Value> {
-    let Some(Value::String(path)) = location.field("path") else {
-        return None;
-    };
-    let mut physical = vec![(
-        "artifactLocation",
-        object(vec![("uri", string(&uri(path)))]),
-    )];
+    let mut physical = vec![("artifactLocation", artifact_location(location)?)];
     let span = location.view("span");
     if span.field("start_line").is_some() {
         physical.push((
@@ -185,6 +174,15 @@ fn location_value(location: &View) -> Option<Value> {
         ));
     }
     Some(object(vec![("physicalLocation", object(physical))]))
+}
+
+/// The artifact holding a location or a fix, named only when the wire path
+/// is printable text.
+fn artifact_location(holder: &View) -> Option<Value> {
+    let Some(Value::String(path)) = holder.field("path") else {
+        return None;
+    };
+    Some(object(vec![("uri", string(&uri(path)))]))
 }
 
 /// RFC 3986 path form: unreserved bytes and the separator stay, every other
