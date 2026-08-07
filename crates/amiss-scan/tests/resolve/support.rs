@@ -37,6 +37,10 @@ pub(crate) fn fixture() -> CommitChain {
         ("pointer.bin", Staged::File(POINTER.as_bytes())),
         ("docs/guide.md", Staged::File(b"# Guide\n")),
         ("docs/anchors.md", Staged::File(ANCHORS)),
+        (
+            "docs/case.md",
+            Staged::File(b"<a name=\"Dup\"></a>\n<a name=\"dup\"></a>\n"),
+        ),
         ("docs/pointer.md", Staged::File(POINTER.as_bytes())),
         ("docs/invalid.md", Staged::File(b"# \xff\n")),
         ("docs/data.json", Staged::File(b"{}\n")),

@@ -992,10 +992,23 @@ fn anchor_resolution(
     if !complete {
         return Ok(unsupported);
     }
+    let near = case_fold_neighbor(identities, fragment);
     Ok(Resolution::Missing(Missing::HeadingAnchorNotFound {
         path: path.clone(),
-        near: None,
+        near,
     }))
+}
+
+/// The one published identity equal to the fragment under case folding, when
+/// exactly one exists: two candidates name a real ambiguity, zero a genuine
+/// miss, and both stay bare.
+fn case_fold_neighbor(identities: &BTreeSet<String>, fragment: &str) -> Option<String> {
+    let folded = fragment.to_lowercase();
+    let mut matches = identities
+        .iter()
+        .filter(|identity| identity.to_lowercase() == folded);
+    let candidate = matches.next()?;
+    matches.next().is_none().then(|| candidate.clone())
 }
 
 /// Answers a Sphinx `:ref:` against the labels the snapshot's documents
