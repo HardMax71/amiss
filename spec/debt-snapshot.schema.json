@@ -414,6 +414,9 @@
           "$ref": "#/$defs/PathMissingResolution"
         },
         {
+          "$ref": "#/$defs/HeadingMissingResolution"
+        },
+        {
           "$ref": "#/$defs/LabelMissingResolution"
         }
       ]
@@ -433,14 +436,46 @@
         "reason": {
           "enum": [
             "path-not-found",
-            "line-fragment-out-of-range",
-            "heading-anchor-not-found"
+            "line-fragment-out-of-range"
           ]
         },
         "path": {
           "$ref": "#/$defs/RepoPath"
         }
       }
+    },
+    "HeadingMissingResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "path",
+        "near"
+      ],
+      "properties": {
+        "kind": {
+          "const": "missing"
+        },
+        "reason": {
+          "const": "heading-anchor-not-found"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "near": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        }
+      },
+      "description": "A heading anchor the complete published set refused, carrying the one case-fold neighbor when exactly one exists and null otherwise."
     },
     "TypeMismatchResolution": {
       "type": "object",

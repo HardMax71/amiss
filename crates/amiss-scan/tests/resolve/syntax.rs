@@ -219,7 +219,7 @@ fn empty_destinations_target_the_source_document() {
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#Intro")
         .unwrap_or_else(|_defect| panic!("resolve absent anchor"))
         .1;
-    let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = row else {
+    let Resolution::Missing(Missing::HeadingAnchorNotFound { path, .. }) = row else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/guide.md"));

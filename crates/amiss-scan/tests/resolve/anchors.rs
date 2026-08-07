@@ -56,7 +56,7 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
             )
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
-        let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = &row else {
+        let Resolution::Missing(Missing::HeadingAnchorNotFound { path, .. }) = &row else {
             panic!("{fragment} is published by no renderer: {row:?}");
         };
         assert_eq!(path.as_str(), Some("docs/anchors.md"));
