@@ -436,6 +436,43 @@ fn a_case_drifted_anchor_carries_its_fix() {
         .unwrap();
     assert!(row["fix"].is_null(), "no neighbor, no edit: {row}");
 
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    fs::write(root.join("sections.md"), "# Setup\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let rst = "See `s <sections.md#Setup>`_ here.\n";
+    fs::write(root.join("guide.rst"), rst).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "linked"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let rst_payload = payload(&built);
+    let row = rst_payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(
+        row["fix"]["replacement"], "setup",
+        "the rst lane carries the anchor fix too: {row}"
+    );
+    let start = usize::try_from(row["fix"]["span"]["start_byte"].as_u64().unwrap()).unwrap();
+    let end = usize::try_from(row["fix"]["span"]["end_byte"].as_u64().unwrap()).unwrap();
+    assert_eq!(&rst.as_bytes()[start..end], b"Setup");
+
     let encoded = run("[s](sections.md#S%65tup)\n");
     let row = encoded["findings"]
         .as_array()

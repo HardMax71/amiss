@@ -26,7 +26,10 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
         } else {
             (reference.block, 0)
         };
-        occurrences.push(occurrence(reference, within.1));
+        let mut entry = occurrence(reference, within.1);
+        entry.fragment_span =
+            amiss_wire::extraction::fragment_span(source, reference.span, &reference.target);
+        occurrences.push(entry);
     }
     Ok(Analysis {
         work: Work {

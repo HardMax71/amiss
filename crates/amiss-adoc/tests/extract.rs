@@ -296,3 +296,30 @@ fn ordinals_and_work_counts_are_exact() {
         nested.nesting
     );
 }
+
+/// An AsciiDoc cross-reference names its fragment bytes under the shared
+/// certainty gate, and a percent spelling stays bare.
+#[test]
+fn an_adoc_destination_names_its_fragment_bytes() {
+    let source = "See xref:other.adoc#section[Other] here.\n";
+    let analysis = amiss_adoc::analyze(source.as_bytes()).expect("utf-8 source");
+    let spans: Vec<Option<(usize, usize)>> = analysis
+        .extraction
+        .expect("asciidoc always extracts")
+        .occurrences
+        .iter()
+        .map(|occurrence| occurrence.fragment_span)
+        .collect();
+    let (start, end) = spans[0].expect("a plain fragment names its bytes");
+    assert_eq!(&source.as_bytes()[start..end], b"section");
+    let encoded =
+        amiss_adoc::analyze(b"See xref:other.adoc#a%20b[Other] here.\n").expect("utf-8 source");
+    assert_eq!(
+        encoded
+            .extraction
+            .expect("asciidoc always extracts")
+            .occurrences[0]
+            .fragment_span,
+        None
+    );
+}
