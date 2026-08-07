@@ -297,7 +297,7 @@ fn ordinals_and_work_counts_are_exact() {
     );
 }
 
-/// An AsciiDoc cross-reference names its fragment bytes under the shared
+/// An `AsciiDoc` cross-reference names its fragment bytes under the shared
 /// certainty gate, and a percent spelling stays bare.
 #[test]
 fn an_adoc_destination_names_its_fragment_bytes() {
