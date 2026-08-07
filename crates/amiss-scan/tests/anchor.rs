@@ -243,6 +243,25 @@ fn duplicate_headings_diverge_by_suffix_style() {
     }
 }
 
+/// A heading already ending in digits must not lose its tail to the
+/// increment parser: the first duplicate appends a fresh counter instead of
+/// bumping digits that belong to the title.
+#[test]
+fn a_digit_tailed_heading_keeps_its_digits_through_duplication() {
+    let (headings, _anchors, _declared) = headings("# Sec2\n\n# Sec2\n\n# Sec2\n");
+    for rule in &RULES {
+        if !matches!(rule.name, "python-markdown" | "pymdownx") {
+            continue;
+        }
+        assert_eq!(
+            identities(rule, &headings),
+            vec!["sec2".to_owned(), "sec2_1".to_owned(), "sec2_2".to_owned()],
+            "{}",
+            rule.name
+        );
+    }
+}
+
 /// Only the rules that run over rendered HTML see a heading written that way,
 /// and the ones that do count it in the same duplicate sequence.
 #[test]

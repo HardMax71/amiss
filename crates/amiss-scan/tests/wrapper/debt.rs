@@ -1,6 +1,6 @@
 use amiss_git::Repository;
 use amiss_scan::policy::{ConstraintInput, TrustSource};
-use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::{ExecutionConstraintDescriptor, OrganizationFloor};
 use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::support::{
@@ -323,4 +323,87 @@ fn a_debt_snapshot_bound_to_anything_else_verifies_nothing_and_tolerates_nothing
             "{bound_to}: a snapshot that binds to nothing here carried a finding anyway"
         );
     }
+}
+
+/// A debt snapshot bound to a foreign floor digest names the mismatch as its
+/// reason, not the parse bucket.
+#[test]
+fn a_foreign_floor_digest_names_the_binding_mismatch() {
+    let fx = fixture("see [gone](missing.md)\n");
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let mut setup = shell(true);
+    setup.time = Some(time_input(&fx, true));
+    setup.debt = Some(debt_input(&debt_json(
+        "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        &fx.base_tree,
+        &finding_key,
+        &fact,
+        &fact_digest,
+        "2026-07-01T00:00:00Z",
+        "2026-08-01T00:00:00Z",
+    )));
+    let report = payload(&fx, &setup);
+
+    assert_eq!(report["exit_code"], 2);
+    assert_eq!(report["controls"]["status"], "unavailable");
+    assert_eq!(
+        report["controls"]["reasons"],
+        serde_json::json!(["control-binding-mismatch"])
+    );
+    let errors = report["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(errors[0]["code"], "CONTROL_BINDING_MISMATCH");
+}
+
+/// A debt snapshot over the floor-tightened item ceiling is merely not
+/// parsed: the crossing is a resource row, not a control judgement.
+#[test]
+fn a_debt_snapshot_over_the_tightened_ceiling_is_not_parsed() {
+    let fx = fixture("see [gone](missing.md)\n");
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let doc = r#"{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/scanner-floor-2026-07",
+  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [ "team:docs-platform" ],
+  "authorized_waiver_issuers": [],
+  "resource_limits": [ { "resource": "debt-items", "maximum": 0 } ]
+}"#;
+    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
+    let floor_digest = floor.digest.to_string();
+    let mut setup = shell(true);
+    setup.floor = Some(amiss_scan::policy::FloorInput {
+        floor,
+        trust_source: TrustSource::OrganizationPolicy,
+    });
+    setup.time = Some(time_input(&fx, true));
+    setup.debt = Some(debt_input(&debt_json(
+        &floor_digest,
+        &fx.base_tree,
+        &finding_key,
+        &fact,
+        &fact_digest,
+        "2026-07-01T00:00:00Z",
+        "2026-08-01T00:00:00Z",
+    )));
+    let report = payload(&fx, &setup);
+
+    assert_eq!(report["exit_code"], 2);
+    assert_eq!(report["controls"]["status"], "unavailable");
+    assert_eq!(
+        report["controls"]["reasons"],
+        serde_json::json!(["not-parsed"])
+    );
+    let errors = report["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(errors[0]["code"], "RESOURCE_LIMIT_EXCEEDED");
+    assert_eq!(errors[0]["resource"], "debt-items");
+    assert_eq!(errors[0]["configured_limit"], 0);
+    assert_eq!(errors[0]["observed_lower_bound"], 1);
 }
