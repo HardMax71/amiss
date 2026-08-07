@@ -1065,10 +1065,8 @@ fn fragment_span(
         return None;
     }
     let slice = source.get(span.0..span.1)?;
+    // split_once proved the needle nonempty; a short slice yields no windows.
     let needle = raw_destination.as_bytes();
-    if needle.is_empty() || slice.len() < needle.len() {
-        return None;
-    }
     let mut hits = slice
         .windows(needle.len())
         .enumerate()
