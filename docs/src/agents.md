@@ -47,7 +47,9 @@ found. A starting recipe lives at
 [`integrations/gh-aw/docs-drift-fix.md`](https://github.com/HardMax71/amiss/blob/main/integrations/gh-aw/docs-drift-fix.md).
 Copied into `.github/workflows/` and compiled with the `gh aw` extension, it runs the
 scan on a schedule and reads the report. What it can prove it repairs, and the pull
-request it opens passes back through the same gate it started from.
+request it opens passes back through the same gate it started from. Findings that carry
+a `fix` hand the agent the exact edit: the document, the byte span, and the replacement
+text, already proven against the grammar that will re-check them.
 
 ## Claude Code
 
