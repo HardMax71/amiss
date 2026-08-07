@@ -662,6 +662,11 @@ fn a_fragment_span_names_bytes_only_under_certainty() {
     assert_eq!(spans("[a](x.md)\n"), vec![None]);
     assert_eq!(spans("[x.md#a](x.md#a)\n"), vec![None]);
     assert_eq!(spans("[a][r]\n\n[r]: x.md#frag\n"), vec![None]);
+    assert_eq!(
+        spans("<a#b@example.com>\n"),
+        vec![None],
+        "an autolink's hash sits in an email local part, never a fragment"
+    );
     let fronted = "---\nkey: value\n---\n[a](guide.md#setup)\n";
     let with_front = spans(fronted);
     let (start, end) = with_front[0].expect("the fragment survives frontmatter");
