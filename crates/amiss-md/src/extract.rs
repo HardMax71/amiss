@@ -1057,29 +1057,5 @@ fn fragment_span(
     if construct == SourceConstruct::Autolink {
         return None;
     }
-    let (prefix, fragment) = raw_destination.split_once('#')?;
-    if fragment.is_empty()
-        || fragment.contains(['#', '%', '&', '\\'])
-        || prefix.contains(['%', '&', '\\'])
-    {
-        return None;
-    }
-    let slice = source.get(span.0..span.1)?;
-    // split_once proved the needle nonempty; a short slice yields no windows.
-    let needle = raw_destination.as_bytes();
-    let mut hits = slice
-        .windows(needle.len())
-        .enumerate()
-        .filter(|(_, window)| *window == needle)
-        .map(|(at, _)| at);
-    let at = hits.next()?;
-    if hits.next().is_some() {
-        return None;
-    }
-    let start = span
-        .0
-        .checked_add(at)?
-        .checked_add(prefix.len())?
-        .checked_add(1)?;
-    Some((start, start.checked_add(fragment.len())?))
+    amiss_wire::extraction::fragment_span(source, span, raw_destination)
 }

@@ -347,3 +347,25 @@ fn a_flush_left_line_after_the_literal_marker_stays_text() {
 fn an_indented_line_stays_inside_the_open_literal() {
     assert!(kinds("intro::\n\n    one\n    `x <y.rst>`_\n").is_empty());
 }
+
+/// A reStructuredText destination names its fragment bytes under the same
+/// certainty gate the markdown adapter holds.
+#[test]
+fn an_rst_destination_names_its_fragment_bytes() {
+    let source = "See `guide <guide.md#Setup>`_ for more.\n";
+    let analysis = amiss_rst::analyze(source.as_bytes()).expect("utf-8 source");
+    let spans: Vec<Option<(usize, usize)>> = analysis
+        .extraction
+        .expect("rst always extracts")
+        .occurrences
+        .iter()
+        .map(|occurrence| occurrence.fragment_span)
+        .collect();
+    let (start, end) = spans[0].expect("a plain fragment names its bytes");
+    assert_eq!(&source.as_bytes()[start..end], b"Setup");
+    let bare = amiss_rst::analyze(b"See `guide <guide.md>`_ here.\n").expect("utf-8 source");
+    assert_eq!(
+        bare.extraction.expect("rst always extracts").occurrences[0].fragment_span,
+        None
+    );
+}
