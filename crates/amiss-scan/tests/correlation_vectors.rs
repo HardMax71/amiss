@@ -210,6 +210,7 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
             projection.as_bytes(),
         ),
         resolution: Resolution::External(ExternalReference::Url),
+        fragment_span: None,
     }
 }
 

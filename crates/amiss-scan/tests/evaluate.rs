@@ -140,6 +140,7 @@ fn observation(from: &Spec) -> Observation {
         raw_destination_digest: scanned.raw_destination_digest,
         projection_digest: scanned.projection_digest,
         resolution: from.resolution.clone(),
+        fragment_span: None,
     }
 }
 

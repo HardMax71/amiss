@@ -29,6 +29,7 @@ pub struct Observation {
     pub raw_destination_digest: Digest,
     pub projection_digest: Digest,
     pub resolution: Resolution,
+    pub fragment_span: Option<(usize, usize)>,
 }
 
 /// One snapshot side: its observations and, for the rename rule, every
