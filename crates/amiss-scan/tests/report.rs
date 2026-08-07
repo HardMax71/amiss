@@ -98,6 +98,7 @@ fn snapshot(
                 raw_destination_digest: occurrence.raw_destination_digest,
                 projection_digest: occurrence.projection_digest,
                 resolution,
+                fragment_span: occurrence.occurrence.fragment_span,
             });
         }
     }

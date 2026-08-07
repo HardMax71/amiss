@@ -466,6 +466,49 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
     }
 }
 
+/// The one sentence an anchor fix carries.
+const ANCHOR_FIX_DESCRIPTION: &str =
+    "replace the fragment with the one published anchor it matches under case folding";
+
+/// The provable rewrite for a lone missing heading anchor: exactly one
+/// candidate member, a resolver-named neighbor, and a fragment span the
+/// adapter located verbatim. The resolution match is the kind gate, since
+/// only a missing resolution reaches a structural finding. Anything less
+/// emits nothing.
+fn anchor_fix(candidates: &[&Observation]) -> Option<Value> {
+    let [observation] = candidates else {
+        return None;
+    };
+    let Resolution::Missing(Missing::HeadingAnchorNotFound {
+        near: Some(near), ..
+    }) = &observation.resolution
+    else {
+        return None;
+    };
+    let (start, end) = observation.fragment_span?;
+    Some(Value::Object(vec![
+        ("path".to_owned(), observation.document.to_value()),
+        (
+            "span".to_owned(),
+            Value::Object(vec![
+                (
+                    "start_byte".to_owned(),
+                    Value::Integer(i64::try_from(start).unwrap_or(i64::MAX)),
+                ),
+                (
+                    "end_byte".to_owned(),
+                    Value::Integer(i64::try_from(end).unwrap_or(i64::MAX)),
+                ),
+            ]),
+        ),
+        ("replacement".to_owned(), Value::String(near.clone())),
+        (
+            "description".to_owned(),
+            Value::String(ANCHOR_FIX_DESCRIPTION.to_owned()),
+        ),
+    ]))
+}
+
 /// The occurrence-boundary mapping of step two: which non-structural kind one
 /// candidate resolution emits, if any.
 const fn boundary_kind(resolution: &crate::resolve::Resolution) -> Option<FindingKind> {
@@ -1730,6 +1773,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
         } else {
             group.kind.built_in_disposition(enforce)
         };
+        let fix = anchor_fix(&group.candidate);
         findings.push(Finding {
             kind: group.kind,
             key_input: key_value,
@@ -1742,9 +1786,9 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
             location,
             configured_disposition: configured,
             effective_disposition: configured,
+            fix,
             debt: None,
             waiver: None,
-            fix: None,
             steps: if attribution == Attribution::Resolved {
                 vec![PolicyStep {
                     source: "resolved-projection",

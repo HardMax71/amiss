@@ -137,6 +137,7 @@ pub(crate) fn side_observations(
                         raw_destination_digest: occurrence.raw_destination_digest,
                         projection_digest: occurrence.projection_digest,
                         resolution,
+                        fragment_span: occurrence.occurrence.fragment_span,
                     });
                 }
                 if let Some(outcomes) = claims.as_deref_mut() {

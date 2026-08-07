@@ -352,6 +352,103 @@ fn a_fix_is_emitted_only_when_provable() {
     );
 }
 
+/// A lone case-drifted anchor carries its fix: the fragment bytes and the
+/// published spelling. Aggregated references, bare misses, and spellings the
+/// adapter refused to locate all stay bare.
+#[test]
+fn a_case_drifted_anchor_carries_its_fix() {
+    let run = |links: &str| -> serde_json::Value {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        fs::write(root.join("README.md"), "# R\n").unwrap();
+        fs::write(root.join("sections.md"), "# Setup\n").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "base"]);
+        let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        fs::write(root.join("guide.md"), links).unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "linked"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let built = commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        );
+        payload(&built)
+    };
+
+    let drifted = run("[s](sections.md#Setup)\n");
+    let row = drifted["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    let fix = &row["fix"];
+    assert_eq!(fix["path"], "guide.md", "{row}");
+    assert_eq!(fix["replacement"], "setup");
+    let source = "[s](sections.md#Setup)\n";
+    let start = usize::try_from(fix["span"]["start_byte"].as_u64().unwrap()).unwrap();
+    let end = usize::try_from(fix["span"]["end_byte"].as_u64().unwrap()).unwrap();
+    assert_eq!(&source.as_bytes()[start..end], b"Setup");
+    assert_eq!(
+        fix["description"],
+        "replace the fragment with the one published anchor it matches under case folding"
+    );
+
+    let same_block = run("[a](sections.md#Setup) and [b](sections.md#Setup)\n");
+    let row = same_block["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(row["aggregation"]["member_count"], 2, "{same_block}");
+    assert!(row["fix"].is_null(), "two members share no one edit: {row}");
+
+    let two_blocks = run("[a](sections.md#Setup)\n\n[b](sections.md#Setup)\n");
+    let fixes: Vec<(u64, u64)> = two_blocks["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "explicit-target-missing")
+        .map(|row| {
+            (
+                row["fix"]["span"]["start_byte"].as_u64().unwrap(),
+                row["fix"]["span"]["end_byte"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(fixes.len(), 2, "each block's reference repairs itself");
+    assert_ne!(fixes[0], fixes[1], "each fix names its own bytes");
+
+    let bare = run("[s](sections.md#nothing-close)\n");
+    let row = bare["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert!(row["fix"].is_null(), "no neighbor, no edit: {row}");
+
+    let encoded = run("[s](sections.md#S%65tup)\n");
+    let row = encoded["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert!(
+        row["fix"].is_null(),
+        "a percent spelling names no bytes: {row}"
+    );
+}
+
 /// A claim only the base holds is invisible: evaluation is candidate-side,
 /// so a broken claim the candidate deletes leaves no count and no finding.
 #[test]
