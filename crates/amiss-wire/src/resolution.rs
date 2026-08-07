@@ -90,7 +90,7 @@ impl<P> Target<P> {
 pub enum Missing<P> {
     PathNotFound { path: P },
     LineFragmentOutOfRange { path: P },
-    HeadingAnchorNotFound { path: P },
+    HeadingAnchorNotFound { path: P, near: Option<String> },
     LabelNotDeclared,
 }
 

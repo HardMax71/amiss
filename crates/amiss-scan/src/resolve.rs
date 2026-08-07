@@ -994,6 +994,7 @@ fn anchor_resolution(
     }
     Ok(Resolution::Missing(Missing::HeadingAnchorNotFound {
         path: path.clone(),
+        near: None,
     }))
 }
 

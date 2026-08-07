@@ -129,7 +129,7 @@ fn a_fragment_on_a_routed_reference_reads_the_served_file() {
         )
         .unwrap_or_else(|_defect| panic!("resolve the routed anchor"))
         .1;
-    let Resolution::Missing(Missing::HeadingAnchorNotFound { path }) = &row else {
+    let Resolution::Missing(Missing::HeadingAnchorNotFound { path, .. }) = &row else {
         panic!("an absent identity is missing on the served file: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/anchors.md"));

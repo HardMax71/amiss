@@ -169,7 +169,8 @@ per configuration of one, and the resolver asks whether any of them would publis
 anchor, counting the headings a document writes as raw HTML and the identities it declares
 outright, in raw HTML or in an attribute block, as well. An anchor no rule
 publishes is `kind: missing` with `reason: heading-anchor-not-found`, an ordinary missing
-target. The union is deliberate: adding a rule can only grow what an anchor may match, and no
+target; the row also carries `near`, the one case-fold neighbor from the published set when
+exactly one exists and null otherwise, groundwork for the anchor fix. The union is deliberate: adding a rule can only grow what an anchor may match, and no
 repository policy narrows it. A document can add to it, by declaring an identity the way it
 would add a heading, which is an edit to the target that a reviewer reads rather than a
 setting that clears a finding.

@@ -1273,8 +1273,7 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                 return Ok(Resolution::Missing(Missing::LabelNotDeclared));
             }
             let resolved_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
-            obj.finish()?;
-            Ok(Resolution::Missing(match reason {
+            let missing = match reason {
                 MissingTag::PathNotFound => Missing::PathNotFound {
                     path: resolved_path,
                 },
@@ -1283,9 +1282,15 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                 },
                 MissingTag::HeadingAnchorNotFound => Missing::HeadingAnchorNotFound {
                     path: resolved_path,
+                    near: match obj.take("near")? {
+                        Value::Null => None,
+                        value => Some(de::string(&obj.field("near"), value)?),
+                    },
                 },
                 MissingTag::LabelNotDeclared => Missing::LabelNotDeclared,
-            }))
+            };
+            obj.finish()?;
+            Ok(Resolution::Missing(missing))
         }
         ResolutionTag::TypeMismatch => {
             let target = decode_resolution_target(&obj.field("target"), obj.take("target")?)?;
