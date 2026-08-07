@@ -626,3 +626,17 @@ fn adjacent_opaque_constructs_coalesce() {
         "an expression and a jsx element touching merge"
     );
 }
+
+/// A GFM task checkbox is a checkbox, not a shortcut reference, even when a
+/// definition spells its label.
+#[test]
+fn a_task_checkbox_is_not_a_reference() {
+    for adapter in [Adapter::Markdown, Adapter::Mdx] {
+        let got = extraction(adapter, "- [x] done\n\n[x]: target.md\n");
+        assert!(
+            got.occurrences.is_empty(),
+            "{adapter:?}: {:?}",
+            got.occurrences
+        );
+    }
+}

@@ -105,7 +105,6 @@ pub fn parse_options(
         Adapter::Markdown => Some((
             ParseOptions {
                 constructs: gfm(),
-                gfm_strikethrough_single_tilde: true,
                 ..ParseOptions::default()
             },
             meter,
@@ -127,7 +126,6 @@ pub fn parse_options(
                         mdx_jsx_text: true,
                         ..gfm()
                     },
-                    gfm_strikethrough_single_tilde: true,
                     mdx_expression_parse: Some(Box::new(
                         move |source, _kind: &MdxExpressionKind| expression.ask(source),
                     )),

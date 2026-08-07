@@ -330,3 +330,20 @@ fn within_block_ordinals_count_up_and_reset_per_block() {
         "the second paragraph is its own block"
     );
 }
+
+/// The literal region opens only for indented lines: a flush-left line after
+/// the marker is ordinary text and keeps its reference.
+#[test]
+fn a_flush_left_line_after_the_literal_marker_stays_text() {
+    assert_eq!(
+        kinds("intro::\n\nplain `x <y.rst>`_\n"),
+        vec![(ReferenceKind::InlineHyperlink, "y.rst".to_owned())],
+    );
+}
+
+/// An indented line under an open literal region belongs to it: nothing
+/// inside reads as a reference until the indentation returns.
+#[test]
+fn an_indented_line_stays_inside_the_open_literal() {
+    assert!(kinds("intro::\n\n    one\n    `x <y.rst>`_\n").is_empty());
+}
