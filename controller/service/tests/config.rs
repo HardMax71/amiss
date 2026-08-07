@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
-    load_execution_limits, load_limits, read_regular,
+    load_execution_limits, load_limits, load_plan, read_regular,
 };
+use amiss_wire::controls::Profile;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use serde::de::DeserializeOwned;
@@ -263,4 +264,115 @@ fn assert_hard_ceilings<T: DeserializeOwned>(
             "{field} accepted a value above its hard ceiling"
         );
     }
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn execution_with(overrides: Value) -> ExecutionLimits {
+    let mut base = json!({});
+    if let (Value::Object(target), Value::Object(extra)) = (&mut base, overrides) {
+        target.extend(extra);
+    }
+    serde_json::from_value(base).expect("the override shape is owned")
+}
+
+/// Every validation clause refuses alone: one field off at a time, each
+/// against otherwise-default limits.
+#[test]
+fn each_limit_clause_refuses_on_its_own() {
+    for (field, value) in [
+        ("header_count", json!(129)),
+        ("header_bytes", json!(32_769)),
+        ("api_connect_millis", json!(0)),
+        ("api_request_millis", json!(30_001)),
+        ("api_read_millis", json!(20_001)),
+        ("statement_validity_seconds", json!(0)),
+    ] {
+        let raw = execution_with(json!({ field: value }));
+        assert!(
+            load_execution_limits(&raw, "/provider/evaluate".to_owned(), 4).is_err(),
+            "{field}"
+        );
+    }
+    let equal = execution_with(json!({ "ledger_lease_seconds": 20, "api_request_millis": 20_000 }));
+    assert!(
+        load_execution_limits(&equal, "/provider/evaluate".to_owned(), 4).is_err(),
+        "a request timeout equal to the ledger lease must refuse"
+    );
+}
+
+/// The route grammar admits digits and hyphens in a prefix and refuses an
+/// empty field list on that clause alone.
+#[test]
+fn route_prefixes_and_field_lists_answer_their_own_clauses() {
+    assert!(framed_route_id("amiss/test-route", "a1-b", &["x"]).is_some());
+    assert!(framed_route_id("amiss/test-route", "test", &[]).is_none());
+    assert!(framed_route_id("amiss/test-route", "test", &[""]).is_none());
+}
+
+#[test]
+fn a_config_error_displays_its_reason() {
+    assert_eq!(
+        amiss_controller_service::ConfigError("endpoint limits are invalid").to_string(),
+        "endpoint limits are invalid"
+    );
+}
+
+/// The plan loader maps both profile spellings, refuses the rest, and
+/// carries a named floor file's exact bytes into the plan.
+#[test]
+fn a_plan_binds_its_profile_and_carries_its_floor() {
+    let dir = TempDir::new().unwrap();
+    let constraint = br#"{
+  "schema": "amiss/scanner-execution-constraint",
+  "action_repository": { "host": "github.com", "owner": "acme", "name": "amiss-action" },
+  "action_object_format": "sha1",
+  "action_commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "manifest_path": "release/manifest.json",
+  "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "selected_platform": "linux-x86_64",
+  "required_status_name": "amiss / documentation assurance",
+  "bootstrap_contract": "amiss-action-bootstrap",
+  "bootstrap_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+}"#;
+    let constraint_path = dir.path().join("constraint.json");
+    fs::write(&constraint_path, constraint).unwrap();
+    let floor_bytes: &[u8] = br#"{
+  "schema": "amiss/organization-floor",
+  "floor_id": "acme/scanner-floor-2026-07",
+  "repository": { "host": "github.com", "owner": "acme", "name": "docs" },
+  "ref": "refs/heads/main",
+  "minimum_profile": "observe",
+  "minimum_dispositions": [],
+  "protected_inventory": [],
+  "protected_control_paths": [],
+  "waivable_finding_kinds": [],
+  "authorized_debt_owners": [],
+  "authorized_waiver_issuers": [],
+  "resource_limits": []
+}"#;
+    let floor_path = dir.path().join("floor.json");
+    fs::write(&floor_path, floor_bytes).unwrap();
+
+    let files = |profile: &str, floor: bool| -> amiss_controller_service::CheckPlanFiles {
+        serde_json::from_value(json!({
+            "profile": profile,
+            "execution_constraint_file": constraint_path,
+            "organization_floor_file": floor.then(|| floor_path.clone()),
+        }))
+        .unwrap()
+    };
+    let observed = load_plan(&files("observe", true)).unwrap();
+    assert_eq!(observed.profile, Profile::Observe);
+    let floor = observed
+        .policy
+        .organization_floor
+        .as_ref()
+        .expect("the named floor file lands in the plan");
+    assert_eq!(floor.bytes, floor_bytes);
+    assert_eq!(
+        load_plan(&files("enforce", false)).unwrap().profile,
+        Profile::Enforce
+    );
+    assert!(load_plan(&files("Observe", false)).is_err());
 }
