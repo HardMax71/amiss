@@ -364,3 +364,13 @@ fn only_a_real_heading_tag_opens_a_raw_html_heading() {
         "a slash after the level still opens the heading scan"
     );
 }
+
+/// Single-tilde strikethrough is a marker pair under both parsing profiles,
+/// so the tildes never reach the heading's text.
+#[test]
+fn single_tilde_marks_stay_out_of_heading_text() {
+    for adapter in [Adapter::Markdown, Adapter::Mdx] {
+        let got = extraction(adapter, "# a ~b~\n");
+        assert_eq!(texts(&got), vec!["a b".to_owned()], "{adapter:?}");
+    }
+}

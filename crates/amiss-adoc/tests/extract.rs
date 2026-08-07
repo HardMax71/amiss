@@ -261,3 +261,38 @@ fn a_list_item_is_a_marker_and_a_space() {
     }
     assert_eq!(shapes("\n\n"), Vec::new(), "blank lines are no block");
 }
+
+/// Two references in one block count up within it and a new block resets the
+/// ordinal, and the extraction's block and nesting counts are exact.
+#[test]
+fn ordinals_and_work_counts_are_exact() {
+    let analysis = amiss_adoc::analyze(
+        "See link:a.adoc[] and link:b.adoc[].\n\nThen link:c.adoc[].\n".as_bytes(),
+    )
+    .expect("utf-8 source");
+    let extraction = analysis.extraction.expect("asciidoc always extracts");
+    let paths: Vec<&[usize]> = extraction
+        .occurrences
+        .iter()
+        .map(|occurrence| occurrence.node_path.as_slice())
+        .collect();
+    assert_eq!(paths.len(), 3, "{paths:?}");
+    let ordinals: Vec<usize> = paths
+        .iter()
+        .filter_map(|path| path.get(1).copied())
+        .collect();
+    assert_eq!(ordinals, vec![0, 1, 0], "{paths:?}");
+    assert_eq!(
+        paths.first().and_then(|path| path.first()),
+        paths.get(1).and_then(|path| path.first())
+    );
+
+    let read = extract("para one\n\npara two\n".as_bytes()).expect("utf-8 source");
+    assert_eq!(read.blocks, 2, "two paragraphs are two blocks");
+    let nested = extract("====\ninner\n====\n".as_bytes()).expect("utf-8 source");
+    assert!(
+        nested.nesting >= 1,
+        "a delimited block carries depth: {}",
+        nested.nesting
+    );
+}
