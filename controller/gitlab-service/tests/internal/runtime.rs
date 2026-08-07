@@ -21,8 +21,10 @@ use secrecy::SecretString;
 use tokio::sync::Notify;
 
 use super::{
-    Lane, ServiceError, cleanup_ledger, evaluate, maintenance_loop, rejection_status, result_status,
+    LEDGER_MAINTENANCE_INTERVAL, Lane, ServiceError, cleanup_ledger, clone_secret, evaluate,
+    maintain_ledger, maintenance_loop, rejection_status, result_status,
 };
+use secrecy::ExposeSecret as _;
 
 #[test]
 fn only_a_published_pass_is_an_http_success() {
@@ -267,4 +269,49 @@ impl ProviderAdapter for RejectingAdapter {
     ) -> Result<(), ProviderError> {
         Err(ProviderError::Unavailable)
     }
+}
+
+/// The ledger maintenance entry runs its cleanup on the interval and stops
+/// clean, observable through the operations counters it carries.
+#[tokio::test(start_paused = true)]
+async fn ledger_maintenance_binds_cleanup_to_the_interval() {
+    let state = tempfile::TempDir::new().unwrap();
+    let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
+    let ledger = Arc::new(
+        FileLedgerRoot::open(
+            state.path(),
+            FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+        )
+        .unwrap(),
+    );
+    let leftover = state.path().join(".atomicwrite-session-leftover");
+    std::fs::create_dir(&leftover).unwrap();
+    let stop = Arc::new(Notify::new());
+    let operations = Operations::default();
+    let task = tokio::spawn(maintain_ledger(
+        Arc::clone(&ledger),
+        Arc::clone(&stop),
+        operations.clone(),
+    ));
+    tokio::time::sleep(LEDGER_MAINTENANCE_INTERVAL + Duration::from_secs(1)).await;
+    assert!(!leftover.exists(), "the interval ran one cleanup");
+    assert_eq!(operations.maintenance_runs.get(), 1);
+    stop.notify_one();
+    assert_eq!(task.await.unwrap(), Ok(()));
+}
+
+/// The cloned credential exposes the same bytes, not a fresh empty secret.
+#[test]
+fn a_cloned_secret_keeps_its_bytes() {
+    let secret = SecretString::from("glpat-dedicated".to_owned());
+    assert_eq!(clone_secret(&secret).expose_secret(), "glpat-dedicated");
+}
+
+/// The service error displays its reason verbatim.
+#[test]
+fn a_service_error_displays_its_reason() {
+    assert_eq!(
+        ServiceError("GitLab API timeouts are invalid").to_string(),
+        "GitLab API timeouts are invalid"
+    );
 }

@@ -251,3 +251,18 @@ fn synchronous_capacity_and_configuration_shape_are_closed() {
         "configuration is not strict JSON"
     );
 }
+
+/// A self-hosted runner id of zero refuses on the positive clause alone.
+#[test]
+fn a_zero_runner_id_is_refused_alone() {
+    let mut zero_runner = Fixture::new();
+    *zero_runner.field("/policy/self_hosted_runner_ids") = serde_json::json!([0]);
+    zero_runner.save();
+    assert_eq!(
+        ServiceConfig::load(&zero_runner.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "GitLab runner trust is invalid"
+    );
+}
