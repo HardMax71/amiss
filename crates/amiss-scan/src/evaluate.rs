@@ -108,6 +108,7 @@ pub struct Finding {
     pub steps: Vec<PolicyStep>,
     pub debt: Option<DebtApplied>,
     pub waiver: Option<WaiverApplied>,
+    pub fix: Option<Value>,
 }
 
 /// A valid active debt item applied to this finding, retained as adoption
@@ -503,6 +504,7 @@ fn simple(
         effective_disposition: configured,
         debt: None,
         waiver: None,
+        fix: None,
         steps: vec![built_in_step(kind, enforce)],
     }
 }
@@ -640,6 +642,7 @@ fn control_fact_finding(
         effective_disposition: configured,
         debt: None,
         waiver: None,
+        fix: None,
         steps: vec![built_in_step(kind, enforce)],
     }
 }
@@ -726,6 +729,7 @@ pub struct ClaimGroup {
     pub expected_digest: Digest,
     pub observed: &'static str,
     pub observed_digest: Option<Digest>,
+    pub observed_line: Option<Vec<u8>>,
 }
 
 /// Groups defective outcomes by kind, document, and claim name, keeping the
@@ -741,16 +745,21 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
         kind: FindingKind,
         observed: &'static str,
         observed_digest: Option<Digest>,
+        observed_line: Option<&'outcome [u8]>,
     }
 
     let mut keyed: BTreeMap<(&RepoPath, &str, FindingKind), Vec<Keyed<'_>>> = BTreeMap::new();
     for outcome in outcomes {
-        let (kind, observed, observed_digest) = match &outcome.verdict {
+        let (kind, observed, observed_digest, observed_line) = match &outcome.verdict {
             ClaimVerdict::Attested => continue,
-            ClaimVerdict::Broken { observed_digest } => (
+            ClaimVerdict::Broken {
+                observed_digest,
+                observed,
+            } => (
                 FindingKind::ClaimBroken,
                 "line-differs",
                 Some(*observed_digest),
+                Some(observed.as_slice()),
             ),
             ClaimVerdict::TargetMissing(reason) => (
                 FindingKind::ClaimTargetMissing,
@@ -760,6 +769,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                     ClaimMissingReason::LfsPointer => "target-lfs-pointer",
                     ClaimMissingReason::LineOutOfRange => "line-out-of-range",
                 },
+                None,
                 None,
             ),
         };
@@ -771,6 +781,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                 kind,
                 observed,
                 observed_digest,
+                observed_line,
             });
     }
     keyed
@@ -802,6 +813,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                 expected_digest: representative.outcome.expected_digest,
                 observed: representative.observed,
                 observed_digest: representative.observed_digest,
+                observed_line: representative.observed_line.map(<[u8]>::to_vec),
             })
         })
         .collect()
@@ -836,7 +848,7 @@ fn claim_finding(group: &ClaimGroup, enforce: bool) -> Finding {
         ),
         ("sources".to_owned(), sources_value(&group.sources)),
     ]);
-    control_fact_finding(
+    let mut finding = control_fact_finding(
         group.kind,
         &group.document,
         &rule_id,
@@ -844,7 +856,42 @@ fn claim_finding(group: &ClaimGroup, enforce: bool) -> Finding {
         group.member_count,
         (group.representative_span, group.representative_display),
         enforce,
-    )
+    );
+    finding.fix = claim_fix(group);
+    finding
+}
+
+/// The provable rewrite for a lone broken claim, or None: grouped members
+/// share one finding but not one edit, and a target-missing claim has no
+/// derivable content.
+fn claim_fix(group: &ClaimGroup) -> Option<Value> {
+    if group.kind != FindingKind::ClaimBroken || group.member_count != 1 {
+        return None;
+    }
+    let observed = group.observed_line.as_deref()?;
+    let replacement = crate::claim::rewrite(&group.name, &group.target_path, group.line, observed)?;
+    let (start, end) = group.representative_span?;
+    Some(Value::Object(vec![
+        ("path".to_owned(), group.document.to_value()),
+        (
+            "span".to_owned(),
+            Value::Object(vec![
+                (
+                    "start_byte".to_owned(),
+                    Value::Integer(i64::try_from(start).unwrap_or(i64::MAX)),
+                ),
+                (
+                    "end_byte".to_owned(),
+                    Value::Integer(i64::try_from(end).unwrap_or(i64::MAX)),
+                ),
+            ]),
+        ),
+        ("replacement".to_owned(), Value::String(replacement)),
+        (
+            "description".to_owned(),
+            Value::String(crate::claim::CLAIM_FIX_DESCRIPTION.to_owned()),
+        ),
+    ]))
 }
 
 /// One candidate document's reserved governed definitions: the exact node
@@ -1405,6 +1452,7 @@ fn control_row(
         effective_disposition: configured,
         debt: None,
         waiver: None,
+        fix: None,
         steps: vec![built_in_step(kind, enforce)],
     }
 }
@@ -1684,6 +1732,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
             effective_disposition: configured,
             debt: None,
             waiver: None,
+            fix: None,
             steps: if attribution == Attribution::Resolved {
                 vec![PolicyStep {
                     source: "resolved-projection",

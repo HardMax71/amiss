@@ -76,7 +76,10 @@ fn claim_name(name: &str) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ClaimVerdict {
     Attested,
-    Broken { observed_digest: Digest },
+    Broken {
+        observed_digest: Digest,
+        observed: Vec<u8>,
+    },
     TargetMissing(ClaimMissingReason),
 }
 
@@ -101,4 +104,48 @@ pub struct ClaimOutcome {
     pub line: u64,
     pub expected_digest: Digest,
     pub verdict: ClaimVerdict,
+}
+
+/// The one sentence a claim fix carries.
+pub const CLAIM_FIX_DESCRIPTION: &str =
+    "replace the definition so the claim expects the target's current line";
+
+/// The canonical respelling that would attest a broken claim: the whole
+/// definition rewritten with the observed line as its expected words. None
+/// when the observed line cannot be spelled as a quoted title, or when the
+/// respelled definition does not classify back to the identical claim under
+/// the real extractor, which is the proof the fix resolves the finding.
+#[must_use]
+pub fn rewrite(name: &str, path: &RepoPath, line: u64, observed: &[u8]) -> Option<String> {
+    let observed = std::str::from_utf8(observed).ok()?;
+    if observed
+        .chars()
+        .any(|character| character == '"' || character == '\\' || character.is_control())
+    {
+        return None;
+    }
+    let path_text = path.as_str()?;
+    let replacement =
+        format!("[amiss:{name}]: <amiss:value?path={path_text}&line=L{line}> \"{observed}\"");
+    let mut resources = crate::ScanResources::new(crate::ScanLimits::CONTRACT);
+    let scanned = crate::scan_document(
+        &mut resources,
+        amiss_wire::model::Adapter::Markdown,
+        replacement.as_bytes(),
+    )
+    .ok()?;
+    let [source] = scanned.governed.as_slice() else {
+        return None;
+    };
+    match &source.form {
+        GovernedForm::Value(claim)
+            if claim.name == name
+                && claim.path == *path
+                && claim.line == line
+                && claim.expected == observed =>
+        {
+            Some(replacement)
+        }
+        GovernedForm::Value(_) | GovernedForm::Unknown => None,
+    }
 }

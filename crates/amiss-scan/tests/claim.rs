@@ -1,3 +1,4 @@
+use amiss_scan::claim;
 use amiss_scan::claim::{GovernedForm, ValueClaim, classify};
 use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::RepoPath;
@@ -103,4 +104,37 @@ fn each_grammar_clause_refuses_alone() {
         deviate(&mut deviant);
         assert_eq!(classify(&deviant), GovernedForm::Unknown, "{reason}");
     }
+}
+
+/// The rewrite's two gates each refuse alone: the spellability guard turns
+/// away control bytes the title parser itself would keep, and the round-trip
+/// proof turns away a path whose ampersand would re-split the claim grammar.
+#[test]
+fn a_rewrite_is_proved_or_refused_on_each_gate() {
+    let path = |text: &str| RepoPath::new(text.to_owned()).unwrap();
+    assert_eq!(
+        claim::rewrite("v", &path("README.md"), 1, b"# R"),
+        Some("[amiss:v]: <amiss:value?path=README.md&line=L1> \"# R\"".to_owned()),
+    );
+    assert_eq!(
+        claim::rewrite("v", &path("README.md"), 1, b"say \"hi\""),
+        None,
+        "a double quote cannot sit in a quoted title"
+    );
+    assert_eq!(
+        claim::rewrite("v", &path("README.md"), 1, b"a\tb"),
+        None,
+        "the guard refuses control bytes on its own clause"
+    );
+    assert_eq!(
+        claim::rewrite("v", &path("a&b.md"), 1, b"words"),
+        None,
+        "an ampersand path would re-split the grammar, which only the round trip sees"
+    );
+    assert_eq!(claim::rewrite("v", &path("README.md"), 1, b"\xff"), None);
+    assert_eq!(
+        claim::rewrite("v", &path("README.md"), 1, b"&amp;"),
+        None,
+        "an entity decodes to different expected words, which only the field proof sees"
+    );
 }
