@@ -443,7 +443,7 @@ fn a_case_drifted_anchor_carries_its_fix() {
     fs::write(root.join("sections.md"), "# Setup\n").unwrap();
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "base"]);
-    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let base_commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let rst = "See `s <sections.md#Setup>`_ here.\n";
     fs::write(root.join("guide.rst"), rst).unwrap();
     git(root, &["add", "."]);
@@ -455,7 +455,7 @@ fn a_case_drifted_anchor_carries_its_fix() {
         &engine(),
         None,
         &shell(),
-        &oid(&base),
+        &oid(&base_commit),
         &oid(&candidate),
     );
     let rst_payload = payload(&built);
