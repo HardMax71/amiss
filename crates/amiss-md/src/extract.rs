@@ -128,6 +128,8 @@ fn extract_tree(
             .map(|entry| Occurrence {
                 span: translate(entry.span),
                 block_span: translate(entry.block_span),
+                fragment_span: fragment_span(suffix.as_bytes(), entry.span, &entry.raw_destination)
+                    .map(translate),
                 ..entry
             })
             .collect(),
@@ -293,6 +295,7 @@ impl Sweep<'_> {
             node_path: path.to_vec(),
             block_kind,
             block_span,
+            fragment_span: None,
         });
     }
 }
@@ -1034,3 +1037,41 @@ fn validate(
 
 #[path = "../tests/internal/extract.rs"]
 mod tests;
+
+/// The suffix-relative byte range of a destination's fragment, only when the
+/// raw destination appears verbatim exactly once inside the reference span,
+/// carries a single `#`, and the fragment holds nothing a decoder could
+/// alter. Anything less certain names no bytes.
+fn fragment_span(
+    source: &[u8],
+    span: (usize, usize),
+    raw_destination: &str,
+) -> Option<(usize, usize)> {
+    let (prefix, fragment) = raw_destination.split_once('#')?;
+    if fragment.is_empty()
+        || fragment.contains(['#', '%', '&', '\\'])
+        || prefix.contains(['%', '&', '\\'])
+    {
+        return None;
+    }
+    let slice = source.get(span.0..span.1)?;
+    let needle = raw_destination.as_bytes();
+    if needle.is_empty() || slice.len() < needle.len() {
+        return None;
+    }
+    let mut hits = slice
+        .windows(needle.len())
+        .enumerate()
+        .filter(|(_, window)| *window == needle)
+        .map(|(at, _)| at);
+    let at = hits.next()?;
+    if hits.next().is_some() {
+        return None;
+    }
+    let start = span
+        .0
+        .checked_add(at)?
+        .checked_add(prefix.len())?
+        .checked_add(1)?;
+    Some((start, start.checked_add(fragment.len())?))
+}

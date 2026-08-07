@@ -16,6 +16,7 @@ fn occurrence(span: (usize, usize), block_span: (usize, usize)) -> Occurrence {
         node_path: Vec::new(),
         block_kind: BlockKind::Paragraph,
         block_span,
+        fragment_span: None,
     }
 }
 

@@ -92,6 +92,11 @@ pub struct Occurrence {
     pub node_path: Vec<usize>,
     pub block_kind: BlockKind,
     pub block_span: (usize, usize),
+    /// The document byte range of the destination's fragment text, present
+    /// only when the adapter located the raw destination verbatim exactly
+    /// once inside the reference and nothing a decoder could alter sits in
+    /// the fragment. Absent means no edit may claim those bytes.
+    pub fragment_span: Option<(usize, usize)>,
 }
 
 /// The opaque partition of one document: the frontmatter region's byte count,

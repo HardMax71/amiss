@@ -79,6 +79,7 @@ fn observation(spec: &Spec) -> Observation {
             node_path: spec.node_path.clone(),
             block_kind: BlockKind::Paragraph,
             block_span: (0, 1),
+            fragment_span: None,
         },
         display: SpanDisplay {
             start_line: 1,
