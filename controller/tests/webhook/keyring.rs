@@ -140,3 +140,77 @@ fn bounds_and_validates_the_complete_header_block() -> Result<(), IngressError> 
     );
     Ok(())
 }
+
+#[test]
+fn activity_windows_bind_at_their_exact_edges() -> Result<(), IngressError> {
+    let closing =
+        WebhookKeyring::new(trust_set(), vec![key("edge", OLD_SECRET, 0, Some(NOW + 1))]).unwrap();
+    let verifier = GitHubWebhook::new(closing);
+    let headers = [header("x-hub-signature-256", OLD_SIGNATURE)];
+    assert!(
+        verifier.verify(replay_check(&headers, BODY, NOW)?).is_ok(),
+        "one millisecond inside the window verifies"
+    );
+    assert_eq!(
+        verifier.verify(replay_check(&headers, BODY, NOW + 1)?),
+        Err(WebhookError::NoActiveAnchor),
+        "the until edge is exclusive"
+    );
+    Ok(())
+}
+
+/// A negative receipt never reaches authentication, since the ingress clock
+/// gate refuses it first; the epoch instant itself must therefore verify.
+#[test]
+fn the_epoch_instant_is_a_lawful_receipt() -> Result<(), IngressError> {
+    let verifier = GitHubWebhook::new(ring("active", OLD_SECRET));
+    let headers = [header("x-hub-signature-256", OLD_SIGNATURE)];
+    assert!(verifier.verify(replay_check(&headers, BODY, 0)?).is_ok());
+    Ok(())
+}
+
+#[test]
+fn a_benign_header_well_inside_the_cap_rides_along() -> Result<(), IngressError> {
+    let verifier = GitHubWebhook::new(ring("active", OLD_SECRET));
+    let padding = vec![b'x'; 2_000];
+    let headers = [
+        header("x-noop", &padding),
+        header("x-hub-signature-256", OLD_SIGNATURE),
+    ];
+    assert!(verifier.verify(replay_check(&headers, BODY, NOW)?).is_ok());
+    Ok(())
+}
+
+#[test]
+fn an_empty_signature_header_is_a_header_defect() -> Result<(), IngressError> {
+    let verifier = GitHubWebhook::new(ring("active", OLD_SECRET));
+    let headers = [header("x-hub-signature-256", b"")];
+    assert_eq!(
+        verifier.verify(replay_check(&headers, BODY, NOW)?),
+        Err(WebhookError::Headers)
+    );
+    Ok(())
+}
+
+#[test]
+fn every_webhook_error_message_is_its_own_sentence() {
+    let keyring = [
+        WebhookKeyringError::Empty,
+        WebhookKeyringError::TooMany,
+        WebhookKeyringError::Secret,
+        WebhookKeyringError::Window,
+        WebhookKeyringError::DuplicateAnchor,
+        WebhookKeyringError::DuplicateSecret,
+    ];
+    let verification = [
+        WebhookError::Headers,
+        WebhookError::ReceiptTime,
+        WebhookError::NoActiveAnchor,
+        WebhookError::Authentication,
+    ];
+    let mut messages: Vec<String> = keyring.iter().map(ToString::to_string).collect();
+    messages.extend(verification.iter().map(ToString::to_string));
+    assert!(messages.iter().all(|message| !message.is_empty()));
+    let unique: std::collections::BTreeSet<&str> = messages.iter().map(String::as_str).collect();
+    assert_eq!(unique.len(), messages.len(), "{messages:?}");
+}
