@@ -1130,6 +1130,7 @@ pub fn resolve_claim(
     } else {
         Ok(ClaimVerdict::Broken {
             observed_digest: hb(RAW_EVIDENCE_DOMAIN, observed),
+            observed: observed.to_vec(),
         })
     }
 }

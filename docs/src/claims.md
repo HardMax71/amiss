@@ -62,3 +62,16 @@ Claims sharing one name in one document aggregate per outcome kind: every broken
 member joins one `claim-broken` finding and every unanswered member joins one
 `claim-target-missing` finding, each carrying its contributing source digests, the
 way governed boundaries already aggregate.
+
+## The fix a broken claim carries
+
+A `claim-broken` finding standing alone carries a machine-applicable `fix`: the whole
+definition respelled with the observed line as its expected words, the byte span of the
+definition to replace, and the document that holds it. The engine emits the fix only
+when it can prove it: the rewritten definition is parsed back through the real
+extractor and must classify to the identical claim with the new expected words, so an
+observed line the quoted-title grammar cannot spell (a double quote, a backslash, a
+control byte, or bytes outside UTF-8) leaves the field null, and so does a name whose
+definitions aggregate, since grouped members share one finding but not one edit. A
+`claim-target-missing` finding never carries a fix, because nothing derivable says
+where the target went.

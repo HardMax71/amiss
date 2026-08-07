@@ -301,6 +301,57 @@ fn a_grouped_item_annotates_its_least_location() {
     );
 }
 
+/// The fix refuses to guess: an observed line the title grammar cannot
+/// spell, a missing target, and a grouped name all emit null.
+#[test]
+fn a_fix_is_emitted_only_when_provable() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "say \"hi\"\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join("docs.md"),
+        "# Docs\n\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"other\"\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "claimed"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(payload["findings"][0]["kind"], "claim-broken", "{payload}");
+    assert!(
+        payload["findings"][0]["fix"].is_null(),
+        "a quoted observed line cannot be respelled: {payload}"
+    );
+
+    let missing = "[amiss:v]: <amiss:value?path=gone.md&line=L1> \"words\"";
+    let (_code, payload) = claimed_run(missing, false);
+    assert!(
+        payload["findings"][0]["fix"].is_null(),
+        "a missing target has no derivable content: {payload}"
+    );
+
+    let duplicated = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"one\"\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"two\"";
+    let (_code, payload) = claimed_run(duplicated, false);
+    assert_eq!(payload["findings"][0]["aggregation"]["member_count"], 2);
+    assert!(
+        payload["findings"][0]["fix"].is_null(),
+        "grouped members share one finding but not one edit: {payload}"
+    );
+}
+
 /// A claim only the base holds is invisible: evaluation is candidate-side,
 /// so a broken claim the candidate deletes leaves no count and no finding.
 #[test]
@@ -379,9 +430,22 @@ fn a_broken_claim_warns_then_fails_by_profile() {
     let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"";
     let (code, payload) = claimed_run(claim, false);
     assert_eq!(code, 0, "observe never blocks: {payload}");
-    assert!(
-        payload["findings"][0]["fix"].is_null(),
-        "no producer emits a fix yet: {payload}"
+    let fix = &payload["findings"][0]["fix"];
+    assert_eq!(fix["path"], "docs.md", "{payload}");
+    let rewritten = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# R\"";
+    assert_eq!(fix["replacement"], rewritten);
+    assert_eq!(
+        fix["span"]["start_byte"], 8,
+        "the definition follows the heading"
+    );
+    assert_eq!(
+        fix["span"]["end_byte"].as_u64().map(|end| end - 8),
+        Some(u64::try_from(claim.len()).unwrap()),
+        "the span covers the whole definition: {fix}"
+    );
+    assert_eq!(
+        fix["description"],
+        "replace the definition so the claim expects the target's current line"
     );
     let row = payload["findings"]
         .as_array()
