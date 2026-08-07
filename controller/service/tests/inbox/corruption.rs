@@ -271,7 +271,13 @@ fn an_established_root_recovers_debris_and_refuses_squatters() {
 /// is the record validator's own, not the frame digest's.
 #[test]
 fn resealed_semantic_defects_fail_closed() {
-    let edits: [(&str, PayloadEdit); 5] = [
+    let edits: [(&str, PayloadEdit); 7] = [
+        ("uppercase content digest", |payload| {
+            digest_respelled(payload, &"F".repeat(64))
+        }),
+        ("short content digest", |payload| {
+            digest_respelled(payload, &"a".repeat(63))
+        }),
         ("foreign schema", |payload| {
             payload.replace("inbox-record-v1", "inbox-record-v2")
         }),
@@ -393,4 +399,56 @@ fn a_claimed_row_answers_for_its_lease_grammar() {
             "{reason}"
         );
     }
+}
+
+fn digest_respelled(payload: &str, spelling: &str) -> String {
+    let prefix = "\"content_digest\":\"";
+    let start = payload.find(prefix).unwrap().saturating_add(prefix.len());
+    let mut edited = payload.to_owned();
+    edited.replace_range(start..start.saturating_add(64), spelling);
+    edited
+}
+
+/// The frame header answers clause by clause: a wrong version alone and a
+/// lying length alone are each corrupt, however sound the rest of the frame.
+#[test]
+fn a_version_flip_and_a_length_flip_are_each_corrupt() {
+    let magic_len = b"AMISS-INBOX-ROW".len();
+    for at in [magic_len, magic_len + 1] {
+        let directory = TempDir::new().unwrap();
+        let mut inbox = open(directory.path());
+        inbox.enqueue(incoming("delivery-1", b"body")).unwrap();
+        let path = row_file(directory.path());
+        let mut bytes = fs::read(&path).unwrap();
+        *bytes.get_mut(at).unwrap() ^= 1;
+        fs::write(path, bytes).unwrap();
+        assert!(matches!(inbox.entries(), Err(InboxError::Corrupt)), "{at}");
+    }
+}
+
+/// Every inbox error names itself, the wrapped I/O error keeps its message,
+/// and only the I/O variant carries a source.
+#[test]
+fn inbox_errors_speak_and_only_io_carries_a_source() {
+    let io = InboxError::Io(std::io::Error::other("disk gone"));
+    let mut messages: Vec<String> = [
+        InboxError::Configuration,
+        InboxError::AlreadyOpen,
+        InboxError::Full,
+        InboxError::Conflict,
+        InboxError::InvalidDelivery,
+        InboxError::Clock,
+        InboxError::Random,
+        InboxError::Corrupt,
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
+    messages.push(io.to_string());
+    assert!(messages.iter().all(|message| !message.is_empty()));
+    let unique: std::collections::BTreeSet<&str> = messages.iter().map(String::as_str).collect();
+    assert_eq!(unique.len(), messages.len(), "{messages:?}");
+    assert!(io.to_string().contains("disk gone"));
+    assert!(std::error::Error::source(&io).is_some());
+    assert!(std::error::Error::source(&InboxError::Corrupt).is_none());
 }

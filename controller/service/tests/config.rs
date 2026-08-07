@@ -376,3 +376,11 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
     );
     assert!(load_plan(&files("Observe", false)).is_err());
 }
+
+#[test]
+fn a_queued_service_error_displays_its_reason() {
+    assert_eq!(
+        amiss_controller_service::QueuedServiceError("delivery inbox cannot be opened").to_string(),
+        "delivery inbox cannot be opened"
+    );
+}
