@@ -119,7 +119,9 @@ the findings count has its own separate ceiling in [Limits and refusals](limits.
 
 `--format sarif` writes exactly one line to stdout: a SARIF 2.1.0 log projected from the
 same payload. Every finding row becomes a result under its kind's rule, `fail` as `error`,
-`warn` as `warning`, and `record` as `note`, with the row's own `description` as the message
+`warn` as `warning`, and `record` as `note`, with the row's own `description` as the message,
+and a row carrying a `fix` projects it as a SARIF fix with the byte region and replacement,
+which GitHub renders as a suggested edit
 and the finding key riding as the stable `partialFingerprints` entry, so an ingesting
 scanner deduplicates across runs by the same identity the report uses. A location renders
 when the wire path is printable text, percent-encoded into the artifact URI so a hostile

@@ -278,3 +278,83 @@ fn a_claim_finding_carries_its_rule_into_sarif() {
         "the rule carries the fixed meaning sentence"
     );
 }
+
+/// A finding's wire fix rides into SARIF as the byte region to delete and
+/// the replacement text, and rows without one carry no fixes array.
+#[test]
+fn a_claim_fix_projects_as_a_sarif_fix() {
+    let fx = claim_fixture();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "sarif",
+    ]);
+    assert_eq!(code, 1);
+    let log: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let results = log.pointer("/runs/0/results").unwrap().as_array().unwrap();
+    let claim = results
+        .iter()
+        .find(|result| result.get("ruleId") == Some(&serde_json::json!("claim-broken")))
+        .unwrap();
+    let (_wire_code, wire, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+    let wire_fix = payload(&wire)["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "claim-broken")
+        .unwrap()["fix"]
+        .clone();
+    let replacement = claim
+        .pointer("/fixes/0/artifactChanges/0/replacements/0")
+        .unwrap();
+    assert_eq!(
+        replacement.pointer("/insertedContent/text"),
+        wire_fix.get("replacement"),
+        "the projection mirrors the wire"
+    );
+    assert_eq!(
+        replacement.pointer("/deletedRegion/byteOffset"),
+        wire_fix.pointer("/span/start_byte"),
+    );
+    let length = wire_fix["span"]["end_byte"].as_u64().unwrap()
+        - wire_fix["span"]["start_byte"].as_u64().unwrap();
+    assert_eq!(
+        replacement
+            .pointer("/deletedRegion/byteLength")
+            .and_then(serde_json::Value::as_u64),
+        Some(length),
+    );
+    assert_eq!(
+        claim.pointer("/fixes/0/description/text"),
+        wire_fix.get("description"),
+    );
+    for result in results {
+        if result.get("ruleId") != Some(&serde_json::json!("claim-broken")) {
+            assert!(result.get("fixes").is_none(), "{result}");
+        }
+    }
+}

@@ -111,7 +111,55 @@ fn result_value(row: &View, present: &[FindingKind]) -> Value {
     if let Some(location) = location_value(&row.view("location")) {
         members.push(("locations", Value::Array(vec![location])));
     }
+    if let Some(fix) = fix_value(&row.view("fix")) {
+        members.push(("fixes", Value::Array(vec![fix])));
+    }
     object(members)
+}
+
+/// A wire fix renders as one SARIF fix: the byte region to delete and the
+/// replacement text, under the engine's own fix description.
+fn fix_value(fix: &View) -> Option<Value> {
+    let Some(Value::String(path)) = fix.field("path") else {
+        return None;
+    };
+    let Some(Value::String(replacement)) = fix.field("replacement") else {
+        return None;
+    };
+    let span = fix.view("span");
+    let start = span.number("start_byte");
+    let length = span.number("end_byte").saturating_sub(start);
+    Some(object(vec![
+        (
+            "artifactChanges",
+            Value::Array(vec![object(vec![
+                (
+                    "artifactLocation",
+                    object(vec![("uri", string(&uri(path)))]),
+                ),
+                (
+                    "replacements",
+                    Value::Array(vec![object(vec![
+                        (
+                            "deletedRegion",
+                            object(vec![
+                                ("byteLength", Value::Integer(length)),
+                                ("byteOffset", Value::Integer(start)),
+                            ]),
+                        ),
+                        (
+                            "insertedContent",
+                            object(vec![("text", string(replacement))]),
+                        ),
+                    ])]),
+                ),
+            ])]),
+        ),
+        (
+            "description",
+            object(vec![("text", string(&fix.text("description")))]),
+        ),
+    ]))
 }
 
 /// A location renders only when the wire path is printable text; a
