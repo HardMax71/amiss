@@ -436,6 +436,23 @@ fn a_case_drifted_anchor_carries_its_fix() {
         .unwrap();
     assert!(row["fix"].is_null(), "no neighbor, no edit: {row}");
 
+    let encoded = run("[s](sections.md#S%65tup)\n");
+    let row = encoded["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert!(
+        row["fix"].is_null(),
+        "a percent spelling names no bytes: {row}"
+    );
+}
+
+/// The rst lane carries the anchor fix too, end to end against a real
+/// repository.
+#[test]
+fn an_rst_reference_carries_the_anchor_fix_too() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -472,18 +489,6 @@ fn a_case_drifted_anchor_carries_its_fix() {
     let start = usize::try_from(row["fix"]["span"]["start_byte"].as_u64().unwrap()).unwrap();
     let end = usize::try_from(row["fix"]["span"]["end_byte"].as_u64().unwrap()).unwrap();
     assert_eq!(&rst.as_bytes()[start..end], b"Setup");
-
-    let encoded = run("[s](sections.md#S%65tup)\n");
-    let row = encoded["findings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["kind"] == "explicit-target-missing")
-        .unwrap();
-    assert!(
-        row["fix"].is_null(),
-        "a percent spelling names no bytes: {row}"
-    );
 }
 
 /// A claim only the base holds is invisible: evaluation is candidate-side,
