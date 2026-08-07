@@ -77,6 +77,11 @@ fn a_half_empty_staging_list_is_refused() {
     let tree = TempDir::new().unwrap();
     std::fs::write(tree.path().join("Cargo.lock"), b"version = 4\n").unwrap();
     std::fs::write(tree.path().join("action.yml"), b"action").unwrap();
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_BIN_EXE_amiss-bootstrap")),
+        tree.path().join("engine"),
+    )
+    .unwrap();
     let common = [
         "--version",
         "0.9.0",
