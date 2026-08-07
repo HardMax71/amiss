@@ -274,3 +274,59 @@ fn an_extraction_reports_its_block_count_and_deepest_nesting() {
     assert_eq!(nested.blocks, 3);
     assert_eq!(nested.nesting, 6, "the deepest indent, not the last one");
 }
+
+/// The `:doc:` suffix rule leg by leg: an extensionless relative target gains
+/// the source suffix, a source-root-absolute target keeps its slash untouched,
+/// and a dotted final segment already names a file.
+#[test]
+fn a_doc_role_destination_answers_by_the_suffix_rule() {
+    let analysis = amiss_rst::analyze(
+        "See :doc:`guide` then :doc:`/abs/guide` then :doc:`pages/note.txt`.\n".as_bytes(),
+    )
+    .expect("utf-8 source");
+    let extraction = analysis.extraction.expect("rst always extracts");
+    let pairs: Vec<(&str, &str)> = extraction
+        .occurrences
+        .iter()
+        .map(|occurrence| {
+            (
+                occurrence.raw_destination.as_str(),
+                occurrence.semantic_destination.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        pairs,
+        vec![
+            ("guide", "guide.rst"),
+            ("/abs/guide", "/abs/guide"),
+            ("pages/note.txt", "pages/note.txt"),
+        ],
+    );
+}
+
+/// Two references in one paragraph count up within the block; a new block
+/// resets the ordinal to zero.
+#[test]
+fn within_block_ordinals_count_up_and_reset_per_block() {
+    let analysis =
+        amiss_rst::analyze("See `a <a.rst>`_ and `b <b.rst>`_.\n\nThen `c <c.rst>`_.\n".as_bytes())
+            .expect("utf-8 source");
+    let extraction = analysis.extraction.expect("rst always extracts");
+    let paths: Vec<&[usize]> = extraction
+        .occurrences
+        .iter()
+        .map(|occurrence| occurrence.node_path.as_slice())
+        .collect();
+    assert_eq!(paths.len(), 3);
+    assert_eq!(
+        (paths[0][1], paths[1][1], paths[2][1]),
+        (0, 1, 0),
+        "ordinals: {paths:?}"
+    );
+    assert_eq!(paths[0][0], paths[1][0], "one paragraph, one block");
+    assert_ne!(
+        paths[1][0], paths[2][0],
+        "the second paragraph is its own block"
+    );
+}
