@@ -5,6 +5,7 @@
 )]
 
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 use amiss_bootstrap::build::{StagedArtifact, StagedBuild, StagedFile, build_manifest};
@@ -147,21 +148,42 @@ fn a_symlinked_engine_path_refuses() {
     );
 }
 
-fn strip_action_rows(value: &mut Value) {
+fn edit_action_rows(value: &mut Value, edit: &impl Fn(&mut Value) -> bool) {
     match value {
         Value::Array(items) => {
-            items.retain(|item| !is_action_row(item));
+            items.retain_mut(|item| !is_action_row(item) || edit(item));
             for item in items.iter_mut() {
-                strip_action_rows(item);
+                edit_action_rows(item, edit);
             }
         }
         Value::Object(members) => {
             for (_key, member) in members.iter_mut() {
-                strip_action_rows(member);
+                edit_action_rows(member, edit);
             }
         }
         Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
     }
+}
+
+fn with_rewritten_manifest(transform: impl Fn(&mut Value), also: impl FnOnce(&Path)) -> Release {
+    let mut digested: Option<Digest> = None;
+    let mut release = release(|root| {
+        let path = root.join("release-manifest.json");
+        let bytes = fs::read(&path).unwrap();
+        let mut value = parse_json(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
+            .expect("the manifest parses");
+        transform(&mut value);
+        digested = Some(amiss_wire::digest::hj(
+            amiss_wire::manifest::MANIFEST_DOMAIN,
+            &value,
+        ));
+        let mut out = canonical(&value);
+        out.push(b'\n');
+        fs::write(&path, out).unwrap();
+        also(root);
+    });
+    release.manifest_digest = digested.expect("the rewritten manifest was digested");
+    release
 }
 
 fn is_action_row(value: &Value) -> bool {
@@ -179,23 +201,8 @@ fn is_action_row(value: &Value) -> bool {
 /// the one file nothing checks.
 #[test]
 fn a_manifest_that_omits_the_action_row_is_refused() {
-    let mut restripped: Option<Digest> = None;
-    let mut release = release(|root| {
-        let path = root.join("release-manifest.json");
-        let bytes = fs::read(&path).unwrap();
-        let mut value =
-            amiss_wire::json::parse(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
-                .expect("the manifest parses");
-        strip_action_rows(&mut value);
-        restripped = Some(amiss_wire::digest::hj(
-            amiss_wire::manifest::MANIFEST_DOMAIN,
-            &value,
-        ));
-        let mut out = canonical(&value);
-        out.push(b'\n');
-        fs::write(&path, out).unwrap();
-    });
-    release.manifest_digest = restripped.expect("the stripped manifest was digested");
+    let release =
+        with_rewritten_manifest(|value| edit_action_rows(value, &|_row| false), |_root| {});
 
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
@@ -205,52 +212,25 @@ fn a_manifest_that_omits_the_action_row_is_refused() {
     );
 }
 
-fn rename_action_rows(value: &mut Value) {
-    match value {
-        Value::Array(items) => {
-            for item in items.iter_mut() {
-                rename_action_rows(item);
-            }
-        }
-        Value::Object(_) => {
-            let renamed = is_action_row(value);
-            let Value::Object(members) = value else {
-                return;
-            };
-            for (key, member) in members.iter_mut() {
-                if renamed && key == "path" {
-                    *member = Value::String("assets.yml".to_owned());
-                } else {
-                    rename_action_rows(member);
-                }
-            }
-        }
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
-    }
-}
-
 /// Runtime data alone is not a pin: the closure row must sit at the action
 /// metadata path, not merely exist somewhere in the artifact.
 #[test]
 fn runtime_data_off_the_action_path_is_not_a_pin() {
-    let mut renamed: Option<Digest> = None;
-    let mut release = release(|root| {
-        let path = root.join("release-manifest.json");
-        let bytes = fs::read(&path).unwrap();
-        let mut value =
-            amiss_wire::json::parse(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
-                .expect("the manifest parses");
-        rename_action_rows(&mut value);
-        renamed = Some(amiss_wire::digest::hj(
-            amiss_wire::manifest::MANIFEST_DOMAIN,
-            &value,
-        ));
-        let mut out = canonical(&value);
-        out.push(b'\n');
-        fs::write(&path, out).unwrap();
-        fs::rename(root.join("action.yml"), root.join("assets.yml")).unwrap();
-    });
-    release.manifest_digest = renamed.expect("the renamed manifest was digested");
+    let repathed = |row: &mut Value| {
+        let Value::Object(members) = row else {
+            return true;
+        };
+        for (key, member) in members.iter_mut() {
+            if key == "path" {
+                *member = Value::String("assets.yml".to_owned());
+            }
+        }
+        true
+    };
+    let release = with_rewritten_manifest(
+        |value| edit_action_rows(value, &repathed),
+        |root| fs::rename(root.join("action.yml"), root.join("assets.yml")).unwrap(),
+    );
 
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
