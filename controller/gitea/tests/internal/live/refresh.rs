@@ -2,6 +2,7 @@ use amiss_controller::{ChangeState, ProviderError};
 use amiss_wire::model::ForgeDialect;
 
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
+use super::super::{GiteaClientError, GiteaPullRequest};
 use super::support::{
     FORGEJO_PROTECTION, FORGEJO_REPOSITORY, Fixture, GITEA_PROTECTION, GITEA_REPOSITORY, commit,
     oid, resolved,
@@ -327,7 +328,7 @@ fn assert_revoked(fixture: &Fixture) {
     );
 }
 
-type RequestDeviation = for<'a> fn(&mut crate::GiteaPullRequest<'a>);
+type RequestDeviation = for<'a> fn(&mut GiteaPullRequest<'a>);
 type DataDeviation = fn(&mut RefreshData);
 
 /// Every field of the request binding is load-bearing on its own, asserted
@@ -467,4 +468,46 @@ fn an_injected_allowlist_revokes_the_forgejo_shape() {
         ChangeState::AuthorizationRevoked,
         "a forgejo shape carrying any gitea allowlist is not trusted"
     );
+}
+
+/// Each route identity refuses zero on its own boundary.
+#[test]
+fn route_identities_refuse_zero_alone() {
+    let fixture = Fixture::new("gitea");
+    let deviations: [(&str, RequestDeviation); 3] = [
+        ("repository", |pull_request| pull_request.repository_id = 0),
+        ("pull request", |pull_request| {
+            pull_request.pull_request_id = 0;
+        }),
+        ("number", |pull_request| pull_request.number = 0),
+    ];
+    for (name, mutate) in deviations {
+        let mut pull_request = fixture.pull_request();
+        mutate(&mut pull_request);
+        assert!(fixture.client.refresh(pull_request).is_err(), "{name}");
+    }
+}
+
+/// The base resolver answers for itself: a base object naming a foreign
+/// commit fails closed however sound the candidate side reads.
+#[test]
+fn a_base_resolver_that_disagrees_fails_closed() {
+    let fixture = Fixture::resolving("gitea", |objects| {
+        objects.base = resolved('c', 'c', &[]);
+    });
+    assert!(fixture.client.refresh(fixture.pull_request()).is_err());
+}
+
+/// Both client errors speak, and the configuration reason survives whole.
+#[test]
+fn client_errors_name_themselves() {
+    let configuration = GiteaClientError::Configuration("the API base must use https");
+    assert!(
+        configuration
+            .to_string()
+            .contains("the API base must use https")
+    );
+    let client = GiteaClientError::Client;
+    assert!(!client.to_string().is_empty());
+    assert_ne!(configuration.to_string(), client.to_string());
 }
