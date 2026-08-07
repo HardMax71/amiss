@@ -204,10 +204,10 @@ fn an_rst_include_leaves_absent_anchors_undecided() {
     );
 }
 
-/// The neighbor steps forward only alone: one case-fold match names itself,
+/// The neighbor steps forward only alone: one typography match names itself,
 /// two stay bare as a real ambiguity, and an unrelated miss stays bare.
 #[test]
-fn a_case_fold_neighbor_steps_forward_alone() {
+fn a_typography_neighbor_steps_forward_alone() {
     let mut bed = bed();
     let near_of = |bed: &mut crate::support::Bed, destination: &str| {
         let row = bed
@@ -237,5 +237,15 @@ fn a_case_fold_neighbor_steps_forward_alone() {
         near_of(&mut bed, "case.md#DUP"),
         None,
         "two case variants are a real ambiguity"
+    );
+    assert_eq!(
+        near_of(&mut bed, "anchors.md#anchor_point"),
+        Some("anchor-point".to_owned()),
+        "the separator renderers disagree on folds away"
+    );
+    assert_eq!(
+        near_of(&mut bed, "anchors.md#Pair_ID"),
+        Some("pair-id".to_owned()),
+        "case and separator fold together"
     );
 }
