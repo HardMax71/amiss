@@ -493,8 +493,9 @@ fn classify_claim(
             && value.len() <= 16
             && !value.starts_with('0')
             && value.bytes().all(|byte| byte.is_ascii_digit());
+        let ceiling = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).ok()?;
         if lawful {
-            value.parse::<u64>().ok()
+            value.parse::<u64>().ok().filter(|line| *line <= ceiling)
         } else {
             None
         }
@@ -502,7 +503,7 @@ fn classify_claim(
     let path = gathered.claim_path.unique_value().filter(|value| {
         amiss_wire::model::RepoPath::new((*value).to_owned())
             .is_some_and(|path| path.as_str().is_some())
-            && !value.contains(['&', '<', '>', '"', ' ', '%', '\\'])
+            && !value.contains(['&', '<', '>', '"', ' ', '%', '?', '#', '\\'])
     });
     match (repo, name, line, path) {
         (Some(repo), Some(name), Some(line), Some(path)) if codes.is_empty() => {

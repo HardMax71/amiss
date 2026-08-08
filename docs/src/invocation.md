@@ -149,7 +149,7 @@ the output path refused, and 2 means nothing trustworthy could be recorded, whet
 evaluation itself failed, the report carried no candidate tree, or the minted bytes were
 refused by the engine's own reader.
 
-`amiss --version` is the fifth form of the grammar and the only one that is not a scan. It
+`amiss --version` is the fifth form of the grammar and the only one that reads neither a repository nor a file. It
 carries no other flag, prints two lines to stdout, and exits 0:
 
 ```text
