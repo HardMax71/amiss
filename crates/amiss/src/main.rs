@@ -1,4 +1,5 @@
 mod adopt;
+mod author;
 mod payload;
 mod repair;
 mod sarif;
@@ -94,7 +95,10 @@ fn main() -> ExitCode {
             eprintln!("{}", invocation::GRAMMAR);
             failure
         }
-        Outcome::Accepted(invocation) => run(&invocation, &mut reserve),
+        Outcome::Accepted(command) => match *command {
+            invocation::Command::Scan(invocation) => run(&invocation, &mut reserve),
+            invocation::Command::Author(author) => author::run(&author),
+        },
     }
 }
 

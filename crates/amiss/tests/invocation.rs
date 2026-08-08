@@ -46,8 +46,11 @@ fn rejected_codes(outcome: Outcome) -> Vec<Code> {
 
 #[test]
 fn accepts_the_commit_pair_grammar() {
-    let Outcome::Accepted(invocation) = parse_tokens(&valid_pair()) else {
+    let Outcome::Accepted(command) = parse_tokens(&valid_pair()) else {
         panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(invocation) = *command else {
+        panic!("expected a scan command");
     };
     assert_eq!(invocation.base.as_str(), BASE_A);
     match &invocation.candidate {
@@ -83,8 +86,11 @@ fn accepts_index_mode_with_identity_and_flags() {
         .iter()
         .map(|token| (*token).to_owned()),
     );
-    let Outcome::Accepted(invocation) = parse_tokens(&tokens) else {
+    let Outcome::Accepted(command) = parse_tokens(&tokens) else {
         panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(invocation) = *command else {
+        panic!("expected a scan command");
     };
     assert_eq!(invocation.candidate, CandidateSelector::Index);
     assert_eq!(invocation.format, OutputFormat::Json);
@@ -152,8 +158,11 @@ fn classifies_profile_host_and_event_rows() {
             "refs/heads/main",
         ],
     );
-    let Outcome::Accepted(other_forge) = parse_tokens(&gitlab) else {
+    let Outcome::Accepted(other_forge_command) = parse_tokens(&gitlab) else {
         panic!("an identity on another forge is a claim, not a refusal");
+    };
+    let amiss::invocation::Command::Scan(other_forge) = *other_forge_command else {
+        panic!("expected a scan command");
     };
     assert_eq!(other_forge.identity.unwrap().repository.host, "gitlab.com");
     assert_eq!(
@@ -279,8 +288,11 @@ fn every_repetition_refuses_by_itself() {
 #[test]
 fn the_ramp_profile_parses_between_the_two() {
     let ramp = replace_value(&valid_pair(), "observe", "enforce-introduced");
-    let Outcome::Accepted(invocation) = parse_tokens(&ramp) else {
+    let Outcome::Accepted(command) = parse_tokens(&ramp) else {
         panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(invocation) = *command else {
+        panic!("expected a scan command");
     };
     assert_eq!(invocation.profile, Profile::EnforceIntroduced);
 }
@@ -297,8 +309,11 @@ fn output_selection_follows_the_format_law() {
     assert_eq!(format, OutputFormat::Json);
 
     let sarif = with(&valid_pair(), &["--format", "sarif"]);
-    let Outcome::Accepted(invocation) = parse_tokens(&sarif) else {
+    let Outcome::Accepted(command) = parse_tokens(&sarif) else {
         panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(invocation) = *command else {
+        panic!("expected a scan command");
     };
     assert_eq!(invocation.format, OutputFormat::Sarif);
 
@@ -404,6 +419,17 @@ fn replace_value(base: &[String], from: &str, to: &str) -> Vec<String> {
         .collect()
 }
 
+#[expect(clippy::panic, reason = "test harness unwrap")]
+fn scan_of(outcome: Outcome) -> amiss::invocation::Invocation {
+    let Outcome::Accepted(command) = outcome else {
+        panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(invocation) = *command else {
+        panic!("expected a scan command");
+    };
+    *invocation
+}
+
 /// The dialect grammar: an explicit flag names a known dialect and rides the
 /// identity triple; the known-host table fills the default; the github
 /// dialect refuses a nested owner it could never match.
@@ -423,8 +449,12 @@ fn classifies_the_forge_dialect_grammar() {
         )
     };
 
-    let Outcome::Accepted(defaulted) = parse_tokens(&identity("github.com/acme/repo")) else {
+    let Outcome::Accepted(defaulted_command) = parse_tokens(&identity("github.com/acme/repo"))
+    else {
         panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(defaulted) = *defaulted_command else {
+        panic!("expected a scan command");
     };
     assert_eq!(
         defaulted.forge,
@@ -436,16 +466,12 @@ fn classifies_the_forge_dialect_grammar() {
         &identity("ghes.corp.example/acme/repo"),
         &["--forge", "github"],
     );
-    let Outcome::Accepted(ghes) = parse_tokens(&explicit) else {
-        panic!("expected acceptance");
-    };
+    let ghes = scan_of(parse_tokens(&explicit));
     assert_eq!(ghes.forge, Some(amiss_wire::model::ForgeDialect::Github));
     assert_eq!(ghes.identity.unwrap().repository.host, "ghes.corp.example");
 
     let nested = parse_tokens(&identity("gitlab.example/group/subgroup/repo"));
-    let Outcome::Accepted(nested) = nested else {
-        panic!("expected acceptance");
-    };
+    let nested = scan_of(nested);
     assert_eq!(nested.identity.unwrap().repository.owner, "group/subgroup");
     assert_eq!(nested.forge, None);
 
@@ -454,8 +480,12 @@ fn classifies_the_forge_dialect_grammar() {
         vec![Code::InvalidEvent],
         "the github dialect cannot match a nested owner"
     );
-    let Outcome::Accepted(codeberg) = parse_tokens(&identity("codeberg.org/acme/repo")) else {
+    let Outcome::Accepted(codeberg_command) = parse_tokens(&identity("codeberg.org/acme/repo"))
+    else {
         panic!("expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(codeberg) = *codeberg_command else {
+        panic!("expected a scan command");
     };
     assert_eq!(
         codeberg.forge,
