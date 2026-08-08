@@ -20,10 +20,6 @@ enum DocumentOutcome {
     Refused(&'static str),
 }
 
-/// Applies the evaluation's fixes to the working tree and reports each
-/// document's outcome. Exit 0 when every carried fix is applied or already
-/// present, 1 when any document refused, 2 when the evaluation itself could
-/// not be trusted and nothing was touched.
 #[expect(
     clippy::print_stdout,
     reason = "the repair rows are the command's output"
@@ -33,6 +29,7 @@ pub(crate) fn run(
     repo: &Repository,
     object_format: ObjectFormat,
     built: &Built,
+    initial_index: Option<&[u8]>,
 ) -> ExitCode {
     if built.exit_code == 2 {
         println!("amiss fix: the evaluation could not be trusted; nothing applied");
@@ -43,10 +40,25 @@ pub(crate) fn run(
         println!("amiss fix: no fixes to apply; {bare} findings carry none");
         return ExitCode::SUCCESS;
     }
-    let Ok(staged) = staged_blobs(repo, object_format, &fixes) else {
+    let Some(initial_index) = initial_index else {
         println!("amiss fix: the staged index could not be read; nothing applied");
         return ExitCode::from(2);
     };
+    let mut resources = GitResources::new(GitLimits::default());
+    let Ok(staged) = staged_blobs(repo, &mut resources, object_format, initial_index, &fixes)
+    else {
+        println!("amiss fix: the staged index could not be read; nothing applied");
+        return ExitCode::from(2);
+    };
+    // The spans were computed against the index read before the evaluation,
+    // so an index that moved since is nobody's proof.
+    if repo
+        .verify_index_unchanged(&mut resources, initial_index)
+        .is_err()
+    {
+        println!("amiss fix: the staged index moved during the run; nothing applied");
+        return ExitCode::FAILURE;
+    }
     let mut applied = 0_usize;
     let mut present = 0_usize;
     let mut refused = 0_usize;
@@ -102,8 +114,6 @@ fn byte_offset(value: &Value) -> Option<usize> {
     usize::try_from(*offset).ok()
 }
 
-/// Every finding's fix, grouped by the document it edits, beside the count
-/// of findings that carry none.
 fn collect(envelope: &Value) -> (BTreeMap<String, Vec<Fix>>, usize) {
     let mut fixes: BTreeMap<String, Vec<Fix>> = BTreeMap::new();
     let mut bare = 0_usize;
@@ -143,18 +153,14 @@ fn collect(envelope: &Value) -> (BTreeMap<String, Vec<Fix>>, usize) {
     (fixes, bare)
 }
 
-/// The staged blob bytes for every document a fix names, read through the
-/// same index the evaluation read.
 fn staged_blobs(
     repo: &Repository,
+    resources: &mut GitResources,
     object_format: ObjectFormat,
+    initial_index: &[u8],
     fixes: &BTreeMap<String, Vec<Fix>>,
 ) -> Result<BTreeMap<String, Vec<u8>>, ()> {
-    let mut resources = GitResources::new(GitLimits::default());
-    let bytes = repo
-        .read_index_bytes(&mut resources)
-        .map_err(|_defect| ())?;
-    let index = parse_index_file(object_format, &bytes).map_err(|_defect| ())?;
+    let index = parse_index_file(object_format, initial_index).map_err(|_defect| ())?;
     let mut staged = BTreeMap::new();
     for entry in &index.entries {
         let Ok(path) = std::str::from_utf8(&entry.path) else {
@@ -164,7 +170,7 @@ fn staged_blobs(
             continue;
         }
         let object = repo
-            .read_object(&mut resources, &entry.oid)
+            .read_object(resources, &entry.oid)
             .map_err(|_defect| ())?;
         staged.insert(path.to_owned(), object.body);
     }
@@ -184,6 +190,9 @@ fn repair_document(
         return DocumentOutcome::Refused("overlapping or out-of-range spans");
     };
     let path = worktree.join(document);
+    if !contained(worktree, &path) {
+        return DocumentOutcome::Refused("resolves outside the worktree");
+    }
     let regular = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_file());
     if !regular {
         return DocumentOutcome::Refused("not a regular worktree file");
@@ -203,8 +212,16 @@ fn repair_document(
     DocumentOutcome::Applied(rows.len())
 }
 
-/// The spans replaced back to front so earlier offsets stay true; two spans
-/// that touch are one edit nobody proved, so they refuse together.
+/// A symlinked parent must not carry the write outside the repository, so
+/// the resolved parent has to stay under the resolved root.
+fn contained(worktree: &Path, path: &Path) -> bool {
+    let (Ok(root), Some(parent)) = (fs::canonicalize(worktree), path.parent()) else {
+        return false;
+    };
+    fs::canonicalize(parent).is_ok_and(|resolved| resolved.starts_with(&root))
+}
+
+/// The spans replaced back to front so earlier offsets stay true.
 fn splice(source: &[u8], rows: &[Fix]) -> Option<Vec<u8>> {
     let mut ordered: Vec<&Fix> = rows.iter().collect();
     ordered.sort_by_key(|fix| (fix.start, fix.end));

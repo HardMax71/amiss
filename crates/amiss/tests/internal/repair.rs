@@ -63,3 +63,37 @@ fn out_of_range_spans_refuse_alone() {
     }];
     assert_eq!(splice(b"wxyz", &past_end), None);
 }
+
+/// A parent directory that resolves outside the worktree refuses the write,
+/// and one that resolves inside it does not.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_parent_escaping_the_worktree_refuses() {
+    let outside = tempfile::TempDir::new().unwrap();
+    let root = tempfile::TempDir::new().unwrap();
+    std::fs::write(outside.path().join("guide.md"), b"x").unwrap();
+    std::os::unix::fs::symlink(outside.path(), root.path().join("sub")).unwrap();
+    let fixes = [Fix {
+        start: 0,
+        end: 1,
+        replacement: "y".to_owned(),
+    }];
+    let staged = b"x".to_vec();
+    let outcome = super::repair_document(root.path(), "sub/guide.md", &fixes, Some(&staged));
+    assert!(
+        matches!(
+            outcome,
+            super::DocumentOutcome::Refused("resolves outside the worktree")
+        ),
+        "the escape is named"
+    );
+
+    std::fs::create_dir(root.path().join("actual")).unwrap();
+    std::fs::write(root.path().join("actual/guide.md"), b"x").unwrap();
+    std::os::unix::fs::symlink(root.path().join("actual"), root.path().join("inside")).unwrap();
+    let outcome = super::repair_document(root.path(), "inside/guide.md", &fixes, Some(&staged));
+    assert!(
+        matches!(outcome, super::DocumentOutcome::Applied(1)),
+        "an in-root resolution applies"
+    );
+}
