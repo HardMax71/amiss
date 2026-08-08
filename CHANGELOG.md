@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0](https://github.com/HardMax71/amiss/compare/v0.17.0...v0.18.0) - 2026-08-08
+
+### Changes
+
+- Fold the scan tests into one linked suite
+- Trim the summaries and project the fix sentences
+- Turn the case neighbor into the path's fix
+- Let a missed path name its one case neighbor
+- Give the fix sentences the home the law names
+- Fold the typography the renderers argue about
+- Let the md battery read the path span it fills
+
 ## [0.17.0](https://github.com/HardMax71/amiss/compare/v0.16.0...v0.17.0) - 2026-08-07
 
 ### Changes
