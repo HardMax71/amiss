@@ -44,6 +44,21 @@ fn a_double_quoted_line_falls_to_single_quotes() {
     );
 }
 
+/// A bare-CR file authors through the evaluation's own line scanner, so the
+/// printed claim names the line a check will actually compare.
+#[test]
+fn a_cr_delimited_file_authors_the_engine_line() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("legacy.txt"), b"alpha\rbeta\rgamma\r").unwrap();
+    let root = dir.path().to_str().unwrap();
+    let (code, stdout, _stderr) = amiss(&author_args(root, "legacy.txt", "2", "cr-line"));
+    assert_eq!(code, 0);
+    assert_eq!(
+        String::from_utf8(stdout).unwrap(),
+        "[amiss:cr-line]: <amiss:value?path=legacy.txt&line=L2> \"beta\"\n"
+    );
+}
+
 /// The money test: the printed definition, pasted into a document, evaluates
 /// as one attested claim under the full check.
 #[test]
@@ -142,6 +157,9 @@ fn the_claim_form_refuses_foreign_and_malformed_values() {
         swapped("--line", "007"),
         swapped("--name", "-bad"),
         swapped("--path", "has space.txt"),
+        swapped("--path", "a?b.txt"),
+        swapped("--path", "a#b.txt"),
+        swapped("--line", "9007199254740992"),
     ] {
         let shown: Vec<&str> = args.iter().map(String::as_str).collect();
         let (code, _stdout, stderr) = amiss(&shown);

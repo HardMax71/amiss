@@ -25,26 +25,33 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let Ok(text) = std::str::from_utf8(&bytes) else {
-        eprintln!(
-            "amiss claim: {} is not UTF-8, so no line can be quoted",
-            author.path
-        );
-        return ExitCode::FAILURE;
-    };
     let Ok(wanted) = usize::try_from(author.line) else {
         eprintln!("amiss claim: the line number does not fit this platform");
         return ExitCode::FAILURE;
     };
-    let Some(line) = text.split_inclusive('\n').nth(wanted.saturating_sub(1)) else {
-        let held = text.split_inclusive('\n').count();
+    // The evaluation's own line scanner, so authored numbers and bytes match
+    // what a check will later compare.
+    let Some(line) = amiss_md::lines::scan(&bytes).nth(wanted.saturating_sub(1)) else {
+        let held = amiss_md::lines::scan(&bytes).count();
         eprintln!(
             "amiss claim: {} holds {held} lines and L{} is past them",
             author.path, author.line
         );
         return ExitCode::FAILURE;
     };
-    let expected = line.trim_end_matches('\n').trim_end_matches('\r');
+    let selected = bytes.get(line.start..line.end).unwrap_or_default();
+    let content = selected
+        .strip_suffix(b"\r\n")
+        .or_else(|| selected.strip_suffix(b"\n"))
+        .or_else(|| selected.strip_suffix(b"\r"))
+        .unwrap_or(selected);
+    let Ok(expected) = std::str::from_utf8(content) else {
+        eprintln!(
+            "amiss claim: line L{} of {} is not UTF-8, so it cannot be quoted",
+            author.line, author.path
+        );
+        return ExitCode::FAILURE;
+    };
     // Double quotes first, the single-quoted title second for lines that
     // hold double quotes themselves; each spelling must survive the round
     // trip before it reaches stdout.
