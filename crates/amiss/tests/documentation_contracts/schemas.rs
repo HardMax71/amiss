@@ -251,6 +251,36 @@ fn all_public_contract_examples_clear_their_schema_and_registered_reader() {
     );
 }
 
+/// The example the last release shipped, refreshed by the release workflow,
+/// must keep clearing the rolling schema and reader: additions leave it
+/// clean, so a failure here is a payload reshape and resets the roadmap's
+/// settled-wire clock.
+#[test]
+fn the_last_released_example_still_clears_the_rolling_contract() {
+    let root = repository_root();
+    let schema_bytes =
+        fs::read(root.join("spec/scanner-report.schema.json")).expect("schema is readable");
+    let example_bytes = fs::read(root.join("spec/examples/scanner-report.last-released.json"))
+        .expect("the last released example is readable");
+    let schema: serde_json::Value = serde_json::from_slice(&schema_bytes).expect("schema is JSON");
+    let example: serde_json::Value =
+        serde_json::from_slice(&example_bytes).expect("the last released example is JSON");
+    let validator = jsonschema::validator_for(&schema).expect("schema compiles");
+    let mut defects: Vec<String> = validator
+        .iter_errors(&example)
+        .map(|error| format!("at {}: {error}", error.instance_path()))
+        .collect();
+    if let Some(error) = example_reader_defect("scanner-report", &example_bytes) {
+        defects.push(format!("rejected by the report reader: {error}"));
+    }
+    assert!(
+        defects.is_empty(),
+        "the last released example no longer clears the rolling contract; \
+         this is a payload reshape and resets the settled-wire clock:\n{}",
+        defects.join("\n"),
+    );
+}
+
 #[test]
 fn report_example_is_schema_clean_and_matches_its_canonical_form() {
     let root = repository_root();

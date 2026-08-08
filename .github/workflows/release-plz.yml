@@ -97,22 +97,25 @@ jobs:
             "s|^(      uses: HardMax71/amiss@action/v)[^[:space:]]+$|\\1${version}|" \
             action.yml
           grep -Fxq "      uses: HardMax71/amiss@action/v${version}" action.yml
+          cp spec/examples/scanner-report.json \
+            spec/examples/scanner-report.last-released.json
 
           if [[ -n "$(git status --short --untracked-files=all -- . \
             ':(exclude)fuzz/Cargo.lock' \
-            ':(exclude)action.yml')" ]]; then
+            ':(exclude)action.yml' \
+            ':(exclude)spec/examples/scanner-report.last-released.json')" ]]; then
             echo "Refreshing release-generated files changed an unexpected path"
             git status --short
             exit 1
           fi
-          if git diff --quiet -- fuzz/Cargo.lock action.yml; then
+          if git diff --quiet -- fuzz/Cargo.lock action.yml spec/examples/scanner-report.last-released.json; then
             echo "The release-generated files are already current"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fuzz/Cargo.lock action.yml
+          git add fuzz/Cargo.lock action.yml spec/examples/scanner-report.last-released.json
           git commit -m "chore: refresh release-generated files"
 
           # Authenticate for this push only; do not persist the token in the

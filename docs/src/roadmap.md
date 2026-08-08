@@ -16,6 +16,10 @@ consumer reads the report's stability from the report rather than from the versi
 binary that wrote it. Engine releases mean engine behavior; they neither promise nor
 threaten the wire.
 
+The clock has a tripwire in the tree. The example the last release shipped is kept beside
+the rolling one, refreshed by the release workflow, and a contract test fails the build
+the moment it stops clearing the current schema and reader, which is exactly a reshape.
+
 The contract freezes when three things hold at once. Two hold today: every supported
 lane's trust story is closed on retained live evidence, and the release carries no
 half-built trust path, since the launcher placeholder is cut and the verified-consumption
