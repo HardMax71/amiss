@@ -84,6 +84,8 @@ jobs:
         with:
           name: mutants-incremental-${{ matrix.shard }}
           path: mutants.out/
+          # A diff of renames or workflow edits mutates nothing, and that is not a defect.
+          if-no-files-found: ignore
 
   # The shards skip their own baseline, so one job has to establish it.
   baseline:
