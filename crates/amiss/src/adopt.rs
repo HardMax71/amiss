@@ -1,0 +1,174 @@
+use std::fs;
+use std::process::ExitCode;
+
+use amiss_scan::report::Built;
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::json::Value;
+
+use crate::invocation::{Adoption, Invocation, ProviderIdentity};
+use crate::payload::{member, text};
+
+const ELIGIBLE: [&str; 2] = ["explicit-target-missing", "explicit-target-type-mismatch"];
+
+#[expect(
+    clippy::print_stdout,
+    reason = "the adoption rows are the command's output"
+)]
+pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -> ExitCode {
+    if built.exit_code == 2 {
+        println!("amiss adopt: the evaluation could not be trusted; nothing recorded");
+        return ExitCode::from(2);
+    }
+    let Some(identity) = &invocation.identity else {
+        println!("amiss adopt: the snapshot binds a repository, so --repository is required");
+        return ExitCode::from(2);
+    };
+    if adoption.output.exists() {
+        println!("amiss adopt: the output path already exists; nothing recorded");
+        return ExitCode::FAILURE;
+    }
+    let (items, ineligible) = items(&built.envelope, adoption);
+    let recorded = items.len();
+    let Some(snapshot) = snapshot(&built.envelope, identity, adoption, built, items) else {
+        println!("amiss adopt: the report carries no candidate tree; nothing recorded");
+        return ExitCode::from(2);
+    };
+    let bytes = amiss_wire::json::canonical(&snapshot);
+    // The engine's own reader is the gate: a file it would refuse is never
+    // written.
+    if DebtSnapshot::parse(&bytes).is_err() {
+        println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
+        return ExitCode::from(2);
+    }
+    if fs::write(&adoption.output, &bytes).is_err() {
+        println!("amiss adopt: the output path could not be written; nothing recorded");
+        return ExitCode::FAILURE;
+    }
+    println!(
+        "amiss adopt: {recorded} blocking findings recorded at {}; {ineligible} blocking \
+         findings are not debt-eligible",
+        adoption.output.display()
+    );
+    ExitCode::SUCCESS
+}
+
+/// Every blocking, debt-eligible finding becomes one item carrying the fact
+/// the adoption accepts; blocking rows outside the eligible kinds are
+/// counted and left to be fixed instead.
+fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize) {
+    let mut rows = Vec::new();
+    let mut ineligible = 0_usize;
+    let findings = member(envelope, "payload")
+        .and_then(|payload| member(payload, "findings"))
+        .and_then(|findings| match findings {
+            Value::Array(rows) => Some(rows),
+            _ => None,
+        });
+    for row in findings.into_iter().flatten() {
+        if member(row, "effective_disposition").and_then(text) != Some("fail") {
+            continue;
+        }
+        let kind = member(row, "kind").and_then(text);
+        if !kind.is_some_and(|kind| ELIGIBLE.contains(&kind)) {
+            ineligible = ineligible.saturating_add(1);
+            continue;
+        }
+        let parts = member(row, "finding_key").and_then(text).zip(
+            member(row, "candidate_fact")
+                .filter(|fact| !matches!(fact, Value::Null))
+                .zip(member(row, "candidate_fact_digest").and_then(text)),
+        );
+        let Some((key, (fact, fact_digest))) = parts else {
+            ineligible = ineligible.saturating_add(1);
+            continue;
+        };
+        let short = key.strip_prefix("sha256:").unwrap_or(key);
+        rows.push(Value::Object(vec![
+            (
+                "debt_id".to_owned(),
+                Value::String(format!("debt/{}", short.get(..12).unwrap_or(short))),
+            ),
+            ("finding_key".to_owned(), Value::String(key.to_owned())),
+            ("accepted_fact".to_owned(), fact.clone()),
+            (
+                "accepted_fact_digest".to_owned(),
+                Value::String(fact_digest.to_owned()),
+            ),
+            ("owner".to_owned(), Value::String(adoption.owner.clone())),
+            ("reason".to_owned(), Value::String(adoption.reason.clone())),
+            (
+                "created_at".to_owned(),
+                Value::String(adoption.created_at.clone()),
+            ),
+            (
+                "expires_at".to_owned(),
+                Value::String(adoption.expires_at.clone()),
+            ),
+        ]));
+    }
+    (rows, ineligible)
+}
+
+fn snapshot(
+    envelope: &Value,
+    identity: &ProviderIdentity,
+    adoption: &Adoption,
+    built: &Built,
+    items: Vec<Value>,
+) -> Option<Value> {
+    let candidate = member(envelope, "payload")
+        .and_then(|payload| member(payload, "evaluation"))
+        .and_then(|evaluation| member(evaluation, "candidate"))?;
+    let tree = member(candidate, "tree_oid").and_then(text)?;
+    let object_format = member(candidate, "object_format").and_then(text)?;
+    Some(Value::Object(vec![
+        (
+            "schema".to_owned(),
+            Value::String("amiss/debt-snapshot".to_owned()),
+        ),
+        (
+            "repository".to_owned(),
+            Value::Object(vec![
+                (
+                    "host".to_owned(),
+                    Value::String(identity.repository.host.clone()),
+                ),
+                (
+                    "owner".to_owned(),
+                    Value::String(identity.repository.owner.clone()),
+                ),
+                (
+                    "name".to_owned(),
+                    Value::String(identity.repository.name.clone()),
+                ),
+            ]),
+        ),
+        (
+            "ref".to_owned(),
+            Value::String(identity.ref_name.as_str().to_owned()),
+        ),
+        (
+            "organization_floor_digest".to_owned(),
+            Value::String(adoption.floor_digest.clone()),
+        ),
+        (
+            "adoption_tree".to_owned(),
+            Value::Object(vec![
+                (
+                    "object_format".to_owned(),
+                    Value::String(object_format.to_owned()),
+                ),
+                ("tree_oid".to_owned(), Value::String(tree.to_owned())),
+            ]),
+        ),
+        (
+            "adoption_report_payload_digest".to_owned(),
+            Value::String(built.payload_digest.to_string()),
+        ),
+        (
+            "created_at".to_owned(),
+            Value::String(adoption.created_at.clone()),
+        ),
+        ("items".to_owned(), Value::Array(items)),
+    ]))
+}

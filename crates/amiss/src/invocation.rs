@@ -26,6 +26,15 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
+amiss adopt --repo <path> --object-format <sha1|sha256>
+            --base <full-oid> --candidate <full-oid>
+            [--repository <host>/<owner>/<name>
+             --ref refs/heads/<name>
+             --default-branch-ref refs/heads/<name>
+             [--forge <github|gitlab|gitea>]]
+            --floor-digest sha256:<64-hex> --debt-owner <name>
+            --debt-reason <text> --created-at <utc-instant>
+            --expires-at <utc-instant> --debt-output <path>
 amiss --version";
 
 const VERSION_FLAG: &str = "--version";
@@ -79,6 +88,7 @@ impl Code {
 pub enum Verb {
     Check,
     Fix,
+    Adopt,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,6 +111,18 @@ pub struct ProviderIdentity {
     pub default_branch_ref: BranchRef,
 }
 
+/// The adoption metadata the engine cannot know: who owns the recorded
+/// debt, why, its instants, the floor it binds to, and where the file goes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Adoption {
+    pub floor_digest: String,
+    pub owner: String,
+    pub reason: String,
+    pub created_at: String,
+    pub expires_at: String,
+    pub output: PathBuf,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {
     pub verb: Verb,
@@ -113,6 +135,7 @@ pub struct Invocation {
     pub profile: Profile,
     pub explain_scope: bool,
     pub format: OutputFormat,
+    pub adoption: Option<Adoption>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -173,6 +196,12 @@ struct Gathered {
     forge: Slot,
     profile: Slot,
     format: Slot,
+    floor_digest: Slot,
+    debt_owner: Slot,
+    debt_reason: Slot,
+    created_at: Slot,
+    expires_at: Slot,
+    debt_output: Slot,
     index: usize,
     explain_scope: usize,
     lexical_defect: bool,
@@ -202,6 +231,7 @@ fn gather(argv: &[OsString]) -> Gathered {
     match tokens.next() {
         Some(Some("check")) => gathered.verb = Some(Verb::Check),
         Some(Some("fix")) => gathered.verb = Some(Verb::Fix),
+        Some(Some("adopt")) => gathered.verb = Some(Verb::Adopt),
         Some(Some(_) | None) | None => gathered.lexical_defect = true,
     }
 
@@ -228,7 +258,13 @@ fn gather(argv: &[OsString]) -> Gathered {
             | "--default-branch-ref"
             | "--forge"
             | "--profile"
-            | "--format" => {
+            | "--format"
+            | "--floor-digest"
+            | "--debt-owner"
+            | "--debt-reason"
+            | "--created-at"
+            | "--expires-at"
+            | "--debt-output" => {
                 let value = match tokens.peek() {
                     Some(Some(next)) if !next.starts_with("--") => {
                         let owned = (*next).to_owned();
@@ -256,6 +292,12 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> &'a mut Slot {
         "--default-branch-ref" => &mut gathered.default_branch_ref,
         "--forge" => &mut gathered.forge,
         "--profile" => &mut gathered.profile,
+        "--floor-digest" => &mut gathered.floor_digest,
+        "--debt-owner" => &mut gathered.debt_owner,
+        "--debt-reason" => &mut gathered.debt_reason,
+        "--created-at" => &mut gathered.created_at,
+        "--expires-at" => &mut gathered.expires_at,
+        "--debt-output" => &mut gathered.debt_output,
         _ => &mut gathered.format,
     }
 }
@@ -289,21 +331,46 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
             &gathered.default_branch_ref,
             &gathered.forge,
             &gathered.profile,
+            &gathered.floor_digest,
+            &gathered.debt_owner,
+            &gathered.debt_reason,
+            &gathered.created_at,
+            &gathered.expires_at,
+            &gathered.debt_output,
         ]
         .iter()
         .any(|slot| slot.defective());
     if duplicated {
         codes.insert(Code::InvalidInvocation);
     }
-    for required in [
-        &gathered.repo,
-        &gathered.object_format,
-        &gathered.base,
-        &gathered.profile,
-    ] {
+    for required in [&gathered.repo, &gathered.object_format, &gathered.base] {
         if !required.present() {
             codes.insert(Code::InvalidInvocation);
         }
+    }
+    // Adoption records what enforce would block, so the profile is not a
+    // choice there; everywhere else it stays required.
+    if gathered.verb == Some(Verb::Adopt) {
+        if gathered.profile.present() {
+            codes.insert(Code::InvalidInvocation);
+        }
+    } else if !gathered.profile.present() {
+        codes.insert(Code::InvalidInvocation);
+    }
+    let adoption_slots = [
+        &gathered.floor_digest,
+        &gathered.debt_owner,
+        &gathered.debt_reason,
+        &gathered.created_at,
+        &gathered.expires_at,
+        &gathered.debt_output,
+    ];
+    if gathered.verb == Some(Verb::Adopt) {
+        if adoption_slots.iter().any(|slot| !slot.present()) {
+            codes.insert(Code::InvalidInvocation);
+        }
+    } else if adoption_slots.iter().any(|slot| slot.present()) {
+        codes.insert(Code::InvalidInvocation);
     }
     if gathered.candidate.present() == (gathered.index > 0) {
         codes.insert(Code::InvalidInvocation);
@@ -311,6 +378,13 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
     // Check-only flags are refused on the repair form rather than ignored.
     if gathered.verb == Some(Verb::Fix)
         && (gathered.candidate.present() || gathered.format.present() || gathered.explain_scope > 0)
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
+    // The adoption form records a committed tree and writes a file, so the
+    // staged selector and report output flags are refused.
+    if gathered.verb == Some(Verb::Adopt)
+        && (gathered.index > 0 || gathered.format.present() || gathered.explain_scope > 0)
     {
         codes.insert(Code::InvalidInvocation);
     }
@@ -341,16 +415,22 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
         codes.insert(Code::InvalidInvocation);
     }
 
-    let profile = match gathered.profile.unique_value() {
-        Some("observe") => Some(Profile::Observe),
-        Some("enforce-introduced") => Some(Profile::EnforceIntroduced),
-        Some("enforce") => Some(Profile::Enforce),
-        Some(_) => {
-            codes.insert(Code::InvalidProfile);
-            None
+    let profile = if gathered.verb == Some(Verb::Adopt) {
+        Some(Profile::Enforce)
+    } else {
+        match gathered.profile.unique_value() {
+            Some("observe") => Some(Profile::Observe),
+            Some("enforce-introduced") => Some(Profile::EnforceIntroduced),
+            Some("enforce") => Some(Profile::Enforce),
+            Some(_) => {
+                codes.insert(Code::InvalidProfile);
+                None
+            }
+            None => None,
         }
-        None => None,
     };
+
+    let adoption = classify_adoption(&mut codes, gathered);
 
     let identity = classify_identity(&mut codes, gathered);
     let forge = classify_forge(&mut codes, gathered, &identity);
@@ -366,6 +446,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
             };
             Ok(Invocation {
                 verb,
+                adoption,
                 repo,
                 object_format,
                 base,
@@ -378,6 +459,62 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
             })
         }
         _ => Err(BTreeSet::from([Code::InvalidInvocation])),
+    }
+}
+
+/// Every adoption value is validated where the grammar can see it: the
+/// floor digest by its exact spelling, both instants by the wire's own
+/// clock grammar, and the free-text fields by being nonempty.
+fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<Adoption> {
+    if gathered.verb != Some(Verb::Adopt) {
+        return None;
+    }
+    let digest = gathered.floor_digest.unique_value().filter(|value| {
+        value.strip_prefix("sha256:").is_some_and(|hex| {
+            hex.len() == 64
+                && hex
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+    });
+    let instant = |slot: &Slot| {
+        slot.unique_value()
+            .filter(|value| amiss_wire::model::UtcInstant::new((*value).to_owned()).is_some())
+            .map(str::to_owned)
+    };
+    let nonempty = |slot: &Slot| {
+        slot.unique_value()
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    let fields = (
+        digest.map(str::to_owned),
+        nonempty(&gathered.debt_owner),
+        nonempty(&gathered.debt_reason),
+        instant(&gathered.created_at),
+        instant(&gathered.expires_at),
+        nonempty(&gathered.debt_output),
+    );
+    match fields {
+        (
+            Some(floor_digest),
+            Some(owner),
+            Some(reason),
+            Some(created_at),
+            Some(expires_at),
+            Some(output),
+        ) => Some(Adoption {
+            floor_digest,
+            owner,
+            reason,
+            created_at,
+            expires_at,
+            output: PathBuf::from(output),
+        }),
+        _ => {
+            codes.insert(Code::InvalidInvocation);
+            None
+        }
     }
 }
 

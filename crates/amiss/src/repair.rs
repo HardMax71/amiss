@@ -8,6 +8,8 @@ use amiss_scan::report::Built;
 use amiss_wire::json::Value;
 use amiss_wire::model::ObjectFormat;
 
+use crate::payload::{byte_offset, member, text};
+
 struct Fix {
     start: usize,
     end: usize,
@@ -88,30 +90,6 @@ pub(crate) fn run(
     } else {
         ExitCode::SUCCESS
     }
-}
-
-fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
-    let Value::Object(members) = value else {
-        return None;
-    };
-    members
-        .iter()
-        .find(|(name, _)| name == key)
-        .map(|(_, member)| member)
-}
-
-fn text(value: &Value) -> Option<&str> {
-    let Value::String(text) = value else {
-        return None;
-    };
-    Some(text)
-}
-
-fn byte_offset(value: &Value) -> Option<usize> {
-    let Value::Integer(offset) = value else {
-        return None;
-    };
-    usize::try_from(*offset).ok()
 }
 
 fn collect(envelope: &Value) -> (BTreeMap<String, Vec<Fix>>, usize) {

@@ -34,6 +34,15 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
+amiss adopt --repo <path> --object-format <sha1|sha256>
+            --base <full-oid> --candidate <full-oid>
+            [--repository <host>/<owner>/<name>
+             --ref refs/heads/<name>
+             --default-branch-ref refs/heads/<name>
+             [--forge <github|gitlab|gitea>]]
+            --floor-digest sha256:<64-hex> --debt-owner <name>
+            --debt-reason <text> --created-at <utc-instant>
+            --expires-at <utc-instant> --debt-output <path>
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
