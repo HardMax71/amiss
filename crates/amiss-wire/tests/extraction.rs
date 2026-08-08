@@ -52,6 +52,16 @@ fn the_fragment_core_names_bytes_only_under_certainty() {
         "a percent fragment refuses alone"
     );
     assert_eq!(
+        fragment_span(b"see [a](x.md#a&b) end", (4, 17), "x.md#a&b"),
+        None,
+        "an ampersand fragment refuses alone"
+    );
+    assert_eq!(
+        fragment_span(b"see [a](x.md#a\\b) end", (4, 17), "x.md#a\\b"),
+        None,
+        "a backslash fragment refuses alone"
+    );
+    assert_eq!(
         fragment_span(b"see [a](x%20.md#ab) end", (4, 19), "x%20.md#ab"),
         None,
         "a percent prefix refuses alone"
@@ -95,6 +105,16 @@ fn the_path_core_names_bytes_only_under_certainty() {
         path_span(b"see [a](G%20.md) end", (4, 16), "G%20.md"),
         None,
         "a percent path refuses alone"
+    );
+    assert_eq!(
+        path_span(b"see [a](a&b.md) end", (4, 15), "a&b.md"),
+        None,
+        "an ampersand path refuses alone"
+    );
+    assert_eq!(
+        path_span(b"see [a](a\\b.md) end", (4, 15), "a\\b.md"),
+        None,
+        "a backslash path refuses alone"
     );
     assert_eq!(
         path_span(b"see [a]() end", (4, 9), ""),
