@@ -50,6 +50,10 @@ the enforcement control moves.
 | GitLab | gitlab.com 19.3.0-pre | `merge_train_enforcement: allow_bypass` | policy job `failed` on `412`, train dropped the car | `270b65505c42` |
 
 The revocation was restored afterwards and the restored train merged the same content.
+Drift verdicts from the same instance, where the candidate broke a documented reference
+and the control stayed intact, are recorded in
+[pull request 332](https://github.com/HardMax71/amiss/pull/332): the drift refused, the
+completed move approved.
 Running the lane live found two defects every fixture had agreed with, keeping the July
 pattern: the documented policy job wrapped its script across YAML lines that policy
 injection preserves literally, so the book now keeps the command on one physical line,
