@@ -127,7 +127,7 @@ lines the findings name, with fixes rendered as suggested edits and the finding 
 deduplicating alerts across runs. Two steps after any direct invocation:
 
 ```yaml
-- run: amiss check "$@" --format sarif > amiss.sarif
+- run: amiss check <the check flags above> --format sarif > amiss.sarif
 - uses: github/codeql-action/upload-sarif@24c7eb380a2dc368f2d129e4c65e51d172983a1e # v4
   with:
     sarif_file: amiss.sarif
