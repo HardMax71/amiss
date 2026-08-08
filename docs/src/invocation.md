@@ -67,7 +67,7 @@ and are the ones to trust when the short form reads ambiguous.
 | `--format` | `human`, `json`, or `sarif` | ten grouped items, the exact report in [The report](report.md), or its SARIF projection |
 | `--path` | repo-relative path | the file the authored claim pins |
 | `--line` | positive line number | the line the claim expects, one-based |
-| `--name` | claim name | the `amiss:` label; letters, digits, `.`, `_`, `-` |
+| `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |
 | `--floor-digest` | `sha256:` and 64 hex | the organization floor the minted debt snapshot binds to |
 | `--debt-owner` | text | the item owner the floor must authorize |
 | `--debt-reason` | text | why the debt is being recorded |

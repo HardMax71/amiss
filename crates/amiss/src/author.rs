@@ -6,9 +6,8 @@ use amiss_wire::model::Adapter;
 
 use crate::invocation::AuthorInvocation;
 
-/// Prints one ready value-claim definition for the named line, proven by
-/// running the printed bytes back through the markdown extractor and the
-/// claim grammar before anything reaches stdout.
+/// Nothing reaches stdout unproven: the printed bytes must survive the
+/// extractor and the claim grammar first.
 #[expect(
     clippy::print_stdout,
     clippy::print_stderr,
@@ -52,9 +51,7 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
         );
         return ExitCode::FAILURE;
     };
-    // Double quotes first, the single-quoted title second for lines that
-    // hold double quotes themselves; each spelling must survive the round
-    // trip before it reaches stdout.
+    // Double quotes first, single quotes for lines that hold them.
     let spellings = [
         format!(
             "[amiss:{}]: <amiss:value?path={}&line=L{}> \"{expected}\"",
@@ -78,7 +75,6 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
     ExitCode::FAILURE
 }
 
-/// The printed bytes must extract into exactly the claim the flags named.
 fn round_trips(definition: &str, author: &AuthorInvocation, expected: &str) -> bool {
     let document = format!("{definition}\n");
     let Ok(analysis) = amiss_md::analyze(Adapter::Markdown, document.as_bytes(), u64::MAX) else {
