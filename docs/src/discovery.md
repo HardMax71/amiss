@@ -69,7 +69,7 @@ namespace on the candidate side is an unsupported capability boundary: the run e
 incomplete with exit 2. A base-only definition does neither. The
 [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
 drive extraction, source hashing, candidate-only grouping, and report construction in the
-[governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs),
+[governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/governed.rs),
 including one refusal vector per clause of the value grammar.
 
 Every count is reported: discovered, scanned, unsupported, excluded, unlinked. Despite its
@@ -95,7 +95,7 @@ Both commit-tree and staged-index discovery emit document rows strictly increasi
 unique by those raw path bytes. That ordering is load-bearing: exact document queries and
 policy-inventory checks use binary search over it, and two-sided report construction
 merge-joins the ordered sides. The
-[`discovery` ordering test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/discovery.rs)
+[`discovery` ordering test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/discovery.rs)
 pins the Git directory-boundary ordering against both snapshot modes, the report test
 pins interleaved base and candidate rows, and the `amiss-scan` `pipeline` benchmark
 tracks lookup and merge cost as the row count grows.

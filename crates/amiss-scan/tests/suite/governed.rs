@@ -20,7 +20,7 @@ use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use serde_json::{Map, Value};
 
-mod support;
+use crate::support;
 
 use support::assert_report as assert_schema_clean;
 

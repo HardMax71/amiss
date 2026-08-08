@@ -18,7 +18,7 @@ use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::ExternalReference;
 
-mod support;
+use crate::support;
 
 use support::{ReportSchemaFragment, fixture_bytes};
 
