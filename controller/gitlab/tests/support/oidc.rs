@@ -17,6 +17,7 @@ use super::identity::{HOST, PROJECT_PATH, TestClock, oid, provider};
 
 const AUDIENCE: &str = "amiss-controller";
 pub const KID: &str = "current";
+pub const SKEW_SECONDS: u64 = 2;
 
 #[expect(
     clippy::expect_used,
@@ -47,7 +48,7 @@ pub fn oidc() -> Arc<GitLabOidc> {
             AUDIENCE.to_owned(),
             policy,
             vec![public_key()],
-            2,
+            SKEW_SECONDS,
         )
         .unwrap(),
     )

@@ -192,6 +192,12 @@ impl<'a> IngressCheck<'a> {
         self.delivery
     }
 
+    /// The one clock reading this delivery was admitted under; providers
+    /// enforce their own time windows against it, never a second source.
+    pub const fn now_unix_millis(&self) -> i64 {
+        self.now
+    }
+
     pub(crate) const fn request_binding(&self) -> RequestBinding {
         self.request
     }
