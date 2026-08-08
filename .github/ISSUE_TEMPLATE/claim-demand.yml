@@ -1,0 +1,32 @@
+name: Claim-kind demand
+description: Register demand for a claim kind beyond value, per the roadmap's research section
+labels: [claim-demand]
+body:
+  - type: input
+    id: kind
+    attributes:
+      label: Claim kind
+      description: One of the research names (typed snippet, inventory, tree, graph, transcript, narrative, external) or a new name for what it would pin.
+    validations:
+      required: true
+  - type: input
+    id: repository
+    attributes:
+      label: The repository it would gate
+      description: The real repository whose reviews this claim kind would carry.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: One drifted example reference checking cannot catch
+      description: The document and the fact in it that went stale while every reference still resolved. This is the piece that makes the register real.
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: What the claim should have pinned
+      description: The value, shape, or relationship a claim definition would have held, and what breaking it should have blocked.
+    validations:
+      required: false
