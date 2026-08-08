@@ -284,6 +284,7 @@ fn an_ineligible_blocking_finding_is_counted_not_recorded() {
         shown.contains("1 blocking findings are not debt-eligible"),
         "{shown}"
     );
+    assert!(shown.contains("0 eligible rows skipped"), "{shown}");
     let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
     assert!(snapshot.items.is_empty());
 }
@@ -370,6 +371,7 @@ fn malformed_adoption_values_are_refused() {
         broken("--floor-digest", "sha256:short"),
         broken("--floor-digest", &uppercase),
         broken("--debt-owner", ""),
+        broken("--expires-at", "2026-08-08T00:00:00Z"),
     ] {
         let shown: Vec<&str> = args.iter().map(String::as_str).collect();
         let (code, _stdout, stderr) = amiss(&shown);

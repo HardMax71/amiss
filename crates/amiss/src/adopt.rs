@@ -28,7 +28,7 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the output path already exists; nothing recorded");
         return ExitCode::FAILURE;
     }
-    let (items, ineligible) = items(&built.envelope, adoption);
+    let (items, ineligible, factless) = items(&built.envelope, adoption);
     let recorded = items.len();
     let Some(snapshot) = snapshot(&built.envelope, identity, adoption, built, items) else {
         println!("amiss adopt: the report carries no candidate tree; nothing recorded");
@@ -48,12 +48,14 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         .open(&adoption.output)
         .and_then(|mut file| std::io::Write::write_all(&mut file, &bytes));
     if written.is_err() {
+        // A partial file must not survive to block the retry.
+        drop(fs::remove_file(&adoption.output));
         println!("amiss adopt: the output path could not be written; nothing recorded");
         return ExitCode::FAILURE;
     }
     println!(
         "amiss adopt: {recorded} blocking findings recorded at {}; {ineligible} blocking \
-         findings are not debt-eligible",
+         findings are not debt-eligible; {factless} eligible rows skipped for missing facts",
         adoption.output.display()
     );
     ExitCode::SUCCESS
@@ -62,9 +64,10 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// Every blocking, debt-eligible finding becomes one item carrying the fact
 /// the adoption accepts; blocking rows outside the eligible kinds are
 /// counted and left to be fixed instead.
-fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize) {
+fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize, usize) {
     let mut rows = Vec::new();
     let mut ineligible = 0_usize;
+    let mut factless = 0_usize;
     let findings = member(envelope, "payload")
         .and_then(|payload| member(payload, "findings"))
         .and_then(|findings| {
@@ -89,15 +92,12 @@ fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize) {
                 .zip(member(row, "candidate_fact_digest").and_then(text)),
         );
         let Some((key, (fact, fact_digest))) = parts else {
-            ineligible = ineligible.saturating_add(1);
+            factless = factless.saturating_add(1);
             continue;
         };
-        let short = key.strip_prefix("sha256:").unwrap_or(key);
+        let full = key.strip_prefix("sha256:").unwrap_or(key);
         rows.push(Value::Object(vec![
-            (
-                "debt_id".to_owned(),
-                Value::String(format!("debt/{}", short.get(..12).unwrap_or(short))),
-            ),
+            ("debt_id".to_owned(), Value::String(format!("debt/{full}"))),
             ("finding_key".to_owned(), Value::String(key.to_owned())),
             ("accepted_fact".to_owned(), fact.clone()),
             (
@@ -116,7 +116,7 @@ fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize) {
             ),
         ]));
     }
-    (rows, ineligible)
+    (rows, ineligible, factless)
 }
 
 fn snapshot(
