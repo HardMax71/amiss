@@ -58,7 +58,7 @@ and are the ones to trust when the short form reads ambiguous.
 | `--candidate` | full commit ID | the state under review; exclusive with `--index` |
 | `--index` | none | checks the staged state against the base instead |
 | `--repository` | `<host>/<owner>/<name>`, lowercase | unverified identity claim for same-repository URLs |
-| `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to |
+| `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to; in the adopt form, also the ref the minted debt binds to |
 | `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
 | `--forge` | `github`, `gitlab`, or `gitea` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
@@ -125,9 +125,11 @@ itself; the flags supply what it cannot know, the floor digest the snapshot bind
 owner the floor must authorize, the reason, both instants in the wire's own clock
 grammar, and the output path, which must not already exist. Adoption records a committed
 tree, so the staged selector is refused, and the repository identity triple is part of
-the form's own grammar because the snapshot binds one. Mint with `--ref` naming the
-protected target branch the lanes will enforce, since the debt binds to that ref and a
-snapshot minted under another ref stays out of scope there. The minted file is written only after the engine's own
+the form's own grammar because the snapshot binds one. In this form `--ref` carries a second
+role beyond URL resolution: it is written into the snapshot's `ref` binding, so spell it
+as the branch the consuming lanes will enforce, since a snapshot bound to another ref
+stays out of scope there. That reuse changes nothing about the check form, where `--ref`
+remains the candidate branch and no flag names a protected target. The minted file is written only after the engine's own
 reader accepts it, and blocking findings outside the debt-eligible kinds are counted in
 the summary line and left to be fixed. Exit 0 means the snapshot was recorded, 1 means
 the output path refused, and 2 means nothing trustworthy could be recorded, whether the
