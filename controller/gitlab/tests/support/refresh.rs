@@ -37,7 +37,7 @@ pub fn valid_refresh(delivery: &AuthenticatedDelivery) -> GitLabRefresh {
             id: 303,
             name: "amiss:policy".to_owned(),
             status: "running".to_owned(),
-            source: "pipeline_execution_policy".to_owned(),
+            source: Some("pipeline_execution_policy".to_owned()),
             pipeline_id: 202,
             commit: gate.clone(),
             runner_id: 77,

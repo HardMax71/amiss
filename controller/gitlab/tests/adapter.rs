@@ -93,12 +93,31 @@ fn active_snapshot_is_the_exact_train_commit_and_first_parent() {
     assert_eq!(queries[0].runner_id, 77);
 }
 
+/// gitlab.com answers the jobs API with a null source while the OIDC
+/// `job_source` claim it signed already named the policy, so an absent REST
+/// source stays active and only a wrong one is invalid.
+#[test]
+fn an_absent_rest_job_source_still_names_the_policy_job() {
+    let now = now_seconds();
+    let source = oidc();
+    let delivery = accept(&source, &claims(now), BODY, now)
+        .unwrap()
+        .delivery()
+        .clone();
+    let mut refresh = valid_refresh(&delivery);
+    refresh.job.source = None;
+    let api = FakeApi::new([refresh]);
+    let adapter = GitLabMergeTrainAdapter::new(source, api);
+    let snapshot = adapter.refresh(&delivery).unwrap();
+    assert_eq!(snapshot.state, ChangeState::Active);
+}
+
 #[test]
 fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
     let (source, delivery, valid) = fixture();
     let mut cases = Vec::new();
     let mut project_job = valid.clone();
-    project_job.job.source = "project".to_owned();
+    project_job.job.source = Some("project".to_owned());
     cases.push(project_job);
     let mut wrong_pipeline = valid.clone();
     wrong_pipeline.pipeline.sha = "d".repeat(40);

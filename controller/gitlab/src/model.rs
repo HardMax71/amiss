@@ -57,7 +57,9 @@ pub struct GitLabJob {
     pub id: u64,
     pub name: String,
     pub status: String,
-    pub source: String,
+    /// gitlab.com serves a null REST job source while the signed OIDC
+    /// `job_source` claim still states the policy provenance.
+    pub source: Option<String>,
     pub pipeline_id: u64,
     pub commit: String,
     pub runner_id: u64,
