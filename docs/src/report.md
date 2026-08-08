@@ -9,7 +9,7 @@ the contract's numbers are integers, never floats.
 
 The outer envelope has three members: its schema, the payload, and `payload_digest`, a hash
 of the payload's canonical bytes. The payload carries its own schema, `compatibility`
-(`experimental` for the v0 series), and an engine block whose `engine_digest` names the
+(the wire's own version, `experimental` while the contract rolls), and an engine block whose `engine_digest` names the
 binary that produced it. Every digest in the system is domain-separated, meaning the hash
 input starts with a label naming its purpose, so a digest computed for one context cannot be
 replayed as a digest for another.
@@ -164,7 +164,9 @@ emitted bytes with an independent schema validator, checks the canonical example
 that the schema identifiers match the writer constants in the
 [documentation contract test](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/documentation_contracts).
 
-This is one rolling, unversioned wire contract during the pre-1.0 `experimental` series.
-Only the unsuffixed schema and examples linked above describe public report output. The
-schema, examples, parsers, and writer change together. Consumers that need a stable
+The wire is versioned by its own `compatibility` field, not by the engine release:
+`experimental` means one rolling contract, and the planned `1` means additive-only from
+then on, with the conditions in the [roadmap](roadmap.md). While it rolls, only the
+unsuffixed schema and examples linked above describe public report output, the schema,
+examples, parsers, and writer change together, and consumers that need a stable
 integration must pin an Amiss release and its shipped schema.

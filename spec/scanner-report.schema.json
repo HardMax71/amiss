@@ -4828,5 +4828,5 @@
       }
     }
   },
-  "description": "The rolling pre-1.0 report contract. Public wire contracts remain intentionally unversioned while compatibility is experimental."
+  "description": "The report contract, versioned by the in-payload compatibility field: experimental while it rolls, additive within a major once frozen."
 }
