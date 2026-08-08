@@ -444,10 +444,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeS
     }
 }
 
-/// The authoring form stands alone: the repo root plus the claim trio, with
-/// every scan-shaped flag refused, and the trio validated where the grammar
-/// can see it, the name spelling, the line rule, and a path both the wire
-/// and the claim url can hold.
+/// The path refuses the bytes the claim url and the extractor cannot carry.
 fn classify_claim(
     mut codes: BTreeSet<Code>,
     gathered: &Gathered,
