@@ -60,9 +60,12 @@ fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize) {
     let mut ineligible = 0_usize;
     let findings = member(envelope, "payload")
         .and_then(|payload| member(payload, "findings"))
-        .and_then(|findings| match findings {
-            Value::Array(rows) => Some(rows),
-            _ => None,
+        .and_then(|findings| {
+            if let Value::Array(rows) = findings {
+                Some(rows)
+            } else {
+                None
+            }
         });
     for row in findings.into_iter().flatten() {
         if member(row, "effective_disposition").and_then(text) != Some("fail") {

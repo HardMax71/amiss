@@ -299,14 +299,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         }),
         (None | Some(_), None) | (None, Some(_)) => None,
     };
-    // The repair verb pins the index before the evaluation reads it, so the
-    // spans it later applies were proven against exactly these bytes.
-    let staged_snapshot = (invocation.verb == Verb::Fix)
-        .then(|| {
-            let mut resources = amiss_git::GitResources::new(amiss_git::GitLimits::default());
-            repo.read_index_bytes(&mut resources).ok()
-        })
-        .flatten();
+    let staged_snapshot = pinned_index(invocation, &repo);
     let (enforce, introduced_only) = profile_flags(invocation.profile);
     let shell = SetupShell {
         engine,
@@ -368,6 +361,17 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     }
     render(&built, invocation, reserve);
     exit_class(built.exit_code)
+}
+
+/// The repair verb pins the index before the evaluation reads it, so the
+/// spans it later applies were proven against exactly these bytes.
+fn pinned_index(invocation: &Invocation, repo: &amiss_git::Repository) -> Option<Vec<u8>> {
+    (invocation.verb == Verb::Fix)
+        .then(|| {
+            let mut resources = amiss_git::GitResources::new(amiss_git::GitLimits::default());
+            repo.read_index_bytes(&mut resources).ok()
+        })
+        .flatten()
 }
 
 const fn open_code(defect: &amiss_git::Error) -> AnalysisErrorCode {

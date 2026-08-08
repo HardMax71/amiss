@@ -111,7 +111,21 @@ ignored. Exit 0 means every carried fix was applied or already present, 1 means 
 one document refused, and 2 means the evaluation itself could not be trusted and nothing
 was touched. Restage and rerun `amiss check` to see the repaired state judged.
 
-`amiss --version` is the third form of the grammar and the only one that is not a scan. It
+`amiss adopt` is the onboarding form: it runs the same evaluation under enforce and mints
+a [debt snapshot](controls.md) from every blocking, debt-eligible finding, so a repository
+with legacy drift can start gating new drift the same day while the recorded debt is
+worked off. The engine supplies each item's key and accepted fact from the evaluation
+itself; the flags supply what it cannot know, the floor digest the snapshot binds to, the
+owner the floor must authorize, the reason, both instants in the wire's own clock
+grammar, and the output path, which must not already exist. Adoption records a committed
+tree, so the staged selector is refused, and the repository identity block is required
+because the snapshot binds one. The minted file is written only after the engine's own
+reader accepts it, and blocking findings outside the debt-eligible kinds are counted in
+the summary line and left to be fixed. Exit 0 means the snapshot was recorded, 1 means
+the output path refused, and 2 means the evaluation could not be trusted and nothing was
+recorded.
+
+`amiss --version` is the fourth form of the grammar and the only one that is not a scan. It
 carries no other flag, prints two lines to stdout, and exits 0:
 
 ```text

@@ -26,7 +26,8 @@ entry count grows.
 External controls come from outside the repository, because anything stored inside it could
 be rewritten by the very pull request under review. The contract defines five: an
 organization floor (tightens ceilings and dispositions across many repositories), an
-adoption debt snapshot (a recorded list of known failures being worked off), a waiver
+adoption debt snapshot (a recorded list of known failures being worked off, mintable
+from a real evaluation by [`amiss adopt`](invocation.md)), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
 execution constraint.
 
