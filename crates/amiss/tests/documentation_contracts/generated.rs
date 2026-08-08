@@ -202,6 +202,45 @@ fn documented_grammar_matches_the_refusal_grammar() {
 }
 
 #[test]
+fn the_status_page_names_every_grammar_form() {
+    let path = repository_root().join("docs/src/status.md");
+    let document = fs::read_to_string(&path).expect("status documentation is readable");
+    let row = document
+        .lines()
+        .find(|line| line.starts_with("| Command |"))
+        .expect("the supported-surface table has a Command row");
+    let forms: Vec<String> = amiss::invocation::GRAMMAR
+        .lines()
+        .filter_map(|line| line.strip_prefix("amiss "))
+        .filter_map(|form| form.split_whitespace().next())
+        .map(|verb| format!("`amiss {verb}`"))
+        .collect();
+    for form in &forms {
+        assert!(
+            row.contains(form.as_str()),
+            "{} Command row omits {form}",
+            path.display(),
+        );
+    }
+    assert_eq!(
+        row.matches("`amiss ").count(),
+        forms.len(),
+        "{} Command row names a form outside the closed grammar",
+        path.display(),
+    );
+    let spelled = [
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    ]
+    .get(forms.len())
+    .expect("the grammar stays below ten forms");
+    assert!(
+        row.contains(&format!("closed at those {spelled} forms")),
+        "{} Command row miscounts the closed grammar",
+        path.display(),
+    );
+}
+
+#[test]
 fn meaning_sentences_stay_inside_the_wire_bounds() {
     let sentences = FindingKind::all()
         .map(|kind| (kind.as_str(), kind.meaning()))
