@@ -27,6 +27,7 @@ pub struct GitLabOidc {
     pub policy: PolicyBinding,
     keys: BTreeMap<String, OidcPublicKey>,
     validation: Validation,
+    clock_skew_seconds: u64,
 }
 
 impl fmt::Debug for GitLabOidc {
@@ -70,9 +71,12 @@ impl GitLabOidc {
         validation.set_audience(std::slice::from_ref(&audience));
         validation.set_issuer(std::slice::from_ref(&issuer));
         validation.set_required_spec_claims(&["exp", "nbf", "aud", "iss", "sub"]);
-        validation.validate_nbf = true;
-        validation.leeway = clock_skew_seconds;
-        validation.reject_tokens_expiring_in_less_than = 1;
+        // The expiry window is enforced below against the injected clock;
+        // the decoder consulting its own wall clock would be a second time
+        // source no test or replay could pin.
+        validation.validate_exp = false;
+        validation.validate_nbf = false;
+        validation.leeway = 0;
         Ok(Self {
             provider,
             trust_set,
@@ -81,6 +85,7 @@ impl GitLabOidc {
             policy,
             keys,
             validation,
+            clock_skew_seconds,
         })
     }
 
@@ -107,7 +112,16 @@ impl GitLabOidc {
         let claims = decode::<Claims>(token, &key.key, &self.validation)
             .map_err(|_defect| ProviderError::Authentication)?
             .claims;
-        let facts = authenticated_facts(&self.provider, &self.policy, &claims, input.body)?;
+        let now_seconds = u64::try_from(check.now_unix_millis().div_euclid(1_000))
+            .map_err(|_defect| ProviderError::Authentication)?;
+        let facts = authenticated_facts(
+            &self.provider,
+            &self.policy,
+            &claims,
+            input.body,
+            now_seconds,
+            self.clock_skew_seconds,
+        )?;
         let proof = signed_request_proof(
             check,
             self.trust_set.clone(),

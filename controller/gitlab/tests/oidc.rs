@@ -12,7 +12,8 @@ use serde_json::{Value, json};
 
 use support::identity::now_seconds;
 use support::oidc::{
-    accept, claims, oidc, route, set_claim, sign, verify, verify_routed, verify_signed,
+    SKEW_SECONDS, accept, claims, oidc, route, set_claim, sign, verify, verify_routed,
+    verify_signed,
 };
 
 const BODY: &[u8] = br#"{"merge_request_iid":42}"#;
@@ -440,6 +441,38 @@ fn a_token_at_its_own_bounds_is_still_authentic() {
     assert!(
         accept(&source, &valid_from_expiry, BODY, now).is_ok(),
         "valid from its own expiry"
+    );
+
+    let mut at_skew = claims(now);
+    set_claim(&mut at_skew, "iat", json!(now - SKEW_SECONDS));
+    set_claim(&mut at_skew, "nbf", json!(now - SKEW_SECONDS));
+    set_claim(&mut at_skew, "exp", json!(now - SKEW_SECONDS));
+    assert!(
+        accept(&source, &at_skew, BODY, now).is_ok(),
+        "expired exactly the skew ago is still inside the window"
+    );
+
+    let mut past_skew = claims(now);
+    set_claim(&mut past_skew, "iat", json!(now - SKEW_SECONDS - 1));
+    set_claim(&mut past_skew, "nbf", json!(now - SKEW_SECONDS - 1));
+    set_claim(&mut past_skew, "exp", json!(now - SKEW_SECONDS - 1));
+    assert!(
+        accept(&source, &past_skew, BODY, now).is_err(),
+        "one second past the skew is expired"
+    );
+
+    let mut ahead_at_skew = claims(now);
+    set_claim(&mut ahead_at_skew, "nbf", json!(now + SKEW_SECONDS));
+    assert!(
+        accept(&source, &ahead_at_skew, BODY, now).is_ok(),
+        "valid from exactly the skew ahead is inside the window"
+    );
+
+    let mut ahead_past_skew = claims(now);
+    set_claim(&mut ahead_past_skew, "nbf", json!(now + SKEW_SECONDS + 1));
+    assert!(
+        accept(&source, &ahead_past_skew, BODY, now).is_err(),
+        "one second further ahead is not yet valid"
     );
 }
 

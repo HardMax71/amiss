@@ -25,6 +25,8 @@ pub(crate) fn authenticated_facts(
     policy: &PolicyBinding,
     claims: &Claims,
     body: &[u8],
+    now_seconds: u64,
+    skew_seconds: u64,
 ) -> Result<AuthenticatedFacts, ProviderError> {
     let hint: RequestHint =
         serde_json::from_slice(body).map_err(|_defect| ProviderError::Authentication)?;
@@ -52,6 +54,8 @@ pub(crate) fn authenticated_facts(
         || !runner_authorized
         || claims.iat > claims.exp
         || claims.nbf > claims.exp
+        || claims.exp.saturating_add(skew_seconds) < now_seconds
+        || claims.nbf > now_seconds.saturating_add(skew_seconds)
         || hint.merge_request_iid == 0
     {
         return Err(ProviderError::Authentication);
