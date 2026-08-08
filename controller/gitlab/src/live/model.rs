@@ -11,7 +11,7 @@ pub(super) struct JobResponse {
     id: u64,
     name: String,
     status: String,
-    source: String,
+    source: Option<String>,
     commit: CommitReference,
     pipeline: PipelineReference,
     runner: Option<RunnerReference>,

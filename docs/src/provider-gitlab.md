@@ -147,20 +147,15 @@ amiss:policy:
   variables:
     GIT_STRATEGY: none
   script:
-    - >-
-      test "$(
-        curl --fail-with-body --silent --show-error
-        --output /dev/null
-        --write-out '%{http_code}'
-        --header "Authorization: Bearer ${AMISS_ID_TOKEN}"
-        --header "Content-Type: application/json"
-        --data "{\"merge_request_iid\":${CI_MERGE_REQUEST_IID}}"
-        https://amiss.example/gitlab/policy/evaluate
-      )" = 204
+    - 'test "$(curl --fail-with-body --silent --show-error --output /dev/null --write-out %{http_code} --header "Authorization: Bearer ${AMISS_ID_TOKEN}" --header "Content-Type: application/json" --data "{\"merge_request_iid\":${CI_MERGE_REQUEST_IID}}" https://amiss.example/gitlab/policy/evaluate)" = 204'
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
     - when: never
 ```
+
+Keep the script on one physical line. Policy injection carries the included file's newlines into
+the merged configuration literally, so a wrapped scalar runs each fragment as its own command and
+the first live train taught this the hard way.
 
 Replace the image and endpoint placeholders with operator-owned, immutable values. Do not add a
 fallback command, an alternate success path, or a project-controlled variable that can change the

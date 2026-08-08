@@ -35,7 +35,11 @@ pub(crate) fn snapshot(
     let records_valid = validate_project(delivery, policy, query, refresh)?
         && refresh.job.id == query.job_id
         && refresh.job.name == policy.job_name
-        && refresh.job.source == POLICY_JOB_SOURCE
+        && refresh
+            .job
+            .source
+            .as_deref()
+            .is_none_or(|source| source == POLICY_JOB_SOURCE)
         && refresh.job.pipeline_id == query.pipeline_id
         && refresh.job.commit == query.gate_commit.as_str()
         && refresh.job.runner_id == query.runner_id
