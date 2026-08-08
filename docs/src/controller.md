@@ -249,8 +249,9 @@ under that key must fail closed.
 That is the controller contract. GitHub's create-Check-Run API does not offer an atomic
 transaction or caller idempotency key: an accepted create with a lost reply can be retried before
 the first run is visible and leave a duplicate. The concrete adapter reconciles one exact visible
-run and rejects visible duplicates. [Provider-verified controls](provider-controls.md) records
-that provider limit.
+run and rejects visible duplicates. The
+[provider-verified-controls phase record](completed/provider-verified-controls.md) states
+that limit rather than implying exactly-once.
 
 | Stop point | What the next claim sees | Safe next action |
 | --- | --- | --- |
