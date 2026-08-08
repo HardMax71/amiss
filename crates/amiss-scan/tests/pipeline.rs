@@ -6,7 +6,7 @@ use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::{Built, RequestDigests};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
-use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::{EngineProvenance, FixKind};
 use tempfile::TempDir;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -396,10 +396,7 @@ fn a_case_drifted_anchor_carries_its_fix() {
     let start = usize::try_from(fix["span"]["start_byte"].as_u64().unwrap()).unwrap();
     let end = usize::try_from(fix["span"]["end_byte"].as_u64().unwrap()).unwrap();
     assert_eq!(&source.as_bytes()[start..end], b"Setup");
-    assert_eq!(
-        fix["description"],
-        "replace the fragment with the one published anchor it matches apart from case and separator style"
-    );
+    assert_eq!(fix["description"], FixKind::AnchorRespelling.meaning());
 
     let same_block = run("[a](sections.md#Setup) and [b](sections.md#Setup)\n");
     let row = same_block["findings"]
@@ -535,10 +532,7 @@ fn a_case_drifted_path_carries_its_fix() {
     let start = usize::try_from(fix["span"]["start_byte"].as_u64().unwrap()).unwrap();
     let end = usize::try_from(fix["span"]["end_byte"].as_u64().unwrap()).unwrap();
     assert_eq!(&drifted.as_bytes()[start..end], b"Sections.md");
-    assert_eq!(
-        fix["description"],
-        "replace the path with the one tracked spelling it matches apart from case"
-    );
+    assert_eq!(fix["description"], FixKind::PathRespelling.meaning());
 
     let with_fragment = "[s](Sections.md#setup)\n";
     let row = missing_row(&run(with_fragment));
@@ -718,10 +712,7 @@ fn a_broken_claim_warns_then_fails_by_profile() {
         Some(u64::try_from(claim.len()).unwrap()),
         "the span covers the whole definition: {fix}"
     );
-    assert_eq!(
-        fix["description"],
-        "replace the definition so the claim expects the target's current line"
-    );
+    assert_eq!(fix["description"], FixKind::ClaimValueRewrite.meaning());
     let row = payload["findings"]
         .as_array()
         .unwrap()

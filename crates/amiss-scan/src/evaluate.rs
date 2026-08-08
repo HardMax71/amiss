@@ -475,10 +475,8 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
     }
 }
 
-/// The provable rewrite for a lone missing target: exactly one candidate
-/// member, a resolver-named neighbor, and a span the adapter located
-/// verbatim. The resolution match is the kind gate, since only a missing
-/// resolution reaches a structural finding. Anything less emits nothing.
+/// Only a missing resolution reaches a structural finding, so the match is
+/// the kind gate.
 fn missing_fix(candidates: &[&Observation]) -> Option<Value> {
     let [observation] = candidates else {
         return None;
@@ -511,10 +509,8 @@ fn anchor_fix(observation: &Observation, near: &str) -> Option<Value> {
     ))
 }
 
-/// The provable rewrite for a lone case-drifted path: the written path part
-/// must be the missed intent's exact tail on a segment boundary, the head
-/// the author never wrote must already agree, and the replacement is the
-/// tracked spelling's corresponding tail.
+/// The intent is the resolver's join, so only its tail is the author's
+/// spelling to respell.
 fn path_fix(observation: &Observation, near: &RepoPath) -> Option<Value> {
     let span = observation.path_span?;
     let part = observation
@@ -541,8 +537,6 @@ fn path_fix(observation: &Observation, near: &RepoPath) -> Option<Value> {
     ))
 }
 
-/// One wire fix object: the document, the byte span to replace, the
-/// replacement text, and the rewrite's fixed sentence.
 fn fix_value(
     document: &RepoPath,
     (start, end): (usize, usize),
