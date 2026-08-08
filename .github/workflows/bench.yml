@@ -33,8 +33,8 @@ jobs:
         run: cargo bench --workspace --locked 2>&1 | tee benches.txt
       - shell: bash
         run: >-
-          cargo nextest run -p amiss-scan --test eligibility --release --locked
-          --no-capture 2>&1 | tee eligibility.txt
+          cargo nextest run -p amiss-scan --test suite --release --locked
+          -E 'test(/^eligibility::/)' --no-capture 2>&1 | tee eligibility.txt
       - shell: bash
         run: >-
           cargo nextest run -p amiss-scan --test measure --release --locked

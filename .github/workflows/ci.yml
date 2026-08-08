@@ -178,7 +178,7 @@ jobs:
             fuzz
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo nextest run --workspace --locked
-      - run: cargo nextest run -p amiss-scan --test eligibility --release --locked
+      - run: cargo nextest run -p amiss-scan --test suite -E 'test(/^eligibility::/)' --release --locked
       - name: Verify the scanner fuzz lockfile
         run: cargo test --locked --release
         working-directory: fuzz
