@@ -26,7 +26,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
-            [--explain-scope] [--format <human|json|sarif>]
+            [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --index
             [--repository <host>/<owner>/<name>
@@ -64,7 +64,7 @@ and are the ones to trust when the short form reads ambiguous.
 | `--forge` | `github`, `gitlab`, or `gitea` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
-| `--format` | `human`, `json`, or `sarif` | ten grouped items, the exact report in [The report](report.md), or its SARIF projection |
+| `--format` | `human`, `json`, `sarif`, or `codequality` | ten grouped items, the exact report in [The report](report.md), or its SARIF or GitLab Code Quality projection |
 | `--path` | repo-relative path | the file the authored claim pins |
 | `--line` | positive line number | the line the claim expects, one-based |
 | `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |

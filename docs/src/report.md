@@ -137,6 +137,17 @@ still answers in SARIF with exit class 2. Like the human form, the projection ca
 change facts, ordering, totals, or the exit class; the canonical report stays the only
 wire, and consumers that need the full evidence read it there.
 
+`--format codequality` projects the same payload as GitLab's Code Quality artifact: a
+JSON array with one issue per finding row in report order, the row's `description` as
+the issue text, its kind as `check_name`, and `fail` as `major`, `warn` as `minor`, and
+`record` as `info`. The finding key rides as the fingerprint, so GitLab's diff of target
+against head recognizes the same finding across runs by the identity the report uses.
+GitLab requires a path and a first line on every issue, so a byte-named document answers
+with the wire's hex spelling and a byte-only span reads as line one. The format has no
+shape for analysis errors or a refusal: a rejected invocation answers with a valid empty
+artifact, the exit class still carries the truth, and error detail stays on the JSON and
+human lanes. The same projection bounds apply.
+
 The report is evidence of engine evaluation, not a self-authenticating provider attestation. A
 control row with `status: "verified"` means that the engine accepted the supplied digest and
 repository, target-ref, tree, time, or run relationships required for that control. A caller that

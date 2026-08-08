@@ -462,6 +462,50 @@ fn byte_and_text_paths_interleave_deterministically_in_byte_order() {
     );
 }
 
+/// GitLab requires a path on every issue, so a byte-named document answers
+/// the Code Quality projection with the wire's own hex spelling.
+#[test]
+fn a_bytes_located_code_quality_issue_carries_the_wire_hex_spelling() {
+    let (dir, base) = byte_named_index(b"# H\n\n[g](gone.md)\n");
+    let repo = amiss_fixtures::path_arg(dir.path());
+    let (code, stdout) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "enforce",
+        "--format",
+        "codequality",
+    ]);
+    assert_eq!(code, 1);
+    let issues: Vec<serde_json::Value> = serde_json::from_slice(&stdout).unwrap();
+    let issue = issues
+        .iter()
+        .find(|issue| issue["check_name"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(
+        issue.pointer("/location/path").unwrap(),
+        crate::support::BYTE_NAME_HEX,
+    );
+    assert!(
+        issue
+            .pointer("/location/lines/begin")
+            .is_some_and(|line| line.as_i64().is_some_and(|value| value >= 1),),
+        "{issue}"
+    );
+    assert!(
+        issue["fingerprint"]
+            .as_str()
+            .is_some_and(|key| key.starts_with("sha256:")),
+        "{issue}"
+    );
+}
+
 /// A finding located in a byte-named document keeps its fingerprint in the
 /// SARIF projection and simply carries no artifact location, because raw
 /// bytes name no URI.

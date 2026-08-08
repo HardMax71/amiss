@@ -1,5 +1,6 @@
 mod adopt;
 mod author;
+mod codequality;
 mod payload;
 mod repair;
 mod sarif;
@@ -85,6 +86,16 @@ fn main() -> ExitCode {
             failure
         }
         Outcome::Rejected {
+            format: OutputFormat::CodeQuality,
+            codes,
+        } => {
+            match machine_refusal(&codes) {
+                Ok(envelope) => emit(&mut reserve, &codequality::issues(&envelope)),
+                Err(code) => eprintln!("amiss: {}", code.as_str()),
+            }
+            failure
+        }
+        Outcome::Rejected {
             format: OutputFormat::Human,
             codes,
         } => {
@@ -110,6 +121,7 @@ fn render(
     match invocation.format {
         OutputFormat::Json => emit(reserve, &built.envelope),
         OutputFormat::Sarif => emit(reserve, &sarif::log(&built.envelope)),
+        OutputFormat::CodeQuality => emit(reserve, &codequality::issues(&built.envelope)),
         OutputFormat::Human => human(built, invocation.explain_scope),
     }
 }

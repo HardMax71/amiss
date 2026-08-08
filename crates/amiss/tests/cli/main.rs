@@ -1,6 +1,7 @@
 mod adopt;
 mod author;
 mod claims;
+mod codequality;
 mod fix;
 mod forge;
 mod formats;

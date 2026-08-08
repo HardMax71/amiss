@@ -1,7 +1,7 @@
 use amiss_wire::json::Value;
 use amiss_wire::report::FindingKind;
 
-use crate::view::View;
+use crate::view::{View, object, string};
 
 /// The SARIF projection: a non-wire convenience over the same payload that
 /// cannot change facts, ordering, totals, or exit. Findings become results
@@ -201,17 +201,4 @@ fn uri(path: &str) -> String {
         }
     }
     encoded
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    let mut members: Vec<(String, Value)> = members
-        .into_iter()
-        .map(|(key, value)| (key.to_owned(), value))
-        .collect();
-    members.sort_by(|left, right| left.0.cmp(&right.0));
-    Value::Object(members)
-}
-
-fn string(value: &str) -> Value {
-    Value::String(value.to_owned())
 }
