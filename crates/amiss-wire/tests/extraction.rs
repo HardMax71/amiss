@@ -72,3 +72,38 @@ fn the_fragment_core_names_bytes_only_under_certainty() {
         "a span past the source names nothing"
     );
 }
+
+/// The path-span core beside its sibling: the path part is byte-exact with
+/// and without a fragment, and every refusal answers alone.
+#[test]
+fn the_path_core_names_bytes_only_under_certainty() {
+    use amiss_wire::extraction::path_span;
+    let plain = b"see [a](Guide.md) end";
+    assert_eq!(path_span(plain, (4, 17), "Guide.md"), Some((8, 16)));
+    assert_eq!(&plain[8..16], b"Guide.md");
+    let with_fragment = b"see [a](Guide.md#x) end";
+    assert_eq!(
+        path_span(with_fragment, (4, 19), "Guide.md#x"),
+        Some((8, 16))
+    );
+    assert_eq!(
+        path_span(b"see [a](#x) end", (4, 11), "#x"),
+        None,
+        "a pure fragment holds no path part"
+    );
+    assert_eq!(
+        path_span(b"see [a](G%20.md) end", (4, 16), "G%20.md"),
+        None,
+        "a percent path refuses alone"
+    );
+    assert_eq!(
+        path_span(b"see [a]() end", (4, 9), ""),
+        None,
+        "an empty destination names nothing"
+    );
+    assert_eq!(
+        path_span(b"[Guide.md](Guide.md)", (0, 20), "Guide.md"),
+        None,
+        "two verbatim hits are ambiguity"
+    );
+}

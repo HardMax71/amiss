@@ -103,12 +103,13 @@ second source to act on a report. Beside it sits `fix`, a machine-applicable rew
 null, whose own `description` is one of a closed set of engine-owned sentences named by
 `FixKind`: when the engine can prove the exact edit, the field names the candidate document,
 the byte span to replace, and the replacement text, and a finding whose correct content
-is not derivable carries null rather than a guess. Two producers emit one today: the broken
+is not derivable carries null rather than a guess. Three producers emit one today: the broken
 value claim carries its definition respelled to expect the target's current line,
 proven by classifying the rewrite back through the claim grammar (see
 [Claims](claims.md)), and a lone drifted heading anchor carries its fragment
 respelled to the one published identity it names apart from case and separator style,
-over bytes the adapter located verbatim. The sentences live in one place,
+over bytes the adapter located verbatim, and a lone case-drifted path carries its
+written path part respelled to the one tracked path it matches apart from case. The sentences live in one place,
 [`FindingKind::meaning`, `AnalysisErrorCode::meaning`, and `FixKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
 the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
 and the shipped example are checked against that source in CI. The human format prints

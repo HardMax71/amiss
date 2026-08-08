@@ -475,24 +475,82 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
     }
 }
 
-/// The provable rewrite for a lone missing heading anchor: exactly one
-/// candidate member, a resolver-named neighbor, and a fragment span the
-/// adapter located verbatim. The resolution match is the kind gate, since
-/// only a missing resolution reaches a structural finding. Anything less
-/// emits nothing.
-fn anchor_fix(candidates: &[&Observation]) -> Option<Value> {
+/// The provable rewrite for a lone missing target: exactly one candidate
+/// member, a resolver-named neighbor, and a span the adapter located
+/// verbatim. The resolution match is the kind gate, since only a missing
+/// resolution reaches a structural finding. Anything less emits nothing.
+fn missing_fix(candidates: &[&Observation]) -> Option<Value> {
     let [observation] = candidates else {
         return None;
     };
-    let Resolution::Missing(Missing::HeadingAnchorNotFound {
-        near: Some(near), ..
-    }) = &observation.resolution
-    else {
+    match &observation.resolution {
+        Resolution::Missing(Missing::HeadingAnchorNotFound {
+            near: Some(near), ..
+        }) => anchor_fix(observation, near),
+        Resolution::Missing(Missing::PathNotFound {
+            near: Some(near), ..
+        }) => path_fix(observation, near),
+        Resolution::Missing(_)
+        | Resolution::Resolved(_)
+        | Resolution::DeclaredUntracked(_)
+        | Resolution::TypeMismatch(_)
+        | Resolution::UnsupportedTarget(_)
+        | Resolution::UnsupportedSemantics(_)
+        | Resolution::UnsupportedVersion(_)
+        | Resolution::Invalid(_)
+        | Resolution::External(_) => None,
+    }
+}
+
+fn anchor_fix(observation: &Observation, near: &str) -> Option<Value> {
+    Some(fix_value(
+        &observation.document,
+        observation.fragment_span?,
+        near.to_owned(),
+        FixKind::AnchorRespelling,
+    ))
+}
+
+/// The provable rewrite for a lone case-drifted path: the written path part
+/// must be the missed intent's exact tail on a segment boundary, the head
+/// the author never wrote must already agree, and the replacement is the
+/// tracked spelling's corresponding tail.
+fn path_fix(observation: &Observation, near: &RepoPath) -> Option<Value> {
+    let span = observation.path_span?;
+    let part = observation
+        .raw_destination
+        .split_once('#')
+        .map_or(observation.raw_destination.as_str(), |(prefix, _)| prefix);
+    let missed_bytes = observation.intent.repository_path.as_ref()?.as_bytes();
+    let tail_at = missed_bytes.len().checked_sub(part.len())?;
+    if missed_bytes.get(tail_at..)? != part.as_bytes() {
         return None;
-    };
-    let (start, end) = observation.fragment_span?;
-    Some(Value::Object(vec![
-        ("path".to_owned(), observation.document.to_value()),
+    }
+    if tail_at != 0 && missed_bytes.get(tail_at.checked_sub(1)?)? != &b'/' {
+        return None;
+    }
+    if near.as_bytes().get(..tail_at)? != missed_bytes.get(..tail_at)? {
+        return None;
+    }
+    let replacement = near.as_str()?.get(tail_at..)?.to_owned();
+    Some(fix_value(
+        &observation.document,
+        span,
+        replacement,
+        FixKind::PathRespelling,
+    ))
+}
+
+/// One wire fix object: the document, the byte span to replace, the
+/// replacement text, and the rewrite's fixed sentence.
+fn fix_value(
+    document: &RepoPath,
+    (start, end): (usize, usize),
+    replacement: String,
+    kind: FixKind,
+) -> Value {
+    Value::Object(vec![
+        ("path".to_owned(), document.to_value()),
         (
             "span".to_owned(),
             Value::Object(vec![
@@ -506,12 +564,12 @@ fn anchor_fix(candidates: &[&Observation]) -> Option<Value> {
                 ),
             ]),
         ),
-        ("replacement".to_owned(), Value::String(near.clone())),
+        ("replacement".to_owned(), Value::String(replacement)),
         (
             "description".to_owned(),
-            Value::String(FixKind::AnchorRespelling.meaning().to_owned()),
+            Value::String(kind.meaning().to_owned()),
         ),
-    ]))
+    ])
 }
 
 /// The occurrence-boundary mapping of step two: which non-structural kind one
@@ -930,28 +988,13 @@ fn claim_fix(group: &ClaimGroup) -> Option<Value> {
     }
     let observed = group.observed_line.as_deref()?;
     let replacement = crate::claim::rewrite(&group.name, &group.target_path, group.line, observed)?;
-    let (start, end) = group.representative_span?;
-    Some(Value::Object(vec![
-        ("path".to_owned(), group.document.to_value()),
-        (
-            "span".to_owned(),
-            Value::Object(vec![
-                (
-                    "start_byte".to_owned(),
-                    Value::Integer(i64::try_from(start).unwrap_or(i64::MAX)),
-                ),
-                (
-                    "end_byte".to_owned(),
-                    Value::Integer(i64::try_from(end).unwrap_or(i64::MAX)),
-                ),
-            ]),
-        ),
-        ("replacement".to_owned(), Value::String(replacement)),
-        (
-            "description".to_owned(),
-            Value::String(FixKind::ClaimValueRewrite.meaning().to_owned()),
-        ),
-    ]))
+    let span = group.representative_span?;
+    Some(fix_value(
+        &group.document,
+        span,
+        replacement,
+        FixKind::ClaimValueRewrite,
+    ))
 }
 
 /// One candidate document's reserved governed definitions: the exact node
@@ -1778,7 +1821,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
         } else {
             group.kind.built_in_disposition(enforce)
         };
-        let fix = anchor_fix(&group.candidate);
+        let fix = missing_fix(&group.candidate);
         findings.push(Finding {
             kind: group.kind,
             key_input: key_value,

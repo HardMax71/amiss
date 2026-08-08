@@ -26,10 +26,12 @@ pub struct Observation {
     /// would request, kept only for a reference the engine leaves to another
     /// layer so that layer can read it without the tree.
     pub external_destination: Option<String>,
+    pub raw_destination: String,
     pub raw_destination_digest: Digest,
     pub projection_digest: Digest,
     pub resolution: Resolution,
     pub fragment_span: Option<(usize, usize)>,
+    pub path_span: Option<(usize, usize)>,
 }
 
 /// One snapshot side: its observations and, for the rename rule, every

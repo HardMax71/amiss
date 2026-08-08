@@ -204,6 +204,7 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
         construct: SourceConstruct::InlineLink,
         external_destination: None,
         intent,
+        raw_destination: String::new(),
         raw_destination_digest: fixture.raw_destination_digest,
         projection_digest: hb(
             "amiss/test-correlation-vector-projection",
@@ -211,6 +212,7 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
         ),
         resolution: Resolution::External(ExternalReference::Url),
         fragment_span: None,
+        path_span: None,
     }
 }
 

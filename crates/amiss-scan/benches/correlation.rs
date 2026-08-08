@@ -84,6 +84,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
             query: None,
             fragment: None,
         },
+        raw_destination: String::new(),
         raw_destination_digest: hb("amiss/scanner-raw-destination", target.as_bytes()),
         projection_digest: hb("amiss/scanner-source-projection", b"reference"),
         resolution: Resolution::Missing(Missing::PathNotFound {
@@ -91,6 +92,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
             near: None,
         }),
         fragment_span: None,
+        path_span: None,
     }
 }
 

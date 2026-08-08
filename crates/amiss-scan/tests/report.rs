@@ -95,10 +95,12 @@ fn snapshot(
                 )
                 .then(|| occurrence.occurrence.semantic_destination.clone()),
                 intent,
+                raw_destination: occurrence.occurrence.raw_destination.clone(),
                 raw_destination_digest: occurrence.raw_destination_digest,
                 projection_digest: occurrence.projection_digest,
                 resolution,
                 fragment_span: occurrence.occurrence.fragment_span,
+                path_span: occurrence.occurrence.path_span,
             });
         }
     }

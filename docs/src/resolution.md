@@ -105,7 +105,9 @@ that row carries `near`: the one tracked path equal to the missed one apart from
 when exactly one exists and null otherwise. It answers the break a case-insensitive
 working copy hides, where `Guide.md` opens locally and resolves nowhere on the tree the
 forge and Linux CI read. A repository holding both spellings names a real ambiguity and
-stays bare.
+stays bare. A lone reference whose written path part is the missed intent's exact tail
+turns that neighbor into the finding's `fix`, replacing only the bytes the author wrote
+while a fragment rides untouched beside them.
 
 A destination no spelling reaches is asked one last question, against a declaration the
 repository already publishes for Git rather than for this engine. Only the tracked

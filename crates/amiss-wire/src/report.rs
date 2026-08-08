@@ -957,6 +957,7 @@ impl FindingKind {
 pub enum FixKind {
     ClaimValueRewrite,
     AnchorRespelling,
+    PathRespelling,
 }
 
 impl FixKind {
@@ -970,6 +971,9 @@ impl FixKind {
             }
             Self::AnchorRespelling => {
                 "replace the fragment with the one published anchor it matches apart from case and separator style"
+            }
+            Self::PathRespelling => {
+                "replace the path with the one tracked spelling it matches apart from case"
             }
         }
     }
