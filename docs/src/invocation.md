@@ -27,6 +27,13 @@ amiss check --repo <path> --object-format <sha1|sha256>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
             [--explain-scope] [--format <human|json|sarif>]
+amiss fix   --repo <path> --object-format <sha1|sha256>
+            --base <full-oid> --index
+            [--repository <host>/<owner>/<name>
+             --ref refs/heads/<name>
+             --default-branch-ref refs/heads/<name>
+             [--forge <github|gitlab|gitea>]]
+            --profile <observe|enforce-introduced|enforce>
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -83,7 +90,19 @@ codes are three classes, not detail: 0 means the run completed and nothing block
 a finding blocks, 2 means nothing trustworthy could be produced. A consumer that closes the
 pipe early, `head` among them, ends the printing and not the verdict.
 
-`amiss --version` is the second form of the grammar and the only one that is not a scan. It
+`amiss fix` is the repair form of the same evaluation, over the staged state only. It runs
+the check the grammar's first form runs with `--index`, takes every finding whose `fix` is
+not null, and rewrites exactly those byte spans in the working tree. It applies nothing on
+faith: a document is repaired only while its working-tree bytes still equal the staged
+bytes the fixes were computed against, a file already holding the repaired bytes counts as
+already fixed rather than drifted, and a symlink, an unreadable file, or overlapping spans
+refuse that document whole. Its output is the repair itself, one row per document and a
+summary line, so `--format`, `--explain-scope`, and `--candidate` are refused rather than
+ignored. Exit 0 means every carried fix was applied or already present, 1 means at least
+one document refused, and 2 means the evaluation itself could not be trusted and nothing
+was touched. Restage and rerun `amiss check` to see the repaired state judged.
+
+`amiss --version` is the third form of the grammar and the only one that is not a scan. It
 carries no other flag, prints two lines to stdout, and exits 0:
 
 ```text

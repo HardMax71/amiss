@@ -109,7 +109,9 @@ proven by classifying the rewrite back through the claim grammar (see
 [Claims](claims.md)), and a lone drifted heading anchor carries its fragment
 respelled to the one published identity it names apart from case and separator style,
 over bytes the adapter located verbatim, and a lone case-drifted path carries its
-written path part respelled to the one tracked path it matches apart from case. The sentences live in one place,
+written path part respelled to the one tracked path it matches apart from case.
+[`amiss fix`](invocation.md) applies these spans to the staged working tree in
+place, refusing any document whose bytes moved since the evaluation. The sentences live in one place,
 [`FindingKind::meaning`, `AnalysisErrorCode::meaning`, and `FixKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs);
 the lists in [Profiles and findings](profiles.md) and [Limits and refusals](limits.md)
 and the shipped example are checked against that source in CI. The human format prints

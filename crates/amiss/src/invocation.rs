@@ -19,6 +19,13 @@ pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha25
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
             [--explain-scope] [--format <human|json|sarif>]
+amiss fix   --repo <path> --object-format <sha1|sha256>
+            --base <full-oid> --index
+            [--repository <host>/<owner>/<name>
+             --ref refs/heads/<name>
+             --default-branch-ref refs/heads/<name>
+             [--forge <github|gitlab|gitea>]]
+            --profile <observe|enforce-introduced|enforce>
 amiss --version";
 
 const VERSION_FLAG: &str = "--version";
@@ -69,6 +76,12 @@ impl Code {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verb {
+    Check,
+    Fix,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputFormat {
     Human,
     Json,
@@ -90,6 +103,7 @@ pub struct ProviderIdentity {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invocation {
+    pub verb: Verb,
     pub repo: PathBuf,
     pub object_format: ObjectFormat,
     pub base: Oid,
@@ -148,6 +162,7 @@ impl Slot {
 
 #[derive(Default)]
 struct Gathered {
+    verb: Option<Verb>,
     repo: Slot,
     object_format: Slot,
     base: Slot,
@@ -185,7 +200,8 @@ fn gather(argv: &[OsString]) -> Gathered {
     let mut tokens = argv.iter().map(|token| token.to_str()).peekable();
 
     match tokens.next() {
-        Some(Some("check")) => {}
+        Some(Some("check")) => gathered.verb = Some(Verb::Check),
+        Some(Some("fix")) => gathered.verb = Some(Verb::Fix),
         Some(Some(_) | None) | None => gathered.lexical_defect = true,
     }
 
@@ -292,6 +308,14 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
     if gathered.candidate.present() == (gathered.index > 0) {
         codes.insert(Code::InvalidInvocation);
     }
+    // The fix verb repairs the staged state only, and its output is the
+    // repair itself, so a commit candidate, a format, or scope prose is
+    // refused rather than ignored.
+    if gathered.verb == Some(Verb::Fix)
+        && (gathered.candidate.present() || gathered.format.present() || gathered.explain_scope > 0)
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
 
     let repo = match gathered.repo.unique_value() {
         Some("") | None => {
@@ -336,13 +360,14 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
     if !codes.is_empty() {
         return Err(codes);
     }
-    match (repo, object_format, base, profile, identity) {
-        (Some(repo), Some(object_format), Some(base), Some(profile), Ok(identity)) => {
+    match (gathered.verb, repo, object_format, base, profile, identity) {
+        (Some(verb), Some(repo), Some(object_format), Some(base), Some(profile), Ok(identity)) => {
             let candidate = match candidate_oid {
                 Some(oid) => CandidateSelector::Commit(oid),
                 None => CandidateSelector::Index,
             };
             Ok(Invocation {
+                verb,
                 repo,
                 object_format,
                 base,
