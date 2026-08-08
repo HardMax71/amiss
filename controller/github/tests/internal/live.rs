@@ -281,7 +281,7 @@ fn publication_reuses_only_one_exact_owned_check() {
 fn a_token_answers_only_for_its_own_installation() {
     use std::time::Duration;
 
-    use amiss_controller_fixtures::rsa_keys;
+    use amiss_controller_fixtures::pinned_rsa_keys;
 
     use super::{GitHubApp, GitHubTimeouts};
     use crate::{GitHubApi as _, GitHubTokenSource as _};
@@ -293,7 +293,7 @@ fn a_token_answers_only_for_its_own_installation() {
         },
         APP_ID,
         INSTALLATION_ID,
-        rsa_keys().unwrap().private_pem,
+        pinned_rsa_keys().private_pem,
         "https://ghes.invalid",
         "amiss / documentation assurance".to_owned(),
         GitHubTimeouts::new(Duration::from_millis(1), Duration::from_millis(2)).unwrap(),

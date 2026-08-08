@@ -6,7 +6,7 @@ use amiss_controller::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressLimits, IngressPolicy, OpaqueId,
     ProviderError, ReplayWindow, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
 };
-use amiss_controller_fixtures::{RsaKeys, rsa_keys};
+use amiss_controller_fixtures::{RsaKeys, pinned_rsa_keys};
 use amiss_controller_gitlab::{
     GitLabConfigError, GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust,
 };
@@ -18,12 +18,7 @@ use super::identity::{HOST, PROJECT_PATH, TestClock, oid, provider};
 const AUDIENCE: &str = "amiss-controller";
 pub const KID: &str = "current";
 
-#[expect(
-    clippy::expect_used,
-    reason = "the generated RSA fixture must remain valid"
-)]
-static RSA_KEYS: LazyLock<RsaKeys> =
-    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
+static RSA_KEYS: LazyLock<RsaKeys> = LazyLock::new(pinned_rsa_keys);
 
 pub fn oidc() -> Arc<GitLabOidc> {
     let policy = PolicyBinding {

@@ -8,7 +8,7 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
-use amiss_controller_fixtures::{RsaKeys, rsa_keys};
+use amiss_controller_fixtures::{RsaKeys, pinned_rsa_keys};
 use amiss_controller_github_service::ServiceConfig;
 use amiss_wire::action::host_platform;
 use amiss_wire::controls::ConstraintPlatform;
@@ -17,12 +17,7 @@ use tempfile::TempDir;
 
 const BINARY: &str = env!("CARGO_BIN_EXE_amiss-controller-github");
 
-#[expect(
-    clippy::expect_used,
-    reason = "the generated RSA fixture must remain valid"
-)]
-static RSA_KEYS: LazyLock<RsaKeys> =
-    LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
+static RSA_KEYS: LazyLock<RsaKeys> = LazyLock::new(pinned_rsa_keys);
 
 struct Fixture {
     _trust: TrustFiles,
