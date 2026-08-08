@@ -308,9 +308,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
     if gathered.candidate.present() == (gathered.index > 0) {
         codes.insert(Code::InvalidInvocation);
     }
-    // The fix verb repairs the staged state only, and its output is the
-    // repair itself, so a commit candidate, a format, or scope prose is
-    // refused rather than ignored.
+    // Check-only flags are refused on the repair form rather than ignored.
     if gathered.verb == Some(Verb::Fix)
         && (gathered.candidate.present() || gathered.format.present() || gathered.explain_scope > 0)
     {
