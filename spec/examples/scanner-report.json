@@ -269,7 +269,8 @@
             "resolution": {
               "kind": "missing",
               "reason": "path-not-found",
-              "path": "docs/missing.md"
+              "path": "docs/missing.md",
+              "near": null
             }
           },
           "finding_kind": "explicit-target-missing",
@@ -783,7 +784,8 @@
           "resolution": {
             "kind": "missing",
             "reason": "path-not-found",
-            "path": "docs/missing.md"
+            "path": "docs/missing.md",
+            "near": null
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -999,6 +1001,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:759cbc9133b6b7800f1b882059b93bed954cb3d6ae522607fffb21d2eb4d52aa",
+  "payload_digest": "sha256:4f5b6111619b2554155a0fe0b5dfc79e2ed6bba2f27050d75c24846ecb64ca89",
   "schema": "amiss/scanner-report-envelope"
 }

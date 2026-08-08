@@ -240,13 +240,22 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
             vec![("target", target_value(target))],
         ),
         Resolution::Missing(missing) => match missing {
-            Missing::PathNotFound { path } | Missing::LineFragmentOutOfRange { path } => {
-                reasoned_resolution(
-                    resolution.discriminant().as_ref(),
-                    missing.discriminant().as_ref(),
-                    vec![("path", path.to_value())],
-                )
-            }
+            Missing::LineFragmentOutOfRange { path } => reasoned_resolution(
+                resolution.discriminant().as_ref(),
+                missing.discriminant().as_ref(),
+                vec![("path", path.to_value())],
+            ),
+            Missing::PathNotFound { path, near } => reasoned_resolution(
+                resolution.discriminant().as_ref(),
+                missing.discriminant().as_ref(),
+                vec![
+                    ("path", path.to_value()),
+                    (
+                        "near",
+                        near.as_ref().map_or(Value::Null, RepoPath::to_value),
+                    ),
+                ],
+            ),
             Missing::HeadingAnchorNotFound { path, near } => reasoned_resolution(
                 resolution.discriminant().as_ref(),
                 missing.discriminant().as_ref(),

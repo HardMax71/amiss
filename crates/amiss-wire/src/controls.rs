@@ -1276,6 +1276,9 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
             let missing = match reason {
                 MissingTag::PathNotFound => Missing::PathNotFound {
                     path: resolved_path,
+                    near: de::nullable(obj.take("near")?)
+                        .map(|value| decode_repo_path(&obj.field("near"), value))
+                        .transpose()?,
                 },
                 MissingTag::LineFragmentOutOfRange => Missing::LineFragmentOutOfRange {
                     path: resolved_path,

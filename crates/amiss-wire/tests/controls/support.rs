@@ -61,7 +61,8 @@ pub(crate) fn fact_json() -> String {
         r#"{
           "kind": "missing",
           "reason": "path-not-found",
-          "path": "docs/example.md"
+          "path": "docs/example.md",
+          "near": null
         }"#,
     )
 }

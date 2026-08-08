@@ -49,7 +49,10 @@ fn resolved(path: &str, body: &[u8]) -> Resolution {
 }
 
 fn missing(path: &str) -> Resolution {
-    Resolution::Missing(Missing::PathNotFound { path: rp(path) })
+    Resolution::Missing(Missing::PathNotFound {
+        path: rp(path),
+        near: None,
+    })
 }
 
 fn declared(path: &str, declared_by: &str) -> Resolution {

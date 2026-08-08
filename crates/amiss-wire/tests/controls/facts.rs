@@ -44,13 +44,14 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
         r#"{
           "kind": "missing",
           "reason": "path-not-found",
-          "path": "docs/missing.md"
+          "path": "docs/missing.md",
+          "near": null
         }"#,
     )
     .unwrap();
     assert!(matches!(
         path_missing.items[0].accepted_fact.resolution(),
-        Resolution::Missing(Missing::PathNotFound { path })
+        Resolution::Missing(Missing::PathNotFound { path, .. })
             if path.as_str() == "docs/missing.md"
     ));
 
@@ -199,7 +200,7 @@ fn structural_resolution_facts_reject_bad_missing_reasons_and_legacy_bags() {
         ),
         (
             "legacy nullable bag",
-            r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","status":"missing","code":"path-not-found","entry_kind":null,"git_mode":null,"raw_digest":null,"projection_digest":null,"content_availability":"not-applicable"}"#,
+            r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null,"status":"missing","code":"path-not-found","entry_kind":null,"git_mode":null,"raw_digest":null,"projection_digest":null,"content_availability":"not-applicable"}"#,
             ErrorKind::UnknownField,
         ),
     ];
@@ -273,7 +274,8 @@ fn structural_resolution_facts_reject_invalid_target_and_content_shapes() {
 
 #[test]
 fn structural_resolution_facts_reject_finding_kind_mismatches() {
-    let missing = r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md"}"#;
+    let missing =
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#;
     let cases = [
         (
             "resolution versus fact",
@@ -300,7 +302,7 @@ fn structural_fact_constructor_rejects_invalid_programmatic_states() {
     let parsed = parse_debt_fact_case(
         "explicit-target-missing",
         "explicit-target-missing",
-        r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md"}"#,
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#,
     )
     .unwrap();
     let accepted = &parsed.items[0].accepted_fact;

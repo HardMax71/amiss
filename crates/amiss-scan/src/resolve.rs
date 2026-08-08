@@ -641,7 +641,21 @@ fn declared_untracked(
     }
     Ok(Resolution::Missing(Missing::PathNotFound {
         path: path.clone(),
+        near: case_neighbor(snapshot, path),
     }))
+}
+
+/// The one tracked path equal to the missed one apart from case, when exactly
+/// one exists. A repository holding both spellings names a real ambiguity and
+/// stays bare, and so does a path nothing in the tree comes close to.
+fn case_neighbor(snapshot: &SnapshotDiscovery, path: &RepoPath) -> Option<RepoPath> {
+    let folded = path.as_bytes().to_ascii_lowercase();
+    let mut matches = snapshot
+        .entries
+        .keys()
+        .filter(|entry| entry.as_bytes().to_ascii_lowercase() == folded);
+    let candidate = matches.next()?;
+    matches.next().is_none().then(|| candidate.clone())
 }
 
 fn declares(

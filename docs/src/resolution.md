@@ -100,6 +100,13 @@ same-repository forge URL are never re-spelled at all.
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, and what the union costs.
 
+A destination no spelling reaches is `kind: missing` with `reason: path-not-found`, and
+that row carries `near`: the one tracked path equal to the missed one apart from case,
+when exactly one exists and null otherwise. It answers the break a case-insensitive
+working copy hides, where `Guide.md` opens locally and resolves nowhere on the tree the
+forge and Linux CI read. A repository holding both spellings names a real ambiguity and
+stays bare.
+
 A destination no spelling reaches is asked one last question, against a declaration the
 repository already publishes for Git rather than for this engine. Only the tracked
 `.gitignore` files on the path's own ancestor chain can name it, and a line qualifies only

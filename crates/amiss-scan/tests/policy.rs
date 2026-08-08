@@ -207,6 +207,7 @@ fn fixture_fact() -> Fact {
         key_input,
         Resolution::Missing(Missing::PathNotFound {
             path: RepoPathText::new("docs/x.md".to_owned()).expect("path"),
+            near: None,
         }),
     )
     .expect("a structural fact")
