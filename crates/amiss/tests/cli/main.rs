@@ -1,4 +1,5 @@
 mod adopt;
+mod author;
 mod claims;
 mod fix;
 mod forge;

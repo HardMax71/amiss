@@ -67,6 +67,7 @@ version = "0.18.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
+ "amiss-md",
  "amiss-scan",
  "amiss-wire",
  "jsonschema",

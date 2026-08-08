@@ -20,6 +20,7 @@ exclude = [
 
 [dependencies]
 amiss-git = { path = "../amiss-git", version = "0.18.0" }
+amiss-md = { path = "../amiss-md", version = "0.18.0" }
 amiss-scan = { path = "../amiss-scan", version = "0.18.0" }
 amiss-wire = { path = "../amiss-wire", version = "0.18.0" }
 

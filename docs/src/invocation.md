@@ -34,6 +34,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
+amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
             --repository <host>/<owner>/<name>
@@ -64,6 +65,9 @@ and are the ones to trust when the short form reads ambiguous.
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--format` | `human`, `json`, or `sarif` | ten grouped items, the exact report in [The report](report.md), or its SARIF projection |
+| `--path` | repo-relative path | the file the authored claim pins |
+| `--line` | positive line number | the line the claim expects, one-based |
+| `--name` | claim name | the `amiss:` label; letters, digits, `.`, `_`, `-` |
 | `--floor-digest` | `sha256:` and 64 hex | the organization floor the minted debt snapshot binds to |
 | `--debt-owner` | text | the item owner the floor must authorize |
 | `--debt-reason` | text | why the debt is being recorded |
@@ -117,6 +121,15 @@ ignored. Exit 0 means every carried fix was applied or already present, 1 means 
 one document refused, and 2 means the evaluation itself could not be trusted and nothing
 was touched. Restage and rerun `amiss check` to see the repaired state judged.
 
+`amiss claim` is the authoring form and the only one that reads no git at all: it takes a
+repo-relative path and a one-based line, reads that line from the working tree, and prints
+one ready [value claim](claims.md) definition to stdout, nothing else, so the output pastes
+or pipes straight into a document. It spells the title double-quoted first and single-quoted
+for lines that hold double quotes, and it prints nothing it has not proven: the candidate
+definition is run back through the markdown extractor and the claim grammar, and a line
+neither quoting can carry is refused with exit 1 rather than printed broken. Exit 0 prints
+the definition, 1 refuses the line or the file, and 2 is an invalid invocation.
+
 `amiss adopt` is the onboarding form: it runs the same evaluation under enforce and mints
 a [debt snapshot](controls.md) from every blocking, debt-eligible finding, so a repository
 with legacy drift can start gating new drift the same day while the recorded debt is
@@ -136,7 +149,7 @@ the output path refused, and 2 means nothing trustworthy could be recorded, whet
 evaluation itself failed, the report carried no candidate tree, or the minted bytes were
 refused by the engine's own reader.
 
-`amiss --version` is the fourth form of the grammar and the only one that is not a scan. It
+`amiss --version` is the fifth form of the grammar and the only one that is not a scan. It
 carries no other flag, prints two lines to stdout, and exits 0:
 
 ```text

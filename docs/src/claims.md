@@ -4,7 +4,9 @@ A document can do more than point at a file: it can pin what the file says. A va
 is a reserved reference definition asserting that one line of one repository file,
 terminator aside, is exactly one expected text. The scanner evaluates the claim on every
 run, so the page that states a version number or a default stops being a promise and
-becomes a checked fact.
+becomes a checked fact. Authoring one is a single command:
+[`amiss claim`](invocation.md) reads the line and prints a definition it has already
+proven against the extractor and this grammar.
 
 ## The grammar
 

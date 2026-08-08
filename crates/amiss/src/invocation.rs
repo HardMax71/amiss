@@ -26,6 +26,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
+amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
             --repository <host>/<owner>/<name>
@@ -89,6 +90,7 @@ pub enum Verb {
     Check,
     Fix,
     Adopt,
+    Claim,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,6 +111,22 @@ pub struct ProviderIdentity {
     pub repository: RepositoryIdentity,
     pub ref_name: BranchRef,
     pub default_branch_ref: BranchRef,
+}
+
+/// The claim the author wants pinned: where, which line, and its name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthorInvocation {
+    pub repo: PathBuf,
+    pub path: String,
+    pub line: u64,
+    pub name: String,
+}
+
+/// One accepted command line: a scan-shaped verb or the authoring form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Command {
+    Scan(Box<Invocation>),
+    Author(AuthorInvocation),
 }
 
 /// The adoption metadata the engine cannot know: who owns the recorded
@@ -149,7 +167,7 @@ pub enum Outcome {
         format: OutputFormat,
         codes: BTreeSet<Code>,
     },
-    Accepted(Box<Invocation>),
+    Accepted(Box<Command>),
 }
 
 #[derive(Default)]
@@ -202,6 +220,9 @@ struct Gathered {
     created_at: Slot,
     expires_at: Slot,
     debt_output: Slot,
+    claim_path: Slot,
+    claim_line: Slot,
+    claim_name: Slot,
     index: usize,
     explain_scope: usize,
     lexical_defect: bool,
@@ -219,7 +240,7 @@ pub fn parse(argv: &[OsString]) -> Outcome {
         return Outcome::MalformedOutputSelection;
     };
     match classify(&gathered, format) {
-        Ok(invocation) => Outcome::Accepted(Box::new(invocation)),
+        Ok(command) => Outcome::Accepted(Box::new(command)),
         Err(codes) => Outcome::Rejected { format, codes },
     }
 }
@@ -232,6 +253,7 @@ fn gather(argv: &[OsString]) -> Gathered {
         Some(Some("check")) => gathered.verb = Some(Verb::Check),
         Some(Some("fix")) => gathered.verb = Some(Verb::Fix),
         Some(Some("adopt")) => gathered.verb = Some(Verb::Adopt),
+        Some(Some("claim")) => gathered.verb = Some(Verb::Claim),
         Some(Some(_) | None) | None => gathered.lexical_defect = true,
     }
 
@@ -264,7 +286,10 @@ fn gather(argv: &[OsString]) -> Gathered {
             | "--debt-reason"
             | "--created-at"
             | "--expires-at"
-            | "--debt-output" => {
+            | "--debt-output"
+            | "--path"
+            | "--line"
+            | "--name" => {
                 let value = match tokens.peek() {
                     Some(Some(next)) if !next.starts_with("--") => {
                         let owned = (*next).to_owned();
@@ -298,6 +323,9 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> &'a mut Slot {
         "--created-at" => &mut gathered.created_at,
         "--expires-at" => &mut gathered.expires_at,
         "--debt-output" => &mut gathered.debt_output,
+        "--path" => &mut gathered.claim_path,
+        "--line" => &mut gathered.claim_line,
+        "--name" => &mut gathered.claim_name,
         _ => &mut gathered.format,
     }
 }
@@ -314,7 +342,7 @@ fn output_selection(format: &Slot) -> Option<OutputFormat> {
     }
 }
 
-fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTreeSet<Code>> {
+fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeSet<Code>> {
     let mut codes: BTreeSet<Code> = BTreeSet::new();
     if gathered.lexical_defect {
         codes.insert(Code::InvalidInvocation);
@@ -337,11 +365,17 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
             &gathered.created_at,
             &gathered.expires_at,
             &gathered.debt_output,
+            &gathered.claim_path,
+            &gathered.claim_line,
+            &gathered.claim_name,
         ]
         .iter()
         .any(|slot| slot.defective());
     if duplicated {
         codes.insert(Code::InvalidInvocation);
+    }
+    if gathered.verb == Some(Verb::Claim) {
+        return classify_claim(codes, gathered).map(Command::Author);
     }
     for required in [&gathered.repo, &gathered.object_format, &gathered.base] {
         if !required.present() {
@@ -392,7 +426,7 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
                 Some(oid) => CandidateSelector::Commit(oid),
                 None => CandidateSelector::Index,
             };
-            Ok(Invocation {
+            Ok(Command::Scan(Box::new(Invocation {
                 verb,
                 adoption,
                 repo,
@@ -404,9 +438,85 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
                 profile,
                 explain_scope: gathered.explain_scope == 1,
                 format,
-            })
+            })))
         }
         _ => Err(BTreeSet::from([Code::InvalidInvocation])),
+    }
+}
+
+/// The authoring form stands alone: the repo root plus the claim trio, with
+/// every scan-shaped flag refused, and the trio validated where the grammar
+/// can see it, the name spelling, the line rule, and a path both the wire
+/// and the claim url can hold.
+fn classify_claim(
+    mut codes: BTreeSet<Code>,
+    gathered: &Gathered,
+) -> Result<AuthorInvocation, BTreeSet<Code>> {
+    let foreign = [
+        &gathered.object_format,
+        &gathered.base,
+        &gathered.candidate,
+        &gathered.repository,
+        &gathered.ref_name,
+        &gathered.default_branch_ref,
+        &gathered.forge,
+        &gathered.profile,
+        &gathered.format,
+        &gathered.floor_digest,
+        &gathered.debt_owner,
+        &gathered.debt_reason,
+        &gathered.created_at,
+        &gathered.expires_at,
+        &gathered.debt_output,
+    ];
+    if foreign.iter().any(|slot| slot.present()) || gathered.index > 0 || gathered.explain_scope > 0
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
+    let repo = match gathered.repo.unique_value() {
+        Some("") | None => {
+            codes.insert(Code::InvalidInvocation);
+            None
+        }
+        Some(path) => Some(PathBuf::from(path)),
+    };
+    let name = gathered.claim_name.unique_value().filter(|value| {
+        let mut bytes = value.bytes();
+        let head = bytes
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric());
+        head && value.len() <= 120
+            && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    });
+    let line = gathered.claim_line.unique_value().and_then(|value| {
+        let lawful = !value.is_empty()
+            && value.len() <= 16
+            && !value.starts_with('0')
+            && value.bytes().all(|byte| byte.is_ascii_digit());
+        if lawful {
+            value.parse::<u64>().ok()
+        } else {
+            None
+        }
+    });
+    let path = gathered.claim_path.unique_value().filter(|value| {
+        amiss_wire::model::RepoPath::new((*value).to_owned())
+            .is_some_and(|path| path.as_str().is_some())
+            && !value.contains(['&', '<', '>', '"', ' ', '%', '\\'])
+    });
+    match (repo, name, line, path) {
+        (Some(repo), Some(name), Some(line), Some(path)) if codes.is_empty() => {
+            Ok(AuthorInvocation {
+                repo,
+                path: path.to_owned(),
+                line,
+                name: name.to_owned(),
+            })
+        }
+        (_, _, _, _) => {
+            codes.insert(Code::InvalidInvocation);
+            Err(codes)
+        }
     }
 }
 

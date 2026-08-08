@@ -529,8 +529,11 @@ fn dialect_default_case(case: &Value, id: &str) {
         tokens.push(flag.to_owned());
     }
     let argv: Vec<OsString> = tokens.iter().map(OsString::from).collect();
-    let Outcome::Accepted(invocation) = parse(&argv) else {
+    let Outcome::Accepted(command) = parse(&argv) else {
         panic!("{id}: expected acceptance");
+    };
+    let amiss::invocation::Command::Scan(invocation) = *command else {
+        panic!("{id}: expected a scan command");
     };
     assert_eq!(
         invocation.forge.map(ForgeDialect::as_str),
