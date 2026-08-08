@@ -66,8 +66,10 @@ saved result is accepted.
 
 ## GitLab project
 
-Use a SHA-1 project on a root-mounted HTTPS GitLab instance. Configure the checked project as
-follows:
+Use a SHA-1 project on a root-mounted HTTPS GitLab instance. On gitlab.com a fresh account
+must pass identity verification before any hosted-runner job runs; until then every
+pipeline fails jobless with the verification banner as its only error. Configure the
+checked project as follows:
 
 - enable merged-results pipelines and merge trains;
 - set merge-train enforcement to **Enforce for all users**, including Owners and administrators;

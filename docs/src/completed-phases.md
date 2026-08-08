@@ -1,6 +1,6 @@
 # Completed phases
 
-Five phases are closed, one page each. A page is a dated exit record rather than live documentation:
+Six phases are closed, one page each. A page is a dated exit record rather than live documentation:
 it states what was true when the phase closed, what each claim defends against, and links the code
 that has to stay true for the claim to hold. Where a fact has moved on since, the page says so and
 points at the live chapter that owns it.
@@ -32,3 +32,8 @@ label-free counters, a graceful drain, and account-free robustness testing.
 measured and named, and refused a fifth. Heading anchors under twelve renderer rules, router
 spellings, generated targets read from the repository's own declarations, AsciiDoc and
 reStructuredText, and the measurement that killed bare-path inference.
+
+[Live provider evidence](completed/live-provider-evidence.md) replaced fixture belief with provider
+verdicts on every lane. A positive and a revoked-control pair per lane, candidate content fixed so
+one control moves per flip, github.com and gitlab.com and self-hosted Gitea and Forgejo, and six
+live-found defects that every fixture had agreed with.

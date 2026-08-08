@@ -53,3 +53,4 @@
     - [Provider-verified controls](completed/provider-verified-controls.md)
     - [Provider operations](completed/provider-operations.md)
     - [Reference coverage](completed/reference-coverage.md)
+    - [Live provider evidence](completed/live-provider-evidence.md)
