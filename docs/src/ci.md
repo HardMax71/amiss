@@ -122,6 +122,22 @@ but lowercase. A scan is a pure function of the two snapshots and the invocation
 no baseline cache to warm between runs. As with the Action, graduate to `--profile enforce`
 once the first report is triaged.
 
+The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
+lines the findings name, with fixes rendered as suggested edits and the finding key
+deduplicating alerts across runs. Two steps after any direct invocation:
+
+```yaml
+- run: amiss check "$@" --format sarif > amiss.sarif
+- uses: github/codeql-action/upload-sarif@24c7eb380a2dc368f2d129e4c65e51d172983a1e # v4
+  with:
+    sarif_file: amiss.sarif
+    category: amiss
+```
+
+The `category` keeps Amiss's alerts distinct from any other SARIF producer in the
+repository, and the upload needs the workflow's `security-events: write` permission. What
+each result carries is stated in [The report](report.md).
+
 ## Reading a run
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for

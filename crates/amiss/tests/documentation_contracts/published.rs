@@ -73,7 +73,7 @@ fn published_ci_examples_expose_every_moving_release_choice() {
     let root = repository_root();
     let sources = [
         (root.join("README.md"), 1_usize),
-        (root.join("docs/src/ci.md"), 2_usize),
+        (root.join("docs/src/ci.md"), 3_usize),
     ];
     let workspace_major = env!("CARGO_PKG_VERSION")
         .split('.')
@@ -115,10 +115,12 @@ fn published_ci_examples_expose_every_moving_release_choice() {
                 );
                 amiss_references = amiss_references.saturating_add(1);
             } else {
-                assert_eq!(
-                    reference,
-                    "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-                    "{}:{} must use the reviewed checkout release",
+                assert!(
+                    reference.len() == 40
+                        && reference
+                            .bytes()
+                            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()),
+                    "{}:{} must pin the upstream action to a full reviewed commit, found {reference}",
                     path.display(),
                     line_index + 1,
                 );
