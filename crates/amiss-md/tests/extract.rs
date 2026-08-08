@@ -14,6 +14,17 @@ fn extraction(adapter: Adapter, source: &str) -> Extraction {
         .expect("a parsing adapter extracts")
 }
 
+fn spans_by(
+    source: &str,
+    field: fn(&amiss_wire::extraction::Occurrence) -> Option<(usize, usize)>,
+) -> Vec<Option<(usize, usize)>> {
+    extraction(Adapter::Markdown, source)
+        .occurrences
+        .iter()
+        .map(field)
+        .collect()
+}
+
 fn triples(extraction: &Extraction) -> Vec<(SourceConstruct, String, String)> {
     extraction
         .occurrences
@@ -647,13 +658,7 @@ fn a_task_checkbox_is_not_a_reference() {
 /// fragmentless links all yield nothing. Frontmatter still translates it.
 #[test]
 fn a_fragment_span_names_bytes_only_under_certainty() {
-    let spans = |source: &str| -> Vec<Option<(usize, usize)>> {
-        extraction(Adapter::Markdown, source)
-            .occurrences
-            .iter()
-            .map(|occurrence| occurrence.fragment_span)
-            .collect()
-    };
+    let spans = |source: &str| spans_by(source, |occurrence| occurrence.fragment_span);
     assert_eq!(spans("[a](guide.md#setup)\n"), vec![Some((13, 18))]);
     let doc = "[a](guide.md#setup)\n";
     assert_eq!(&doc.as_bytes()[13..18], b"setup");
@@ -671,4 +676,28 @@ fn a_fragment_span_names_bytes_only_under_certainty() {
     let with_front = spans(fronted);
     let (start, end) = with_front[0].expect("the fragment survives frontmatter");
     assert_eq!(&fronted.as_bytes()[start..end], b"setup");
+}
+
+/// The path span rides the same certainty: a plain destination yields the
+/// exact range, the part stops at the hash, an autolink is never a path,
+/// and frontmatter still translates it.
+#[test]
+fn a_path_span_names_bytes_only_under_certainty() {
+    let spans = |source: &str| spans_by(source, |occurrence| occurrence.path_span);
+    let doc = "[a](Guide.md)\n";
+    assert_eq!(spans(doc), vec![Some((4, 12))]);
+    assert_eq!(&doc.as_bytes()[4..12], b"Guide.md");
+    let with_fragment = "[a](guide.md#setup)\n";
+    assert_eq!(spans(with_fragment), vec![Some((4, 12))]);
+    assert_eq!(&with_fragment.as_bytes()[4..12], b"guide.md");
+    assert_eq!(spans("[a](x%20.md)\n"), vec![None]);
+    assert_eq!(
+        spans("<user@example.com>\n"),
+        vec![None],
+        "an autolink is a URL or address, never a repository path"
+    );
+    let fronted = "---\nkey: value\n---\n[a](Guide.md)\n";
+    let with_front = spans(fronted);
+    let (start, end) = with_front[0].expect("the path survives frontmatter");
+    assert_eq!(&fronted.as_bytes()[start..end], b"Guide.md");
 }
