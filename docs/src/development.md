@@ -1,8 +1,16 @@
 # Development
 
-The toolchain version is pinned in `rust-toolchain.toml`, `unsafe` is forbidden in every
-crate, and the lint table denies panics, lossy casts, wildcard matches, and undocumented
-errors. Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
+The toolchain version is pinned in `rust-toolchain.toml`, today at 1.97.0, `unsafe` is
+forbidden in every crate, and the lint table denies panics, lossy casts, wildcard
+matches, and undocumented errors. The version in that sentence is this book's first live
+[value claim](claims.md): the definition below pins the pinning line itself, so a
+toolchain bump that forgets this page fails the repository's own gate with the corrected
+expectation in the finding.
+
+[amiss:toolchain-channel]: <amiss:value?path=rust-toolchain.toml&line=L2> 'channel = "1.97.0"'
+
+Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks
+on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
 warnings denied, the full test suite, `cargo deny`, `cargo shear`, and two exact-count
 [similarity-rs](https://github.com/mizchi/similarity) twin-function ratchets on push. The tool
 compares functions within one file, so the first ratchet counts twins inside every file of both
