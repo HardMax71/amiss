@@ -18,7 +18,7 @@ pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha25
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea>]]
             --profile <observe|enforce-introduced|enforce>
-            [--explain-scope] [--format <human|json|sarif>]
+            [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --index
             [--repository <host>/<owner>/<name>
@@ -98,6 +98,7 @@ pub enum OutputFormat {
     Human,
     Json,
     Sarif,
+    CodeQuality,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -338,6 +339,7 @@ fn output_selection(format: &Slot) -> Option<OutputFormat> {
         Some("human") => Some(OutputFormat::Human),
         Some("json") => Some(OutputFormat::Json),
         Some("sarif") => Some(OutputFormat::Sarif),
+        Some("codequality") => Some(OutputFormat::CodeQuality),
         Some(_) | None => None,
     }
 }

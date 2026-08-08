@@ -80,5 +80,20 @@ impl View {
     }
 }
 
+/// A projection object in canonical member order, shared by the lanes that
+/// build non-wire JSON.
+pub(crate) fn object(members: Vec<(&str, Value)>) -> Value {
+    let mut members: Vec<(String, Value)> = members
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect();
+    members.sort_by(|left, right| left.0.cmp(&right.0));
+    Value::Object(members)
+}
+
+pub(crate) fn string(value: &str) -> Value {
+    Value::String(value.to_owned())
+}
+
 #[path = "../tests/internal/view.rs"]
 mod tests;

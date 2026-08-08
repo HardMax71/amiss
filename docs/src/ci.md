@@ -138,6 +138,24 @@ The `category` keeps Amiss's alerts distinct from any other SARIF producer in th
 repository, and the upload needs the workflow's `security-events: write` permission. What
 each result carries is stated in [The report](report.md).
 
+On GitLab the same run becomes a
+[Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/), rendered in the
+merge-request widget and inline on the diff:
+
+```yaml
+amiss:
+  script:
+    - amiss check <the check flags above> --format codequality > gl-code-quality-report.json
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+```
+
+The fingerprint is the finding key, so the widget's new-versus-resolved diff follows the
+same identity the report uses. This is rendering, not the trust lane: a blocking run
+still fails the job by exit class, and the provider-verified gate is
+[the GitLab policy lane](provider-gitlab.md).
+
 ## Reading a run
 
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for

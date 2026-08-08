@@ -308,14 +308,19 @@ fn output_selection_follows_the_format_law() {
     };
     assert_eq!(format, OutputFormat::Json);
 
-    let sarif = with(&valid_pair(), &["--format", "sarif"]);
-    let Outcome::Accepted(command) = parse_tokens(&sarif) else {
-        panic!("expected acceptance");
-    };
-    let amiss::invocation::Command::Scan(invocation) = *command else {
-        panic!("expected a scan command");
-    };
-    assert_eq!(invocation.format, OutputFormat::Sarif);
+    for (value, expected) in [
+        ("sarif", OutputFormat::Sarif),
+        ("codequality", OutputFormat::CodeQuality),
+    ] {
+        let machine = with(&valid_pair(), &["--format", value]);
+        let Outcome::Accepted(command) = parse_tokens(&machine) else {
+            panic!("expected acceptance of {value}");
+        };
+        let amiss::invocation::Command::Scan(invocation) = *command else {
+            panic!("expected a scan command for {value}");
+        };
+        assert_eq!(invocation.format, expected);
+    }
 
     for malformed in [
         with(&valid_pair(), &["--format", "yaml"]),
