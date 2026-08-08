@@ -50,7 +50,8 @@ evidence that reviewers find it useful, and experiments covering persistence and
 Until then these are design vocabulary, not advertised capability. Demand has a place to
 land: open an issue on the repository naming the claim kind and the repository it would
 gate, with one drifted example that reference checking cannot catch. The claim-demand
-issue form asks for exactly those three things. That register is what
+issue form asks for those three, and optionally what the claim should have
+pinned. That register is what
 this section reads before anything here becomes work.
 
 The permanent boundaries stay in [What Amiss is not](non-goals.md): no semantic truth
