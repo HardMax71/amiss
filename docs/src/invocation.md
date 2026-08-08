@@ -36,10 +36,10 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
             --profile <observe|enforce-introduced|enforce>
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
-            [--repository <host>/<owner>/<name>
-             --ref refs/heads/<name>
-             --default-branch-ref refs/heads/<name>
-             [--forge <github|gitlab|gitea>]]
+            --repository <host>/<owner>/<name>
+            --ref refs/heads/<name>
+            --default-branch-ref refs/heads/<name>
+            [--forge <github|gitlab|gitea>]
             --floor-digest sha256:<64-hex> --debt-owner <name>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>
@@ -118,12 +118,13 @@ worked off. The engine supplies each item's key and accepted fact from the evalu
 itself; the flags supply what it cannot know, the floor digest the snapshot binds to, the
 owner the floor must authorize, the reason, both instants in the wire's own clock
 grammar, and the output path, which must not already exist. Adoption records a committed
-tree, so the staged selector is refused, and the repository identity block is required
-because the snapshot binds one. The minted file is written only after the engine's own
+tree, so the staged selector is refused, and the repository identity triple is part of
+the form's own grammar because the snapshot binds one. The minted file is written only after the engine's own
 reader accepts it, and blocking findings outside the debt-eligible kinds are counted in
 the summary line and left to be fixed. Exit 0 means the snapshot was recorded, 1 means
-the output path refused, and 2 means the evaluation could not be trusted and nothing was
-recorded.
+the output path refused, and 2 means nothing trustworthy could be recorded, whether the
+evaluation itself failed, the report carried no candidate tree, or the minted bytes were
+refused by the engine's own reader.
 
 `amiss --version` is the fourth form of the grammar and the only one that is not a scan. It
 carries no other flag, prints two lines to stdout, and exits 0:

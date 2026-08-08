@@ -28,10 +28,10 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
             --profile <observe|enforce-introduced|enforce>
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
-            [--repository <host>/<owner>/<name>
-             --ref refs/heads/<name>
-             --default-branch-ref refs/heads/<name>
-             [--forge <github|gitlab|gitea>]]
+            --repository <host>/<owner>/<name>
+            --ref refs/heads/<name>
+            --default-branch-ref refs/heads/<name>
+            [--forge <github|gitlab|gitea>]
             --floor-digest sha256:<64-hex> --debt-owner <name>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>
@@ -466,7 +466,10 @@ fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
         codes.insert(Code::InvalidInvocation);
     }
     if gathered.verb == Some(Verb::Adopt)
-        && (gathered.index > 0 || gathered.format.present() || gathered.explain_scope > 0)
+        && (gathered.index > 0
+            || gathered.format.present()
+            || gathered.explain_scope > 0
+            || !gathered.repository.present())
     {
         codes.insert(Code::InvalidInvocation);
     }

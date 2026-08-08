@@ -15,14 +15,15 @@ const ELIGIBLE: [&str; 2] = ["explicit-target-missing", "explicit-target-type-mi
     reason = "the adoption rows are the command's output"
 )]
 pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -> ExitCode {
+    let Some(identity) = &invocation.identity else {
+        println!("amiss adopt: the grammar requires the repository identity; nothing recorded");
+        return ExitCode::from(2);
+    };
+
     if built.exit_code == 2 {
         println!("amiss adopt: the evaluation could not be trusted; nothing recorded");
         return ExitCode::from(2);
     }
-    let Some(identity) = &invocation.identity else {
-        println!("amiss adopt: the snapshot binds a repository, so --repository is required");
-        return ExitCode::from(2);
-    };
     if adoption.output.exists() {
         println!("amiss adopt: the output path already exists; nothing recorded");
         return ExitCode::FAILURE;
@@ -40,7 +41,13 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
         return ExitCode::from(2);
     }
-    if fs::write(&adoption.output, &bytes).is_err() {
+    // Exclusive creation closes the race the early existence check leaves.
+    let written = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&adoption.output)
+        .and_then(|mut file| std::io::Write::write_all(&mut file, &bytes));
+    if written.is_err() {
         println!("amiss adopt: the output path could not be written; nothing recorded");
         return ExitCode::FAILURE;
     }
