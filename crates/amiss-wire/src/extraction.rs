@@ -97,6 +97,9 @@ pub struct Occurrence {
     /// once inside the reference and nothing a decoder could alter sits in
     /// the fragment. Absent means no edit may claim those bytes.
     pub fragment_span: Option<(usize, usize)>,
+    /// The document byte range of the destination's path part, under the
+    /// same certainty rules. Absent means no edit may claim those bytes.
+    pub path_span: Option<(usize, usize)>,
 }
 
 /// The opaque partition of one document: the frontmatter region's byte count,
@@ -200,9 +203,41 @@ pub fn fragment_span(
     {
         return None;
     }
+    let start = locate_destination(source, span, raw_destination)?
+        .checked_add(prefix.len())?
+        .checked_add(1)?;
+    Some((start, start.checked_add(fragment.len())?))
+}
+
+/// The document byte range of a destination's path part: the destination
+/// located verbatim exactly once, up to its first `#` or its whole text,
+/// holding nothing a decoder could alter. Anything less names no bytes.
+#[must_use]
+pub fn path_span(
+    source: &[u8],
+    span: (usize, usize),
+    raw_destination: &str,
+) -> Option<(usize, usize)> {
+    let part = raw_destination
+        .split_once('#')
+        .map_or(raw_destination, |(prefix, _)| prefix);
+    if part.is_empty() || part.contains(['%', '&', '\\']) {
+        return None;
+    }
+    let at = locate_destination(source, span, raw_destination)?;
+    Some((at, at.checked_add(part.len())?))
+}
+
+/// The one place a raw destination's own text begins inside its reference
+/// span, or None on zero hits, two hits, or a span past the source. An empty
+/// destination is refused here, where a zero-width window would otherwise
+/// match everywhere.
+fn locate_destination(source: &[u8], span: (usize, usize), raw_destination: &str) -> Option<usize> {
     let slice = source.get(span.0..span.1)?;
-    // split_once proved the needle nonempty; a short slice yields no windows.
     let needle = raw_destination.as_bytes();
+    if needle.is_empty() {
+        return None;
+    }
     let mut hits = slice
         .windows(needle.len())
         .enumerate()
@@ -212,10 +247,5 @@ pub fn fragment_span(
     if hits.next().is_some() {
         return None;
     }
-    let start = span
-        .0
-        .checked_add(at)?
-        .checked_add(prefix.len())?
-        .checked_add(1)?;
-    Some((start, start.checked_add(fragment.len())?))
+    span.0.checked_add(at)
 }

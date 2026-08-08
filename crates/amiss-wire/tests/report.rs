@@ -326,7 +326,12 @@ fn a_failure_envelope_exists_exactly_when_a_reason_does() {
 /// rewrite names itself, and no two share a sentence.
 #[test]
 fn every_fix_kind_states_its_own_sentence() {
-    let sentences = [FixKind::ClaimValueRewrite, FixKind::AnchorRespelling].map(FixKind::meaning);
+    let sentences = [
+        FixKind::ClaimValueRewrite,
+        FixKind::AnchorRespelling,
+        FixKind::PathRespelling,
+    ]
+    .map(FixKind::meaning);
     assert!(sentences.iter().all(|sentence| !sentence.is_empty()));
     let unique: BTreeSet<&str> = sentences.iter().copied().collect();
     assert_eq!(unique.len(), sentences.len(), "{sentences:?}");

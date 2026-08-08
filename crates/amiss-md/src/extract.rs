@@ -128,7 +128,16 @@ fn extract_tree(
             .map(|entry| Occurrence {
                 span: translate(entry.span),
                 block_span: translate(entry.block_span),
-                fragment_span: fragment_span(
+                fragment_span: gated_span(
+                    amiss_wire::extraction::fragment_span,
+                    suffix.as_bytes(),
+                    entry.span,
+                    &entry.raw_destination,
+                    entry.construct,
+                )
+                .map(translate),
+                path_span: gated_span(
+                    amiss_wire::extraction::path_span,
                     suffix.as_bytes(),
                     entry.span,
                     &entry.raw_destination,
@@ -301,6 +310,7 @@ impl Sweep<'_> {
             block_kind,
             block_span,
             fragment_span: None,
+            path_span: None,
         });
     }
 }
@@ -1043,19 +1053,20 @@ fn validate(
 #[path = "../tests/internal/extract.rs"]
 mod tests;
 
-/// The suffix-relative byte range of a destination's fragment, only when the
-/// raw destination appears verbatim exactly once inside the reference span,
-/// carries a single `#`, and the fragment holds nothing a decoder could
-/// alter. Anything less certain names no bytes.
-fn fragment_span(
+type SpanCore = fn(&[u8], (usize, usize), &str) -> Option<(usize, usize)>;
+
+/// One construct gate in front of both wire span cores: an autolink is a URL
+/// or email address, so its hash can sit in a local part and its text never
+/// names a repository path.
+fn gated_span(
+    core: SpanCore,
     source: &[u8],
     span: (usize, usize),
     raw_destination: &str,
     construct: SourceConstruct,
 ) -> Option<(usize, usize)> {
-    // An autolink's hash can sit in an email local part, never a fragment.
     if construct == SourceConstruct::Autolink {
         return None;
     }
-    amiss_wire::extraction::fragment_span(source, span, raw_destination)
+    core(source, span, raw_destination)
 }

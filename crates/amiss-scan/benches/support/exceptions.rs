@@ -151,6 +151,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
             query: None,
             fragment: None,
         },
+        raw_destination: String::new(),
         raw_destination_digest: hb("amiss/scanner-raw-destination", target_text.as_bytes()),
         projection_digest,
         resolution: Resolution::<RepoPath>::Missing(Missing::PathNotFound {
@@ -158,6 +159,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
             near: None,
         }),
         fragment_span: None,
+        path_span: None,
     };
     (observation, fact)
 }

@@ -17,6 +17,7 @@ fn occurrence(span: (usize, usize), block_span: (usize, usize)) -> Occurrence {
         block_kind: BlockKind::Paragraph,
         block_span,
         fragment_span: None,
+        path_span: None,
     }
 }
 

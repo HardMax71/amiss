@@ -487,6 +487,104 @@ fn a_separator_drifted_anchor_carries_its_fix() {
     );
 }
 
+/// A lone case-drifted path carries its fix: the written path bytes and the
+/// tracked spelling's tail. Dot segments break the tail law and stay bare,
+/// and a fragment rides untouched beside the replaced path part.
+#[test]
+fn a_case_drifted_path_carries_its_fix() {
+    let run = |link: &str| -> serde_json::Value {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        fs::write(root.join("README.md"), "# R\n").unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("docs/sections.md"), "# Setup\n").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "base"]);
+        let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        fs::write(root.join("docs/guide.md"), link).unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "linked"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let built = commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        );
+        payload(&built)
+    };
+    let missing_row = |payload: &serde_json::Value| -> serde_json::Value {
+        payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["kind"] == "explicit-target-missing")
+            .unwrap()
+            .clone()
+    };
+
+    let drifted = "[s](Sections.md)\n";
+    let row = missing_row(&run(drifted));
+    let fix = &row["fix"];
+    assert_eq!(fix["path"], "docs/guide.md", "{row}");
+    assert_eq!(fix["replacement"], "sections.md");
+    let start = usize::try_from(fix["span"]["start_byte"].as_u64().unwrap()).unwrap();
+    let end = usize::try_from(fix["span"]["end_byte"].as_u64().unwrap()).unwrap();
+    assert_eq!(&drifted.as_bytes()[start..end], b"Sections.md");
+    assert_eq!(
+        fix["description"],
+        "replace the path with the one tracked spelling it matches apart from case"
+    );
+
+    let with_fragment = "[s](Sections.md#setup)\n";
+    let row = missing_row(&run(with_fragment));
+    let fix = &row["fix"];
+    assert_eq!(fix["replacement"], "sections.md");
+    let end = usize::try_from(fix["span"]["end_byte"].as_u64().unwrap()).unwrap();
+    assert_eq!(
+        with_fragment.as_bytes()[end],
+        b'#',
+        "the fragment rides untouched beside the replaced path part"
+    );
+
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    fs::write(root.join("sections.md"), "# Setup\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("guide.md"), "[s](Sections.md)\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "linked"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let at_root = missing_row(&payload(&built));
+    assert_eq!(
+        at_root["fix"]["replacement"], "sections.md",
+        "a root-level reference writes the whole intent, and still repairs: {at_root}"
+    );
+
+    let row = missing_row(&run("[s](../Docs/sections.md)\n"));
+    assert!(
+        row["fix"].is_null(),
+        "a dot segment breaks the tail law and stays bare: {row}"
+    );
+}
+
 /// The rst lane carries the anchor fix too, end to end against a real
 /// repository.
 #[test]

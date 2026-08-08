@@ -83,6 +83,7 @@ fn observation(spec: &Spec) -> Observation {
             block_kind: BlockKind::Paragraph,
             block_span: (0, 1),
             fragment_span: None,
+            path_span: None,
         },
         display: SpanDisplay {
             start_line: 1,
@@ -113,10 +114,12 @@ fn observation(spec: &Spec) -> Observation {
         construct: SourceConstruct::InlineLink,
         external_destination: None,
         intent: spec.intent.clone(),
+        raw_destination: String::new(),
         raw_destination_digest: scanned.raw_destination_digest,
         projection_digest: scanned.projection_digest,
         resolution: spec.resolution.clone(),
         fragment_span: None,
+        path_span: None,
     }
 }
 
