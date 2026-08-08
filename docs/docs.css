@@ -103,3 +103,12 @@ html, body, .sidebar, #menu-bar, .menu-title, .content main {
 .chapter li.part-title[aria-expanded="true"] .part-chevron {
   transform: rotate(90deg);
 }
+
+#last-change {
+  margin-top: 3rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--table-border-color);
+  font-size: 0.8em;
+  text-align: right;
+  opacity: 0.65;
+}
