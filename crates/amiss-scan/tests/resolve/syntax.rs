@@ -122,7 +122,7 @@ fn native_paths_decode_once_and_stay_contained() {
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "absent.md")
         .unwrap_or_else(|_defect| panic!("resolve absent path"))
         .1;
-    let Resolution::Missing(Missing::PathNotFound { path }) = row else {
+    let Resolution::Missing(Missing::PathNotFound { path, .. }) = row else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/absent.md"));

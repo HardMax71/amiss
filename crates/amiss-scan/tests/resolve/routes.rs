@@ -57,7 +57,7 @@ fn a_spelling_never_invents_a_target() {
             .run_as(Adapter::Markdown, None, "docs/index.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
-        let Resolution::Missing(Missing::PathNotFound { path }) = &row else {
+        let Resolution::Missing(Missing::PathNotFound { path, .. }) = &row else {
             panic!("{destination} names no file any router serves: {row:?}");
         };
         assert_eq!(
@@ -77,7 +77,7 @@ fn a_promised_directory_and_a_forge_url_are_never_re_spelled() {
         .run_as(Adapter::Markdown, None, "docs/index.md", false, "guide/")
         .unwrap_or_else(|_defect| panic!("resolve guide/"))
         .1;
-    let Resolution::Missing(Missing::PathNotFound { path }) = &row else {
+    let Resolution::Missing(Missing::PathNotFound { path, .. }) = &row else {
         panic!("a promised directory stays missing: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/guide"));
@@ -93,7 +93,7 @@ fn a_promised_directory_and_a_forge_url_are_never_re_spelled() {
         )
         .unwrap_or_else(|_defect| panic!("resolve the forge URL"))
         .1;
-    let Resolution::Missing(Missing::PathNotFound { path }) = &row else {
+    let Resolution::Missing(Missing::PathNotFound { path, .. }) = &row else {
         panic!("a forge URL keeps the tree's answer: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/guide"));

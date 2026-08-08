@@ -70,6 +70,7 @@ fn lfs_pointer(path: &str) -> Resolution {
 fn path_not_found(path: &str) -> Resolution {
     Resolution::Missing(Missing::PathNotFound {
         path: repo_path(path),
+        near: None,
     })
 }
 
@@ -336,6 +337,7 @@ fn every_missing_reason_emits_the_structural_finding() {
             "absent.md",
             Missing::PathNotFound {
                 path: repo_path("absent.md"),
+                near: None,
             },
         ),
         (
@@ -603,6 +605,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
         },
         amiss_wire::resolution::Resolution::Missing(Missing::PathNotFound {
             path: amiss_wire::model::RepoPathText::new("absent.md".to_owned()).expect("path"),
+            near: None,
         }),
     )
     .expect("a structural fact")

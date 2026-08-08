@@ -249,3 +249,30 @@ fn a_typography_neighbor_steps_forward_alone() {
         "case and separator fold together"
     );
 }
+
+/// A path the tree does not hold names its one case neighbor, and stays bare
+/// when nothing or more than one thing comes close.
+#[test]
+fn a_case_drifted_path_names_its_neighbor() {
+    let mut bed = bed();
+    let near_of = |bed: &mut crate::support::Bed, destination: &str| {
+        let row = bed
+            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
+            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+            .1;
+        let Resolution::Missing(Missing::PathNotFound { near, .. }) = row else {
+            panic!("{destination} is not a missing path: {row:?}");
+        };
+        near.and_then(|path| path.as_str().map(str::to_owned))
+    };
+    assert_eq!(
+        near_of(&mut bed, "Anchors.md"),
+        Some("docs/anchors.md".to_owned()),
+        "a case-drifted basename names the tracked spelling"
+    );
+    assert_eq!(
+        near_of(&mut bed, "nothing-like-this.md"),
+        None,
+        "a path nothing comes close to stays bare"
+    );
+}

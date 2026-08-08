@@ -2537,6 +2537,9 @@
     "MissingResolution": {
       "oneOf": [
         {
+          "$ref": "#/$defs/PathNotFoundResolution"
+        },
+        {
           "$ref": "#/$defs/PathMissingResolution"
         },
         {
@@ -2561,7 +2564,6 @@
         },
         "reason": {
           "enum": [
-            "path-not-found",
             "line-fragment-out-of-range"
           ]
         },
@@ -2569,6 +2571,38 @@
           "$ref": "#/$defs/RepoPath"
         }
       }
+    },
+    "PathNotFoundResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason",
+        "path",
+        "near"
+      ],
+      "properties": {
+        "kind": {
+          "const": "missing"
+        },
+        "reason": {
+          "const": "path-not-found"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "near": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/RepoPath"
+            }
+          ]
+        }
+      },
+      "description": "A path the tree does not hold, carrying the one tracked path equal to it apart from case when exactly one exists and null otherwise."
     },
     "HeadingMissingResolution": {
       "type": "object",

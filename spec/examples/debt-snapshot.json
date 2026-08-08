@@ -45,12 +45,13 @@
           "resolution": {
             "kind": "missing",
             "reason": "path-not-found",
-            "path": "docs/example.md"
+            "path": "docs/example.md",
+            "near": null
           },
           "occurrence_multiplicity": 1
         }
       },
-      "accepted_fact_digest": "sha256:a0353dcaafcede4e34389a8a0f5c2e8143acd412c26bd2943848f81275e69933",
+      "accepted_fact_digest": "sha256:4a115af08f3c2692fb97499bc7fc9e4c325f8f0932496a2285d2b812486df573",
       "owner": "team:docs-platform",
       "reason": "Legacy link scheduled for removal.",
       "created_at": "2026-07-01T00:00:00Z",
