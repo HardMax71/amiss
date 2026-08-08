@@ -16,9 +16,9 @@ separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api
 is bytewise, including for paths JSON cannot represent as text. Each snapshot policy can carry
 the [published repository-policy entry ceiling](limits.md), so the base/candidate
 classification union can contain twice that many distinct roots. The
-[`policy` tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/policy.rs)
+[`policy` tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/policy.rs)
 pin the semantic boundaries, and the release
-[`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/eligibility.rs)
+[`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/eligibility.rs)
 checks the maximum union without scanning every policy row for every discovered path. The
 `amiss-scan` `controls` benchmark tracks both tree matching and policy-set comparison as the
 entry count grows.

@@ -2,10 +2,6 @@
     clippy::expect_used,
     reason = "integration assertions over repository-owned schema fragments"
 )]
-#![expect(
-    dead_code,
-    reason = "each integration-test crate uses a different subset of this shared support module"
-)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

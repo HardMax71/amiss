@@ -47,7 +47,7 @@ Both refs are part of that identity preimage, alongside the repository, selected
 base, and candidate, so a trusted-time statement bound to one source and target relationship
 cannot be replayed for another. These JSON files are digest preimages, not accepted request
 documents, and the
-[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs)
+[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/identity.rs)
 validates each against its report-schema definition and reproduces the full chain through
 the production builders.
 

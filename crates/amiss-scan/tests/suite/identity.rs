@@ -13,7 +13,7 @@ use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{ForgeDialect, RepoPath, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 
-mod support;
+use crate::support;
 
 use support::{ReportSchemaFragment, fixture_bytes};
 

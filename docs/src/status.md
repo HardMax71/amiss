@@ -126,14 +126,14 @@ canonical bytes clear the
 [wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/acceptance.rs)
 end to end. The commit and staged-index identity preimages reproduce the production digest
 chain in the
-[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/identity.rs).
+[identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/identity.rs).
 The published semantic corpora drive their live code paths:
 [frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json)
 through the [recognizer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs),
 [correlation vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json)
-through the [intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/correlation_vectors.rs), and
+through the [intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/correlation_vectors.rs), and
 [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)
-through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/governed.rs),
+through [report construction](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/governed.rs),
 value-grammar refusals included.
 
 Published CI snippets must pin upstream Actions immutably, name an explicit reviewed crate
