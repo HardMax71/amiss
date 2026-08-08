@@ -7,6 +7,9 @@ src = "src"
 [preprocessor.graphviz]
 command = "mdbook-graphviz"
 
+[preprocessor.last-changed]
+command = "mdbook-last-changed"
+
 [output.html]
 additional-css = ["docs.css"]
 additional-js = ["parts.js"]
