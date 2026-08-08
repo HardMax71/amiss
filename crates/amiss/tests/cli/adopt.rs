@@ -120,8 +120,14 @@ fn a_minted_snapshot_clears_its_own_reader_and_schema() {
     let bytes = fs::read(&path).unwrap();
     let snapshot = DebtSnapshot::parse(&bytes).unwrap();
     assert_eq!(snapshot.items.len(), 1);
-    let schema: serde_json::Value =
-        serde_json::from_slice(&fs::read("../../spec/debt-snapshot.schema.json").unwrap()).unwrap();
+    let schema: serde_json::Value = serde_json::from_slice(
+        &fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../spec/debt-snapshot.schema.json"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
     let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let validator = jsonschema::validator_for(&schema).unwrap();
     assert!(
@@ -320,9 +326,15 @@ fn the_adopt_form_refuses_foreign_and_missing_flags() {
         with(&["--profile", "enforce"]),
         with(&["--explain-scope"]),
         with(&["--index"]),
+        {
+            let mut args = dropped("--candidate");
+            args.push("--index".to_owned());
+            args
+        },
         dropped("--debt-owner"),
         dropped("--expires-at"),
         dropped("--floor-digest"),
+        dropped("--repository"),
     ] {
         let shown: Vec<&str> = args.iter().map(String::as_str).collect();
         let (code, _stdout, stderr) = amiss(&shown);
