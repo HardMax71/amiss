@@ -171,3 +171,6 @@ repos:
     hooks:
       - id: amiss
 ```
+
+When the staged check reports fixes, [`amiss fix`](invocation.md) applies them to the
+working tree in place; restage and the same hook judges the repaired state.

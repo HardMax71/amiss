@@ -1,3 +1,4 @@
+mod repair;
 mod sarif;
 mod view;
 
@@ -6,7 +7,7 @@ use std::env;
 use std::fs;
 use std::process::ExitCode;
 
-use amiss::invocation::{self, CandidateSelector, Code, Invocation, Outcome, OutputFormat};
+use amiss::invocation::{self, CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
@@ -267,25 +268,11 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     let repo = match amiss_git::Repository::open(&invocation.repo, invocation.object_format) {
         Ok(repo) => repo,
         Err(defect) => {
-            let code = match defect {
-                amiss_git::Error::RepositoryUnavailable => {
-                    AnalysisErrorCode::GitRepositoryUnavailable
-                }
-                amiss_git::Error::ObjectMissing => AnalysisErrorCode::GitObjectMissing,
-                amiss_git::Error::ObjectWrongKind => AnalysisErrorCode::GitObjectWrongKind,
-                amiss_git::Error::ObjectUnreadable | amiss_git::Error::ResourceLimit { .. } => {
-                    AnalysisErrorCode::GitObjectUnreadable
-                }
-                amiss_git::Error::IndexInvalid => AnalysisErrorCode::GitIndexInvalid,
-                amiss_git::Error::IndexUnmerged => AnalysisErrorCode::GitIndexUnmerged,
-                amiss_git::Error::IntentToAdd => AnalysisErrorCode::GitIntentToAdd,
-                amiss_git::Error::SnapshotChanged => AnalysisErrorCode::GitSnapshotChanged,
-            };
             return fatal(
                 invocation,
                 &engine,
                 &[ErrorDetail {
-                    code,
+                    code: open_code(&defect),
                     path: None,
                     path_bytes: None,
                     resource: None,
@@ -357,8 +344,26 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             &invocation.base,
         ),
     };
+    if invocation.verb == Verb::Fix {
+        return repair::run(&invocation.repo, &repo, invocation.object_format, &built);
+    }
     render(&built, invocation, reserve);
     exit_class(built.exit_code)
+}
+
+const fn open_code(defect: &amiss_git::Error) -> AnalysisErrorCode {
+    match defect {
+        amiss_git::Error::RepositoryUnavailable => AnalysisErrorCode::GitRepositoryUnavailable,
+        amiss_git::Error::ObjectMissing => AnalysisErrorCode::GitObjectMissing,
+        amiss_git::Error::ObjectWrongKind => AnalysisErrorCode::GitObjectWrongKind,
+        amiss_git::Error::ObjectUnreadable | amiss_git::Error::ResourceLimit { .. } => {
+            AnalysisErrorCode::GitObjectUnreadable
+        }
+        amiss_git::Error::IndexInvalid => AnalysisErrorCode::GitIndexInvalid,
+        amiss_git::Error::IndexUnmerged => AnalysisErrorCode::GitIndexUnmerged,
+        amiss_git::Error::IntentToAdd => AnalysisErrorCode::GitIntentToAdd,
+        amiss_git::Error::SnapshotChanged => AnalysisErrorCode::GitSnapshotChanged,
+    }
 }
 
 fn fatal(
