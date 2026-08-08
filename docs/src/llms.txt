@@ -60,3 +60,4 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Provider-verified controls](https://hardmax71.github.io/amiss/completed/provider-verified-controls.html): how the gate became an object the provider owns and the checked repository cannot forge
 - [Provider operations](https://hardmax71.github.io/amiss/completed/provider-operations.html): deploying, watching, and restarting the provider lanes without losing work
 - [Reference coverage](https://hardmax71.github.io/amiss/completed/reference-coverage.html): the four resolver classes the scan ledger named, answered here or refused with a measurement
+- [Live provider evidence](https://hardmax71.github.io/amiss/completed/live-provider-evidence.html): provider-published verdicts on every lane, one positive and one revoked pair each, and the six live-found defects

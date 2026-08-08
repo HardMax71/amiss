@@ -33,10 +33,29 @@ and the control stayed intact, are recorded in
 [pull request 131](https://github.com/HardMax71/amiss/pull/131). Both families blocked the
 drift, refused the merge, and approved the correction.
 
-GitLab has no row. The lane's floor is 19.3 with Ultimate and 19.2.0 was the newest
-release on the date above, so no supported instance existed to run. A live 19.2.0-ee
-confirmed the shapes the adapter reads and confirmed that the floor refuses the instance,
-which is a version check rather than a lane run.
+In July GitLab had no row: the lane's floor is 19.3 with Ultimate, 19.2.0 was the newest
+release, and a live 19.2.0-ee confirmed only that the floor refuses the instance.
+
+## August 2026
+
+Controller `d6d42de`, action tree pinned at commit
+`b4b576da872c2e5b7243264919a324e39b7276ad`. The instance is gitlab.com itself, running
+`19.3.0-pre` (revision `6ec80fea941`) ahead of the self-managed 19.3 release, under an
+Ultimate trial namespace. The candidate content is held fixed across the pair and only
+the enforcement control moves.
+
+| Provider | Version | Control | Provider evidence | Gate commit |
+| --- | --- | --- | --- | --- |
+| GitLab | gitlab.com 19.3.0-pre | train enforced for all users | policy job `success`, train merged | `73da3cdf0319` |
+| GitLab | gitlab.com 19.3.0-pre | `merge_train_enforcement: allow_bypass` | policy job `failed` on `412`, train dropped the car | `270b65505c42` |
+
+The revocation was restored afterwards and the restored train merged the same content.
+Running the lane live found two defects every fixture had agreed with, keeping the July
+pattern: the documented policy job wrapped its script across YAML lines that policy
+injection preserves literally, so the book now keeps the command on one physical line,
+and gitlab.com answers the jobs API with a null `source` for the policy job, so the
+adapter now accepts an absent REST source while the signed OIDC `job_source` claim and
+the pinned `job_config` binding continue to state the provenance.
 
 ## What a row must be
 

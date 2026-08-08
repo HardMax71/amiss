@@ -8,27 +8,12 @@ product is in
 [Completed phases](completed-phases.md), and version history is in the
 [changelog](https://github.com/HardMax71/amiss/blob/main/CHANGELOG.md).
 
-## Now: retain live provider evidence
-
-The provider code chapter is closed. What remains cannot be produced by a local fixture: it
-requires accounts and protected test projects on the providers themselves.
-
-GitHub, Gitea, and Forgejo are done. [Retained provider runs](provider-evidence.md) holds a
-positive and a revoked-control run for each, against github.com, Gitea 1.27.0, and Forgejo
-16.0.1. Running them found four defects that every fixture had agreed with, so the lanes
-themselves changed on the way.
-
-- Retain positive and revoked-control runs from a GitLab project. Record the provider version,
-  controller commit, and provider evidence. The lane's floor is 19.3 with Ultimate and 19.2.0 is
-  the newest release, so this waits on GitLab. Local HTTP fixtures remain regression tests, not
-  live-provider evidence.
-
 ## Toward a settled wire
 
 `compatibility` stays `experimental` while the contract rolls, and the [status
 page](status.md) says so wherever the report is described. It leaves experimental when
-three things hold at once. The GitLab lane holds retained live evidence like the other
-three, so every supported lane's trust story is closed. Two consecutive minor series ship
+three things hold at once. The first holds today: the GitLab lane retains live evidence
+like the other three, so every supported lane's trust story is closed. Two consecutive minor series ship
 without reshaping the report payload, so the contract has shown it can hold still under
 feature work. And the release carries no half-built trust path: the launcher placeholder
 is cut, since a verifier the artifact supplies can never vouch for the artifact, and the
