@@ -1,3 +1,4 @@
+mod adopt;
 mod claims;
 mod fix;
 mod forge;

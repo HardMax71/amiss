@@ -149,7 +149,7 @@ pub enum Outcome {
         format: OutputFormat,
         codes: BTreeSet<Code>,
     },
-    Accepted(Invocation),
+    Accepted(Box<Invocation>),
 }
 
 #[derive(Default)]
@@ -219,7 +219,7 @@ pub fn parse(argv: &[OsString]) -> Outcome {
         return Outcome::MalformedOutputSelection;
     };
     match classify(&gathered, format) {
-        Ok(invocation) => Outcome::Accepted(invocation),
+        Ok(invocation) => Outcome::Accepted(Box::new(invocation)),
         Err(codes) => Outcome::Rejected { format, codes },
     }
 }
@@ -348,64 +348,12 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
             codes.insert(Code::InvalidInvocation);
         }
     }
-    // Adoption records what enforce would block, so the profile is not a
-    // choice there; everywhere else it stays required.
-    if gathered.verb == Some(Verb::Adopt) {
-        if gathered.profile.present() {
-            codes.insert(Code::InvalidInvocation);
-        }
-    } else if !gathered.profile.present() {
-        codes.insert(Code::InvalidInvocation);
-    }
-    let adoption_slots = [
-        &gathered.floor_digest,
-        &gathered.debt_owner,
-        &gathered.debt_reason,
-        &gathered.created_at,
-        &gathered.expires_at,
-        &gathered.debt_output,
-    ];
-    if gathered.verb == Some(Verb::Adopt) {
-        if adoption_slots.iter().any(|slot| !slot.present()) {
-            codes.insert(Code::InvalidInvocation);
-        }
-    } else if adoption_slots.iter().any(|slot| slot.present()) {
-        codes.insert(Code::InvalidInvocation);
-    }
+    verb_rules(&mut codes, gathered);
     if gathered.candidate.present() == (gathered.index > 0) {
         codes.insert(Code::InvalidInvocation);
     }
-    // Check-only flags are refused on the repair form rather than ignored.
-    if gathered.verb == Some(Verb::Fix)
-        && (gathered.candidate.present() || gathered.format.present() || gathered.explain_scope > 0)
-    {
-        codes.insert(Code::InvalidInvocation);
-    }
-    // The adoption form records a committed tree and writes a file, so the
-    // staged selector and report output flags are refused.
-    if gathered.verb == Some(Verb::Adopt)
-        && (gathered.index > 0 || gathered.format.present() || gathered.explain_scope > 0)
-    {
-        codes.insert(Code::InvalidInvocation);
-    }
 
-    let repo = match gathered.repo.unique_value() {
-        Some("") | None => {
-            codes.insert(Code::InvalidInvocation);
-            None
-        }
-        Some(path) => Some(PathBuf::from(path)),
-    };
-
-    let object_format = match gathered.object_format.unique_value() {
-        Some("sha1") => Some(ObjectFormat::Sha1),
-        Some("sha256") => Some(ObjectFormat::Sha256),
-        Some(_) => {
-            codes.insert(Code::InvalidInvocation);
-            None
-        }
-        None => None,
-    };
+    let (repo, object_format) = classify_target(&mut codes, gathered);
 
     let base = decode_oid(&mut codes, object_format, &gathered.base);
     let candidate_oid = decode_oid(&mut codes, object_format, &gathered.candidate);
@@ -462,6 +410,68 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Invocation, BTr
     }
 }
 
+fn classify_target(
+    codes: &mut BTreeSet<Code>,
+    gathered: &Gathered,
+) -> (Option<PathBuf>, Option<ObjectFormat>) {
+    let repo = match gathered.repo.unique_value() {
+        Some("") | None => {
+            codes.insert(Code::InvalidInvocation);
+            None
+        }
+        Some(path) => Some(PathBuf::from(path)),
+    };
+    let object_format = match gathered.object_format.unique_value() {
+        Some("sha1") => Some(ObjectFormat::Sha1),
+        Some("sha256") => Some(ObjectFormat::Sha256),
+        Some(_) => {
+            codes.insert(Code::InvalidInvocation);
+            None
+        }
+        None => None,
+    };
+    (repo, object_format)
+}
+
+/// The per-verb shape: adoption bakes enforce so the profile is refused
+/// there and required elsewhere, the six adoption values are required there
+/// and refused elsewhere, the repair form is staged-only without report
+/// flags, and the adoption form is commit-pair only without them.
+fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
+    if gathered.verb == Some(Verb::Adopt) {
+        if gathered.profile.present() {
+            codes.insert(Code::InvalidInvocation);
+        }
+    } else if !gathered.profile.present() {
+        codes.insert(Code::InvalidInvocation);
+    }
+    let adoption_slots = [
+        &gathered.floor_digest,
+        &gathered.debt_owner,
+        &gathered.debt_reason,
+        &gathered.created_at,
+        &gathered.expires_at,
+        &gathered.debt_output,
+    ];
+    if gathered.verb == Some(Verb::Adopt) {
+        if adoption_slots.iter().any(|slot| !slot.present()) {
+            codes.insert(Code::InvalidInvocation);
+        }
+    } else if adoption_slots.iter().any(|slot| slot.present()) {
+        codes.insert(Code::InvalidInvocation);
+    }
+    if gathered.verb == Some(Verb::Fix)
+        && (gathered.candidate.present() || gathered.format.present() || gathered.explain_scope > 0)
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
+    if gathered.verb == Some(Verb::Adopt)
+        && (gathered.index > 0 || gathered.format.present() || gathered.explain_scope > 0)
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
+}
+
 /// Every adoption value is validated where the grammar can see it: the
 /// floor digest by its exact spelling, both instants by the wire's own
 /// clock grammar, and the free-text fields by being nonempty.
@@ -495,26 +505,26 @@ fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<
         instant(&gathered.expires_at),
         nonempty(&gathered.debt_output),
     );
-    match fields {
-        (
-            Some(floor_digest),
-            Some(owner),
-            Some(reason),
-            Some(created_at),
-            Some(expires_at),
-            Some(output),
-        ) => Some(Adoption {
+    if let (
+        Some(floor_digest),
+        Some(owner),
+        Some(reason),
+        Some(created_at),
+        Some(expires_at),
+        Some(output),
+    ) = fields
+    {
+        Some(Adoption {
             floor_digest,
             owner,
             reason,
             created_at,
             expires_at,
             output: PathBuf::from(output),
-        }),
-        _ => {
-            codes.insert(Code::InvalidInvocation);
-            None
-        }
+        })
+    } else {
+        codes.insert(Code::InvalidInvocation);
+        None
     }
 }
 
