@@ -100,6 +100,8 @@ warning naming the `.md` file, and vitepress emits it verbatim into a build hold
 `page.html`, dead on any host despite its own dead-link checker accepting it. One router, by
 configuration, is not a rule.
 
-What Hugo and Jest need instead is the generated class the [roadmap](roadmap.md) still
-carries, arriving there as transclusion, as a repository's own render hook, and as an
-identifier that was never a path.
+What Hugo and Jest need instead is the generated class, arriving there as transclusion,
+as a repository's own render hook, and as an identifier that was never a path. The exact-path
+core of that class is answered now, from the tracked ignore file recorded in
+[Reference coverage](completed/reference-coverage.md), and all three of those arrivals sit
+outside it.

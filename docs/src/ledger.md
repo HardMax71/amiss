@@ -57,8 +57,9 @@ docs build generates and the repository never holds, `settings.md` and `rules.md
 mostly, plus three literal template placeholders. Amiss reads every one of these
 correctly against the tree; the maintainers would still close the report, and they would
 be right to, which is what makes the class worth recording. These are the measured
-adoption boundary behind the declared-generated-targets candidate on the
-[roadmap](roadmap.md).
+adoption boundary that put declared generated targets on the roadmap, and the answer has
+since shipped from the tracked ignore file, recorded in
+[Reference coverage](completed/reference-coverage.md).
 
 The four later rows were picked deliberately from repositories without a docs-site
 generator, and they produced no rejection class at all: every nonzero count there is a
@@ -76,7 +77,8 @@ Heading anchors resolve since [What twelve renderers call a heading](anchor-rule
 ten trees were scanned again on 2026-07-26 with that work's release build. These are not
 rows. Each is a whole-tree count at that day's head against a synthetic empty base, so there
 is no commit range, no changed-line denominator, and no density figure. They are kept
-because the class mix the [roadmap](roadmap.md) argues from moved.
+because the class mix that [Reference coverage](completed/reference-coverage.md) later
+answered moved.
 
 | Repository | Head | References | Missing | Anchor | Other spelling | Absent |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
