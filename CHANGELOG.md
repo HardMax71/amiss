@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0](https://github.com/HardMax71/amiss/compare/v0.18.0...v0.19.0) - 2026-08-08
+
+### Changes
+
+- Wire the SARIF projection into code scanning
+- Trim the authoring comments to their constraints
+- Author through the evaluation's own line scanner
+- Give amiss its claim authoring verb
+- Answer the second review round on adoption
+- Move the identity into the grammar and close the write race
+- Prove the mint round trips into tolerance
+- Mint the adoption debt from the evaluation
+- Pin the index and the parent the repair trusts
+- Give amiss its repair verb
+
 ## [0.18.0](https://github.com/HardMax71/amiss/compare/v0.17.0...v0.18.0) - 2026-08-08
 
 ### Changes
