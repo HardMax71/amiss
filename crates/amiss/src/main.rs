@@ -1,3 +1,5 @@
+mod adopt;
+mod payload;
 mod repair;
 mod sarif;
 mod view;
@@ -360,6 +362,9 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             &built,
             staged_snapshot.as_deref(),
         );
+    }
+    if let (Verb::Adopt, Some(adoption)) = (invocation.verb, &invocation.adoption) {
+        return adopt::run(invocation, adoption, &built);
     }
     render(&built, invocation, reserve);
     exit_class(built.exit_code)
