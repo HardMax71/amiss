@@ -500,6 +500,16 @@ fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<
             .filter(|value| !value.is_empty())
             .map(str::to_owned)
     };
+    let ordered = matches!(
+        (
+            instant(&gathered.created_at),
+            instant(&gathered.expires_at)
+        ),
+        (Some(created), Some(expires)) if created < expires
+    );
+    if gathered.verb == Some(Verb::Adopt) && !ordered {
+        codes.insert(Code::InvalidInvocation);
+    }
     let fields = (
         digest.map(str::to_owned),
         nonempty(&gathered.debt_owner),
