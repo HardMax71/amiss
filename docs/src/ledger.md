@@ -204,6 +204,52 @@ reference. Each names a route the current tree does not hold under
 class as helix's one-character break: real, pre-existing, and invisible to a build that
 never resolves them.
 
+## The same ten trees, a third time
+
+Scanned 2026-08-10 on the main build the Django row used, engine
+`sha256:3a7263e876ec5ccd55f3b4899f8189af4567b8b21051bec255d93ffba0257a34`, each tree at
+that day's default-branch head against the same synthetic empty base as the second pass,
+depth-one clones. The wall column is new: one process, one scan, measured around the
+whole invocation on an ordinary development machine. These are the book's first recorded
+timings.
+
+| Repository | Head | References | Missing | Anchor | Absent | Wall (ms) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| helix | `079a789e8cb0` | 3,249 | 10 | 9 | 1 | 1,086 |
+| ripgrep | `3fce3b5bb023` | 766 | 0 | 0 | 0 | 347 |
+| just | `4f41f609278e` | 3,234 | 0 | 0 | 0 | 1,111 |
+| mdBook | `b90df240a318` | 922 | 0 | 0 | 0 | 400 |
+| starship | `545c0621a209` | 7,510 | 103 | 103 | 0 | 14,671 |
+| ruff | `78cad66655dd` | 5,383 | 10 | 2 | 8 | 1,795 |
+| bat | `2ba8db9c14e5` | 399 | 19 | 7 | 12 | 132 |
+| fd | `ee20f426ddf3` | 96 | 1 | 1 | 0 | 64 |
+| hyperfine | `f12f3d9f86f3` | 48 | 0 | 0 | 0 | 24 |
+| alacritty | `1b2b36a64e88` | 87 | 0 | 0 | 0 | 57 |
+
+The second pass's arithmetic predicted 122 real heading anchors, and the current build
+measures exactly 122, in the same five repositories at the same counts: 103 in
+starship's translated pages, 9 in helix, 7 in bat, 2 in ruff, 1 in fd. The absent class
+fell from 116 to 21. The tracked-ignore answer emptied ruff's generated-target class
+whole, alacritty's one break was fixed upstream between passes, and mdBook stays clean
+at a newer head. Reference totals move with coverage and with the trees themselves:
+mdBook's count drops because discovery now skips its fixture suites, bat's because its
+documentation moved.
+
+Every remaining absent row was read at its source line, and none is a resolver defect.
+helix still carries the one-character `./themes.md` break, its community fix
+([helix-editor/helix#16034](https://github.com/helix-editor/helix/pull/16034)) open
+since July. bat's twelve are the translated-README 404s of the first study, unchanged.
+ruff's eight split three ways: five angle-bracket placeholders in an agent-skill
+template, one literal teaching example inside a changelog entry, and two broken relative
+links inside `ty`'s markdown-based test fixtures under `resources/mdtest`, a fixture
+tree the deliberately closed skip list does not name. A maintainer would close all
+eight, and the rejection classes of the first study still describe them.
+
+The timings say what the architecture promises: a scan is one pass over two snapshots,
+so every plain tree answers in under two seconds, and Django's 674 bound documents in
+the section above answered in 1.1. starship is the outlier its 7,510 references across
+twenty-two translation mirrors earn, and even that finishes inside fifteen seconds.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
