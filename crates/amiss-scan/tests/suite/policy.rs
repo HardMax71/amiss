@@ -297,3 +297,130 @@ fn debt_and_waiver_item_ceilings_are_exact() {
     assert_eq!(over.code, AnalysisErrorCode::ResourceLimitExceeded);
     assert_eq!(over.resource, Some((ResourceName::WaiverItems, 1, 2)));
 }
+
+/// The binding map answers documents exactly, then the nearest bound
+/// ancestor tree, and nothing else.
+#[test]
+fn a_binding_answers_documents_then_the_nearest_tree() {
+    let mut includes = Includes::default();
+    includes
+        .document_bindings
+        .insert(path("docs/a.q"), amiss_wire::model::Adapter::Markdown);
+    includes
+        .tree_bindings
+        .insert(path("man"), amiss_wire::model::Adapter::Rst);
+    includes
+        .tree_bindings
+        .insert(path("man/deep"), amiss_wire::model::Adapter::Mdx);
+    assert_eq!(
+        includes.binding(&path("docs/a.q")),
+        Some(amiss_wire::model::Adapter::Markdown)
+    );
+    assert_eq!(
+        includes.binding(&path("man/x.txt")),
+        Some(amiss_wire::model::Adapter::Rst)
+    );
+    assert_eq!(
+        includes.binding(&path("man/deep/y.txt")),
+        Some(amiss_wire::model::Adapter::Mdx),
+        "the nearest bound ancestor wins"
+    );
+    assert_eq!(includes.binding(&path("other/z.txt")), None);
+}
+
+/// Only a policy-included row under its own path answers the bound-adapter
+/// lookup; native classifications never do.
+#[test]
+fn bound_adapter_answers_only_policy_included_rows() {
+    use amiss_scan::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery};
+    use amiss_wire::controls::GitMode;
+    use amiss_wire::model::{Adapter, ObjectFormat, Oid};
+
+    let oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40)).expect("valid fixture oid");
+    let record = |raw: &str, classification, adapter| DocumentRecord {
+        path: path(raw),
+        classification,
+        adapter,
+        status: DocumentStatus::ExcludedBuiltIn,
+        oid: oid.clone(),
+        mode: GitMode::RegularFile,
+        byte_count: 0,
+        raw_digest: None,
+    };
+    let snapshot = SnapshotDiscovery {
+        documents: vec![
+            record(
+                "docs/r.rst",
+                amiss_scan::Classification::StructuredRst,
+                Some(Adapter::Rst),
+            ),
+            record(
+                "man/g.txt",
+                amiss_scan::Classification::PolicyIncluded,
+                Some(Adapter::Rst),
+            ),
+        ],
+        outside_document_set: 0,
+        tree_entries: 2,
+        path_defects: Vec::new(),
+        entries: std::collections::BTreeMap::new(),
+        labels: std::collections::BTreeMap::new(),
+    };
+    assert_eq!(
+        snapshot.bound_adapter(&path("man/g.txt")),
+        Some(Adapter::Rst)
+    );
+    assert_eq!(
+        snapshot.bound_adapter(&path("docs/r.rst")),
+        None,
+        "a native classification is not a binding"
+    );
+    assert_eq!(snapshot.bound_adapter(&path("man/other.txt")), None);
+}
+
+/// The binding clauses of include weakening, each alone: dropping or changing
+/// a binding is weakening, keeping or adding one is not.
+#[test]
+fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
+    use amiss_wire::model::Adapter;
+    let side = |adapter: Option<Adapter>| {
+        let policy = ScannerPolicy {
+            digest: hb("amiss/raw-evidence", b"binding weakening fixture"),
+            document_includes: vec![DocumentInclude {
+                path: RepoPathText::new("man".to_owned()).expect("valid include path"),
+                kind: IncludeKind::Tree,
+                adapter,
+            }],
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+        };
+        PolicySide {
+            digest: Some(policy.digest),
+            policy: Some(policy),
+        }
+    };
+    let removed = |got: &amiss_scan::policy::Effects| {
+        got.controls
+            .iter()
+            .filter(|row| row.rule_id == "policy/include-binding-removed")
+            .count()
+    };
+    let scanned: fn(&str) -> InventoryState = |_| InventoryState::Scanned;
+
+    let dropped = effects(&side(Some(Adapter::Rst)), &side(None), &scanned);
+    assert_eq!(removed(&dropped), 1, "dropping the binding weakens");
+    let changed = effects(
+        &side(Some(Adapter::Rst)),
+        &side(Some(Adapter::Markdown)),
+        &scanned,
+    );
+    assert_eq!(removed(&changed), 1, "changing the grammar weakens");
+    let kept = effects(
+        &side(Some(Adapter::Rst)),
+        &side(Some(Adapter::Rst)),
+        &scanned,
+    );
+    assert_eq!(removed(&kept), 0, "an unchanged binding is not weakening");
+    let added = effects(&side(None), &side(Some(Adapter::Rst)), &scanned);
+    assert_eq!(removed(&added), 0, "adding a binding is a plain tighten");
+}
