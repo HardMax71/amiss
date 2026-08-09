@@ -244,6 +244,19 @@ fn a_commondir_that_reaches_no_object_store_is_refused() {
         Error::RepositoryUnavailable,
         "a present commondir binds; private objects are never a fallback"
     );
+
+    let refused = TempDir::new().unwrap();
+    let private = refused.path().join("private");
+    fs::create_dir_all(private.join("objects")).unwrap();
+    let store = refused.path().join("store");
+    fs::create_dir_all(&store).unwrap();
+    directory_link(&store, &private.join("commondir")).unwrap();
+    fs::write(refused.path().join(".git"), "gitdir: private\n").unwrap();
+    assert_eq!(
+        Repository::open(refused.path(), ObjectFormat::Sha1).unwrap_err(),
+        Error::RepositoryUnavailable,
+        "a refused commondir is present, not absent; the fallback is NotFound-only"
+    );
 }
 
 /// The hand-built two-hop shape, no git binary: a worktree-form checkout

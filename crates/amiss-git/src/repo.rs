@@ -53,9 +53,10 @@ impl Repository {
                 let common = open_root(&common_path)?;
                 open_dir(&common, "objects").map_err(|_defect| Error::RepositoryUnavailable)?
             }
-            Err(_absent) => {
+            Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => {
                 open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?
             }
+            Err(_defect) => return Err(Error::RepositoryUnavailable),
         };
         Ok(Self::from_handles(git_dir, objects, object_format))
     }
