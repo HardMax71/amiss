@@ -143,7 +143,8 @@ the issue text, its kind as `check_name`, and `fail` as `major`, `warn` as `mino
 `record` as `info`. The finding key rides as the fingerprint, so GitLab's diff of target
 against head recognizes the same finding across runs by the identity the report uses.
 GitLab requires a path and a first line on every issue, so a byte-named document answers
-with the wire's hex spelling and a byte-only span reads as line one. The format has no
+with the wire's hex spelling, a finding on no file answers as `(global)`, and a byte-only
+span reads as line one. The format has no
 shape for analysis errors or a refusal: a rejected invocation answers with a valid empty
 artifact, the exit class still carries the truth, and error detail stays on the JSON and
 human lanes. The same projection bounds apply.
