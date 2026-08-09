@@ -127,3 +127,53 @@ fn the_path_core_names_bytes_only_under_certainty() {
         "two verbatim hits are ambiguity"
     );
 }
+
+/// The carrier line grammar, one clause at a time: every accepted part is
+/// pinned exactly, and each refusal case would parse if its clause dropped.
+#[test]
+fn the_governed_carrier_line_is_closed_clause_by_clause() {
+    use amiss_wire::extraction::governed_carrier_line;
+
+    assert_eq!(
+        governed_carrier_line(r#"[amiss:pin]: <amiss:value?path=a&line=L1> "alpha""#),
+        Some((
+            "amiss:pin".to_owned(),
+            "amiss:value?path=a&line=L1".to_owned(),
+            "alpha".to_owned(),
+        )),
+    );
+    assert_eq!(
+        governed_carrier_line("[amiss:q.2_x-y]: <d> 'single'"),
+        Some((
+            "amiss:q.2_x-y".to_owned(),
+            "d".to_owned(),
+            "single".to_owned()
+        )),
+    );
+    assert_eq!(
+        governed_carrier_line(r#"[amiss:e]: <d> """#),
+        Some(("amiss:e".to_owned(), "d".to_owned(), String::new())),
+        "an empty title claims an empty line"
+    );
+
+    for (reason, line) in [
+        ("unreserved label", r#"[other:p]: <d> "t""#),
+        ("empty name", r#"[amiss:]: <d> "t""#),
+        ("bracket in name", r#"[amiss:a[b]: <d> "t""#),
+        ("closing bracket in name", r#"[amiss:a]b]: <d> "t""#),
+        ("empty destination", r#"[amiss:p]: <> "t""#),
+        ("angle inside destination", r#"[amiss:p]: <a<b> "t""#),
+        (
+            "closing angle inside destination",
+            r#"[amiss:p]: <a>b> "t""#,
+        ),
+        ("bare destination", r#"[amiss:p]: d "t""#),
+        ("missing title", "[amiss:p]: <d>"),
+        ("quote inside double title", r#"[amiss:p]: <d> "a"b""#),
+        ("quote inside single title", "[amiss:p]: <d> 'a'b'"),
+        ("unterminated title", r#"[amiss:p]: <d> "t"#),
+        ("trailing bytes", r#"[amiss:p]: <d> "t" extra"#),
+    ] {
+        assert_eq!(governed_carrier_line(line), None, "{reason}");
+    }
+}
