@@ -458,6 +458,13 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
         "the span stops at the line even when the comment swallowed blanks"
     );
 
+    let whitespace_tail = extract(b".. [amiss:ws]: <amiss:v?a=1> \"t\"\n   \nprose\n").unwrap();
+    assert_eq!(
+        whitespace_tail.governed.len(),
+        1,
+        "a whitespace-only blank line is blank, the lexer's own rule"
+    );
+
     let crlf = extract(b".. [amiss:cr]: <amiss:v?a=1> \"t\"\r\n").unwrap();
     assert_eq!(
         crlf.governed.len(),
