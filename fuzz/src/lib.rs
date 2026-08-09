@@ -188,3 +188,61 @@ pub fn human(bytes: &[u8]) {
         );
     }
 }
+
+/// The reserved claim grammar over scanned markdown: an accepted value claim
+/// keeps the closed grammar's own promises, a name inside its charset and
+/// length, a path `RepoPath` accepts again, and a line inside the safe
+/// integer window, while governed spans stay inside the source.
+///
+/// # Panics
+///
+/// Panics when an accepted claim escapes the closed grammar.
+#[expect(
+    clippy::expect_used,
+    reason = "a claim outside its own grammar is a fuzz finding"
+)]
+pub fn claim(bytes: &[u8]) {
+    let mut resources = ScanResources::new(ScanLimits::CONTRACT);
+    let Ok(scanned) = amiss_scan::scan_document(&mut resources, Adapter::Markdown, bytes) else {
+        return;
+    };
+    for source in &scanned.governed {
+        let (start, end) = source.span;
+        assert!(
+            start <= end && end <= bytes.len(),
+            "governed spans stay inside the source"
+        );
+        let amiss_scan::claim::GovernedForm::Value(claim) = &source.form else {
+            continue;
+        };
+        assert!(
+            !claim.name.is_empty() && claim.name.len() <= 120,
+            "a claim name keeps the closed length"
+        );
+        assert!(
+            claim
+                .name
+                .bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_alphanumeric()),
+            "a claim name opens alphanumeric"
+        );
+        assert!(
+            claim
+                .name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')),
+            "a claim name stays inside its charset"
+        );
+        let text = String::from_utf8(claim.path.as_bytes().to_vec()).expect("a claim path is text");
+        assert!(
+            amiss_wire::model::RepoPath::new(text).is_some(),
+            "a claim path revalidates"
+        );
+        let ceiling = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).unwrap_or(u64::MAX);
+        assert!(
+            (1..=ceiling).contains(&claim.line),
+            "a claim line stays inside the safe window"
+        );
+    }
+}

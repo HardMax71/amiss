@@ -1,0 +1,6 @@
+[amiss:bare]: amiss:value?path=a&line=L1 "x"
+[amiss:swap]: <amiss:value?line=L1&path=a> "x"
+[amiss:zero]: <amiss:value?path=a&line=L0> "x"
+[amiss:no/slash]: <amiss:value?path=a&line=L1> "x"
+[amiss:dots]: <amiss:value?path=../a&line=L1> "x"
+[amiss:untitled]: <amiss:value?path=a&line=L1>

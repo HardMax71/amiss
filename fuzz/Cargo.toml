@@ -119,3 +119,11 @@ allow_attributes_without_reason = "deny"
 
 [profile.release]
 debug = 1
+
+[[bin]]
+name = "claim"
+path = "fuzz_targets/claim.rs"
+test = false
+doc = false
+bench = false
+required-features = ["harness"]
