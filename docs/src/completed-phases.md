@@ -1,6 +1,6 @@
 # Completed phases
 
-Six phases are closed, one page each. A page is a dated exit record rather than live documentation:
+Seven phases are closed, one page each. A page is a dated exit record rather than live documentation:
 it states what was true when the phase closed, what each claim defends against, and links the code
 that has to stay true for the claim to hold. Where a fact has moved on since, the page says so and
 points at the live chapter that owns it.
@@ -37,3 +37,8 @@ reStructuredText, and the measurement that killed bare-path inference.
 verdicts on every lane. A positive and a revoked-control pair per lane, candidate content fixed so
 one control moves per flip, github.com and gitlab.com and self-hosted Gitea and Forgejo, and six
 live-found defects that every fixture had agreed with.
+
+[A settled wire](completed/a-settled-wire.md) froze the report contract at `1` once its three
+conditions held at once. The wire versioned by its own in-payload field, engine releases decoupled,
+two minor series quiet under a mechanical tripwire, and the first frozen example retained
+permanently to hold every later schema in the major to the additive promise.

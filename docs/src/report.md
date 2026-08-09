@@ -9,7 +9,7 @@ the contract's numbers are integers, never floats.
 
 The outer envelope has three members: its schema, the payload, and `payload_digest`, a hash
 of the payload's canonical bytes. The payload carries its own schema, `compatibility`
-(the wire's own version, `experimental` while the contract rolls), and an engine block whose `engine_digest` names the
+(the wire's own version, frozen at `1`), and an engine block whose `engine_digest` names the
 binary that produced it. Every digest in the system is domain-separated, meaning the hash
 input starts with a label naming its purpose, so a digest computed for one context cannot be
 replayed as a digest for another.
@@ -62,7 +62,7 @@ The envelope, down to its top-level keys:
   "schema": "amiss/scanner-report-envelope",
   "payload": {
     "schema": "amiss/scanner-report-payload",
-    "compatibility": "experimental",
+    "compatibility": "1",
     "engine": { "engine_digest": "sha256:..." },
     "evaluation": {},
     "controls": {},
@@ -178,9 +178,12 @@ emitted bytes with an independent schema validator, checks the canonical example
 that the schema identifiers match the writer constants in the
 [documentation contract test](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/documentation_contracts).
 
-The wire is versioned by its own `compatibility` field, not by the engine release:
-`experimental` means one rolling contract, and the planned `1` means additive-only from
-then on, with the conditions in the [roadmap](roadmap.md). While it rolls, only the
-unsuffixed schema and examples linked above describe public report output, the schema,
-examples, parsers, and writer change together, and consumers that need a stable
-integration must pin an Amiss release and its shipped schema.
+The wire is versioned by its own `compatibility` field, not by the engine release: `1`
+means frozen, additive within the major. A `1` report may gain optional fields as `1`
+rolls forward, and nothing a `1.0` consumer parsed ever changes meaning or disappears.
+The promise is mechanical: the first frozen example is retained permanently beside the
+rolling one, a contract test requires every later schema in the major to keep validating
+it, and a second test holds the example the last release shipped to the same bar.
+Reshaping past that promise mints `2`, and that release is a major one. The record of
+how the contract earned the freeze is in
+[A settled wire](completed/a-settled-wire.md).

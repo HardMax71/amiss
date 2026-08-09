@@ -3,8 +3,8 @@ use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical, canonical_length};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{
-    AnalysisErrorCode, Disposition, EngineProvenance, ErrorDetail, FindingKind, FindingScope,
-    IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block, error_row_value,
+    AnalysisErrorCode, COMPATIBILITY, Disposition, EngineProvenance, ErrorDetail, FindingKind,
+    FindingScope, IntentKind, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block, error_row_value,
     sandbox_descriptor,
 };
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
@@ -1500,7 +1500,7 @@ pub fn construct(
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string("experimental")),
+        ("compatibility", string(COMPATIBILITY)),
         ("engine", engine_block(&setup.engine)),
         ("evaluation", evaluation_value(setup)),
         ("controls", controls_value(setup)),
@@ -1854,7 +1854,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string("experimental")),
+        ("compatibility", string(COMPATIBILITY)),
         ("engine", engine_block(&setup.engine)),
         ("evaluation", evaluation_value(setup)),
         ("controls", controls_value(setup)),

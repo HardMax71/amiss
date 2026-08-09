@@ -144,6 +144,9 @@ impl Sink for StagedSink<'_> {
 pub const ENGINE_DOMAIN: &str = "amiss/scanner-engine";
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload";
+/// The wire's own version: frozen, additive within the major; a reshape
+/// mints the next major and that release is a major one.
+pub const COMPATIBILITY: &str = "1";
 pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract";
 pub const BUILT_IN_POLICY: &str = "scanner-policy-defaults";
 
@@ -520,7 +523,7 @@ pub fn unavailable_evaluation_envelope(
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string("experimental")),
+        ("compatibility", string(COMPATIBILITY)),
         ("engine", engine_block(engine)),
         (
             "evaluation",

@@ -211,6 +211,13 @@ fn active_report_schema_ids_match_the_writer_contract() {
         Some(PAYLOAD_SCHEMA),
         "the active schema and writer disagree on the payload identity"
     );
+    assert_eq!(
+        schema
+            .pointer("/$defs/ReportPayload/properties/compatibility/const")
+            .and_then(serde_json::Value::as_str),
+        Some(amiss_wire::report::COMPATIBILITY),
+        "the active schema and writer disagree on the wire major"
+    );
 }
 
 #[test]
@@ -253,30 +260,91 @@ fn all_public_contract_examples_clear_their_schema_and_registered_reader() {
 
 /// The example the last release shipped, refreshed by the release workflow,
 /// must keep clearing the rolling schema and reader: additions leave it
-/// clean, so a failure here is a payload reshape and resets the roadmap's
-/// settled-wire clock.
+/// clean, so a failure here is a payload reshape, which the frozen major
+/// forbids. The one lawful mismatch is the founding window: the last
+/// release before the freeze wrote `experimental`, the reader must still
+/// accept it, and the next release refresh restores the full check.
 #[test]
 fn the_last_released_example_still_clears_the_rolling_contract() {
     let root = repository_root();
-    let schema_bytes =
-        fs::read(root.join("spec/scanner-report.schema.json")).expect("schema is readable");
     let example_bytes = fs::read(root.join("spec/examples/scanner-report.last-released.json"))
         .expect("the last released example is readable");
-    let schema: serde_json::Value = serde_json::from_slice(&schema_bytes).expect("schema is JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&example_bytes).expect("the last released example is JSON");
-    let validator = jsonschema::validator_for(&schema).expect("schema compiles");
-    let mut defects: Vec<String> = validator
-        .iter_errors(&example)
-        .map(|error| format!("at {}: {error}", error.instance_path()))
-        .collect();
+    let mut defects = Vec::new();
+    match example
+        .pointer("/payload/compatibility")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(released) if released == amiss_wire::report::COMPATIBILITY => {
+            let schema = report_schema();
+            let validator = jsonschema::validator_for(&schema).expect("schema compiles");
+            defects.extend(
+                validator
+                    .iter_errors(&example)
+                    .map(|error| format!("at {}: {error}", error.instance_path())),
+            );
+        }
+        Some("experimental") => assert_eq!(
+            amiss_wire::report::COMPATIBILITY,
+            "1",
+            "only the founding freeze may follow an experimental release",
+        ),
+        released => {
+            panic!("the last released example carries no lawful wire version: {released:?}")
+        }
+    }
     if let Some(error) = example_reader_defect("scanner-report", &example_bytes) {
         defects.push(format!("rejected by the report reader: {error}"));
     }
     assert!(
         defects.is_empty(),
         "the last released example no longer clears the rolling contract; \
-         this is a payload reshape and resets the settled-wire clock:\n{}",
+         this is a payload reshape, which the frozen major forbids:\n{}",
+        defects.join("\n"),
+    );
+}
+
+/// The first frozen example, retained permanently at the moment the wire
+/// froze: every later schema in the major must still validate it, and the
+/// bytes themselves never change. Reshaping past this fixture mints `2`,
+/// and that release is a major one.
+#[test]
+fn the_first_frozen_example_binds_the_major() {
+    let root = repository_root();
+    let bytes = fs::read(root.join("spec/examples/scanner-report.frozen-1.json"))
+        .expect("the frozen example is readable");
+    let mut retained = String::with_capacity(64);
+    for byte in <sha2::Sha256 as sha2::Digest>::digest(&bytes) {
+        use std::fmt::Write as _;
+        write!(&mut retained, "{byte:02x}").expect("writing to a string is infallible");
+    }
+    assert_eq!(
+        retained, "3fff8892cabc5bf6a9aae730ed11ac37f6c96ecd1efbc3d04786367d36f39d7a",
+        "the frozen fixture is permanent; a new major mints a new fixture instead",
+    );
+    let example: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("the frozen example is JSON");
+    assert_eq!(
+        example
+            .pointer("/payload/compatibility")
+            .and_then(serde_json::Value::as_str),
+        Some("1"),
+        "the frozen fixture opens the major it binds",
+    );
+    let schema = report_schema();
+    let validator = jsonschema::validator_for(&schema).expect("schema compiles");
+    let mut defects: Vec<String> = validator
+        .iter_errors(&example)
+        .map(|error| format!("at {}: {error}", error.instance_path()))
+        .collect();
+    if let Some(error) = example_reader_defect("scanner-report", &bytes) {
+        defects.push(format!("rejected by the report reader: {error}"));
+    }
+    assert!(
+        defects.is_empty(),
+        "the rolling contract no longer accepts the first frozen example; \
+         this reshape mints wire major 2 and a major release:\n{}",
         defects.join("\n"),
     );
 }

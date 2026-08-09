@@ -54,3 +54,4 @@
     - [Provider operations](completed/provider-operations.md)
     - [Reference coverage](completed/reference-coverage.md)
     - [Live provider evidence](completed/live-provider-evidence.md)
+    - [A settled wire](completed/a-settled-wire.md)
