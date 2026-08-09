@@ -29,12 +29,14 @@ fn issue(row: &View) -> Value {
 }
 
 /// GitLab requires a path and a first line on every issue, so a byte-named
-/// document answers with the wire's own hex spelling and a byte-only span
-/// reads as line one.
+/// document answers with the wire's own hex spelling, a finding on no file
+/// (the wire's nullable global side) answers as `(global)`, and a byte-only
+/// span reads as line one.
 fn location_value(location: &View) -> Value {
     let path = match location.field("path") {
         Some(Value::String(path)) => path.clone(),
-        _ => location.view("path").text("bytes_hex"),
+        Some(Value::Object(_)) => location.view("path").text("bytes_hex"),
+        _ => "(global)".to_owned(),
     };
     let begin = location.view("span").number("start_line").max(1);
     object(vec![
@@ -42,3 +44,6 @@ fn location_value(location: &View) -> Value {
         ("path", string(&path)),
     ])
 }
+
+#[path = "../tests/internal/codequality.rs"]
+mod tests;
