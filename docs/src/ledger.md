@@ -250,6 +250,12 @@ so every plain tree answers in under two seconds, and Django's 674 bound documen
 the section above answered in 1.1. starship is the outlier its 7,510 references across
 twenty-two translation mirrors earn, and even that finishes inside fifteen seconds.
 
+Remeasured 2026-08-11 after the anchor lane learned to reuse discovery's own parse:
+starship reads 5.7 seconds on the same tree, engine
+`sha256:3423bdfa922c64f9c6ebc7be0fb6242ac1afb5d977b0504f7c0c273f8ac44fd0`. The removed cost was a second full parse of every
+distinct anchor target; what remains is the parse-and-discovery baseline over the
+mirrors' 17 MB, a recorded fact with a weekly bench now watching the mirror shape.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit

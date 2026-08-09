@@ -34,6 +34,10 @@ name = "adapters"
 harness = false
 
 [[bench]]
+name = "anchors"
+harness = false
+
+[[bench]]
 name = "correlation"
 harness = false
 
