@@ -80,10 +80,12 @@ refusal, never a best-effort read. Every SHA-1 object is re-hashed as it is read
 collision detection switched on, so an object that does not hash to its own name simply does
 not exist as far as the evaluation is concerned.
 
-The supported repository form is a primary non-bare checkout with a real `.git` directory. A
-bare repository or linked worktree whose `.git` entry is a file is refused as unavailable,
-and objects available only through Git alternates are not consulted. These are explicit
-boundaries of the direct
+The supported repository forms are the non-bare checkouts: a primary checkout with a real
+`.git` directory, a linked worktree, or a separate-git-dir checkout, the latter two through
+one bounded `gitdir:` indirection and at most one bounded `commondir` hop, with symlinked
+targets refused. A bare repository is refused directly, though its linked worktrees read
+through their commondir, and objects available only through Git alternates are not
+consulted. These are explicit boundaries of the direct
 [repository reader](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs),
 not empty snapshots or silently missing documents.
 

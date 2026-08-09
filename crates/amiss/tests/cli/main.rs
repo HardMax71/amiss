@@ -13,3 +13,4 @@ mod rst;
 mod sarif;
 mod support;
 mod verdicts;
+mod worktree;

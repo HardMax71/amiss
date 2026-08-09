@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Read as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use amiss_wire::controls::ResourceName;
@@ -24,27 +24,50 @@ pub struct Repository {
 }
 
 impl Repository {
-    /// Opens the primary non-bare form: the root's final entry and its direct
-    /// `.git` child as no-follow directory handles; every later object access
-    /// is relative to those handles.
+    /// Opens the non-bare checkout forms, all through no-follow handles. A
+    /// `.git` directory is the primary form. A `.git` file is one bounded
+    /// `gitdir:` indirection to the private git directory: a linked worktree
+    /// then takes one bounded `commondir` indirection to the object store,
+    /// and a separate-git-dir or submodule checkout holds objects directly.
+    /// The depth is structural, one hop each, and no target is ever a
+    /// symlink; the index always reads from the private directory.
     ///
     /// # Errors
     ///
-    /// `RepositoryUnavailable` for a bare repository, `.git` file, symlink,
-    /// or missing primary object database.
+    /// `RepositoryUnavailable` for a bare repository, a malformed or
+    /// oversized pointer, a symlinked target, or a missing object database.
     pub fn open(root: &Path, object_format: ObjectFormat) -> Result<Self, Error> {
         let root_dir = open_root(root)?;
-        let git_dir =
-            open_dir(&root_dir, ".git").map_err(|_defect| Error::RepositoryUnavailable)?;
-        let objects =
-            open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?;
-        Ok(Self {
+        if let Ok(git_dir) = open_dir(&root_dir, ".git") {
+            let objects =
+                open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?;
+            return Ok(Self::from_handles(git_dir, objects, object_format));
+        }
+        let pointer =
+            open_file(&root_dir, ".git").map_err(|_defect| Error::RepositoryUnavailable)?;
+        let private_path = root.join(pointer_line(pointer, "gitdir: ")?);
+        let git_dir = open_root(&private_path)?;
+        let objects = match open_file(&git_dir, "commondir") {
+            Ok(commondir) => {
+                let common_path = private_path.join(pointer_line(commondir, "")?);
+                let common = open_root(&common_path)?;
+                open_dir(&common, "objects").map_err(|_defect| Error::RepositoryUnavailable)?
+            }
+            Err(_absent) => {
+                open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?
+            }
+        };
+        Ok(Self::from_handles(git_dir, objects, object_format))
+    }
+
+    const fn from_handles(git_dir: File, objects: File, object_format: ObjectFormat) -> Self {
+        Self {
             git_dir,
             objects,
             object_format,
             packs: OnceLock::new(),
             repacked: OnceLock::new(),
-        })
+        }
     }
 
     /// Total loose-first lookup for one full OID in the declared namespace.
@@ -404,6 +427,31 @@ impl Repository {
             value_cap,
         )
     }
+}
+
+/// The ceiling on a `gitdir:` or `commondir` pointer file; a larger one is a
+/// repository-form defect rather than any real checkout git writes.
+const GITDIR_POINTER_BYTES: u64 = 16_384;
+
+/// One bounded pointer line: `prefix`, a nonempty single-line UTF-8 path,
+/// one optional trailing newline, and nothing else.
+fn pointer_line(file: File, prefix: &str) -> Result<PathBuf, Error> {
+    let mut bytes = Vec::new();
+    file.take(GITDIR_POINTER_BYTES.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|_defect| Error::RepositoryUnavailable)?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > GITDIR_POINTER_BYTES {
+        return Err(Error::RepositoryUnavailable);
+    }
+    let text = std::str::from_utf8(&bytes).map_err(|_defect| Error::RepositoryUnavailable)?;
+    let rest = text
+        .strip_prefix(prefix)
+        .ok_or(Error::RepositoryUnavailable)?;
+    let path = rest.strip_suffix('\n').unwrap_or(rest);
+    if path.is_empty() || path.contains('\n') || path.contains('\r') {
+        return Err(Error::RepositoryUnavailable);
+    }
+    Ok(PathBuf::from(path))
 }
 
 /// An entry that is simply absent falls through to the pack lookup; a
