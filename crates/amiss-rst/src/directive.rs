@@ -22,7 +22,10 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
             .copied()
         {
             let argument = rest.get(name.len()..).unwrap_or_default().trim();
-            if !argument.is_empty() && !argument.contains(char::is_whitespace) {
+            if !argument.is_empty()
+                && !argument.contains(char::is_whitespace)
+                && !argument.ends_with(".*")
+            {
                 found.push(build(kind, argument, at, after, line.len()));
             }
             return found;
@@ -101,13 +104,21 @@ fn named_target(rest: &str) -> Option<&str> {
     let body = rest.strip_prefix('_')?;
     let (_, target) = body.rsplit_once(": ")?;
     let target = target.trim();
-    (!target.is_empty() && !target.contains(char::is_whitespace)).then_some(target)
+    (!target.is_empty() && !target.contains(char::is_whitespace) && !indirect(target))
+        .then_some(target)
+}
+
+/// A destination ending `_` names another target, docutils' indirect form,
+/// which is an alias rather than anything a tree can answer.
+fn indirect(target: &str) -> bool {
+    target.ends_with('_')
 }
 
 /// The `:file:` option that `csv-table` and `raw` take.
 fn file_option(trimmed: &str) -> Option<&str> {
     let value = trimmed.strip_prefix(":file:")?.trim();
-    (!value.is_empty() && !value.contains(char::is_whitespace)).then_some(value)
+    (!value.is_empty() && !value.contains(char::is_whitespace) && !value.starts_with('`'))
+        .then_some(value)
 }
 
 /// `` `text <target>`_ `` carries its target inline. The trailing underscore is
@@ -131,7 +142,9 @@ fn inline(line: &str, at: usize, found: &mut Vec<Reference>) {
             .and_then(|body| body.rsplit_once('<'))
             .and_then(|(_, tail)| tail.strip_suffix('>'))
             .map(str::trim)
-            .filter(|target| !target.is_empty() && !target.contains(char::is_whitespace))
+            .filter(|target| {
+                !target.is_empty() && !target.contains(char::is_whitespace) && !indirect(target)
+            })
         {
             found.push(build(
                 ReferenceKind::InlineHyperlink,
