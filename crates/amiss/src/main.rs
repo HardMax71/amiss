@@ -91,7 +91,10 @@ fn main() -> ExitCode {
         } => {
             match machine_refusal(&codes) {
                 Ok(envelope) => emit(&mut reserve, &codequality::issues(&envelope)),
-                Err(code) => eprintln!("amiss: {}", code.as_str()),
+                Err(code) => {
+                    emit(&mut reserve, &amiss_wire::json::Value::Array(Vec::new()));
+                    eprintln!("amiss: {}", code.as_str());
+                }
             }
             failure
         }
@@ -126,8 +129,9 @@ fn render(
     }
 }
 
-/// Both machine refusal lanes share one envelope; the error is the code the
-/// caller prints, keeping the two stderr fallbacks distinct.
+/// The machine refusal lanes share one envelope; the error is the code the
+/// caller prints on stderr, and the artifact lane still answers its empty
+/// array, the one machine answer that needs no envelope.
 /// The one place a profile becomes the evaluation pair: the built-in table
 /// flag and the pre-existing lowering flag.
 fn profile_flags(profile: amiss_wire::controls::Profile) -> (bool, bool) {
