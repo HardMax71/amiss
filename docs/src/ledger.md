@@ -171,9 +171,9 @@ The binding shipped and Django stopped being the counterexample. These counts we
 fixes below, engine
 `sha256:3a7263e876ec5ccd55f3b4899f8189af4567b8b21051bec255d93ffba0257a34`. The method
 bends one convention and states it: Django's tree carries no Amiss policy, so the
-candidate is a local commit whose only change is `.amiss/scanner-policy.json`, 674
-document includes binding the `rst` adapter to every `.txt` under `docs/`, and the base
-is the unmodified upstream head. The whole tree read in 1.1 seconds on an ordinary
+candidate is a local commit whose only change is `.amiss/scanner-policy.json`, holding
+674 document includes that bind the `rst` adapter to every `.txt` under `docs/`, and the
+base is the unmodified upstream head. The whole tree read in 1.1 seconds on an ordinary
 development machine.
 
 | Repository | Head | Documents | References | Labels | Resolved | Duplicate | Inventory | Missing |
