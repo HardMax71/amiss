@@ -18,14 +18,17 @@ amiss:
     - curl -fsSLO "https://github.com/HardMax71/amiss/releases/download/${AMISS_VERSION}/SHA256SUMS"
     - grep ' amiss-linux-x86_64$' SHA256SUMS | sha256sum -c -
     - chmod +x amiss-linux-x86_64
-    - >
-      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}"
-      --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA"
-      --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
-    - >
-      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}"
-      --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA"
-      --profile "${AMISS_PROFILE:-observe}" --format codequality > gl-code-quality-report.json
+    - |
+      set +e
+      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}" \
+        --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA" \
+        --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
+      status=$?
+      set -e
+      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}" \
+        --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA" \
+        --profile "${AMISS_PROFILE:-observe}" --format codequality > gl-code-quality-report.json || true
+      exit "$status"
   artifacts:
     when: always
     paths:

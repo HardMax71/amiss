@@ -191,8 +191,14 @@ fn the_gitlab_template_keeps_the_release_choices() {
     let template = fs::read_to_string(root.join("integrations/gitlab/amiss.gitlab-ci.yml"))
         .expect("the GitLab template is readable");
     assert!(
-        template.contains("set AMISS_VERSION to the exact reviewed Amiss release"),
-        "the template must refuse to run without a reviewed version"
+        template.contains(r#"if [ -z "${AMISS_VERSION}" ]; then"#)
+            && template.contains("set AMISS_VERSION to the exact reviewed Amiss release")
+            && template.contains("exit 1"),
+        "the template must refuse to run without a reviewed version, not just say so"
+    );
+    assert!(
+        template.contains(r#"exit "$status""#),
+        "the job's verdict is the check's own exit class, emitted after both artifacts exist"
     );
     assert_eq!(
         template
@@ -209,13 +215,21 @@ fn the_gitlab_template_keeps_the_release_choices() {
         template.contains("sha256sum -c"),
         "the downloaded binary must be verified before it runs"
     );
-    for (line_index, line) in template.lines().enumerate() {
-        assert!(
-            !line.contains("releases/download/v0") && !line.contains("releases/download/v1"),
-            "integrations/gitlab/amiss.gitlab-ci.yml:{} hardcodes a release; the version is the consumer's reviewed choice",
-            line_index + 1,
-        );
-    }
+    let downloads: Vec<&str> = template
+        .lines()
+        .filter(|line| line.contains("releases/download/"))
+        .collect();
+    assert_eq!(
+        downloads.len(),
+        2,
+        "the binary and its checksums, nothing else"
+    );
+    assert!(
+        downloads
+            .iter()
+            .all(|line| line.contains("releases/download/${AMISS_VERSION}/")),
+        "every download names the consumer's reviewed choice, never a literal release"
+    );
 
     let ci = fs::read_to_string(root.join("docs/src/ci.md")).expect("CI documentation is readable");
     assert!(
