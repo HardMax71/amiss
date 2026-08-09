@@ -349,8 +349,23 @@ fn a_reserved_line_comment_becomes_governed_and_only_it() {
         "a recognized carrier line never feeds prose extraction"
     );
 
+    let crlf = extract(b"// [amiss:cr]: <amiss:value?path=a.adoc&line=L1> \"t\"\r\n").unwrap();
+    assert_eq!(
+        crlf.governed.len(),
+        1,
+        "a CRLF document still authors claims"
+    );
+    assert_eq!(
+        crlf.governed[0].span.1, 52,
+        "the span excludes the carriage return"
+    );
+
     for (reason, body) in [
         ("plain comment line", "// a note\n"),
+        (
+            "indented comment line",
+            "   // [amiss:p]: <amiss:v?a=1> \"t\"\n",
+        ),
         (
             "missing space after slashes",
             "//[amiss:p]: <amiss:v?a=1> \"t\"\n",

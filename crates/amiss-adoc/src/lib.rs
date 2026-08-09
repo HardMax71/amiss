@@ -97,12 +97,13 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
 fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
     for (offset, line) in lines(body) {
         let at = block.span.0.saturating_add(offset);
-        if let Some(rest) = line.strip_prefix("// ")
+        let bare = line.strip_suffix('\r').unwrap_or(line);
+        if let Some(rest) = bare.strip_prefix("// ")
             && let Some(parts) = amiss_wire::extraction::governed_carrier_line(rest)
         {
             let (label, url, title) = parts;
             extraction.governed.push(GovernedCarrier {
-                span: (at, at.saturating_add(line.len())),
+                span: (at, at.saturating_add(bare.len())),
                 label,
                 url,
                 title,

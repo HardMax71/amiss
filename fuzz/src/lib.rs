@@ -197,16 +197,16 @@ pub fn human(bytes: &[u8]) {
 /// # Panics
 ///
 /// Panics when an accepted claim escapes the closed grammar.
-#[expect(
-    clippy::expect_used,
-    reason = "a claim outside its own grammar is a fuzz finding"
-)]
 pub fn claim(bytes: &[u8]) {
     for adapter in [Adapter::Markdown, Adapter::Rst, Adapter::AsciiDoc] {
         claim_under(adapter, bytes);
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a claim outside its own grammar is a fuzz finding"
+)]
 fn claim_under(adapter: Adapter, bytes: &[u8]) {
     let mut resources = ScanResources::new(ScanLimits::CONTRACT);
     let Ok(scanned) = amiss_scan::scan_document(&mut resources, adapter, bytes) else {
