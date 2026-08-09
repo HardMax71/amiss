@@ -4749,7 +4749,7 @@
           "const": "amiss/scanner-report-payload"
         },
         "compatibility": {
-          "const": "experimental"
+          "const": "1"
         },
         "engine": {
           "$ref": "#/$defs/Engine"
@@ -4828,5 +4828,5 @@
       }
     }
   },
-  "description": "The report contract, versioned by the in-payload compatibility field: experimental while it rolls, additive within a major once frozen."
+  "description": "The report contract, versioned by the in-payload compatibility field: frozen at 1, additive within the major; a reshape mints 2."
 }
