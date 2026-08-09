@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0](https://github.com/HardMax71/amiss/compare/v0.19.0...v0.20.0) - 2026-08-09
+
+### Changes
+
+- Pin document-over-tree precedence and the anchor row count
+- Kill the binding mutants inside their package
+- Let a policy include bind its grammar
+- Answer the empty artifact even without an envelope
+- Give the fileless finding a path the widget accepts
+- Project the report as GitLab Code Quality
+
 ## [0.19.0](https://github.com/HardMax71/amiss/compare/v0.18.0...v0.19.0) - 2026-08-08
 
 ### Changes
