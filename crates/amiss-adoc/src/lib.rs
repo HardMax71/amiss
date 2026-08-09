@@ -10,11 +10,21 @@ pub use macros::{Reference, ReferenceKind, references};
 /// Everything one `AsciiDoc` scan yields: the references it recognised, the
 /// section titles that carry anchor identity, the explicit anchors a document
 /// declares, and the byte intervals it refused to read into.
+/// One recognized governed carrier: its span, then label, url, and title.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedCarrier {
+    pub span: (usize, usize),
+    pub label: String,
+    pub url: String,
+    pub title: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Extraction {
     pub references: Vec<Reference>,
     pub titles: Vec<Title>,
     pub anchors: Vec<String>,
+    pub governed: Vec<GovernedCarrier>,
     pub opaque: Vec<(usize, usize)>,
     pub blocks: usize,
     pub nesting: usize,
@@ -87,6 +97,18 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
 fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
     for (offset, line) in lines(body) {
         let at = block.span.0.saturating_add(offset);
+        if let Some(rest) = line.strip_prefix("// ")
+            && let Some(parts) = amiss_wire::extraction::governed_carrier_line(rest)
+        {
+            let (label, url, title) = parts;
+            extraction.governed.push(GovernedCarrier {
+                span: (at, at.saturating_add(line.len())),
+                label,
+                url,
+                title,
+            });
+            continue;
+        }
         if let Some(title) = macros::title(line, at) {
             extraction.titles.push(title);
             continue;

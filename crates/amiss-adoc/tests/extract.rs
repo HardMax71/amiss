@@ -323,3 +323,45 @@ fn an_adoc_destination_names_its_fragment_bytes() {
         None
     );
 }
+
+/// The reserved carrier is a whole line comment; other comment lines keep
+/// today's behavior and the carrier never leaks into prose extraction.
+#[test]
+fn a_reserved_line_comment_becomes_governed_and_only_it() {
+    let read =
+        extract(b"// [amiss:pin]: <amiss:value?path=a.adoc&line=L2> \"beta\"\n\nlink:x.adoc[x]\n")
+            .unwrap();
+    assert_eq!(read.governed.len(), 1);
+    let carrier = &read.governed[0];
+    let ((start, end), label, url, title) =
+        (carrier.span, &carrier.label, &carrier.url, &carrier.title);
+    assert_eq!(label, "amiss:pin");
+    assert_eq!(url, "amiss:value?path=a.adoc&line=L2");
+    assert_eq!(title, "beta");
+    assert!(start < end);
+    assert_eq!(read.references.len(), 1, "prose extraction is untouched");
+
+    let smuggled = extract(b"// [amiss:p]: <link:q.adoc[q]> \"t\"\n").unwrap();
+    assert_eq!(smuggled.governed.len(), 1);
+    assert_eq!(
+        smuggled.references.len(),
+        0,
+        "a recognized carrier line never feeds prose extraction"
+    );
+
+    for (reason, body) in [
+        ("plain comment line", "// a note\n"),
+        (
+            "missing space after slashes",
+            "//[amiss:p]: <amiss:v?a=1> \"t\"\n",
+        ),
+        ("missing title", "// [amiss:p]: <amiss:v?a=1>\n"),
+        (
+            "trailing extra",
+            "// [amiss:p]: <amiss:v?a=1> \"t\" extra\n",
+        ),
+    ] {
+        let read = extract(body.as_bytes()).unwrap();
+        assert_eq!(read.governed.len(), 0, "{reason}");
+    }
+}

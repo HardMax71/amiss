@@ -185,6 +185,30 @@ pub struct GovernedDefinition {
     pub angled: bool,
 }
 
+/// One reserved carrier line, the non-Markdown spelling of the governed
+/// channel: `[amiss:name]: <dest> "title"`, double or single quotes, bytes
+/// taken literally with no entity decoding, nothing else on the line.
+#[must_use]
+pub fn governed_carrier_line(line: &str) -> Option<(String, String, String)> {
+    let rest = line.strip_prefix("[amiss:")?;
+    let (name, rest) = rest.split_once("]: <")?;
+    if name.is_empty() || name.contains('[') || name.contains(']') {
+        return None;
+    }
+    let (dest, rest) = rest.split_once("> ")?;
+    if dest.is_empty() || dest.contains('<') || dest.contains('>') {
+        return None;
+    }
+    let title = match rest.strip_prefix('"') {
+        Some(tail) => tail.strip_suffix('"').filter(|body| !body.contains('"'))?,
+        None => rest
+            .strip_prefix('\'')?
+            .strip_suffix('\'')
+            .filter(|body| !body.contains('\''))?,
+    };
+    Some((format!("amiss:{name}"), dest.to_owned(), title.to_owned()))
+}
+
 /// The document byte range of a destination's fragment: present only when
 /// the raw destination appears verbatim exactly once inside the reference
 /// span, carries a single `#`, and holds nothing a decoder could alter on

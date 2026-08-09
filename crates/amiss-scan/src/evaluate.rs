@@ -830,6 +830,7 @@ fn sources_value(sources: &[(Digest, u64)]) -> Value {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClaimGroup {
     pub kind: FindingKind,
+    pub carrier: crate::claim::ClaimCarrier,
     pub document: RepoPath,
     pub name: String,
     pub member_count: u64,
@@ -914,6 +915,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
             let member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
             members.first().map(|representative| ClaimGroup {
                 kind: representative.kind,
+                carrier: representative.outcome.carrier,
                 document: representative.outcome.document.clone(),
                 name: representative.outcome.name.clone(),
                 member_count,
@@ -981,7 +983,13 @@ fn claim_fix(group: &ClaimGroup) -> Option<Value> {
         return None;
     }
     let observed = group.observed_line.as_deref()?;
-    let replacement = crate::claim::rewrite(&group.name, &group.target_path, group.line, observed)?;
+    let replacement = crate::claim::rewrite(
+        &group.name,
+        &group.target_path,
+        group.line,
+        observed,
+        group.carrier,
+    )?;
     let span = group.representative_span?;
     Some(fix_value(
         &group.document,
