@@ -312,6 +312,9 @@ fn a_binding_answers_documents_then_the_nearest_tree() {
     includes
         .tree_bindings
         .insert(path("man/deep"), amiss_wire::model::Adapter::Mdx);
+    includes
+        .document_bindings
+        .insert(path("man/deep/y.txt"), amiss_wire::model::Adapter::Markdown);
     assert_eq!(
         includes.binding(&path("docs/a.q")),
         Some(amiss_wire::model::Adapter::Markdown)
@@ -322,8 +325,13 @@ fn a_binding_answers_documents_then_the_nearest_tree() {
     );
     assert_eq!(
         includes.binding(&path("man/deep/y.txt")),
+        Some(amiss_wire::model::Adapter::Markdown),
+        "an exact document binding beats the tree covering it"
+    );
+    assert_eq!(
+        includes.binding(&path("man/deep/z.txt")),
         Some(amiss_wire::model::Adapter::Mdx),
-        "the nearest bound ancestor wins"
+        "the nearest bound ancestor answers the rest of the tree"
     );
     assert_eq!(includes.binding(&path("other/z.txt")), None);
 }

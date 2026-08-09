@@ -514,16 +514,15 @@ fn an_anchor_into_a_bound_target_resolves_under_its_grammar() {
         .map(|rows| {
             rows.iter()
                 .filter(|row| {
-                    row["kind"] == "explicit-target-missing"
-                        && row["key_input"]["scope"]["normalized_target_intent"]["path"]
-                            == "manual/guide.txt"
+                    row["key_input"]["scope"]["normalized_target_intent"]["path"]
+                        == "manual/guide.txt"
                 })
                 .count()
         })
         .unwrap_or_default();
     assert_eq!(
         into_guide, 1,
-        "the published rst id resolves and the absent one is the only miss: {}",
+        "the published rst id resolves without a row of any kind and the absent one is the only miss: {}",
         payload["findings"]
     );
 }
