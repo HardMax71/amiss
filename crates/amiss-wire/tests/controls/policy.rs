@@ -64,3 +64,30 @@ fn rejects_policy_shape_defects() {
         );
     }
 }
+
+/// An include's optional adapter is a closed spelling: each wire id parses to
+/// its adapter, absence stays unbound, and anything else refuses.
+#[test]
+fn an_include_binding_is_a_closed_adapter_spelling() {
+    let bound = r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#;
+    let policy = ScannerPolicy::parse(bound.as_bytes()).unwrap();
+    assert_eq!(
+        policy.document_includes[0].adapter,
+        Some(amiss_wire::model::Adapter::Rst)
+    );
+
+    let unbound = r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#;
+    let policy = ScannerPolicy::parse(unbound.as_bytes()).unwrap();
+    assert_eq!(policy.document_includes[0].adapter, None);
+
+    for bad in ["latex", "Rst", "restructuredtext", ""] {
+        let doc = format!(
+            r#"{{"schema":"amiss/scanner-policy","document_includes":[{{"adapter":"{bad}","kind":"tree","path":"manual"}}],"protected_inventory":[],"finding_dispositions":[]}}"#
+        );
+        assert_eq!(
+            ScannerPolicy::parse(doc.as_bytes()).unwrap_err().kind,
+            ErrorKind::InvalidValue,
+            "adapter {bad}"
+        );
+    }
+}

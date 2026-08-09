@@ -505,6 +505,7 @@ fn policy_includes_and_gitlinks_survive_both_walks() {
             .into_iter()
             .collect(),
         trees: std::collections::BTreeSet::new(),
+        ..amiss_scan::Includes::default()
     };
 
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();

@@ -338,7 +338,7 @@ fn side_facets(
             "scanned",
             None,
             ContentAvailability::Available,
-            record.classification.adapter(),
+            record.adapter,
         ),
         DocumentStatus::ExcludedBuiltIn => (
             "excluded-built-in",

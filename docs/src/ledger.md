@@ -135,9 +135,11 @@ table behind `:ref:`. These are that work's counts, taken 2026-07-31 on two Sphi
 trees with the main build carrying the two lexer fixes below, engine
 `sha256:5d1df7f8a4756f23aa7a78330ebc030438dc246f89cb06a7bb676062abc81c92`. Like the rescan
 above these are whole-tree counts at that day's head, base one commit back, so there is no
-range and no density figure. Django, the tree that motivated the adapter, stays
-unmeasurable by design: its reStructuredText lives in `.txt`, which
-[discovery](discovery.md) refuses and a policy include cannot parse.
+range and no density figure. Django, the tree that motivated the adapter, was still
+unmeasurable when these counts were taken: its reStructuredText lives in `.txt`, which the
+built-in rows refuse. A policy include can now bind the `rst` adapter to exactly those
+paths, stated in [discovery](discovery.md), so a measured Django row has stopped being
+impossible and started being work.
 
 | Repository | Head | Documents | References | Labels | Resolved | Duplicate | Inventory | Missing |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

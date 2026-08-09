@@ -58,6 +58,7 @@ fn the_maximal_policy_union_matches_under_the_eligibility_ceiling() {
     let includes = Includes {
         documents: BTreeSet::new(),
         trees,
+        ..Includes::default()
     };
 
     let start = Instant::now();

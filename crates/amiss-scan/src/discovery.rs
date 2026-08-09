@@ -32,6 +32,7 @@ pub enum DocumentStatus {
 pub struct DocumentRecord {
     pub path: RepoPath,
     pub classification: Classification,
+    pub adapter: Option<Adapter>,
     pub status: DocumentStatus,
     pub oid: Oid,
     pub mode: GitMode,
@@ -113,6 +114,17 @@ pub enum Located<'snapshot> {
 }
 
 impl SnapshotDiscovery {
+    /// The policy-bound adapter for a path no built-in row classifies; the
+    /// lookup only runs for those, so the linear scan prices nothing else.
+    #[must_use]
+    pub fn bound_adapter(&self, path: &RepoPath) -> Option<Adapter> {
+        self.documents
+            .iter()
+            .find(|record| record.path == *path)
+            .filter(|record| record.classification == Classification::PolicyIncluded)
+            .and_then(|record| record.adapter)
+    }
+
     /// The discovered document at one exact raw path. Tree and index
     /// discovery both preserve the strict ordering documented on this type.
     #[must_use]
@@ -311,15 +323,21 @@ fn discover_walk(
                 continue;
             }
         };
+        let adapter = if classification == Classification::PolicyIncluded {
+            includes.binding(&path)
+        } else {
+            classification.adapter()
+        };
         if scope.is_some_and(|documents| !documents.contains(&path)) {
             continue;
         }
         let (status, byte_count, raw_digest) =
-            side_status(repo, git, scan, includes, classification, &path, &entry)?;
+            side_status(repo, git, scan, includes, adapter, &path, &entry)?;
         collect_labels(scan, &mut discovery.labels, &path, &status)?;
         discovery.documents.push(DocumentRecord {
             path,
             classification,
+            adapter,
             status,
             oid: entry.oid.clone(),
             mode: entry.mode,
@@ -387,24 +405,23 @@ pub fn discover_index(
                 continue;
             }
         };
+        let adapter = if classification == Classification::PolicyIncluded {
+            includes.binding(&path)
+        } else {
+            classification.adapter()
+        };
         let tree_entry = TreeEntry {
             mode: entry.mode,
             name: entry.path.clone(),
             oid: entry.oid.clone(),
         };
-        let (status, byte_count, raw_digest) = side_status(
-            repo,
-            git,
-            scan,
-            includes,
-            classification,
-            &path,
-            &tree_entry,
-        )?;
+        let (status, byte_count, raw_digest) =
+            side_status(repo, git, scan, includes, adapter, &path, &tree_entry)?;
         collect_labels(scan, &mut discovery.labels, &path, &status)?;
         discovery.documents.push(DocumentRecord {
             path,
             classification,
+            adapter,
             status,
             oid: entry.oid.clone(),
             mode: entry.mode,
@@ -424,7 +441,7 @@ fn side_status(
     git: &mut GitResources,
     scan: &mut ScanResources,
     includes: &Includes,
-    classification: Classification,
+    adapter: Option<Adapter>,
     path: &RepoPath,
     entry: &TreeEntry,
 ) -> Result<(DocumentStatus, u64, Option<amiss_wire::digest::Digest>), Error> {
@@ -475,7 +492,7 @@ fn side_status(
             Some(raw),
         ));
     }
-    let Some(adapter) = classification.adapter() else {
+    let Some(adapter) = adapter else {
         return Ok((
             DocumentStatus::Unsupported(UnsupportedKind::Format),
             byte_count,

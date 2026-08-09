@@ -140,6 +140,7 @@ fn document_discovery(count: usize) -> SnapshotDiscovery {
             path: RepoPath::new(format!("docs/{index:05}.md"))
                 .unwrap_or_else(|| panic!("benchmark document path")),
             classification: Classification::StructuredMarkdown,
+            adapter: None,
             status: DocumentStatus::ExcludedBuiltIn,
             oid: oid.clone(),
             mode: GitMode::RegularFile,

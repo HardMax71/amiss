@@ -65,6 +65,14 @@ impl Obj {
         format!("{}.{name}", self.path)
     }
 
+    /// An optional member: present or absent, never defaulted from null.
+    pub fn take_optional(&mut self, name: &str) -> Option<Value> {
+        self.members
+            .iter()
+            .position(|(key, _)| key == name)
+            .map(|index| self.members.remove(index).1)
+    }
+
     /// # Errors
     ///
     /// Fails with `MissingField` when the member is absent.
