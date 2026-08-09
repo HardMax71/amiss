@@ -889,7 +889,7 @@ fn retained_and_fallback_anchor_routes_agree() {
     let body = "# Alpha\n\n## Shared Section\n\ntext\n";
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    fs::write(root.join("target.md"), body).unwrap_or_default();
+    fs::write(root.join("target.md"), body).unwrap();
     fs::create_dir_all(root.join("tests")).unwrap();
     fs::write(root.join("tests/fixture.md"), body).unwrap();
     let (base, candidate) = {
@@ -943,13 +943,13 @@ fn retained_and_fallback_anchor_routes_agree() {
 fn a_transcluding_in_set_target_stays_partial_through_retention() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    fs::write(root.join("part.rst"), "extra\n").unwrap_or_default();
+    fs::write(root.join("part.rst"), "extra\n").unwrap();
     fs::write(
         root.join("whole.rst"),
         "Title\n=====\n\n.. include:: part.rst\n",
     )
-    .unwrap_or_default();
-    fs::write(root.join("plain.rst"), "Title\n=====\n\ntext\n").unwrap_or_default();
+    .unwrap();
+    fs::write(root.join("plain.rst"), "Title\n=====\n\ntext\n").unwrap();
     let (base, candidate) = anchor_pair(root, "[a](whole.rst#gone)\n[b](plain.rst#gone)\n");
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let built = commit_pair(

@@ -1116,10 +1116,7 @@ fn retained_identities(
     path: &RepoPath,
     adapter: Adapter,
 ) -> Option<(BTreeSet<String>, bool)> {
-    let record = snapshot
-        .documents
-        .iter()
-        .find(|record| record.path == *path)?;
+    let record = snapshot.document(path.as_bytes())?;
     if record.adapter != Some(adapter) {
         return None;
     }
