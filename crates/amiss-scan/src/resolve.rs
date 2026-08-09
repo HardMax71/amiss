@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_md::lines::scan;
-use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct, TargetKind};
+use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ForgeDialect, Oid, RepoPath};
@@ -934,13 +934,17 @@ fn fragment_resolution(
     }
     match classify(path.as_bytes()) {
         Some(classification) => match classification.adapter() {
-            Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
+            Some(adapter) => {
+                anchor_resolution(scan, cache, snapshot, path, mode, blob, adapter, decoded)
+            }
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::Fragment(blob),
             )),
         },
         None => match snapshot.bound_adapter(path) {
-            Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
+            Some(adapter) => {
+                anchor_resolution(scan, cache, snapshot, path, mode, blob, adapter, decoded)
+            }
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
             )),
@@ -952,9 +956,14 @@ fn fragment_resolution(
 /// publish for the target. A target this evaluation cannot read, parse, or
 /// afford keeps the unsupported-semantics answer, so nothing is reported
 /// missing on the strength of a parse that did not happen.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the retained-set lookup needs the snapshot beside the seven resolution inputs"
+)]
 fn anchor_resolution(
     scan_resources: &mut ScanResources,
     cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
     path: &RepoPath,
     mode: GitMode,
     blob: BlobTarget<RepoPath>,
@@ -985,21 +994,30 @@ fn anchor_resolution(
         );
         let allowance = scan_resources.heading_anchor_allowance();
         *slot = match charged {
-            Ok(()) => crate::scan::parse(adapter, body, allowance)
-                .ok()
-                .and_then(|analysis| analysis.extraction)
-                .map_or(Anchors::Unevaluable, |extraction| {
-                    let identities = anchor_set(
-                        &extraction.headings,
-                        &extraction.html_anchors,
-                        &extraction.declared_anchors,
-                    );
-                    if transcludes(&extraction.occurrences) {
+            Ok(()) => match retained_identities(snapshot, path, adapter) {
+                Some((identities, transcluding)) => {
+                    if transcluding {
                         Anchors::Partial(identities)
                     } else {
                         Anchors::Published(identities)
                     }
-                }),
+                }
+                None => crate::scan::parse(adapter, body, allowance)
+                    .ok()
+                    .and_then(|analysis| analysis.extraction)
+                    .map_or(Anchors::Unevaluable, |extraction| {
+                        let identities = anchor_set(
+                            &extraction.headings,
+                            &extraction.html_anchors,
+                            &extraction.declared_anchors,
+                        );
+                        if transcludes(&extraction.occurrences) {
+                            Anchors::Partial(identities)
+                        } else {
+                            Anchors::Published(identities)
+                        }
+                    }),
+            },
             Err(_crossing) => Anchors::Unevaluable,
         };
     }
@@ -1090,13 +1108,37 @@ pub(crate) fn resolve_label(
 
 /// A document that splices another file publishes identities this engine never
 /// read, so an anchor it does not hold is undecided rather than absent.
+/// The anchor inputs discovery already parsed for an in-set scanned target
+/// under the same adapter; slugging runs here, once per asked target, and
+/// any mismatch falls back to the parse.
+fn retained_identities(
+    snapshot: &SnapshotDiscovery,
+    path: &RepoPath,
+    adapter: Adapter,
+) -> Option<(BTreeSet<String>, bool)> {
+    let record = snapshot
+        .documents
+        .iter()
+        .find(|record| record.path == *path)?;
+    if record.adapter != Some(adapter) {
+        return None;
+    }
+    let crate::discovery::DocumentStatus::Scanned(scanned) = &record.status else {
+        return None;
+    };
+    let source = scanned.anchor_source.as_ref()?;
+    let identities = anchor_set(
+        &source.headings,
+        &source.html_anchors,
+        &scanned.declared_anchors,
+    );
+    Some((identities, source.transcluding))
+}
+
 fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {
-    occurrences.iter().any(|occurrence| {
-        matches!(
-            occurrence.construct,
-            SourceConstruct::AsciidocInclude | SourceConstruct::RstIncludeDirective
-        )
-    })
+    occurrences
+        .iter()
+        .any(|occurrence| crate::scan::transcluding_construct(occurrence.construct))
 }
 
 /// Answers one value claim against the snapshot: the target must be a

@@ -50,6 +50,29 @@ pub struct Scanned {
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
     pub declared_anchors: Vec<String>,
+    pub anchor_source: Option<AnchorSource>,
+}
+
+/// The raw anchor inputs a scanned document retains so the resolve lane never
+/// parses an in-set target twice; slugging stays lazy, paid only for targets
+/// a fragment actually asks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AnchorSource {
+    pub headings: Vec<amiss_wire::extraction::Heading>,
+    pub html_anchors: Vec<String>,
+    pub transcluding: bool,
+}
+
+/// Whether one construct transcludes other sources, which makes any published
+/// anchor set partial rather than complete.
+pub(crate) const fn transcluding_construct(
+    construct: amiss_wire::controls::SourceConstruct,
+) -> bool {
+    matches!(
+        construct,
+        amiss_wire::controls::SourceConstruct::AsciidocInclude
+            | amiss_wire::controls::SourceConstruct::RstIncludeDirective
+    )
 }
 
 /// Scans one selected document body under the snapshot's budgets: admission
@@ -118,6 +141,7 @@ pub fn scan_bytes(
             opaque: Opaque::default(),
             governed: Vec::new(),
             declared_anchors: Vec::new(),
+            anchor_source: None,
         });
     };
 
@@ -171,6 +195,9 @@ pub fn scan_bytes(
         });
     }
 
+    let transcluding = occurrences
+        .iter()
+        .any(|scanned| transcluding_construct(scanned.occurrence.construct));
     Ok(Scanned {
         adapter,
         work: analysis.work,
@@ -178,6 +205,11 @@ pub fn scan_bytes(
         opaque: extraction.opaque,
         governed,
         declared_anchors: extraction.declared_anchors,
+        anchor_source: Some(AnchorSource {
+            headings: extraction.headings,
+            html_anchors: extraction.html_anchors,
+            transcluding,
+        }),
     })
 }
 

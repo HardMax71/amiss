@@ -851,3 +851,131 @@ fn mixed_verdicts_under_one_name_split_by_kind() {
     assert_eq!(payload["summary"]["governed_claims"], 2);
     assert_eq!(payload["summary"]["unattested_claims"], 2);
 }
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn anchor_pair(root: &Path, reader: &str) -> (String, String) {
+    let base = base_commit(root);
+    fs::write(root.join("reader.md"), reader).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "anchors"]);
+    (base, git(root, &["rev-parse", "HEAD"]).trim().to_owned())
+}
+
+fn missing_targets(payload: &serde_json::Value) -> Vec<String> {
+    payload
+        .get("findings")
+        .and_then(serde_json::Value::as_array)
+        .map(|rows| {
+            rows.iter()
+                .filter(|row| {
+                    row.get("kind")
+                        .is_some_and(|kind| kind == "explicit-target-missing")
+                })
+                .filter_map(|row| {
+                    row.pointer("/key_input/scope/normalized_target_intent/fragment_digest")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The anchor lane answers identically from the retained in-set identities
+/// and from the fallback parse of an excluded-tree target: the published
+/// fragment resolves on both routes and only the absent one is missing.
+#[test]
+fn retained_and_fallback_anchor_routes_agree() {
+    let body = "# Alpha\n\n## Shared Section\n\ntext\n";
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    fs::write(root.join("target.md"), body).unwrap_or_default();
+    fs::create_dir_all(root.join("tests")).unwrap();
+    fs::write(root.join("tests/fixture.md"), body).unwrap();
+    let (base, candidate) = {
+        let base = base_commit(root);
+        fs::write(
+            root.join("reader.md"),
+            "[a](target.md#shared-section)\n[b](target.md#gone)\n\
+             [c](tests/fixture.md#shared-section)\n[d](tests/fixture.md#gone)\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "anchors"]);
+        (base, git(root, &["rev-parse", "HEAD"]).trim().to_owned())
+    };
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    let documents: Vec<(&str, &str)> = payload["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| {
+            Some((
+                row["path"].as_str()?,
+                row["candidate"]["status"].as_str().unwrap_or(""),
+            ))
+        })
+        .collect();
+    assert!(
+        documents.contains(&("tests/fixture.md", "excluded-built-in")),
+        "the fallback target is discovered but never scanned: {documents:?}"
+    );
+    assert_eq!(
+        missing_targets(&payload).len(),
+        2,
+        "each route resolves the published fragment and misses the absent one: {}",
+        payload["findings"]
+    );
+}
+
+/// A transcluding in-set rst target keeps answering Partial through the
+/// retained identities: an absent fragment stays unsupported, never missing.
+#[test]
+fn a_transcluding_in_set_target_stays_partial_through_retention() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    fs::write(root.join("part.rst"), "extra\n").unwrap_or_default();
+    fs::write(
+        root.join("whole.rst"),
+        "Title\n=====\n\n.. include:: part.rst\n",
+    )
+    .unwrap_or_default();
+    fs::write(root.join("plain.rst"), "Title\n=====\n\ntext\n").unwrap_or_default();
+    let (base, candidate) = anchor_pair(root, "[a](whole.rst#gone)\n[b](plain.rst#gone)\n");
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(
+        missing_targets(&payload).len(),
+        1,
+        "only the complete target's absent fragment is missing: {}",
+        payload["findings"]
+    );
+    let unsupported = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "unsupported-reference-semantics")
+        .count();
+    assert_eq!(
+        unsupported, 1,
+        "the transcluding target's absent fragment stays a boundary: {}",
+        payload["findings"]
+    );
+}
