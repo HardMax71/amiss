@@ -30,6 +30,7 @@ jobs:
           - { workspace: fuzz, target: git_index }
           - { workspace: fuzz, target: git_objects }
           - { workspace: fuzz, target: human }
+          - { workspace: fuzz, target: claim }
           - { workspace: controller/fuzz, target: provider_webhooks }
           - { workspace: controller/fuzz, target: gitlab_oidc }
     steps:

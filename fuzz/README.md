@@ -26,7 +26,7 @@ cargo +nightly fuzz run <target> --features harness corpus/<target> seeds/<targe
 ```
 
 Targets: `json`, `controls`, `requests`, `markdown`, `git_index`,
-`git_objects`, `human`.
+`git_objects`, `human`, `claim`.
 
 CI runs the smoke on every pull request and push to main. The fuzz-long
 workflow runs every target for twenty minutes nightly under
