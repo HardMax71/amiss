@@ -13,7 +13,9 @@ so an agent with no book at hand can construct a working command from the refusa
 
 ## Check before pushing
 
-Tell your repository's agents to scan before they push. If the repository keeps an
+Tell your repository's agents to scan before they push. The staged loop works from a
+linked worktree too, reading that worktree's own index, so agents running in worktree
+isolation keep the same gate. If the repository keeps an
 `AGENTS.md`, paste this section into it. A repository that keeps a `CLAUDE.md` instead
 takes the same block there, or bridges the two the way this repository does, with a
 `CLAUDE.md` whose whole body is `@AGENTS.md`:

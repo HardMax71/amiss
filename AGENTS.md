@@ -37,7 +37,9 @@ green and remote green are the same thing.
   appearance is a checked projection.
 - New function twins move the similarity baseline in `.pre-commit-config.yaml`; bump it
   in the same change, or better, deduplicate.
-- The scanner's repository I/O stays inside the repository, and it spawns nothing. Its
+- The scanner's repository I/O stays inside the repository's declared git roots, the
+  checkout plus the private and common git directories one bounded gitdir/commondir
+  indirection names, and it spawns nothing. Its
   private sealed entry additionally reads only the closed request frame from stdin. Shared
   test scaffolding goes in `amiss-fixtures`.
 - `controller/` is a separate, unpublished Rust workspace. Provider transport, storage,
