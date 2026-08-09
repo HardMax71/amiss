@@ -418,6 +418,11 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
     assert_eq!(read.governed.len(), 1);
     let carrier = &read.governed[0];
     let (start, label, url, title) = (carrier.span.0, &carrier.label, &carrier.url, &carrier.title);
+    assert_eq!(
+        carrier.span,
+        (0, 56),
+        "the governed span is the carrier line alone, terminator excluded"
+    );
     assert_eq!(start, 0);
     assert_eq!(label, "amiss:pin");
     assert_eq!(url, "amiss:value?path=a.txt&line=L1");
@@ -441,6 +446,36 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
 
     let single = extract(b".. [amiss:q]: <amiss:v?a=1> 'single'\n").unwrap();
     assert_eq!(single.governed.len(), 1, "the single-quote rung holds");
+
+    let blank_tail = extract(b".. [amiss:bt]: <amiss:v?a=1> \"t\"\n\n").unwrap();
+    assert_eq!(
+        blank_tail.governed.len(),
+        1,
+        "a blank tail is still exactly the carrier"
+    );
+    assert_eq!(
+        blank_tail.governed[0].span.1, 32,
+        "the span stops at the line even when the comment swallowed blanks"
+    );
+
+    let crlf = extract(b".. [amiss:cr]: <amiss:v?a=1> \"t\"\r\n").unwrap();
+    assert_eq!(
+        crlf.governed.len(),
+        1,
+        "a CRLF document still authors claims"
+    );
+
+    for (reason, body) in [
+        (
+            "trailing space after the title",
+            ".. [amiss:p]: <amiss:v?a=1> \"t\" \n",
+        ),
+        ("indented carrier", "   .. [amiss:p]: <amiss:v?a=1> \"t\"\n"),
+    ] {
+        let read = extract(body.as_bytes()).unwrap();
+        assert_eq!(read.governed.len(), 0, "{reason}");
+        assert_eq!(read.opaque.len(), 1, "{reason} stays opaque");
+    }
 
     let smuggled = extract(b".. [amiss:p]: <amiss:value?path=a\n   b&line=L1> \"t\"\n").unwrap();
     assert_eq!(

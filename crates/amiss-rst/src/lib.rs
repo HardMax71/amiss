@@ -117,15 +117,21 @@ pub fn normalized_label(label: &str) -> String {
         .to_lowercase()
 }
 
-/// The reserved governed carrier: a comment whose whole body is the one
-/// carrier line. Anything else, including a carrier line with company, stays
-/// an opaque comment exactly as before.
-fn carrier(body: &str) -> Option<(String, String, String)> {
-    let line = body.trim_end();
-    if line.contains('\n') {
+/// The reserved governed carrier: a column-zero comment whose first line is
+/// exactly the carrier line and whose remainder is blank. Returns the line's
+/// byte length so the governed span excludes the terminator and the blank
+/// tail, which is what keeps an applied fix from merging the comment into
+/// the prose after it. Anything else stays an opaque comment.
+fn carrier(body: &str) -> Option<(usize, (String, String, String))> {
+    let (line, rest) = body
+        .split_once('\n')
+        .map_or((body, ""), |(first, tail)| (first, tail));
+    if !rest.bytes().all(|byte| byte == b'\n' || byte == b'\r') {
         return None;
     }
-    amiss_wire::extraction::governed_carrier_line(line.trim_start().strip_prefix(".. ")?)
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    let parts = amiss_wire::extraction::governed_carrier_line(line.strip_prefix(".. ")?)?;
+    Some((line.len(), parts))
 }
 
 /// The reasons a document is refused before anything is extracted.
@@ -153,12 +159,14 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
         match block.kind {
             Kind::Comment => {
                 match carrier(body) {
-                    Some((label, url, title)) => extraction.governed.push(GovernedCarrier {
-                        span: block.span,
-                        label,
-                        url,
-                        title,
-                    }),
+                    Some((line_length, (label, url, title))) => {
+                        extraction.governed.push(GovernedCarrier {
+                            span: (block.span.0, block.span.0.saturating_add(line_length)),
+                            label,
+                            url,
+                            title,
+                        });
+                    }
                     None => extraction.opaque.push(block.span),
                 }
                 continue;

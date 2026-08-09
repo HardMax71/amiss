@@ -44,11 +44,12 @@ exactly the one carrier line, and AsciiDoc a line comment:
 ```
 
 The comment carriers take their bytes literally: no entity decoding, the title in double
-or single quotes, nothing else on the line, and in reStructuredText nothing else in the
-comment, since a comment holding anything more stays opaque exactly as before. The one
-recognized spelling is the whole carve-out from comment opacity. `amiss claim` prints
-the Markdown line; prefix it with `.. ` or `// ` for the other two, and a broken
-claim's fix respells whichever carrier it lives in, marker included.
+or single quotes, nothing after the closing quote, the comment at column zero, and in
+reStructuredText nothing but blank lines after the carrier line, since a comment holding
+anything more stays opaque exactly as before. The one recognized spelling is the whole
+carve-out from comment opacity. `amiss claim` prints the Markdown line; prefix it with
+`..` plus one space for reStructuredText or `//` plus one space for AsciiDoc, and a
+broken claim's fix respells whichever carrier it lives in, marker included.
 
 ## Evaluation
 
@@ -86,10 +87,11 @@ way governed boundaries already aggregate.
 ## The fix a broken claim carries
 
 A `claim-broken` finding standing alone carries a machine-applicable `fix`: the whole
-definition respelled with the observed line as its expected words, the byte span of the
-definition to replace, and the document that holds it. The engine emits the fix only
-when it can prove it: the rewritten definition is parsed back through the real
-extractor and must classify to the identical claim with the new expected words, so an
+carrier respelled with the observed line as its expected words, marker included, the
+byte span of the carrier to replace, and the document that holds it. The engine emits
+the fix only when it can prove it: the rewritten carrier is parsed back through the
+real extractor for its own format and must classify to the identical claim with the
+new expected words, so an
 observed line the quoted-title grammar cannot spell (a double quote, a backslash, a
 control byte, or bytes outside UTF-8) leaves the field null, and so does a name whose
 definitions aggregate, since grouped members share one finding but not one edit. A
