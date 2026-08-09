@@ -167,6 +167,67 @@ fn published_ci_examples_expose_every_moving_release_choice() {
         ],
         "the direct CI form must demand an exact reviewed version without copying the current patch release"
     );
+
+    assert_pre_commit_rev(&ci);
+}
+
+/// The pre-commit block obeys the same reviewed-version law as the installs.
+fn assert_pre_commit_rev(ci: &str) {
+    let revisions: Vec<&str> = ci
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("rev:"))
+        .collect();
+    assert_eq!(
+        revisions,
+        ["rev: v<reviewed-version>"],
+        "the pre-commit form must demand an exact reviewed version without copying any release"
+    );
+}
+
+#[test]
+fn the_gitlab_template_keeps_the_release_choices() {
+    let root = repository_root();
+    let template = fs::read_to_string(root.join("integrations/gitlab/amiss.gitlab-ci.yml"))
+        .expect("the GitLab template is readable");
+    assert!(
+        template.contains("set AMISS_VERSION to the exact reviewed Amiss release"),
+        "the template must refuse to run without a reviewed version"
+    );
+    assert_eq!(
+        template
+            .matches(r#"--profile "${AMISS_PROFILE:-observe}""#)
+            .count(),
+        2,
+        "both emissions default observe-first"
+    );
+    assert!(
+        template.contains("codequality: gl-code-quality-report.json"),
+        "the template must declare the Code Quality artifact"
+    );
+    assert!(
+        template.contains("sha256sum -c"),
+        "the downloaded binary must be verified before it runs"
+    );
+    for (line_index, line) in template.lines().enumerate() {
+        assert!(
+            !line.contains("releases/download/v0") && !line.contains("releases/download/v1"),
+            "integrations/gitlab/amiss.gitlab-ci.yml:{} hardcodes a release; the version is the consumer's reviewed choice",
+            line_index + 1,
+        );
+    }
+
+    let ci = fs::read_to_string(root.join("docs/src/ci.md")).expect("CI documentation is readable");
+    assert!(
+        ci.contains(
+            "remote: https://raw.githubusercontent.com/HardMax71/amiss/v<reviewed-version>/integrations/gitlab/amiss.gitlab-ci.yml"
+        ),
+        "the include example pins the template URL by the reviewed tag"
+    );
+    assert!(
+        ci.contains("AMISS_VERSION: v<reviewed-version>"),
+        "the include example pins the binary by the same reviewed choice"
+    );
 }
 
 #[test]

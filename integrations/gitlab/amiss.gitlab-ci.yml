@@ -1,0 +1,34 @@
+amiss:
+  # The merge-request gate as a pinned remote include: consume from a tagged
+  # URL, set AMISS_VERSION to the exact reviewed release, and the two pins
+  # move together only on review. GIT_DEPTH 0 because the evaluation reads
+  # both commits' objects, not a diff.
+  image: buildpack-deps:stable-scm
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - |
+      if [ -z "${AMISS_VERSION}" ]; then
+        echo "set AMISS_VERSION to the exact reviewed Amiss release (vX.Y.Z)"
+        exit 1
+      fi
+    - curl -fsSLO "https://github.com/HardMax71/amiss/releases/download/${AMISS_VERSION}/amiss-linux-x86_64"
+    - curl -fsSLO "https://github.com/HardMax71/amiss/releases/download/${AMISS_VERSION}/SHA256SUMS"
+    - grep ' amiss-linux-x86_64$' SHA256SUMS | sha256sum -c -
+    - chmod +x amiss-linux-x86_64
+    - >
+      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}"
+      --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA"
+      --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
+    - >
+      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}"
+      --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA"
+      --profile "${AMISS_PROFILE:-observe}" --format codequality > gl-code-quality-report.json
+  artifacts:
+    when: always
+    paths:
+      - amiss-report.json
+    reports:
+      codequality: gl-code-quality-report.json

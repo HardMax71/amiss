@@ -135,26 +135,44 @@ deduplicating alerts across runs. Two steps after any direct invocation:
 ```
 
 The `category` keeps Amiss's alerts distinct from any other SARIF producer in the
-repository, and the upload needs the workflow's `security-events: write` permission. What
-each result carries is stated in [The report](report.md).
+repository, and the upload needs the workflow's `security-events: write` permission. The
+uploaded rows are ordinary code-scanning alerts, so GitHub's remediation surfaces,
+[agentic autofix](https://github.blog/changelog/2026-07-10-agentic-autofix-for-code-scanning-alerts-in-public-preview/)
+included, operate on them directly. What each result carries is stated in
+[The report](report.md).
 
-On GitLab the same run becomes a
-[Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/), rendered in the
-merge-request widget and inline on the diff:
+On GitLab the whole job ships as a pinned template. GitLab's CI/CD Catalog only serves
+components hosted on a GitLab instance, so a GitHub-hosted project publishes the honest
+equivalent: a template consumed as a remote include from a tagged URL.
 
 ```yaml
-amiss:
-  script:
-    - amiss check <the check flags above> --format codequality > gl-code-quality-report.json
-  artifacts:
-    reports:
-      codequality: gl-code-quality-report.json
+include:
+  - remote: https://raw.githubusercontent.com/HardMax71/amiss/v<reviewed-version>/integrations/gitlab/amiss.gitlab-ci.yml
+
+variables:
+  AMISS_VERSION: v<reviewed-version>
 ```
 
-The fingerprint is the finding key, so the widget's new-versus-resolved diff follows the
-same identity the report uses. This is rendering, not the trust lane: a blocking run
-still fails the job by exit class, and the provider-verified gate is
-[the GitLab policy lane](provider-gitlab.md).
+Both pins name the release you reviewed and move together. The
+[template](https://github.com/HardMax71/amiss/blob/main/integrations/gitlab/amiss.gitlab-ci.yml)
+runs on merge-request pipelines, refuses to run until `AMISS_VERSION` is set, verifies
+the downloaded binary against the release's `SHA256SUMS` before executing it, scans the
+merge request's diff base against its head under `AMISS_PROFILE` (`observe` until the
+first report is triaged, the same ramp as everywhere else), and uploads two artifacts:
+the exact JSON report, and a
+[Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/) rendered in the
+merge-request widget and inline on the diff. The fingerprint is the finding key, so the
+widget's new-versus-resolved diff follows the same identity the report uses. This is
+rendering, not the trust lane: a blocking run still fails the job by exit class, and the
+provider-verified gate is [the GitLab policy lane](provider-gitlab.md).
+
+On Gitea and Forgejo the published Action runs unchanged. Gitea Actions resolves
+`uses:` references through github.com by default, so the same two steps shown at the top
+of this page work in a `.gitea/workflows/` file verbatim: verified on Gitea 1.24.7 with
+act_runner 0.6.1, where a broken reference failed the job with the engine's exit class
+and its file annotation, and the repaired push went green. This is the convenience
+surface, not [the Gitea and Forgejo provider lane](provider-gitea.md), whose own floor
+is stated there.
 
 ## Reading a run
 
@@ -201,10 +219,11 @@ installed `amiss` binary:
 ```yaml
 repos:
   - repo: https://github.com/HardMax71/amiss
-    rev: v0.5.1
+    rev: v<reviewed-version>
     hooks:
       - id: amiss
 ```
 
-When the staged check reports fixes, [`amiss fix`](invocation.md) applies them to the
+Replace `v<reviewed-version>` with the exact release you reviewed, the same convention
+as every version pin on this page. When the staged check reports fixes, [`amiss fix`](invocation.md) applies them to the
 working tree in place; restage and the same hook judges the repaired state.
