@@ -113,6 +113,11 @@ fn requests_smoke() {
 }
 
 #[test]
+fn claim_smoke() {
+    sweep("claim", amiss_fuzz::claim, 0xC2B2_AE3D_27D4_EB4F, 300);
+}
+
+#[test]
 fn markdown_smoke() {
     sweep("markdown", amiss_fuzz::markdown, 0xD6E8_FEB8_6659_FD93, 25);
 }
