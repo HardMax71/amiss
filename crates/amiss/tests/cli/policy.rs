@@ -331,3 +331,135 @@ fn unsupplied_controls_report_none_and_claim_no_trust() {
         "a local process does not get to claim it was verified"
     );
 }
+
+/// A tree include may bind one built-in grammar: the bound `.txt` parses as
+/// reStructuredText, its broken `:doc:` blocks, and the documents row says
+/// which adapter read it, while an unbound include stays inert.
+#[test]
+fn a_bound_include_parses_under_the_named_grammar() {
+    let fx = fixture();
+    let root = fx.root();
+    let bound = r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual"},{"kind":"document","path":"notes.tex"},{"adapter":"markdown","kind":"document","path":"tour.guide"}],"protected_inventory":[],"finding_dispositions":[]}"#;
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    fs::create_dir_all(root.join("manual")).unwrap_or_default();
+    fs::write(root.join(".amiss/scanner-policy.json"), bound).unwrap_or_default();
+    fs::write(root.join("notes.tex"), "inert include\n").unwrap_or_default();
+    fs::write(root.join("tour.guide"), "# Tour\n").unwrap_or_default();
+    fs::write(root.join("manual/guide.txt"), "start\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "bound"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("manual/guide.txt"), "see :doc:`gone`\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "broken"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 1, "the bound grammar finds the broken :doc:");
+    let payload = payload(&stdout);
+    assert!(
+        payload["findings"].as_array().is_some_and(|rows| {
+            rows.iter().any(|row| {
+                row["kind"] == "explicit-target-missing"
+                    && row["key_input"]["scope"]["document"] == "manual/guide.txt"
+            })
+        }),
+        "{}",
+        payload["findings"]
+    );
+    let documents = payload["documents"].as_array().cloned().unwrap_or_default();
+    let guide = documents
+        .iter()
+        .find(|row| row["path"] == "manual/guide.txt")
+        .unwrap();
+    assert_eq!(guide["classification"], "policy-included");
+    assert_eq!(guide["candidate"]["adapter_id"], "rst");
+    let notes = documents
+        .iter()
+        .find(|row| row["path"] == "notes.tex")
+        .unwrap();
+    assert_eq!(notes["classification"], "policy-included");
+    assert_eq!(
+        notes["candidate"]["adapter_id"],
+        serde_json::Value::Null,
+        "an unbound include still installs no parser"
+    );
+    let tour = documents
+        .iter()
+        .find(|row| row["path"] == "tour.guide")
+        .unwrap();
+    assert_eq!(tour["classification"], "policy-included");
+    assert_eq!(
+        tour["candidate"]["adapter_id"], "markdown",
+        "an exact document binding answers without a tree"
+    );
+}
+
+/// Keeping the include while dropping its binding stops reading the tree, so
+/// it is policy weakening under its own rule.
+#[test]
+fn dropping_a_binding_is_policy_weakening() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    fs::create_dir_all(root.join("manual")).unwrap_or_default();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    fs::write(root.join("manual/guide.txt"), "steady\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "bound"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "unbound"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 1, "binding removal is an unsuppressible fail");
+    let payload = payload(&stdout);
+    assert!(
+        payload["findings"].as_array().is_some_and(|rows| {
+            rows.iter().any(|row| {
+                row["kind"] == "policy-weakened"
+                    && row["key_input"]["scope"]["rule_id"] == "policy/include-binding-removed"
+            })
+        }),
+        "{}",
+        payload["findings"]
+    );
+}

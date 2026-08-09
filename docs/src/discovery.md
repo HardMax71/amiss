@@ -8,9 +8,14 @@ Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are s
 adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
 `structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside,
 and Django's reStructuredText documentation uses it, so a policy include is the way to name
-those. `.ipynb` and `.org` are `unparsed-markup`: this engine has no parser for a notebook or
+those, and an include that also binds the `rst` adapter reads them as reStructuredText. `.ipynb` and `.org` are `unparsed-markup`: this engine has no parser for a notebook or
 for Org markup, so those files are discovered and counted as `unsupported-document-format`
-and their content is never read, the same honest count a policy include reaches. Every
+and their content is never read, the same honest count an unbound policy include reaches.
+An include may instead bind one of the five built-in adapters, which reads the named path or
+tree under that grammar without installing another parser. One grammar answers per path per
+evaluation: the candidate policy's bindings, or the base's when the candidate carries none,
+and dropping a binding while keeping the include is policy weakening under
+`policy/include-binding-removed`. Every
 other file is a possible reference target, not a built-in document. These rows come directly from the
 [classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 

@@ -89,7 +89,7 @@ pub(crate) fn side_observations(
             }
             DocumentStatus::ExcludedBuiltIn | DocumentStatus::Unsupported(_) => {}
             DocumentStatus::Scanned(scanned) => {
-                let Some(adapter) = record.classification.adapter() else {
+                let Some(adapter) = record.adapter else {
                     continue;
                 };
                 for occurrence in &scanned.occurrences {

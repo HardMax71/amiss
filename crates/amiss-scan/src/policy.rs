@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap, parse_tree};
 use amiss_wire::controls::{
@@ -7,7 +7,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::{Adapter, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, Disposition, ErrorDetail, FindingKind};
 
 use crate::resources::{Aggregate, ScanResources};
@@ -22,11 +22,15 @@ pub struct PolicySide {
 }
 
 /// The union of both sides' includes, which fixes classification row five and
-/// overrides built-in exclusion.
+/// overrides built-in exclusion. Bindings are not a union: one grammar per
+/// path per evaluation, taken from the candidate policy so both sides extract
+/// comparably, or from the base policy when the candidate carries none.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Includes {
     pub documents: BTreeSet<RepoPath>,
     pub trees: BTreeSet<RepoPath>,
+    pub document_bindings: BTreeMap<RepoPath, Adapter>,
+    pub tree_bindings: BTreeMap<RepoPath, Adapter>,
 }
 
 impl Includes {
@@ -49,7 +53,42 @@ impl Includes {
                 }
             }
         }
+        if let Some(policy) = candidate.policy.as_ref().or(base.policy.as_ref()) {
+            for include in &policy.document_includes {
+                let Some(adapter) = include.adapter else {
+                    continue;
+                };
+                let path = RepoPath::from(&include.path);
+                match include.kind {
+                    IncludeKind::Document => {
+                        merged.document_bindings.insert(path, adapter);
+                    }
+                    IncludeKind::Tree => {
+                        merged.tree_bindings.insert(path, adapter);
+                    }
+                }
+            }
+        }
         merged
+    }
+
+    /// The bound adapter for a policy-included path: an exact document binding
+    /// wins, then the nearest bound ancestor tree.
+    #[must_use]
+    pub fn binding(&self, path: &RepoPath) -> Option<Adapter> {
+        if let Some(adapter) = self.document_bindings.get(path) {
+            return Some(*adapter);
+        }
+        let raw = path.as_bytes();
+        raw.iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, byte)| **byte == b'/')
+            .find_map(|(separator, _)| {
+                raw.get(..separator)
+                    .and_then(|ancestor| self.tree_bindings.get(ancestor))
+            })
+            .copied()
     }
 
     /// A document include matches exactly its path; a tree include matches the
@@ -379,10 +418,10 @@ pub fn effects(
     };
     let base_policy = base.policy.as_ref().unwrap_or(&empty);
     let candidate_policy = candidate.policy.as_ref().unwrap_or(&empty);
-    let candidate_includes: BTreeSet<(&str, IncludeKind)> = candidate_policy
+    let candidate_includes: BTreeMap<(&str, IncludeKind), Option<Adapter>> = candidate_policy
         .document_includes
         .iter()
-        .map(|row| (row.path.as_str(), row.kind))
+        .map(|row| ((row.path.as_str(), row.kind), row.adapter))
         .collect();
     let candidate_inventory: BTreeSet<&str> = candidate_policy
         .protected_inventory
@@ -391,11 +430,16 @@ pub fn effects(
         .collect();
 
     for include in &base_policy.document_includes {
-        if !candidate_includes.contains(&(include.path.as_str(), include.kind)) {
-            let rule = match include.kind {
+        let rule = match candidate_includes.get(&(include.path.as_str(), include.kind)) {
+            Some(now) if *now == include.adapter => None,
+            Some(_) if include.adapter.is_none() => None,
+            Some(_) => Some("policy/include-binding-removed"),
+            None => Some(match include.kind {
                 IncludeKind::Document => "policy/include-document-removed",
                 IncludeKind::Tree => "policy/include-tree-removed",
-            };
+            }),
+        };
+        if let Some(rule) = rule {
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
                 rule_id: rule.to_owned(),
@@ -737,7 +781,7 @@ pub fn protected_state(
     repo: &Repository,
     git: &mut GitResources,
     scan: &mut ScanResources,
-    entries: &std::collections::BTreeMap<RepoPath, (GitMode, Oid)>,
+    entries: &BTreeMap<RepoPath, (GitMode, Oid)>,
     path: &str,
 ) -> Result<ProtectedState, Error> {
     let Some((mode, oid)) = entries.get(path.as_bytes()) else {

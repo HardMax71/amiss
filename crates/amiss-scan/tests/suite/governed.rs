@@ -186,6 +186,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         documents: vec![DocumentRecord {
             path,
             classification: Classification::StructuredMarkdown,
+            adapter: Classification::StructuredMarkdown.adapter(),
             status: DocumentStatus::Scanned(scanned),
             oid,
             mode: GitMode::RegularFile,
@@ -533,6 +534,7 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
     candidate.documents.push(DocumentRecord {
         path: extra_path,
         classification: Classification::StructuredMarkdown,
+        adapter: Classification::StructuredMarkdown.adapter(),
         status: DocumentStatus::Scanned(scanned(base_source)),
         oid: extra_oid,
         mode: GitMode::RegularFile,

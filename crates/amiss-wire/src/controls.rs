@@ -7,8 +7,8 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::{self, Value};
 use crate::model::{
-    ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity,
-    UtcInstant,
+    Adapter, ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPathText, RepositoryIdentity,
+    TreeIdentity, UtcInstant,
 };
 use crate::resolution::{
     BlobContent, BlobContentTag, BlobMode, BlobTarget, Missing, MissingTag, Resolution,
@@ -499,6 +499,7 @@ impl ResourceName {
 pub struct DocumentInclude {
     pub path: RepoPathText,
     pub kind: IncludeKind,
+    pub adapter: Option<Adapter>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1027,11 +1028,24 @@ fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
     let mut obj = Obj::new(path, value)?;
     let include_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
     let kind = IncludeKind::decode(&obj.field("kind"), obj.take("kind")?)?;
+    let adapter = match obj.take_optional("adapter") {
+        Some(value) => Some(decode_adapter(&obj.field("adapter"), value)?),
+        None => None,
+    };
     obj.finish()?;
     Ok(DocumentInclude {
         path: include_path,
         kind,
+        adapter,
     })
+}
+
+fn decode_adapter(path: &str, value: Value) -> Result<Adapter, Error> {
+    let name = de::string(path, value)?;
+    match Adapter::all().find(|adapter| adapter.adapter_id() == name) {
+        Some(adapter) => Ok(adapter),
+        None => fail(path, ErrorKind::InvalidValue),
+    }
 }
 
 fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {

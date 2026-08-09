@@ -32,6 +32,7 @@ fn includes_match_exact_documents_and_tree_ancestors_at_slash_boundaries() {
     let includes = Includes {
         documents: BTreeSet::from([path("one.md")]),
         trees: BTreeSet::from([path("docs/specs"), byte_root.clone()]),
+        ..Includes::default()
     };
 
     assert!(includes.matches(&path("one.md")));
@@ -86,6 +87,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         .map(|(raw, kind)| DocumentInclude {
             path: RepoPathText::new((*raw).to_owned()).expect("valid include path"),
             kind: *kind,
+            adapter: None,
         })
         .collect();
     let protected_inventory = inventory

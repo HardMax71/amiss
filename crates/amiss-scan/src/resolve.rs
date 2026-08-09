@@ -868,7 +868,7 @@ fn lookup(
     match fragment {
         Some(raw_fragment) if !raw_fragment.is_empty() => {
             let decoded = decode_fragment(raw_fragment).unwrap_or_default();
-            fragment_resolution(scan, cache, path, mode, entry, forge, &decoded)
+            fragment_resolution(scan, cache, snapshot, path, mode, entry, forge, &decoded)
         }
         Some(_) | None => Ok(Resolution::Resolved(entry)),
     }
@@ -907,9 +907,14 @@ fn refusal(
 /// The fragment precedence on a located target: a tree carries none, the line
 /// grammar wins where it applies, a document class is asked for the heading
 /// identity, and everything else keeps its unsupported answer.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the bound-adapter lookup needs the snapshot beside the seven resolution inputs"
+)]
 fn fragment_resolution(
     scan: &mut ScanResources,
     cache: &mut TargetCache,
+    snapshot: &SnapshotDiscovery,
     path: &RepoPath,
     mode: GitMode,
     entry: Target<RepoPath>,
@@ -934,9 +939,12 @@ fn fragment_resolution(
                 UnsupportedSemantics::Fragment(blob),
             )),
         },
-        None => Ok(Resolution::UnsupportedSemantics(
-            UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
-        )),
+        None => match snapshot.bound_adapter(path) {
+            Some(adapter) => anchor_resolution(scan, cache, path, mode, blob, adapter, decoded),
+            None => Ok(Resolution::UnsupportedSemantics(
+                UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
+            )),
+        },
     }
 }
 

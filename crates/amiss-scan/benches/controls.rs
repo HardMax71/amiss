@@ -30,6 +30,7 @@ fn late_tree_include(bencher: Bencher<'_, '_>, count: usize) {
     let includes = Includes {
         documents: BTreeSet::new(),
         trees,
+        ..Includes::default()
     };
     bencher.bench_local(|| black_box(&includes).matches(black_box(&query)));
 }
@@ -60,6 +61,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
             path: RepoPathText::new(format!("roots/{index:06}"))
                 .expect("valid benchmark include path"),
             kind: IncludeKind::Tree,
+            adapter: None,
         })
         .collect();
     let policy = ScannerPolicy {

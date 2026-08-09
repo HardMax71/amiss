@@ -499,6 +499,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
             .map(|path| DocumentRecord {
                 path: RepoPath::new((*path).to_owned()).unwrap(),
                 classification: Classification::StructuredMarkdown,
+                adapter: Classification::StructuredMarkdown.adapter(),
                 status: DocumentStatus::ExcludedBuiltIn,
                 oid: oid.clone(),
                 mode: GitMode::RegularFile,
