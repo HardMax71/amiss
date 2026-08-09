@@ -138,8 +138,7 @@ above these are whole-tree counts at that day's head, base one commit back, so t
 range and no density figure. Django, the tree that motivated the adapter, was still
 unmeasurable when these counts were taken: its reStructuredText lives in `.txt`, which the
 built-in rows refuse. A policy include can now bind the `rst` adapter to exactly those
-paths, stated in [discovery](discovery.md), so a measured Django row has stopped being
-impossible and started being work.
+paths, stated in [discovery](discovery.md), and the measured row follows below.
 
 | Repository | Head | Documents | References | Labels | Resolved | Duplicate | Inventory | Missing |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -164,6 +163,46 @@ grid-table cells and a list item. Both false-missing classes got pinned fixes
 ([#203](https://github.com/HardMax71/amiss/pull/203),
 [#205](https://github.com/HardMax71/amiss/pull/205)), which is why the table reads as it
 does.
+
+## The Django yield, measured
+
+The binding shipped and Django stopped being the counterexample. These counts were taken
+2026-08-10 at that day's default-branch head, on the main build carrying the three lexer
+fixes below, engine
+`sha256:3a7263e876ec5ccd55f3b4899f8189af4567b8b21051bec255d93ffba0257a34`. The method
+bends one convention and states it: Django's tree carries no Amiss policy, so the
+candidate is a local commit whose only change is `.amiss/scanner-policy.json`, 674
+document includes binding the `rst` adapter to every `.txt` under `docs/`, and the base
+is the unmodified upstream head. The whole tree read in 1.1 seconds on an ordinary
+development machine.
+
+| Repository | Head | Documents | References | Labels | Resolved | Duplicate | Inventory | Missing |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| django | `c9eb16a87e60` | 674 | 3,008 | 1,462 | 1,430 | 0 | 10 | 22 |
+
+Every one of the 22 label misses is a reference an intersphinx inventory satisfies at
+build time, into Python's own documentation (`old-string-formatting`,
+`context-managers`, `tut-packages` and kin) or into Sphinx's generated `genindex` and
+`modindex`, the same tree-only boundary [resolution](resolution.md) states and pytest's
+row hit first. The ten inventory rows are the colon-prefixed intersphinx form, declared
+unsupported rather than guessed. No label is declared twice.
+
+The first pass read 43 rows as missing, and triage proved twelve of them innocent in
+three classes, which became the lexer fixes this section's build carries: an indirect
+hyperlink target (`.. _MySQL manual: MySQL_`, and the embedded `<Granian_>` form) is an
+alias to another target, not a path; the `:file:` role is presentation markup that makes
+no link, distinct from the `csv-table` option the extractor exists for; and a figure
+ending `.*` is Sphinx's builder-resolved glob. Each shape now extracts nothing, pinned
+one line at a time in the adapter's tests.
+
+What remains after the fixes is nine path references that are genuinely dead in the
+tree: relative directory links like `../middleware/` and `../settings/` in five pages,
+`docs/topics/i18n/translation.txt` holding four, left from the documentation structure
+Django retired when it moved to Sphinx, plus `../url_dispatch/` in the sitemaps
+reference. Each names a route the current tree does not hold under
+[the spellings a documentation router serves](route-spellings.md), which is the same
+class as helix's one-character break: real, pre-existing, and invisible to a build that
+never resolves them.
 
 ## What a row must be
 

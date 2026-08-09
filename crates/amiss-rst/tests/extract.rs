@@ -369,3 +369,42 @@ fn an_rst_destination_names_its_fragment_bytes() {
         None
     );
 }
+
+/// The three shapes the Django measurement caught reading as paths: an
+/// indirect target aliases another target, an embedded `<name_>` does the
+/// same inline, the `:file:` role is presentation markup, and a figure glob
+/// is resolved by the docs builder, not the tree. None is a reference.
+#[test]
+fn alias_role_and_glob_shapes_are_not_references() {
+    for line in [
+        ".. _MySQL manual: MySQL_",
+        ".. _corresponding section: loading_of_project_level_translations_",
+        ".. _using logging: `Logging`_",
+        "read the `Granian documentation <Granian_>`_ for more",
+        ":file:`/sitemap.xml`.",
+        ":file:`wsgi.py`::",
+        ".. figure:: _images/django_unittest_classes_hierarchy.*",
+    ] {
+        assert_eq!(
+            amiss_rst::directive::references(line, 0),
+            Vec::new(),
+            "{line}"
+        );
+    }
+
+    assert_eq!(
+        amiss_rst::directive::references(".. _MySQL manual: https://dev.mysql.com/doc/", 0).len(),
+        1,
+        "a direct named target still extracts"
+    );
+    assert_eq!(
+        amiss_rst::directive::references(":file: data.csv", 0).len(),
+        1,
+        "the csv-table option form still extracts"
+    );
+    assert_eq!(
+        amiss_rst::directive::references(".. figure:: _images/diagram.png", 0).len(),
+        1,
+        "an exact figure target still extracts"
+    );
+}
