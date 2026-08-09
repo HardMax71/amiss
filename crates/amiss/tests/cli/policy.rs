@@ -463,3 +463,67 @@ fn dropping_a_binding_is_policy_weakening() {
         payload["findings"]
     );
 }
+
+/// A fragment into a bound target answers under the bound grammar: the rst
+/// heading publishes its docutils id, and a wrong fragment is a missing
+/// target rather than a code-fragment refusal.
+#[test]
+fn an_anchor_into_a_bound_target_resolves_under_its_grammar() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    fs::create_dir_all(root.join("manual")).unwrap_or_default();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    fs::write(root.join("manual/guide.txt"), "Guide\n=====\n\nsteady\n").unwrap_or_default();
+    fs::write(root.join("README.md"), "# R\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "bound"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join("README.md"),
+        "# R\n\n[ok](manual/guide.txt#guide)\n[gone](manual/guide.txt#missing)\n",
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "anchors"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 1, "the wrong fragment blocks under the bound grammar");
+    let payload = payload(&stdout);
+    let into_guide = payload["findings"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter(|row| {
+                    row["kind"] == "explicit-target-missing"
+                        && row["key_input"]["scope"]["normalized_target_intent"]["path"]
+                            == "manual/guide.txt"
+                })
+                .count()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        into_guide, 1,
+        "the published rst id resolves and the absent one is the only miss: {}",
+        payload["findings"]
+    );
+}
