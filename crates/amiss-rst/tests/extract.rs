@@ -408,3 +408,45 @@ fn alias_role_and_glob_shapes_are_not_references() {
         "an exact figure target still extracts"
     );
 }
+
+/// The reserved carrier is the one comment shape the channel reads: a comment
+/// whose whole body is the carrier line. Everything else keeps its opacity.
+#[test]
+fn a_reserved_comment_becomes_governed_and_only_it() {
+    let read =
+        extract(b".. [amiss:pin]: <amiss:value?path=a.txt&line=L1> \"alpha\"\n\nprose\n").unwrap();
+    assert_eq!(read.governed.len(), 1);
+    let carrier = &read.governed[0];
+    let (start, label, url, title) = (carrier.span.0, &carrier.label, &carrier.url, &carrier.title);
+    assert_eq!(start, 0);
+    assert_eq!(label, "amiss:pin");
+    assert_eq!(url, "amiss:value?path=a.txt&line=L1");
+    assert_eq!(title, "alpha");
+    assert!(read.opaque.is_empty(), "the carrier is not opaque");
+
+    for (reason, body) in [
+        (
+            "multi-line comment",
+            ".. [amiss:p]: <amiss:v?a=1> \"t\"\n   more\n",
+        ),
+        ("ordinary comment", ".. just a note\n"),
+        ("missing angles", ".. [amiss:p]: amiss:v?a=1 \"t\"\n"),
+        ("missing title", ".. [amiss:p]: <amiss:v?a=1>\n"),
+        ("unreserved label", ".. [other:p]: <amiss:v?a=1> \"t\"\n"),
+    ] {
+        let read = extract(body.as_bytes()).unwrap();
+        assert_eq!(read.governed.len(), 0, "{reason}");
+        assert_eq!(read.opaque.len(), 1, "{reason} stays an opaque comment");
+    }
+
+    let single = extract(b".. [amiss:q]: <amiss:v?a=1> 'single'\n").unwrap();
+    assert_eq!(single.governed.len(), 1, "the single-quote rung holds");
+
+    let smuggled = extract(b".. [amiss:p]: <amiss:value?path=a\n   b&line=L1> \"t\"\n").unwrap();
+    assert_eq!(
+        smuggled.governed.len(),
+        0,
+        "an indented continuation cannot smuggle a newline into the destination"
+    );
+    assert_eq!(smuggled.opaque.len(), 1);
+}

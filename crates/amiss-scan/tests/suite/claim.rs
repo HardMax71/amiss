@@ -113,32 +113,77 @@ fn each_grammar_clause_refuses_alone() {
 fn a_rewrite_is_proved_or_refused_on_each_gate() {
     let path = |text: &str| RepoPath::new(text.to_owned()).unwrap();
     assert_eq!(
-        claim::rewrite("v", &path("README.md"), 1, b"# R"),
+        claim::rewrite(
+            "v",
+            &path("README.md"),
+            1,
+            b"# R",
+            claim::ClaimCarrier::Definition,
+        ),
         Some("[amiss:v]: <amiss:value?path=README.md&line=L1> \"# R\"".to_owned()),
     );
     assert_eq!(
-        claim::rewrite("v", &path("README.md"), 1, b"say \"hi\""),
+        claim::rewrite(
+            "v",
+            &path("README.md"),
+            1,
+            b"say \"hi\"",
+            claim::ClaimCarrier::Definition,
+        ),
         None,
         "a double quote cannot sit in a quoted title"
     );
     assert_eq!(
-        claim::rewrite("v", &path("README.md"), 1, b"a\tb"),
+        claim::rewrite(
+            "v",
+            &path("README.md"),
+            1,
+            b"a\tb",
+            claim::ClaimCarrier::Definition,
+        ),
         None,
         "the guard refuses control bytes on its own clause"
     );
     assert_eq!(
-        claim::rewrite("v", &path("a&b.md"), 1, b"words"),
+        claim::rewrite(
+            "v",
+            &path("a&b.md"),
+            1,
+            b"words",
+            claim::ClaimCarrier::Definition,
+        ),
         None,
         "an ampersand path would re-split the grammar, which only the round trip sees"
     );
-    assert_eq!(claim::rewrite("v", &path("README.md"), 1, b"\xff"), None);
     assert_eq!(
-        claim::rewrite("v", &path("README.md"), 1, b"a\\b"),
+        claim::rewrite(
+            "v",
+            &path("README.md"),
+            1,
+            b"\xff",
+            claim::ClaimCarrier::Definition,
+        ),
+        None
+    );
+    assert_eq!(
+        claim::rewrite(
+            "v",
+            &path("README.md"),
+            1,
+            b"a\\b",
+            claim::ClaimCarrier::Definition,
+        ),
         None,
         "a backslash is refused by the guard's own clause, conservatively"
     );
     assert_eq!(
-        claim::rewrite("v", &path("README.md"), 1, b"&amp;"),
+        claim::rewrite(
+            "v",
+            &path("README.md"),
+            1,
+            b"&amp;",
+            claim::ClaimCarrier::Definition,
+        ),
         None,
         "an entity decodes to different expected words, which only the field proof sees"
     );

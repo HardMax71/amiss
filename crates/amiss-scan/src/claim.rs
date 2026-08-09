@@ -93,8 +93,47 @@ pub enum ClaimMissingReason {
 }
 
 /// One evaluated claim, carried from the candidate walk to the report.
+/// Which invisible construct carries a claim, which is what a provable
+/// rewrite must respell: the fix regenerates the carrier, not just the line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClaimCarrier {
+    Definition,
+    RstComment,
+    AdocComment,
+}
+
+impl ClaimCarrier {
+    #[must_use]
+    pub const fn of(adapter: amiss_wire::model::Adapter) -> Self {
+        match adapter {
+            amiss_wire::model::Adapter::Rst => Self::RstComment,
+            amiss_wire::model::Adapter::AsciiDoc => Self::AdocComment,
+            amiss_wire::model::Adapter::Markdown
+            | amiss_wire::model::Adapter::Mdx
+            | amiss_wire::model::Adapter::PlainAdvisory => Self::Definition,
+        }
+    }
+
+    const fn prefix(self) -> &'static str {
+        match self {
+            Self::Definition => "",
+            Self::RstComment => ".. ",
+            Self::AdocComment => "// ",
+        }
+    }
+
+    const fn prover(self) -> amiss_wire::model::Adapter {
+        match self {
+            Self::Definition => amiss_wire::model::Adapter::Markdown,
+            Self::RstComment => amiss_wire::model::Adapter::Rst,
+            Self::AdocComment => amiss_wire::model::Adapter::AsciiDoc,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClaimOutcome {
+    pub carrier: ClaimCarrier,
     pub document: RepoPath,
     pub name: String,
     pub span: (usize, usize),
@@ -112,7 +151,13 @@ pub struct ClaimOutcome {
 /// respelled definition does not classify back to the identical claim under
 /// the real extractor, which is the proof the fix resolves the finding.
 #[must_use]
-pub fn rewrite(name: &str, path: &RepoPath, line: u64, observed: &[u8]) -> Option<String> {
+pub fn rewrite(
+    name: &str,
+    path: &RepoPath,
+    line: u64,
+    observed: &[u8],
+    carrier: ClaimCarrier,
+) -> Option<String> {
     let observed = std::str::from_utf8(observed).ok()?;
     if observed
         .chars()
@@ -121,15 +166,13 @@ pub fn rewrite(name: &str, path: &RepoPath, line: u64, observed: &[u8]) -> Optio
         return None;
     }
     let path_text = path.as_str()?;
-    let replacement =
-        format!("[amiss:{name}]: <amiss:value?path={path_text}&line=L{line}> \"{observed}\"");
+    let replacement = format!(
+        "{}[amiss:{name}]: <amiss:value?path={path_text}&line=L{line}> \"{observed}\"",
+        carrier.prefix(),
+    );
     let mut resources = crate::ScanResources::new(crate::ScanLimits::CONTRACT);
-    let scanned = crate::scan_document(
-        &mut resources,
-        amiss_wire::model::Adapter::Markdown,
-        replacement.as_bytes(),
-    )
-    .ok()?;
+    let scanned =
+        crate::scan_document(&mut resources, carrier.prover(), replacement.as_bytes()).ok()?;
     let [source] = scanned.governed.as_slice() else {
         return None;
     };

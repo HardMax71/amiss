@@ -32,6 +32,24 @@ unsupported capability, and the run ends incomplete with exit 2, exactly as befo
 value kind existed. A reference definition is invisible in rendered output, so a claim
 adds nothing to the page a reader sees.
 
+## The carriers
+
+Every structured format has an invisible construct that carries the same line. Markdown
+and MDX use the reference definition above. reStructuredText uses a comment holding
+exactly the one carrier line, and AsciiDoc a line comment:
+
+```text
+.. [amiss:release-version]: <amiss:value?path=Cargo.toml&line=L3> "0.16.0"
+// [amiss:release-version]: <amiss:value?path=Cargo.toml&line=L3> "0.16.0"
+```
+
+The comment carriers take their bytes literally: no entity decoding, the title in double
+or single quotes, nothing else on the line, and in reStructuredText nothing else in the
+comment, since a comment holding anything more stays opaque exactly as before. The one
+recognized spelling is the whole carve-out from comment opacity. `amiss claim` prints
+the Markdown line; prefix it with `.. ` or `// ` for the other two, and a broken
+claim's fix respells whichever carrier it lives in, marker included.
+
 ## Evaluation
 
 The claim's target must be a regular or executable blob in the candidate snapshot. The

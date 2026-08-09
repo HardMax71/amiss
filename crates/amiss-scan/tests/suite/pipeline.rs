@@ -950,7 +950,16 @@ fn a_transcluding_in_set_target_stays_partial_through_retention() {
     )
     .unwrap();
     fs::write(root.join("plain.rst"), "Title\n=====\n\ntext\n").unwrap();
-    let (base, candidate) = anchor_pair(root, "[a](whole.rst#gone)\n[b](plain.rst#gone)\n");
+    fs::create_dir_all(root.join("tests")).unwrap();
+    fs::write(
+        root.join("tests/carried.rst"),
+        "Title\n=====\n\n.. include:: part.rst\n",
+    )
+    .unwrap();
+    let (base, candidate) = anchor_pair(
+        root,
+        "[a](whole.rst#gone)\n[b](plain.rst#gone)\n[c](tests/carried.rst#gone)\n",
+    );
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let built = commit_pair(
         &repo,
@@ -974,8 +983,88 @@ fn a_transcluding_in_set_target_stays_partial_through_retention() {
         .filter(|row| row["kind"] == "unsupported-reference-semantics")
         .count();
     assert_eq!(
-        unsupported, 1,
-        "the transcluding target's absent fragment stays a boundary: {}",
+        unsupported, 2,
+        "both routes keep the transcluding boundary, retained and fallback alike: {}",
         payload["findings"]
+    );
+}
+
+/// The governed channel answers in every structured format: a policy-bound
+/// rst-in-txt document and an adoc document each author a value claim, both
+/// attest against the true line, and both block with the printed fix when
+/// the target drifts.
+#[test]
+fn rst_and_adoc_claims_attest_and_break_like_markdown() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".amiss")).unwrap();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"document","path":"manual.txt"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap();
+    fs::write(root.join("subject.txt"), "alpha\n").unwrap();
+    fs::write(
+        root.join("manual.txt"),
+        ".. [amiss:rst-pin]: <amiss:value?path=subject.txt&line=L1> \"alpha\"\n\nManual\n======\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("guide.adoc"),
+        "// [amiss:adoc-pin]: <amiss:value?path=subject.txt&line=L1> \"alpha\"\n= Guide\n",
+    )
+    .unwrap();
+    let base = base_commit(root);
+    fs::write(root.join("subject.txt"), "beta\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "drift"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let attested = commit_pair(&repo, &engine(), None, &shell(), &oid(&base), &oid(&base));
+    let attested_payload = payload(&attested);
+    assert_eq!(
+        attested_payload["summary"]["governed_claims"], 2,
+        "both carriers evaluate: {}",
+        attested_payload["summary"]
+    );
+    assert_eq!(
+        attested_payload["summary"]["unattested_claims"], 0,
+        "both attest on the true line"
+    );
+
+    let broken = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let broken_payload = payload(&broken);
+    let rows: Vec<(&str, &str)> = broken_payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "claim-broken")
+        .filter_map(|row| {
+            Some((
+                row["key_input"]["scope"]["control_path"].as_str()?,
+                row["fix"]["replacement"].as_str()?,
+            ))
+        })
+        .collect();
+    assert_eq!(
+        rows.len(),
+        2,
+        "both carriers break: {}",
+        broken_payload["findings"]
+    );
+    let respelled: Vec<&str> = rows.iter().map(|(_, replacement)| *replacement).collect();
+    assert!(
+        respelled.contains(&"// [amiss:adoc-pin]: <amiss:value?path=subject.txt&line=L1> \"beta\"")
+            && respelled
+                .contains(&".. [amiss:rst-pin]: <amiss:value?path=subject.txt&line=L1> \"beta\""),
+        "each fix respells its own carrier whole, marker included: {respelled:?}"
     );
 }

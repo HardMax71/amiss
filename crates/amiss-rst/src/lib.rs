@@ -11,10 +11,20 @@ pub use directive::{references, target_definition, title_underline};
 /// reference vocabulary is small: hyperlink targets and four directives that
 /// name a file. Roles are an open extension point, so an unregistered one is
 /// declared rather than guessed at.
+/// One recognized governed carrier: its span, then label, url, and title.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GovernedCarrier {
+    pub span: (usize, usize),
+    pub label: String,
+    pub url: String,
+    pub title: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Extraction {
     pub references: Vec<Reference>,
     pub titles: Vec<Title>,
+    pub governed: Vec<GovernedCarrier>,
     pub anchors: Vec<String>,
     pub opaque: Vec<(usize, usize)>,
     pub blocks: usize,
@@ -107,6 +117,17 @@ pub fn normalized_label(label: &str) -> String {
         .to_lowercase()
 }
 
+/// The reserved governed carrier: a comment whose whole body is the one
+/// carrier line. Anything else, including a carrier line with company, stays
+/// an opaque comment exactly as before.
+fn carrier(body: &str) -> Option<(String, String, String)> {
+    let line = body.trim_end();
+    if line.contains('\n') {
+        return None;
+    }
+    amiss_wire::extraction::governed_carrier_line(line.trim_start().strip_prefix(".. ")?)
+}
+
 /// The reasons a document is refused before anything is extracted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
@@ -130,7 +151,19 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
     for (index, block) in scanned.iter().enumerate() {
         let body = text.get(block.span.0..block.span.1).unwrap_or_default();
         match block.kind {
-            Kind::Literal | Kind::Comment => {
+            Kind::Comment => {
+                match carrier(body) {
+                    Some((label, url, title)) => extraction.governed.push(GovernedCarrier {
+                        span: block.span,
+                        label,
+                        url,
+                        title,
+                    }),
+                    None => extraction.opaque.push(block.span),
+                }
+                continue;
+            }
+            Kind::Literal => {
                 extraction.opaque.push(block.span);
                 continue;
             }

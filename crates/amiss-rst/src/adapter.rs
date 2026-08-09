@@ -46,7 +46,17 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
                 mdx: Vec::new(),
                 html: read.opaque,
             },
-            governed: Vec::new(),
+            governed: read
+                .governed
+                .into_iter()
+                .map(|carrier| amiss_wire::extraction::GovernedDefinition {
+                    span: carrier.span,
+                    url: carrier.url,
+                    title: Some(carrier.title),
+                    label: carrier.label,
+                    angled: true,
+                })
+                .collect(),
             headings: read
                 .titles
                 .into_iter()

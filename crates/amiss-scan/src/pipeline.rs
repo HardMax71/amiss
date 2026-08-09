@@ -232,6 +232,7 @@ fn document_claims(
         )
         .map_err(|defect| detail(&defect, Some(path)))?;
         outcomes.push(crate::claim::ClaimOutcome {
+            carrier: crate::claim::ClaimCarrier::of(scanned.adapter),
             document: path.clone(),
             name: claim.name.clone(),
             span: governed.span,
