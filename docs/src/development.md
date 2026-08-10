@@ -88,6 +88,15 @@ code, and the point of writing the figure down is to be able to tell which.
 None of the three gates a merge and none certifies a global mutation threshold: a surviving
 mutant is a place where a lie would go unnoticed, to be judged against whether the perturbed
 value is observable through real behavior, not a score to raise.
+
+Three agent lanes sit beside the gates, none of them gating. A new issue gets its premise
+checked against the tree before a maintainer reads it, behind an account-age gate so drive-by
+accounts spend no tokens. A new pull request gets one evidence-based review comment. And `/oc`
+in a comment summons the agent for collaborators, who can ask it to fix an issue and open a
+pull request; that lane borrows the release token, since a pull request opened by the runner's
+own token would never trigger ci. All three run opencode on DeepSeek inside the repository's
+runners, read AGENTS.md like any contributor, and treat issue text as a claim under test
+rather than as instructions.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the

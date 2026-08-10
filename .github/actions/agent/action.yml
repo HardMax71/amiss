@@ -1,0 +1,48 @@
+name: agent
+description: Run the opencode agent with the repository toolchain warm
+
+inputs:
+  deepseek_api_key:
+    description: DeepSeek API key, exposed only to the opencode step
+    required: true
+  model:
+    description: provider/model opencode drives
+    default: deepseek/deepseek-v4-flash
+  prompt:
+    description: Instructions for triggers that carry no comment
+    default: ""
+  token:
+    description: Token for comments, commits, and pull requests
+    default: ""
+  github_token:
+    description: Runner token, when the lane posts as github-actions
+    default: ""
+  use_github_token:
+    description: Post through the runner token instead of a PAT
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
+      with:
+        tool: cargo-nextest@0.9.140
+    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      with:
+        save-if: "false"
+    # The only step that holds a credential; the provider requires this
+    # exact env name.
+    - uses: anomalyco/opencode/github@a3647eb025c7615159d417dcc49fc39fdaeba65b # v1.18.16
+      env:
+        DEEPSEEK_API_KEY: ${{ inputs.deepseek_api_key }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      with:
+        model: ${{ inputs.model }}
+        prompt: ${{ inputs.prompt }}
+        token: ${{ inputs.token }}
+        use_github_token: ${{ inputs.use_github_token }}
+        share: "false"
