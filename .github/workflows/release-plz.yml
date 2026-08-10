@@ -55,6 +55,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # Only main runs this job, so its cache saves as well as restores.
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: fuzz
       - id: release-plz
         uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
