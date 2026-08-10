@@ -3,7 +3,10 @@ description: Run the opencode agent with the repository toolchain warm
 
 inputs:
   deepseek_api_key:
-    description: DeepSeek API key, exposed only to the opencode step
+    description: DeepSeek API key, exposed only to the run step
+    required: true
+  github_token:
+    description: Token for comments, commits, and pull requests
     required: true
   model:
     description: provider/model opencode drives
@@ -11,15 +14,19 @@ inputs:
   prompt:
     description: Instructions for triggers that carry no comment
     default: ""
-  github_token:
-    description: Token for comments, commits, and pull requests
-    required: true
+  ref:
+    description: Ref to check out; empty takes the event default
+    default: ""
+  share:
+    description: Publish the session transcript, linked from the comment
+    default: "true"
 
 runs:
   using: composite
   steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        ref: ${{ inputs.ref }}
         fetch-depth: 0
         persist-credentials: false
     - uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # v2.85.3
@@ -28,14 +35,32 @@ runs:
     - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         save-if: "false"
-    # The only step that holds a credential; the provider requires this
+    - id: tool
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.opencode/bin
+        key: opencode-v1.18.16-linux-x64
+    # The install runs before any credential enters the environment, from a
+    # release artifact this file pins by digest.
+    - if: steps.tool.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL -o /tmp/opencode.tar.gz \
+          https://github.com/anomalyco/opencode/releases/download/v1.18.16/opencode-linux-x64.tar.gz
+        echo "286e07355df06738c1905955be15b7fbc10a7b12d931de9394a6f7597246750b  /tmp/opencode.tar.gz" \
+          | sha256sum -c -
+        mkdir -p ~/.opencode/bin
+        tar -xzf /tmp/opencode.tar.gz -C ~/.opencode/bin
+    # The only step that holds credentials; the provider requires this
     # exact env name.
-    - uses: anomalyco/opencode/github@a3647eb025c7615159d417dcc49fc39fdaeba65b # v1.18.16
+    - shell: bash
+      run: |
+        "$HOME/.opencode/bin/opencode" github run
       env:
         DEEPSEEK_API_KEY: ${{ inputs.deepseek_api_key }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
-      with:
-        model: ${{ inputs.model }}
-        prompt: ${{ inputs.prompt }}
-        use_github_token: "true"
-        share: "false"
+        MODEL: ${{ inputs.model }}
+        PROMPT: ${{ inputs.prompt }}
+        USE_GITHUB_TOKEN: "true"
+        SHARE: ${{ inputs.share }}
