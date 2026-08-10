@@ -23,17 +23,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # A comment on a PR works on that PR's head, pinned to the sha seen
+      # here; a fork head never enters this credentialed tree.
+      - id: place
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          IS_PR: ${{ (github.event.pull_request || github.event.issue.pull_request) && 'true' || 'false' }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ref=""
+          if [ "$IS_PR" = "true" ]; then
+            ref=$(gh api "repos/${REPOSITORY}/pulls/${PR}" \
+              -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       # The release token, not the runner token: a PR opened by the default
       # token would never trigger ci, and an unchecked agent PR is worthless.
-      # A comment on a PR works on that PR's head, not on main.
       - uses: ./.github/actions/agent
         with:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
           github_token: ${{ secrets.RELEASE_TOKEN }}
-          ref: ${{ github.event.pull_request && format('refs/pull/{0}/head', github.event.pull_request.number) || github.event.issue.pull_request && format('refs/pull/{0}/head', github.event.issue.number) || '' }}
+          ref: ${{ steps.place.outputs.ref }}
