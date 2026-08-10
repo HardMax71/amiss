@@ -11,7 +11,7 @@ use amiss_bootstrap::supervise::{Supervised, supervise};
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn hung_child() -> Child {
     Command::new(std::env::current_exe().unwrap())
-        .args(["outlives_any_watchdog", "--exact", "--ignored"])
+        .args(["watchdog::outlives_any_watchdog", "--exact", "--ignored"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

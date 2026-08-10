@@ -9,6 +9,7 @@ mod declared;
 mod determinism;
 mod discovery;
 mod eligibility;
+mod envelope;
 mod evaluate;
 mod floor;
 mod governed;

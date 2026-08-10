@@ -62,7 +62,7 @@ contain at most 65,536 bytes, excluding the BOM. An opener without a permitted c
 closer past that bound, remains ordinary document text. The published
 [frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json) execute this boundary,
 including LF, CRLF, bare CR, BOM, and exact-limit cases, through the production recognizer in
-the [frontmatter test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs).
+the [frontmatter test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/suite/frontmatter.rs).
 
 A reference definition whose decoded label begins with exact lowercase `amiss:` is a
 reserved governed claim. Entity and escape decoding happens before that test; case is not

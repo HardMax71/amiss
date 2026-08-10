@@ -29,7 +29,7 @@ index always reads from the worktree's private directory, and depth is structura
 than configured. Bare repositories stay unavailable directly, though a bare main's linked
 worktrees read through their commondir, and alternate object stores are not consulted. The
 [repository boundary](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/src/repo.rs)
-and its [boundary tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/tests/boundary.rs)
+and its [boundary tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-git/tests/suite/boundary.rs)
 pin that behavior.
 
 The supported reference surface is intentionally smaller than "every path-like phrase in
@@ -127,13 +127,13 @@ its owning typed reader; a contract without a registered reader fails CI too.
 
 The examples execute. The report's readable form passes the strict JSON reader, and its
 canonical bytes clear the
-[wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/acceptance.rs)
+[wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/suite/acceptance.rs)
 end to end. The commit and staged-index identity preimages reproduce the production digest
 chain in the
 [identity golden test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/identity.rs).
 The published semantic corpora drive their live code paths:
 [frontmatter vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/frontmatter-vectors.json)
-through the [recognizer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/frontmatter.rs),
+through the [recognizer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-md/tests/suite/frontmatter.rs),
 [correlation vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json)
 through the [intent projection](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/correlation_vectors.rs), and
 [governed-definition vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/governed-definition-vectors.json)

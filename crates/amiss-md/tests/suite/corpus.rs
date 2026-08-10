@@ -1,5 +1,3 @@
-mod fixtures;
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,7 +5,7 @@ use amiss_md::corpus;
 use amiss_wire::digest::hb;
 use amiss_wire::json::canonical;
 
-use fixtures::harvest;
+use crate::fixtures::harvest;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

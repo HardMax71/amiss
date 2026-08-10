@@ -99,7 +99,7 @@ finding is reportable yet cannot be waived or adopted.
 The machine-facing evaluation and controls requests are closed by the
 [evaluation-request schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-evaluation-request.schema.json) and
 [controls-request schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-controls-request.schema.json), with matching
-[strict parser tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/tests/requests.rs). Their unversioned names are
+[strict parser tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/tests/suite/requests.rs). Their unversioned names are
 intentional: before 1.0 the shipped schema, parser, examples, and report form one rolling
 contract and move together.
 

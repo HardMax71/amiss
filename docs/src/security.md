@@ -13,7 +13,7 @@ engine.
 
 The engine has no network acquisition interface and does not fetch missing objects. It never
 writes to the repository, which the
-[no-write tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/no_write.rs)
+[no-write tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/suite/no_write.rs)
 check both by comparing the tree and by scanning a read-only repository. Attempts to make it
 read outside the repository run into the never-follow-links rule described in
 [Snapshots](snapshots.md).

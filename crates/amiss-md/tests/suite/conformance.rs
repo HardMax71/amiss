@@ -1,11 +1,9 @@
-mod fixtures;
-
 use amiss_md::corpus::{self, Case, Expect};
 use amiss_md::profile::parse_options;
 use amiss_wire::model::Adapter;
 use markdown::{CompileOptions, Options, ParseOptions, to_html_with_options};
 
-use fixtures::{github_pairs, harvest};
+use crate::fixtures::{github_pairs, harvest};
 
 /// GFM 0.29 is `cmark-gfm`'s text, while the pinned parse additions are the
 /// `remark-gfm` bundle, so one example is expected to differ. Example 628

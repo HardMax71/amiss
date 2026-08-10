@@ -65,7 +65,7 @@ is in [Controls and policy](controls.md).
 Each promise below is enforced by a test in the suite:
 
 - It never writes to your repository. The
-  [no-write suite](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/no_write.rs)
+  [no-write suite](https://github.com/HardMax71/amiss/blob/main/crates/amiss/tests/suite/no_write.rs)
   compares trees before and after commands and also scans a read-only repository.
 - It never runs repository code and never calls the `git` command. It reads
   [Git](https://git-scm.com)'s objects, packs, and index through the
