@@ -20,15 +20,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: bench-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-          restore-keys: bench-
+          shared-key: bench
       - shell: bash
         run: cargo bench --workspace --locked 2>&1 | tee benches.txt
       - shell: bash
