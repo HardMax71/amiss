@@ -3,21 +3,27 @@ name: agent-review
 on:
   pull_request:
     types: [opened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: agent-review-${{ github.event.pull_request.number }}
+  group: agent-review-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: true
 
 jobs:
   review:
     # Fork heads see no secrets, and release PRs are generated version bumps.
     if: |
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.draft == false &&
-      !startsWith(github.event.pull_request.head.ref, 'release-plz-')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.draft == false &&
+       !startsWith(github.event.pull_request.head.ref, 'release-plz-'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -33,8 +39,12 @@ jobs:
         with:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr) || '' }}
           prompt: |
-            Review this pull request. Verify before you claim: a suspected
+            Review pull request #${{ inputs.pr || github.event.pull_request.number }}
+            of HardMax71/amiss. A dispatched run carries no event context,
+            so first fetch the PR body, diff, and review threads with
+            gh api. Verify before you claim: a suspected
             defect gets checked against the tree, a command run, or a test,
             never asserted from the diff alone.
             cargo nextest run --workspace --locked is available, and
