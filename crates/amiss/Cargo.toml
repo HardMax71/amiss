@@ -9,14 +9,7 @@ keywords = ["documentation", "ci", "links", "markdown", "drift"]
 categories = ["development-tools", "command-line-utilities"]
 license.workspace = true
 repository.workspace = true
-# /tests/internal ships so the src include resolves; consumers compile it empty.
-exclude = [
-  "/tests/*.rs",
-  "/tests/cli",
-  "/tests/documentation_contracts",
-  "/tests/hostile",
-  "/benches",
-]
+exclude.workspace = true
 
 [dependencies]
 amiss-git = { path = "../amiss-git", version = "0.21.0" }
