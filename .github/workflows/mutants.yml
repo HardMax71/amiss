@@ -2,6 +2,8 @@ name: mutants
 
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -64,6 +66,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: ./.github/actions/tools
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: mutants-v2
+          save-if: "false"
       # A diff of anything but the checked-out tree refuses with exit 5.
       - if: ${{ !startsWith(github.head_ref, 'release-plz-') }}
         run: git diff "origin/$BASE_REF".. > git.diff
@@ -71,8 +77,12 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
       - if: startsWith(github.head_ref, 'release-plz-')
         run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
+      # Built before mutation, so a stale cache cannot time a mutant out.
+      - run: cargo nextest run --no-run --workspace --locked --cargo-profile mutants
+      # ci proves this same commit, so the shards skip their own baseline.
       - run: |
-          cargo mutants --test-workspace true --profile=mutants \
+          cargo mutants --test-workspace true --profile=mutants --in-place \
+            --baseline skip --timeout 240 \
             --shard "$SHARD/$SHARDS" \
             --no-shuffle -vV --in-diff git.diff -- --profile mutants
         env:
@@ -87,9 +97,10 @@ jobs:
           # A diff of renames or workflow edits mutates nothing, and that is not a defect.
           if-no-files-found: ignore
 
-  # The shards skip their own baseline, so one job has to establish it.
+  # The sweep shards skip their baseline, so one job establishes it; on main
+  # pushes it also refreshes the cache the PR shards restore.
   baseline:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
