@@ -1,6 +1,6 @@
 {
   "payload": {
-    "compatibility": "experimental",
+    "compatibility": "1",
     "controls": {
       "base_repository_policy_digest": null,
       "candidate_repository_policy_digest": null,
@@ -1001,6 +1001,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:4f5b6111619b2554155a0fe0b5dfc79e2ed6bba2f27050d75c24846ecb64ca89",
+  "payload_digest": "sha256:0d0bd6728afb22b27c8a39b9ff96ea6b0e3a133cd9d12952c279a83cf9518b9e",
   "schema": "amiss/scanner-report-envelope"
 }
