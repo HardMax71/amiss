@@ -8,7 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-amiss-wire = { path = "../amiss-wire", version = "0.20.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.21.0" }
 flate2.workspace = true
 sha1-checked.workspace = true
 tempfile.workspace = true
