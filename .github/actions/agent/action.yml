@@ -64,5 +64,5 @@ runs:
         PROMPT: ${{ inputs.prompt }}
         USE_GITHUB_TOKEN: "true"
         SHARE: ${{ inputs.share }}
-        # An ask rule stalls forever in CI; nothing answers it.
-        OPENCODE_PERMISSION: '{"external_directory": {"/tmp/*": "allow", "*": "deny"}, "question": "deny", "doom_loop": "deny"}'
+        # No ask may survive: nothing in CI answers one. Order is precedence.
+        OPENCODE_PERMISSION: '{"question": "deny", "doom_loop": "deny", "external_directory": {"/tmp/*": "allow", "*": "deny"}, "*": "allow"}'
