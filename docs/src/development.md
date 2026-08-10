@@ -61,12 +61,12 @@ publishes a non-gating measurement of that property, in three sizes.
 
 Every pull request measures only the mutants the change itself reaches, over shards counted
 from the mutants the diff actually reaches rather than from a guess, because listing them needs
-no build. That lane asks the whole workspace whether each mutant lives, so one mutant costs
-about twenty seconds and a diff reaching seventy of them was a twenty-four minute wait for a
-non-gating number. The floor is the sixty seconds each shard spends building the workspace test
-binaries before it can mutate anything: runners share nothing, and the only ways to remove that
-are a cache warmed by a job the shards must then wait for, or building less than the whole
-workspace, which is the inflation this lane exists to avoid. A release pull
+no build. That lane asks the whole workspace whether each mutant lives, at about twenty seconds
+per mutant. The shards used to pay a worse floor, a cold workspace build plus a baseline test
+pass repeated in every shard; now each shard restores the build cache that the baseline job
+saves on every push to main, and skips its own baseline because ci proves the same commit in
+the same run, so what remains is the build delta against the last merge and the mutants
+themselves. A release pull
 request measures what the release ships, every change since the last tag, rather than the version
 bump standing in front of it. Both ask the whole workspace whether a mutant lives.
 
