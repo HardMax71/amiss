@@ -34,11 +34,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Dispatch checks out the named PR's head, pinned to the sha seen
+      # here and only when it lives in this repository.
+      - id: place
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "ref=$(gh api "repos/${REPOSITORY}/pulls/${PR}" \
+            -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')" >> "$GITHUB_OUTPUT"
       - uses: ./.github/actions/agent
         with:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr) || '' }}
+          ref: ${{ steps.place.outputs.ref || '' }}
           prompt: |
             Review pull request #${{ inputs.pr || github.event.pull_request.number }}
             of ${{ github.repository }}. A dispatched run carries no event context,
