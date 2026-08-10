@@ -34,14 +34,26 @@ jobs:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
-            Review this pull request as a skeptical maintainer of this
-            repository. The PR body states what changed and why; verify those
-            claims against the diff and the tree instead of trusting them.
-            Gather evidence where it is cheap: run
-            cargo nextest run --workspace --locked when the change touches
-            code, and read AGENTS.md for the repository's own gate commands.
-            Then post one review comment: discrepancies first with file and
-            line, then anything the diff changes that its text does not
-            mention, then a short confirmation of what held up. If everything
-            checks out, say so in a few lines. Do not push commits, do not
-            approve, and do not request changes formally.
+            Review this pull request. Verify before you claim: a suspected
+            defect gets checked against the tree, a command run, or a test,
+            never asserted from the diff alone.
+            cargo nextest run --workspace --locked is available, and
+            AGENTS.md states the repository's own gate commands. The PR
+            body is a claim under test.
+
+            For each finding, reason first, then state the problem in one
+            sentence, then judge your own confidence; drop anything below
+            high confidence. Style the repository's own rules do not
+            mandate is the author's choice, so say nothing about it. Skip
+            lockfiles and generated files.
+
+            Post findings as inline review comments anchored to the exact
+            changed lines: one pull request review via gh api
+            (POST /repos/HardMax71/amiss/pulls/<n>/reviews, event COMMENT,
+            comments[] entries with path, line, side, and start_line for
+            ranges), whose body is a two-line summary. The anchor shows
+            the code, so do not quote it back.
+
+            When everything holds, the whole review is a few plain lines
+            naming what you checked. Never push commits, never approve,
+            never request changes formally.

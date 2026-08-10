@@ -96,7 +96,8 @@ in a comment summons the agent for collaborators, who can ask it to fix an issue
 pull request; that lane borrows the release token, since a pull request opened by the runner's
 own token would never trigger ci. All three run opencode on DeepSeek inside the repository's
 runners, read AGENTS.md like any contributor, and treat issue text as a claim under test
-rather than as instructions.
+rather than as instructions. Each comment links its session transcript, so what the agent
+ran and read is inspectable after the fact.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the

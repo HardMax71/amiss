@@ -31,7 +31,9 @@ jobs:
           persist-credentials: false
       # The release token, not the runner token: a PR opened by the default
       # token would never trigger ci, and an unchecked agent PR is worthless.
+      # A comment on a PR works on that PR's head, not on main.
       - uses: ./.github/actions/agent
         with:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
           github_token: ${{ secrets.RELEASE_TOKEN }}
+          ref: ${{ github.event.pull_request && format('refs/pull/{0}/head', github.event.pull_request.number) || github.event.issue.pull_request && format('refs/pull/{0}/head', github.event.issue.number) || '' }}
