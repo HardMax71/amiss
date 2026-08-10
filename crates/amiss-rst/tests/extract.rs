@@ -458,6 +458,14 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
         "the span stops at the line even when the comment swallowed blanks"
     );
 
+    let unicode_tail =
+        extract(".. [amiss:un]: <amiss:v?a=1> \"t\"\n\u{2003}\nprose\n".as_bytes()).unwrap();
+    assert_eq!(
+        unicode_tail.governed.len(),
+        1,
+        "blankness is the lexer's own Unicode rule, not an ASCII subset"
+    );
+
     let whitespace_tail = extract(b".. [amiss:ws]: <amiss:v?a=1> \"t\"\n   \nprose\n").unwrap();
     assert_eq!(
         whitespace_tail.governed.len(),

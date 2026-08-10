@@ -126,7 +126,7 @@ fn carrier(body: &str) -> Option<(usize, (String, String, String))> {
     let (line, rest) = body
         .split_once('\n')
         .map_or((body, ""), |(first, tail)| (first, tail));
-    if !rest.bytes().all(|byte| byte.is_ascii_whitespace()) {
+    if !rest.trim().is_empty() {
         return None;
     }
     let line = line.strip_suffix('\r').unwrap_or(line);
