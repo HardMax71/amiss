@@ -1,0 +1,38 @@
+name: agent-mention
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-mention-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  respond:
+    # Only collaborators summon the agent, and only their words steer it.
+    if: |
+      (contains(github.event.comment.body, '/opencode') ||
+       contains(github.event.comment.body, '/oc')) &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The release token, not the runner token: a PR opened by the default
+      # token would never trigger ci, and an unchecked agent PR is worthless.
+      - uses: ./.github/actions/agent
+        with:
+          deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+          use_github_token: "false"
