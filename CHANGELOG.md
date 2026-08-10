@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/HardMax71/amiss/compare/v0.20.0...v0.21.0) - 2026-08-10
+
+### Changes
+
+- Let only absence fall back past commondir
+- Open the linked worktree through its pointer
+- Carry the governed channel into rst and adoc
+- Take the ordered lookup and the loud writes
+- Reuse discovery's parse for anchor targets
+- Freeze the wire at one
+- Kill the carrier mutants inside the wire
+- Say frozen where the row still said rolling
+
 ## [0.20.0](https://github.com/HardMax71/amiss/compare/v0.19.0...v0.20.0) - 2026-08-09
 
 ### Changes
