@@ -52,7 +52,8 @@ jobs:
             (POST /repos/HardMax71/amiss/pulls/<n>/reviews, event COMMENT,
             comments[] entries with path, line, side, and start_line for
             ranges), whose body is a two-line summary. The anchor shows
-            the code, so do not quote it back.
+            the code, so do not quote it back. Keep any scratch files
+            inside the checkout, not /tmp.
 
             When everything holds, the whole review is a few plain lines
             naming what you checked. Never push commits, never approve,
