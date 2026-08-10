@@ -3,8 +3,6 @@
     reason = "fixed controller fixtures and protocol identities must fail loudly"
 )]
 
-mod support;
-
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -19,10 +17,10 @@ use amiss_controller_gitlab::{
     GitLabApi, GitLabMergeTrainAdapter, GitLabRefresh, GitLabRefreshQuery,
 };
 
-use support::identity::{TestClock, now_seconds};
-use support::oidc::{accept, claims, ingress, oidc, sign};
-use support::plan::{plan, scope};
-use support::refresh::valid_refresh;
+use crate::support::identity::{TestClock, now_seconds};
+use crate::support::oidc::{accept, claims, ingress, oidc, sign};
+use crate::support::plan::{plan, scope};
+use crate::support::refresh::valid_refresh;
 
 const BODY: &[u8] = br#"{"merge_request_iid":42}"#;
 
@@ -82,7 +80,7 @@ fn controller_classifies_wrong_identity_and_wrong_tree_without_passing() {
     );
 
     let wrong_tree = run_once(now, |mut identity| {
-        identity.trees.candidate = support::identity::oid('d');
+        identity.trees.candidate = crate::support::identity::oid('d');
         identity
     });
     assert_eq!(

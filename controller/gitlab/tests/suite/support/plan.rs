@@ -35,7 +35,7 @@ pub fn scope(delivery: &AuthenticatedDelivery) -> PlanScope {
 
 fn execution() -> ExecutionConstraintDescriptor {
     let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../../../spec/examples/scanner-execution-constraint.json"
+        "../../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
     let mut input = ExecutionConstraintInput::from(&template);

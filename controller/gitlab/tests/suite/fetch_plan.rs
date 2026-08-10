@@ -3,20 +3,18 @@
     reason = "fixed provider identities and constraints must fail loudly"
 )]
 
-mod support;
-
 use std::sync::Arc;
 
 use amiss_controller::{ChangeId, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 
-use support::identity::now_seconds;
-use support::oidc::{accept, claims, oidc};
-use support::plan::run_request;
-use support::refresh::valid_refresh;
+use crate::support::identity::now_seconds;
+use crate::support::oidc::{accept, claims, oidc};
+use crate::support::plan::run_request;
+use crate::support::refresh::valid_refresh;
 
-use crate::adapter_api::StaticApi;
+use self::adapter_api::StaticApi;
 
 const BODY: &[u8] = br#"{"merge_request_iid":42}"#;
 

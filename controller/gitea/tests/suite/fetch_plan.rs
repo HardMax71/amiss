@@ -140,7 +140,7 @@ fn request(namespace: &str) -> RunRequest {
 
 fn execution() -> ExecutionConstraintDescriptor {
     let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../../spec/examples/scanner-execution-constraint.json"
+        "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
     let mut input = ExecutionConstraintInput::from(&template);

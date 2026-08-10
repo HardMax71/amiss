@@ -3,15 +3,13 @@
     reason = "fixed cryptographic fixtures and protocol identities must fail loudly"
 )]
 
-mod support;
-
 use amiss_controller::{
     OpaqueId, ProviderError, ProviderInstance, ReplayIdentity, SignedTimePolicy,
 };
 use serde_json::{Value, json};
 
-use support::identity::now_seconds;
-use support::oidc::{
+use crate::support::identity::now_seconds;
+use crate::support::oidc::{
     SKEW_SECONDS, accept, claims, oidc, route, set_claim, sign, verify, verify_routed,
     verify_signed,
 };
@@ -190,7 +188,7 @@ fn changed(now: u64, name: &str, value: Value) -> Value {
 
 #[test]
 fn one_trusted_runner_source_is_enough() {
-    use support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
+    use crate::support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
 
     let mut hosted_only = policy_binding();
     hosted_only.runners.self_hosted_ids.clear();
@@ -209,7 +207,7 @@ fn one_trusted_runner_source_is_enough() {
 
 #[test]
 fn the_key_identifier_grammar_is_exact() {
-    use support::oidc::try_key;
+    use crate::support::oidc::try_key;
 
     assert!(try_key(&"k".repeat(256)).is_ok(), "the longest legal kid");
     let overlong = "k".repeat(257);
@@ -337,8 +335,8 @@ fn the_config_error_names_itself() {
 
 #[test]
 fn every_clause_binding_the_policy_is_load_bearing() {
+    use crate::support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
     use amiss_controller_gitlab::PolicyBinding;
-    use support::oidc::{KID, accepts, audience, issuer_url, keys_with, policy_binding};
     let valid = |policy: PolicyBinding| accepts(&issuer_url(), &audience(), policy, keys_with(KID));
     assert!(valid(policy_binding()), "the fixture itself is accepted");
 
