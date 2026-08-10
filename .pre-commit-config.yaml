@@ -23,12 +23,23 @@ repos:
         language: system
         types: [text]
         exclude: (^|/)Cargo\.lock$|\.md$|(^|/)llms\.txt$
-      - id: no-tests-in-src
-        name: tests live outside src/
+      # Unit tests live in dedicated tests.rs files beside their modules; the
+      # implementation files themselves stay free of test code.
+      - id: no-tests-in-implementation
+        name: implementation files carry no test code
         entry: >-
           awk '/#\[test\]|#\[cfg\(test\)\]/{print FILENAME": test code inside implementation";e=1} END{exit e}'
         language: system
         files: ^(crates/[^/]+|controller(/[^/]+)?)/src/.*\.rs$
+        exclude: /tests(\.rs$|/)
+      # The inner gate keeps the module out of non-test builds and tells
+      # cargo-mutants to skip the file.
+      - id: tests-file-self-gates
+        name: a tests.rs opens with its gate
+        entry: >-
+          awk 'FNR==1&&$0!="#![cfg(test)]"{print FILENAME": missing leading #![cfg(test)]";e=1} END{exit e}'
+        language: system
+        files: ^(crates/[^/]+|controller(/[^/]+)?)/src/(.*/)?tests\.rs$
       # The README says the engine never runs anything and never shells out to
       # git, and until now the only thing holding that up was everyone
       # remembering. The bootstrap is the one crate that may spawn: launching the

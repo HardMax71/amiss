@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
@@ -18,9 +20,6 @@ use crate::{
     RunHeartbeat, RunRequest, RunnerOutcome, bootstrap_job, classify_bootstrap_result,
     verify_acquired,
 };
-
-#[path = "../tests/internal/bootstrap_runner.rs"]
-mod tests;
 
 const MAX_HEARTBEAT_WAIT: Duration = Duration::from_secs(5);
 const PROCESS_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);

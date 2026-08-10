@@ -1,3 +1,5 @@
+mod tests;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Completeness {
     Complete,
@@ -116,6 +118,3 @@ fn close(frames: &mut Vec<Frame>, expected: Frame) {
         frames.pop();
     }
 }
-
-#[path = "../tests/internal/js.rs"]
-mod tests;

@@ -1,3 +1,5 @@
+mod tests;
+
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use secrecy::{SecretSlice, SecretString};
 use serde::Serialize;
@@ -324,6 +326,3 @@ fn query_route(route: &str, query: &impl Serialize) -> Result<String, ProviderEr
         serde_urlencoded::to_string(query).map_err(|_defect| ProviderError::InvalidResponse)?;
     Ok(format!("{route}?{query}"))
 }
-
-#[path = "../../tests/internal/rest_pages.rs"]
-mod tests;

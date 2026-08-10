@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fs;
 use std::process::ExitCode;
 
@@ -96,6 +98,3 @@ fn round_trips(definition: &str, author: &AuthorInvocation, expected: &str) -> b
         GovernedForm::Unknown => false,
     }
 }
-
-#[path = "../tests/internal/author.rs"]
-mod tests;

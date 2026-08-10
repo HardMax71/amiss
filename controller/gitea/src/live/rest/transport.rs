@@ -1,3 +1,5 @@
+mod tests;
+
 use std::io::Read as _;
 use std::time::Duration;
 
@@ -189,6 +191,3 @@ fn map_status(status: StatusCode) -> ProviderError {
         _ => ProviderError::InvalidResponse,
     }
 }
-
-#[path = "../../../tests/internal/rest_transport.rs"]
-mod tests;

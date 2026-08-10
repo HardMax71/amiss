@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fs::{File, Metadata, OpenOptions};
 use std::io;
 use std::path::Path;
@@ -200,6 +202,3 @@ fn positioned_read(file: &File, slice: &mut [u8], at: u64) -> io::Result<usize> 
     use std::os::windows::fs::FileExt as _;
     file.seek_read(slice, at)
 }
-
-#[path = "../tests/internal/handle.rs"]
-mod tests;

@@ -1,3 +1,5 @@
+mod tests;
+
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -156,6 +158,3 @@ fn event_bound_run(
         .then_some(identity == delivery.provider_run)
         .ok_or(ProviderError::InvalidResponse)
 }
-
-#[path = "../tests/internal/adapter.rs"]
-mod tests;

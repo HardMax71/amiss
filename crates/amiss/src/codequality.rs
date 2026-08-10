@@ -1,3 +1,5 @@
+mod tests;
+
 use amiss_wire::json::Value;
 
 use crate::view::{View, object, string};
@@ -44,6 +46,3 @@ fn location_value(location: &View) -> Value {
         ("path", string(&path)),
     ])
 }
-
-#[path = "../tests/internal/codequality.rs"]
-mod tests;

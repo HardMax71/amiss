@@ -1,3 +1,5 @@
+mod tests;
+
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::future::Future;
@@ -71,6 +73,3 @@ fn config_path(arguments: &[OsString]) -> Option<(PathBuf, bool)> {
     let path = PathBuf::from(if check_only { arguments.next()? } else { first });
     (arguments.next().is_none() && path.is_absolute()).then_some((path, check_only))
 }
-
-#[path = "../tests/internal/launcher.rs"]
-mod tests;

@@ -1,3 +1,5 @@
+mod tests;
+
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
@@ -174,6 +176,3 @@ fn active(deadline: Instant) -> Result<(), ProviderError> {
         .then_some(())
         .ok_or(ProviderError::Unavailable)
 }
-
-#[path = "../tests/internal/objects.rs"]
-mod tests;

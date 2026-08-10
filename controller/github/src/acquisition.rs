@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fmt;
 use std::sync::atomic::Ordering;
 
@@ -252,6 +254,3 @@ fn repository_url(repository: &RepositoryIdentity) -> Result<String, GitHubAcqui
         })
         .ok_or(GitHubAcquireError::InvalidRequest)
 }
-
-#[path = "../tests/internal/acquisition.rs"]
-mod tests;

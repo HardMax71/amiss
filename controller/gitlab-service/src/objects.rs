@@ -1,3 +1,5 @@
+mod tests;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -70,6 +72,3 @@ fn commit(resolved: ResolvedCommit) -> GitLabCommit {
         parents: resolved.parents,
     }
 }
-
-#[path = "../tests/internal/objects.rs"]
-mod tests;

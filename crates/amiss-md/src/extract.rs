@@ -1,3 +1,5 @@
+mod tests;
+
 use amiss_wire::controls::SourceConstruct;
 pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
@@ -1049,9 +1051,6 @@ fn validate(
     }
     Ok(())
 }
-
-#[path = "../tests/internal/extract.rs"]
-mod tests;
 
 type SpanCore = fn(&[u8], (usize, usize), &str) -> Option<(usize, usize)>;
 

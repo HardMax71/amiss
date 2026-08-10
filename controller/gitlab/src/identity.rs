@@ -1,3 +1,5 @@
+mod tests;
+
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use url::Url;
 
@@ -87,6 +89,3 @@ fn parse_pair(raw: &str, first_label: &str, second_label: &str) -> Option<(u64, 
     let second = positive(fields.next()?.parse().ok()?)?;
     fields.next().is_none().then_some((first, second))
 }
-
-#[path = "../tests/internal/identity.rs"]
-mod tests;

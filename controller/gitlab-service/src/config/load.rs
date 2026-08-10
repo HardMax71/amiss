@@ -1,3 +1,5 @@
+mod tests;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -158,6 +160,3 @@ fn validate_action(
             "action repository must use this SHA-1 GitLab instance",
         ))
 }
-
-#[path = "../../tests/internal/load.rs"]
-mod tests;

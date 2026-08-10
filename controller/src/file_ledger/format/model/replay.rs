@@ -1,3 +1,5 @@
+mod tests;
+
 use serde::{Deserialize, Serialize};
 
 use crate::ingress::ReplayKeep;
@@ -35,6 +37,3 @@ impl StoredReplayKeep {
         }
     }
 }
-
-#[path = "../../../../tests/internal/replay_keep.rs"]
-mod tests;

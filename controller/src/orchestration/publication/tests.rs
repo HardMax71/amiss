@@ -61,7 +61,7 @@ fn run_identity(candidate: char) -> RunIdentity {
 
 fn request() -> super::super::model::RunRequest {
     let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../../spec/examples/scanner-execution-constraint.json"
+        "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .expect("the published constraint");
     let mut input = ExecutionConstraintInput::from(&template);

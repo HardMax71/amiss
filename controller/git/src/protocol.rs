@@ -1,3 +1,5 @@
+mod tests;
+
 use std::num::NonZeroU32;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -267,6 +269,3 @@ impl Negotiate for ExactWants {
 fn fetch_error<E>(_defect: E) -> GitFetchError {
     GitFetchError("the exact Git fetch failed")
 }
-
-#[path = "../tests/internal/protocol.rs"]
-mod tests;

@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fmt;
 use std::future::Future;
 use std::path::PathBuf;
@@ -300,6 +302,3 @@ const fn rejection_status(rejection: AdmissionRejection) -> StatusCode {
 fn clone_secret(secret: &SecretString) -> SecretString {
     SecretString::from(secret.expose_secret().to_owned())
 }
-
-#[path = "../tests/internal/runtime.rs"]
-mod tests;
