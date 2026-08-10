@@ -1,3 +1,5 @@
+mod tests;
+
 use amiss_wire::json::Value;
 
 /// The wire's lowercase hex back to raw bytes; a malformed digit renders as
@@ -94,6 +96,3 @@ pub(crate) fn object(members: Vec<(&str, Value)>) -> Value {
 pub(crate) fn string(value: &str) -> Value {
     Value::String(value.to_owned())
 }
-
-#[path = "../tests/internal/view.rs"]
-mod tests;

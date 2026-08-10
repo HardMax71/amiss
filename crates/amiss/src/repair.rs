@@ -1,3 +1,5 @@
+mod tests;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -220,6 +222,3 @@ fn splice(source: &[u8], rows: &[Fix]) -> Option<Vec<u8>> {
     }
     Some(repaired)
 }
-
-#[path = "../tests/internal/repair.rs"]
-mod tests;

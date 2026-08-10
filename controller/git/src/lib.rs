@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod tests;
+
 mod pack;
 mod protocol;
 
@@ -194,6 +196,3 @@ fn remaining_timeout(limit: Duration, elapsed: Duration) -> Option<Duration> {
 fn fetch_deadline_elapsed() -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(std::io::Error::from(std::io::ErrorKind::TimedOut))
 }
-
-#[path = "../tests/internal/lib.rs"]
-mod tests;

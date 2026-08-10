@@ -1,9 +1,8 @@
+mod tests;
+
 mod model;
 mod refresh;
 mod transport;
-
-#[path = "../tests/internal/live.rs"]
-mod tests;
 
 use std::fmt;
 use std::sync::Arc;

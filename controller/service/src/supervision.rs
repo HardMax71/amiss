@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fmt;
 use std::future::Future;
 use std::io;
@@ -174,6 +176,3 @@ where
     operations.emit(ServiceEvent::Stopped);
     result
 }
-
-#[path = "../tests/internal/supervision.rs"]
-mod tests;

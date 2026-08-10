@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fmt;
 use std::io::Read as _;
 use std::sync::Arc;
@@ -10,9 +12,6 @@ use reqwest::header::HeaderValue;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
 use url::Url;
-
-#[path = "../../tests/internal/transport.rs"]
-mod tests;
 
 const MAX_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_OPERATION_TIMEOUT: Duration = Duration::from_mins(2);

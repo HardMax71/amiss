@@ -1,3 +1,5 @@
+mod tests;
+
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use super::ledger::{CheckConclusion, Publication};
@@ -98,6 +100,3 @@ fn runner_conclusion(
         }
     }
 }
-
-#[path = "../../tests/internal/publication.rs"]
-mod tests;

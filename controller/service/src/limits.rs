@@ -1,3 +1,5 @@
+mod tests;
+
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -151,6 +153,3 @@ fn record_reservation(
 fn base64_size(bytes: u64) -> Option<u64> {
     bytes.checked_add(2)?.checked_div(3)?.checked_mul(4)
 }
-
-#[path = "../tests/internal/limits.rs"]
-mod tests;

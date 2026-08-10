@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek as _, SeekFrom, Write as _};
@@ -535,6 +537,3 @@ fn io_error(_defect: std::io::Error) -> PackError {
 fn pack_error(_defect: gix_pack::bundle::write::Error) -> PackError {
     PackError("the validated pack could not be indexed")
 }
-
-#[path = "../tests/internal/pack.rs"]
-mod tests;

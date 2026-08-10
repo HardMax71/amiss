@@ -1,3 +1,5 @@
+mod tests;
+
 use std::io::Read as _;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -14,9 +16,6 @@ use amiss_controller::ProviderError;
 
 use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
-
-#[path = "../../../tests/internal/transport.rs"]
-mod tests;
 
 const MAX_API_BASE_BYTES: usize = 2_048;
 const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;

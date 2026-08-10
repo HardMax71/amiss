@@ -33,7 +33,8 @@ edition = "2024"
 rust-version = "1.97"
 license = "FSL-1.1-ALv2"
 repository = "https://github.com/HardMax71/amiss"
-# Tests reach for the unpublished fixtures crate and the repository corpus, so a consumer cannot run them.
+# Integration tests reach for the unpublished fixtures crate and the repository corpus, so a
+# consumer cannot run them. Unit tests sit beside their modules under src and ship cfg-stripped.
 exclude = ["/tests", "/benches"]
 
 [workspace.dependencies]

@@ -1,3 +1,5 @@
+mod tests;
+
 use std::fmt;
 use std::io;
 use std::sync::Arc;
@@ -203,6 +205,3 @@ fn write_event_to(output: &mut impl io::Write, event: ServiceEvent) -> io::Resul
     line.push(b'\n');
     output.write_all(&line)
 }
-
-#[path = "../tests/internal/operations.rs"]
-mod tests;
