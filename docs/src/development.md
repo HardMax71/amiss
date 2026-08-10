@@ -91,12 +91,14 @@ value is observable through real behavior, not a score to raise.
 
 Three agent lanes sit beside the gates, none of them gating. A new issue gets its premise
 checked against the tree before a maintainer reads it, behind an account-age gate so drive-by
-accounts spend no tokens. A new pull request gets one evidence-based review comment. And `/oc`
-in a comment summons the agent for collaborators, who can ask it to fix an issue and open a
-pull request; that lane borrows the release token, since a pull request opened by the runner's
-own token would never trigger ci. All three run opencode on DeepSeek inside the repository's
-runners, read AGENTS.md like any contributor, and treat issue text as a claim under test
-rather than as instructions. Each comment links its session transcript, so what the agent
+accounts spend no tokens. A new pull request gets one evidence-based review comment when it
+comes from a same-repository, non-draft branch that is not a release bump. And `/oc` in a
+comment summons the agent for collaborators, who can ask it to fix an issue and open a pull
+request; that lane borrows the release token, since a pull request opened by the runner's own
+token would never trigger ci, and it never checks out a fork's tree. All three run opencode on
+DeepSeek inside the repository's runners and read AGENTS.md like any contributor. What they
+read is a claim under test, never instructions; only the mention lane takes tasks, and only
+from a collaborator's comment. Each comment links its session transcript, so what the agent
 ran and read is inspectable after the fact.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),

@@ -27,7 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      id-token: write
       contents: read
       pull-requests: write
       issues: write
@@ -42,7 +41,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr) || '' }}
           prompt: |
             Review pull request #${{ inputs.pr || github.event.pull_request.number }}
-            of HardMax71/amiss. A dispatched run carries no event context,
+            of ${{ github.repository }}. A dispatched run carries no event context,
             so first fetch the PR body, diff, and review threads with
             gh api. Verify before you claim: a suspected
             defect gets checked against the tree, a command run, or a test,
@@ -59,11 +58,11 @@ jobs:
 
             Post findings as inline review comments anchored to the exact
             changed lines: one pull request review via gh api
-            (POST /repos/HardMax71/amiss/pulls/<n>/reviews, event COMMENT,
-            comments[] entries with path, line, side, and start_line for
-            ranges), whose body is a two-line summary. The anchor shows
-            the code, so do not quote it back. Keep any scratch files
-            inside the checkout, not /tmp.
+            (POST /repos/${{ github.repository }}/pulls/${{ inputs.pr || github.event.pull_request.number }}/reviews,
+            event COMMENT, comments[] entries with path, line, side, and
+            start_line for ranges), whose body is a two-line summary. The
+            anchor shows the code, so do not quote it back. Keep any
+            scratch files inside the checkout, not /tmp.
 
             When everything holds, the whole review is a few plain lines
             naming what you checked. Never push commits, never approve,

@@ -18,8 +18,9 @@ inputs:
     description: Ref to check out; empty takes the event default
     default: ""
   share:
-    description: Publish the session transcript, linked from the comment
-    default: "true"
+    description: Transcript sharing; empty follows opencode's own default,
+      which shares public repositories only
+    default: ""
 
 runs:
   using: composite
