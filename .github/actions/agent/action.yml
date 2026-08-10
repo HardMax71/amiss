@@ -11,15 +11,9 @@ inputs:
   prompt:
     description: Instructions for triggers that carry no comment
     default: ""
-  token:
-    description: Token for comments, commits, and pull requests
-    default: ""
   github_token:
-    description: Runner token, when the lane posts as github-actions
-    default: ""
-  use_github_token:
-    description: Post through the runner token instead of a PAT
-    default: "true"
+    description: Token for comments, commits, and pull requests
+    required: true
 
 runs:
   using: composite
@@ -43,6 +37,5 @@ runs:
       with:
         model: ${{ inputs.model }}
         prompt: ${{ inputs.prompt }}
-        token: ${{ inputs.token }}
-        use_github_token: ${{ inputs.use_github_token }}
+        use_github_token: "true"
         share: "false"
