@@ -46,10 +46,19 @@ jobs:
           set -euo pipefail
           echo "ref=$(gh api "repos/${REPOSITORY}/pulls/${PR}" \
             -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')" >> "$GITHUB_OUTPUT"
+      - id: identity
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.AI_REVIEWER_APP_ID }}
+          private-key: ${{ secrets.AI_REVIEWER_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: write
+          permission-issues: write
       - uses: ./.github/actions/agent
         with:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ steps.identity.outputs.token || secrets.GITHUB_TOKEN }}
           ref: ${{ steps.place.outputs.ref || '' }}
           prompt: |
             Review pull request #${{ inputs.pr || github.event.pull_request.number }}
@@ -71,11 +80,16 @@ jobs:
             Post findings as inline review comments anchored to the exact
             changed lines: one pull request review via gh api
             (POST /repos/${{ github.repository }}/pulls/${{ inputs.pr || github.event.pull_request.number }}/reviews,
-            event COMMENT, comments[] entries with path, line, side, and
-            start_line for ranges), whose body is a two-line summary. The
-            anchor shows the code, so do not quote it back. Keep any
-            scratch files inside the checkout, not /tmp.
+            event COMMENT, body empty, comments[] entries with path, line,
+            side, and start_line for ranges). The anchor shows the code,
+            so do not quote it back. Keep any scratch files inside the
+            checkout, not /tmp.
 
-            When everything holds, the whole review is a few plain lines
+            Your final message becomes the one PR comment, so it is the
+            review summary; state it once and nowhere else. After its
+            closing details line, add one line: review: followed by the
+            html_url the reviews API returned.
+
+            When everything holds, the whole summary is a few plain lines
             naming what you checked. Never push commits, never approve,
             never request changes formally.
