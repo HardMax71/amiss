@@ -3,8 +3,6 @@
     reason = "fixed provider records and identities must fail loudly"
 )]
 
-mod support;
-
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -20,9 +18,9 @@ use amiss_controller_gitlab::{
 
 use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 
-use support::identity::{HOST, now_seconds};
-use support::oidc::{accept, claims, oidc};
-use support::refresh::{publication, valid_refresh};
+use crate::support::identity::{HOST, now_seconds};
+use crate::support::oidc::{accept, claims, oidc};
+use crate::support::refresh::{publication, valid_refresh};
 
 const BODY: &[u8] = br#"{"merge_request_iid":42}"#;
 

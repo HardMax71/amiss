@@ -35,7 +35,7 @@ fn repository() -> RepositoryIdentity {
 
 fn action_execution(action: &CommitPair, action_tree: Oid) -> ExecutionConstraintDescriptor {
     let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../spec/examples/scanner-execution-constraint.json"
+        "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
     let mut input = ExecutionConstraintInput::from(&template);

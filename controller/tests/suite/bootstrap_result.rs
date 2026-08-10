@@ -30,7 +30,7 @@ fn provider() -> ProviderIdentity {
 
 fn plan() -> Arc<CheckPlan> {
     let execution = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../spec/examples/scanner-execution-constraint.json"
+        "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
     Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap())
