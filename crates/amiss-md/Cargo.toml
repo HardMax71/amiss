@@ -7,7 +7,6 @@ license.workspace = true
 repository.workspace = true
 # /tests/internal ships so the src include resolves; consumers compile it empty.
 exclude = ["/tests/*.rs", "/tests/fixtures", "/benches"]
-autotests = false
 
 [dependencies]
 amiss-wire = { path = "../amiss-wire", version = "0.21.0" }
@@ -15,34 +14,6 @@ markdown = "1"
 
 [dev-dependencies]
 sha2.workspace = true
-
-[[test]]
-name = "accounting"
-path = "tests/accounting.rs"
-
-[[test]]
-name = "conformance"
-path = "tests/conformance.rs"
-
-[[test]]
-name = "corpus"
-path = "tests/corpus.rs"
-
-[[test]]
-name = "extract"
-path = "tests/extract.rs"
-
-[[test]]
-name = "headings"
-path = "tests/headings.rs"
-
-[[test]]
-name = "frontmatter"
-path = "tests/frontmatter.rs"
-
-[[test]]
-name = "mdx"
-path = "tests/mdx.rs"
 
 [lints]
 workspace = true

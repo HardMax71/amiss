@@ -1,10 +1,8 @@
-mod fixtures;
-
 use amiss_md::{Analysis, BlockKind, Extraction, analyze};
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::model::Adapter;
 
-use fixtures::harvest;
+use crate::fixtures::harvest;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn extraction(adapter: Adapter, source: &str) -> Extraction {
