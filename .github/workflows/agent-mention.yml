@@ -16,10 +16,14 @@ concurrency:
 jobs:
   respond:
     # Only collaborators summon the agent, and only their words steer it.
+    # Review-comment events check out the PR merge ref before any step
+    # runs, so fork heads must be refused at the job boundary.
     if: |
       (contains(github.event.comment.body, '/opencode') ||
        contains(github.event.comment.body, '/oc')) &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+      (github.event_name != 'pull_request_review_comment' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -44,10 +48,19 @@ jobs:
               -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')
           fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
-      # The release token, not the runner token: a PR opened by the default
-      # token would never trigger ci, and an unchecked agent PR is worthless.
+      # One app identity for every lane, and its PRs trigger ci; without
+      # the app secrets the lane falls back to the release token.
+      - id: identity
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.AI_REVIEWER_APP_ID }}
+          private-key: ${{ secrets.AI_REVIEWER_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
       - uses: ./.github/actions/agent
         with:
           deepseek_api_key: ${{ secrets.DEEPSEEK_API_KEY }}
-          github_token: ${{ secrets.RELEASE_TOKEN }}
+          github_token: ${{ steps.identity.outputs.token || secrets.RELEASE_TOKEN }}
           ref: ${{ steps.place.outputs.ref }}
