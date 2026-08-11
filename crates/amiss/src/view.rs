@@ -2,20 +2,6 @@ mod tests;
 
 use amiss_wire::json::Value;
 
-/// The wire's lowercase hex back to raw bytes; a malformed digit renders as
-/// zero rather than failing the human projection, which is not the wire.
-pub(crate) fn decode_hex(hex: &str) -> Vec<u8> {
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            std::str::from_utf8(pair)
-                .ok()
-                .and_then(|text| u8::from_str_radix(text, 16).ok())
-                .unwrap_or(0)
-        })
-        .collect()
-}
-
 pub(crate) struct View(Vec<(String, Value)>);
 
 impl View {
@@ -55,7 +41,7 @@ impl View {
             Some(Value::String(value)) => amiss_wire::human::atom(value),
             Some(Value::Object(members)) => match members.as_slice() {
                 [(key, Value::String(hex))] if key == "bytes_hex" => {
-                    amiss_wire::human::atom_bytes(&decode_hex(hex))
+                    amiss_wire::human::atom_bytes(&amiss_wire::human::decode_hex(hex))
                 }
                 _ => "-".to_owned(),
             },

@@ -1,6 +1,6 @@
 mod tests;
 
-use amiss_wire::human::{atom, atom_bytes};
+use amiss_wire::human::{atom, atom_bytes, decode_hex};
 use amiss_wire::json::{self, Value};
 
 const DISPLAYED_ITEMS: usize = 10;
@@ -59,16 +59,18 @@ fn feedback_lines(report: Option<&[u8]>) -> Vec<String> {
 }
 
 fn item_line(item: &Value) -> String {
-    let label = match member(item, "action").and_then(as_text) {
-        Some("fix") => "Fix",
-        Some("existing") => "Existing",
-        Some(_) | None => "Check",
-    };
+    let mut action = member(item, "action")
+        .and_then(as_text)
+        .unwrap_or_default()
+        .to_owned();
+    if let Some(first) = action.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
     let places = member(item, "location_count")
         .and_then(as_integer)
         .unwrap_or(0);
     format!(
-        "- {label} target {} affected places {places}",
+        "- {action} target {} affected places {places}",
         target_atom(item)
     )
 }
@@ -115,16 +117,4 @@ fn as_integer(value: &Value) -> Option<i64> {
     } else {
         None
     }
-}
-
-fn decode_hex(hex: &str) -> Vec<u8> {
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            std::str::from_utf8(pair)
-                .ok()
-                .and_then(|text| u8::from_str_radix(text, 16).ok())
-                .unwrap_or(0)
-        })
-        .collect()
 }
