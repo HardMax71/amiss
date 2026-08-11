@@ -3374,7 +3374,8 @@
     "FeedbackAction": {
       "enum": [
         "fix",
-        "check"
+        "check",
+        "existing"
       ]
     },
     "FeedbackAnnotation": {
@@ -3401,7 +3402,10 @@
           "if": {
             "properties": {
               "action": {
-                "const": "check"
+                "enum": [
+                  "check",
+                  "existing"
+                ]
               }
             },
             "required": [
@@ -3481,9 +3485,9 @@
           "type": "array",
           "maxItems": 100000,
           "uniqueItems": true,
-          "description": "Grouped PR feedback: fixes before checks; within each action, targeted repository paths in raw-byte order are followed by at most one untargeted item.",
+          "description": "Grouped PR feedback: fixes before checks before existing backlog; within each action, targeted repository paths in raw-byte order are followed by at most one untargeted item.",
           "x-amiss-order": [
-            "action: fix then check",
+            "action: fix then check then existing",
             "within each action: targeted RepoPath raw-byte order",
             "within each action: untargeted"
           ],

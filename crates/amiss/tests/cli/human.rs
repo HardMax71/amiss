@@ -167,8 +167,8 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
         "the header counts the complete grouped projection: {text}"
     );
     assert!(
-        text.contains("feedback overflow: 191 more in the full report"),
-        "{text}"
+        text.contains("feedback overflow: 192 more in the full report"),
+        "the existing backlog item joins the grouped projection: {text}"
     );
     assert_eq!(
         text.matches("explicit-target-missing").count(),
@@ -194,9 +194,53 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
     let payload = payload(&stdout);
     assert_eq!(
         payload["feedback"]["items"].as_array().map(Vec::len),
-        Some(201),
+        Some(202),
         "the report retains every item; only presentation is capped"
     );
+}
+
+/// The carried backlog is listed, not only counted: a pre-existing broken
+/// reference renders one Existing item after Fixes and Checks, under observe
+/// where it warns and under enforce where it blocks the run.
+#[test]
+fn pre_existing_findings_render_as_existing_items() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "See [setup](docs/setup.md).\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("NOTES.md"), "# Notes\n\n[readme](README.md)\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
+    for (profile, expected_exit) in [("observe", 0), ("enforce", 1)] {
+        let (code, stdout, _stderr) = amiss(&[
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &base,
+            "--candidate",
+            &candidate,
+            "--profile",
+            profile,
+        ]);
+        assert_eq!(code, expected_exit, "profile {profile}");
+        let text = String::from_utf8_lossy(&stdout);
+        assert!(
+            text.contains("Existing target \"docs/setup.md\" affected places 1"),
+            "the backlog names its target under {profile}: {text}"
+        );
+        assert!(
+            text.contains("existing 1,"),
+            "the header count agrees with the listed item under {profile}: {text}"
+        );
+    }
 }
 
 /// A repository path is untrusted bytes, and the human projection is a place those

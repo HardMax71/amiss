@@ -13,6 +13,7 @@ use crate::scan::SpanDisplay;
 pub(crate) enum Action {
     Fix,
     Check,
+    Existing,
 }
 
 impl Action {
@@ -20,6 +21,7 @@ impl Action {
         match self {
             Self::Fix => "fix",
             Self::Check => "check",
+            Self::Existing => "existing",
         }
     }
 }
@@ -73,7 +75,6 @@ enum Decision {
         subject: Subject,
         target: Option<RepoPath>,
     },
-    Existing(Subject),
     Ignore,
 }
 
@@ -82,7 +83,6 @@ enum Decision {
 pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedback {
     let candidates = candidate_index(comparisons);
     let mut groups: BTreeMap<(Action, Subject), Group> = BTreeMap::new();
-    let mut existing: BTreeSet<Subject> = BTreeSet::new();
 
     for finding in findings {
         if finding.effective_disposition == Disposition::Record {
@@ -116,13 +116,14 @@ pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedb
                     group.annotation = Some(candidate);
                 }
             }
-            Decision::Existing(subject) => {
-                existing.insert(subject);
-            }
             Decision::Ignore => {}
         }
     }
 
+    let existing = groups
+        .keys()
+        .filter(|(action, _subject)| *action == Action::Existing)
+        .count();
     let items = groups
         .into_iter()
         .map(|((action, _subject), group)| Item {
@@ -136,7 +137,7 @@ pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedb
         .collect();
     Feedback {
         items,
-        existing_count: u64::try_from(existing.len()).unwrap_or(u64::MAX),
+        existing_count: u64::try_from(existing).unwrap_or(u64::MAX),
     }
 }
 
@@ -199,7 +200,11 @@ fn attributed(
             subject,
             target,
         },
-        Attribution::PreExisting => Decision::Existing(subject),
+        Attribution::PreExisting => Decision::Item {
+            action: Action::Existing,
+            subject,
+            target,
+        },
         Attribution::Unknown => Decision::Item {
             action: Action::Check,
             subject,
