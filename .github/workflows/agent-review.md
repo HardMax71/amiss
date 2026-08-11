@@ -2,6 +2,13 @@
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review]
+    draft: false
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to review
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,7 +18,7 @@ engine:
   id: copilot
   env:
     COPILOT_PROVIDER_BASE_URL: https://api.deepseek.com/v1
-    COPILOT_MODEL: deepseek-chat
+    COPILOT_MODEL: deepseek-v4-flash
     COPILOT_PROVIDER_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
 network:
@@ -32,14 +39,19 @@ timeout-minutes: 20
 safe-outputs:
   create-pull-request-review-comment:
     max: 10
+    target: "*"
   submit-pull-request-review:
     max: 1
     allowed-events: [COMMENT]
+    target: "*"
+    footer: false
 ---
 
 # Review this pull request
 
-Review the pull request that triggered this run as this repository's
+Review one pull request: the triggering one, or on a dispatched run the
+number in the pr input. Supply that number as pull_request_number in every
+review tool call. Review it as this repository's
 maintainer would: short, direct, plain words, problem first, no praise
 padding. Correct beats polite.
 
@@ -58,18 +70,19 @@ create_pull_request_review_comment tool, one finding per comment, without
 quoting the code the anchor already shows.
 
 Then submit one review with the submit_pull_request_review tool, event
-COMMENT. Its body opens with `> [!TIP]` and one quoted verdict line when
-everything holds, or `> [!WARNING]` and the quoted verdict when findings
-exist, followed by at most a paragraph per finding, one line each. Link
+COMMENT. Its body opens with `> [!TIP]` when everything holds or `> [!WARNING]`
+when findings exist, with the verdict sentence as the callout body on its
+own `> ` line, no quotation marks around it, followed by at most a paragraph per finding, one line each. Link
 every file you cite as a blob URL pinned to the head commit, like
 https://github.com/HardMax71/amiss/blob/main/README.md#L1 with the sha in
 place of main. End the body with a collapsed block, exactly:
 
 <details><summary>Session details</summary>
 
-the run link, built from the GITHUB_SERVER_URL, GITHUB_REPOSITORY, and
-GITHUB_RUN_ID environment variables as server/repository/actions/runs/id,
-and one line naming what you ran
+a markdown link labeled run, whose URL you assemble from the
+GITHUB_SERVER_URL, GITHUB_REPOSITORY, and GITHUB_RUN_ID environment
+variables in the shape server/repository/actions/runs/id, and one line
+naming what you ran
 
 </details>
 

@@ -1,0 +1,9 @@
+rules:
+  # agentic_commands.yml is regenerated verbatim by gh aw compile; its
+  # upstream setup ref and checkout defaults are the generator's to fix.
+  unpinned-uses:
+    ignore:
+      - agentic_commands.yml
+  artipacked:
+    ignore:
+      - agentic_commands.yml

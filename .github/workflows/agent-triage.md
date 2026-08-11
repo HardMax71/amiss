@@ -12,7 +12,7 @@ engine:
   id: copilot
   env:
     COPILOT_PROVIDER_BASE_URL: https://api.deepseek.com/v1
-    COPILOT_MODEL: deepseek-chat
+    COPILOT_MODEL: deepseek-v4-flash
     COPILOT_PROVIDER_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
 network:
@@ -33,6 +33,7 @@ timeout-minutes: 15
 safe-outputs:
   add-comment:
     max: 1
+    footer: false
 ---
 
 # Check this issue's premise
@@ -47,23 +48,25 @@ evidence: a scoped test, the workspace suite
 (`cargo nextest run --workspace --locked`), or the scanner's own check
 command from AGENTS.md when the claim is about scanning behavior.
 
-Post one comment with the add_comment tool. It opens with `> [!TIP]` and a
-quoted one-line verdict when the claim does not reproduce or the issue is
-fine as filed, or `> [!WARNING]` and the quoted verdict when the claim is
-confirmed. Then: confirmed means what breaks, where, and the command with
+Post one comment with the add_comment tool. It opens with `> [!TIP]` when the claim
+does not reproduce or the issue is fine as filed, or `> [!WARNING]` when
+the claim is confirmed, with the verdict sentence as the callout body on
+its own `> ` line, no quotation marks around it. Then: confirmed means what breaks, where, and the command with
 the output that shows it; refuted means the counterexample with the
 command you ran; unclear means the one or two questions whose answers
 would decide it, prefixed Question:. Link every file and line you mention
 as a blob URL like
 https://github.com/HardMax71/amiss/blob/main/README.md#L1. Close the
-visible part with: reply with /oc and your question to dig further. End
+visible part by inviting a reply on the issue with whatever detail the
+verdict shows missing. End
 the comment with a collapsed block, exactly:
 
 <details><summary>Session details</summary>
 
-the run link, built from the GITHUB_SERVER_URL, GITHUB_REPOSITORY, and
-GITHUB_RUN_ID environment variables as server/repository/actions/runs/id,
-and one line naming what you ran
+a markdown link labeled run, whose URL you assemble from the
+GITHUB_SERVER_URL, GITHUB_REPOSITORY, and GITHUB_RUN_ID environment
+variables in the shape server/repository/actions/runs/id, and one line
+naming what you ran
 
 </details>
 

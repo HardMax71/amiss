@@ -1,7 +1,9 @@
 ---
 on:
   slash_command:
-    name: oc
+    name: [oc, opencode]
+    events: [issue_comment, pull_request_review_comment]
+    strategy: centralized
 
 permissions:
   contents: read
@@ -12,7 +14,7 @@ engine:
   id: copilot
   env:
     COPILOT_PROVIDER_BASE_URL: https://api.deepseek.com/v1
-    COPILOT_MODEL: deepseek-chat
+    COPILOT_MODEL: deepseek-v4-flash
     COPILOT_PROVIDER_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
 network:
@@ -33,9 +35,11 @@ timeout-minutes: 25
 safe-outputs:
   add-comment:
     max: 1
+    footer: false
   create-pull-request:
     title-prefix: "[agent] "
     draft: false
+    footer: false
   push-to-pull-request-branch:
 ---
 
@@ -61,9 +65,10 @@ collapsed block, exactly:
 
 <details><summary>Session details</summary>
 
-the run link, built from the GITHUB_SERVER_URL, GITHUB_REPOSITORY, and
-GITHUB_RUN_ID environment variables as server/repository/actions/runs/id,
-and one line naming what you ran
+a markdown link labeled run, whose URL you assemble from the
+GITHUB_SERVER_URL, GITHUB_REPOSITORY, and GITHUB_RUN_ID environment
+variables in the shape server/repository/actions/runs/id, and one line
+naming what you ran
 
 </details>
 
