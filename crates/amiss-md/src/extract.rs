@@ -294,24 +294,29 @@ impl Sweep<'_> {
         Ok(true)
     }
 
-    /// `href` and `src` values free of character references are read out of a
-    /// raw-HTML node; everything else in the region stays the declared blind spot.
+    /// `href` and `src` are read out of a raw-HTML node the way any destination
+    /// is, references decoded; comments and raw-text bodies stay the blind spot.
     fn destinations(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
         let Some(region) = self.suffix.as_bytes().get(span.0..span.1) else {
             return;
         };
         let mut found: Vec<(SourceConstruct, String, (usize, usize))> = Vec::new();
         walk_region(region, |at| {
+            if let Some(end) = opaque_text_end(region, at) {
+                return Some(end);
+            }
             let (construct, attribute) = destination_open_at(region, at)?;
-            let end = tag_end(region, at).unwrap_or(region.len());
-            let value = (at..end).find_map(|inner| {
+            let end = tag_close(region, at)?;
+            let value = unquoted(region, at, |inner, _byte| {
+                if inner >= end {
+                    return Some(None);
+                }
                 attribute_name_at(region, inner, attribute)
                     .then(|| attribute_value(region, inner.saturating_add(attribute.len())))
                     .flatten()
+                    .map(|(value, _next)| Some(value))
             });
-            if let Some((value, _next)) = value
-                && !value.contains('&')
-            {
+            if let Some(Some(value)) = value {
                 found.push((
                     construct,
                     value,
@@ -321,7 +326,8 @@ impl Sweep<'_> {
             Some(end)
         });
         for (construct, value, tag_span) in found {
-            self.push(construct, value.clone(), value, tag_span, path, owners);
+            let semantic = decoded(&value);
+            self.push(construct, value, semantic, tag_span, path, owners);
         }
     }
 
@@ -951,6 +957,87 @@ fn destination_open_at(region: &[u8], at: usize) -> Option<(SourceConstruct, &'s
     None
 }
 
+const RAW_TEXT_ELEMENTS: [&[u8]; 4] = [b"script", b"style", b"textarea", b"title"];
+
+/// A comment or raw-text element body: no renderer follows a tag spelled
+/// inside one, so the miner steps over the whole span.
+fn opaque_text_end(region: &[u8], at: usize) -> Option<usize> {
+    if region.get(at) != Some(&b'<') {
+        return None;
+    }
+    if region.get(at..at.saturating_add(4)) == Some(b"<!--") {
+        return Some(comment_end(region, at));
+    }
+    let name = RAW_TEXT_ELEMENTS.into_iter().find(|name| {
+        let start = at.saturating_add(1);
+        region
+            .get(start..start.saturating_add(name.len()))
+            .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+            && region
+                .get(start.saturating_add(name.len()))
+                .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/')
+    })?;
+    Some(raw_text_end(region, at, name))
+}
+
+fn comment_end(region: &[u8], from: usize) -> usize {
+    let start = from.saturating_add(4);
+    region
+        .windows(3)
+        .skip(start)
+        .position(|window| window == b"-->")
+        .map_or(region.len(), |offset| {
+            start.saturating_add(offset).saturating_add(3)
+        })
+}
+
+fn raw_text_end(region: &[u8], from: usize, name: &[u8]) -> usize {
+    let mut at = from.saturating_add(1);
+    while at < region.len() {
+        let closes = region.get(at..at.saturating_add(2)) == Some(b"</")
+            && region
+                .get(at.saturating_add(2)..at.saturating_add(2).saturating_add(name.len()))
+                .is_some_and(|slice| slice.eq_ignore_ascii_case(name));
+        if closes {
+            return tag_end(region, at).unwrap_or(region.len());
+        }
+        at = at.saturating_add(1);
+    }
+    region.len()
+}
+
+/// Every position outside quoted attribute values, visited in order until the
+/// visitor answers; quoted spans are stepped over whole.
+fn unquoted<T>(
+    region: &[u8],
+    from: usize,
+    mut visit: impl FnMut(usize, u8) -> Option<T>,
+) -> Option<T> {
+    let mut quote: Option<u8> = None;
+    let mut at = from;
+    while let Some(byte) = region.get(at).copied() {
+        if let Some(mark) = quote {
+            if byte == mark {
+                quote = None;
+            }
+        } else if byte == b'"' || byte == b'\'' {
+            quote = Some(byte);
+        } else if let Some(result) = visit(at, byte) {
+            return Some(result);
+        }
+        at = at.saturating_add(1);
+    }
+    None
+}
+
+/// The `>` that ends the tag; an unclosed one yields nothing rather than a
+/// truncated span.
+fn tag_close(region: &[u8], from: usize) -> Option<usize> {
+    unquoted(region, from, |at, byte| {
+        (byte == b'>').then(|| at.saturating_add(1))
+    })
+}
+
 fn heading_open_at(region: &[u8], at: usize) -> Option<u8> {
     if region.get(at) != Some(&b'<')
         || !matches!(region.get(at.saturating_add(1)), Some(b'h' | b'H'))
@@ -1015,6 +1102,26 @@ fn strip_markup(inner: &str) -> String {
             out.push('&');
             tail.get(1..).unwrap_or_default()
         };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A destination's character references decoded, the format's own semantic
+/// reading; a bare ampersand that forms no reference stays itself.
+fn decoded(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(at) = rest.find('&') {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        if let Some((symbol, next)) = reference(tail) {
+            out.push(symbol);
+            rest = next;
+        } else {
+            out.push('&');
+            rest = tail.get(1..).unwrap_or_default();
+        }
     }
     out.push_str(rest);
     out
