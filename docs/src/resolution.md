@@ -10,7 +10,10 @@ either the spelling or the meaning is visible later.
 What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)
 expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
-stated blind spot rather than an invisible one.
+stated blind spot rather than an invisible one. An HTML region still yields what can be
+read with certainty: `<a href>` and `<img src>` values free of character references
+resolve like any markdown destination, alongside the headings and `id` attributes the
+anchor tables already harvest, while the rest of the region stays the declared blind spot.
 
 Each destination then passes through the generic
 [resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);

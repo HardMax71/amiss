@@ -644,6 +644,68 @@ fn adjacent_opaque_constructs_coalesce() {
     );
 }
 
+/// Raw-HTML anchors and images maintain destinations the way markdown links
+/// do: `href` and `src` are read in every quoting form and both letter cases,
+/// while everything else in the region stays the declared blind spot.
+#[test]
+fn html_anchor_and_image_destinations_are_read() {
+    let source = "<div>\n<a href=\"a.md\">a</a>\n<img src='b.png'>\n<A HREF=c.md>c</A>\n</div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![
+            (
+                SourceConstruct::HtmlAnchor,
+                "a.md".to_owned(),
+                "a.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlImage,
+                "b.png".to_owned(),
+                "b.png".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "c.md".to_owned(),
+                "c.md".to_owned()
+            ),
+        ]
+    );
+    let spans: Vec<&str> = got
+        .occurrences
+        .iter()
+        .filter_map(|entry| source.get(entry.span.0..entry.span.1))
+        .collect();
+    assert_eq!(
+        spans,
+        vec!["<a href=\"a.md\">", "<img src='b.png'>", "<A HREF=c.md>"],
+        "each occurrence spans its own opening tag"
+    );
+    assert_eq!(got.opaque.html.len(), 1, "the region stays declared opaque");
+}
+
+/// The blind spot keeps what the miner cannot answer: a character reference
+/// in the value, a tag without its destination attribute, a closing tag, a
+/// foreign tag carrying href, and every element under the MDX grammar.
+#[test]
+fn html_destinations_stay_opaque_when_uncertain() {
+    let markdown = "<a href=\"a&amp;b.md\">e</a> <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n";
+    let got = extraction(Adapter::Markdown, markdown);
+    assert!(
+        got.occurrences.is_empty(),
+        "uncertain destinations extract nothing: {:?}",
+        got.occurrences
+    );
+
+    let mdx = extraction(Adapter::Mdx, "See <a href=\"x.md\">x</a>.\n");
+    assert!(
+        mdx.occurrences.is_empty(),
+        "MDX elements are JSX, not raw HTML: {:?}",
+        mdx.occurrences
+    );
+    assert_eq!(mdx.opaque.mdx.len(), 1, "the JSX region is the blind spot");
+}
+
 /// A GFM task checkbox is a checkbox, not a shortcut reference, even when a
 /// definition spells its label; the unconsumed definition then extracts as
 /// its own occurrence rather than vanishing.
