@@ -309,20 +309,16 @@ fn the_backlog_window_caps_at_ten_with_its_own_overflow() {
     );
 }
 
-/// An orphaned reference definition maintains a destination no reference
-/// carries, so a dead one is a finding with the definition's own construct,
-/// while a consumed definition reports only through its consumer.
-#[test]
-fn an_orphan_definition_with_a_dead_destination_is_a_finding() {
+/// Commits one document beside the fixture base, runs enforce over the pair,
+/// and returns the exit code, the human text, and the sorted candidate-side
+/// constructs matching the prefix from the JSON report.
+#[expect(clippy::indexing_slicing, reason = "test assertion helper")]
+fn enforced_document(name: &str, body: &str, prefix: &str) -> (i32, String, Vec<String>) {
     let fx = fixture();
     let root = fx.root();
-    fs::write(
-        root.join("docs/orphans.md"),
-        "# Notes\n\nSee [kept][live].\n\n[live]: guide.md\n\n[api]: gone.md\n",
-    )
-    .unwrap_or_default();
+    fs::write(root.join(name), body).unwrap_or_default();
     git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "orphan definition"]);
+    git(root, &["commit", "-qm", "case"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let base_args = [
         "check",
@@ -338,29 +334,58 @@ fn an_orphan_definition_with_a_dead_destination_is_a_finding() {
         "enforce",
     ];
     let (code, stdout, _stderr) = amiss(&base_args);
-    assert_eq!(code, 1, "the dead orphan destination blocks under enforce");
-    let text = String::from_utf8_lossy(&stdout);
-    assert!(
-        text.contains("Fix target \"docs/gone.md\" affected places 1"),
-        "the orphan definition names its dead target: {text}"
-    );
-
+    let text = String::from_utf8_lossy(&stdout).into_owned();
     let mut json_args = base_args.to_vec();
     json_args.extend(["--format", "json"]);
     let (_code, stdout, _stderr) = amiss(&json_args);
     let payload = payload(&stdout);
-    let constructs: Vec<&str> = payload["observations"]
+    let mut constructs: Vec<String> = payload["observations"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|row| row["candidate"]["source_construct"].as_str())
-        .filter(|construct| *construct == "markdown-link-reference-definition")
+        .filter(|construct| construct.starts_with(prefix))
+        .map(str::to_owned)
         .collect();
-    assert_eq!(
-        constructs.len(),
-        1,
-        "exactly the orphan extracts with the definition construct; the consumed one reports through its consumer"
-    );
+    constructs.sort_unstable();
+    (code, text, constructs)
+}
+
+/// An orphaned definition and a raw-HTML destination each maintain a target
+/// the way a markdown link does: the dead one blocks under enforce and names
+/// its target, the live neighbour in the same document is no finding, and
+/// each extracts under its own construct in the report.
+#[test]
+fn orphan_definitions_and_html_destinations_gate_like_links() {
+    let cases = [
+        (
+            "docs/orphans.md",
+            "# Notes\n\nSee [kept][live].\n\n[live]: guide.md\n\n[api]: gone.md\n",
+            "markdown-link-reference-definition",
+            "docs/gone.md",
+            vec!["markdown-link-reference-definition"],
+        ),
+        (
+            "docs/media.md",
+            "# Media\n\n<a href=\"guide.md\">ok</a>\n\n<img src=\"logo.png\">\n",
+            "html-",
+            "docs/logo.png",
+            vec!["html-anchor", "html-image"],
+        ),
+    ];
+    for (name, body, prefix, dead_target, expected) in cases {
+        let (code, text, constructs) = enforced_document(name, body, prefix);
+        assert_eq!(code, 1, "{name}: the dead destination blocks under enforce");
+        assert!(
+            text.contains(&format!("Fix target \"{dead_target}\" affected places 1")),
+            "{name} names its dead target: {text}"
+        );
+        assert!(
+            !text.contains("Fix target \"docs/guide.md\""),
+            "{name}: the live destination is no finding: {text}"
+        );
+        assert_eq!(constructs, expected, "{name} constructs");
+    }
 }
 
 /// A repository path is untrusted bytes, and the human projection is a place those

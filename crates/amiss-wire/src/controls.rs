@@ -192,6 +192,8 @@ pub enum SourceConstruct {
     RstDocRole,
     RstRefRole,
     LinkReferenceDefinition,
+    HtmlAnchor,
+    HtmlImage,
 }
 
 impl SourceConstruct {
@@ -206,7 +208,8 @@ impl SourceConstruct {
             | Self::ShortcutReferenceImage
             | Self::AsciidocBlockImage
             | Self::AsciidocInlineImage
-            | Self::RstImageDirective => true,
+            | Self::RstImageDirective
+            | Self::HtmlImage => true,
             Self::InlineLink
             | Self::FullReferenceLink
             | Self::CollapsedReferenceLink
@@ -222,7 +225,8 @@ impl SourceConstruct {
             | Self::RstFileOption
             | Self::RstDocRole
             | Self::RstRefRole
-            | Self::LinkReferenceDefinition => false,
+            | Self::LinkReferenceDefinition
+            | Self::HtmlAnchor => false,
         }
     }
 
@@ -252,6 +256,8 @@ impl SourceConstruct {
             Self::RstDocRole => "rst-doc-role",
             Self::RstRefRole => "rst-ref-role",
             Self::LinkReferenceDefinition => "markdown-link-reference-definition",
+            Self::HtmlAnchor => "html-anchor",
+            Self::HtmlImage => "html-image",
         }
     }
 
@@ -280,6 +286,8 @@ impl SourceConstruct {
             "rst-doc-role" => Ok(Self::RstDocRole),
             "rst-ref-role" => Ok(Self::RstRefRole),
             "markdown-link-reference-definition" => Ok(Self::LinkReferenceDefinition),
+            "html-anchor" => Ok(Self::HtmlAnchor),
+            "html-image" => Ok(Self::HtmlImage),
             _ => fail(path, ErrorKind::InvalidValue),
         }
     }

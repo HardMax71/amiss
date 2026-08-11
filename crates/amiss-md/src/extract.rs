@@ -204,7 +204,11 @@ impl Sweep<'_> {
                 self.mdx.push(span_of(node)?);
                 return Ok(false);
             }
-            Node::Html(_) => self.html.push(span_of(node)?),
+            Node::Html(_) => {
+                let span = span_of(node)?;
+                self.html.push(span);
+                self.destinations(span, path, *owners);
+            }
             Node::Heading(_) => {
                 let content = text_content(node);
                 let (text, attribute) = mdx_comment_attribute(node).map_or_else(
@@ -288,6 +292,37 @@ impl Sweep<'_> {
             Node::Definition(_definition) => self.orphan(node, path, *owners)?,
         }
         Ok(true)
+    }
+
+    /// `href` and `src` values free of character references are read out of a
+    /// raw-HTML node; everything else in the region stays the declared blind spot.
+    fn destinations(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
+        let Some(region) = self.suffix.as_bytes().get(span.0..span.1) else {
+            return;
+        };
+        let mut found: Vec<(SourceConstruct, String, (usize, usize))> = Vec::new();
+        walk_region(region, |at| {
+            let (construct, attribute) = destination_open_at(region, at)?;
+            let end = tag_end(region, at).unwrap_or(region.len());
+            let value = (at..end).find_map(|inner| {
+                attribute_name_at(region, inner, attribute)
+                    .then(|| attribute_value(region, inner.saturating_add(attribute.len())))
+                    .flatten()
+            });
+            if let Some((value, _next)) = value
+                && !value.contains('&')
+            {
+                found.push((
+                    construct,
+                    value,
+                    (span.0.saturating_add(at), span.0.saturating_add(end)),
+                ));
+            }
+            Some(end)
+        });
+        for (construct, value, tag_span) in found {
+            self.push(construct, value.clone(), value, tag_span, path, owners);
+        }
     }
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) -> Result<(), Fault> {
@@ -885,6 +920,35 @@ fn walk_region(region: &[u8], mut step: impl FnMut(usize) -> Option<usize>) {
     while at < region.len() {
         at = step(at).unwrap_or_else(|| at.saturating_add(1));
     }
+}
+
+fn destination_open_at(region: &[u8], at: usize) -> Option<(SourceConstruct, &'static [u8])> {
+    if region.get(at) != Some(&b'<') {
+        return None;
+    }
+    for (name, construct, attribute) in [
+        (
+            b"a".as_slice(),
+            SourceConstruct::HtmlAnchor,
+            b"href".as_slice(),
+        ),
+        (
+            b"img".as_slice(),
+            SourceConstruct::HtmlImage,
+            b"src".as_slice(),
+        ),
+    ] {
+        let after = region.get(at.saturating_add(1).saturating_add(name.len()));
+        let opens = region
+            .get(at.saturating_add(1)..at.saturating_add(1).saturating_add(name.len()))
+            .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+            && after
+                .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/');
+        if opens {
+            return Some((construct, attribute));
+        }
+    }
+    None
 }
 
 fn heading_open_at(region: &[u8], at: usize) -> Option<u8> {

@@ -2889,7 +2889,9 @@
         "rst-file-option",
         "rst-doc-role",
         "rst-ref-role",
-        "markdown-link-reference-definition"
+        "markdown-link-reference-definition",
+        "html-anchor",
+        "html-image"
       ]
     },
     "ObservationSourceConstruct": {
@@ -2916,7 +2918,9 @@
         "rst-file-option",
         "rst-doc-role",
         "rst-ref-role",
-        "markdown-link-reference-definition"
+        "markdown-link-reference-definition",
+        "html-anchor",
+        "html-image"
       ]
     },
     "RepositoryTargetIntent": {

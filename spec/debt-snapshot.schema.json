@@ -179,7 +179,9 @@
         "rst-image-directive",
         "rst-include-directive",
         "rst-file-option",
-        "markdown-link-reference-definition"
+        "markdown-link-reference-definition",
+        "html-anchor",
+        "html-image"
       ]
     },
     "RepositoryTargetIntent": {
