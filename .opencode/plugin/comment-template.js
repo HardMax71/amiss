@@ -44,5 +44,3 @@ export const CommentTemplate = async () => {
     },
   }
 }
-
-export const _test = { template }
