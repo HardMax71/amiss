@@ -67,4 +67,6 @@ fn hex_decodes_once_for_every_projection() {
     assert_eq!(amiss_wire::human::decode_hex("ff00ab"), vec![0xff, 0, 0xab]);
     assert_eq!(amiss_wire::human::decode_hex(""), Vec::<u8>::new());
     assert_eq!(amiss_wire::human::decode_hex("zz"), vec![0]);
+    assert_eq!(amiss_wire::human::decode_hex("abc"), vec![0xab, 0]);
+    assert_eq!(amiss_wire::human::decode_hex("f"), vec![0]);
 }
