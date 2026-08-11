@@ -63,6 +63,7 @@ fn item_line(item: &Value) -> String {
         .and_then(as_text)
         .unwrap_or_default()
         .to_owned();
+    action.retain(|symbol| symbol.is_ascii_alphanumeric() || symbol == '-');
     if let Some(first) = action.get_mut(0..1) {
         first.make_ascii_uppercase();
     }
