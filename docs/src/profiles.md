@@ -1,25 +1,31 @@
 # Profiles and findings
 
-A finding is one fact the scan established: one link, one file, one document, with four
-parts. The kind says what happened. The attribution says whose change it is: `introduced` by
-this candidate, `pre-existing` before it, `resolved` by it, `not-applicable` when the
-before-and-after framing does not apply, or `unknown` when the match-up could not be decided
-without guessing. The disposition says what the run does about it: `record` (noted),
-`warn` (shown), or `fail` (blocks). The location says where, down to byte offsets.
+A finding is one fact the scan established, and four of its parts carry the story. The
+kind says what happened. The attribution says whose change it is: `introduced` by this
+candidate, `pre-existing` before it, `resolved` by it, `not-applicable` when the
+before-and-after framing does not apply, or `unknown` when the match-up could not be
+decided without guessing. The disposition says what the run does about it, and it comes
+twice on every row: configured is what the rules asked, effective is what happened, and
+only the effective one decides the exit. `record` is noted, `warn` is shown, `fail`
+blocks. The location says where, down to byte offsets. The full row carries more,
+eighteen members; [The report](report.md) holds the shape.
 
-The profile picks the built-in disposition for each kind. `observe` turns the three
-structural reference failures into warnings, while `enforce` makes them blocking. Several
-control-integrity findings fail under both profiles, and many coverage or change observations
-are records rather than warnings. The exact table below is generated from
-[`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs)
-and checked in CI.
+The profile picks the built-in disposition for each kind. Five kinds flip between the
+columns: the three structural reference failures and both claim kinds warn under
+`observe` and fail under `enforce`. Seven control kinds fail under both profiles, one
+kind warns under both, and the remaining thirteen are records. The exact table below copies
+[`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs),
+and CI checks the two stay equal.
 
-`enforce-introduced` is the ramp between the two. It applies the enforce column, then
-lowers a failing finding whose attribution is `pre-existing` to `warn`, writing a
-`scanner-policy-defaults/<kind>/enforce-introduced` step into the row's trace, so the
-backlog stays visible and counted while anything the comparison introduced still blocks.
-An attribution the engine cannot establish keeps its enforce disposition, and an
-organization floor whose minimum is `enforce` rejects the ramp as below its minimum.
+`enforce-introduced` is the ramp between the two. It applies the enforce column, and
+after repository policy and any floor have raised what they raise, it lowers every
+failing finding whose attribution is `pre-existing` to `warn`, writing a
+`scanner-policy-defaults/<kind>/enforce-introduced` step into the row's trace. Configured
+stays `fail`; effective becomes `warn`. The backlog stays visible and counted while
+anything the comparison introduced still blocks. An attribution the engine cannot
+establish keeps its enforce disposition. And an organization floor whose minimum is
+`enforce` does not merely refuse the ramp: the run ends incomplete at exit 2 with a
+control-binding mismatch.
 
 <!-- amiss-doc-contract:profiles:start -->
 | Finding kind | Observe | Enforce |
@@ -54,10 +60,10 @@ organization floor whose minimum is `enforce` rejects the ramp as below its mini
 
 ## What each kind means
 
-One fixed sentence per kind, generated from
-[`FindingKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs) and checked in CI. The
-machine report carries the same sentence on every finding row, so this page is a reference,
-not a second source of truth.
+One fixed sentence per kind, copied from
+[`FindingKind::meaning`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs)
+and checked against it in CI. The machine report carries the same sentence on every
+finding row, so this page is a reference, not a second source of truth.
 
 <!-- amiss-doc-contract:finding-meanings:start -->
 - `explicit-target-missing`: a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link
@@ -124,9 +130,12 @@ API described in [Controls and policy](controls.md).
 | `claim-target-missing` | A claim names `Cargo.toml` line 3, which exists. | Delete `Cargo.toml` or point the claim at line 9999. |
 <!-- amiss-doc-contract:finding-examples:end -->
 
-The control families exist so that loosening rules and presenting invalid outside
-authority are themselves visible. Repository policy may raise only
+The control families exist so that loosening the rules and leaning on an invalid waiver
+are themselves visible findings. Repository policy may raise only
 `explicit-target-missing`, `explicit-target-type-mismatch`, and `invalid-reference`, as
 the [policy parser and evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/policy.rs)
-enforces. It may never lower a disposition. There is no suppression syntax anywhere. The
-way to remove a repository-policy finding is to fix what it points at.
+enforces. A rule naming a lower disposition is a no-op, and dropping one the base carried
+is `policy-weakened`. Repository policy has no suppression syntax at all. The only
+lowerings anywhere are the ramp above, a verified debt item, and a verified waiver, each
+leaving a trace step and none removing the row. The way to remove a repository-policy
+finding is to fix what it points at.
