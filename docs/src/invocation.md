@@ -166,7 +166,12 @@ records a committed tree, so `--index` is refused and the identity triple is req
 `--ref` does double duty here: beyond URL resolution, its exact string becomes the
 snapshot's ref binding. Spell it as the branch the consuming lanes enforce, since a
 snapshot bound to another ref stays out of scope there; the check form is untouched by
-that reuse. The minted file is written only after the engine's own reader accepts its
+that reuse. Consumption is narrower than minting: only the sealed bootstrap that the
+[provider lanes](provider-controls.md) operate feeds a snapshot back to the engine, while
+the public `check` form and the convenience Action supply every control as absent and
+never read one. On a repository without a lane the minted file waits, and the working
+ramp for a standing backlog is [`enforce-introduced`](profiles.md). The minted file is
+written only after the engine's own reader accepts its
 bytes, by exclusive creation. The summary line counts what was recorded, what blocked but
 is not debt-eligible, and what was eligible but missing facts. Exit 0 recorded the
 snapshot. Exit 1 means the output path already exists or the write failed, any partial
