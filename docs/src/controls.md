@@ -84,7 +84,9 @@ exact current finding key with a candidate fact; a resolved projection or an abs
 is not an exception target. Matching also requires the exact fact digest. When
 everything lines up, active unchanged debt records tolerance at `warn`, and an applied
 waiver changes only `fail` to `warn`. Invalid, expired, worsened, or overlapping items
-suppress nothing, and an overlap makes evaluation incomplete.
+suppress nothing, and an overlap makes evaluation incomplete. Both controls travel only
+in the sealed request: `amiss adopt` mints a debt snapshot from the public grammar, but
+no public flag supplies one back, so consumption belongs to the provider lanes.
 
 The [wrapper tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-scan/tests/wrapper)
 pin binding, trusted-time, expiry, fact-drift, wrong-tree selection, resolved-target, and
