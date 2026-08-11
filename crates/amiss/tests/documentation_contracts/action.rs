@@ -243,6 +243,48 @@ fn action_feedback_filters_execute_the_combined_window_safely() {
 }
 
 #[test]
+fn action_summary_labels_the_existing_backlog() {
+    let runtime = fs::read_to_string(repository_root().join("crates/amiss/action/runtime.yml"))
+        .expect("packaged Action runtime is readable");
+    let (summary_filter, _annotation_filter) = action_filters(&runtime);
+    let payload = serde_json::json!({
+        "payload": {
+            "result": { "status": "fail", "error_count": 0, "exit_code": 1 },
+            "feedback": {
+                "status": "available",
+                "items": [
+                    action_feedback_item(
+                        "fix",
+                        &serde_json::json!("docs/new.md"),
+                        1,
+                        "fail",
+                        &serde_json::Value::Null,
+                    ),
+                    action_feedback_item(
+                        "existing",
+                        &serde_json::json!("docs/old.md"),
+                        2,
+                        "fail",
+                        &serde_json::Value::Null,
+                    ),
+                ],
+                "existing_count": 1
+            },
+            "errors": []
+        }
+    });
+    let summary = run_action_jq(summary_filter, &payload);
+    assert!(
+        summary.starts_with("amiss fail: 1 Fix, 0 Check, 1 Existing, exit class 1\n"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("- **Existing** <code>&quot;docs/old.md&quot;</code>"),
+        "the backlog item is labeled as existing, not check: {summary}"
+    );
+}
+
+#[test]
 fn action_unavailable_feedback_groups_errors_and_caps_annotations() {
     let runtime = fs::read_to_string(repository_root().join("crates/amiss/action/runtime.yml"))
         .expect("packaged Action runtime is readable");

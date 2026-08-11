@@ -115,9 +115,11 @@ parses half a document.
 
 `human` is the default. It prints a status header, one `error` row per retained analysis
 error, at most ten grouped Fix and Check items naming only a target and an affected-place
-count, an overflow line when more exist, one fixed `note` sentence per error code using
-the wording from [Limits and refusals](limits.md), and three totals lines. The full
-findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
+count with an overflow line when more exist, then at most ten Existing items with their
+own overflow line, one fixed `note` sentence per error code using the wording from
+[Limits and refusals](limits.md), and three totals lines. Existing items are the
+pre-existing backlog at warn or fail, and the backlog keeps its own window, so introduced
+volume cannot push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
 fixed and one naming this run's counts, and changes nothing in JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
 
@@ -164,7 +166,12 @@ records a committed tree, so `--index` is refused and the identity triple is req
 `--ref` does double duty here: beyond URL resolution, its exact string becomes the
 snapshot's ref binding. Spell it as the branch the consuming lanes enforce, since a
 snapshot bound to another ref stays out of scope there; the check form is untouched by
-that reuse. The minted file is written only after the engine's own reader accepts its
+that reuse. Consumption is narrower than minting: only the sealed bootstrap that the
+[provider lanes](provider-controls.md) operate feeds a snapshot back to the engine, while
+the public `check` form and the convenience Action supply every control as absent and
+never read one. On a repository without a lane the minted file waits, and the working
+ramp for a standing backlog is [`enforce-introduced`](profiles.md). The minted file is
+written only after the engine's own reader accepts its
 bytes, by exclusive creation. The summary line counts what was recorded, what blocked but
 is not debt-eligible, and what was eligible but missing facts. Exit 0 recorded the
 snapshot. Exit 1 means the output path already exists or the write failed, any partial

@@ -494,9 +494,10 @@ macro_rules! say {
 }
 
 /// The human projection: a non-wire convenience over the same payload that
-/// cannot change facts, ordering, totals, or exit. It prints at most ten
-/// engine-grouped feedback items, retained analysis errors, their meanings,
-/// and the exact raw totals.
+/// cannot change facts, ordering, totals, or exit. It prints two ten-row
+/// windows, fix and check items then the existing backlog, each with its own
+/// overflow line, plus retained analysis errors, their meanings, and the
+/// exact raw totals.
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let mut out = Channel::new();
     let envelope = View::of(Some(&built.envelope));
@@ -558,12 +559,22 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
             );
         }
     }
+    let (backlog, current): (Vec<&View>, Vec<&View>) = items
+        .iter()
+        .partition(|item| item.text("action") == "existing");
+    windowed(&mut out, &current, "feedback");
+    windowed(&mut out, &backlog, "existing");
+    notes(&mut out, &payload);
+    totals(&mut out, &payload);
+}
+
+/// Ten rows and an overflow line, the wire's own action word as the label.
+fn windowed(out: &mut Channel, items: &[&View], label: &str) {
     for item in items.iter().take(10) {
-        let action = if item.text("action") == "fix" {
-            "Fix"
-        } else {
-            "Check"
-        };
+        let mut action = item.text("action");
+        if let Some(first) = action.get_mut(0..1) {
+            first.make_ascii_uppercase();
+        }
         say!(
             out,
             "{} target {} affected places {}",
@@ -574,10 +585,8 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     }
     let overflow = items.len().saturating_sub(10);
     if overflow > 0 {
-        say!(out, "feedback overflow: {overflow} more in the full report");
+        say!(out, "{label} overflow: {overflow} more in the full report");
     }
-    notes(&mut out, &payload);
-    totals(&mut out, &payload);
 }
 
 /// One `note` line per error code used by this run.
