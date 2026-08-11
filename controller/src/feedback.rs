@@ -5,9 +5,8 @@ use amiss_wire::json::{self, Value};
 
 const DISPLAYED_ITEMS: usize = 10;
 
-/// Appends the report's own grouped feedback to a publication text. Every
-/// repository-derived value passes the human-atom law before it reaches any
-/// provider markdown, and a report without readable feedback changes nothing.
+/// Every repository-derived value passes the human-atom law before it
+/// reaches provider markdown.
 #[must_use]
 pub fn with_feedback(text: String, report: Option<&[u8]>) -> String {
     let lines = feedback_lines(report);
@@ -79,10 +78,15 @@ fn item_line(item: &Value) -> String {
 fn target_atom(item: &Value) -> String {
     match member(item, "target") {
         Some(Value::String(path)) => atom(path),
-        Some(Value::Object(members)) => match members.as_slice() {
-            [(key, Value::String(hex))] if key == "bytes_hex" => atom_bytes(&decode_hex(hex)),
-            _defect => "-".to_owned(),
-        },
+        Some(Value::Object(members)) => {
+            if let [(key, Value::String(hex))] = members.as_slice()
+                && key == "bytes_hex"
+            {
+                atom_bytes(&decode_hex(hex))
+            } else {
+                "-".to_owned()
+            }
+        }
         Some(Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_)) | None => {
             "-".to_owned()
         }
