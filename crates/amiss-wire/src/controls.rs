@@ -191,6 +191,7 @@ pub enum SourceConstruct {
     RstFileOption,
     RstDocRole,
     RstRefRole,
+    LinkReferenceDefinition,
 }
 
 impl SourceConstruct {
@@ -220,7 +221,8 @@ impl SourceConstruct {
             | Self::RstIncludeDirective
             | Self::RstFileOption
             | Self::RstDocRole
-            | Self::RstRefRole => false,
+            | Self::RstRefRole
+            | Self::LinkReferenceDefinition => false,
         }
     }
 
@@ -249,6 +251,7 @@ impl SourceConstruct {
             Self::RstFileOption => "rst-file-option",
             Self::RstDocRole => "rst-doc-role",
             Self::RstRefRole => "rst-ref-role",
+            Self::LinkReferenceDefinition => "markdown-link-reference-definition",
         }
     }
 
@@ -276,6 +279,7 @@ impl SourceConstruct {
             "rst-file-option" => Ok(Self::RstFileOption),
             "rst-doc-role" => Ok(Self::RstDocRole),
             "rst-ref-role" => Ok(Self::RstRefRole),
+            "markdown-link-reference-definition" => Ok(Self::LinkReferenceDefinition),
             _ => fail(path, ErrorKind::InvalidValue),
         }
     }

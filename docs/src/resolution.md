@@ -1,9 +1,10 @@
 # Resolution
 
 Parsing turns each document into a list of occurrences: inline links and images, reference
-style links, and autolinks. Each occurrence keeps two spellings of its destination. The raw
-one is the exact bytes from the source. The semantic one is what those bytes mean after the
-format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
+style links, autolinks, and any reference definition no reference in the document consumes,
+since an orphaned `[api]: ./guide.md` still maintains a destination someone will trust.
+Each occurrence keeps two spellings of its destination. The raw one is the exact bytes from
+the source. The semantic one is what those bytes mean after the format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
 either the spelling or the meaning is visible later.
 
 What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)

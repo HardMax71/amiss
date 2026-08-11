@@ -116,11 +116,8 @@ fn definitions<'a>(case: &'a Map<String, Value>, side: &str, id: &str) -> &'a [V
 }
 
 fn labels<'a>(case: &'a Map<String, Value>, id: &str) -> Vec<&'a str> {
+    // A count without consumers is lawful: an unconsumed definition extracts alone.
     let Some(raw) = case.get("consuming_normalized_labels") else {
-        assert!(
-            !case.contains_key("expected_ordinary_reference_count"),
-            "{id} cannot expect consumers without naming them"
-        );
         return Vec::new();
     };
     assert!(

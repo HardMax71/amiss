@@ -433,12 +433,20 @@ fn reserved_definitions_surface_and_suppress() {
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
         triples(&got),
-        vec![(
-            SourceConstruct::FullReferenceLink,
-            "./real.md".to_owned(),
-            "./real.md".to_owned()
-        )],
-        "the reserved winner suppresses its consumer; the ordinary one stays"
+        vec![
+            (
+                SourceConstruct::FullReferenceLink,
+                "./real.md".to_owned(),
+                "./real.md".to_owned()
+            ),
+            (
+                SourceConstruct::LinkReferenceDefinition,
+                "./case.md".to_owned(),
+                "./case.md".to_owned()
+            ),
+        ],
+        "the reserved winner suppresses its consumer; the ordinary one stays; \
+         the case-folded label is no reservation, so its unconsumed definition extracts"
     );
     assert_eq!(
         got.governed.len(),
@@ -637,13 +645,20 @@ fn adjacent_opaque_constructs_coalesce() {
 }
 
 /// A GFM task checkbox is a checkbox, not a shortcut reference, even when a
-/// definition spells its label.
+/// definition spells its label; the unconsumed definition then extracts as
+/// its own occurrence rather than vanishing.
 #[test]
 fn a_task_checkbox_is_not_a_reference() {
     for adapter in [Adapter::Markdown, Adapter::Mdx] {
         let got = extraction(adapter, "- [x] done\n\n[x]: target.md\n");
-        assert!(
-            got.occurrences.is_empty(),
+        let constructs: Vec<_> = got
+            .occurrences
+            .iter()
+            .map(|occurrence| occurrence.construct)
+            .collect();
+        assert_eq!(
+            constructs,
+            vec![SourceConstruct::LinkReferenceDefinition],
             "{adapter:?}: {:?}",
             got.occurrences
         );

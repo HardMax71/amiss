@@ -1,5 +1,7 @@
 mod tests;
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use amiss_wire::controls::SourceConstruct;
 pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
@@ -74,10 +76,11 @@ fn extract_tree(
     raw: &[u8],
     frontmatter_bytes: usize,
 ) -> Result<Extraction, Fault> {
-    let (resolved, governed) = definitions(tree, suffix)?;
+    let (resolved, governed, orphans) = definitions(tree, suffix)?;
     let mut sweep = Sweep {
         suffix,
         definitions: resolved,
+        orphans,
         root_span: span_of(tree)?,
         occurrences: Vec::new(),
         headings: Vec::new(),
@@ -177,6 +180,7 @@ fn extract_tree(
 struct Sweep<'a> {
     suffix: &'a str,
     definitions: Vec<Definition>,
+    orphans: OrphanDefinitions,
     root_span: (usize, usize),
     occurrences: Vec<Occurrence>,
     headings: Vec<Heading>,
@@ -279,10 +283,27 @@ impl Sweep<'_> {
             | Node::Math(_)
             | Node::Table(_)
             | Node::ThematicBreak(_)
-            | Node::TableRow(_)
-            | Node::Definition(_) => {}
+            | Node::TableRow(_) => {}
+            // A definition nobody references still maintains a destination.
+            Node::Definition(_definition) => self.orphan(node, path, *owners)?,
         }
         Ok(true)
+    }
+
+    fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) -> Result<(), Fault> {
+        let span = span_of(node)?;
+        if let Some((raw, url)) = self.orphans.get(&span) {
+            let (raw, url) = (raw.clone(), url.clone());
+            self.push(
+                SourceConstruct::LinkReferenceDefinition,
+                raw,
+                url,
+                span,
+                path,
+                owners,
+            );
+        }
+        Ok(())
     }
 
     fn push(
@@ -477,13 +498,21 @@ fn run_length(bytes: &[u8], at: usize, limit: usize) -> usize {
 
 /// Collects reference definitions in document order; the first with a matching
 /// normalized identifier wins.
-type ResolvedDefinitions = (Vec<Definition>, Vec<GovernedDefinition>);
+type OrphanDefinitions = BTreeMap<(usize, usize), (String, String)>;
+type ResolvedDefinitions = (Vec<Definition>, Vec<GovernedDefinition>, OrphanDefinitions);
 
 fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> {
     let mut out = Vec::new();
     let mut governed = Vec::new();
+    let mut used = BTreeSet::new();
     let mut stack = vec![tree];
     while let Some(node) = stack.pop() {
+        if let Node::LinkReference(reference) = node {
+            used.insert(reference.identifier.clone());
+        }
+        if let Node::ImageReference(reference) = node {
+            used.insert(reference.identifier.clone());
+        }
         if let Node::Definition(definition) = node {
             let span = span_of(node)?;
             let label = definition
@@ -517,9 +546,15 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
     }
     out.sort_by_key(|(span, _)| *span);
     governed.sort_by_key(|definition| definition.span);
+    let orphans = out
+        .iter()
+        .filter(|(_, definition)| !definition.reserved && !used.contains(&definition.identifier))
+        .map(|(span, definition)| (*span, (definition.raw.clone(), definition.url.clone())))
+        .collect();
     Ok((
         out.into_iter().map(|(_, definition)| definition).collect(),
         governed,
+        orphans,
     ))
 }
 

@@ -309,6 +309,60 @@ fn the_backlog_window_caps_at_ten_with_its_own_overflow() {
     );
 }
 
+/// An orphaned reference definition maintains a destination no reference
+/// carries, so a dead one is a finding with the definition's own construct,
+/// while a consumed definition reports only through its consumer.
+#[test]
+fn an_orphan_definition_with_a_dead_destination_is_a_finding() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::write(
+        root.join("docs/orphans.md"),
+        "# Notes\n\nSee [kept][live].\n\n[live]: guide.md\n\n[api]: gone.md\n",
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "orphan definition"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let base_args = [
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+    ];
+    let (code, stdout, _stderr) = amiss(&base_args);
+    assert_eq!(code, 1, "the dead orphan destination blocks under enforce");
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains("Fix target \"docs/gone.md\" affected places 1"),
+        "the orphan definition names its dead target: {text}"
+    );
+
+    let mut json_args = base_args.to_vec();
+    json_args.extend(["--format", "json"]);
+    let (_code, stdout, _stderr) = amiss(&json_args);
+    let payload = payload(&stdout);
+    let constructs: Vec<&str> = payload["observations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| row["candidate"]["source_construct"].as_str())
+        .filter(|construct| *construct == "markdown-link-reference-definition")
+        .collect();
+    assert_eq!(
+        constructs.len(),
+        1,
+        "exactly the orphan extracts with the definition construct; the consumed one reports through its consumer"
+    );
+}
+
 /// A repository path is untrusted bytes, and the human projection is a place those
 /// bytes could become terminal control sequences, a forged workflow command, or a
 /// second log line. Feedback prints a grouped target instead of every source path,
