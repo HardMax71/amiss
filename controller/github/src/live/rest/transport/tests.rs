@@ -110,6 +110,8 @@ fn provider_statuses_have_stable_failure_classes() {
     assert_eq!(map_status(404), ProviderError::InvalidResponse);
 }
 
+/// The last-in-quota auth 403 reads rate-limited by design: the retry heals
+/// that within a window, while a false revocation would publish and stand.
 #[test]
 fn a_rate_limited_403_is_unavailable_not_revoked() {
     let mut spent = reqwest::header::HeaderMap::new();
