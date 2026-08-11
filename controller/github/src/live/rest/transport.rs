@@ -315,7 +315,7 @@ fn settled(
     }
 }
 
-// GitHub marks exhausted limits with retry-after or x-ratelimit-remaining: 0, on 403 too.
+// A 403 spending the last quota unit reads rate-limited for one window; the retry re-classifies it.
 fn rate_limited(headers: &HeaderMap) -> bool {
     headers.contains_key(RETRY_AFTER)
         || headers
