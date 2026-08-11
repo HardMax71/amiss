@@ -31,9 +31,16 @@ steps:
 timeout-minutes: 15
 
 safe-outputs:
-  # Its side-scan runs model auto, which BYOK cannot serve; every run
-  # failed to parse and stamped a warning block into the lane comment.
-  threat-detection: false
+  # The side-scan runs the same BYOK engine as the lane; its old default
+  # of model auto was the parse failure the detection ledger tracks.
+  threat-detection:
+    continue-on-error: true
+    engine:
+      id: copilot
+      env:
+        COPILOT_PROVIDER_BASE_URL: https://api.deepseek.com/v1
+        COPILOT_MODEL: deepseek-v4-flash
+        COPILOT_PROVIDER_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
   add-comment:
     max: 1
     footer: false
