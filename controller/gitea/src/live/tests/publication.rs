@@ -7,6 +7,45 @@ use super::super::publication::{validate_created, validate_publication};
 use super::support::{Fixture, oid, provider, reviewer};
 
 #[test]
+fn review_bodies_carry_the_report_feedback_lines() {
+    let fixture = Fixture::new("gitea");
+    let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
+    let mut publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Block);
+    publication.report = Some(
+        serde_json::to_vec(&serde_json::json!({
+            "payload": { "feedback": {
+                "existing_count": 0,
+                "items": [{
+                    "action": "check",
+                    "annotation": null,
+                    "effective_disposition": "warn",
+                    "finding_kinds": ["dependency-changed-subject-unchanged"],
+                    "location_count": 3,
+                    "target": "docs/guide.md"
+                }],
+                "status": "available"
+            } },
+            "schema": "amiss/scanner-report-envelope"
+        }))
+        .unwrap(),
+    );
+    assert_eq!(
+        fixture.client.publish(fixture.pull_request(), &publication),
+        Ok(())
+    );
+    let state = fixture.rest.state.lock().unwrap();
+    let body = &state.created[0].body;
+    assert!(
+        body.contains("\nfindings: fix 0, check 1, existing 0\n"),
+        "{body}"
+    );
+    assert!(
+        body.ends_with("- Check target \"docs/guide.md\" affected places 3"),
+        "{body}"
+    );
+}
+
+#[test]
 fn reviews_are_exact_commit_bound_and_idempotent() {
     let fixture = Fixture::new("gitea");
     let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();

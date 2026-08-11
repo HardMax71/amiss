@@ -345,8 +345,13 @@ duplicate or conflicting current rows.
 
 The Check Run summary names the provider, repository, change, provider run, gate commit, refs,
 commits, trees, plan, execution constraint, and report digest. An unavailable result also carries
-one stable `failure` label such as `timeout` or `tampered-runtime`. Together with a strict active
-ruleset bound to this App, that Check Run is provider evidence for the configured branch.
+one stable `failure` label such as `timeout` or `tampered-runtime`. Below those bindings the
+summary lists the report's own grouped feedback: the fix, check, and existing counts, then up to
+ten items naming a target and an affected-place count, every repository-derived value rendered
+under the human-atom law so hostile path bytes never become markdown or workflow syntax. The
+digest stays the evidence; the listed lines are a courtesy projection of the same report.
+Together with a strict active ruleset bound to this App, that Check Run is provider evidence for
+the configured branch.
 
 GitHub's [create-Check-Run call](https://docs.github.com/en/rest/checks/runs) has no transaction
 with the local ledger. If GitHub accepts a create but its reply is lost, the exact result remains

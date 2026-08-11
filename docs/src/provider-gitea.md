@@ -74,9 +74,11 @@ bootstrap, refreshes everything again, saves the result, and posts or reuses one
 | Stale or closed before publication | No new review |
 
 The review body binds the evaluation, conclusion, provider, repository, pull request, provider
-run, refs, commits, trees, plan, execution constraint, and report digest. The
-`required_status_name` from the execution constraint is a readable review label and retry binding;
-the provider gate itself is the dedicated reviewer identity.
+run, refs, commits, trees, plan, execution constraint, and report digest, and below those
+bindings lists the report's grouped feedback the way the GitHub summary does: counts, then up to
+ten items with atom-rendered targets. The `required_status_name` from the execution constraint is
+a readable review label and retry binding; the provider gate itself is the dedicated reviewer
+identity.
 
 ## Dedicated reviewer
 
