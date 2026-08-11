@@ -44,8 +44,13 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          echo "ref=$(gh api "repos/${REPOSITORY}/pulls/${PR}" \
-            -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')" >> "$GITHUB_OUTPUT"
+          sha=$(gh api "repos/${REPOSITORY}/pulls/${PR}" \
+            -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')
+          if [ -z "$sha" ]; then
+            echo "PR ${PR} head lives outside ${REPOSITORY}; refusing to run with credentials" >&2
+            exit 1
+          fi
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
       - id: identity
         continue-on-error: true
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -77,19 +82,20 @@ jobs:
             mandate is the author's choice, so say nothing about it. Skip
             lockfiles and generated files.
 
-            Post findings as inline review comments anchored to the exact
-            changed lines: one pull request review via gh api
+            With at least one finding, post exactly one review via gh api
             (POST /repos/${{ github.repository }}/pulls/${{ inputs.pr || github.event.pull_request.number }}/reviews,
-            event COMMENT, body empty, comments[] entries with path, line,
-            side, and start_line for ranges). The anchor shows the code,
-            so do not quote it back. Keep any scratch files inside the
+            event COMMENT, body set to the empty string, comments[]
+            carrying path, line, side, and start_line for ranges). The API
+            refuses a review with no body and no comments, so when nothing
+            anchors you post no review at all. The anchor shows the code,
+            so do not quote it back. Keep scratch files inside the
             checkout, not /tmp.
 
-            Your final message becomes the one PR comment, so it is the
-            review summary; state it once and nowhere else. After its
-            closing details line, add one line: review: followed by the
-            html_url the reviews API returned.
+            Your final message is the only summary anywhere: a paragraph
+            per finding, one line each beyond what the inline comments
+            already carry, and a few plain lines when everything holds.
+            After its details line add one line, review: followed by the
+            html_url the API returned, when a review exists.
 
-            When everything holds, the whole summary is a few plain lines
-            naming what you checked. Never push commits, never approve,
-            never request changes formally.
+            Never push commits, never approve, never request changes
+            formally.
