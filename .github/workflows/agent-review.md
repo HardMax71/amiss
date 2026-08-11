@@ -69,6 +69,12 @@ finding as a review comment on the exact changed lines with the
 create_pull_request_review_comment tool, one finding per comment, without
 quoting the code the anchor already shows.
 
+Give every remark air. In each review comment: the problem or Question:
+line first, then an empty line, then the explanation with its evidence
+links, then an empty line, then one line stating your confidence.
+Summary findings in the review body take the same shape, an empty line
+between components, never a single block.
+
 Then submit one review with the submit_pull_request_review tool, event
 COMMENT. Its body opens with `> [!TIP]` when everything holds or `> [!WARNING]`
 when findings exist, with the verdict sentence as the callout body on its
