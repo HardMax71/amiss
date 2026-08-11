@@ -57,6 +57,18 @@ fn a_hostile_target_cannot_carry_control_bytes_into_provider_markdown() {
         joined.contains("\\u001b"),
         "the atom law spells the escape: {joined:?}"
     );
+
+    let forged = report(&serde_json::json!({
+        "existing_count": 0,
+        "items": [item("fix\n\n- [x] done", &serde_json::json!("docs/new.md"), 1)],
+        "status": "available"
+    }));
+    let lines = feedback_lines(Some(&forged));
+    assert_eq!(
+        lines.get(1).map(String::as_str),
+        Some("- Fix-xdone target \"docs/new.md\" affected places 1"),
+        "a forged action word is constrained to word characters: {lines:?}"
+    );
 }
 
 #[test]
