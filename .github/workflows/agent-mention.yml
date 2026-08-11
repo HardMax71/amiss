@@ -46,6 +46,10 @@ jobs:
           if [ "$IS_PR" = "true" ]; then
             ref=$(gh api "repos/${REPOSITORY}/pulls/${PR}" \
               -q 'select(.head.repo.full_name == .base.repo.full_name) | .head.sha')
+            if [ -z "$ref" ]; then
+              echo "PR ${PR} head lives outside ${REPOSITORY}; refusing to run with credentials" >&2
+              exit 1
+            fi
           fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
       # One app identity for every lane, and its PRs trigger ci; without

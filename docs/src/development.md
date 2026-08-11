@@ -91,8 +91,9 @@ value is observable through real behavior, not a score to raise.
 
 Three agent lanes sit beside the gates, none of them gating. A new issue gets its premise
 checked against the tree before a maintainer reads it, behind an account-age gate so drive-by
-accounts spend no tokens. A new pull request gets one evidence-based review comment when it
-comes from a same-repository, non-draft branch that is not a release bump. And `/oc` in a
+accounts spend no tokens. Every push to a pull request gets an evidence-based review comment, and a review can be
+summoned by hand through `workflow_dispatch`, in both cases only for same-repository,
+non-draft branches that are not release bumps. And `/oc` or `/opencode` in a
 comment summons the agent for collaborators, who can ask it to fix an issue and open a pull
 request; that lane borrows the release token, since a pull request opened by the runner's own
 token would never trigger ci, and it never checks out a fork's tree. All three run opencode on
