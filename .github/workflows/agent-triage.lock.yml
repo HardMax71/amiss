@@ -42,7 +42,7 @@
 #   - actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
 #   - actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
 #   - github/gh-aw-actions/setup@2709137ea6c5b0e19aa621454dc643ea8dc526b1 # v0.85.4
-#   - taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # 18b1216eba7f8039b0f8d131d5473787f0edce68
+#   - taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # 18b1216eba7f8039b0f8d131d5473787f0edce68
 #
 # Container images used:
 #   - ghcr.io/github/gh-aw-firewall/agent:0.27.44@sha256:0d727725c737b58c7bdf51f640cffb928385ec46517e0917c7f1a02f1bada8b4
@@ -455,7 +455,7 @@ jobs:
         with:
           name: activation
           path: /tmp/gh-aw
-      - uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68 # 18b1216eba7f8039b0f8d131d5473787f0edce68
+      - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # 18b1216eba7f8039b0f8d131d5473787f0edce68
         with:
           tool: cargo-nextest@0.9.140
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # c19371144df3bb44fab255c43d04cbc2ab54d1c4
