@@ -31,6 +31,9 @@ steps:
 timeout-minutes: 15
 
 safe-outputs:
+  # Its side-scan runs model auto, which BYOK cannot serve; every run
+  # failed to parse and stamped a warning block into the lane comment.
+  threat-detection: false
   add-comment:
     max: 1
     footer: false
