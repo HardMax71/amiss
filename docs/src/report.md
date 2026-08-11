@@ -49,11 +49,13 @@ system can recompute any finding's identity from the report alone.
 
 `feedback` is the smaller review surface derived by the engine from those exact findings.
 Related introduced problems become one `fix` per target, changed targets under unchanged
-prose become one `check`, and `existing_count` counts grouped pre-existing subjects without
-turning them into items. Each item retains its affected-location count and contributing
-finding kinds. A Fix may carry one candidate-side text-path annotation; Checks never do.
-The report retains every item. An incomplete comparison instead emits exactly
-`{"status":"unavailable"}`, so scan failure cannot look like zero feedback.
+prose become one `check`, and pre-existing failures and warnings become one `existing` per
+target after them, so the backlog is listed, not only counted; `existing_count` stays the
+number of those grouped subjects. Each item retains its affected-location count and
+contributing finding kinds. A Fix may carry one candidate-side text-path annotation;
+Checks and Existing items never do. The report retains every item. An incomplete
+comparison instead emits exactly `{"status":"unavailable"}`, so scan failure cannot look
+like zero feedback.
 
 The envelope, down to its top-level keys:
 

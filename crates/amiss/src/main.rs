@@ -559,10 +559,10 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
         }
     }
     for item in items.iter().take(10) {
-        let action = if item.text("action") == "fix" {
-            "Fix"
-        } else {
-            "Check"
+        let action = match item.text("action").as_str() {
+            "fix" => "Fix",
+            "existing" => "Existing",
+            _ => "Check",
         };
         say!(
             out,
