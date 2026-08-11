@@ -23,11 +23,10 @@ The operations page keeps reading:
 Retries are capped at three attempts; the limit lives in [`src/retry.rs`](../src/retry.rs).
 ```
 
-The paragraph did not change, so nothing in the review draws an eye to it. Against these
-two snapshots Amiss reports the link's target as gone from the candidate tree, which blocks
-under `enforce`. Had the constant changed in place instead, the changed bytes under the
-unchanged paragraph would warn. What neither finding claims is that "three" is now a lie;
-that judgment belongs to whoever reads the finding.
+The paragraph didn't change, so nothing in review looks at it. Amiss does: the link's
+target is gone from the candidate tree, which blocks under `enforce`. Change the constant
+in place instead and you get the warn: changed bytes under an unchanged paragraph. Neither
+finding says "three" is now a lie. That call belongs to whoever reads the finding.
 
 The [audit behind this tool](evidence.md) went through one repository that took
 documentation seriously: golden files, executable CLI examples, a link checker, roughly a
@@ -35,23 +34,25 @@ dozen hand-built defenses. It still held seven live drift classes. The architect
 counted ten workflows against 22 in the tree and named one that never existed. The CLI
 reference documented a three-value exit-code contract while the code used four. Railroad
 diagrams regenerated on every docs build, faithfully, from a stale copy of the grammar
-embedded in the generator script; the freshness of the output proved only that the stale
-input still compiled. Executable examples all stayed green, because examples protect the
-paths they execute and nothing else.
+embedded in the generator script. The fresh output proved one thing: the stale input still
+compiled. Executable examples all stayed green, since examples protect the paths they
+execute and nothing else.
 
 Checkers that run on demand inherit the failure they exist to catch, since the person who
 forgot to update the page also forgot to run the checker. Tools that rewrite prose to
 match the code make a different mistake: deciding what the code means is the one judgment
-a machine should refuse. So Amiss detects and gates, and leaves repair to someone who can
-be held to account, a person or a coding agent reading the finding's own description.
+a machine should refuse. So Amiss splits the work. Mechanical respellings, a moved path
+or a renamed anchor, ship as fixes `amiss fix` applies byte for byte. Everything that
+needs judgment goes to someone who can be held to account: a person, or a coding agent
+reading the finding's own description.
 
 Every run compares two exact snapshots. Under `enforce`, a reference that stops resolving
 blocks the change that broke it. A referenced file that changed under an unchanged
-paragraph warns, a boundary [Correlation and impact](correlation.md) draws precisely,
-because the code moving is a reason to reread the prose and no proof the prose is wrong.
-What the tool cannot see, it declares. And repository policy can raise severity but never
-lower it, so the gate survives the kind of change it exists to catch.
+paragraph warns; [Correlation and impact](correlation.md) draws that boundary precisely.
+The code moving is a reason to reread the prose, not proof the prose is wrong. What the
+tool cannot see, it declares. And repository policy can raise severity but never lower it,
+so the gate survives the kind of change it exists to catch.
 
 The full taxonomy of what a scan establishes is in
-[Profiles and findings](profiles.md); what Amiss deliberately does not attempt, starting
+[Profiles and findings](profiles.md). What Amiss deliberately does not attempt, starting
 with reading your prose, is in [What Amiss is not](non-goals.md).
