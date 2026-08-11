@@ -399,6 +399,49 @@ fn a_created_check_run_answers_on_every_clause() {
 }
 
 #[test]
+fn publication_summary_carries_the_report_feedback_lines() {
+    let fixture = Fixture::new();
+    let mut publication = fixture.publication(CheckConclusion::Block);
+    publication.report = Some(
+        serde_json::to_vec(&serde_json::json!({
+            "payload": { "feedback": {
+                "existing_count": 1,
+                "items": [{
+                    "action": "fix",
+                    "annotation": null,
+                    "effective_disposition": "fail",
+                    "finding_kinds": ["explicit-target-missing"],
+                    "location_count": 2,
+                    "target": "docs/new.md"
+                }],
+                "status": "available"
+            } },
+            "schema": "amiss/scanner-report-envelope"
+        }))
+        .unwrap(),
+    );
+    let expected =
+        created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
+    let summary = &expected.output.summary;
+    assert!(
+        summary.contains("\nfindings: fix 1, check 0, existing 1\n"),
+        "{summary}"
+    );
+    assert!(
+        summary.ends_with("- Fix target \"docs/new.md\" affected places 2"),
+        "{summary}"
+    );
+    let digest_line = format!(
+        "report: {}",
+        sha256(publication.report.as_deref().unwrap_or_default())
+    );
+    assert!(
+        summary.contains(&digest_line),
+        "the digest evidence stays: {summary}"
+    );
+}
+
+#[test]
 fn publication_conclusions_and_create_response_are_exact() {
     let fixture = Fixture::new();
     let cases = [
