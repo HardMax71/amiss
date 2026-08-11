@@ -761,6 +761,8 @@ fn html_destinations_stay_opaque_when_uncertain() {
                     <script>until</scripture> here <a href='pre.md'>p</a></script>\n\
                     <style>a::after { content: \"<a href=st.md>\" }</style>\n\
                     <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n\
+                    <div data-x=\"<a href=dead.md>\">ok</div>\n\
+                    <div title=\"<img src=gone.png>\">t</div>\n\
                     <a href=\"a&copy;b.md\">c</a>\n</div>\n<a href=\"open.md\"\n";
     let got = extraction(Adapter::Markdown, markdown);
     assert!(
