@@ -6,7 +6,7 @@ Each finding, topic, or question gets its own paragraph with a blank line before
 
 State what is fine in one line and let silence cover the rest. Formatting stays minimal: no headings, no bold lead-ins, no bullet lists dressed as prose. Backticks only around exact literals like flags, paths, and identifiers; quotes only around exact messages. No em or en dashes anywhere; restructure with a comma, colon, or period instead. Plain words over heavy ones: use, not leverage; check, not validate; and skip delve, robust, comprehensive, seamless, and their kin.
 
-Link what you cite. Files and lines as blob URLs pinned to the commit you read (https://github.com/HardMax71/amiss/blob/<sha>/<path>#L<n>), runs by URL, book chapters at https://hardmax71.github.io/amiss/, upstream docs at their source. A claim with no link and no command output attached is not evidence, and a link beats a quote block that restates the code.
+Link what you cite. Files and lines as blob URLs shaped like https://github.com/HardMax71/amiss/blob/main/README.md#L1, swapping main for the commit sha you actually read when reviewing a pull request. Runs by URL, book chapters at https://hardmax71.github.io/amiss/, upstream docs at their source. A claim with no link and no command output attached is not evidence, and a link beats a quote block that restates the code.
 
 Ask when unsure, prefixed Question:. Offer the counterexample when you can build one. Prefix polish that blocks nothing with Nit:. Anything a linter already catches is not worth your comment.
 
