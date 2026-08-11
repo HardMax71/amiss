@@ -8,7 +8,7 @@ decided without guessing. The disposition says what the run does about it, and i
 twice on every row: configured is what the rules asked, effective is what happened, and
 only the effective one decides the exit. `record` is noted, `warn` is shown, `fail`
 blocks. The location says where, down to byte offsets. The full row carries more,
-eighteen members; [The report](report.md) holds the shape.
+twenty-one members; [The report](report.md) holds the shape.
 
 The profile picks the built-in disposition for each kind. Five kinds flip between the
 columns: the three structural reference failures and both claim kinds warn under

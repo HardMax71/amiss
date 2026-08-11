@@ -36,7 +36,7 @@ reStructuredText the same way, six bare basenames like README, and two advisory 
 `.cursorrules` and `llms.txt`, whose adapter extracts no references. A notebook or Org
 file is discovered, counted as unsupported, and never read. Everything else is a possible
 reference target, not a document. [Discovery](discovery.md) has the exact rows, and
-repository policy can bind one of the five built-in parsers to any path it names.
+repository policy can bind one of the five built-in adapters to any path it names.
 
 "Supported explicit reference" is the second line, and it's hard. Bare path-like prose is
 never inferred. Raw HTML and MDX code regions are opaque. Site routes, code symbols, live
