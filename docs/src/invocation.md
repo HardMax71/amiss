@@ -114,12 +114,12 @@ envelope under json and sarif, and an empty array under codequality, so a consum
 parses half a document.
 
 `human` is the default. It prints a status header, one `error` row per retained analysis
-error, at most ten grouped Fix, Check, and Existing items naming only a target and an
-affected-place count, an overflow line when more exist, one fixed `note` sentence per
-error code using the wording from [Limits and refusals](limits.md), and three totals
-lines. Existing items are the pre-existing backlog at warn or fail, listed after Fixes
-and Checks, so the terminal shows the carried backlog instead of only counting it. The
-full findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
+error, at most ten grouped Fix and Check items naming only a target and an affected-place
+count with an overflow line when more exist, then at most ten Existing items with their
+own overflow line, one fixed `note` sentence per error code using the wording from
+[Limits and refusals](limits.md), and three totals lines. Existing items are the
+pre-existing backlog at warn or fail, and the backlog keeps its own window, so introduced
+volume cannot push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
 fixed and one naming this run's counts, and changes nothing in JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
 
