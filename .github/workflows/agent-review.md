@@ -37,6 +37,9 @@ steps:
 timeout-minutes: 20
 
 safe-outputs:
+  # Its side-scan runs model auto, which BYOK cannot serve; every run
+  # failed to parse and stamped a warning block into the lane comment.
+  threat-detection: false
   create-pull-request-review-comment:
     max: 10
     target: "*"
@@ -78,7 +81,8 @@ between components, never a single block.
 Then submit one review with the submit_pull_request_review tool, event
 COMMENT. Its body opens with `> [!TIP]` when everything holds or `> [!WARNING]`
 when findings exist, with the verdict sentence as the callout body on its
-own `> ` line, no quotation marks around it, followed by at most a paragraph per finding, one line each. Link
+own `> ` line, no quotation marks around it, followed by one shaped
+entry per finding, air between its parts. Link
 every file you cite as a blob URL pinned to the head commit, like
 https://github.com/HardMax71/amiss/blob/main/README.md#L1 with the sha in
 place of main. End the body with a collapsed block, exactly:
