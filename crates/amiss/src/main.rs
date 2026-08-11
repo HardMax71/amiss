@@ -494,9 +494,10 @@ macro_rules! say {
 }
 
 /// The human projection: a non-wire convenience over the same payload that
-/// cannot change facts, ordering, totals, or exit. It prints at most ten
-/// engine-grouped feedback items, retained analysis errors, their meanings,
-/// and the exact raw totals.
+/// cannot change facts, ordering, totals, or exit. It prints two ten-row
+/// windows, fix and check items then the existing backlog, each with its own
+/// overflow line, plus retained analysis errors, their meanings, and the
+/// exact raw totals.
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let mut out = Channel::new();
     let envelope = View::of(Some(&built.envelope));
