@@ -78,8 +78,8 @@ trust them when the short form reads ambiguous.
 | `--debt-output` | path | where the minted snapshot is written; must not exist |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
-`--base` and `--candidate` take full commit IDs: lowercase hex, forty bytes for sha1,
-sixty-four for sha256. Branch names, short forms, and two equal IDs are refused. Amiss
+`--base` and `--candidate` take full commit IDs: lowercase hex, forty characters for
+sha1, sixty-four for sha256. Branch names, short forms, and two equal IDs are refused. Amiss
 evaluates exactly the trees you name and resolves nothing for you. `--index` swaps the
 candidate for the staged state, including entries marked
 [skip-worktree](https://git-scm.com/docs/git-update-index).
@@ -117,8 +117,8 @@ parses half a document.
 error, at most ten grouped Fix and Check items naming only a target and an affected-place
 count, an overflow line when more exist, one fixed `note` sentence per error code using
 the wording from [Limits and refusals](limits.md), and three totals lines. The full
-findings stay in JSON. `--explain-scope` adds seven fixed scope lines to that human
-output and changes nothing in JSON, behavior pinned by the
+findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
+fixed and one naming this run's counts, and changes nothing in JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
 
 Exit codes are three classes, not detail. 0 means the run completed and nothing blocks. 1

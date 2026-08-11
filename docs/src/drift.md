@@ -41,10 +41,11 @@ execute and nothing else.
 Checkers that run on demand inherit the failure they exist to catch, since the person who
 forgot to update the page also forgot to run the checker. Tools that rewrite prose to
 match the code make a different mistake: deciding what the code means is the one judgment
-a machine should refuse. So Amiss splits the work. Mechanical respellings, a moved path
-or a renamed anchor, ship as fixes `amiss fix` applies byte for byte. Everything that
-needs judgment goes to someone who can be held to account: a person, or a coding agent
-reading the finding's own description.
+a machine should refuse. So Amiss splits the work. The rewrites the engine can prove ship
+as fixes `amiss fix` applies byte for byte: a path off only by case from one tracked
+spelling, an anchor off by case or separator style, a claim expecting a line's old text.
+Everything that needs judgment goes to someone who can be held to account: a person, or a
+coding agent reading the finding's own description.
 
 Every run compares two exact snapshots. Under `enforce`, a reference that stops resolving
 blocks the change that broke it. A referenced file that changed under an unchanged
