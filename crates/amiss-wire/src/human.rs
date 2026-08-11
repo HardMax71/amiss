@@ -77,3 +77,20 @@ pub fn atom_bytes(bytes: &[u8]) -> String {
     out.push('"');
     out
 }
+
+/// The wire's lowercase hex back to raw bytes; a malformed digit or a
+/// truncated trailing pair renders as zero rather than failing a human
+/// projection, which is not the wire.
+#[must_use]
+pub fn decode_hex(hex: &str) -> Vec<u8> {
+    hex.as_bytes()
+        .chunks(2)
+        .map(|pair| {
+            core::str::from_utf8(pair)
+                .ok()
+                .filter(|text| text.len() == 2)
+                .and_then(|text| u8::from_str_radix(text, 16).ok())
+                .unwrap_or(0)
+        })
+        .collect()
+}

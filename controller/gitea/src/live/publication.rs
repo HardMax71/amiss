@@ -135,6 +135,7 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
         publication.check.plan_digest,
         publication.check.execution_constraint_digest,
     );
+    let body = amiss_controller::feedback::with_feedback(body, publication.report.as_deref());
     Ok(CreateReview {
         event: event.to_owned(),
         body,

@@ -237,7 +237,7 @@ runs:
                  | ["amiss \($p.result.status): \($fixes) Fix, \($checks) Check, \($p.feedback.existing_count) Existing, exit class \($p.result.exit_code)",
                     (if ($p.feedback.items | length) > 0 then "" else empty end),
                     ($p.feedback.items[:10][]
-                     | "- **\(if .action == "fix" then "Fix" else "Check" end)** "
+                     | "- **\((.action[0:1] | ascii_upcase) + .action[1:])** "
                        + (.target | target)
                        + " — \(.location_count) affected place\(if .location_count == 1 then "" else "s" end)"),
                     (($p.feedback.items | length) - 10

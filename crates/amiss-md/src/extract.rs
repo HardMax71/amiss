@@ -1,5 +1,7 @@
 mod tests;
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use amiss_wire::controls::SourceConstruct;
 pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
@@ -74,10 +76,11 @@ fn extract_tree(
     raw: &[u8],
     frontmatter_bytes: usize,
 ) -> Result<Extraction, Fault> {
-    let (resolved, governed) = definitions(tree, suffix)?;
+    let (resolved, governed, orphans) = definitions(tree, suffix)?;
     let mut sweep = Sweep {
         suffix,
         definitions: resolved,
+        orphans,
         root_span: span_of(tree)?,
         occurrences: Vec::new(),
         headings: Vec::new(),
@@ -177,6 +180,7 @@ fn extract_tree(
 struct Sweep<'a> {
     suffix: &'a str,
     definitions: Vec<Definition>,
+    orphans: OrphanDefinitions,
     root_span: (usize, usize),
     occurrences: Vec<Occurrence>,
     headings: Vec<Heading>,
@@ -200,7 +204,11 @@ impl Sweep<'_> {
                 self.mdx.push(span_of(node)?);
                 return Ok(false);
             }
-            Node::Html(_) => self.html.push(span_of(node)?),
+            Node::Html(_) => {
+                let span = span_of(node)?;
+                self.html.push(span);
+                self.destinations(span, path, *owners);
+            }
             Node::Heading(_) => {
                 let content = text_content(node);
                 let (text, attribute) = mdx_comment_attribute(node).map_or_else(
@@ -279,10 +287,67 @@ impl Sweep<'_> {
             | Node::Math(_)
             | Node::Table(_)
             | Node::ThematicBreak(_)
-            | Node::TableRow(_)
-            | Node::Definition(_) => {}
+            | Node::TableRow(_) => {}
+            // A definition nobody references still maintains a destination.
+            Node::Definition(_definition) => self.orphan(node, path, *owners)?,
         }
         Ok(true)
+    }
+
+    /// `href` and `src` are read out of a raw-HTML node the way any destination
+    /// is, references decoded; comments and raw-text bodies stay the blind spot.
+    fn destinations(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
+        let Some(region) = self.suffix.as_bytes().get(span.0..span.1) else {
+            return;
+        };
+        let mut found: Vec<(SourceConstruct, String, (usize, usize))> = Vec::new();
+        walk_region(region, |at| {
+            if let Some(end) = opaque_text_end(region, at) {
+                return Some(end);
+            }
+            let Some((construct, attribute)) = destination_open_at(region, at) else {
+                return foreign_tag_end(region, at);
+            };
+            let end = tag_close(region, at)?;
+            let value = unquoted(region, at, |inner, _byte| {
+                if inner >= end {
+                    return Some(None);
+                }
+                attribute_name_at(region, inner, attribute)
+                    .then(|| attribute_value(region, inner.saturating_add(attribute.len())))
+                    .flatten()
+                    .map(|(value, _next)| Some(value))
+            });
+            if let Some(Some(value)) = value {
+                found.push((
+                    construct,
+                    value,
+                    (span.0.saturating_add(at), span.0.saturating_add(end)),
+                ));
+            }
+            Some(end)
+        });
+        for (construct, value, tag_span) in found {
+            if let Some(semantic) = decoded(&value) {
+                self.push(construct, value, semantic, tag_span, path, owners);
+            }
+        }
+    }
+
+    fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) -> Result<(), Fault> {
+        let span = span_of(node)?;
+        if let Some((raw, url)) = self.orphans.get(&span) {
+            let (raw, url) = (raw.clone(), url.clone());
+            self.push(
+                SourceConstruct::LinkReferenceDefinition,
+                raw,
+                url,
+                span,
+                path,
+                owners,
+            );
+        }
+        Ok(())
     }
 
     fn push(
@@ -477,13 +542,21 @@ fn run_length(bytes: &[u8], at: usize, limit: usize) -> usize {
 
 /// Collects reference definitions in document order; the first with a matching
 /// normalized identifier wins.
-type ResolvedDefinitions = (Vec<Definition>, Vec<GovernedDefinition>);
+type OrphanDefinitions = BTreeMap<(usize, usize), (String, String)>;
+type ResolvedDefinitions = (Vec<Definition>, Vec<GovernedDefinition>, OrphanDefinitions);
 
 fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> {
     let mut out = Vec::new();
     let mut governed = Vec::new();
+    let mut used = BTreeSet::new();
     let mut stack = vec![tree];
     while let Some(node) = stack.pop() {
+        if let Node::LinkReference(reference) = node {
+            used.insert(reference.identifier.clone());
+        }
+        if let Node::ImageReference(reference) = node {
+            used.insert(reference.identifier.clone());
+        }
         if let Node::Definition(definition) = node {
             let span = span_of(node)?;
             let label = definition
@@ -517,9 +590,15 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
     }
     out.sort_by_key(|(span, _)| *span);
     governed.sort_by_key(|definition| definition.span);
+    let orphans = out
+        .iter()
+        .filter(|(_, definition)| !definition.reserved && !used.contains(&definition.identifier))
+        .map(|(span, definition)| (*span, (definition.raw.clone(), definition.url.clone())))
+        .collect();
     Ok((
         out.into_iter().map(|(_, definition)| definition).collect(),
         governed,
+        orphans,
     ))
 }
 
@@ -852,6 +931,130 @@ fn walk_region(region: &[u8], mut step: impl FnMut(usize) -> Option<usize>) {
     }
 }
 
+fn destination_open_at(region: &[u8], at: usize) -> Option<(SourceConstruct, &'static [u8])> {
+    if region.get(at) != Some(&b'<') {
+        return None;
+    }
+    for (name, construct, attribute) in [
+        (
+            b"a".as_slice(),
+            SourceConstruct::HtmlAnchor,
+            b"href".as_slice(),
+        ),
+        (
+            b"img".as_slice(),
+            SourceConstruct::HtmlImage,
+            b"src".as_slice(),
+        ),
+    ] {
+        let after = region.get(at.saturating_add(1).saturating_add(name.len()));
+        let opens = region
+            .get(at.saturating_add(1)..at.saturating_add(1).saturating_add(name.len()))
+            .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+            && after
+                .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/');
+        if opens {
+            return Some((construct, attribute));
+        }
+    }
+    None
+}
+
+const RAW_TEXT_ELEMENTS: [&[u8]; 4] = [b"script", b"style", b"textarea", b"title"];
+
+/// A comment or raw-text element body: no renderer follows a tag spelled
+/// inside one, so the miner steps over the whole span.
+fn opaque_text_end(region: &[u8], at: usize) -> Option<usize> {
+    if region.get(at) != Some(&b'<') {
+        return None;
+    }
+    if region.get(at..at.saturating_add(4)) == Some(b"<!--") {
+        return Some(comment_end(region, at));
+    }
+    let name = RAW_TEXT_ELEMENTS.into_iter().find(|name| {
+        let start = at.saturating_add(1);
+        region
+            .get(start..start.saturating_add(name.len()))
+            .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+            && region
+                .get(start.saturating_add(name.len()))
+                .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/')
+    })?;
+    Some(raw_text_end(region, at, name))
+}
+
+/// Any other tag is consumed whole, so a raw-text opener spelled inside its
+/// quoted attribute values is never mistaken for markup.
+fn foreign_tag_end(region: &[u8], at: usize) -> Option<usize> {
+    let named = matches!(region.get(at), Some(&b'<'))
+        && region
+            .get(at.saturating_add(1))
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'/');
+    if named { tag_close(region, at) } else { None }
+}
+
+fn comment_end(region: &[u8], from: usize) -> usize {
+    let start = from.saturating_add(4);
+    region
+        .windows(3)
+        .skip(start)
+        .position(|window| window == b"-->")
+        .map_or(region.len(), |offset| {
+            start.saturating_add(offset).saturating_add(3)
+        })
+}
+
+fn raw_text_end(region: &[u8], from: usize, name: &[u8]) -> usize {
+    let mut at = from.saturating_add(1);
+    while at < region.len() {
+        let after = at.saturating_add(2).saturating_add(name.len());
+        let closes = region.get(at..at.saturating_add(2)) == Some(b"</")
+            && region
+                .get(at.saturating_add(2)..after)
+                .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+            && region
+                .get(after)
+                .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'>');
+        if closes {
+            return tag_end(region, at).unwrap_or(region.len());
+        }
+        at = at.saturating_add(1);
+    }
+    region.len()
+}
+
+/// Every position outside quoted attribute values, visited in order until the
+/// visitor answers; quoted spans are stepped over whole.
+fn unquoted<T>(
+    region: &[u8],
+    from: usize,
+    mut visit: impl FnMut(usize, u8) -> Option<T>,
+) -> Option<T> {
+    let mut quote: Option<u8> = None;
+    let mut at = from;
+    while let Some(byte) = region.get(at).copied() {
+        if let Some(mark) = quote {
+            if byte == mark {
+                quote = None;
+            }
+        } else if byte == b'"' || byte == b'\'' {
+            quote = Some(byte);
+        } else if let Some(result) = visit(at, byte) {
+            return Some(result);
+        }
+        at = at.saturating_add(1);
+    }
+    None
+}
+
+/// The `>` that ends the tag; an unclosed one yields nothing rather than a
+/// truncated span.
+fn tag_close(region: &[u8], from: usize) -> Option<usize> {
+    unquoted(region, from, |at, byte| {
+        (byte == b'>').then(|| at.saturating_add(1))
+    })
+}
+
 fn heading_open_at(region: &[u8], at: usize) -> Option<u8> {
     if region.get(at) != Some(&b'<')
         || !matches!(region.get(at.saturating_add(1)), Some(b'h' | b'H'))
@@ -919,6 +1122,43 @@ fn strip_markup(inner: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// A destination's character references decoded, the format's own semantic
+/// reading. A bare ampersand that forms no reference stays itself; a
+/// reference-shaped run the table cannot decode yields nothing, so the
+/// destination stays a blind spot rather than a half-decoded miss.
+fn decoded(value: &str) -> Option<String> {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(at) = rest.find('&') {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        if let Some((symbol, next)) = reference(tail) {
+            out.push(symbol);
+            rest = next;
+        } else if reference_shaped(tail) {
+            return None;
+        } else {
+            out.push('&');
+            rest = tail.get(1..).unwrap_or_default();
+        }
+    }
+    out.push_str(rest);
+    Some(out)
+}
+
+fn reference_shaped(tail: &str) -> bool {
+    const LONGEST: usize = 32;
+    tail.find(';')
+        .filter(|end| *end <= LONGEST)
+        .and_then(|end| tail.get(1..end))
+        .is_some_and(|body| {
+            !body.is_empty()
+                && body
+                    .chars()
+                    .all(|symbol| symbol.is_ascii_alphanumeric() || symbol == '#')
+        })
 }
 
 /// The named references HTML predefines, plus numeric ones. A run longer than

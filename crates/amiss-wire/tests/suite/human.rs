@@ -59,3 +59,14 @@ fn byte_atoms_escape_every_nonprintable_byte_and_invent_nothing() {
     assert!(rendered.ends_with("...\""));
     assert_eq!(rendered.matches("\\u00fe").count(), 200);
 }
+
+/// One decoder serves every human projection: exact pairs decode, and a
+/// malformed digit is zero rather than a failure.
+#[test]
+fn hex_decodes_once_for_every_projection() {
+    assert_eq!(amiss_wire::human::decode_hex("ff00ab"), vec![0xff, 0, 0xab]);
+    assert_eq!(amiss_wire::human::decode_hex(""), Vec::<u8>::new());
+    assert_eq!(amiss_wire::human::decode_hex("zz"), vec![0]);
+    assert_eq!(amiss_wire::human::decode_hex("abc"), vec![0xab, 0]);
+    assert_eq!(amiss_wire::human::decode_hex("f"), vec![0]);
+}

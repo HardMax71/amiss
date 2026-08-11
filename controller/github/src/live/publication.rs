@@ -122,6 +122,7 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
         publication.check.plan_digest,
         publication.check.execution_constraint_digest,
     );
+    let summary = amiss_controller::feedback::with_feedback(summary, publication.report.as_deref());
     Ok(CreateCheckRun {
         name: config.required_status_name.clone(),
         head_sha: publication.gate_commit.as_str().to_owned(),
