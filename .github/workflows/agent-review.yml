@@ -94,8 +94,8 @@ jobs:
             Your final message is the only summary anywhere: a paragraph
             per finding, one line each beyond what the inline comments
             already carry, and a few plain lines when everything holds.
-            After its details line add one line, review: followed by the
-            html_url the API returned, when a review exists.
+            When a review exists, end with one line, review: followed by
+            the html_url the API returned.
 
             Never push commits, never approve, never request changes
             formally.

@@ -65,5 +65,6 @@ jobs:
             two questions whose answers would decide it. When the issue is
             fine as filed, two plain lines saying so beat a report.
 
-            End the comment with: reply with /oc and your question to dig
-            further. Do not open a pull request and do not change code.
+            Close the visible part with: reply with /oc and your question
+            to dig further. Do not open a pull request and do not change
+            code.
