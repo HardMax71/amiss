@@ -692,7 +692,9 @@ fn html_anchor_and_image_destinations_are_read() {
 #[test]
 fn html_destinations_decode_references_and_survive_quoted_closers() {
     let source = "<div>\n<a href=\"a&amp;b.md\">e</a>\n<a href=\"p?a=1&b=2\">q</a>\n\
-                  <a title=\"a>b\" href=\"real.md\">r</a>\n<a href=\"x>y.md\">x</a>\n</div>\n";
+                  <a title=\"a>b\" href=\"real.md\">r</a>\n<a href=\"x>y.md\">x</a>\n\
+                  <p title=\"<script>\">t</p>\n<a href=\"after.md\">a</a>\n\
+                  <a href=\"a&#x2f;b.md\">n</a>\n</div>\n";
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
         triples(&got),
@@ -717,6 +719,16 @@ fn html_destinations_decode_references_and_survive_quoted_closers() {
                 "x>y.md".to_owned(),
                 "x>y.md".to_owned()
             ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "after.md".to_owned(),
+                "after.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "a&#x2f;b.md".to_owned(),
+                "a/b.md".to_owned()
+            ),
         ]
     );
     let spans: Vec<&str> = got
@@ -731,6 +743,8 @@ fn html_destinations_decode_references_and_survive_quoted_closers() {
             "<a href=\"p?a=1&b=2\">",
             "<a title=\"a>b\" href=\"real.md\">",
             "<a href=\"x>y.md\">",
+            "<a href=\"after.md\">",
+            "<a href=\"a&#x2f;b.md\">",
         ],
         "each occurrence spans its whole opening tag, quoted closers included"
     );
@@ -744,8 +758,10 @@ fn html_destinations_decode_references_and_survive_quoted_closers() {
 fn html_destinations_stay_opaque_when_uncertain() {
     let markdown = "<div>\n<!-- gone: <a href=\"dead.md\">old</a> -->\n\
                     <script>\"<a href='sk.md'>\"</script>\n\
+                    <script>until</scripture> here <a href='pre.md'>p</a></script>\n\
                     <style>a::after { content: \"<a href=st.md>\" }</style>\n\
-                    <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n</div>\n<a href=\"open.md\"\n";
+                    <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n\
+                    <a href=\"a&copy;b.md\">c</a>\n</div>\n<a href=\"open.md\"\n";
     let got = extraction(Adapter::Markdown, markdown);
     assert!(
         got.occurrences.is_empty(),

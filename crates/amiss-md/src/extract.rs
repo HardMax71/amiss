@@ -305,7 +305,9 @@ impl Sweep<'_> {
             if let Some(end) = opaque_text_end(region, at) {
                 return Some(end);
             }
-            let (construct, attribute) = destination_open_at(region, at)?;
+            let Some((construct, attribute)) = destination_open_at(region, at) else {
+                return foreign_tag_end(region, at);
+            };
             let end = tag_close(region, at)?;
             let value = unquoted(region, at, |inner, _byte| {
                 if inner >= end {
@@ -326,8 +328,9 @@ impl Sweep<'_> {
             Some(end)
         });
         for (construct, value, tag_span) in found {
-            let semantic = decoded(&value);
-            self.push(construct, value, semantic, tag_span, path, owners);
+            if let Some(semantic) = decoded(&value) {
+                self.push(construct, value, semantic, tag_span, path, owners);
+            }
         }
     }
 
@@ -980,6 +983,16 @@ fn opaque_text_end(region: &[u8], at: usize) -> Option<usize> {
     Some(raw_text_end(region, at, name))
 }
 
+/// Any other tag is consumed whole, so a raw-text opener spelled inside its
+/// quoted attribute values is never mistaken for markup.
+fn foreign_tag_end(region: &[u8], at: usize) -> Option<usize> {
+    let named = matches!(region.get(at), Some(&b'<'))
+        && region
+            .get(at.saturating_add(1))
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'/');
+    if named { tag_close(region, at) } else { None }
+}
+
 fn comment_end(region: &[u8], from: usize) -> usize {
     let start = from.saturating_add(4);
     region
@@ -994,10 +1007,14 @@ fn comment_end(region: &[u8], from: usize) -> usize {
 fn raw_text_end(region: &[u8], from: usize, name: &[u8]) -> usize {
     let mut at = from.saturating_add(1);
     while at < region.len() {
+        let after = at.saturating_add(2).saturating_add(name.len());
         let closes = region.get(at..at.saturating_add(2)) == Some(b"</")
             && region
-                .get(at.saturating_add(2)..at.saturating_add(2).saturating_add(name.len()))
-                .is_some_and(|slice| slice.eq_ignore_ascii_case(name));
+                .get(at.saturating_add(2)..after)
+                .is_some_and(|slice| slice.eq_ignore_ascii_case(name))
+            && region
+                .get(after)
+                .is_some_and(|byte| byte.is_ascii_whitespace() || *byte == b'>');
         if closes {
             return tag_end(region, at).unwrap_or(region.len());
         }
@@ -1108,8 +1125,10 @@ fn strip_markup(inner: &str) -> String {
 }
 
 /// A destination's character references decoded, the format's own semantic
-/// reading; a bare ampersand that forms no reference stays itself.
-fn decoded(value: &str) -> String {
+/// reading. A bare ampersand that forms no reference stays itself; a
+/// reference-shaped run the table cannot decode yields nothing, so the
+/// destination stays a blind spot rather than a half-decoded miss.
+fn decoded(value: &str) -> Option<String> {
     let mut out = String::with_capacity(value.len());
     let mut rest = value;
     while let Some(at) = rest.find('&') {
@@ -1118,13 +1137,28 @@ fn decoded(value: &str) -> String {
         if let Some((symbol, next)) = reference(tail) {
             out.push(symbol);
             rest = next;
+        } else if reference_shaped(tail) {
+            return None;
         } else {
             out.push('&');
             rest = tail.get(1..).unwrap_or_default();
         }
     }
     out.push_str(rest);
-    out
+    Some(out)
+}
+
+fn reference_shaped(tail: &str) -> bool {
+    const LONGEST: usize = 32;
+    tail.find(';')
+        .filter(|end| *end <= LONGEST)
+        .and_then(|end| tail.get(1..end))
+        .is_some_and(|body| {
+            !body.is_empty()
+                && body
+                    .chars()
+                    .all(|symbol| symbol.is_ascii_alphanumeric() || symbol == '#')
+        })
 }
 
 /// The named references HTML predefines, plus numeric ones. A run longer than
