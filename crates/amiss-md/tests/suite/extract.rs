@@ -684,16 +684,72 @@ fn html_anchor_and_image_destinations_are_read() {
     assert_eq!(got.opaque.html.len(), 1, "the region stays declared opaque");
 }
 
-/// The blind spot keeps what the miner cannot answer: a character reference
-/// in the value, a tag without its destination attribute, a closing tag, a
-/// foreign tag carrying href, and every element under the MDX grammar.
+/// The two destination spellings hold for raw HTML the way they do for
+/// markdown: the raw value keeps the author's references and the semantic
+/// value decodes them, while a bare ampersand in a query stays itself. A `>`
+/// inside a quoted value neither ends the tag scan nor hides a later
+/// destination attribute, and the occurrence spans the whole opening tag.
+#[test]
+fn html_destinations_decode_references_and_survive_quoted_closers() {
+    let source = "<div>\n<a href=\"a&amp;b.md\">e</a>\n<a href=\"p?a=1&b=2\">q</a>\n\
+                  <a title=\"a>b\" href=\"real.md\">r</a>\n<a href=\"x>y.md\">x</a>\n</div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![
+            (
+                SourceConstruct::HtmlAnchor,
+                "a&amp;b.md".to_owned(),
+                "a&b.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "p?a=1&b=2".to_owned(),
+                "p?a=1&b=2".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "real.md".to_owned(),
+                "real.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "x>y.md".to_owned(),
+                "x>y.md".to_owned()
+            ),
+        ]
+    );
+    let spans: Vec<&str> = got
+        .occurrences
+        .iter()
+        .filter_map(|entry| source.get(entry.span.0..entry.span.1))
+        .collect();
+    assert_eq!(
+        spans,
+        vec![
+            "<a href=\"a&amp;b.md\">",
+            "<a href=\"p?a=1&b=2\">",
+            "<a title=\"a>b\" href=\"real.md\">",
+            "<a href=\"x>y.md\">",
+        ],
+        "each occurrence spans its whole opening tag, quoted closers included"
+    );
+}
+
+/// The blind spot keeps what no renderer follows: a tag spelled inside a
+/// comment or a raw-text body, a tag without its destination attribute, a
+/// closing tag, a foreign tag carrying href, an unclosed opener, and every
+/// element under the MDX grammar.
 #[test]
 fn html_destinations_stay_opaque_when_uncertain() {
-    let markdown = "<a href=\"a&amp;b.md\">e</a> <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n";
+    let markdown = "<div>\n<!-- gone: <a href=\"dead.md\">old</a> -->\n\
+                    <script>\"<a href='sk.md'>\"</script>\n\
+                    <style>a::after { content: \"<a href=st.md>\" }</style>\n\
+                    <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n</div>\n<a href=\"open.md\"\n";
     let got = extraction(Adapter::Markdown, markdown);
     assert!(
         got.occurrences.is_empty(),
-        "uncertain destinations extract nothing: {:?}",
+        "no renderer follows these, so the miner reads none: {:?}",
         got.occurrences
     );
 
