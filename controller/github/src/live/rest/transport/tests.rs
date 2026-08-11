@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use super::{
     AppCredential, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken, OperationDeadline,
-    Transport, app_jwt, bounded_bytes, map_error, map_status, mint_status, settled,
+    Transport, app_jwt, bounded_bytes, map_error, map_status, rate_limited, settled,
     validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
@@ -108,10 +108,46 @@ fn provider_statuses_have_stable_failure_classes() {
     assert_eq!(map_status(429), ProviderError::Unavailable);
     assert_eq!(map_status(503), ProviderError::Unavailable);
     assert_eq!(map_status(404), ProviderError::InvalidResponse);
-    assert_eq!(mint_status(401), ProviderError::Authentication);
-    assert_eq!(mint_status(403), ProviderError::Authentication);
-    assert_eq!(mint_status(503), ProviderError::Unavailable);
-    assert_eq!(mint_status(404), ProviderError::InvalidResponse);
+}
+
+#[test]
+fn a_rate_limited_403_is_unavailable_not_revoked() {
+    let mut spent = reqwest::header::HeaderMap::new();
+    spent.insert("x-ratelimit-remaining", "0".parse().unwrap());
+    assert_eq!(
+        settled(403, &spent, ProviderError::AuthorizationRevoked),
+        Err(ProviderError::Unavailable)
+    );
+    assert_eq!(
+        settled(403, &spent, ProviderError::Authentication),
+        Err(ProviderError::Unavailable)
+    );
+    assert_eq!(
+        settled(401, &spent, ProviderError::Authentication),
+        Err(ProviderError::Authentication)
+    );
+    assert_eq!(
+        settled(429, &spent, ProviderError::AuthorizationRevoked),
+        Err(ProviderError::Unavailable)
+    );
+    assert_eq!(
+        settled(200, &spent, ProviderError::AuthorizationRevoked),
+        Ok(())
+    );
+}
+
+#[test]
+fn the_rate_limit_signature_is_retry_after_or_a_spent_quota() {
+    let mut spent = reqwest::header::HeaderMap::new();
+    spent.insert("x-ratelimit-remaining", "0".parse().unwrap());
+    let mut live = reqwest::header::HeaderMap::new();
+    live.insert("x-ratelimit-remaining", "4999".parse().unwrap());
+    let mut asked = reqwest::header::HeaderMap::new();
+    asked.insert(reqwest::header::RETRY_AFTER, "60".parse().unwrap());
+    assert!(rate_limited(&spent));
+    assert!(rate_limited(&asked));
+    assert!(!rate_limited(&live));
+    assert!(!rate_limited(&reqwest::header::HeaderMap::new()));
 }
 
 #[test]
@@ -196,19 +232,31 @@ fn a_body_at_exactly_the_ceiling_is_within_it() {
 
 #[test]
 fn only_the_success_range_settles() {
-    assert_eq!(settled(200, map_status), Ok(()));
-    assert_eq!(settled(299, mint_status), Ok(()));
+    let none = reqwest::header::HeaderMap::new();
     assert_eq!(
-        settled(199, map_status),
+        settled(200, &none, ProviderError::AuthorizationRevoked),
+        Ok(())
+    );
+    assert_eq!(settled(299, &none, ProviderError::Authentication), Ok(()));
+    assert_eq!(
+        settled(199, &none, ProviderError::AuthorizationRevoked),
         Err(ProviderError::InvalidResponse)
     );
     assert_eq!(
-        settled(300, map_status),
+        settled(300, &none, ProviderError::AuthorizationRevoked),
         Err(ProviderError::InvalidResponse)
     );
     assert_eq!(
-        settled(401, mint_status),
+        settled(403, &none, ProviderError::AuthorizationRevoked),
+        Err(ProviderError::AuthorizationRevoked)
+    );
+    assert_eq!(
+        settled(401, &none, ProviderError::Authentication),
         Err(ProviderError::Authentication)
+    );
+    assert_eq!(
+        settled(503, &none, ProviderError::Authentication),
+        Err(ProviderError::Unavailable)
     );
 }
 

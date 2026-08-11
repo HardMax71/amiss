@@ -6,7 +6,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderName, HeaderValue};
+use reqwest::header::{
+    ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER,
+};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -115,7 +117,11 @@ impl Transport {
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        settled(response.status().as_u16(), map_status)?;
+        settled(
+            response.status().as_u16(),
+            response.headers(),
+            ProviderError::AuthorizationRevoked,
+        )?;
         decode_body(response)
     }
 
@@ -145,7 +151,11 @@ impl Transport {
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        settled(response.status().as_u16(), mint_status)?;
+        settled(
+            response.status().as_u16(),
+            response.headers(),
+            ProviderError::Authentication,
+        )?;
         let minted: InstallationToken = decode_body(response)?;
         Ok(SecretString::from(minted.token))
     }
@@ -292,29 +302,33 @@ fn map_error(error: &reqwest::Error) -> ProviderError {
     }
 }
 
-fn settled(status: u16, refuse: fn(u16) -> ProviderError) -> Result<(), ProviderError> {
-    if (200..300).contains(&status) {
-        Ok(())
-    } else {
-        Err(refuse(status))
+fn settled(
+    status: u16,
+    headers: &HeaderMap,
+    unauthorized: ProviderError,
+) -> Result<(), ProviderError> {
+    match status {
+        200..300 => Ok(()),
+        403 if rate_limited(headers) => Err(ProviderError::Unavailable),
+        401 | 403 => Err(unauthorized),
+        _ => Err(map_status(status)),
     }
+}
+
+// GitHub marks exhausted limits with retry-after or x-ratelimit-remaining: 0, on 403 too.
+fn rate_limited(headers: &HeaderMap) -> bool {
+    headers.contains_key(RETRY_AFTER)
+        || headers
+            .get(HeaderName::from_static("x-ratelimit-remaining"))
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|remaining| remaining == "0")
 }
 
 fn map_status(status: u16) -> ProviderError {
-    if matches!(status, 401 | 403) {
-        ProviderError::AuthorizationRevoked
-    } else if matches!(status, 408 | 425 | 429) || status >= 500 {
-        ProviderError::Unavailable
-    } else {
-        ProviderError::InvalidResponse
-    }
-}
-
-fn mint_status(status: u16) -> ProviderError {
-    let mapped = map_status(status);
-    if mapped == ProviderError::AuthorizationRevoked {
-        ProviderError::Authentication
-    } else {
-        mapped
+    match status {
+        401 | 403 => ProviderError::AuthorizationRevoked,
+        408 | 425 | 429 => ProviderError::Unavailable,
+        value if value >= 500 => ProviderError::Unavailable,
+        _ => ProviderError::InvalidResponse,
     }
 }
