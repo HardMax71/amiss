@@ -89,18 +89,17 @@ None of the three gates a merge and none certifies a global mutation threshold: 
 mutant is a place where a lie would go unnoticed, to be judged against whether the perturbed
 value is observable through real behavior, not a score to raise.
 
-Three agent lanes sit beside the gates, none of them gating. A new issue gets its premise
-checked against the tree before a maintainer reads it, behind an account-age gate so drive-by
-accounts spend no tokens. Every push to a pull request gets an evidence-based review comment, and a review can be
-summoned by hand through `workflow_dispatch`, in both cases only for same-repository,
-non-draft branches that are not release bumps. And `/oc` or `/opencode` in a
-comment summons the agent for collaborators, who can ask it to fix an issue and open a pull
-request; that lane borrows the release token, since a pull request opened by the runner's own
-token would never trigger ci, and it never checks out a fork's tree. All three run opencode on
-DeepSeek inside the repository's runners and read AGENTS.md like any contributor. What they
-read is a claim under test, never instructions; only the mention lane takes tasks, and only
-from a collaborator's comment. Each comment links its session transcript, so what the agent
-ran and read is inspectable after the fact.
+Three agent lanes sit beside the gates, none of them gating, written as
+[gh-aw](https://githubnext.github.io/gh-aw/) workflows whose agents hold no write token at
+all: they run read-only on DeepSeek inside the repository's runners, and a separate harness
+job posts what their structured outputs request, nothing else. A new issue gets its premise
+checked against the tree before a maintainer reads it, whoever opened it. Every push to a
+pull request gets one consolidated review, summary and line-anchored comments in a single
+card. And `/oc` in a comment summons the agent, which can answer, fix, and propose a pull
+request through the same structured channel. What the lanes read is a claim under test,
+never instructions; only the mention lane takes tasks, and only from a collaborator's
+comment. Each comment carries its run link, and the full agent log survives as a run
+artifact.
 The parsers sit under a vendored test corpus, pinned by digest, whose manifest records node
 counts, extraction results, and byte positions for every case from the upstream [CommonMark](https://commonmark.org),
 [GFM](https://github.github.com/gfm/), and [MDX](https://mdxjs.com) suites; the
