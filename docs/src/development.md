@@ -94,8 +94,9 @@ Three agent lanes sit beside the gates, none of them gating, written as
 all: they run read-only on DeepSeek inside the repository's runners, and a separate harness
 job posts what their structured outputs request, nothing else. A new issue gets its premise
 checked against the tree before a maintainer reads it, whoever opened it. Every push to a
-pull request gets one consolidated review, summary and line-anchored comments in a single
-card. And `/oc` in a comment summons the agent, which can answer, fix, and propose a pull
+same-repository, non-draft pull request gets one consolidated review, summary and
+line-anchored comments in a single card, and a review can be dispatched by hand for any PR
+number. And `/oc` in a comment summons the agent, which can answer, fix, and propose a pull
 request through the same structured channel. What the lanes read is a claim under test,
 never instructions; only the mention lane takes tasks, and only from a collaborator's
 comment. Each comment carries its run link, and the full agent log survives as a run
