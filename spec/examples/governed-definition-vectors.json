@@ -43,7 +43,8 @@
         }
       ],
       "expected_member_count": 0,
-      "expected_sources": []
+      "expected_sources": [],
+      "expected_ordinary_reference_count": 1
     },
     {
       "id": "GD-004-duplicate-source-multiplicity",

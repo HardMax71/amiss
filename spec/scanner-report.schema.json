@@ -2888,7 +2888,8 @@
         "rst-include-directive",
         "rst-file-option",
         "rst-doc-role",
-        "rst-ref-role"
+        "rst-ref-role",
+        "markdown-link-reference-definition"
       ]
     },
     "ObservationSourceConstruct": {
@@ -2914,7 +2915,8 @@
         "rst-include-directive",
         "rst-file-option",
         "rst-doc-role",
-        "rst-ref-role"
+        "rst-ref-role",
+        "markdown-link-reference-definition"
       ]
     },
     "RepositoryTargetIntent": {
