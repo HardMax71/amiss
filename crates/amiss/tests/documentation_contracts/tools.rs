@@ -10,8 +10,7 @@ use std::process::Command;
 
 use crate::support::repository_root;
 
-/// The workspace.metadata.tools tables in the root manifest, parsed
-/// independently of the shell reader they feed.
+/// The workspace.metadata.tools tables in the root manifest.
 fn bench() -> BTreeMap<String, String> {
     let raw = fs::read_to_string(repository_root().join("Cargo.toml"))
         .expect("the root manifest is readable");
@@ -41,25 +40,47 @@ fn bench() -> BTreeMap<String, String> {
     versions
 }
 
-/// The shell reader and this parser answer from the same manifest and must
-/// agree on every tool.
+/// Cargo exposes the same tool table that the manifest parser sees.
 #[test]
-fn the_reader_and_the_manifest_agree() {
-    for (name, version) in bench() {
-        let output = Command::new("sh")
-            .arg("scripts/tools.sh")
-            .arg("version")
-            .arg(&name)
-            .current_dir(repository_root())
-            .output()
-            .expect("scripts/tools.sh runs");
-        assert!(output.status.success(), "the reader refuses {name}");
-        assert_eq!(
-            String::from_utf8_lossy(&output.stdout).trim(),
-            version,
-            "the reader disagrees with the manifest on {name}"
-        );
+fn cargo_metadata_and_the_manifest_agree() {
+    let output = Command::new("cargo")
+        .args([
+            "metadata",
+            "--locked",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--offline",
+        ])
+        .current_dir(repository_root())
+        .output()
+        .expect("cargo metadata runs");
+    assert!(
+        output.status.success(),
+        "cargo metadata refuses the manifest"
+    );
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("cargo metadata emits JSON");
+    let tables = metadata
+        .pointer("/metadata/tools")
+        .and_then(serde_json::Value::as_object)
+        .expect("cargo exposes workspace.metadata.tools");
+    let mut projected = BTreeMap::new();
+    for (table_name, table) in tables {
+        let rows = table
+            .as_object()
+            .unwrap_or_else(|| panic!("metadata.tools.{table_name} is not an object"));
+        for (name, value) in rows {
+            let version = value
+                .as_str()
+                .unwrap_or_else(|| panic!("metadata.tools.{table_name}.{name} is not a string"));
+            assert!(
+                projected.insert(name.clone(), version.to_owned()).is_none(),
+                "cargo metadata declares {name} twice"
+            );
+        }
     }
+    assert_eq!(projected, bench(), "cargo projects a different tool bench");
 }
 
 /// Every `tool:` pin in a workflow naming a declared tool must spell the
@@ -98,22 +119,48 @@ fn workflow_tool_pins_match_the_bench() {
     }
 }
 
-/// The composite holds no version of its own: it calls the reader and keys
-/// its cache on the reader's hash.
+/// Tool consumers ask cargo for the manifest metadata directly; the composite
+/// holds no version or cache hash of its own.
 #[test]
 fn the_tools_composite_reads_the_bench() {
-    let raw = fs::read_to_string(repository_root().join(".github/actions/tools/action.yml"))
+    let root = repository_root();
+    assert!(
+        !root.join("scripts/tools.sh").exists(),
+        "the cargo metadata shim has been recreated"
+    );
+    let raw = fs::read_to_string(root.join(".github/actions/tools/action.yml"))
         .expect("the tools composite is readable");
     assert!(
-        raw.contains("scripts/tools.sh") && raw.contains("steps.bench.outputs.key"),
-        "the composite must call the reader and key its cache on the reader's hash"
+        raw.contains("cargo metadata --locked --format-version 1 --no-deps --offline")
+            && raw.contains(".prebuilt | to_entries")
+            && raw.contains(".source | to_entries")
+            && raw.contains("hashFiles('Cargo.toml')")
+            && raw.contains("runner.arch")
+            && raw.contains("fallback: none"),
+        "the composite must query cargo and use GitHub's manifest hash"
+    );
+    assert!(
+        !raw.contains("scripts/tools.sh"),
+        "the composite calls the removed metadata shim"
     );
     for (name, version) in bench() {
         assert!(
             !raw.contains(&format!("{name}@{version}")),
-            "the composite hardcodes {name}@{version} beside the reader"
+            "the composite hardcodes {name}@{version} beside the manifest"
         );
     }
+    let ci = fs::read_to_string(root.join(".github/workflows/ci.yml"))
+        .expect("the CI workflow is readable");
+    assert!(
+        ci.contains("cargo metadata --locked --format-version 1 --no-deps --offline")
+            && ci.contains(r#".metadata.tools.prebuilt["cargo-nextest"]"#)
+            && ci.contains("fallback: none"),
+        "the platform lane must query cargo for the nextest pin"
+    );
+    assert!(
+        !ci.contains("scripts/tools.sh"),
+        "the platform lane calls the removed metadata shim"
+    );
 }
 
 /// The agent lanes install through the composite, never through their own pins.
@@ -136,7 +183,7 @@ fn the_agent_lanes_ride_the_composite() {
 }
 
 /// The hook config defers to the bench: the prek floor matches, and the
-/// ratchet hooks ask the reader instead of spelling a version.
+/// ratchet hooks ask cargo instead of spelling a version.
 #[test]
 fn the_hook_config_defers_to_the_bench() {
     let bench = bench();
@@ -148,10 +195,19 @@ fn the_hook_config_defers_to_the_bench() {
         "the prek floor does not match the manifest: wanted {floor}"
     );
     assert_eq!(
-        raw.matches("scripts/tools.sh version similarity-rs")
+        raw.matches("cargo metadata --locked --format-version 1 --no-deps --offline")
             .count(),
         2,
-        "both ratchet hooks must ask the reader for their pin"
+        "both ratchet hooks must ask cargo for their pin"
+    );
+    assert_eq!(
+        raw.matches(".metadata.tools.source").count(),
+        2,
+        "both ratchet hooks must read the source tool table"
+    );
+    assert!(
+        !raw.contains("scripts/tools.sh"),
+        "a ratchet hook calls the removed metadata shim"
     );
     assert!(
         !raw.contains(&format!("similarity-rs {}", bench["similarity-rs"])),

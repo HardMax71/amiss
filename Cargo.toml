@@ -149,7 +149,7 @@ opt-level = 2
 [profile.dev.package.sha2]
 opt-level = 2
 
-# Gate-tool pins: read by scripts/tools.sh, checked by the tools contract.
+# Gate-tool pins: exposed by cargo metadata and checked by the tools contract.
 [workspace.metadata.tools.prebuilt]
 prek = "0.4.9"
 typos = "1.48.0"

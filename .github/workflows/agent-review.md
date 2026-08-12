@@ -16,6 +16,7 @@ permissions:
 
 engine:
   id: copilot
+  version: "1.0.79"
   env:
     COPILOT_PROVIDER_BASE_URL: https://api.deepseek.com/v1
     COPILOT_MODEL: deepseek-v4-flash
@@ -26,11 +27,38 @@ network:
     - defaults
     - rust
 
+cache:
+  key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-1.0.79
+  path: ${{ runner.tool_cache }}/copilot-cli/1.0.79
+
+jobs:
+  detection:
+    setup-steps:
+      - name: Restore Copilot CLI
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-1.0.79
+          path: ${{ runner.tool_cache }}/copilot-cli/1.0.79
+
 steps:
   - uses: ./.github/actions/tools
   - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
     with:
       save-if: "false"
+
+pre-agent-steps:
+  - name: Seed Copilot CLI toolcache
+    run: |
+      case "$(uname -m)" in
+        x86_64|amd64) arch=x64 ;;
+        aarch64|arm64) arch=arm64 ;;
+        *) exit 1 ;;
+      esac
+      copilot=$(command -v copilot)
+      target="${RUNNER_TOOL_CACHE}/copilot-cli/1.0.79/${arch}/bin/copilot"
+      if [ "$copilot" != "$target" ]; then
+        install -D -m 0755 "$copilot" "$target"
+      fi
 
 timeout-minutes: 20
 
@@ -41,6 +69,7 @@ safe-outputs:
     continue-on-error: true
     engine:
       id: copilot
+      version: "1.0.79"
       env:
         COPILOT_PROVIDER_BASE_URL: https://api.deepseek.com/v1
         COPILOT_MODEL: deepseek-v4-flash

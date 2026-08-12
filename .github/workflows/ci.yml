@@ -170,10 +170,13 @@ jobs:
         run: Set-MpPreference -DisableRealtimeMonitoring $true
       - id: bench
         shell: bash
-        run: printf 'nextest=%s\n' "$(sh scripts/tools.sh version cargo-nextest)" >> "$GITHUB_OUTPUT"
+        run: |
+          cargo metadata --locked --format-version 1 --no-deps --offline |
+            jq -er '"nextest=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2.85.8
         with:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
+          fallback: none
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: .
