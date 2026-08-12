@@ -18,7 +18,7 @@ case "${1:?usage: tools.sh prebuilt|source|key|version <name>}" in
     printf '%s' "$json" | jq -re '.metadata.tools | tojson' | digest | cut -c1-16
     ;;
   version)
-    result=$(printf '%s' "$json" | jq -re --arg name "${2:?usage: tools.sh version <name>}" \
+    result=$(printf '%s' "$json" | jq -r --arg name "${2:?usage: tools.sh version <name>}" \
       '.metadata.tools | .prebuilt + .source | .[$name] // empty')
     [ -n "$result" ] || { echo "unknown tool: $2" >&2; exit 1; }
     printf '%s\n' "$result"
