@@ -6,44 +6,64 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::process::Command;
 
 use crate::support::repository_root;
 
-/// The workspace.metadata.tools tables in the root manifest are the one
-/// authority for gate-tool versions: `name = "version"` rows, nothing else.
+/// The workspace.metadata.tools tables in the root manifest, parsed
+/// independently of the shell reader they feed.
 fn bench() -> BTreeMap<String, String> {
     let raw = fs::read_to_string(repository_root().join("Cargo.toml"))
         .expect("the root manifest is readable");
+    let manifest: toml::Table = raw.parse().expect("the root manifest parses as TOML");
+    let tables = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("metadata"))
+        .and_then(|metadata| metadata.get("tools"))
+        .and_then(toml::Value::as_table)
+        .expect("the manifest declares workspace.metadata.tools");
     let mut versions = BTreeMap::new();
-    let mut inside = false;
-    for line in raw.lines() {
-        let line = line.trim();
-        if let Some(header) = line.strip_prefix('[') {
-            inside = header.starts_with("workspace.metadata.tools.");
-            continue;
+    for (table_name, table) in tables {
+        let rows = table
+            .as_table()
+            .unwrap_or_else(|| panic!("tools.{table_name} is not a table"));
+        for (name, value) in rows {
+            let version = value
+                .as_str()
+                .unwrap_or_else(|| panic!("tools.{table_name}.{name} is not a string"));
+            assert!(
+                versions.insert(name.clone(), version.to_owned()).is_none(),
+                "the tools tables declare {name} twice"
+            );
         }
-        if !inside || line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let (name, rest) = line
-            .split_once(" = \"")
-            .unwrap_or_else(|| panic!("tools row is not name = \"version\": {line}"));
-        let version = rest
-            .strip_suffix('"')
-            .unwrap_or_else(|| panic!("tools row lacks its closing quote: {line}"));
-        assert!(
-            versions
-                .insert(name.to_owned(), version.to_owned())
-                .is_none(),
-            "the tools tables declare {name} twice"
-        );
     }
     assert!(versions.len() >= 10, "the bench lost tools: {versions:?}");
     versions
 }
 
-/// Every `tool:` pin anywhere under .github naming a declared tool must spell
-/// the declared version, so no workflow can drift from tools.toml.
+/// The shell reader and this parser answer from the same manifest and must
+/// agree on every tool.
+#[test]
+fn the_reader_and_the_manifest_agree() {
+    for (name, version) in bench() {
+        let output = Command::new("sh")
+            .arg("scripts/tools.sh")
+            .arg("version")
+            .arg(&name)
+            .current_dir(repository_root())
+            .output()
+            .expect("scripts/tools.sh runs");
+        assert!(output.status.success(), "the reader refuses {name}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            version,
+            "the reader disagrees with the manifest on {name}"
+        );
+    }
+}
+
+/// Every `tool:` pin in a workflow naming a declared tool must spell the
+/// declared version.
 #[test]
 fn workflow_tool_pins_match_the_bench() {
     let bench = bench();
@@ -66,7 +86,7 @@ fn workflow_tool_pins_match_the_bench() {
                     assert_eq!(
                         version,
                         declared,
-                        "{} pins {name}@{version} against tools.toml's {declared}",
+                        "{} pins {name}@{version} against the manifest's {declared}",
                         path.display()
                     );
                 }
@@ -75,20 +95,20 @@ fn workflow_tool_pins_match_the_bench() {
     }
 }
 
-/// The composite carries no version of its own: it parses tools.toml and keys
-/// its cache on the file's hash.
+/// The composite holds no version of its own: it calls the reader and keys
+/// its cache on the reader's hash.
 #[test]
 fn the_tools_composite_reads_the_bench() {
     let raw = fs::read_to_string(repository_root().join(".github/actions/tools/action.yml"))
         .expect("the tools composite is readable");
     assert!(
-        raw.contains("workspace\\.metadata\\.tools") && raw.contains("steps.bench.outputs.key"),
-        "the composite must extract the manifest tables and key its cache on their hash"
+        raw.contains("scripts/tools.sh") && raw.contains("steps.bench.outputs.key"),
+        "the composite must call the reader and key its cache on the reader's hash"
     );
     for (name, version) in bench() {
         assert!(
             !raw.contains(&format!("{name}@{version}")),
-            "the composite hardcodes {name}@{version} beside the file it parses"
+            "the composite hardcodes {name}@{version} beside the reader"
         );
     }
 }
@@ -112,8 +132,8 @@ fn the_agent_lanes_ride_the_composite() {
     }
 }
 
-/// prek's floor in the hook config is the bench's prek, and the ratchet hooks
-/// take their version from tools.toml rather than an inline spelling.
+/// The hook config defers to the bench: the prek floor matches, and the
+/// ratchet hooks ask the reader instead of spelling a version.
 #[test]
 fn the_hook_config_defers_to_the_bench() {
     let bench = bench();
@@ -122,12 +142,13 @@ fn the_hook_config_defers_to_the_bench() {
     let floor = format!("minimum_prek_version: \"{}\"", bench["prek"]);
     assert!(
         raw.contains(&floor),
-        "the prek floor does not match tools.toml: wanted {floor}"
+        "the prek floor does not match the manifest: wanted {floor}"
     );
     assert_eq!(
-        raw.matches("s/^similarity-rs = ").count(),
+        raw.matches("scripts/tools.sh version similarity-rs")
+            .count(),
         2,
-        "both ratchet hooks must read their pin out of the root manifest"
+        "both ratchet hooks must ask the reader for their pin"
     );
     assert!(
         !raw.contains(&format!("similarity-rs {}", bench["similarity-rs"])),
@@ -135,9 +156,8 @@ fn the_hook_config_defers_to_the_bench() {
     );
 }
 
-/// The gh-aw commands dispatcher runs with credentials, so its setup action
-/// stays sha-pinned; the compiler emits a mutable tag and the pin is applied
-/// by hand after every compile until upstream reads its own ledger.
+/// The credentialed dispatcher reaches its setup action by sha; the compiler
+/// re-emits a mutable tag on every compile until upstream reads its ledger.
 #[test]
 fn the_dispatcher_setup_action_is_sha_pinned() {
     let raw = fs::read_to_string(repository_root().join(".github/workflows/agentic_commands.yml"))
