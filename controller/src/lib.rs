@@ -8,6 +8,7 @@ mod bootstrap_job;
 mod bootstrap_result;
 mod bootstrap_runner;
 mod clock;
+pub mod feedback;
 mod file_ledger;
 mod identity;
 mod ingress;

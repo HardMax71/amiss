@@ -1,15 +1,21 @@
 # Resolution
 
 Parsing turns each document into a list of occurrences: inline links and images, reference
-style links, and autolinks. Each occurrence keeps two spellings of its destination. The raw
-one is the exact bytes from the source. The semantic one is what those bytes mean after the
-format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
+style links, autolinks, and any reference definition no reference in the document consumes,
+since an orphaned `[api]: ./guide.md` still maintains a destination someone will trust.
+Each occurrence keeps two spellings of its destination. The raw one is the exact bytes from
+the source. The semantic one is what those bytes mean after the format's own decoding. So `[a](&amp;b)` records both `&amp;b` and `&b`, and a change to
 either the spelling or the meaning is visible later.
 
 What the parser cannot see into is declared instead of skipped. Raw HTML blocks and [MDX](https://mdxjs.com)
 expressions become opaque regions, reported with their size and place as
 `opaque-html-region` and `opaque-mdx-region` findings, so a link hidden inside JSX is a
-stated blind spot rather than an invisible one.
+stated blind spot rather than an invisible one. An HTML region still yields what a
+renderer would follow: `<a href>` and `<img src>` values resolve like any markdown
+destination, character references decoded into the semantic spelling, alongside the
+headings and `id` attributes the anchor tables already harvest. A tag spelled inside a
+comment or a script, style, textarea, or title body is followed by no renderer and is
+never mined, and the rest of the region stays the declared blind spot.
 
 Each destination then passes through the generic
 [resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);

@@ -433,12 +433,20 @@ fn reserved_definitions_surface_and_suppress() {
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
         triples(&got),
-        vec![(
-            SourceConstruct::FullReferenceLink,
-            "./real.md".to_owned(),
-            "./real.md".to_owned()
-        )],
-        "the reserved winner suppresses its consumer; the ordinary one stays"
+        vec![
+            (
+                SourceConstruct::FullReferenceLink,
+                "./real.md".to_owned(),
+                "./real.md".to_owned()
+            ),
+            (
+                SourceConstruct::LinkReferenceDefinition,
+                "./case.md".to_owned(),
+                "./case.md".to_owned()
+            ),
+        ],
+        "the reserved winner suppresses its consumer; the ordinary one stays; \
+         the case-folded label is no reservation, so its unconsumed definition extracts"
     );
     assert_eq!(
         got.governed.len(),
@@ -636,14 +644,157 @@ fn adjacent_opaque_constructs_coalesce() {
     );
 }
 
+/// Raw-HTML anchors and images maintain destinations the way markdown links
+/// do: `href` and `src` are read in every quoting form and both letter cases,
+/// while everything else in the region stays the declared blind spot.
+#[test]
+fn html_anchor_and_image_destinations_are_read() {
+    let source = "<div>\n<a href=\"a.md\">a</a>\n<img src='b.png'>\n<A HREF=c.md>c</A>\n</div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![
+            (
+                SourceConstruct::HtmlAnchor,
+                "a.md".to_owned(),
+                "a.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlImage,
+                "b.png".to_owned(),
+                "b.png".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "c.md".to_owned(),
+                "c.md".to_owned()
+            ),
+        ]
+    );
+    let spans: Vec<&str> = got
+        .occurrences
+        .iter()
+        .filter_map(|entry| source.get(entry.span.0..entry.span.1))
+        .collect();
+    assert_eq!(
+        spans,
+        vec!["<a href=\"a.md\">", "<img src='b.png'>", "<A HREF=c.md>"],
+        "each occurrence spans its own opening tag"
+    );
+    assert_eq!(got.opaque.html.len(), 1, "the region stays declared opaque");
+}
+
+/// The two destination spellings hold for raw HTML the way they do for
+/// markdown: the raw value keeps the author's references and the semantic
+/// value decodes them, while a bare ampersand in a query stays itself. A `>`
+/// inside a quoted value neither ends the tag scan nor hides a later
+/// destination attribute, and the occurrence spans the whole opening tag.
+#[test]
+fn html_destinations_decode_references_and_survive_quoted_closers() {
+    let source = "<div>\n<a href=\"a&amp;b.md\">e</a>\n<a href=\"p?a=1&b=2\">q</a>\n\
+                  <a title=\"a>b\" href=\"real.md\">r</a>\n<a href=\"x>y.md\">x</a>\n\
+                  <p title=\"<script>\">t</p>\n<a href=\"after.md\">a</a>\n\
+                  <a href=\"a&#x2f;b.md\">n</a>\n</div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![
+            (
+                SourceConstruct::HtmlAnchor,
+                "a&amp;b.md".to_owned(),
+                "a&b.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "p?a=1&b=2".to_owned(),
+                "p?a=1&b=2".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "real.md".to_owned(),
+                "real.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "x>y.md".to_owned(),
+                "x>y.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "after.md".to_owned(),
+                "after.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "a&#x2f;b.md".to_owned(),
+                "a/b.md".to_owned()
+            ),
+        ]
+    );
+    let spans: Vec<&str> = got
+        .occurrences
+        .iter()
+        .filter_map(|entry| source.get(entry.span.0..entry.span.1))
+        .collect();
+    assert_eq!(
+        spans,
+        vec![
+            "<a href=\"a&amp;b.md\">",
+            "<a href=\"p?a=1&b=2\">",
+            "<a title=\"a>b\" href=\"real.md\">",
+            "<a href=\"x>y.md\">",
+            "<a href=\"after.md\">",
+            "<a href=\"a&#x2f;b.md\">",
+        ],
+        "each occurrence spans its whole opening tag, quoted closers included"
+    );
+}
+
+/// The blind spot keeps what no renderer follows: a tag spelled inside a
+/// comment or a raw-text body, a tag without its destination attribute, a
+/// closing tag, a foreign tag carrying href, an unclosed opener, and every
+/// element under the MDX grammar.
+#[test]
+fn html_destinations_stay_opaque_when_uncertain() {
+    let markdown = "<div>\n<!-- gone: <a href=\"dead.md\">old</a> -->\n\
+                    <script>\"<a href='sk.md'>\"</script>\n\
+                    <script>until</scripture> here <a href='pre.md'>p</a></script>\n\
+                    <style>a::after { content: \"<a href=st.md>\" }</style>\n\
+                    <a id=\"x\">n</a> </a> <p href=\"y.md\">p</p>\n\
+                    <div data-x=\"<a href=dead.md>\">ok</div>\n\
+                    <div title=\"<img src=gone.png>\">t</div>\n\
+                    <a href=\"a&copy;b.md\">c</a>\n</div>\n<a href=\"open.md\"\n";
+    let got = extraction(Adapter::Markdown, markdown);
+    assert!(
+        got.occurrences.is_empty(),
+        "no renderer follows these, so the miner reads none: {:?}",
+        got.occurrences
+    );
+
+    let mdx = extraction(Adapter::Mdx, "See <a href=\"x.md\">x</a>.\n");
+    assert!(
+        mdx.occurrences.is_empty(),
+        "MDX elements are JSX, not raw HTML: {:?}",
+        mdx.occurrences
+    );
+    assert_eq!(mdx.opaque.mdx.len(), 1, "the JSX region is the blind spot");
+}
+
 /// A GFM task checkbox is a checkbox, not a shortcut reference, even when a
-/// definition spells its label.
+/// definition spells its label; the unconsumed definition then extracts as
+/// its own occurrence rather than vanishing.
 #[test]
 fn a_task_checkbox_is_not_a_reference() {
     for adapter in [Adapter::Markdown, Adapter::Mdx] {
         let got = extraction(adapter, "- [x] done\n\n[x]: target.md\n");
-        assert!(
-            got.occurrences.is_empty(),
+        let constructs: Vec<_> = got
+            .occurrences
+            .iter()
+            .map(|occurrence| occurrence.construct)
+            .collect();
+        assert_eq!(
+            constructs,
+            vec![SourceConstruct::LinkReferenceDefinition],
             "{adapter:?}: {:?}",
             got.occurrences
         );

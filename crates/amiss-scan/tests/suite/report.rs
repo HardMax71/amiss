@@ -173,7 +173,7 @@ fn assert_grouped_feedback(payload: &serde_json::Value) {
     assert_eq!(feedback["status"], "available");
     assert_eq!(feedback["existing_count"], 1);
     let items = feedback["items"].as_array().unwrap();
-    assert_eq!(items.len(), 3);
+    assert_eq!(items.len(), 4);
     assert_eq!(items[0]["action"], "fix");
     assert_eq!(items[0]["target"], "docs/new-missing.md");
     assert_eq!(
@@ -193,6 +193,14 @@ fn assert_grouped_feedback(payload: &serde_json::Value) {
     assert_eq!(items[2]["target"], "docs/target.md");
     assert_eq!(items[2]["location_count"], 2);
     assert!(items[2]["annotation"].is_null());
+    assert_eq!(items[3]["action"], "existing");
+    assert_eq!(items[3]["target"], "docs/missing.md");
+    assert_eq!(
+        items[3]["finding_kinds"],
+        serde_json::json!(["explicit-target-missing"])
+    );
+    assert_eq!(items[3]["location_count"], 1);
+    assert!(items[3]["annotation"].is_null());
 }
 
 #[test]
@@ -364,7 +372,7 @@ fn invalid_references_split_new_existing_and_ambiguous_feedback() {
     let feedback = &wire["payload"]["feedback"];
     assert_eq!(feedback["existing_count"], 1);
     let items = feedback["items"].as_array().unwrap();
-    assert_eq!(items.len(), 2);
+    assert_eq!(items.len(), 3);
     assert_eq!(items[0]["action"], "fix");
     assert!(items[0]["target"].is_null());
     assert_eq!(items[0]["location_count"], 1);
@@ -373,6 +381,10 @@ fn invalid_references_split_new_existing_and_ambiguous_feedback() {
     assert!(items[1]["target"].is_null());
     assert_eq!(items[1]["location_count"], 2);
     assert!(items[1]["annotation"].is_null());
+    assert_eq!(items[2]["action"], "existing");
+    assert!(items[2]["target"].is_null());
+    assert_eq!(items[2]["location_count"], 1);
+    assert!(items[2]["annotation"].is_null());
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]

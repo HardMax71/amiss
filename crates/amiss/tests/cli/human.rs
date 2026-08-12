@@ -92,7 +92,7 @@ fn repeated_error_codes_are_explained_once() {
 }
 
 #[test]
-fn human_output_keeps_existing_findings_out_of_feedback_and_notes() {
+fn pre_existing_findings_render_as_existing_rows_without_fix_or_notes() {
     let fx = fixture();
     let root = fx.root();
     fs::write(root.join("source.rs"), "pub fn untouched() {}\n").unwrap_or_default();
@@ -118,10 +118,14 @@ fn human_output_keeps_existing_findings_out_of_feedback_and_notes() {
         text.starts_with("amiss: pass (fix 0, check 0, existing 1, errors 0, exit 0)"),
         "got: {text}"
     );
+    assert!(
+        text.contains("Existing target \"docs/missing.md\" affected places 1"),
+        "the backlog renders under its own label: {text}"
+    );
     assert!(!text.lines().any(|line| line.starts_with("Fix ")), "{text}");
     assert!(
         !text.contains("note explicit-target-missing:"),
-        "background findings do not expand the focused projection: {text}"
+        "finding kinds stay out of the note lines: {text}"
     );
     assert!(
         text.contains("findings: total "),
@@ -168,7 +172,15 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
     );
     assert!(
         text.contains("feedback overflow: 191 more in the full report"),
-        "{text}"
+        "the fix window overflows without counting the backlog: {text}"
+    );
+    assert!(
+        text.contains("Existing target \"docs/missing.md\" affected places 1"),
+        "the backlog window survives two hundred introduced items: {text}"
+    );
+    assert!(
+        !text.contains("existing overflow"),
+        "one backlog item is not an overflow: {text}"
     );
     assert_eq!(
         text.matches("explicit-target-missing").count(),
@@ -194,9 +206,186 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
     let payload = payload(&stdout);
     assert_eq!(
         payload["feedback"]["items"].as_array().map(Vec::len),
-        Some(201),
+        Some(202),
         "the report retains every item; only presentation is capped"
     );
+}
+
+/// The carried backlog is listed, not only counted: a pre-existing broken
+/// reference renders one Existing item after Fixes and Checks, under observe
+/// where it warns and under enforce where it blocks the run.
+#[test]
+fn pre_existing_findings_render_as_existing_items() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "See [setup](docs/setup.md).\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("NOTES.md"), "# Notes\n\n[readme](README.md)\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
+    for (profile, expected_exit) in [("observe", 0), ("enforce", 1)] {
+        let (code, stdout, _stderr) = amiss(&[
+            "check",
+            "--repo",
+            &repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &base,
+            "--candidate",
+            &candidate,
+            "--profile",
+            profile,
+        ]);
+        assert_eq!(code, expected_exit, "profile {profile}");
+        let text = String::from_utf8_lossy(&stdout);
+        assert!(
+            text.contains("Existing target \"docs/setup.md\" affected places 1"),
+            "the backlog names its target under {profile}: {text}"
+        );
+        assert!(
+            text.contains("existing 1,"),
+            "the header count agrees with the listed item under {profile}: {text}"
+        );
+    }
+}
+
+/// The backlog window is its own: ten Existing rows and an existing overflow
+/// line, whatever the introduced volume beside them.
+#[test]
+fn the_backlog_window_caps_at_ten_with_its_own_overflow() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    for index in 0..11 {
+        fs::write(
+            root.join(format!("doc-{index}.md")),
+            format!("[x](gone-{index}.md)\n"),
+        )
+        .unwrap_or_default();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("NOTES.md"), "# Notes\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ]);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains("existing 11,"),
+        "the header counts all: {text}"
+    );
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("Existing "))
+            .count(),
+        10,
+        "ten backlog rows and no more: {text}"
+    );
+    assert!(
+        text.contains("existing overflow: 1 more in the full report"),
+        "{text}"
+    );
+}
+
+/// Commits one document beside the fixture base, runs enforce over the pair,
+/// and returns the exit code, the human text, and the sorted candidate-side
+/// constructs matching the prefix from the JSON report.
+#[expect(clippy::indexing_slicing, reason = "test assertion helper")]
+fn enforced_document(name: &str, body: &str, prefix: &str) -> (i32, String, Vec<String>) {
+    let fx = fixture();
+    let root = fx.root();
+    fs::write(root.join(name), body).unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "case"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let base_args = [
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+    ];
+    let (code, stdout, _stderr) = amiss(&base_args);
+    let text = String::from_utf8_lossy(&stdout).into_owned();
+    let mut json_args = base_args.to_vec();
+    json_args.extend(["--format", "json"]);
+    let (_code, stdout, _stderr) = amiss(&json_args);
+    let payload = payload(&stdout);
+    let mut constructs: Vec<String> = payload["observations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| row["candidate"]["source_construct"].as_str())
+        .filter(|construct| construct.starts_with(prefix))
+        .map(str::to_owned)
+        .collect();
+    constructs.sort_unstable();
+    (code, text, constructs)
+}
+
+/// An orphaned definition and a raw-HTML destination each maintain a target
+/// the way a markdown link does: the dead one blocks under enforce and names
+/// its target, the live neighbour in the same document is no finding, and
+/// each extracts under its own construct in the report.
+#[test]
+fn orphan_definitions_and_html_destinations_gate_like_links() {
+    let cases = [
+        (
+            "docs/orphans.md",
+            "# Notes\n\nSee [kept][live].\n\n[live]: guide.md\n\n[api]: gone.md\n",
+            "markdown-link-reference-definition",
+            "docs/gone.md",
+            vec!["markdown-link-reference-definition"],
+        ),
+        (
+            "docs/media.md",
+            "# Media\n\n<a href=\"guide.md\">ok</a>\n\n<img src=\"logo.png\">\n",
+            "html-",
+            "docs/logo.png",
+            vec!["html-anchor", "html-image"],
+        ),
+    ];
+    for (name, body, prefix, dead_target, expected) in cases {
+        let (code, text, constructs) = enforced_document(name, body, prefix);
+        assert_eq!(code, 1, "{name}: the dead destination blocks under enforce");
+        assert!(
+            text.contains(&format!("Fix target \"{dead_target}\" affected places 1")),
+            "{name} names its dead target: {text}"
+        );
+        assert!(
+            !text.contains("Fix target \"docs/guide.md\""),
+            "{name}: the live destination is no finding: {text}"
+        );
+        assert_eq!(constructs, expected, "{name} constructs");
+    }
 }
 
 /// A repository path is untrusted bytes, and the human projection is a place those
