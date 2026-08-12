@@ -147,3 +147,21 @@ opt-level = 2
 
 [profile.dev.package.sha2]
 opt-level = 2
+
+# The bench every gate runs on: one version per tool. The tools composite
+# extracts these tables and keys its cache on their hash, the ratchet hooks
+# read the similarity pin at run time, and the tools documentation contract
+# pins every remaining spelling elsewhere to these values.
+[workspace.metadata.tools.prebuilt]
+prek = "0.4.9"
+typos = "1.48.0"
+cargo-nextest = "0.9.140"
+cargo-deny = "0.20.2"
+cargo-shear = "1.13.1"
+cargo-llvm-cov = "0.8.7"
+cargo-mutants = "27.1.0"
+zizmor = "1.26.1"
+
+[workspace.metadata.tools.source]
+cargo-fuzz = "0.13.2"
+similarity-rs = "0.5.0"
