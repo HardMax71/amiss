@@ -4,18 +4,13 @@ description: Restore or fetch the cargo tool binaries pinned under workspace.met
 runs:
   using: composite
   steps:
-    # Cargo.toml's tools tables are the single source: the cache key is the
-    # hash of the extracted lists, so it moves exactly when a tool does.
     - id: bench
       shell: bash
       run: |
-        prebuilt=$(sed -n '/^\[workspace\.metadata\.tools\.prebuilt\]/,/^\[workspace\.metadata\.tools\.source\]/{s/^\([a-z0-9-]*\) = "\(.*\)"/\1@\2/p}' Cargo.toml | paste -sd, -)
-        source=$(sed -n '/^\[workspace\.metadata\.tools\.source\]/,${s/^\([a-z0-9-]*\) = "\(.*\)"/\1@\2/p}' Cargo.toml | paste -sd' ' -)
-        key=$(printf '%s\n%s\n' "$prebuilt" "$source" | sha256sum | cut -c1-16)
         {
-          printf 'prebuilt=%s\n' "$prebuilt"
-          printf 'source=%s\n' "$source"
-          printf 'key=%s\n' "$key"
+          printf 'prebuilt=%s\n' "$(scripts/tools.sh prebuilt)"
+          printf 'source=%s\n' "$(scripts/tools.sh source)"
+          printf 'key=%s\n' "$(scripts/tools.sh key)"
         } >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -26,8 +21,7 @@ runs:
       uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
       with:
         tool: ${{ steps.bench.outputs.prebuilt }}
-    # The source table holds the tools that publish no prebuilt manifest; they
-    # are the only compiles left on a cold cache.
+    # The source table's tools publish no prebuilt manifest.
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
@@ -42,8 +36,6 @@ runs:
         for entry in ${PREBUILT_TOOLS//,/ }; do
           cp "$(command -v "${entry%@*}")" "$HOME/.cargo-tools/bin/"
         done
-    # Exporting the tool directory onto PATH is this composite's whole point. The
-    # value is a fixed name under the runner's own HOME, and what sits inside it
-    # is the pinned installs above, so nothing candidate-controlled is written.
+    # A fixed path under the runner's own HOME, holding only the installs above.
     - shell: bash
       run: echo "$HOME/.cargo-tools/bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env]

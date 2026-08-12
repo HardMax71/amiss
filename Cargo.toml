@@ -64,6 +64,7 @@ sha1-checked = "0.10"
 sha2 = "0.11"
 strum = { version = "0.28", features = ["derive"] }
 tempfile = "3"
+toml = "0.9"
 tokio = "1.53.1"
 tower = { version = "0.5.3", features = ["util"] }
 unicode-general-category = "1.1"
@@ -148,10 +149,7 @@ opt-level = 2
 [profile.dev.package.sha2]
 opt-level = 2
 
-# The bench every gate runs on: one version per tool. The tools composite
-# extracts these tables and keys its cache on their hash, the ratchet hooks
-# read the similarity pin at run time, and the tools documentation contract
-# pins every remaining spelling elsewhere to these values.
+# Gate-tool pins: read by scripts/tools.sh, checked by the tools contract.
 [workspace.metadata.tools.prebuilt]
 prek = "0.4.9"
 typos = "1.48.0"
