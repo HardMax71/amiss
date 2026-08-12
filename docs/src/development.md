@@ -9,6 +9,12 @@ expectation in the finding.
 
 [amiss:toolchain-channel]: <amiss:value?path=rust-toolchain.toml&line=L2> 'channel = "1.97.0"'
 
+Gate-tool versions live in one file, `tools.toml` at the repository root: the CI tools
+composite parses it and keys its cache on the file's hash, the agent lanes install
+through that same composite, the ratchet hooks read their pin out of it at run time, and
+a documentation-contract test refuses any workflow spelling a declared tool at another
+version. Bumping a tool is one edit.
+
 Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks
 on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
 warnings denied, the full test suite, `cargo deny`, `cargo shear`, and two exact-count
