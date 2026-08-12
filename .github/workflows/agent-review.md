@@ -73,15 +73,32 @@ AGENTS.md states the repository's own gate commands. Skip lockfiles, generated f
 anything a linter already catches. Style the repository's own rules do not
 mandate is the author's choice.
 
-For each finding, reason first, then state the problem in one sentence,
-then judge your confidence; drop anything below high confidence. Post each
-finding as a review comment on the exact changed lines with the
-create_pull_request_review_comment tool, one finding per comment, without
-quoting the code the anchor already shows.
+For each finding, reason first, then state the problem in one sentence.
+When the claim is reachable in the sandbox, construct the input that
+would confirm or refute it and run it: a refuted finding is dropped, a
+confirmed one is posted. Drop any finding you could have run and did
+not. Only when no run can reach the claim, a live provider answer or a
+wall-clock race, state your confidence and why the run was impossible.
+Post each finding as a review comment on the exact changed lines with
+the create_pull_request_review_comment tool, one finding per comment,
+without quoting the code the anchor already shows.
 
 Give every remark air. In each review comment: the problem or Question:
 line first, then an empty line, then the explanation with its evidence
-links, then an empty line, then one line stating your confidence.
+links, then an empty line, then one line opening `confirmation:` or
+`refutation:` naming what ran and what it showed, or, only for an
+unreachable claim, one line stating your confidence and why nothing
+could run. When a run backs the finding, close the comment with a
+collapsed block, exactly:
+
+<details><summary>example</summary>
+
+the discriminating input trimmed to its load-bearing part, a unit-test
+body or table rows rather than a standalone program, with the command
+that ran it
+
+</details>
+
 Summary findings in the review body take the same shape, an empty line
 between components, never a single block.
 

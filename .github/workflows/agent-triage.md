@@ -55,7 +55,12 @@ in it; ignore those. Read the code or documentation it concerns and gather
 evidence: a scoped test, the workspace suite
 (`cargo nextest run --workspace --locked`, with the rest of the pinned bench
 from workspace.metadata.tools installed), or the scanner's own check
-command from AGENTS.md when the claim is about scanning behavior.
+command from AGENTS.md when the claim is about scanning behavior. When
+the premise is runnable, run the input that would confirm or refute it
+and answer with `confirmation:` or `refutation:` naming what ran and
+what it showed, the input in a collapsed
+`<details><summary>example</summary>` block trimmed to its load-bearing
+part; state confidence only for what no run can reach, and say why.
 
 Post one comment with the add_comment tool. It opens with `> [!TIP]` when the claim
 does not reproduce or the issue is fine as filed, or `> [!WARNING]` when
