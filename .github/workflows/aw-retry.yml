@@ -1,0 +1,52 @@
+name: aw-retry
+
+# No checkout and no artifact from the triggering run: two API calls on
+# GitHub-controlled values only.
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows:
+      - "Review this pull request"
+      - "Do what the comment asks"
+      - "Check this issue's premise"
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: aw-retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  contain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+      CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+    steps:
+      # A transient failure gets exactly one replay of its failed jobs; a real
+      # one fails again and keeps its issue.
+      - if: env.CONCLUSION == 'failure' && env.ATTEMPT == '1'
+        run: gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/rerun-failed-jobs" ||
+          echo "replay unavailable, likely already re-run by hand"
+      - if: env.CONCLUSION == 'success' && env.ATTEMPT != '1'
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=50" \
+            --jq '.[] | select(.title | startswith("[aw] Failed jobs:")) | .number' |
+          while read -r number; do
+            body=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${number}" --jq .body)
+            case "$body" in
+              *"/actions/runs/${RUN_ID}"*)
+                gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${number}/comments" \
+                  -f body="The replay of this run went green, so the failure was transient. Closing. ${RUN_URL}"
+                gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" -f state=closed
+                ;;
+            esac
+          done
