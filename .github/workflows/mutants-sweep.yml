@@ -1,0 +1,112 @@
+name: mutants-sweep
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutants-sweep
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # The sweep shards skip their baseline, so this run establishes its own.
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: mutants-v2
+          save-if: "false"
+      - run: cargo nextest run --workspace --locked --cargo-profile mutants
+
+  # Pin the work per shard, not the shard count, so the split follows the tree.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      shards: ${{ steps.split.outputs.shards }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+      - id: split
+        env:
+          PER_SHARD: "400"
+          # One matrix generates at most 256 jobs, so nothing here may ask for more.
+          MAX_SHARDS: "256"
+        run: |
+          set -euo pipefail
+          total=$(cargo mutants --list | { grep -c . || :; })
+          wanted=$(( (total + PER_SHARD - 1) / PER_SHARD ))
+          shards="$wanted"
+          if [ "$shards" -gt "$MAX_SHARDS" ]; then
+            shards="$MAX_SHARDS"
+            echo "a matrix cannot hold $wanted jobs, so each shard takes more than $PER_SHARD" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$shards" -lt 1 ]; then shards=1; fi
+          echo "shards=[$(seq -s, 0 $((shards - 1)))]" >> "$GITHUB_OUTPUT"
+          echo "$total mutants over $shards shards" >> "$GITHUB_STEP_SUMMARY"
+
+  sweep:
+    needs: [baseline, plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/tools
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          shared-key: mutants-v2
+          save-if: "false"
+      # The default slice hands one shard every mutant of the slowest file.
+      - run: |
+          cargo mutants --in-place --no-shuffle --profile=mutants \
+            --shard "$SHARD/$SHARDS" \
+            --baseline skip --timeout 60 -- --profile mutants
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        continue-on-error: true
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out/
+
+  collect:
+    if: always()
+    needs: sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Merging deletes the shard artifacts, so it must not run until every
+      # shard has reported; a re-run could not rebuild what it consumed.
+      - if: needs.sweep.result != 'success'
+        run: |
+          echo "a shard did not report, so these counts are not a baseline" \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/upload-artifact/merge@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutants
+          pattern: mutants-shard-*
+          separate-directories: true
+          delete-merged: true

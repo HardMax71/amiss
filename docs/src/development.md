@@ -63,8 +63,11 @@ supervised-process cases. The supported service deployments are documented in
 
 Tests answer to a house rule called the teeth check: important tests are exercised against
 deliberately broken behavior before they are trusted. The
-[mutation workflow](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml)
-publishes a non-gating measurement of that property, in three sizes.
+mutation lanes publish a non-gating measurement of that property, in three sizes:
+[per pull request](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml),
+[per push to main](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants-baseline.yml),
+and [on demand](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants-sweep.yml),
+each on its own trigger so no lane ever shows as skipped beside another's run.
 
 Every pull request measures only the mutants the change itself reaches, over shards counted
 from the mutants the diff actually reaches rather than from a guess, because listing them needs

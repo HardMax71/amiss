@@ -1,0 +1,39 @@
+name: docs build
+description: Build the book with its pinned renderers and generate llms-full.txt.
+
+runs:
+  using: composite
+  steps:
+    - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2.85.8
+      with:
+        tool: mdbook@0.5.4
+    - id: graphviz
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cargo-tools
+        key: docs-mdbook-graphviz0.3.1-last-changed0.4.0
+    - if: steps.graphviz.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install --locked --root ~/.cargo-tools mdbook-graphviz@0.3.1 mdbook-last-changed@0.4.0
+    # A fixed path under the runner's own HOME, holding only the pinned installs above.
+    - shell: bash
+      run: echo "$HOME/.cargo-tools/bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env]
+    - shell: bash
+      run: sudo apt-get update -q && sudo apt-get install -yq graphviz
+    - shell: bash
+      run: mdbook build docs
+    # llms-full.txt is the whole book in one fetch, in reading order.
+    - shell: bash
+      run: |
+        chapters="$(sed -n 's/.*](\([^)]*\.md\)).*/\1/p' docs/src/SUMMARY.md)"
+        [ "$(printf '%s\n' "$chapters" | wc -l)" -eq "$(grep -c '](' docs/src/SUMMARY.md)" ] || {
+          echo 'SUMMARY.md holds a chapter the llms-full extraction missed' >&2
+          exit 1
+        }
+        {
+          printf '# Amiss, the whole book\n'
+          for chapter in $chapters; do
+            printf '\n---\n\n'
+            cat "docs/src/$chapter"
+          done
+        } > docs/book/llms-full.txt
