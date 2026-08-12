@@ -85,10 +85,13 @@ without quoting the code the anchor already shows.
 
 Give every remark air. In each review comment: the problem or Question:
 line first, then an empty line, then the explanation with its evidence
-links, then an empty line, then one line opening `confirmation:` or
-`refutation:` naming what ran and what it showed, or, only for an
-unreachable claim, one line stating your confidence and why nothing
-could run. When a run backs the finding, close the comment with a
+links, then an empty line, then one line opening `confirmation:` naming
+what ran and what it showed. `refutation:` opens that line only when the
+run disproves a claim the change itself makes, the pull request body's
+assertion or a questioned premise, since the disproof is then the
+finding; a refuted suspicion of your own is dropped, never posted. For
+an unreachable claim only, one line states your confidence and why
+nothing could run. When a run backs the finding, close the comment with a
 collapsed block, exactly:
 
 <details><summary>example</summary>
