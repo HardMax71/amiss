@@ -15,7 +15,7 @@ runs:
     - id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/.cargo-tools
+        path: ${{ runner.tool_cache }}/amiss-tools
         key: tools-${{ runner.os }}-${{ steps.bench.outputs.key }}
     - if: steps.cache.outputs.cache-hit != 'true'
       uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
@@ -26,16 +26,17 @@ runs:
       shell: bash
       env:
         SOURCE_TOOLS: ${{ steps.bench.outputs.source }}
-      run: cargo install --locked --root ~/.cargo-tools $SOURCE_TOOLS
+      run: cargo install --locked --root "${RUNNER_TOOL_CACHE}/amiss-tools" $SOURCE_TOOLS
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         PREBUILT_TOOLS: ${{ steps.bench.outputs.prebuilt }}
       run: |
-        mkdir -p "$HOME/.cargo-tools/bin"
+        mkdir -p "${RUNNER_TOOL_CACHE}/amiss-tools/bin"
         for entry in ${PREBUILT_TOOLS//,/ }; do
-          cp "$(command -v "${entry%@*}")" "$HOME/.cargo-tools/bin/"
+          cp "$(command -v "${entry%@*}")" "${RUNNER_TOOL_CACHE}/amiss-tools/bin/"
         done
-    # A fixed path under the runner's own HOME, holding only the installs above.
+    # The tool cache is the one directory the agent sandbox also puts on PATH,
+    # and what sits under this fixed name is only the pinned installs above.
     - shell: bash
-      run: echo "$HOME/.cargo-tools/bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env]
+      run: echo "${RUNNER_TOOL_CACHE}/amiss-tools/bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env]

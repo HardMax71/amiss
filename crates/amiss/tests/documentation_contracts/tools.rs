@@ -82,6 +82,9 @@ fn workflow_tool_pins_match_the_bench() {
                 let Some((name, version)) = spec.trim().split_once('@') else {
                     continue;
                 };
+                if version.starts_with("${{") {
+                    continue;
+                }
                 if let Some(declared) = bench.get(name) {
                     assert_eq!(
                         version,
