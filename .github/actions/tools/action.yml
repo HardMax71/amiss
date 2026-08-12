@@ -7,20 +7,22 @@ runs:
     - id: bench
       shell: bash
       run: |
-        {
-          printf 'prebuilt=%s\n' "$(scripts/tools.sh prebuilt)"
-          printf 'source=%s\n' "$(scripts/tools.sh source)"
-          printf 'key=%s\n' "$(scripts/tools.sh key)"
-        } >> "$GITHUB_OUTPUT"
+        cargo metadata --locked --format-version 1 --no-deps --offline |
+          jq -er '
+            .metadata.tools |
+            "prebuilt=\(.prebuilt | to_entries | map("\(.key)@\(.value)") | join(","))",
+            "source=\(.source | to_entries | map("\(.key)@\(.value)") | join(" "))"
+          ' >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.tool_cache }}/amiss-tools
-        key: tools-${{ runner.os }}-${{ steps.bench.outputs.key }}
+        key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.toml') }}
     - if: steps.cache.outputs.cache-hit != 'true'
       uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
       with:
         tool: ${{ steps.bench.outputs.prebuilt }}
+        fallback: none
     # The source table's tools publish no prebuilt manifest.
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash

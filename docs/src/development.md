@@ -10,11 +10,11 @@ expectation in the finding.
 [amiss:toolchain-channel]: <amiss:value?path=rust-toolchain.toml&line=L2> 'channel = "1.97.0"'
 
 Gate-tool versions live in one place, the `workspace.metadata.tools` tables of the root
-manifest, and cargo is the only thing that parses them: `scripts/tools.sh` serves the
-tables out of `cargo metadata` (jq is its one requirement), the CI tools composite and
-the ratchet hooks call that reader, the agent lanes install through the composite, and a
-documentation-contract test parses the manifest independently and refuses any workflow
-spelling a declared tool at another version. Bumping a tool is one edit.
+manifest. Runtime consumers use Cargo's projection directly: the CI tools composite and
+ratchet hooks query `cargo metadata` with jq, GitHub's `hashFiles` keys the shared tool cache,
+and the agent lanes install through the composite. A documentation-contract test parses the
+manifest independently and refuses any workflow spelling a declared tool at another version.
+Bumping a tool is one edit.
 
 Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks
 on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
