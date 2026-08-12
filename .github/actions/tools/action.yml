@@ -1,23 +1,27 @@
 name: pinned tools
-description: Restore or fetch the cargo tool binaries pinned by tools.toml, shared by every workflow.
+description: Restore or fetch the cargo tool binaries pinned under workspace.metadata.tools, shared by every workflow.
 
 runs:
   using: composite
   steps:
-    # tools.toml is the single source: the cache key is its hash, and the two
-    # install lanes below receive exactly what it declares.
+    # Cargo.toml's tools tables are the single source: the cache key is the
+    # hash of the extracted lists, so it moves exactly when a tool does.
     - id: bench
       shell: bash
       run: |
-        prebuilt=$(sed -n '/^\[prebuilt\]/,/^\[source\]/{s/^\([a-z0-9-]*\) = "\(.*\)"/\1@\2/p}' tools.toml | paste -sd, -)
-        source=$(sed -n '/^\[source\]/,${s/^\([a-z0-9-]*\) = "\(.*\)"/\1@\2/p}' tools.toml | paste -sd' ' -)
-        printf 'prebuilt=%s\n' "$prebuilt" >> "$GITHUB_OUTPUT"
-        printf 'source=%s\n' "$source" >> "$GITHUB_OUTPUT"
+        prebuilt=$(sed -n '/^\[workspace\.metadata\.tools\.prebuilt\]/,/^\[workspace\.metadata\.tools\.source\]/{s/^\([a-z0-9-]*\) = "\(.*\)"/\1@\2/p}' Cargo.toml | paste -sd, -)
+        source=$(sed -n '/^\[workspace\.metadata\.tools\.source\]/,${s/^\([a-z0-9-]*\) = "\(.*\)"/\1@\2/p}' Cargo.toml | paste -sd' ' -)
+        key=$(printf '%s\n%s\n' "$prebuilt" "$source" | sha256sum | cut -c1-16)
+        {
+          printf 'prebuilt=%s\n' "$prebuilt"
+          printf 'source=%s\n' "$source"
+          printf 'key=%s\n' "$key"
+        } >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cargo-tools
-        key: tools-${{ runner.os }}-${{ hashFiles('tools.toml') }}
+        key: tools-${{ runner.os }}-${{ steps.bench.outputs.key }}
     - if: steps.cache.outputs.cache-hit != 'true'
       uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
       with:

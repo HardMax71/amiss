@@ -9,28 +9,33 @@ use std::fs;
 
 use crate::support::repository_root;
 
-/// tools.toml is the one authority for gate-tool versions: `name = "version"`
-/// rows under its two tables, nothing else.
+/// The workspace.metadata.tools tables in the root manifest are the one
+/// authority for gate-tool versions: `name = "version"` rows, nothing else.
 fn bench() -> BTreeMap<String, String> {
-    let raw = fs::read_to_string(repository_root().join("tools.toml"))
-        .expect("tools.toml is readable at the repository root");
+    let raw = fs::read_to_string(repository_root().join("Cargo.toml"))
+        .expect("the root manifest is readable");
     let mut versions = BTreeMap::new();
+    let mut inside = false;
     for line in raw.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with('[') {
+        if let Some(header) = line.strip_prefix('[') {
+            inside = header.starts_with("workspace.metadata.tools.");
+            continue;
+        }
+        if !inside || line.is_empty() || line.starts_with('#') {
             continue;
         }
         let (name, rest) = line
             .split_once(" = \"")
-            .unwrap_or_else(|| panic!("tools.toml row is not name = \"version\": {line}"));
+            .unwrap_or_else(|| panic!("tools row is not name = \"version\": {line}"));
         let version = rest
             .strip_suffix('"')
-            .unwrap_or_else(|| panic!("tools.toml row lacks its closing quote: {line}"));
+            .unwrap_or_else(|| panic!("tools row lacks its closing quote: {line}"));
         assert!(
             versions
                 .insert(name.to_owned(), version.to_owned())
                 .is_none(),
-            "tools.toml declares {name} twice"
+            "the tools tables declare {name} twice"
         );
     }
     assert!(versions.len() >= 10, "the bench lost tools: {versions:?}");
@@ -77,8 +82,8 @@ fn the_tools_composite_reads_the_bench() {
     let raw = fs::read_to_string(repository_root().join(".github/actions/tools/action.yml"))
         .expect("the tools composite is readable");
     assert!(
-        raw.contains("hashFiles('tools.toml')"),
-        "the cache key must be the hash of tools.toml"
+        raw.contains("workspace\\.metadata\\.tools") && raw.contains("steps.bench.outputs.key"),
+        "the composite must extract the manifest tables and key its cache on their hash"
     );
     for (name, version) in bench() {
         assert!(
@@ -122,7 +127,7 @@ fn the_hook_config_defers_to_the_bench() {
     assert_eq!(
         raw.matches("s/^similarity-rs = ").count(),
         2,
-        "both ratchet hooks must read their pin out of tools.toml"
+        "both ratchet hooks must read their pin out of the root manifest"
     );
     assert!(
         !raw.contains(&format!("similarity-rs {}", bench["similarity-rs"])),
