@@ -27,38 +27,50 @@ network:
     - defaults
     - rust
 
-cache:
-  key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-1.0.79
-  path: ${{ runner.tool_cache }}/copilot-cli/1.0.79
+# The two engine version literals below must equal this; the tools contract checks.
+env:
+  COPILOT_CLI_VERSION: "1.0.79"
 
 jobs:
   detection:
     setup-steps:
       - name: Restore Copilot CLI
+        continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-1.0.79
-          path: ${{ runner.tool_cache }}/copilot-cli/1.0.79
+          key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
+          path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 steps:
   - uses: ./.github/actions/tools
   - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
     with:
       save-if: "false"
+  - name: Restore Copilot CLI
+    id: copilot-cache
+    continue-on-error: true
+    uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    with:
+      key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
+      path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 pre-agent-steps:
   - name: Seed Copilot CLI toolcache
     run: |
-      case "$(uname -m)" in
-        x86_64|amd64) arch=x64 ;;
-        aarch64|arm64) arch=arm64 ;;
-        *) exit 1 ;;
-      esac
+      arch=$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
       copilot=$(command -v copilot)
-      target="${RUNNER_TOOL_CACHE}/copilot-cli/1.0.79/${arch}/bin/copilot"
+      target="${RUNNER_TOOL_CACHE}/copilot-cli/${COPILOT_CLI_VERSION}/${arch}/bin/copilot"
       if [ "$copilot" != "$target" ]; then
         install -D -m 0755 "$copilot" "$target"
       fi
+  # Saving here, before the agent runs, keeps a failing run from losing the seed.
+  - name: Save Copilot CLI
+    if: steps.copilot-cache.outputs.cache-hit != 'true'
+    continue-on-error: true
+    uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    with:
+      key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
+      path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 timeout-minutes: 20
 
