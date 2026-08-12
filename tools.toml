@@ -1,0 +1,13 @@
+[prebuilt]
+prek = "0.4.9"
+typos = "1.48.0"
+cargo-nextest = "0.9.140"
+cargo-deny = "0.20.2"
+cargo-shear = "1.13.1"
+cargo-llvm-cov = "0.8.7"
+cargo-mutants = "27.1.0"
+zizmor = "1.26.1"
+
+[source]
+cargo-fuzz = "0.13.2"
+similarity-rs = "0.5.0"
