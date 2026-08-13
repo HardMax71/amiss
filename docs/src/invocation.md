@@ -46,6 +46,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --floor-digest sha256:<64-hex> --debt-owner <name>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>
+amiss external-plan --report <path> [--format <human|json>]
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -76,6 +77,7 @@ trust them when the short form reads ambiguous.
 | `--created-at` | UTC instant | the snapshot's and items' creation instant |
 | `--expires-at` | UTC instant | when the items expire; must be after `--created-at` |
 | `--debt-output` | path | where the minted snapshot is written; must not exist |
+| `--report` | path | the report file the plan form reads; foreign to every other form |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
 `--base` and `--candidate` take full commit IDs: lowercase hex, forty characters for
@@ -178,7 +180,15 @@ snapshot. Exit 1 means the output path already exists or the write failed, any p
 file removed. Exit 2 means nothing trustworthy could be recorded: the evaluation failed,
 the report carried no candidate tree, or the minted bytes failed the engine's own reader.
 
-`amiss --version` is the grammar's fifth form and stands alone: any second token makes it
+`amiss external-plan` derives [the external plan](external-plan.md) from a report file a
+`check --format json` run already wrote. It opens no repository and touches no network:
+it verifies the report's own payload digest, refuses an incomplete report, and projects
+the external delta the report already carries. `--format` takes `human` or `json` here;
+the two scan-only projections are refused. Exit 0 wrote the plan. Exit 2 means the input
+could not be trusted: unreadable, not the scanner's strict JSON, not a report envelope,
+digest mismatch, or incomplete.
+
+`amiss --version` is the grammar's sixth form and stands alone: any second token makes it
 an ordinary, refused invocation. It opens no repository. It prints two lines and exits 0:
 
 ```text

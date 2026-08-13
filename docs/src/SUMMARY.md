@@ -20,6 +20,7 @@
 - [Correlation and impact](correlation.md)
 - [Claims](claims.md)
 - [The report](report.md)
+- [The external plan](external-plan.md)
 - [Limits and refusals](limits.md)
 
 # Trust

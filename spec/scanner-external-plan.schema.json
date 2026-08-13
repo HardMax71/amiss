@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-external-plan",
+  "title": "Amiss external plan",
+  "description": "The pure derivation `amiss external-plan` makes from one complete scanner report: the distinct external destinations the candidate introduced and the base lost, each with the documents naming it, bound to the report payload digest the derivation verified. The engine never fetches a destination; the plan only names the work an evidence producer may do.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/external-plan-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/PlanPayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes, under the payload schema identity as its domain.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "PlanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "introduced", "removed", "report", "retained_count", "schema"],
+      "properties": {
+        "schema": {
+          "const": "amiss/external-plan-payload"
+        },
+        "engine": {
+          "description": "The provenance of the binary that derived this plan.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine_digest", "engine_version"],
+          "properties": {
+            "engine_version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "engine_digest": {
+              "$ref": "#/$defs/Digest"
+            }
+          }
+        },
+        "report": {
+          "description": "The one report this plan derives from: its verified payload digest and its own evaluation identities, echoed verbatim so a consumer can join plan, report, and later evidence without re-reading the tree.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base", "candidate", "mode", "payload_digest"],
+          "properties": {
+            "payload_digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "base": {
+              "description": "The report's evaluation.base value, echoed verbatim.",
+              "type": "object"
+            },
+            "candidate": {
+              "description": "The report's evaluation.candidate value, echoed verbatim.",
+              "type": "object"
+            },
+            "mode": {
+              "description": "The report's evaluation.mode value, echoed verbatim.",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "introduced": {
+          "description": "Destinations the candidate references and the base does not: the set an evidence producer probes first.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/DestinationRow"
+          }
+        },
+        "removed": {
+          "description": "Destinations the base referenced and the candidate no longer does.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/DestinationRow"
+          }
+        },
+        "retained_count": {
+          "description": "Distinct destinations present on both sides, counted and not listed, so the plan stays proportional to the change.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "DestinationRow": {
+      "description": "One distinct external destination on the counted side, with every document naming it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["destination", "documents", "scheme"],
+      "properties": {
+        "destination": {
+          "description": "The destination after the format's own decoding, exactly as the report records it: what a fetcher would request.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "scheme": {
+          "description": "The occurrence intent's lowercased scheme.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9+.-]*$"
+        },
+        "documents": {
+          "description": "The repository paths of the documents holding the destination, sorted and unique.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

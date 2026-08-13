@@ -15,14 +15,19 @@ Amiss also does, against ten pinned renderer rules. If your failure mode is dead
 published site, lychee alone is the right tool, and nothing here argues otherwise.
 
 The composition is literal rather than aspirational. Every external destination is recorded
-in the report as written, so the list a checker needs comes out of a run that already
-happened:
+in the report as written, and [the external plan](external-plan.md) turns a written report
+into the delta a checker actually wants: the destinations this change introduced, not the
+whole corpus every run.
 
 ```sh
-amiss check --repo . --base "$BASE" --candidate HEAD --format json |
-  jq -r '.payload.observations[] | (.base, .candidate) | select(. != null)
-         | .external_destination | select(. != null)' | sort -u | lychee -
+amiss check --repo . --base "$BASE" --candidate HEAD --format json > report.json
+amiss external-plan --report report.json --format json |
+  jq -r '.payload.introduced[].destination' | lychee -
 ```
+
+Checking only what the change added is what keeps a checker tolerable in a gate: the
+author can fix a link they just wrote, and the pre-existing corpus rots on its own
+schedule instead of failing every pull request.
 
 What a link checker cannot see is change. It examines one state of the world, so it can
 say a target is missing but not who removed it, whether it was missing before your pull
