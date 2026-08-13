@@ -156,3 +156,17 @@ fn an_unreadable_report_is_a_plain_refusal() {
     assert!(stdout.is_empty());
     assert!(stderr.contains("is unreadable"), "{stderr}");
 }
+
+/// The scanner's own writer caps an envelope at `MACHINE_JSON_BYTES`, so a
+/// larger input is provably not a report and is refused after a bounded read.
+#[cfg(unix)]
+#[test]
+fn an_oversized_input_is_refused_without_reading_it_all() {
+    let (code, stdout, stderr) = support::amiss(&["external-plan", "--report", "/dev/zero"]);
+    assert_eq!(code, 2);
+    assert!(stdout.is_empty());
+    assert!(
+        stderr.contains("larger than a scanner report can be"),
+        "{stderr}"
+    );
+}

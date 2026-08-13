@@ -15,12 +15,13 @@ Amiss also does, against ten pinned renderer rules. If your failure mode is dead
 published site, lychee alone is the right tool, and nothing here argues otherwise.
 
 The composition is literal rather than aspirational. Every external destination is recorded
-in the report as written, and [the external plan](external-plan.md) turns a written report
-into the delta a checker actually wants: the destinations this change introduced, not the
-whole corpus every run.
+in the report after the format's own decoding, the address a fetcher would request, and
+[the external plan](external-plan.md) turns a written report into the delta a checker
+actually wants: the destinations this change introduced, not the whole corpus every run.
 
 ```sh
-amiss check --repo . --base "$BASE" --candidate HEAD --format json > report.json
+amiss check --repo . --object-format sha1 --base "$BASE" --candidate HEAD \
+  --profile observe --format json > report.json
 amiss external-plan --report report.json --format json |
   jq -r '.payload.introduced[].destination' | lychee -
 ```
