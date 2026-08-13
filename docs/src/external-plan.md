@@ -38,8 +38,9 @@ and its example is derived from the report example by the same code path, checke
 
 The plan states work; it performs none. Fetching stays outside the engine for the same
 reasons [What Amiss is not](non-goals.md) gives for live URLs: a probe's answer varies
-with the network's mood, and a guessed pass looks exactly like a real one. The
-composition with a checker that does fetch is one pipe, shown in
+with the network's mood, and a guessed pass looks exactly like a real one. What a
+producer observes comes back through [the external assessment](external-assessment.md),
+and the composition with a checker that does fetch is one pipe, shown in
 [Amiss and link checkers](comparison.md).
 
 Exit 0 wrote the plan, human or JSON. Exit 2 means the input could not be trusted:

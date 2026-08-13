@@ -1,0 +1,30 @@
+{
+  "payload": {
+    "engine": {
+      "engine_digest": "sha256:f7a89b2b73c0d52d643e529fcc2a928a752dfb0acf089c073e7cd93d6035007e",
+      "engine_version": "0.4.0"
+    },
+    "producer": {
+      "name": "amiss-probe",
+      "version": "0.4.0"
+    },
+    "schema": "amiss/external-assessment-payload",
+    "subject": {
+      "evidence_digest": "sha256:ec6cd68db6de86344a96e35c1a4f155770b2a2751692e8c216267a2bfbe3b13d",
+      "plan_payload_digest": "sha256:ba048bc50cd910f55b243f15e777341e0d6496f69d72a62205432b2ddc61dd96",
+      "report_payload_digest": "sha256:0d0bd6728afb22b27c8a39b9ff96ea6b0e3a133cd9d12952c279a83cf9518b9e"
+    },
+    "verdicts": [
+      {
+        "destination": "https://example.com/manual",
+        "documents": [
+          "docs/guide.md"
+        ],
+        "reason": "gone",
+        "verdict": "refuted"
+      }
+    ]
+  },
+  "payload_digest": "sha256:80ff88a516f10d9e078379b5a8d3fdeebfa49bfd03014df57851bf87f750dabc",
+  "schema": "amiss/external-assessment-envelope"
+}

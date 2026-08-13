@@ -28,6 +28,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Claims](https://hardmax71.github.io/amiss/claims.html): the closed value-claim grammar, its evaluation, and its outcomes
 - [The report](https://hardmax71.github.io/amiss/report.html): the canonical JSON wire, row descriptions, and the human projection
 - [The external plan](https://hardmax71.github.io/amiss/external-plan.html): the digest-bound derivation naming the external destinations a change introduced and removed
+- [The external assessment](https://hardmax71.github.io/amiss/external-assessment.html): the offline judgment of a plan against producer evidence, refuting only on proof
 - [Limits and refusals](https://hardmax71.github.io/amiss/limits.html): every resource ceiling and every analysis error code with its meaning
 
 ## Trust

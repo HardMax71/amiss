@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-external-evidence",
+  "title": "Amiss external evidence",
+  "description": "One producer's observations over an external plan's introduced destinations, consumed by `amiss external-assess`. Rows report what was observed, never verdicts; judgment is the engine's fixed policy. A row naming a destination the plan did not introduce, repeating one, or binding another plan invalidates the whole file rather than being skipped, and destinations the file does not cover stay unproven.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["plan_payload_digest", "producer", "rows", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/external-evidence"
+    },
+    "plan_payload_digest": {
+      "description": "The payload digest of the exact plan these observations answer.",
+      "$ref": "#/$defs/Digest"
+    },
+    "producer": {
+      "description": "Who gathered the observations and under which of its versions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ProbeRow"
+          },
+          {
+            "$ref": "#/$defs/ForgeRow"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ProbeRow": {
+      "description": "One HTTPS probe: the final status or the transport failure, exactly one of the two, and the final address when the probe was redirected.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checked_at", "destination", "kind", "method"],
+      "properties": {
+        "kind": {
+          "const": "http-probe"
+        },
+        "destination": {
+          "description": "The plan row's destination, byte-exact.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "method": {
+          "description": "The request method whose answer this row reports; a 404 refutes only under get.",
+          "enum": ["head", "get"]
+        },
+        "status": {
+          "description": "The final HTTP status, absent when the transport failed first.",
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 999
+        },
+        "failure": {
+          "description": "The transport failure, absent when a status arrived.",
+          "enum": ["dns", "tls", "timeout", "refused"]
+        },
+        "final_destination": {
+          "description": "Where redirects ended, when that differs from the destination.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "checked_at": {
+          "description": "The producer's own observation instant; the engine never reads a clock, so staleness policy belongs to the producer's operator.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["status"],
+          "not": {
+            "required": ["failure"]
+          }
+        },
+        {
+          "required": ["failure"],
+          "not": {
+            "required": ["status"]
+          }
+        }
+      ]
+    },
+    "ForgeRow": {
+      "description": "One forge API verification of a destination the plan shaped: repository visibility first, then the opaque tail's resolution, admissible only when the repository was readable.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checked_at", "destination", "kind", "repository"],
+      "properties": {
+        "kind": {
+          "const": "forge-api"
+        },
+        "destination": {
+          "description": "The plan row's destination, byte-exact; the plan must have shaped it.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "repository": {
+          "description": "What the API said about the repository itself; missing may be a private repository, so it never refutes.",
+          "enum": ["readable", "missing", "denied"]
+        },
+        "tail": {
+          "description": "How the opaque tail resolved against the readable repository's refs, absent when the producer stopped at visibility.",
+          "enum": ["resolved", "path-missing", "revision-missing"]
+        },
+        "checked_at": {
+          "description": "The producer's own observation instant.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -37,6 +37,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
+amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss --version";
 
 const VERSION_FLAG: &str = "--version";
@@ -94,6 +95,7 @@ pub enum Verb {
     Adopt,
     Claim,
     ExternalPlan,
+    ExternalAssess,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,13 +135,23 @@ pub struct PlanInvocation {
     pub format: OutputFormat,
 }
 
-/// One accepted command line: a scan-shaped verb, the authoring form, or
-/// the report-bound plan form.
+/// The assessment form's shape: the plan and evidence it judges and the
+/// projection it prints.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssessInvocation {
+    pub plan: PathBuf,
+    pub evidence: PathBuf,
+    pub format: OutputFormat,
+}
+
+/// One accepted command line: a scan-shaped verb, the authoring form, or a
+/// report-bound pure form.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     Scan(Box<Invocation>),
     Author(AuthorInvocation),
     Plan(PlanInvocation),
+    Assess(AssessInvocation),
 }
 
 /// The adoption metadata the engine cannot know: who owns the recorded
@@ -237,6 +249,8 @@ struct Gathered {
     claim_line: Slot,
     claim_name: Slot,
     report: Slot,
+    plan: Slot,
+    evidence: Slot,
     index: usize,
     explain_scope: usize,
     lexical_defect: bool,
@@ -269,6 +283,7 @@ fn gather(argv: &[OsString]) -> Gathered {
         Some(Some("adopt")) => gathered.verb = Some(Verb::Adopt),
         Some(Some("claim")) => gathered.verb = Some(Verb::Claim),
         Some(Some("external-plan")) => gathered.verb = Some(Verb::ExternalPlan),
+        Some(Some("external-assess")) => gathered.verb = Some(Verb::ExternalAssess),
         Some(Some(_) | None) | None => gathered.lexical_defect = true,
     }
 
@@ -305,7 +320,9 @@ fn gather(argv: &[OsString]) -> Gathered {
             | "--path"
             | "--line"
             | "--name"
-            | "--report" => {
+            | "--report"
+            | "--plan"
+            | "--evidence" => {
                 let value = match tokens.peek() {
                     Some(Some(next)) if !next.starts_with("--") => {
                         let owned = (*next).to_owned();
@@ -343,6 +360,8 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> &'a mut Slot {
         "--line" => &mut gathered.claim_line,
         "--name" => &mut gathered.claim_name,
         "--report" => &mut gathered.report,
+        "--plan" => &mut gathered.plan,
+        "--evidence" => &mut gathered.evidence,
         _ => &mut gathered.format,
     }
 }
@@ -360,12 +379,8 @@ fn output_selection(format: &Slot) -> Option<OutputFormat> {
     }
 }
 
-fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeSet<Code>> {
-    let mut codes: BTreeSet<Code> = BTreeSet::new();
-    if gathered.lexical_defect {
-        codes.insert(Code::InvalidInvocation);
-    }
-    let duplicated = gathered.index > 1
+fn duplicated(gathered: &Gathered) -> bool {
+    gathered.index > 1
         || gathered.explain_scope > 1
         || [
             &gathered.repo,
@@ -387,10 +402,16 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeS
             &gathered.claim_line,
             &gathered.claim_name,
             &gathered.report,
+            &gathered.plan,
+            &gathered.evidence,
         ]
         .iter()
-        .any(|slot| slot.defective());
-    if duplicated {
+        .any(|slot| slot.defective())
+}
+
+fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeSet<Code>> {
+    let mut codes: BTreeSet<Code> = BTreeSet::new();
+    if gathered.lexical_defect || duplicated(gathered) {
         codes.insert(Code::InvalidInvocation);
     }
     if gathered.verb == Some(Verb::Claim) {
@@ -398,6 +419,9 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeS
     }
     if gathered.verb == Some(Verb::ExternalPlan) {
         return classify_plan(codes, gathered, format).map(Command::Plan);
+    }
+    if gathered.verb == Some(Verb::ExternalAssess) {
+        return classify_assess(codes, gathered, format).map(Command::Assess);
     }
     for required in [&gathered.repo, &gathered.object_format, &gathered.base] {
         if !required.present() {
@@ -488,6 +512,8 @@ fn classify_claim(
         &gathered.expires_at,
         &gathered.debt_output,
         &gathered.report,
+        &gathered.plan,
+        &gathered.evidence,
     ];
     if foreign.iter().any(|slot| slot.present()) || gathered.index > 0 || gathered.explain_scope > 0
     {
@@ -541,13 +567,17 @@ fn classify_claim(
     }
 }
 
-/// The plan form reads one report file and projects it as human or JSON;
-/// every scan, claim, and adoption option is foreign to it.
-fn classify_plan(
+/// The pure-form gate: a report-bound verb reads its own path flags and
+/// projects as human or JSON; every scan, claim, and adoption option is
+/// foreign, as are the other pure forms' paths. Accepts with exactly one
+/// path per required slot, in the order given, or carries every code out.
+fn classify_pure(
     mut codes: BTreeSet<Code>,
     gathered: &Gathered,
     format: OutputFormat,
-) -> Result<PlanInvocation, BTreeSet<Code>> {
+    required: &[&Slot],
+    foreign_pure: &[&Slot],
+) -> Result<Vec<PathBuf>, BTreeSet<Code>> {
     let foreign = [
         &gathered.repo,
         &gathered.object_format,
@@ -568,27 +598,63 @@ fn classify_plan(
         &gathered.claim_line,
         &gathered.claim_name,
     ];
-    if foreign.iter().any(|slot| slot.present()) || gathered.index > 0 || gathered.explain_scope > 0
+    if foreign
+        .iter()
+        .chain(foreign_pure)
+        .any(|slot| slot.present())
+        || gathered.index > 0
+        || gathered.explain_scope > 0
+        || matches!(format, OutputFormat::Sarif | OutputFormat::CodeQuality)
     {
         codes.insert(Code::InvalidInvocation);
     }
-    if matches!(format, OutputFormat::Sarif | OutputFormat::CodeQuality) {
+    let mut paths = Vec::new();
+    for slot in required {
+        match slot.unique_value() {
+            Some("") | None => {
+                codes.insert(Code::InvalidInvocation);
+            }
+            Some(path) => paths.push(PathBuf::from(path)),
+        }
+    }
+    if codes.is_empty() && paths.len() == required.len() {
+        Ok(paths)
+    } else {
         codes.insert(Code::InvalidInvocation);
+        Err(codes)
     }
-    let report = match gathered.report.unique_value() {
-        Some("") | None => {
-            codes.insert(Code::InvalidInvocation);
-            None
-        }
-        Some(path) => Some(PathBuf::from(path)),
+}
+
+fn classify_plan(
+    codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<PlanInvocation, BTreeSet<Code>> {
+    let required = [&gathered.report];
+    let foreign = [&gathered.plan, &gathered.evidence];
+    let mut paths = classify_pure(codes, gathered, format, &required, &foreign)?;
+    let report = paths
+        .pop()
+        .ok_or_else(|| BTreeSet::from([Code::InvalidInvocation]))?;
+    Ok(PlanInvocation { report, format })
+}
+
+fn classify_assess(
+    codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<AssessInvocation, BTreeSet<Code>> {
+    let required = [&gathered.plan, &gathered.evidence];
+    let foreign = [&gathered.report];
+    let mut paths = classify_pure(codes, gathered, format, &required, &foreign)?;
+    let (Some(evidence), Some(plan)) = (paths.pop(), paths.pop()) else {
+        return Err(BTreeSet::from([Code::InvalidInvocation]));
     };
-    match report {
-        Some(report) if codes.is_empty() => Ok(PlanInvocation { report, format }),
-        Some(_) | None => {
-            codes.insert(Code::InvalidInvocation);
-            Err(codes)
-        }
-    }
+    Ok(AssessInvocation {
+        plan,
+        evidence,
+        format,
+    })
 }
 
 fn classify_target(
@@ -619,7 +685,10 @@ fn classify_target(
 /// and refused elsewhere, the repair form is staged-only without report
 /// flags, and the adoption form is commit-pair only without them.
 fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
-    if gathered.report.present() {
+    if [&gathered.report, &gathered.plan, &gathered.evidence]
+        .iter()
+        .any(|slot| slot.present())
+    {
         codes.insert(Code::InvalidInvocation);
     }
     if gathered.verb == Some(Verb::Adopt) {

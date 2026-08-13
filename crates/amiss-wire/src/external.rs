@@ -7,6 +7,9 @@ use crate::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/external-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/external-plan-payload";
+pub const EVIDENCE_SCHEMA: &str = "amiss/external-evidence";
+pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/external-assessment-envelope";
+pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/external-assessment-payload";
 
 /// Why a report yields no plan: the first defect found, in reading order.
 /// Classification only; the command projecting a defect owns its wording.
@@ -256,6 +259,292 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
         }
     }
     Some(object(members))
+}
+
+/// Why a plan and evidence yield no assessment: the first defect found.
+/// Classification only; the command projecting a defect owns its wording.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AssessDefect {
+    NotAPlan,
+    PlanDigestMismatch,
+    NotEvidence,
+    UnboundEvidence,
+    MalformedEvidence,
+}
+
+/// One validated evidence observation, either transport or forge facts.
+enum Observed {
+    Probe {
+        method_get: bool,
+        status: Option<i64>,
+        retarget: Option<String>,
+    },
+    Forge {
+        repository: Repository,
+        tail: Option<Tail>,
+    },
+}
+
+#[derive(Clone, Copy)]
+enum Repository {
+    Readable,
+    Missing,
+    Denied,
+}
+
+#[derive(Clone, Copy)]
+enum Tail {
+    Resolved,
+    PathMissing,
+    RevisionMissing,
+}
+
+/// Judges one complete external plan against one producer's evidence: every
+/// introduced destination gets a verdict, missing evidence stays unproven,
+/// and evidence naming anything outside the introduced set invalidates the
+/// whole assessment rather than being skipped. Pure: the same plan and
+/// evidence always yield the same assessment, digest included.
+///
+/// # Errors
+///
+/// Returns the first [`AssessDefect`] when the plan is not one or fails its
+/// digest, the evidence is not evidence, it binds another plan or names an
+/// unknown destination, or a row breaks its own kind's grammar.
+pub fn assess(
+    plan: &Value,
+    evidence: &Value,
+    engine_version: &str,
+    engine_digest: &str,
+) -> Result<Value, AssessDefect> {
+    if text(plan, "schema") != Some(PLAN_ENVELOPE_SCHEMA) {
+        return Err(AssessDefect::NotAPlan);
+    }
+    let (Some(payload), Some(recorded)) = (member(plan, "payload"), text(plan, "payload_digest"))
+    else {
+        return Err(AssessDefect::NotAPlan);
+    };
+    if hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() != recorded {
+        return Err(AssessDefect::PlanDigestMismatch);
+    }
+    let report_digest = member(payload, "report").and_then(|report| text(report, "payload_digest"));
+    let (Some(report_digest), Some(Value::Array(introduced))) =
+        (report_digest, member(payload, "introduced"))
+    else {
+        return Err(AssessDefect::NotAPlan);
+    };
+
+    if text(evidence, "schema") != Some(EVIDENCE_SCHEMA) {
+        return Err(AssessDefect::NotEvidence);
+    }
+    let producer = member(evidence, "producer")
+        .filter(|producer| {
+            text(producer, "name").is_some_and(|name| !name.is_empty())
+                && text(producer, "version").is_some()
+        })
+        .ok_or(AssessDefect::NotEvidence)?;
+    if text(evidence, "plan_payload_digest") != Some(recorded) {
+        return Err(AssessDefect::UnboundEvidence);
+    }
+    let Some(Value::Array(evidence_rows)) = member(evidence, "rows") else {
+        return Err(AssessDefect::NotEvidence);
+    };
+
+    let observed = observed_rows(evidence_rows, introduced)?;
+    let assessment = object(vec![
+        ("schema", string(ASSESSMENT_PAYLOAD_SCHEMA)),
+        (
+            "engine",
+            object(vec![
+                ("engine_version", string(engine_version)),
+                ("engine_digest", string(engine_digest)),
+            ]),
+        ),
+        (
+            "subject",
+            object(vec![
+                ("report_payload_digest", string(report_digest)),
+                ("plan_payload_digest", string(recorded)),
+                (
+                    "evidence_digest",
+                    string(&hj(EVIDENCE_SCHEMA, evidence).to_string()),
+                ),
+            ]),
+        ),
+        ("producer", producer.clone()),
+        (
+            "verdicts",
+            Value::Array(verdict_rows(introduced, &observed)),
+        ),
+    ]);
+    let digest = hj(ASSESSMENT_PAYLOAD_SCHEMA, &assessment);
+    Ok(object(vec![
+        ("schema", string(ASSESSMENT_ENVELOPE_SCHEMA)),
+        ("payload", assessment),
+        ("payload_digest", string(&digest.to_string())),
+    ]))
+}
+
+/// Every evidence row validated and keyed: a row must name an introduced
+/// destination, name it once, and carry an observation instant.
+fn observed_rows<'e>(
+    evidence_rows: &'e [Value],
+    introduced: &[Value],
+) -> Result<BTreeMap<&'e str, Observed>, AssessDefect> {
+    let mut observed: BTreeMap<&str, Observed> = BTreeMap::new();
+    for row in evidence_rows {
+        let destination = text(row, "destination").ok_or(AssessDefect::MalformedEvidence)?;
+        let shaped = introduced.iter().find_map(|candidate| {
+            (text(candidate, "destination") == Some(destination))
+                .then(|| member(candidate, "repository"))
+        });
+        let Some(shape) = shaped else {
+            return Err(AssessDefect::UnboundEvidence);
+        };
+        if text(row, "checked_at").is_none_or(str::is_empty) {
+            return Err(AssessDefect::MalformedEvidence);
+        }
+        let observation = observe(row, shape.is_some())?;
+        if observed.insert(destination, observation).is_some() {
+            return Err(AssessDefect::UnboundEvidence);
+        }
+    }
+    Ok(observed)
+}
+
+/// One verdict row per introduced destination, in the plan's own order.
+fn verdict_rows(introduced: &[Value], observed: &BTreeMap<&str, Observed>) -> Vec<Value> {
+    introduced
+        .iter()
+        .map(|row| {
+            let destination = text(row, "destination").unwrap_or_default();
+            let mut members = vec![
+                ("destination", string(destination)),
+                (
+                    "documents",
+                    member(row, "documents").cloned().unwrap_or(Value::Null),
+                ),
+            ];
+            let (verdict, reason, retarget) = match observed.get(destination) {
+                None => ("unproven", Some("unexamined"), None),
+                Some(seen) => judge(seen, member(row, "repository")),
+            };
+            members.push(("verdict", string(verdict)));
+            if let Some(reason) = reason {
+                members.push(("reason", string(reason)));
+            }
+            if let Some(retarget) = retarget {
+                members.push(("retarget", string(&retarget)));
+            }
+            object(members)
+        })
+        .collect()
+}
+
+/// One evidence row into its validated observation; forge facts are only
+/// admissible for a destination the plan shaped.
+fn observe(row: &Value, shaped: bool) -> Result<Observed, AssessDefect> {
+    match text(row, "kind") {
+        Some("http-probe") => {
+            let method_get = match text(row, "method") {
+                Some("get") => true,
+                Some("head") => false,
+                Some(_) | None => return Err(AssessDefect::MalformedEvidence),
+            };
+            let status = member(row, "status");
+            let failure = member(row, "failure");
+            let status = match (status, failure) {
+                (Some(Value::Integer(status)), None | Some(Value::Null)) => Some(*status),
+                (None | Some(Value::Null), Some(Value::String(failure)))
+                    if matches!(failure.as_str(), "dns" | "tls" | "timeout" | "refused") =>
+                {
+                    None
+                }
+                (_, _) => return Err(AssessDefect::MalformedEvidence),
+            };
+            let retarget = match member(row, "final_destination") {
+                Some(Value::String(final_destination)) if !final_destination.is_empty() => {
+                    Some(final_destination.clone())
+                }
+                None | Some(Value::Null) => None,
+                Some(_) => return Err(AssessDefect::MalformedEvidence),
+            };
+            Ok(Observed::Probe {
+                method_get,
+                status,
+                retarget,
+            })
+        }
+        Some("forge-api") => {
+            if !shaped {
+                return Err(AssessDefect::UnboundEvidence);
+            }
+            let repository = match text(row, "repository") {
+                Some("readable") => Repository::Readable,
+                Some("missing") => Repository::Missing,
+                Some("denied") => Repository::Denied,
+                Some(_) | None => return Err(AssessDefect::MalformedEvidence),
+            };
+            let tail = match (repository, member(row, "tail")) {
+                (_, None | Some(Value::Null)) => None,
+                (Repository::Readable, Some(Value::String(tail))) => match tail.as_str() {
+                    "resolved" => Some(Tail::Resolved),
+                    "path-missing" => Some(Tail::PathMissing),
+                    "revision-missing" => Some(Tail::RevisionMissing),
+                    _ => return Err(AssessDefect::MalformedEvidence),
+                },
+                (_, Some(_)) => return Err(AssessDefect::MalformedEvidence),
+            };
+            Ok(Observed::Forge { repository, tail })
+        }
+        Some(_) | None => Err(AssessDefect::MalformedEvidence),
+    }
+}
+
+/// The fixed judgment policy: denial and rate limits are never death, a 404
+/// counts only when a GET confirmed it, a missing repository may be a
+/// private one, and a path is absent only after the repository and revision
+/// resolved.
+fn judge(
+    observed: &Observed,
+    shape: Option<&Value>,
+) -> (&'static str, Option<&'static str>, Option<String>) {
+    match observed {
+        Observed::Probe {
+            method_get,
+            status,
+            retarget,
+        } => {
+            let (verdict, reason) = match status {
+                Some(404 | 410) if *method_get => ("refuted", Some("gone")),
+                Some(404 | 410) => ("unproven", Some("unconfirmed")),
+                Some(200..=299) => ("reachable", None),
+                Some(300..=399) => ("unproven", Some("unfollowed")),
+                Some(401 | 403 | 999) => ("unproven", Some("denied")),
+                Some(429) => ("unproven", Some("rate-limited")),
+                None | Some(_) => ("unproven", Some("unavailable")),
+            };
+            (verdict, reason, retarget.clone())
+        }
+        Observed::Forge { repository, tail } => match (repository, tail) {
+            (Repository::Missing, _) => ("unproven", Some("repository-unseen"), None),
+            (Repository::Denied, _) => ("unproven", Some("denied"), None),
+            (Repository::Readable, Some(Tail::Resolved)) => ("reachable", None, None),
+            (Repository::Readable, Some(Tail::PathMissing)) => {
+                ("refuted", Some("path-missing"), None)
+            }
+            (Repository::Readable, Some(Tail::RevisionMissing)) => {
+                ("refuted", Some("revision-missing"), None)
+            }
+            (Repository::Readable, None) => {
+                let unresolved = shape.is_some_and(|shape| member(shape, "tail").is_some());
+                if unresolved {
+                    ("unproven", Some("unconfirmed"), None)
+                } else {
+                    ("reachable", None, None)
+                }
+            }
+        },
+    }
 }
 
 fn member<'v>(value: &'v Value, name: &str) -> Option<&'v Value> {

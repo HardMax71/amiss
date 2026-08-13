@@ -65,7 +65,10 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
         "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
         "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
-        "scanner-external-plan" | "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
+        "scanner-external-assessment"
+        | "scanner-external-evidence"
+        | "scanner-external-plan"
+        | "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
@@ -377,6 +380,41 @@ fn the_external_plan_example_derives_from_the_report_example() {
     assert_eq!(
         derived, plan,
         "the plan example drifted from its own derivation"
+    );
+}
+
+/// The assessment example is not authored either: judging the plan example
+/// against the evidence example through the real code path, with the engine
+/// values the assessment example itself carries, must reproduce it exactly.
+#[test]
+fn the_assessment_example_derives_from_the_plan_and_evidence_examples() {
+    let root = repository_root();
+    let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
+        .expect("the plan example is readable");
+    let plan = amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
+    let evidence_bytes = fs::read(root.join("spec/examples/scanner-external-evidence.json"))
+        .expect("the evidence example is readable");
+    let evidence =
+        amiss_wire::json::parse(&evidence_bytes).expect("the evidence example is strict JSON");
+    let assessment_bytes = fs::read(root.join("spec/examples/scanner-external-assessment.json"))
+        .expect("the assessment example is readable");
+    let assessment =
+        amiss_wire::json::parse(&assessment_bytes).expect("the assessment example is strict JSON");
+    let example: serde_json::Value =
+        serde_json::from_slice(&assessment_bytes).expect("the assessment example is JSON");
+    let version = example
+        .pointer("/payload/engine/engine_version")
+        .and_then(serde_json::Value::as_str)
+        .expect("the assessment example names an engine version");
+    let digest = example
+        .pointer("/payload/engine/engine_digest")
+        .and_then(serde_json::Value::as_str)
+        .expect("the assessment example names an engine digest");
+    let derived = amiss_wire::external::assess(&plan, &evidence, version, digest)
+        .expect("the plan and evidence examples yield an assessment");
+    assert_eq!(
+        derived, assessment,
+        "the assessment example drifted from its own derivation"
     );
 }
 
