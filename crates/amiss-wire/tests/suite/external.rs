@@ -308,8 +308,12 @@ fn a_known_host_destination_carries_its_forge_shape() {
             r#"{"dialect":"gitlab","form":"blob","host":"gitlab.com","name":"widgets","owner":"group/sub","tail":"main/a.md"}"#,
         ),
         (
-            "https://gitlab.com/group/sub/widgets",
-            r#"{"dialect":"gitlab","host":"gitlab.com","name":"widgets","owner":"group/sub"}"#,
+            "https://gitlab.com/acme/widgets",
+            r#"{"dialect":"gitlab","host":"gitlab.com","name":"widgets","owner":"acme"}"#,
+        ),
+        (
+            "https://github.com/acme/widgets/tree/main/docs/",
+            r#"{"dialect":"github","form":"tree","host":"github.com","name":"widgets","owner":"acme","tail":"main/docs/"}"#,
         ),
         (
             "https://codeberg.org/acme/widgets/src/branch/main/a.md",
@@ -346,6 +350,8 @@ fn an_unrecognizable_destination_stays_unshaped() {
         "https://github.com//widgets/blob/main/a.md",
         "https://gitlab.com/group/-/blob/main/a.md",
         "https://github.com",
+        "https://gitlab.com/acme/widgets/blob/main/a.md",
+        "https://gitlab.com/group/sub/widgets",
     ] {
         let plan = planned(introduced(destination));
         assert_eq!(
