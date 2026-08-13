@@ -42,9 +42,10 @@ green and remote green are the same thing.
   indirection names, and it spawns nothing. Its
   private sealed entry additionally reads only the closed request frame from stdin. Shared
   test scaffolding goes in `amiss-fixtures`.
-- `controller/` is a separate, unpublished Rust workspace. Provider transport, storage,
-  credential, and runtime dependencies stay there; never add them to the offline root
-  workspace or its lockfile.
+- The `controller/` crates are unpublished members of the one workspace. The trust
+  boundary is a dependency boundary, not a workspace boundary: provider transport,
+  storage, credential, and runtime dependencies stay in their graphs, no engine crate
+  may depend on them, and `deny-engine.toml` checks the engine graph without them.
 
 ## Checking your own change
 

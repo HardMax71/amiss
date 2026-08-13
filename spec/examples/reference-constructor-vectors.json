@@ -373,11 +373,14 @@
       "expected": "gitlab"
     },
     {
-      "id": "FD-003-unknown-host-null",
+      "id": "FD-003-unknown-host-refused",
       "operation": "forge-dialect-default",
       "host": "git.example.internal",
       "flag": null,
-      "expected": null
+      "expected": {
+        "kind": "refused",
+        "code": "INVALID_EVENT"
+      }
     },
     {
       "id": "FD-004-ghes-flagged",

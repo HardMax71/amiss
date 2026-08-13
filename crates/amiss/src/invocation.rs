@@ -71,9 +71,10 @@ impl Code {
                  matched byte for byte wherever it appears, so give the lowercase form your \
                  links use; owner segments and the name are canonical ASCII lowercase, and \
                  owners nest as group/subgroup on GitLab only. --ref and --default-branch-ref \
-                 are full refs such as refs/heads/main. Forges report the owner with its \
-                 original capitals, so a workflow passing ${{ github.repository }} has to \
-                 lowercase it first."
+                 are full refs such as refs/heads/main. A host outside github.com, gitlab.com, \
+                 and codeberg.org needs --forge to name its dialect. Forges report the owner \
+                 with its original capitals, so a workflow passing ${{ github.repository }} \
+                 has to lowercase it first."
             }
             Self::InvalidInvocation => {
                 "every option is spelled exactly, appears at most once, and carries a value. \
@@ -726,9 +727,10 @@ fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<
 
 /// The dialect law: an explicit `--forge` names a grammar the engine knows
 /// and accompanies the identity triple; without the flag the known-host
-/// table decides, and an unknown host means no dialect at all. The github
-/// dialect cannot match a nested owner, so that pairing is refused rather
-/// than left deterministically dead.
+/// table decides, and an identity on a host outside the table is refused,
+/// since accepting it would silently leave every same-repository URL
+/// external. The github dialect cannot match a nested owner, so that
+/// pairing is refused rather than left deterministically dead.
 fn classify_forge(
     codes: &mut BTreeSet<Code>,
     gathered: &Gathered,
@@ -750,15 +752,19 @@ fn classify_forge(
     };
     match identity {
         Ok(Some(identity)) => {
-            let dialect =
-                declared.or_else(|| ForgeDialect::default_for_host(&identity.repository.host));
-            if matches!(dialect, Some(ForgeDialect::Github | ForgeDialect::Gitea))
+            let Some(dialect) =
+                declared.or_else(|| ForgeDialect::default_for_host(&identity.repository.host))
+            else {
+                codes.insert(Code::InvalidEvent);
+                return None;
+            };
+            if matches!(dialect, ForgeDialect::Github | ForgeDialect::Gitea)
                 && identity.repository.owner.contains('/')
             {
                 codes.insert(Code::InvalidEvent);
                 return None;
             }
-            dialect
+            Some(dialect)
         }
         Ok(None) => {
             if gathered.forge.present() {

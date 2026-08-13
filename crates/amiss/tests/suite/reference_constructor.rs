@@ -529,6 +529,21 @@ fn dialect_default_case(case: &Value, id: &str) {
         tokens.push(flag.to_owned());
     }
     let argv: Vec<OsString> = tokens.iter().map(OsString::from).collect();
+    if case.pointer("/expected/kind").and_then(Value::as_str) == Some("refused") {
+        let Outcome::Rejected { codes, .. } = parse(&argv) else {
+            panic!("{id}: expected a refusal");
+        };
+        assert_eq!(
+            codes.iter().map(|code| code.as_str()).collect::<Vec<_>>(),
+            vec![
+                case.pointer("/expected/code")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+            ],
+            "{id}"
+        );
+        return;
+    }
     let Outcome::Accepted(command) = parse(&argv) else {
         panic!("{id}: expected acceptance");
     };
