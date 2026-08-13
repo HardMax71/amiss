@@ -120,6 +120,46 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "repository": {
+          "$ref": "#/$defs/Repository"
+        }
+      }
+    },
+    "Repository": {
+      "description": "The forge shape of a destination on a known or declared host, structure only: parsed without the other repository's refs, so the revision-and-path tail stays opaque. Absent when the destination is not a recognizable forge repository URL. A verifying layer resolves the tail; this artifact never claims the repository exists.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dialect", "host", "name", "owner"],
+      "properties": {
+        "host": {
+          "description": "The destination's host, byte-exact.",
+          "type": "string",
+          "minLength": 1
+        },
+        "dialect": {
+          "description": "The URL grammar that split the path: the known-host table's entry, or the report's own declared dialect on its declared host.",
+          "enum": ["github", "gitlab", "gitea"]
+        },
+        "owner": {
+          "description": "The owner segments before the name, joined; nested only under the gitlab dialect.",
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "description": "The repository name segment.",
+          "type": "string",
+          "minLength": 1
+        },
+        "form": {
+          "description": "The path segment after the repository, verbatim: blob, tree, src, issues, whatever the source spelled.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tail": {
+          "description": "Everything after the form, opaque, since branch names may contain slashes and splitting revision from path needs the other repository's refs.",
+          "type": "string",
+          "minLength": 1
         }
       }
     }

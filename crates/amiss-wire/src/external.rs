@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::digest::hj;
 use crate::json::Value;
+use crate::model::ForgeDialect;
 use crate::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/external-plan-envelope";
@@ -78,6 +79,11 @@ pub fn plan(
         .keys()
         .filter(|destination| base.contains_key(*destination))
         .count();
+    let recognition = Recognition {
+        declared: member(evaluation, "repository")
+            .and_then(|repository| text(repository, "host"))
+            .zip(text(evaluation, "forge")),
+    };
 
     let plan_payload = object(vec![
         ("schema", string(PLAN_PAYLOAD_SCHEMA)),
@@ -97,8 +103,8 @@ pub fn plan(
                 ("mode", mode.clone()),
             ]),
         ),
-        ("introduced", rows(&candidate, &base)),
-        ("removed", rows(&base, &candidate)),
+        ("introduced", rows(&candidate, &base, &recognition)),
+        ("removed", rows(&base, &candidate, &recognition)),
         (
             "retained_count",
             Value::Integer(i64::try_from(retained).unwrap_or(i64::MAX)),
@@ -149,24 +155,100 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
 }
 
 /// The destinations present here and absent on the other side, one sorted
-/// row each.
-fn rows(entries: &BTreeMap<String, Entry>, other: &BTreeMap<String, Entry>) -> Value {
+/// row each, with the forge shape attached where a host is recognized.
+fn rows(
+    entries: &BTreeMap<String, Entry>,
+    other: &BTreeMap<String, Entry>,
+    recognition: &Recognition<'_>,
+) -> Value {
     Value::Array(
         entries
             .iter()
             .filter(|(destination, _)| !other.contains_key(*destination))
             .map(|(destination, entry)| {
-                object(vec![
+                let mut members = vec![
                     ("destination", string(destination)),
                     ("scheme", string(&entry.scheme)),
                     (
                         "documents",
                         Value::Array(entry.documents.iter().map(|path| string(path)).collect()),
                     ),
-                ])
+                ];
+                if let Some(repository) = repository_value(destination, recognition) {
+                    members.push(("repository", repository));
+                }
+                object(members)
             })
             .collect(),
     )
+}
+
+/// The forge hosts this run can name: the built-in table plus the report's
+/// own declared identity, whose dialect the evaluation already carries.
+struct Recognition<'a> {
+    declared: Option<(&'a str, &'a str)>,
+}
+
+impl Recognition<'_> {
+    fn dialect(&self, host: &str) -> Option<&str> {
+        if let Some((declared, dialect)) = self.declared
+            && declared == host
+        {
+            return Some(dialect);
+        }
+        ForgeDialect::default_for_host(host).map(<&'static str>::from)
+    }
+}
+
+/// The forge shape of one destination, structure only: owner and name split
+/// by the dialect's grammar, the segment after them verbatim as the form,
+/// and everything later as one opaque tail, since splitting revision from
+/// path needs the other repository's refs, which branch slashes hide.
+fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<Value> {
+    let rest = destination.strip_prefix("https://")?;
+    let (host, path) = rest.split_at(rest.find(['/', '?', '#']).unwrap_or(rest.len()));
+    let dialect = recognition.dialect(host)?;
+    let path = path.strip_prefix('/')?.split(['?', '#']).next()?;
+    let mut segments: Vec<&str> = path.split('/').collect();
+    if segments.last() == Some(&"") {
+        segments.pop();
+    }
+    if segments.len() < 2 || segments.iter().any(|segment| segment.is_empty()) {
+        return None;
+    }
+    let (project, form, tail) = if dialect == "gitlab" {
+        match segments.iter().position(|segment| *segment == "-") {
+            Some(separator) if separator >= 2 => (
+                segments.get(..separator)?,
+                segments.get(separator.saturating_add(1)).copied(),
+                segments
+                    .get(separator.saturating_add(2)..)
+                    .unwrap_or_default(),
+            ),
+            Some(_) => return None,
+            None => (segments.as_slice(), None, [].as_slice()),
+        }
+    } else {
+        (
+            segments.get(..2)?,
+            segments.get(2).copied(),
+            segments.get(3..).unwrap_or_default(),
+        )
+    };
+    let (name, owner) = project.split_last()?;
+    let mut members = vec![
+        ("dialect", string(dialect)),
+        ("host", string(host)),
+        ("name", string(name)),
+        ("owner", string(&owner.join("/"))),
+    ];
+    if let Some(form) = form {
+        members.push(("form", string(form)));
+        if !tail.is_empty() {
+            members.push(("tail", string(&tail.join("/"))));
+        }
+    }
+    Some(object(members))
 }
 
 fn member<'v>(value: &'v Value, name: &str) -> Option<&'v Value> {

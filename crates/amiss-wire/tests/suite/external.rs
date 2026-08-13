@@ -269,6 +269,131 @@ fn a_foreign_value_is_not_a_report() {
     );
 }
 
+fn repository_of(planned: &Value, destination: &str) -> Option<Value> {
+    array(field(field(planned, "payload"), "introduced"))
+        .iter()
+        .find(|row| text(field(row, "destination")) == destination)
+        .and_then(|row| {
+            if let Value::Object(members) = row {
+                members
+                    .iter()
+                    .find(|(key, _)| key == "repository")
+                    .map(|(_, value)| value.clone())
+            } else {
+                None
+            }
+        })
+}
+
+fn introduced(destination: &str) -> Vec<Value> {
+    vec![row(
+        Value::Null,
+        external_occurrence("docs/a.md", destination),
+    )]
+}
+
+#[test]
+fn a_known_host_destination_carries_its_forge_shape() {
+    let cases = [
+        (
+            "https://github.com/acme/widgets/blob/feature/x/docs/a.md",
+            r#"{"dialect":"github","form":"blob","host":"github.com","name":"widgets","owner":"acme","tail":"feature/x/docs/a.md"}"#,
+        ),
+        (
+            "https://github.com/acme/widgets",
+            r#"{"dialect":"github","host":"github.com","name":"widgets","owner":"acme"}"#,
+        ),
+        (
+            "https://gitlab.com/group/sub/widgets/-/blob/main/a.md",
+            r#"{"dialect":"gitlab","form":"blob","host":"gitlab.com","name":"widgets","owner":"group/sub","tail":"main/a.md"}"#,
+        ),
+        (
+            "https://gitlab.com/group/sub/widgets",
+            r#"{"dialect":"gitlab","host":"gitlab.com","name":"widgets","owner":"group/sub"}"#,
+        ),
+        (
+            "https://codeberg.org/acme/widgets/src/branch/main/a.md",
+            r#"{"dialect":"gitea","form":"src","host":"codeberg.org","name":"widgets","owner":"acme","tail":"branch/main/a.md"}"#,
+        ),
+        (
+            "https://github.com/acme/widgets/blob/main/f.md#L10",
+            r#"{"dialect":"github","form":"blob","host":"github.com","name":"widgets","owner":"acme","tail":"main/f.md"}"#,
+        ),
+        (
+            "https://github.com/acme/widgets?tab=readme",
+            r#"{"dialect":"github","host":"github.com","name":"widgets","owner":"acme"}"#,
+        ),
+    ];
+    for (destination, expected) in cases {
+        let plan = planned(introduced(destination));
+        let repository = repository_of(&plan, destination)
+            .unwrap_or_else(|| panic!("{destination} carries no shape"));
+        assert_eq!(
+            String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
+            expected,
+            "{destination}"
+        );
+    }
+}
+
+#[test]
+fn an_unrecognizable_destination_stays_unshaped() {
+    for destination in [
+        "https://example.com/manual",
+        "http://github.com/acme/widgets",
+        "https://GitHub.com/acme/widgets",
+        "https://github.com/acme",
+        "https://github.com//widgets/blob/main/a.md",
+        "https://gitlab.com/group/-/blob/main/a.md",
+        "https://github.com",
+    ] {
+        let plan = planned(introduced(destination));
+        assert_eq!(
+            repository_of(&plan, destination),
+            None,
+            "{destination} must stay unshaped"
+        );
+    }
+}
+
+/// The report's own declared identity extends recognition to its host, with
+/// the dialect the evaluation already names.
+#[test]
+fn the_declared_host_is_recognized_with_its_declared_dialect() {
+    let destination = "https://ghes.corp.example/other/repo/blob/main/x.md";
+    let payload = object(vec![
+        ("schema", string(PAYLOAD_SCHEMA)),
+        ("result", object(vec![("complete", Value::Bool(true))])),
+        (
+            "evaluation",
+            object(vec![
+                ("base", object(vec![("commit_oid", string("a"))])),
+                ("candidate", object(vec![("commit_oid", string("b"))])),
+                ("mode", string("commit-pair")),
+                ("forge", string("github")),
+                (
+                    "repository",
+                    object(vec![("host", string("ghes.corp.example"))]),
+                ),
+            ]),
+        ),
+        ("observations", Value::Array(introduced(destination))),
+    ]);
+    let digest = hj(PAYLOAD_SCHEMA, &payload);
+    let envelope = object(vec![
+        ("schema", string(ENVELOPE_SCHEMA)),
+        ("payload", payload),
+        ("payload_digest", string(&digest.to_string())),
+    ]);
+    let derived =
+        plan(&envelope, "0.0.0", &sample_digest()).expect("the declared-host report yields a plan");
+    let repository = repository_of(&derived, destination).expect("the declared host is shaped");
+    assert_eq!(
+        String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
+        r#"{"dialect":"github","form":"blob","host":"ghes.corp.example","name":"repo","owner":"other","tail":"main/x.md"}"#,
+    );
+}
+
 #[test]
 fn an_external_occurrence_missing_its_promise_is_refused() {
     let mut occurrence = members(external_occurrence("docs/a.md", "https://x.example/a"));
