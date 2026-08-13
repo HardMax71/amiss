@@ -45,6 +45,7 @@ steps:
   - uses: ./.github/actions/tools
   - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
     with:
+      shared-key: gates
       save-if: "false"
   - name: Restore Copilot CLI
     id: copilot-cache
@@ -72,7 +73,7 @@ pre-agent-steps:
       key: agent-review-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
       path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
-timeout-minutes: 20
+timeout-minutes: 30
 
 safe-outputs:
   # The side-scan runs the same BYOK engine as the lane; its old default
