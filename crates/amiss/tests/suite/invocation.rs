@@ -437,6 +437,31 @@ fn scan_of(outcome: Outcome) -> amiss::invocation::Invocation {
 
 /// The dialect grammar: an explicit flag names a known dialect and rides the
 /// identity triple; the known-host table fills the default; the github
+/// An identity on a host outside the known table is refused, never
+/// silently external; naming the dialect opens it, nested owners intact.
+#[test]
+fn refuses_an_unknown_host_without_a_dialect() {
+    let identity = with(
+        &valid_pair(),
+        &[
+            "--repository",
+            "gitlab.example/group/subgroup/repo",
+            "--ref",
+            "refs/heads/main",
+            "--default-branch-ref",
+            "refs/heads/main",
+        ],
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&identity)),
+        vec![Code::InvalidEvent]
+    );
+
+    let flagged = scan_of(parse_tokens(&with(&identity, &["--forge", "gitlab"])));
+    assert_eq!(flagged.identity.unwrap().repository.owner, "group/subgroup");
+    assert_eq!(flagged.forge, Some(amiss_wire::model::ForgeDialect::Gitlab));
+}
+
 /// dialect refuses a nested owner it could never match.
 #[test]
 fn classifies_the_forge_dialect_grammar() {
@@ -474,11 +499,6 @@ fn classifies_the_forge_dialect_grammar() {
     let ghes = scan_of(parse_tokens(&explicit));
     assert_eq!(ghes.forge, Some(amiss_wire::model::ForgeDialect::Github));
     assert_eq!(ghes.identity.unwrap().repository.host, "ghes.corp.example");
-
-    let nested = parse_tokens(&identity("gitlab.example/group/subgroup/repo"));
-    let nested = scan_of(nested);
-    assert_eq!(nested.identity.unwrap().repository.owner, "group/subgroup");
-    assert_eq!(nested.forge, None);
 
     assert_eq!(
         rejected_codes(parse_tokens(&identity("github.com/group/subgroup/repo"))),

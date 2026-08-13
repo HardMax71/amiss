@@ -104,8 +104,9 @@ says so.
 `--forge` names the URL dialect the resolver applies and accepts exactly three values.
 `github` covers GitHub and GitHub Enterprise, `gitlab` the `/-/blob/` separator form,
 `gitea` the form Gitea, Forgejo, and Codeberg share. Without the flag, github.com,
-gitlab.com, and codeberg.org select their own dialects; every other host selects none,
-leaving its links foreign and `evaluation.forge` null. An explicit flag beats the table;
+gitlab.com, and codeberg.org select their own dialects; an identity on any other host is
+refused as `INVALID_EVENT` until the flag names its dialect, since accepting it would
+silently leave every same-repository link external. An explicit flag beats the table;
 that's how a self-hosted instance gets its grammar. Recognizing a dialect authenticates
 nothing about how the run was invoked.
 
