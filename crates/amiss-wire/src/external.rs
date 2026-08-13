@@ -8,26 +8,13 @@ pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/external-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/external-plan-payload";
 
 /// Why a report yields no plan: the first defect found, in reading order.
+/// Classification only; the command projecting a defect owns its wording.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlanDefect {
     NotAReport,
     DigestMismatch,
     Incomplete,
     MalformedExternal,
-}
-
-impl PlanDefect {
-    #[must_use]
-    pub const fn describe(self) -> &'static str {
-        match self {
-            Self::NotAReport => "the input is not a scanner report envelope",
-            Self::DigestMismatch => "the report payload does not match its recorded digest",
-            Self::Incomplete => "the report is incomplete, so its sides cannot be compared",
-            Self::MalformedExternal => {
-                "an external occurrence is missing its destination, document, or scheme"
-            }
-        }
-    }
 }
 
 /// One side's view of a destination: its scheme and every document naming it.

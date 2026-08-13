@@ -11,8 +11,10 @@ amiss external-plan --report report.json --format json
 
 The command opens no repository and touches no network. It reads the report file,
 verifies the payload against the digest the envelope records, and refuses anything less
-than a complete report, so a plan can only exist for bytes the scanner actually stood
-behind. The derivation is set-wise per side: a destination counts as introduced when the
+than a complete report. The digest proves the payload is whole and untampered relative
+to its own envelope, so corruption and truncation are refused; where the file came from
+is the caller's supply chain, as it is for every other input. The derivation is set-wise
+per side: a destination counts as introduced when the
 candidate references it and the base does not anywhere in the tree, and as removed in
 the mirror case. A destination that only moved between documents is neither; it is
 counted under `retained_count` and never listed, which keeps the plan proportional to
