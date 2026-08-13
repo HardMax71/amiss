@@ -209,6 +209,7 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
     let (host, path) = rest.split_at(rest.find(['/', '?', '#']).unwrap_or(rest.len()));
     let dialect = recognition.dialect(host)?;
     let path = path.strip_prefix('/')?.split(['?', '#']).next()?;
+    let directory = path.ends_with('/');
     let mut segments: Vec<&str> = path.split('/').collect();
     if segments.last() == Some(&"") {
         segments.pop();
@@ -217,6 +218,8 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
         return None;
     }
     let (project, form, tail) = if dialect == "gitlab" {
+        // Without the separator a legacy file URL and a nested project page
+        // are indistinguishable, so only the two-segment form is a shape.
         match segments.iter().position(|segment| *segment == "-") {
             Some(separator) if separator >= 2 => (
                 segments.get(..separator)?,
@@ -225,8 +228,8 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
                     .get(separator.saturating_add(2)..)
                     .unwrap_or_default(),
             ),
-            Some(_) => return None,
-            None => (segments.as_slice(), None, [].as_slice()),
+            None if segments.len() == 2 => (segments.as_slice(), None, [].as_slice()),
+            Some(_) | None => return None,
         }
     } else {
         (
@@ -245,7 +248,11 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
     if let Some(form) = form {
         members.push(("form", string(form)));
         if !tail.is_empty() {
-            members.push(("tail", string(&tail.join("/"))));
+            let mut tail = tail.join("/");
+            if directory {
+                tail.push('/');
+            }
+            members.push(("tail", string(&tail)));
         }
     }
     Some(object(members))
