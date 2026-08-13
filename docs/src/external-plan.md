@@ -22,7 +22,13 @@ the change rather than to the corpus.
 
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address a fetcher would request; its lowercased scheme; and the sorted
-documents naming it. The payload binds the report's own `payload_digest` and echoes its
+documents naming it. A destination on a forge host the run can name, github.com,
+gitlab.com, codeberg.org, or the report's own declared host under its declared dialect,
+also carries a `repository` object: host, dialect, owner, name, then verbatim the path
+segment after them as `form` and everything later as one opaque `tail`. The tail stays
+unsplit on purpose. Branch names may contain slashes, so separating revision from path
+needs the other repository's refs, and naming structure is not claiming the repository
+exists; both belong to the verifying layer. The payload binds the report's own `payload_digest` and echoes its
 evaluation identities, and the plan envelope carries a digest of its own payload under
 the plan schema identity. A producer that probes the introduced list, and any later
 judgment over that evidence, can therefore join plan, report, and evidence on one
