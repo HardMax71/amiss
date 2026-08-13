@@ -39,8 +39,9 @@ the URL in `external_destination`, after the format's own decoding so that
 `https://example.com/x?a=1&amp;b=2` is recorded as the address a fetcher would request rather
 than as the bytes the source spells. No finding is raised, and the summary counts it
 under `external_out_of_scope`, because the engine never fetched it and so decided nothing.
-[Amiss and link checkers](comparison.md) shows the one command that turns those rows into a
-list for the tool that does fetch.
+[The external plan](external-plan.md) derives the introduced and removed destinations from
+a written report, and [Amiss and link checkers](comparison.md) shows the pipe that hands
+them to the tool that does fetch.
 
 Every finding carries its kind, its location with byte offsets, its attribution, the
 policy steps that set its final disposition, and the digests of the facts underneath it.

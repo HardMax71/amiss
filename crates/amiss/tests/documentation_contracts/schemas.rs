@@ -65,9 +65,9 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
         "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
         "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
+        "scanner-external-plan" | "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
-        "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
         "scanner-trusted-time-statement" => parse_defect(TrustedTimeStatement::parse(bytes)),
         "waiver-bundle" => parse_defect(WaiverBundle::parse(bytes)),
@@ -346,6 +346,37 @@ fn the_first_frozen_example_binds_the_major() {
         "the rolling contract no longer accepts the first frozen example; \
          this reshape mints wire major 2 and a major release:\n{}",
         defects.join("\n"),
+    );
+}
+
+/// The plan example is not authored, it is derived: feeding the report
+/// example through the real derivation, with the engine values the plan
+/// example itself carries, must reproduce it byte-equal at the value level.
+/// A drift in either example, the derivation, or the digest fails here.
+#[test]
+fn the_external_plan_example_derives_from_the_report_example() {
+    let root = repository_root();
+    let report_bytes = fs::read(root.join("spec/examples/scanner-report.json"))
+        .expect("the report example is readable");
+    let report = amiss_wire::json::parse(&report_bytes).expect("the report example is strict JSON");
+    let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
+        .expect("the plan example is readable");
+    let plan = amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
+    let example: serde_json::Value =
+        serde_json::from_slice(&plan_bytes).expect("the plan example is JSON");
+    let version = example
+        .pointer("/payload/engine/engine_version")
+        .and_then(serde_json::Value::as_str)
+        .expect("the plan example names an engine version");
+    let digest = example
+        .pointer("/payload/engine/engine_digest")
+        .and_then(serde_json::Value::as_str)
+        .expect("the plan example names an engine digest");
+    let derived = amiss_wire::external::plan(&report, version, digest)
+        .expect("the report example yields a plan");
+    assert_eq!(
+        derived, plan,
+        "the plan example drifted from its own derivation"
     );
 }
 

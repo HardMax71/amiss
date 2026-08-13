@@ -1,0 +1,38 @@
+{
+  "payload": {
+    "engine": {
+      "engine_digest": "sha256:f7a89b2b73c0d52d643e529fcc2a928a752dfb0acf089c073e7cd93d6035007e",
+      "engine_version": "0.4.0"
+    },
+    "introduced": [
+      {
+        "destination": "https://example.com/manual",
+        "documents": [
+          "docs/guide.md"
+        ],
+        "scheme": "https"
+      }
+    ],
+    "removed": [],
+    "report": {
+      "base": {
+        "commit_oid": "7ed2c702c3f70bf9ab0837b5b0941b31a1cdd027",
+        "kind": "git-commit",
+        "object_format": "sha1",
+        "tree_oid": "7ce22021ddd28e84799fe3133e5c6e52cd893e0a"
+      },
+      "candidate": {
+        "commit_oid": "e17ebaf2f75fbc0854cf389f4aa098854586cdc4",
+        "kind": "git-commit",
+        "object_format": "sha1",
+        "tree_oid": "bf414a1d28abffc17b8f2636aded1244f4173279"
+      },
+      "mode": "commit-pair",
+      "payload_digest": "sha256:0d0bd6728afb22b27c8a39b9ff96ea6b0e3a133cd9d12952c279a83cf9518b9e"
+    },
+    "retained_count": 0,
+    "schema": "amiss/external-plan-payload"
+  },
+  "payload_digest": "sha256:ba048bc50cd910f55b243f15e777341e0d6496f69d72a62205432b2ddc61dd96",
+  "schema": "amiss/external-plan-envelope"
+}
