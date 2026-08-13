@@ -24,6 +24,7 @@ steps:
   - uses: ./.github/actions/tools
   - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
     with:
+      shared-key: gates
       save-if: "false"
 
 timeout-minutes: 15
