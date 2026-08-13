@@ -1,8 +1,8 @@
 mod adopt;
 mod author;
 mod codequality;
+mod external;
 mod payload;
-mod plan;
 mod repair;
 mod sarif;
 mod view;
@@ -113,7 +113,8 @@ fn main() -> ExitCode {
         Outcome::Accepted(command) => match *command {
             invocation::Command::Scan(invocation) => run(&invocation, &mut reserve),
             invocation::Command::Author(author) => author::run(&author),
-            invocation::Command::Plan(plan) => plan::run(&plan, &mut reserve),
+            invocation::Command::Plan(plan) => external::run_plan(&plan, &mut reserve),
+            invocation::Command::Assess(assess) => external::run_assess(&assess, &mut reserve),
         },
     }
 }

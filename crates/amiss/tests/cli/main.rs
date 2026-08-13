@@ -2,6 +2,7 @@ mod adopt;
 mod author;
 mod claims;
 mod codequality;
+mod external_assess;
 mod external_plan;
 mod fix;
 mod forge;

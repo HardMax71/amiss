@@ -1,0 +1,17 @@
+{
+  "plan_payload_digest": "sha256:ba048bc50cd910f55b243f15e777341e0d6496f69d72a62205432b2ddc61dd96",
+  "producer": {
+    "name": "amiss-probe",
+    "version": "0.4.0"
+  },
+  "rows": [
+    {
+      "checked_at": "2026-08-14T00:00:00Z",
+      "destination": "https://example.com/manual",
+      "kind": "http-probe",
+      "method": "get",
+      "status": 410
+    }
+  ],
+  "schema": "amiss/external-evidence"
+}

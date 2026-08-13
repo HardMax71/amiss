@@ -400,6 +400,253 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
     );
 }
 
+use amiss_wire::external::{AssessDefect, EVIDENCE_SCHEMA, assess};
+
+fn evidence(plan: &Value, rows: Vec<Value>) -> Value {
+    object(vec![
+        ("schema", string(EVIDENCE_SCHEMA)),
+        ("plan_payload_digest", field(plan, "payload_digest").clone()),
+        (
+            "producer",
+            object(vec![
+                ("name", string("amiss-probe")),
+                ("version", string("0.0.0")),
+            ]),
+        ),
+        ("rows", Value::Array(rows)),
+    ])
+}
+
+fn probe(destination: &str, method: &str, status: i64) -> Value {
+    object(vec![
+        ("kind", string("http-probe")),
+        ("destination", string(destination)),
+        ("method", string(method)),
+        ("status", Value::Integer(status)),
+        ("checked_at", string("t0")),
+    ])
+}
+
+fn forge_row(destination: &str, repository: &str, tail: Option<&str>) -> Value {
+    let mut members = vec![
+        ("kind", string("forge-api")),
+        ("destination", string(destination)),
+        ("repository", string(repository)),
+        ("checked_at", string("t0")),
+    ];
+    if let Some(tail) = tail {
+        members.push(("tail", string(tail)));
+    }
+    object(members)
+}
+
+fn verdicts_of(assessment: &Value) -> Vec<(String, String, String)> {
+    array(field(field(assessment, "payload"), "verdicts"))
+        .iter()
+        .map(|row| {
+            let reason = if let Value::Object(members) = row {
+                members
+                    .iter()
+                    .find(|(key, _)| key == "reason")
+                    .map(|(_, value)| text(value).to_owned())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+            (
+                text(field(row, "destination")).to_owned(),
+                text(field(row, "verdict")).to_owned(),
+                reason,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_judgment_policy_is_conservative() {
+    let destinations = [
+        (
+            "https://a.example/gone",
+            probe("https://a.example/gone", "get", 410),
+        ),
+        (
+            "https://b.example/head404",
+            probe("https://b.example/head404", "head", 404),
+        ),
+        (
+            "https://c.example/ok",
+            probe("https://c.example/ok", "head", 200),
+        ),
+        (
+            "https://d.example/wall",
+            probe("https://d.example/wall", "get", 403),
+        ),
+        (
+            "https://e.example/limit",
+            probe("https://e.example/limit", "get", 429),
+        ),
+    ];
+    let observations = destinations
+        .iter()
+        .map(|(destination, _)| row(Value::Null, external_occurrence("docs/a.md", destination)))
+        .chain(std::iter::once(row(
+            Value::Null,
+            external_occurrence("docs/a.md", "https://f.example/quiet"),
+        )))
+        .collect();
+    let plan = planned(observations);
+    let evidence = evidence(
+        &plan,
+        destinations.iter().map(|(_, row)| row.clone()).collect(),
+    );
+    let assessment =
+        assess(&plan, &evidence, "0.0.0", &sample_digest()).expect("the pair yields an assessment");
+    assert_eq!(
+        verdicts_of(&assessment),
+        vec![
+            (
+                "https://a.example/gone".into(),
+                "refuted".into(),
+                "gone".into()
+            ),
+            (
+                "https://b.example/head404".into(),
+                "unproven".into(),
+                "unconfirmed".into()
+            ),
+            (
+                "https://c.example/ok".into(),
+                "reachable".into(),
+                String::new()
+            ),
+            (
+                "https://d.example/wall".into(),
+                "unproven".into(),
+                "denied".into()
+            ),
+            (
+                "https://e.example/limit".into(),
+                "unproven".into(),
+                "rate-limited".into()
+            ),
+            (
+                "https://f.example/quiet".into(),
+                "unproven".into(),
+                "unexamined".into()
+            ),
+        ],
+    );
+}
+
+#[test]
+fn forge_facts_refute_only_after_visibility_and_resolution() {
+    let shaped = |name: &str| format!("https://github.com/acme/{name}/blob/main/a.md");
+    let observations = ["one", "two", "three"]
+        .iter()
+        .map(|name| row(Value::Null, external_occurrence("docs/a.md", &shaped(name))))
+        .collect();
+    let plan = planned(observations);
+    let evidence = evidence(
+        &plan,
+        vec![
+            forge_row(&shaped("one"), "readable", Some("path-missing")),
+            forge_row(&shaped("two"), "missing", None),
+            forge_row(&shaped("three"), "readable", None),
+        ],
+    );
+    let assessment =
+        assess(&plan, &evidence, "0.0.0", &sample_digest()).expect("the pair yields an assessment");
+    assert_eq!(
+        verdicts_of(&assessment),
+        vec![
+            (shaped("one"), "refuted".into(), "path-missing".into()),
+            (shaped("three"), "unproven".into(), "unconfirmed".into()),
+            (shaped("two"), "unproven".into(), "repository-unseen".into()),
+        ],
+    );
+}
+
+#[test]
+fn stray_or_repeated_evidence_invalidates_the_assessment() {
+    let plan = planned(introduced("https://a.example/x"));
+    for rows in [
+        vec![probe("https://other.example/y", "get", 200)],
+        vec![
+            probe("https://a.example/x", "get", 200),
+            probe("https://a.example/x", "head", 200),
+        ],
+        vec![forge_row("https://a.example/x", "readable", None)],
+    ] {
+        assert_eq!(
+            assess(&plan, &evidence(&plan, rows), "0.0.0", &sample_digest()),
+            Err(AssessDefect::UnboundEvidence)
+        );
+    }
+    let mut foreign = evidence(&plan, Vec::new());
+    if let Value::Object(members) = &mut foreign {
+        members.retain(|(key, _)| key != "plan_payload_digest");
+        members.push(("plan_payload_digest".to_owned(), string(&sample_digest())));
+        members.sort_by(|left, right| left.0.cmp(&right.0));
+    }
+    assert_eq!(
+        assess(&plan, &foreign, "0.0.0", &sample_digest()),
+        Err(AssessDefect::UnboundEvidence)
+    );
+}
+
+#[test]
+fn malformed_evidence_rows_are_refused() {
+    let plan = planned(introduced("https://a.example/x"));
+    let both = object(vec![
+        ("kind", string("http-probe")),
+        ("destination", string("https://a.example/x")),
+        ("method", string("get")),
+        ("status", Value::Integer(200)),
+        ("failure", string("tls")),
+        ("checked_at", string("t0")),
+    ]);
+    let neither = object(vec![
+        ("kind", string("http-probe")),
+        ("destination", string("https://a.example/x")),
+        ("method", string("get")),
+        ("checked_at", string("t0")),
+    ]);
+    for bad in [both, neither] {
+        assert_eq!(
+            assess(
+                &plan,
+                &evidence(&plan, vec![bad]),
+                "0.0.0",
+                &sample_digest()
+            ),
+            Err(AssessDefect::MalformedEvidence)
+        );
+    }
+}
+
+#[test]
+fn the_assessment_binds_the_whole_chain() {
+    let plan = planned(introduced("https://a.example/x"));
+    let rows = vec![probe("https://a.example/x", "get", 200)];
+    let evidence = evidence(&plan, rows);
+    let assessment =
+        assess(&plan, &evidence, "0.0.0", &sample_digest()).expect("the pair yields an assessment");
+    let subject = field(field(&assessment, "payload"), "subject");
+    assert_eq!(
+        field(subject, "plan_payload_digest"),
+        field(&plan, "payload_digest")
+    );
+    assert_eq!(
+        text(field(subject, "evidence_digest")),
+        hj(EVIDENCE_SCHEMA, &evidence).to_string()
+    );
+    let payload = field(&assessment, "payload");
+    assert_eq!(
+        text(field(&assessment, "payload_digest")),
+        hj("amiss/external-assessment-payload", payload).to_string()
+    );
+}
+
 #[test]
 fn an_external_occurrence_missing_its_promise_is_refused() {
     let mut occurrence = members(external_occurrence("docs/a.md", "https://x.example/a"));

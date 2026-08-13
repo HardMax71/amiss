@@ -47,6 +47,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
+amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -78,6 +79,8 @@ trust them when the short form reads ambiguous.
 | `--expires-at` | UTC instant | when the items expire; must be after `--created-at` |
 | `--debt-output` | path | where the minted snapshot is written; must not exist |
 | `--report` | path | the report file the plan form reads; foreign to every other form |
+| `--plan` | path | the plan file the assessment form judges; foreign to every other form |
+| `--evidence` | path | the producer observations the assessment form judges; foreign to every other form |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
 `--base` and `--candidate` take full commit IDs: lowercase hex, forty characters for
@@ -189,7 +192,14 @@ the two scan-only projections are refused. Exit 0 wrote the plan. Exit 2 means t
 could not be trusted: unreadable, not the scanner's strict JSON, not a report envelope,
 digest mismatch, or incomplete.
 
-`amiss --version` is the grammar's sixth form and stands alone: any second token makes it
+`amiss external-assess` judges [an external plan](external-assessment.md) against one
+producer's observations, offline, under the engine's fixed policy. It verifies the plan's
+digest and the evidence's binding to that exact plan; evidence naming a destination the
+plan did not introduce, repeating one, or binding another plan refuses the whole run.
+`--format` takes `human` or `json`. Exit 0 wrote the assessment, refuted rows included,
+since the artifact is advisory data. Exit 2 means an input could not be trusted.
+
+`amiss --version` is the grammar's seventh form and stands alone: any second token makes it
 an ordinary, refused invocation. It opens no repository. It prints two lines and exits 0:
 
 ```text
