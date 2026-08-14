@@ -14,6 +14,7 @@ exclude = [
   "amiss-controller-gitlab",
   "amiss-controller-gitlab-service",
   "amiss-controller-service",
+  "amiss-probe",
 ]
 
 [bans]
