@@ -611,7 +611,9 @@ fn malformed_evidence_rows_are_refused() {
         ("method", string("get")),
         ("checked_at", string("t0")),
     ]);
-    for bad in [both, neither] {
+    let below = probe("https://a.example/x", "get", 42);
+    let above = probe("https://a.example/x", "get", 1000);
+    for bad in [both, neither, below, above] {
         assert_eq!(
             assess(
                 &plan,
@@ -622,6 +624,79 @@ fn malformed_evidence_rows_are_refused() {
             Err(AssessDefect::MalformedEvidence)
         );
     }
+}
+
+/// The published contract's own bounds hold at the judge too: an empty
+/// producer version or a plan row the assessment schema would reject never
+/// becomes an artifact.
+#[test]
+fn the_judge_is_no_laxer_than_its_contracts() {
+    let plan = planned(introduced("https://a.example/x"));
+    let mut unnamed = members(evidence(&plan, Vec::new()));
+    for (key, value) in &mut unnamed {
+        if key == "producer" {
+            *value = object(vec![("name", string("p")), ("version", string(""))]);
+        }
+    }
+    assert_eq!(
+        assess(&plan, &Value::Object(unnamed), "0.0.0", &sample_digest()),
+        Err(AssessDefect::NotEvidence)
+    );
+
+    let broken_row = object(vec![
+        ("destination", string("https://a.example/x")),
+        ("scheme", string("https")),
+    ]);
+    let payload = object(vec![
+        ("schema", string(PLAN_PAYLOAD_SCHEMA)),
+        (
+            "report",
+            object(vec![("payload_digest", string(&sample_digest()))]),
+        ),
+        ("introduced", Value::Array(vec![broken_row])),
+        ("removed", Value::Array(Vec::new())),
+        ("retained_count", Value::Integer(0)),
+    ]);
+    let digest = hj(PLAN_PAYLOAD_SCHEMA, &payload);
+    let handcrafted = object(vec![
+        ("schema", string(PLAN_ENVELOPE_SCHEMA)),
+        ("payload", payload),
+        ("payload_digest", string(&digest.to_string())),
+    ]);
+    let empty = evidence(&handcrafted, Vec::new());
+    assert_eq!(
+        assess(&handcrafted, &empty, "0.0.0", &sample_digest()),
+        Err(AssessDefect::NotAPlan),
+        "a digest-valid plan with rows the contract rejects is not a plan"
+    );
+}
+
+/// A tail resolution for a bare repository shape is evidence about nothing
+/// the plan asked for.
+#[test]
+fn a_tail_resolution_needs_a_tail_in_the_shape() {
+    let bare = "https://github.com/acme/widgets";
+    let plan = planned(introduced(bare));
+    assert_eq!(
+        assess(
+            &plan,
+            &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
+            "0.0.0",
+            &sample_digest()
+        ),
+        Err(AssessDefect::UnboundEvidence)
+    );
+    let visibility_only = assess(
+        &plan,
+        &evidence(&plan, vec![forge_row(bare, "readable", None)]),
+        "0.0.0",
+        &sample_digest(),
+    )
+    .expect("visibility-only evidence judges a bare shape");
+    assert_eq!(
+        verdicts_of(&visibility_only),
+        vec![(bare.to_owned(), "reachable".to_owned(), String::new())],
+    );
 }
 
 #[test]

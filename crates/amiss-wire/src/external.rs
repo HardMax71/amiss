@@ -339,7 +339,7 @@ pub fn assess(
     let producer = member(evidence, "producer")
         .filter(|producer| {
             text(producer, "name").is_some_and(|name| !name.is_empty())
-                && text(producer, "version").is_some()
+                && text(producer, "version").is_some_and(|version| !version.is_empty())
         })
         .ok_or(AssessDefect::NotEvidence)?;
     if text(evidence, "plan_payload_digest") != Some(recorded) {
@@ -349,6 +349,24 @@ pub fn assess(
         return Err(AssessDefect::NotEvidence);
     };
 
+    // The digest only proves the plan is whole; the judged fields must still
+    // fit the assessment contract, so a hand-built plan cannot smuggle rows
+    // the published schema would reject.
+    let mut destinations: BTreeSet<&str> = BTreeSet::new();
+    for introduced_row in introduced {
+        let destination =
+            text(introduced_row, "destination").filter(|destination| !destination.is_empty());
+        let documents = matches!(
+            member(introduced_row, "documents"),
+            Some(Value::Array(items)) if !items.is_empty()
+        );
+        let (Some(destination), true) = (destination, documents) else {
+            return Err(AssessDefect::NotAPlan);
+        };
+        if !destinations.insert(destination) {
+            return Err(AssessDefect::NotAPlan);
+        }
+    }
     let observed = observed_rows(evidence_rows, introduced)?;
     let assessment = object(vec![
         ("schema", string(ASSESSMENT_PAYLOAD_SCHEMA)),
@@ -403,7 +421,7 @@ fn observed_rows<'e>(
         if text(row, "checked_at").is_none_or(str::is_empty) {
             return Err(AssessDefect::MalformedEvidence);
         }
-        let observation = observe(row, shape.is_some())?;
+        let observation = observe(row, shape)?;
         if observed.insert(destination, observation).is_some() {
             return Err(AssessDefect::UnboundEvidence);
         }
@@ -441,8 +459,9 @@ fn verdict_rows(introduced: &[Value], observed: &BTreeMap<&str, Observed>) -> Ve
 }
 
 /// One evidence row into its validated observation; forge facts are only
-/// admissible for a destination the plan shaped.
-fn observe(row: &Value, shaped: bool) -> Result<Observed, AssessDefect> {
+/// admissible for a destination the plan shaped, and a tail resolution only
+/// where the shape carries a tail to resolve.
+fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect> {
     match text(row, "kind") {
         Some("http-probe") => {
             let method_get = match text(row, "method") {
@@ -453,7 +472,11 @@ fn observe(row: &Value, shaped: bool) -> Result<Observed, AssessDefect> {
             let status = member(row, "status");
             let failure = member(row, "failure");
             let status = match (status, failure) {
-                (Some(Value::Integer(status)), None | Some(Value::Null)) => Some(*status),
+                (Some(Value::Integer(status)), None | Some(Value::Null))
+                    if (100..=999).contains(status) =>
+                {
+                    Some(*status)
+                }
                 (None | Some(Value::Null), Some(Value::String(failure)))
                     if matches!(failure.as_str(), "dns" | "tls" | "timeout" | "refused") =>
                 {
@@ -475,9 +498,9 @@ fn observe(row: &Value, shaped: bool) -> Result<Observed, AssessDefect> {
             })
         }
         Some("forge-api") => {
-            if !shaped {
+            let Some(shape) = shape else {
                 return Err(AssessDefect::UnboundEvidence);
-            }
+            };
             let repository = match text(row, "repository") {
                 Some("readable") => Repository::Readable,
                 Some("missing") => Repository::Missing,
@@ -494,6 +517,9 @@ fn observe(row: &Value, shaped: bool) -> Result<Observed, AssessDefect> {
                 },
                 (_, Some(_)) => return Err(AssessDefect::MalformedEvidence),
             };
+            if tail.is_some() && member(shape, "tail").is_none() {
+                return Err(AssessDefect::UnboundEvidence);
+            }
             Ok(Observed::Forge { repository, tail })
         }
         Some(_) | None => Err(AssessDefect::MalformedEvidence),
