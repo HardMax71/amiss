@@ -1,9 +1,12 @@
 # The external assessment
 
 [The external plan](external-plan.md) names work; the assessment judges what came back.
-A producer, any producer, probes the plan's introduced destinations or asks a forge API
-about the shaped ones, and writes its observations into an evidence file. The engine then
-judges offline:
+A producer probes the plan's introduced destinations or asks a forge API about the shaped
+ones, and writes its observations into an evidence file. Two producers ship in this
+repository: the provider lanes verify shaped destinations through their own APIs, and
+`amiss-probe --plan plan.json` probes the unshaped https ones, every URL and redirect hop
+vetted and address-pinned before a byte leaves the process. Any other producer works too.
+The engine then judges offline:
 
 ```sh
 amiss external-assess --plan plan.json --evidence evidence.json --format json

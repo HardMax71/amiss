@@ -23,6 +23,7 @@ members = [
   "controller/github-service",
   "controller/gitlab",
   "controller/gitlab-service",
+  "controller/probe",
   "controller/service",
 ]
 exclude = ["fuzz"]
