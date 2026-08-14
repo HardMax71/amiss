@@ -153,3 +153,9 @@ pub(super) struct CreateCheckRunOutput {
     pub title: String,
     pub summary: String,
 }
+
+#[derive(Deserialize)]
+pub(super) struct RefRecord {
+    #[serde(rename = "ref")]
+    pub reference: String,
+}

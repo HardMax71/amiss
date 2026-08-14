@@ -4,6 +4,7 @@ mod model;
 mod publication;
 mod refresh;
 mod rest;
+mod verify;
 
 use std::fmt;
 use std::sync::Arc;
@@ -140,6 +141,30 @@ impl GitHubApp {
     /// GitHub cannot authenticate this exact installation.
     pub fn installation_access_token(&self) -> Result<SecretString, ProviderError> {
         self.client.rest.installation_access_token()
+    }
+
+    /// Verifies an external plan's introduced destinations shaped for this
+    /// instance's host and returns the evidence file for `external-assess`.
+    /// Advisory producer work: facts only, partial on rate limits, and a
+    /// destination outside this host is simply left to other producers.
+    ///
+    /// # Errors
+    ///
+    /// The value is not a plan, this installation's authorization failed,
+    /// or the API answered nothing usable before the first fact.
+    pub fn verify_external(
+        &self,
+        plan: &amiss_wire::json::Value,
+        producer_version: &str,
+        checked_at: &str,
+    ) -> Result<amiss_wire::json::Value, ProviderError> {
+        verify::verify_external(
+            &self.client.rest,
+            plan,
+            self.client.config.provider.instance.as_str(),
+            producer_version,
+            checked_at,
+        )
     }
 }
 

@@ -43,35 +43,37 @@ pub fn plan(
     engine_version: &str,
     engine_digest: &str,
 ) -> Result<Value, PlanDefect> {
-    if text(envelope, "schema") != Some(ENVELOPE_SCHEMA) {
+    if envelope.text("schema") != Some(ENVELOPE_SCHEMA) {
         return Err(PlanDefect::NotAReport);
     }
-    let Some(payload) = member(envelope, "payload") else {
+    let Some(payload) = envelope.member("payload") else {
         return Err(PlanDefect::NotAReport);
     };
-    if text(payload, "schema") != Some(PAYLOAD_SCHEMA) {
+    if payload.text("schema") != Some(PAYLOAD_SCHEMA) {
         return Err(PlanDefect::NotAReport);
     }
-    let Some(recorded) = text(envelope, "payload_digest") else {
+    let Some(recorded) = envelope.text("payload_digest") else {
         return Err(PlanDefect::NotAReport);
     };
     if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
         return Err(PlanDefect::DigestMismatch);
     }
-    let complete = member(payload, "result").and_then(|result| member(result, "complete"));
+    let complete = payload
+        .member("result")
+        .and_then(|result| result.member("complete"));
     if complete != Some(&Value::Bool(true)) {
         return Err(PlanDefect::Incomplete);
     }
-    let Some(Value::Array(observations)) = member(payload, "observations") else {
+    let Some(Value::Array(observations)) = payload.member("observations") else {
         return Err(PlanDefect::NotAReport);
     };
-    let Some(evaluation) = member(payload, "evaluation") else {
+    let Some(evaluation) = payload.member("evaluation") else {
         return Err(PlanDefect::NotAReport);
     };
     let (Some(base_identity), Some(candidate_identity), Some(mode)) = (
-        member(evaluation, "base"),
-        member(evaluation, "candidate"),
-        member(evaluation, "mode"),
+        evaluation.member("base"),
+        evaluation.member("candidate"),
+        evaluation.member("mode"),
     ) else {
         return Err(PlanDefect::NotAReport);
     };
@@ -83,9 +85,10 @@ pub fn plan(
         .filter(|destination| base.contains_key(*destination))
         .count();
     let recognition = Recognition {
-        declared: member(evaluation, "repository")
-            .and_then(|repository| text(repository, "host"))
-            .zip(text(evaluation, "forge")),
+        declared: evaluation
+            .member("repository")
+            .and_then(|repository| repository.text("host"))
+            .zip(evaluation.text("forge")),
     };
 
     let plan_payload = object(vec![
@@ -126,18 +129,22 @@ pub fn plan(
 fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>, PlanDefect> {
     let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
     for row in observations {
-        let Some(occurrence) = member(row, side) else {
+        let Some(occurrence) = row.member(side) else {
             continue;
         };
-        let resolution = member(occurrence, "resolution");
-        if resolution.and_then(|value| text(value, "kind")) != Some("external") {
+        let resolution = occurrence.member("resolution");
+        if resolution.and_then(|value| value.text("kind")) != Some("external") {
             continue;
         }
-        let destination =
-            text(occurrence, "external_destination").filter(|value| !value.is_empty());
-        let document = text(occurrence, "document").filter(|value| !value.is_empty());
-        let scheme = member(occurrence, "intent")
-            .and_then(|intent| text(intent, "external_scheme"))
+        let destination = occurrence
+            .text("external_destination")
+            .filter(|value| !value.is_empty());
+        let document = occurrence
+            .text("document")
+            .filter(|value| !value.is_empty());
+        let scheme = occurrence
+            .member("intent")
+            .and_then(|intent| intent.text("external_scheme"))
             .filter(|value| !value.is_empty());
         let (Some(destination), Some(document), Some(scheme)) = (destination, document, scheme)
         else {
@@ -316,36 +323,41 @@ pub fn assess(
     engine_version: &str,
     engine_digest: &str,
 ) -> Result<Value, AssessDefect> {
-    if text(plan, "schema") != Some(PLAN_ENVELOPE_SCHEMA) {
+    if plan.text("schema") != Some(PLAN_ENVELOPE_SCHEMA) {
         return Err(AssessDefect::NotAPlan);
     }
-    let (Some(payload), Some(recorded)) = (member(plan, "payload"), text(plan, "payload_digest"))
+    let (Some(payload), Some(recorded)) = (plan.member("payload"), plan.text("payload_digest"))
     else {
         return Err(AssessDefect::NotAPlan);
     };
     if hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() != recorded {
         return Err(AssessDefect::PlanDigestMismatch);
     }
-    let report_digest = member(payload, "report").and_then(|report| text(report, "payload_digest"));
+    let report_digest = payload
+        .member("report")
+        .and_then(|report| report.text("payload_digest"));
     let (Some(report_digest), Some(Value::Array(introduced))) =
-        (report_digest, member(payload, "introduced"))
+        (report_digest, payload.member("introduced"))
     else {
         return Err(AssessDefect::NotAPlan);
     };
 
-    if text(evidence, "schema") != Some(EVIDENCE_SCHEMA) {
+    if evidence.text("schema") != Some(EVIDENCE_SCHEMA) {
         return Err(AssessDefect::NotEvidence);
     }
-    let producer = member(evidence, "producer")
+    let producer = evidence
+        .member("producer")
         .filter(|producer| {
-            text(producer, "name").is_some_and(|name| !name.is_empty())
-                && text(producer, "version").is_some_and(|version| !version.is_empty())
+            producer.text("name").is_some_and(|name| !name.is_empty())
+                && producer
+                    .text("version")
+                    .is_some_and(|version| !version.is_empty())
         })
         .ok_or(AssessDefect::NotEvidence)?;
-    if text(evidence, "plan_payload_digest") != Some(recorded) {
+    if evidence.text("plan_payload_digest") != Some(recorded) {
         return Err(AssessDefect::UnboundEvidence);
     }
-    let Some(Value::Array(evidence_rows)) = member(evidence, "rows") else {
+    let Some(Value::Array(evidence_rows)) = evidence.member("rows") else {
         return Err(AssessDefect::NotEvidence);
     };
 
@@ -354,10 +366,11 @@ pub fn assess(
     // the published schema would reject.
     let mut destinations: BTreeSet<&str> = BTreeSet::new();
     for introduced_row in introduced {
-        let destination =
-            text(introduced_row, "destination").filter(|destination| !destination.is_empty());
+        let destination = introduced_row
+            .text("destination")
+            .filter(|destination| !destination.is_empty());
         let documents = matches!(
-            member(introduced_row, "documents"),
+            introduced_row.member("documents"),
             Some(Value::Array(items)) if !items.is_empty()
         );
         let (Some(destination), true) = (destination, documents) else {
@@ -410,15 +423,17 @@ fn observed_rows<'e>(
 ) -> Result<BTreeMap<&'e str, Observed>, AssessDefect> {
     let mut observed: BTreeMap<&str, Observed> = BTreeMap::new();
     for row in evidence_rows {
-        let destination = text(row, "destination").ok_or(AssessDefect::MalformedEvidence)?;
+        let destination = row
+            .text("destination")
+            .ok_or(AssessDefect::MalformedEvidence)?;
         let shaped = introduced.iter().find_map(|candidate| {
-            (text(candidate, "destination") == Some(destination))
-                .then(|| member(candidate, "repository"))
+            (candidate.text("destination") == Some(destination))
+                .then(|| candidate.member("repository"))
         });
         let Some(shape) = shaped else {
             return Err(AssessDefect::UnboundEvidence);
         };
-        if text(row, "checked_at").is_none_or(str::is_empty) {
+        if row.text("checked_at").is_none_or(str::is_empty) {
             return Err(AssessDefect::MalformedEvidence);
         }
         let observation = observe(row, shape)?;
@@ -434,17 +449,17 @@ fn verdict_rows(introduced: &[Value], observed: &BTreeMap<&str, Observed>) -> Ve
     introduced
         .iter()
         .map(|row| {
-            let destination = text(row, "destination").unwrap_or_default();
+            let destination = row.text("destination").unwrap_or_default();
             let mut members = vec![
                 ("destination", string(destination)),
                 (
                     "documents",
-                    member(row, "documents").cloned().unwrap_or(Value::Null),
+                    row.member("documents").cloned().unwrap_or(Value::Null),
                 ),
             ];
             let (verdict, reason, retarget) = match observed.get(destination) {
                 None => ("unproven", Some("unexamined"), None),
-                Some(seen) => judge(seen, member(row, "repository")),
+                Some(seen) => judge(seen, row.member("repository")),
             };
             members.push(("verdict", string(verdict)));
             if let Some(reason) = reason {
@@ -462,15 +477,15 @@ fn verdict_rows(introduced: &[Value], observed: &BTreeMap<&str, Observed>) -> Ve
 /// admissible for a destination the plan shaped, and a tail resolution only
 /// where the shape carries a tail to resolve.
 fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect> {
-    match text(row, "kind") {
+    match row.text("kind") {
         Some("http-probe") => {
-            let method_get = match text(row, "method") {
+            let method_get = match row.text("method") {
                 Some("get") => true,
                 Some("head") => false,
                 Some(_) | None => return Err(AssessDefect::MalformedEvidence),
             };
-            let status = member(row, "status");
-            let failure = member(row, "failure");
+            let status = row.member("status");
+            let failure = row.member("failure");
             let status = match (status, failure) {
                 (Some(Value::Integer(status)), None | Some(Value::Null))
                     if (100..=999).contains(status) =>
@@ -484,7 +499,7 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
                 }
                 (_, _) => return Err(AssessDefect::MalformedEvidence),
             };
-            let retarget = match member(row, "final_destination") {
+            let retarget = match row.member("final_destination") {
                 Some(Value::String(final_destination)) if !final_destination.is_empty() => {
                     Some(final_destination.clone())
                 }
@@ -501,13 +516,13 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
             let Some(shape) = shape else {
                 return Err(AssessDefect::UnboundEvidence);
             };
-            let repository = match text(row, "repository") {
+            let repository = match row.text("repository") {
                 Some("readable") => Repository::Readable,
                 Some("missing") => Repository::Missing,
                 Some("denied") => Repository::Denied,
                 Some(_) | None => return Err(AssessDefect::MalformedEvidence),
             };
-            let tail = match (repository, member(row, "tail")) {
+            let tail = match (repository, row.member("tail")) {
                 (_, None | Some(Value::Null)) => None,
                 (Repository::Readable, Some(Value::String(tail))) => match tail.as_str() {
                     "resolved" => Some(Tail::Resolved),
@@ -517,7 +532,7 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
                 },
                 (_, Some(_)) => return Err(AssessDefect::MalformedEvidence),
             };
-            if tail.is_some() && member(shape, "tail").is_none() {
+            if tail.is_some() && shape.member("tail").is_none() {
                 return Err(AssessDefect::UnboundEvidence);
             }
             Ok(Observed::Forge { repository, tail })
@@ -562,7 +577,7 @@ fn judge(
                 ("refuted", Some("revision-missing"), None)
             }
             (Repository::Readable, None) => {
-                let unresolved = shape.is_some_and(|shape| member(shape, "tail").is_some());
+                let unresolved = shape.is_some_and(|shape| shape.member("tail").is_some());
                 if unresolved {
                     ("unproven", Some("unconfirmed"), None)
                 } else {
@@ -573,23 +588,49 @@ fn judge(
     }
 }
 
-fn member<'v>(value: &'v Value, name: &str) -> Option<&'v Value> {
-    if let Value::Object(members) = value {
-        members
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value)
-    } else {
-        None
-    }
+/// One producer's evidence file over a plan: the binding digest is read from
+/// the plan itself, so a producer never computes one.
+#[must_use]
+pub fn evidence_file(
+    plan: &Value,
+    producer_name: &str,
+    producer_version: &str,
+    rows: Vec<Value>,
+) -> Option<Value> {
+    let digest = plan.text("payload_digest")?;
+    Some(object(vec![
+        ("schema", string(EVIDENCE_SCHEMA)),
+        ("plan_payload_digest", string(digest)),
+        (
+            "producer",
+            object(vec![
+                ("name", string(producer_name)),
+                ("version", string(producer_version)),
+            ]),
+        ),
+        ("rows", Value::Array(rows)),
+    ]))
 }
 
-fn text<'v>(value: &'v Value, name: &str) -> Option<&'v str> {
-    if let Some(Value::String(text)) = member(value, name) {
-        Some(text)
-    } else {
-        None
+/// One forge-api observation row, tail present only when a resolution was
+/// actually established.
+#[must_use]
+pub fn forge_evidence_row(
+    destination: &str,
+    repository: &str,
+    tail: Option<&str>,
+    checked_at: &str,
+) -> Value {
+    let mut members = vec![
+        ("kind", string("forge-api")),
+        ("destination", string(destination)),
+        ("repository", string(repository)),
+        ("checked_at", string(checked_at)),
+    ];
+    if let Some(tail) = tail {
+        members.push(("tail", string(tail)));
     }
+    object(members)
 }
 
 /// A plan object in canonical member order; the parser demands sorted keys,

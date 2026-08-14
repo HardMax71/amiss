@@ -15,6 +15,31 @@ pub enum Value {
     Object(Vec<(String, Value)>),
 }
 
+impl Value {
+    /// The named member of an object value, or `None` off objects.
+    #[must_use]
+    pub fn member(&self, name: &str) -> Option<&Self> {
+        if let Self::Object(members) = self {
+            members
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value)
+        } else {
+            None
+        }
+    }
+
+    /// The named member as a string slice, or `None` when absent or not one.
+    #[must_use]
+    pub fn text(&self, name: &str) -> Option<&str> {
+        if let Some(Self::String(text)) = self.member(name) {
+            Some(text)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     InvalidUtf8,

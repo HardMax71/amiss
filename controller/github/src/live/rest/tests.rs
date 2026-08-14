@@ -5,8 +5,8 @@ use std::time::Duration;
 use amiss_controller::ProviderError;
 
 use super::{
-    MAX_PAGES, OperationDeadline, PAGE_SIZE, PAGE_SIZE_U8, PageQuery, check_page, page_complete,
-    path_segment, query_route, runs_settled,
+    ContentQuery, MAX_PAGES, OperationDeadline, PAGE_SIZE, PAGE_SIZE_U8, PageQuery, RefFamily,
+    check_page, page_complete, path_segment, query_route, runs_settled,
 };
 
 #[test]
@@ -78,4 +78,17 @@ fn routes_encode_their_segments_and_queries() {
         query_route("/repos/a/b/rules/branches/main", &query).unwrap(),
         format!("/repos/a/b/rules/branches/main?per_page={PAGE_SIZE_U8}&page=2")
     );
+}
+
+#[test]
+fn verification_routes_encode_foreign_spellings() {
+    let query = ContentQuery {
+        reference: "feature/x".to_owned(),
+    };
+    assert_eq!(
+        query_route("/repos/a/b/contents/docs/a.md", &query).unwrap(),
+        "/repos/a/b/contents/docs/a.md?ref=feature%2Fx"
+    );
+    assert_eq!(RefFamily::Heads.as_str(), "heads");
+    assert_eq!(RefFamily::Tags.as_str(), "tags");
 }

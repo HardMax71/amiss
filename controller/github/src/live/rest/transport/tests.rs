@@ -12,9 +12,9 @@ use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::Deserialize;
 
 use super::{
-    AppCredential, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken, OperationDeadline,
-    Transport, app_jwt, bounded_bytes, map_error, map_status, rate_limited, settled,
-    validate_api_base,
+    AppCredential, Classified, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken,
+    OperationDeadline, Transport, app_jwt, bounded_bytes, classified, map_error, map_status,
+    rate_limited, settled, validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
 
@@ -330,4 +330,23 @@ fn the_api_base_length_bounds_are_exact() {
             "the API base length is out of bounds"
         ))
     );
+}
+
+#[test]
+fn verification_statuses_classify_facts_apart_from_failures() {
+    let plain = reqwest::header::HeaderMap::new();
+    assert_eq!(classified(200, &plain), Ok(Classified::Success));
+    assert_eq!(classified(404, &plain), Ok(Classified::Missing));
+    assert_eq!(classified(422, &plain), Ok(Classified::Missing));
+    assert_eq!(classified(403, &plain), Ok(Classified::Denied));
+    let mut limited = reqwest::header::HeaderMap::new();
+    limited.insert("retry-after", "30".parse().expect("a header value"));
+    assert_eq!(classified(403, &limited), Err(ProviderError::Unavailable));
+    assert_eq!(classified(429, &plain), Err(ProviderError::Unavailable));
+    assert_eq!(classified(500, &plain), Err(ProviderError::Unavailable));
+    assert_eq!(
+        classified(401, &plain),
+        Err(ProviderError::AuthorizationRevoked)
+    );
+    assert_eq!(classified(302, &plain), Err(ProviderError::InvalidResponse));
 }

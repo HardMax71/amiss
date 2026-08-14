@@ -12,13 +12,14 @@ use crate::GitHubPullRequest;
 
 use super::model::{
     BranchRule, CheckRunPage, CheckRunRecord, CommitRecord, CreateCheckRun, GateCommitRecord,
-    GitCommitRecord, PullRequestRecord, RefreshData, RepositoryCommitRecord, RepositoryRecord,
+    GitCommitRecord, PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord,
+    RepositoryRecord,
 };
 use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
 
-use self::transport::Transport;
+use self::transport::{Fact, Transport};
 
 const PAGE_SIZE: usize = 100;
 const PAGE_SIZE_U8: u8 = 100;
@@ -40,6 +41,38 @@ impl OperationDeadline {
         (!remaining.is_zero())
             .then_some(remaining)
             .ok_or(ProviderError::Unavailable)
+    }
+}
+
+/// What the API said about a foreign repository itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Visibility {
+    Readable,
+    Missing,
+    Denied,
+}
+
+/// Whether a route's subject exists; Unknown when the API refused the one
+/// route without refusing the repository, as contents does for large blobs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Presence {
+    Present,
+    Absent,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RefFamily {
+    Heads,
+    Tags,
+}
+
+impl RefFamily {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Heads => "heads",
+            Self::Tags => "tags",
+        }
     }
 }
 
@@ -73,6 +106,46 @@ pub(super) trait GitHubRest: Send + Sync {
         check: &CreateCheckRun,
         deadline: OperationDeadline,
     ) -> Result<CheckRunRecord, ProviderError>;
+}
+
+/// The read-only verification surface, apart from refresh and publication
+/// on purpose: a verifier holding this can state facts and nothing else.
+pub(super) trait GitHubVerification: Send + Sync {
+    fn deadline(&self) -> Result<OperationDeadline, ProviderError>;
+
+    fn repository_visibility(
+        &self,
+        owner: &str,
+        name: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Visibility, ProviderError>;
+
+    /// Ref names in the family sharing the prefix, family qualifier stripped.
+    fn matching_refs(
+        &self,
+        owner: &str,
+        name: &str,
+        family: RefFamily,
+        prefix: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Vec<String>, ProviderError>;
+
+    fn content_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        reference: &str,
+        path: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError>;
+
+    fn commit_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        oid: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError>;
 }
 
 pub(super) struct HttpRest {
@@ -140,6 +213,23 @@ impl HttpRest {
         self.transport.get(
             &format!("/repos/{owner}/{name}/git/commits/{}", path_segment(oid)),
             deadline,
+        )
+    }
+
+    fn presence(
+        &self,
+        route: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError> {
+        Ok(
+            match self
+                .transport
+                .get_fact::<serde::de::IgnoredAny>(route, deadline)?
+            {
+                Fact::Found(_) => Presence::Present,
+                Fact::Missing => Presence::Absent,
+                Fact::Denied => Presence::Unknown,
+            },
         )
     }
 }
@@ -276,6 +366,108 @@ impl GitHubRest for HttpRest {
         );
         self.transport.post(&route, check, deadline)
     }
+}
+
+// The verification routes carry another repository's spellings, so every
+// borrowed segment is percent-encoded rather than trusted.
+impl GitHubVerification for HttpRest {
+    fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
+        self.transport.deadline()
+    }
+
+    fn repository_visibility(
+        &self,
+        owner: &str,
+        name: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Visibility, ProviderError> {
+        let route = format!("/repos/{}/{}", path_segment(owner), path_segment(name));
+        Ok(
+            match self
+                .transport
+                .get_fact::<serde::de::IgnoredAny>(&route, deadline)?
+            {
+                Fact::Found(_) => Visibility::Readable,
+                Fact::Missing => Visibility::Missing,
+                Fact::Denied => Visibility::Denied,
+            },
+        )
+    }
+
+    fn matching_refs(
+        &self,
+        owner: &str,
+        name: &str,
+        family: RefFamily,
+        prefix: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Vec<String>, ProviderError> {
+        let route = format!(
+            "/repos/{}/{}/git/matching-refs/{}/{}",
+            path_segment(owner),
+            path_segment(name),
+            family.as_str(),
+            path_segment(prefix),
+        );
+        let qualifier = format!("refs/{}/", family.as_str());
+        match self
+            .transport
+            .get_fact::<Vec<RefRecord>>(&route, deadline)?
+        {
+            Fact::Found(records) => Ok(records
+                .into_iter()
+                .filter_map(|record| record.reference.strip_prefix(&qualifier).map(str::to_owned))
+                .collect()),
+            // The repository was readable one call ago; no fact was learned.
+            Fact::Missing | Fact::Denied => Err(ProviderError::Unavailable),
+        }
+    }
+
+    fn content_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        reference: &str,
+        path: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError> {
+        let encoded: Vec<String> = path.split('/').map(path_segment).collect();
+        let route = format!(
+            "/repos/{}/{}/contents/{}",
+            path_segment(owner),
+            path_segment(name),
+            encoded.join("/"),
+        );
+        let route = query_route(
+            &route,
+            &ContentQuery {
+                reference: reference.to_owned(),
+            },
+        )?;
+        self.presence(&route, deadline)
+    }
+
+    fn commit_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        oid: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError> {
+        let route = format!(
+            "/repos/{}/{}/commits/{}",
+            path_segment(owner),
+            path_segment(name),
+            path_segment(oid),
+        );
+        self.presence(&route, deadline)
+    }
+}
+
+#[derive(Serialize)]
+struct ContentQuery {
+    #[serde(rename = "ref")]
+    reference: String,
 }
 
 #[derive(Serialize)]
