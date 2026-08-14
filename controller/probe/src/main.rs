@@ -5,7 +5,7 @@ use std::env;
 use std::fs;
 use std::io::Read as _;
 use std::process::ExitCode;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use amiss_wire::external::{evidence_file, probe_evidence_row};
 use amiss_wire::json::{self, Value};
@@ -19,6 +19,10 @@ amiss-probe --version";
 
 /// Destinations probed per run; everything past the cap stays unproven.
 const RUN_CAP: usize = 64;
+
+/// The whole run's wall ceiling, so one pathological chain cannot starve
+/// the caller; everything past it stays unproven.
+const RUN_BUDGET: Duration = Duration::from_mins(2);
 
 /// Diagnostics are the stderr channel and the evidence is stdout; nothing
 /// else leaves the process.
@@ -49,9 +53,15 @@ fn main() -> ExitCode {
     };
     let checked_at = elapsed.as_millis().to_string();
 
-    let (selected, skipped) = targets(&plan, RUN_CAP);
+    let (selected, capped) = targets(&plan, RUN_CAP);
+    let started = Instant::now();
+    let mut skipped = capped;
     let mut rows = Vec::new();
-    for destination in selected {
+    for (position, destination) in selected.iter().enumerate() {
+        if started.elapsed() >= RUN_BUDGET {
+            skipped = skipped.saturating_add(selected.len().saturating_sub(position));
+            break;
+        }
         let row = match probe(destination) {
             Observation::Answered {
                 method,
@@ -74,7 +84,7 @@ fn main() -> ExitCode {
         rows.push(row);
     }
     if skipped > 0 {
-        eprintln!("amiss-probe: {skipped} destinations past the run cap stay unproven");
+        eprintln!("amiss-probe: {skipped} destinations past the run cap or budget stay unproven");
     }
     let Some(evidence) = evidence_file(&plan, "amiss-probe", env!("CARGO_PKG_VERSION"), rows)
     else {

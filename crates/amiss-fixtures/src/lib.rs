@@ -847,8 +847,9 @@ pub fn external_report(destinations: &[&str]) -> Vec<u8> {
     let rows: Vec<String> = destinations
         .iter()
         .map(|destination| {
+            let scheme = destination.split(':').next().unwrap_or("https");
             format!(
-                r#"{{"base":null,"candidate":{{"document":"docs/a.md","external_destination":"{destination}","intent":{{"external_scheme":"https"}},"resolution":{{"kind":"external","reason":"url"}}}}}}"#
+                r#"{{"base":null,"candidate":{{"document":"docs/a.md","external_destination":"{destination}","intent":{{"external_scheme":"{scheme}"}},"resolution":{{"kind":"external","reason":"url"}}}}}}"#
             )
         })
         .collect();
