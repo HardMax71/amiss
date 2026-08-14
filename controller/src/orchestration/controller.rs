@@ -10,8 +10,8 @@ use crate::{
 };
 
 use self::helpers::{
-    LedgerHeartbeat, publish_staged, renew_lease, stage_publication, validate_change,
-    validate_staged,
+    LedgerHeartbeat, observe_external, publish_staged, renew_lease, stage_publication,
+    validate_change, validate_staged,
 };
 use super::ledger::{CheckConclusion, DeliveryClaim, DeliveryLedger};
 use super::model::{ChangeState, RunRequest, Runner};
@@ -79,6 +79,25 @@ pub enum HandleOutcome {
     Published(CheckConclusion),
 }
 
+/// The advisory verdict counts of one published delivery's external
+/// assessment; the verdict the provider shows is already sealed when these
+/// are tallied.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ExternalTally {
+    pub refuted: u64,
+    pub unproven: u64,
+    pub reachable: u64,
+}
+
+/// Receives the advisory external outcome after a delivery published. No
+/// sink means no verification is attempted at all.
+pub trait ExternalSink: Send + Sync {
+    fn assessed(&self, tally: &ExternalTally);
+
+    /// Verification was owed but could not finish; nothing was tallied.
+    fn incomplete(&self);
+}
+
 pub struct Controller<L, R> {
     pub registry: AdapterRegistry,
     pub plans: PlanRegistry,
@@ -86,6 +105,7 @@ pub struct Controller<L, R> {
     pub runner: R,
     ingress: IngressPolicy,
     clock: Arc<dyn ControllerClock>,
+    external: Option<Arc<dyn ExternalSink>>,
 }
 
 impl<L, R> Controller<L, R>
@@ -119,7 +139,16 @@ where
             runner,
             ingress,
             clock,
+            external: None,
         }
+    }
+
+    /// Turns on advisory external verification after publications, with the
+    /// sink receiving each delivery's tally.
+    #[must_use]
+    pub fn with_external_sink(mut self, sink: Arc<dyn ExternalSink>) -> Self {
+        self.external = Some(sink);
+        self
     }
 
     /// Executes the provider-neutral trust flow from raw delivery through a
@@ -160,7 +189,14 @@ where
             DeliveryClaim::Execute(_) => return Err(ControllerError::LeaseLost),
             DeliveryClaim::Publish(staged) => {
                 validate_staged(delivery, &check, &staged)?;
-                return publish_staged(adapter, &mut self.ledger, &accepted, &staged);
+                let outcome = publish_staged(adapter, &mut self.ledger, &accepted, &staged)?;
+                observe_external(
+                    adapter,
+                    self.external.as_deref(),
+                    self.clock.as_ref(),
+                    &staged.publication,
+                );
+                return Ok(outcome);
             }
             DeliveryClaim::Busy {
                 evaluation_id,
@@ -215,6 +251,13 @@ where
         lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
         let publication = publication(&request, &initial, &fresh, runner_outcome);
         let staged = stage_publication(&mut self.ledger, &accepted, &lease, &publication)?;
-        publish_staged(adapter, &mut self.ledger, &accepted, &staged)
+        let outcome = publish_staged(adapter, &mut self.ledger, &accepted, &staged)?;
+        observe_external(
+            adapter,
+            self.external.as_deref(),
+            self.clock.as_ref(),
+            &staged.publication,
+        );
+        Ok(outcome)
     }
 }

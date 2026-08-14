@@ -42,9 +42,10 @@ pub use ingress::{
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,
-    DeliveryLease, DeliveryLedger, Evaluation, HandleOutcome, HeartbeatOutcome, LeaseCompletion,
-    LeaseFence, LeaseRenewal, OidPair, Publication, RunFailure, RunHeartbeat, RunIdentity, RunRefs,
-    RunRequest, Runner, RunnerOutcome, StageOutcome, StagedPublication,
+    DeliveryLease, DeliveryLedger, Evaluation, ExternalSink, ExternalTally, HandleOutcome,
+    HeartbeatOutcome, LeaseCompletion, LeaseFence, LeaseRenewal, OidPair, Publication, RunFailure,
+    RunHeartbeat, RunIdentity, RunRefs, RunRequest, Runner, RunnerOutcome, StageOutcome,
+    StagedPublication,
 };
 pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan, resolve_plan};
 pub use provider::{

@@ -190,3 +190,65 @@ fn validate_run<E>(
     }
     Ok(())
 }
+
+/// The advisory external step, after the verdict is sealed: derive the plan
+/// from the published report, ask the provider for evidence, judge, tally.
+/// Every failure collapses into one incomplete tick; nothing here can touch
+/// the delivery's outcome, and without a sink nothing runs at all.
+pub(super) fn observe_external(
+    adapter: &dyn ProviderAdapter,
+    sink: Option<&dyn super::ExternalSink>,
+    clock: &dyn ControllerClock,
+    publication: &Publication,
+) {
+    let (Some(sink), Some(report)) = (sink, publication.report.as_deref()) else {
+        return;
+    };
+    let Ok(parsed) = amiss_wire::json::parse(report) else {
+        return sink.incomplete();
+    };
+    let engine = parsed
+        .member("payload")
+        .and_then(|payload| payload.member("engine"));
+    let (Some(version), Some(digest)) = (
+        engine.and_then(|engine| engine.text("engine_version")),
+        engine.and_then(|engine| engine.text("engine_digest")),
+    ) else {
+        return sink.incomplete();
+    };
+    let Ok(plan) = amiss_wire::external::plan(&parsed, version, digest) else {
+        return sink.incomplete();
+    };
+    let Some(now) = clock.now_unix_millis() else {
+        return sink.incomplete();
+    };
+    match adapter.verify_external(&plan, &now.to_string()) {
+        Ok(Some(evidence)) => {
+            match amiss_wire::external::assess(&plan, &evidence, version, digest) {
+                Ok(assessment) => sink.assessed(&tally(&assessment)),
+                Err(_defect) => sink.incomplete(),
+            }
+        }
+        // No verifier for this provider: nothing was owed.
+        Ok(None) => {}
+        Err(_defect) => sink.incomplete(),
+    }
+}
+
+fn tally(assessment: &amiss_wire::json::Value) -> super::ExternalTally {
+    let mut counted = super::ExternalTally::default();
+    let verdicts = assessment
+        .member("payload")
+        .and_then(|payload| payload.member("verdicts"));
+    if let Some(amiss_wire::json::Value::Array(verdicts)) = verdicts {
+        for row in verdicts {
+            match row.text("verdict") {
+                Some("refuted") => counted.refuted = counted.refuted.saturating_add(1),
+                Some("unproven") => counted.unproven = counted.unproven.saturating_add(1),
+                Some("reachable") => counted.reachable = counted.reachable.saturating_add(1),
+                Some(_) | None => {}
+            }
+        }
+    }
+    counted
+}

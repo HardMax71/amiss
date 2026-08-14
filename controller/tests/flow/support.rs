@@ -1,9 +1,11 @@
 mod adapter;
+mod external;
 mod fixtures;
 mod ledger;
 mod runner;
 
 pub(crate) use adapter::FakeAdapter;
+pub(crate) use external::RecordingSink;
 pub(crate) use fixtures::{
     binding, complete, controller, controller_with_ledger, delivery, locator, oid, provider,
     repository, run, run_with_resolution, snapshot,

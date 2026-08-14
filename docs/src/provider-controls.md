@@ -119,7 +119,7 @@ as soon as supervision observes a worker or maintenance stop, before remaining w
 provider `POST` returns `503` while readiness is false;
 `/healthz` can therefore remain live while `/readyz` correctly removes the process from service.
 
-`/metrics` has exactly ten label-free counters:
+`/metrics` has exactly fourteen label-free counters:
 
 | Counter | Counts |
 | --- | --- |
@@ -133,6 +133,10 @@ provider `POST` returns `503` while readiness is false;
 | `amiss_controller_delivery_discards_total` | Durable deliveries removed after failed reauthentication. |
 | `amiss_controller_maintenance_runs_total` | Ledger maintenance scans completed. |
 | `amiss_controller_maintenance_removals_total` | Durable records, reports, and temporary entries removed by maintenance. |
+| `amiss_controller_external_refuted_total` | External destinations an advisory assessment refuted. |
+| `amiss_controller_external_unproven_total` | External destinations an advisory assessment left unproven. |
+| `amiss_controller_external_reachable_total` | External destinations an advisory assessment found reachable. |
+| `amiss_controller_external_incomplete_total` | Advisory external verifications that could not finish. |
 
 The set cannot grow from a repository, request, provider identity, or result. It has no labels,
 and all values reset on restart. Counters that do not apply to a lane remain zero. The metrics

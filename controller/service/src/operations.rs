@@ -44,70 +44,84 @@ pub struct Operations {
     pub delivery_discards: Counter,
     pub maintenance_runs: Counter,
     pub maintenance_removals: Counter,
+    pub external_refuted: Counter,
+    pub external_unproven: Counter,
+    pub external_reachable: Counter,
+    pub external_incomplete: Counter,
 }
 
 impl Operations {
     pub fn with_event_sink(events: impl Fn(ServiceEvent) + Send + Sync + 'static) -> Self {
-        let provider_requests = Counter::default();
-        let provider_acceptances = Counter::default();
-        let provider_refusals = Counter::default();
-        let provider_unavailable = Counter::default();
-        let delivery_attempts = Counter::default();
-        let delivery_completions = Counter::default();
-        let delivery_retries = Counter::default();
-        let delivery_discards = Counter::default();
-        let maintenance_runs = Counter::default();
-        let maintenance_removals = Counter::default();
         let mut registry = Registry::with_prefix("amiss_controller");
-        registry.register(
+        let provider_requests = counter(
+            &mut registry,
             "provider_requests",
             "Provider requests answered by this process.",
-            provider_requests.clone(),
         );
-        registry.register(
+        let provider_acceptances = counter(
+            &mut registry,
             "provider_acceptances",
             "Provider requests answered with a successful status.",
-            provider_acceptances.clone(),
         );
-        registry.register(
+        let provider_refusals = counter(
+            &mut registry,
             "provider_refusals",
             "Provider requests answered with a client-error status.",
-            provider_refusals.clone(),
         );
-        registry.register(
+        let provider_unavailable = counter(
+            &mut registry,
             "provider_unavailable",
             "Provider requests answered with any other non-success status.",
-            provider_unavailable.clone(),
         );
-        registry.register(
+        let delivery_attempts = counter(
+            &mut registry,
             "delivery_attempts",
             "Durable webhook deliveries claimed for processing.",
-            delivery_attempts.clone(),
         );
-        registry.register(
+        let delivery_completions = counter(
+            &mut registry,
             "delivery_completions",
             "Durable webhook deliveries removed after processing.",
-            delivery_completions.clone(),
         );
-        registry.register(
+        let delivery_retries = counter(
+            &mut registry,
             "delivery_retries",
             "Durable webhook deliveries rescheduled after processing.",
-            delivery_retries.clone(),
         );
-        registry.register(
+        let delivery_discards = counter(
+            &mut registry,
             "delivery_discards",
             "Durable webhook deliveries removed after failed reauthentication.",
-            delivery_discards.clone(),
         );
-        registry.register(
+        let maintenance_runs = counter(
+            &mut registry,
             "maintenance_runs",
             "Successful durable-state maintenance runs.",
-            maintenance_runs.clone(),
         );
-        registry.register(
+        let maintenance_removals = counter(
+            &mut registry,
             "maintenance_removals",
             "Durable-state entries removed by maintenance.",
-            maintenance_removals.clone(),
+        );
+        let external_refuted = counter(
+            &mut registry,
+            "external_refuted",
+            "External destinations an advisory assessment refuted.",
+        );
+        let external_unproven = counter(
+            &mut registry,
+            "external_unproven",
+            "External destinations an advisory assessment left unproven.",
+        );
+        let external_reachable = counter(
+            &mut registry,
+            "external_reachable",
+            "External destinations an advisory assessment found reachable.",
+        );
+        let external_incomplete = counter(
+            &mut registry,
+            "external_incomplete",
+            "Advisory external verifications that could not finish.",
         );
         Self {
             registry: Arc::new(registry),
@@ -122,6 +136,10 @@ impl Operations {
             delivery_discards,
             maintenance_runs,
             maintenance_removals,
+            external_refuted,
+            external_unproven,
+            external_reachable,
+            external_incomplete,
         }
     }
 
@@ -204,4 +222,25 @@ fn write_event_to(output: &mut impl io::Write, event: ServiceEvent) -> io::Resul
     let mut line = serde_json::to_vec(&EventLine::from(event)).map_err(io::Error::other)?;
     line.push(b'\n');
     output.write_all(&line)
+}
+
+/// One registered label-free counter; the name gains the registry prefix.
+fn counter(registry: &mut Registry, name: &str, help: &str) -> Counter {
+    let counter = Counter::default();
+    registry.register(name, help, counter.clone());
+    counter
+}
+
+/// The counter sink the queued lanes hand the controller: one advisory
+/// external outcome becomes counter movement and nothing else.
+impl amiss_controller::ExternalSink for Operations {
+    fn assessed(&self, tally: &amiss_controller::ExternalTally) {
+        self.external_refuted.inc_by(tally.refuted);
+        self.external_unproven.inc_by(tally.unproven);
+        self.external_reachable.inc_by(tally.reachable);
+    }
+
+    fn incomplete(&self) {
+        self.external_incomplete.inc();
+    }
 }

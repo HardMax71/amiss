@@ -51,9 +51,10 @@ fn metrics_are_fixed_and_label_free() {
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .collect::<Vec<_>>();
 
-    assert_eq!(samples.len(), 10);
+    assert_eq!(samples.len(), 14);
     assert!(samples.iter().all(|line| !line.contains('{')));
     assert!(samples.contains(&"amiss_controller_provider_requests_total 3"));
+    assert!(samples.contains(&"amiss_controller_external_refuted_total 0"));
     assert!(encoded.ends_with("# EOF\n"));
 }
 

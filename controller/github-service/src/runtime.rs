@@ -205,7 +205,8 @@ fn build_worker(
         runner,
         settings.ingress,
         Arc::clone(&clock),
-    );
+    )
+    .with_external_sink(Arc::new(operations.clone()));
     DeliveryWorker::new(DeliveryWorkerInput {
         inbox,
         controller,

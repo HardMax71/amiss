@@ -67,6 +67,22 @@ pub trait ProviderAdapter: Send + Sync {
         delivery: &AuthenticatedDelivery,
         publication: &Publication,
     ) -> Result<(), ProviderError>;
+
+    /// Advisory verification of an external plan's introduced destinations:
+    /// the facts this provider can state, as an evidence file, or `None`
+    /// from the default when it has no verifier. Runs only after the
+    /// delivery's verdict is sealed and must never influence one.
+    ///
+    /// # Errors
+    ///
+    /// No fact could be gathered before the first one.
+    fn verify_external(
+        &self,
+        _plan: &amiss_wire::json::Value,
+        _checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        Ok(None)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
