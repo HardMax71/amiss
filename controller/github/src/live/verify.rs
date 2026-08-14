@@ -91,21 +91,28 @@ fn resolve_tail<R: GitHubVerification>(
     let Some(first) = tail.split('/').next().filter(|segment| !segment.is_empty()) else {
         return Ok(None);
     };
-    let mut resolved = None;
+    let mut matches = Vec::new();
     for family in [RefFamily::Heads, RefFamily::Tags] {
         let Some(names) = rest.matching_refs(owner, name, family, first, deadline)? else {
             return Ok(None);
         };
-        resolved = names.into_iter().find(|candidate| {
+        // Within one family a second whole-segment match cannot exist, since
+        // git refuses a ref nesting under another; across families it can.
+        matches.extend(names.into_iter().find(|candidate| {
             tail == candidate
                 || tail
                     .strip_prefix(candidate.as_str())
                     .is_some_and(|rest| rest.starts_with('/'))
-        });
-        if resolved.is_some() {
-            break;
-        }
+        }));
     }
+    // A branch and a differing tag both matching leave the revision split
+    // ambiguous, and the forge's tie-break is its own; that is no fact.
+    let resolved = match matches.as_slice() {
+        [only] => Some(only.clone()),
+        [head, tag] if head == tag => Some(head.clone()),
+        [] => None,
+        [_, ..] => return Ok(None),
+    };
     // The commit route also resolves what no ref names: symbolic HEAD and
     // abbreviated ids. Only its positive absence may claim revision-missing,
     // since a false refutation is the worst answer this producer can give.
