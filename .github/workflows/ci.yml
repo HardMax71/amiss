@@ -130,7 +130,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - shell: bash
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           set -u
           advisory() {

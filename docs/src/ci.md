@@ -131,7 +131,7 @@ above, with every defect degrading into one summary line rather than a failed ch
 ```yaml
 - run: |
     amiss external-plan --report amiss-report.json --format json > amiss-plan.json
-    amiss-probe --plan amiss-plan.json > amiss-evidence.json
+    ./target/release/amiss-probe --plan amiss-plan.json > amiss-evidence.json
     amiss external-assess --plan amiss-plan.json --evidence amiss-evidence.json
 ```
 
