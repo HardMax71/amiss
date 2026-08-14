@@ -120,7 +120,9 @@ pub(super) trait GitHubVerification: Send + Sync {
         deadline: OperationDeadline,
     ) -> Result<Visibility, ProviderError>;
 
-    /// Ref names in the family sharing the prefix, family qualifier stripped.
+    /// Ref names in the family sharing the prefix, family qualifier
+    /// stripped; `None` when the repository stopped answering for them, so
+    /// no ref fact exists.
     fn matching_refs(
         &self,
         owner: &str,
@@ -128,7 +130,7 @@ pub(super) trait GitHubVerification: Send + Sync {
         family: RefFamily,
         prefix: &str,
         deadline: OperationDeadline,
-    ) -> Result<Vec<String>, ProviderError>;
+    ) -> Result<Option<Vec<String>>, ProviderError>;
 
     fn content_presence(
         &self,
@@ -401,7 +403,7 @@ impl GitHubVerification for HttpRest {
         family: RefFamily,
         prefix: &str,
         deadline: OperationDeadline,
-    ) -> Result<Vec<String>, ProviderError> {
+    ) -> Result<Option<Vec<String>>, ProviderError> {
         let route = format!(
             "/repos/{}/{}/git/matching-refs/{}/{}",
             path_segment(owner),
@@ -414,12 +416,15 @@ impl GitHubVerification for HttpRest {
             .transport
             .get_fact::<Vec<RefRecord>>(&route, deadline)?
         {
-            Fact::Found(records) => Ok(records
-                .into_iter()
-                .filter_map(|record| record.reference.strip_prefix(&qualifier).map(str::to_owned))
-                .collect()),
-            // The repository was readable one call ago; no fact was learned.
-            Fact::Missing | Fact::Denied => Err(ProviderError::Unavailable),
+            Fact::Found(records) => Ok(Some(
+                records
+                    .into_iter()
+                    .filter_map(|record| {
+                        record.reference.strip_prefix(&qualifier).map(str::to_owned)
+                    })
+                    .collect(),
+            )),
+            Fact::Missing | Fact::Denied => Ok(None),
         }
     }
 
