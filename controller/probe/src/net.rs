@@ -88,17 +88,10 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
     let mut url = start.clone();
     let mut standing_redirect = None;
     for _hop in 0..=MAX_HOPS {
-        // The ceiling binds between requests; one resolver lookup or one
-        // in-flight request can overhang it, nothing more.
-        let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            return match standing_redirect {
-                Some(status) => Attempted::Answered {
-                    status,
-                    final_destination: Some(url.to_string()),
-                },
-                None => Attempted::Failed("timeout"),
-            };
+        // The ceiling binds before the resolver and again before the send,
+        // so only one lookup or one in-flight request can overhang it.
+        if remaining(deadline).is_none() {
+            return spent(standing_redirect, &url);
         }
         // A hop whose name resolves nowhere usable keeps the redirect that
         // pointed at it: the redirect is the observation, the hop is not.
@@ -115,6 +108,9 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
         };
         let Ok(client) = pinned(&url, address) else {
             return Attempted::Refused;
+        };
+        let Some(left) = remaining(deadline) else {
+            return spent(standing_redirect, &url);
         };
         let request = if get {
             client.get(url.clone())
@@ -169,6 +165,23 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
     }
 }
 
+fn remaining(deadline: Instant) -> Option<Duration> {
+    let left = deadline.saturating_duration_since(Instant::now());
+    (!left.is_zero()).then_some(left)
+}
+
+/// The budget ran out mid-walk: the standing redirect is still the record
+/// when one was observed, and plain exhaustion otherwise.
+fn spent(standing_redirect: Option<i64>, url: &Url) -> Attempted {
+    match standing_redirect {
+        Some(status) => Attempted::Answered {
+            status,
+            final_destination: Some(url.to_string()),
+        },
+        None => Attempted::Failed("timeout"),
+    }
+}
+
 fn moved(start: &Url, current: &Url) -> Option<String> {
     (current != start).then(|| current.to_string())
 }
@@ -176,6 +189,19 @@ fn moved(start: &Url, current: &Url) -> Option<String> {
 fn redirect_target(current: &Url, headers: &reqwest::header::HeaderMap) -> Option<Url> {
     let location = headers.get(reqwest::header::LOCATION)?.to_str().ok()?;
     current.join(location).ok()
+}
+
+/// A destination safe to print: credentials stripped when the URL parses,
+/// and a fixed placeholder when it does not, so nothing secret reaches a log.
+pub(crate) fn shown(destination: &str) -> String {
+    match Url::parse(destination) {
+        Ok(mut url) => {
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+            url.to_string()
+        }
+        Err(_defect) => "an unparsable destination".to_owned(),
+    }
 }
 
 /// The URL shapes a probe may even consider: https, no credentials, and a
@@ -216,8 +242,8 @@ fn resolved_global(url: &Url) -> Result<SocketAddr, Resolution> {
 }
 
 /// Globally routable or not. Every v6 form that embeds or routes toward a
-/// v4 address, mapped, compatible, NAT64, and 6to4, defers to that v4's
-/// answer, so the two tables cannot drift apart.
+/// v4 address, mapped, compatible, NAT64 well-known and local-use, and
+/// 6to4, defers to that v4's answer, so the two tables cannot drift apart.
 fn global(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(v4) => {
@@ -240,9 +266,14 @@ fn global(address: IpAddr) -> bool {
                 return global(IpAddr::V4(embedded));
             }
             let segments = v6.segments();
-            if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2..6] == [0, 0, 0, 0] {
-                let embedded = (u32::from(segments[6]) << 16) | u32::from(segments[7]);
-                return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
+            if segments[0] == 0x0064 && segments[1] == 0xff9b {
+                // The well-known and local-use prefixes embed the v4 in the
+                // last 32 bits; a NAT64 shape we cannot locate is denied.
+                if segments[2] <= 1 && segments[3..6] == [0, 0, 0] {
+                    let embedded = (u32::from(segments[6]) << 16) | u32::from(segments[7]);
+                    return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
+                }
+                return false;
             }
             if segments[0] == 0x2002 {
                 let embedded = (u32::from(segments[1]) << 16) | u32::from(segments[2]);

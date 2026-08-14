@@ -11,7 +11,7 @@ use amiss_wire::external::{evidence_file, probe_evidence_row};
 use amiss_wire::json::{self, Value};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
-use crate::net::{Observation, probe};
+use crate::net::{Observation, probe, shown};
 use crate::select::targets;
 
 const USAGE: &str = "amiss-probe --plan <path>
@@ -86,7 +86,8 @@ fn main() -> ExitCode {
             // Policy refusals state no observation, but they do get named.
             Observation::Refused => {
                 eprintln!(
-                    "amiss-probe: {destination} refused by the address policy, stays unproven"
+                    "amiss-probe: {} refused by the address policy, stays unproven",
+                    shown(destination)
                 );
                 continue;
             }

@@ -4,7 +4,7 @@ use std::net::IpAddr;
 
 use url::Url;
 
-use super::{get_retries, global, redirect_target, vetted};
+use super::{get_retries, global, redirect_target, shown, vetted};
 
 fn ip(text: &str) -> IpAddr {
     text.parse().unwrap()
@@ -43,6 +43,9 @@ fn the_deny_table_refuses_every_unroutable_family() {
         "2001:10::1",
         "2001:2::1",
         "64:ff9b::10.0.0.1",
+        "64:ff9b:1::10.0.0.1",
+        "64:ff9b:1::7f00:1",
+        "64:ff9b:2::1",
         "2002:a00:1::1",
         "2001::1",
         "2001:0:4136:e378:8000:63bf:3fff:fdd2",
@@ -55,6 +58,7 @@ fn the_deny_table_refuses_every_unroutable_family() {
         "100.128.0.1",
         "2606:4700::1111",
         "64:ff9b::1.1.1.1",
+        "64:ff9b:1::1.1.1.1",
         "2002:101:101::1",
         "2001:4860:4860::8888",
     ] {
@@ -107,4 +111,14 @@ fn redirect_targets_join_relative_locations() {
         "https://other.example/x"
     );
     assert!(redirect_target(&current, &reqwest::header::HeaderMap::new()).is_none());
+}
+
+#[test]
+fn refused_destinations_are_named_without_their_credentials() {
+    assert_eq!(
+        shown("https://user:secret@example.com/a"),
+        "https://example.com/a"
+    );
+    assert_eq!(shown("https://example.com/a"), "https://example.com/a");
+    assert_eq!(shown("not a url"), "an unparsable destination");
 }
