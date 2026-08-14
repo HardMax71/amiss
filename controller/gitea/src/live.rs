@@ -4,6 +4,7 @@ mod model;
 mod publication;
 mod refresh;
 mod rest;
+mod verify;
 
 use std::fmt;
 use std::sync::Arc;
@@ -131,6 +132,21 @@ impl GiteaClient {
 }
 
 impl GiteaApi for GiteaClient {
+    fn verify_external(
+        &self,
+        plan: &amiss_wire::json::Value,
+        checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        verify::verify_external(
+            &self.client.rest,
+            plan,
+            self.client.config.provider.instance.as_str(),
+            env!("CARGO_PKG_VERSION"),
+            checked_at,
+        )
+        .map(Some)
+    }
+
     fn refresh(&self, pull_request: GiteaPullRequest<'_>) -> Result<ChangeSnapshot, ProviderError> {
         self.client.refresh(pull_request)
     }

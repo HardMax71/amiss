@@ -174,3 +174,9 @@ pub(super) struct CreateReview {
 
 #[derive(Clone, Serialize)]
 pub(super) struct CreateReviewComment {}
+
+#[derive(Deserialize)]
+pub(super) struct RefRecord {
+    #[serde(rename = "ref")]
+    pub reference: String,
+}

@@ -8,14 +8,14 @@ use serde::de::DeserializeOwned;
 use crate::GiteaPullRequest;
 
 use super::model::{
-    BranchProtectionRecord, BranchRecord, CommitRecord, CreateReview, PullRequestRecord,
+    BranchProtectionRecord, BranchRecord, CommitRecord, CreateReview, PullRequestRecord, RefRecord,
     RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
 };
 use super::{Config, GiteaClientError, GiteaTimeouts};
 
 mod transport;
 
-use self::transport::Transport;
+use self::transport::{Fact, Transport};
 
 const PAGE_SIZE: usize = 50;
 const MAX_REVIEW_PAGES: u32 = 20;
@@ -37,6 +37,79 @@ impl OperationDeadline {
             .then_some(remaining)
             .ok_or(ProviderError::Unavailable)
     }
+}
+
+/// What the API said about a foreign repository itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Visibility {
+    Readable,
+    Missing,
+    Denied,
+}
+
+/// Whether a route's subject exists; Unknown when the API refused the one
+/// route without refusing the repository.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Presence {
+    Present,
+    Absent,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RefFamily {
+    Heads,
+    Tags,
+}
+
+impl RefFamily {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Heads => "heads",
+            Self::Tags => "tags",
+        }
+    }
+}
+
+/// The read-only verification surface, apart from refresh and publication
+/// on purpose: a verifier holding this can state facts and nothing else.
+pub(super) trait GiteaVerification: Send + Sync {
+    fn deadline(&self) -> Result<OperationDeadline, ProviderError>;
+
+    fn repository_visibility(
+        &self,
+        owner: &str,
+        name: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Visibility, ProviderError>;
+
+    /// Ref names in the family sharing the prefix, family qualifier
+    /// stripped. A 404 here is Gitea's empty match set, not a lost fact.
+    fn matching_refs(
+        &self,
+        owner: &str,
+        name: &str,
+        family: RefFamily,
+        prefix: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Option<Vec<String>>, ProviderError>;
+
+    fn content_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        reference: &str,
+        path: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError>;
+
+    fn commit_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        revision: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError>;
 }
 
 pub(super) trait GiteaRest: Send + Sync {
@@ -103,6 +176,23 @@ impl HttpRest {
             }
         }
         Err(ProviderError::InvalidResponse)
+    }
+
+    fn presence(
+        &self,
+        route: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError> {
+        Ok(
+            match self
+                .transport
+                .get_fact::<serde::de::IgnoredAny>(route, deadline)?
+            {
+                Fact::Found(_) => Presence::Present,
+                Fact::Missing => Presence::Absent,
+                Fact::Denied => Presence::Unknown,
+            },
+        )
     }
 }
 
@@ -190,6 +280,102 @@ impl GiteaRest for HttpRest {
             review,
             deadline,
         )
+    }
+}
+
+// The verification routes carry another repository's spellings, so every
+// borrowed segment is percent-encoded rather than trusted.
+impl GiteaVerification for HttpRest {
+    fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
+        self.transport.deadline()
+    }
+
+    fn repository_visibility(
+        &self,
+        owner: &str,
+        name: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Visibility, ProviderError> {
+        let route = format!("/repos/{}/{}", path_segment(owner), path_segment(name));
+        Ok(
+            match self
+                .transport
+                .get_fact::<serde::de::IgnoredAny>(&route, deadline)?
+            {
+                Fact::Found(_) => Visibility::Readable,
+                Fact::Missing => Visibility::Missing,
+                Fact::Denied => Visibility::Denied,
+            },
+        )
+    }
+
+    fn matching_refs(
+        &self,
+        owner: &str,
+        name: &str,
+        family: RefFamily,
+        prefix: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Option<Vec<String>>, ProviderError> {
+        let route = format!(
+            "/repos/{}/{}/git/refs/{}/{}",
+            path_segment(owner),
+            path_segment(name),
+            family.as_str(),
+            path_segment(prefix),
+        );
+        let qualifier = format!("refs/{}/", family.as_str());
+        match self
+            .transport
+            .get_fact::<Vec<RefRecord>>(&route, deadline)?
+        {
+            Fact::Found(records) => Ok(Some(
+                records
+                    .into_iter()
+                    .filter_map(|record| {
+                        record.reference.strip_prefix(&qualifier).map(str::to_owned)
+                    })
+                    .collect(),
+            )),
+            // Gitea answers an empty match set as 404, unlike GitHub.
+            Fact::Missing => Ok(Some(Vec::new())),
+            Fact::Denied => Ok(None),
+        }
+    }
+
+    fn content_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        reference: &str,
+        path: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError> {
+        let encoded: Vec<String> = path.split('/').map(path_segment).collect();
+        let route = format!(
+            "/repos/{}/{}/contents/{}?ref={}",
+            path_segment(owner),
+            path_segment(name),
+            encoded.join("/"),
+            path_segment(reference),
+        );
+        self.presence(&route, deadline)
+    }
+
+    fn commit_presence(
+        &self,
+        owner: &str,
+        name: &str,
+        revision: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Presence, ProviderError> {
+        let route = format!(
+            "/repos/{}/{}/commits?sha={}&limit=1&stat=false",
+            path_segment(owner),
+            path_segment(name),
+            path_segment(revision),
+        );
+        self.presence(&route, deadline)
     }
 }
 

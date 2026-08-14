@@ -71,17 +71,33 @@ impl Transport {
         self.execute(self.client.post(self.url(route)?).json(body), deadline)
     }
 
+    /// A verification GET whose negative answers are facts: the absence or
+    /// refusal of what the route names, distinct from a failed call.
+    pub(super) fn get_fact<T: DeserializeOwned>(
+        &self,
+        route: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Fact<T>, ProviderError> {
+        let request = self.client.get(self.url(route)?);
+        let response = self
+            .authorized(request)?
+            .timeout(deadline.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))?;
+        match classified(response.status())? {
+            Classified::Success => Ok(Fact::Found(decode_body(response)?)),
+            Classified::Missing => Ok(Fact::Missing),
+            Classified::Denied => Ok(Fact::Denied),
+        }
+    }
+
     fn execute<T: DeserializeOwned>(
         &self,
         request: RequestBuilder,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        let mut authorization = HeaderValue::from_str(self.authorization.expose_secret())
-            .map_err(|_defect| ProviderError::Authentication)?;
-        authorization.set_sensitive(true);
-        let response = request
-            .header(ACCEPT, GITEA_JSON)
-            .header(AUTHORIZATION, authorization)
+        let response = self
+            .authorized(request)?
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
@@ -90,6 +106,15 @@ impl Transport {
             return Err(map_status(status));
         }
         decode_body(response)
+    }
+
+    fn authorized(&self, request: RequestBuilder) -> Result<RequestBuilder, ProviderError> {
+        let mut authorization = HeaderValue::from_str(self.authorization.expose_secret())
+            .map_err(|_defect| ProviderError::Authentication)?;
+        authorization.set_sensitive(true);
+        Ok(request
+            .header(ACCEPT, GITEA_JSON)
+            .header(AUTHORIZATION, authorization))
     }
 
     fn url(&self, route: &str) -> Result<Url, ProviderError> {
@@ -180,6 +205,32 @@ fn map_error(error: &reqwest::Error) -> ProviderError {
         ProviderError::InvalidResponse
     } else {
         ProviderError::Unavailable
+    }
+}
+
+/// One route's verification answer.
+pub(super) enum Fact<T> {
+    Found(T),
+    Missing,
+    Denied,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Classified {
+    Success,
+    Missing,
+    Denied,
+}
+
+/// The verification statuses that are facts: 404 and 422 are the absence of
+/// what the route names, a 403 is a standing refusal since Gitea carries no
+/// rate-limit signal, and everything else classifies as a data call would.
+fn classified(status: StatusCode) -> Result<Classified, ProviderError> {
+    match status.as_u16() {
+        200..300 => Ok(Classified::Success),
+        404 | 422 => Ok(Classified::Missing),
+        403 => Ok(Classified::Denied),
+        _ => Err(map_status(status)),
     }
 }
 
