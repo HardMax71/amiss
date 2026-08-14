@@ -28,6 +28,35 @@ const JWT_BACKDATE_SECONDS: u64 = 60;
 const JWT_LIFETIME_SECONDS: u64 = 540;
 const TOKEN_REUSE: Duration = Duration::from_mins(5);
 
+/// One route's verification answer.
+pub(super) enum Fact<T> {
+    Found(T),
+    Missing,
+    Denied,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Classified {
+    Success,
+    Missing,
+    Denied,
+}
+
+/// The verification statuses that are facts: 404 and 422 are the absence of
+/// what the route names, an unlimited 403 is a standing refusal, and every
+/// other status classifies exactly as a settled data call would.
+fn classified(status: u16, headers: &HeaderMap) -> Result<Classified, ProviderError> {
+    match status {
+        200..300 => Ok(Classified::Success),
+        404 | 422 => Ok(Classified::Missing),
+        403 if !rate_limited(headers) => Ok(Classified::Denied),
+        _ => match settled(status, headers, ProviderError::AuthorizationRevoked) {
+            Ok(()) => Err(ProviderError::InvalidResponse),
+            Err(defect) => Err(defect),
+        },
+    }
+}
+
 pub(super) struct Transport {
     client: Client,
     api_base: String,
@@ -105,6 +134,27 @@ impl Transport {
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
         self.execute(self.client.post(self.url(route)?).json(body), deadline)
+    }
+
+    /// A verification GET whose negative answers are facts: the absence or
+    /// refusal of what the route names, distinct from a failed call. A
+    /// rate-limited refusal stays an error, since no fact was learned.
+    pub(super) fn get_fact<T: DeserializeOwned>(
+        &self,
+        route: &str,
+        deadline: OperationDeadline,
+    ) -> Result<Fact<T>, ProviderError> {
+        let token = self.token(deadline)?;
+        let request = self.client.get(self.url(route)?);
+        let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
+            .timeout(deadline.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))?;
+        match classified(response.status().as_u16(), response.headers())? {
+            Classified::Success => Ok(Fact::Found(decode_body(response)?)),
+            Classified::Missing => Ok(Fact::Missing),
+            Classified::Denied => Ok(Fact::Denied),
+        }
     }
 
     fn execute<T: DeserializeOwned>(
