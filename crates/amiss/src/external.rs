@@ -17,9 +17,11 @@ pub(crate) fn run_plan(invocation: &PlanInvocation, reserve: &mut FatalSerialize
         &[&invocation.report],
         invocation.format,
         reserve,
-        |values, version, digest| match values {
-            [report] => amiss_wire::external::plan(report, version, digest).map_err(describe_plan),
-            [..] => Err("the input set is not one report"),
+        |values, version, digest| {
+            let [report] = values else {
+                return Err("the input set is not one report");
+            };
+            amiss_wire::external::plan(report, version, digest).map_err(describe_plan)
         },
     )
 }
@@ -30,17 +32,15 @@ pub(crate) fn run_assess(invocation: &AssessInvocation, reserve: &mut FatalSeria
         &[&invocation.plan, &invocation.evidence],
         invocation.format,
         reserve,
-        |values, version, digest| match values {
-            [plan, evidence] => amiss_wire::external::assess(plan, evidence, version, digest)
-                .map_err(describe_assess),
-            [..] => Err("the input set is not a plan and its evidence"),
+        |values, version, digest| {
+            let [plan, evidence] = values else {
+                return Err("the input set is not a plan and its evidence");
+            };
+            amiss_wire::external::assess(plan, evidence, version, digest).map_err(describe_assess)
         },
     )
 }
 
-/// One pure verb's whole run: bounded reads, provenance, derivation,
-/// projection. Refusals are diagnostics; the machine lane emits through the
-/// reserve serializer and the human projection prints its own lines.
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 fn run_pure(
     command: &str,
@@ -69,9 +69,8 @@ fn run_pure(
     }
 }
 
-/// One bounded read and strict parse: the scanner's own writer caps an
-/// envelope at `MACHINE_JSON_BYTES`, so a larger input is provably not one
-/// of its artifacts. Diagnostics carry the calling form's name.
+/// The writer caps an envelope at `MACHINE_JSON_BYTES`, so a larger input
+/// is provably not the scanner's artifact.
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 fn strict_value(command: &str, path: &Path) -> Option<Value> {
     let shown = path.display();
@@ -107,8 +106,7 @@ fn internal_error() -> ExitCode {
     ExitCode::from(ExitClass::Failure.code())
 }
 
-/// A closed pipe means the consumer stopped reading, never a lost artifact;
-/// any other write defect did lose bytes, so the exit says so.
+/// A closed pipe never fails the exit; any other write defect lost bytes.
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 fn project(
     command: &str,
@@ -155,40 +153,40 @@ const fn describe_assess(defect: AssessDefect) -> &'static str {
         AssessDefect::PlanDigestMismatch => "the plan payload does not match its recorded digest",
         AssessDefect::NotEvidence => "the input is not an external evidence file",
         AssessDefect::UnboundEvidence => {
-            "the evidence binds another plan, repeats a destination, or names one the plan did not introduce"
+            "the evidence binds another plan, repeats a destination, names one the plan did not \
+             introduce, or resolves a tail the plan's shape does not carry"
         }
         AssessDefect::MalformedEvidence => "an evidence row breaks its own kind's grammar",
     }
 }
 
-/// The human projection: one totals line, then up to ten introduced
-/// destinations with an overflow line, the machine payload untouched.
-#[expect(clippy::print_stdout, reason = "the human projection's output channel")]
 fn human_plan(envelope: &Value) {
+    let mut out = crate::Channel::new();
     let payload = View::of(Some(envelope)).view("payload");
     let introduced = payload.rows("introduced");
-    println!(
+    out.line(format_args!(
         "amiss external-plan: introduced {} removed {} retained {}",
         introduced.len(),
         payload.rows("removed").len(),
         payload.number("retained_count"),
-    );
+    ));
     for row in introduced.iter().take(10) {
-        println!(
+        out.line(format_args!(
             "introduced {} in {} documents",
             row.text("destination"),
             row.rows("documents").len(),
-        );
+        ));
     }
     let overflow = introduced.len().saturating_sub(10);
     if overflow > 0 {
-        println!("introduced overflow: {overflow} more in the full plan");
+        out.line(format_args!(
+            "introduced overflow: {overflow} more in the full plan"
+        ));
     }
 }
 
-/// The assessment's human window: totals, then up to ten refuted rows.
-#[expect(clippy::print_stdout, reason = "the human projection's output channel")]
 fn human_assessment(envelope: &Value) {
+    let mut out = crate::Channel::new();
     let payload = View::of(Some(envelope)).view("payload");
     let verdicts = payload.rows("verdicts");
     let count = |wanted: &str| {
@@ -197,25 +195,27 @@ fn human_assessment(envelope: &Value) {
             .filter(|row| row.text("verdict") == wanted)
             .count()
     };
-    println!(
+    out.line(format_args!(
         "amiss external-assess: refuted {} unproven {} reachable {}",
         count("refuted"),
         count("unproven"),
         count("reachable"),
-    );
+    ));
     let refuted: Vec<&View> = verdicts
         .iter()
         .filter(|row| row.text("verdict") == "refuted")
         .collect();
     for row in refuted.iter().take(10) {
-        println!(
+        out.line(format_args!(
             "refuted {} ({})",
             row.text("destination"),
             row.text("reason")
-        );
+        ));
     }
     let overflow = refuted.len().saturating_sub(10);
     if overflow > 0 {
-        println!("refuted overflow: {overflow} more in the full assessment");
+        out.line(format_args!(
+            "refuted overflow: {overflow} more in the full assessment"
+        ));
     }
 }

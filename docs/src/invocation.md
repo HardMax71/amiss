@@ -192,8 +192,9 @@ the two scan-only projections are refused. Exit 0 wrote the plan. Exit 2 means t
 could not be trusted: unreadable, not the scanner's strict JSON, not a report envelope,
 digest mismatch, or incomplete.
 
-`amiss external-assess` judges [an external plan](external-assessment.md) against one
-producer's observations, offline, under the engine's fixed policy. It verifies the plan's
+`amiss external-assess` judges [an external plan](external-plan.md) against one
+producer's observations, writing [the external assessment](external-assessment.md)
+offline under the engine's fixed policy. It verifies the plan's
 digest and the evidence's binding to that exact plan; evidence naming a destination the
 plan did not introduce, repeating one, or binding another plan refuses the whole run.
 `--format` takes `human` or `json`. Exit 0 wrote the assessment, refuted rows included,

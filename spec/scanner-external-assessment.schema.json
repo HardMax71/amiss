@@ -135,7 +135,35 @@
           "minLength": 1,
           "maxLength": 16384
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "reachable"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": ["reason"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "enum": ["refuted", "unproven"]
+              }
+            }
+          },
+          "then": {
+            "required": ["reason"]
+          }
+        }
+      ]
     }
   }
 }
