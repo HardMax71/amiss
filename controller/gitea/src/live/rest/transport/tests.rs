@@ -172,3 +172,17 @@ fn a_deadline_keeps_a_positive_remainder_or_refuses() {
     let spent = OperationDeadline::after(Duration::ZERO).unwrap();
     assert_eq!(spent.remaining(), Err(ProviderError::Unavailable));
 }
+
+#[test]
+fn verification_statuses_classify_facts_apart_from_failures() {
+    use super::Classified;
+    let of = |code: u16| super::classified(StatusCode::from_u16(code).unwrap());
+    assert_eq!(of(200), Ok(Classified::Success));
+    assert_eq!(of(404), Ok(Classified::Missing));
+    assert_eq!(of(422), Ok(Classified::Missing));
+    assert_eq!(of(403), Ok(Classified::Denied));
+    assert_eq!(of(429), Err(ProviderError::Unavailable));
+    assert_eq!(of(500), Err(ProviderError::Unavailable));
+    assert_eq!(of(401), Err(ProviderError::AuthorizationRevoked));
+    assert_eq!(of(302), Err(ProviderError::InvalidResponse));
+}

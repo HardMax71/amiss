@@ -138,7 +138,7 @@ repos:
           want="similarity-rs $version"; have="$(similarity-rs --version)";
           [ "$have" = "$want" ] || { echo "the ratchet pins $want, found $have"; exit 1; };
           pairs="$(similarity-rs crates controller --threshold 0.85 --min-lines 8 | grep -c "Similarity:" || true)";
-          baseline=187;
+          baseline=191;
           [ "$pairs" -eq "$baseline" ] ||
           { echo "near-twin function pairs: $pairs, baseline $baseline
           (similarity-rs crates controller --threshold 0.85 --min-lines 8)"; exit 1; }'
@@ -161,7 +161,7 @@ repos:
           cat controller/gitea-service/tests/lane/harness.rs controller/github-service/tests/lane/harness.rs controller/gitlab-service/tests/lane/harness.rs > "$dir/harnesses.rs";
           cat controller/gitea-service/src/runtime.rs controller/github-service/src/runtime.rs controller/gitlab-service/src/runtime.rs > "$dir/runtimes.rs";
           pairs="$(similarity-rs "$dir" --threshold 0.85 --min-lines 8 | grep -c "Similarity:" || true)";
-          baseline=31;
+          baseline=33;
           [ "$pairs" -eq "$baseline" ] ||
           { echo "provider twin-trio pairs: $pairs, baseline $baseline
           (concatenate each trio, then similarity-rs --threshold 0.85 --min-lines 8)"; exit 1; }'

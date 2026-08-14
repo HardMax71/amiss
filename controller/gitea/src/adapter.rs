@@ -77,6 +77,14 @@ impl<A: GiteaApi> ProviderAdapter for GiteaPullRequestAdapter<A> {
         }
         self.api.publish(pull_request, publication)
     }
+
+    fn verify_external(
+        &self,
+        plan: &amiss_wire::json::Value,
+        checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        self.api.verify_external(plan, checked_at)
+    }
 }
 
 fn validate_delivery<'a>(
