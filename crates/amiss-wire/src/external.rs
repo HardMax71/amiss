@@ -323,13 +323,15 @@ pub fn assess(
     engine_version: &str,
     engine_digest: &str,
 ) -> Result<Value, AssessDefect> {
-    if plan.text("schema") != Some(PLAN_ENVELOPE_SCHEMA) {
-        return Err(AssessDefect::NotAPlan);
-    }
     let (Some(payload), Some(recorded)) = (plan.member("payload"), plan.text("payload_digest"))
     else {
         return Err(AssessDefect::NotAPlan);
     };
+    if plan.text("schema") != Some(PLAN_ENVELOPE_SCHEMA)
+        || payload.text("schema") != Some(PLAN_PAYLOAD_SCHEMA)
+    {
+        return Err(AssessDefect::NotAPlan);
+    }
     if hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() != recorded {
         return Err(AssessDefect::PlanDigestMismatch);
     }
@@ -592,12 +594,13 @@ fn judge(
 /// recorded digest: the check a producer makes before spending calls on it.
 #[must_use]
 pub fn bound_plan(plan: &Value) -> bool {
+    let (Some(payload), Some(recorded)) = (plan.member("payload"), plan.text("payload_digest"))
+    else {
+        return false;
+    };
     plan.text("schema") == Some(PLAN_ENVELOPE_SCHEMA)
-        && matches!(
-            (plan.member("payload"), plan.text("payload_digest")),
-            (Some(payload), Some(recorded))
-                if hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() == recorded
-        )
+        && payload.text("schema") == Some(PLAN_PAYLOAD_SCHEMA)
+        && hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() == recorded
 }
 
 /// One producer's evidence file over a plan: the binding digest is read from

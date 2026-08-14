@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -46,6 +46,7 @@ struct ScriptedRest {
     tags: BTreeMap<&'static str, Vec<&'static str>>,
     contents: BTreeMap<(&'static str, &'static str, &'static str), Presence>,
     commits: BTreeMap<(&'static str, &'static str), Presence>,
+    refs_unanswered: BTreeSet<&'static str>,
     calls: AtomicUsize,
     unavailable_from: Option<usize>,
 }
@@ -84,6 +85,9 @@ impl GitHubVerification for ScriptedRest {
         _deadline: OperationDeadline,
     ) -> Result<Option<Vec<String>>, ProviderError> {
         self.spend()?;
+        if self.refs_unanswered.contains(name) {
+            return Ok(None);
+        }
         let table = match family {
             RefFamily::Heads => &self.heads,
             RefFamily::Tags => &self.tags,
@@ -146,27 +150,10 @@ fn facts(evidence: &Value) -> Vec<String> {
 
 const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 
-#[test]
-fn every_visibility_and_resolution_becomes_its_fact() {
-    let plan = plan_over(&[
-        "https://github.com/acme/bare",
-        "https://github.com/acme/bound/blob/feature/x/a.md",
-        "https://github.com/acme/denied/blob/main/a.md",
-        "https://github.com/acme/deleted/blob/old-branch/a.md",
-        "https://github.com/acme/gone/blob/main/missing.md",
-        "https://github.com/acme/head/blob/HEAD/README.md",
-        "https://github.com/acme/large/blob/main/big.bin",
-        "https://github.com/acme/missing/blob/main/a.md",
-        &format!("https://github.com/acme/pinned/blob/{OID}/a.md"),
-        "https://github.com/acme/short/blob/09059d9/a.md",
-        "https://github.com/acme/tagged/blob/v1.0/a.md",
-        "https://github.com/acme/tickets/issues/5",
-        "https://github.com/acme/widgets/blob/feature/x/docs/a.md",
-        "https://github.com/acme/widgets/tree/feature/x/docs/",
-        "https://gitlab.com/acme/elsewhere",
-    ]);
-    let rest = ScriptedRest {
+fn matrix_rest() -> ScriptedRest {
+    ScriptedRest {
         visibility: BTreeMap::from([
+            ("agreed", Visibility::Readable),
             ("bare", Visibility::Readable),
             ("bound", Visibility::Readable),
             ("deleted", Visibility::Readable),
@@ -175,22 +162,32 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             ("head", Visibility::Readable),
             ("large", Visibility::Readable),
             ("pinned", Visibility::Readable),
+            ("refless", Visibility::Readable),
+            ("shadow", Visibility::Readable),
             ("short", Visibility::Readable),
             ("tagged", Visibility::Readable),
             ("tickets", Visibility::Readable),
             ("widgets", Visibility::Readable),
         ]),
+        refs_unanswered: BTreeSet::from(["refless"]),
         heads: BTreeMap::from([
+            ("agreed", vec!["v1.0"]),
             ("bound", vec!["feature-x"]),
+            ("shadow", vec!["feature"]),
             ("gone", vec!["main"]),
             ("large", vec!["main"]),
             ("widgets", vec!["feature/x"]),
         ]),
-        tags: BTreeMap::from([("tagged", vec!["v1.0"])]),
+        tags: BTreeMap::from([
+            ("agreed", vec!["v1.0"]),
+            ("shadow", vec!["feature/x"]),
+            ("tagged", vec!["v1.0"]),
+        ]),
         contents: BTreeMap::from([
             (("widgets", "feature/x", "docs/a.md"), Presence::Present),
             (("widgets", "feature/x", "docs"), Presence::Present),
             (("tagged", "v1.0", "a.md"), Presence::Present),
+            (("agreed", "v1.0", "a.md"), Presence::Present),
             (("pinned", OID, "a.md"), Presence::Present),
             (("large", "main", "big.bin"), Presence::Unknown),
             (("head", "HEAD", "README.md"), Presence::Present),
@@ -202,12 +199,38 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             (("short", "09059d9"), Presence::Present),
         ]),
         ..ScriptedRest::default()
-    };
+    }
+}
+
+#[test]
+fn every_visibility_and_resolution_becomes_its_fact() {
+    let plan = plan_over(&[
+        "https://github.com/acme/agreed/blob/v1.0/a.md",
+        "https://github.com/acme/bare",
+        "https://github.com/acme/bound/blob/feature/x/a.md",
+        "https://github.com/acme/denied/blob/main/a.md",
+        "https://github.com/acme/deleted/blob/old-branch/a.md",
+        "https://github.com/acme/gone/blob/main/missing.md",
+        "https://github.com/acme/head/blob/HEAD/README.md",
+        "https://github.com/acme/large/blob/main/big.bin",
+        "https://github.com/acme/missing/blob/main/a.md",
+        "https://github.com/acme/refless/blob/main/a.md",
+        &format!("https://github.com/acme/pinned/blob/{OID}/a.md"),
+        "https://github.com/acme/shadow/blob/feature/x/y.md",
+        "https://github.com/acme/short/blob/09059d9/a.md",
+        "https://github.com/acme/tagged/blob/v1.0/a.md",
+        "https://github.com/acme/tickets/issues/5",
+        "https://github.com/acme/widgets/blob/feature/x/docs/a.md",
+        "https://github.com/acme/widgets/tree/feature/x/docs/",
+        "https://gitlab.com/acme/elsewhere",
+    ]);
+    let rest = matrix_rest();
     let evidence =
         verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("evidence is produced");
     assert_eq!(
         facts(&evidence),
         vec![
+            "https://github.com/acme/agreed/blob/v1.0/a.md readable resolved".to_owned(),
             "https://github.com/acme/bare readable".to_owned(),
             "https://github.com/acme/bound/blob/feature/x/a.md readable revision-missing"
                 .to_owned(),
@@ -219,6 +242,8 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             "https://github.com/acme/large/blob/main/big.bin readable".to_owned(),
             "https://github.com/acme/missing/blob/main/a.md missing".to_owned(),
             format!("https://github.com/acme/pinned/blob/{OID}/a.md readable resolved"),
+            "https://github.com/acme/refless/blob/main/a.md readable".to_owned(),
+            "https://github.com/acme/shadow/blob/feature/x/y.md readable".to_owned(),
             "https://github.com/acme/short/blob/09059d9/a.md readable resolved".to_owned(),
             "https://github.com/acme/tagged/blob/v1.0/a.md readable resolved".to_owned(),
             "https://github.com/acme/tickets/issues/5 readable".to_owned(),
