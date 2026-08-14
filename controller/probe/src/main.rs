@@ -20,8 +20,8 @@ amiss-probe --version";
 /// Destinations probed per run; everything past the cap stays unproven.
 const RUN_CAP: usize = 64;
 
-/// The whole run's wall ceiling, so one pathological chain cannot starve
-/// the caller; everything past it stays unproven.
+/// The run's wall ceiling, consulted between destinations and between
+/// requests; one resolver lookup or in-flight request can overhang it.
 const RUN_BUDGET: Duration = Duration::from_mins(2);
 
 /// Diagnostics are the stderr channel and the evidence is stdout; nothing
@@ -55,6 +55,11 @@ fn main() -> ExitCode {
 
     let (selected, capped) = targets(&plan, RUN_CAP);
     let started = Instant::now();
+    let deadline = started.checked_add(RUN_BUDGET);
+    let Some(deadline) = deadline else {
+        eprintln!("amiss-probe: the clock cannot hold the run budget");
+        return ExitCode::from(2);
+    };
     let mut skipped = capped;
     let mut rows = Vec::new();
     for (position, destination) in selected.iter().enumerate() {
@@ -62,7 +67,7 @@ fn main() -> ExitCode {
             skipped = skipped.saturating_add(selected.len().saturating_sub(position));
             break;
         }
-        let row = match probe(destination) {
+        let row = match probe(destination, deadline) {
             Observation::Answered {
                 method,
                 status,
@@ -78,8 +83,13 @@ fn main() -> ExitCode {
             Observation::Failed { method, failure } => {
                 probe_evidence_row(destination, method, None, Some(failure), None, &checked_at)
             }
-            // Policy refusals state no observation at all.
-            Observation::Refused => continue,
+            // Policy refusals state no observation, but they do get named.
+            Observation::Refused => {
+                eprintln!(
+                    "amiss-probe: {destination} refused by the address policy, stays unproven"
+                );
+                continue;
+            }
         };
         rows.push(row);
     }
