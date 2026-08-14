@@ -24,8 +24,10 @@ pub(crate) struct FakeAdapter {
     refreshes: Mutex<VecDeque<Result<ChangeSnapshot, ProviderError>>>,
     publications: Mutex<Vec<Publication>>,
     publish_results: Mutex<VecDeque<Result<(), ProviderError>>>,
+    verify_results: Mutex<VecDeque<Result<Option<amiss_wire::json::Value>, ProviderError>>>,
     pub(crate) authentication_count: AtomicUsize,
     pub(crate) refresh_count: AtomicUsize,
+    pub(crate) verify_count: AtomicUsize,
 }
 
 impl FakeAdapter {
@@ -48,8 +50,10 @@ impl FakeAdapter {
             refreshes: Mutex::new(refreshes.into_iter().collect()),
             publications: Mutex::new(Vec::new()),
             publish_results: Mutex::new(VecDeque::new()),
+            verify_results: Mutex::new(VecDeque::new()),
             authentication_count: AtomicUsize::new(0),
             refresh_count: AtomicUsize::new(0),
+            verify_count: AtomicUsize::new(0),
         }
     }
 
@@ -62,6 +66,14 @@ impl FakeAdapter {
         results: impl IntoIterator<Item = Result<(), ProviderError>>,
     ) -> Self {
         *self.publish_results.lock().unwrap() = results.into_iter().collect();
+        self
+    }
+
+    pub(crate) fn with_verify_results(
+        self,
+        results: impl IntoIterator<Item = Result<Option<amiss_wire::json::Value>, ProviderError>>,
+    ) -> Self {
+        *self.verify_results.lock().unwrap() = results.into_iter().collect();
         self
     }
 
@@ -117,5 +129,18 @@ impl ProviderAdapter for FakeAdapter {
             .unwrap()
             .pop_front()
             .unwrap_or(Ok(()))
+    }
+
+    fn verify_external(
+        &self,
+        _plan: &amiss_wire::json::Value,
+        _checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        self.verify_count.fetch_add(1, Ordering::Relaxed);
+        self.verify_results
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(Ok(None))
     }
 }

@@ -55,6 +55,20 @@ pub trait GitHubApi: Send + Sync {
         pull_request: GitHubPullRequest<'_>,
         publication: &Publication,
     ) -> Result<(), ProviderError>;
+
+    /// Advisory external verification, `None` from the default for an API
+    /// without a verifier.
+    ///
+    /// # Errors
+    ///
+    /// No fact could be gathered before the first one.
+    fn verify_external(
+        &self,
+        _plan: &amiss_wire::json::Value,
+        _checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        Ok(None)
+    }
 }
 
 pub struct GitHubPullRequestSource {
@@ -171,6 +185,14 @@ impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
             return Err(ProviderError::InvalidResponse);
         }
         self.api.publish(pull_request, publication)
+    }
+
+    fn verify_external(
+        &self,
+        plan: &amiss_wire::json::Value,
+        checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        self.api.verify_external(plan, checked_at)
     }
 }
 
