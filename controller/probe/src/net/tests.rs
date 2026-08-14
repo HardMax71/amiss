@@ -37,10 +37,24 @@ fn the_deny_table_refuses_every_unroutable_family() {
         "2001:db8::1",
         "::ffff:127.0.0.1",
         "::ffff:10.0.0.1",
+        "0.1.2.3",
+        "::10.0.0.1",
+        "100::1",
+        "2001:10::1",
+        "2001:2::1",
+        "64:ff9b::10.0.0.1",
+        "2002:a00:1::1",
     ] {
         assert!(!global(ip(private)), "{private} must be refused");
     }
-    for public in ["140.82.121.4", "1.1.1.1", "100.128.0.1", "2606:4700::1111"] {
+    for public in [
+        "140.82.121.4",
+        "1.1.1.1",
+        "100.128.0.1",
+        "2606:4700::1111",
+        "64:ff9b::1.1.1.1",
+        "2002:101:101::1",
+    ] {
         assert!(global(ip(public)), "{public} must be routable");
     }
 }

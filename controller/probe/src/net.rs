@@ -83,10 +83,18 @@ fn attempt(start: &Url, get: bool) -> Attempted {
     let mut url = start.clone();
     let mut standing_redirect = None;
     for _hop in 0..=MAX_HOPS {
-        let address = match resolved_global(&url) {
-            Ok(address) => address,
-            Err(Resolution::NoRecords) => return Attempted::Failed("dns"),
-            Err(Resolution::NothingGlobal) => return Attempted::Refused,
+        // A hop whose name resolves nowhere usable keeps the redirect that
+        // pointed at it: the redirect is the observation, the hop is not.
+        let address = match (resolved_global(&url), standing_redirect) {
+            (Ok(address), _) => address,
+            (Err(_defect), Some(status)) => {
+                return Attempted::Answered {
+                    status,
+                    final_destination: Some(url.to_string()),
+                };
+            }
+            (Err(Resolution::NoRecords), None) => return Attempted::Failed("dns"),
+            (Err(Resolution::NothingGlobal), None) => return Attempted::Refused,
         };
         let Ok(client) = pinned(&url, address) else {
             return Attempted::Refused;
@@ -189,9 +197,9 @@ fn resolved_global(url: &Url) -> Result<SocketAddr, Resolution> {
     })
 }
 
-/// Globally routable or not, by the closed deny table: loopback, private,
-/// link-local, carrier NAT, benchmarking, documentation, multicast,
-/// reserved, and their v6 counterparts including v4-mapped forms.
+/// Globally routable or not. Every v6 form that embeds or routes toward a
+/// v4 address, mapped, compatible, NAT64, and 6to4, defers to that v4's
+/// answer, so the two tables cannot drift apart.
 fn global(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(v4) => {
@@ -203,22 +211,32 @@ fn global(address: IpAddr) -> bool {
                 || v4.is_broadcast()
                 || v4.is_multicast()
                 || v4.is_documentation()
+                || octets[0] == 0
                 || (octets[0] == 100 && (octets[1] & 0b1100_0000) == 64)
                 || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
                 || (octets[0] == 198 && (octets[1] & 0b1111_1110) == 18)
                 || octets[0] >= 240)
         }
         IpAddr::V6(v6) => {
-            if let Some(mapped) = v6.to_ipv4_mapped() {
-                return global(IpAddr::V4(mapped));
+            if let Some(embedded) = v6.to_ipv4() {
+                return global(IpAddr::V4(embedded));
             }
             let segments = v6.segments();
-            !(v6.is_loopback()
-                || v6.is_unspecified()
-                || v6.is_multicast()
+            if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2..6] == [0, 0, 0, 0] {
+                let embedded = (u32::from(segments[6]) << 16) | u32::from(segments[7]);
+                return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
+            }
+            if segments[0] == 0x2002 {
+                let embedded = (u32::from(segments[1]) << 16) | u32::from(segments[2]);
+                return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
+            }
+            !(v6.is_multicast()
                 || (segments[0] & 0xfe00) == 0xfc00
                 || (segments[0] & 0xffc0) == 0xfe80
-                || (segments[0] == 0x2001 && segments[1] == 0x0db8))
+                || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+                || (segments[0] == 0x2001 && segments[1] == 0x0002 && segments[2] == 0)
+                || (segments[0] == 0x2001 && (segments[1] & 0xfff0) == 0x0010)
+                || (segments[0] == 0x0100 && segments[1..4] == [0, 0, 0]))
         }
     }
 }
