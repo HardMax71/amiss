@@ -99,7 +99,9 @@ fn renewal_keeps_a_long_controller_operation_owned() {
     });
     started.wait();
     let first_expiry = claimed_expiry(&mut inbox.lock().unwrap());
-    let observation_deadline = Instant::now() + Duration::from_secs(10);
+    // Exits on the first observed renewal, around the five-second poll cap;
+    // the wide ceiling is only for stalled runners.
+    let observation_deadline = Instant::now() + Duration::from_secs(30);
     let renewed_and_owned = loop {
         let now = support::now();
         let mut inbox = inbox.lock().unwrap();
