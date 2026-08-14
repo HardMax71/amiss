@@ -1,7 +1,7 @@
 mod tests;
 
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs as _};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
@@ -37,12 +37,15 @@ enum Attempted {
 /// servers answer differently by method, since a 404 refutes only under
 /// GET. Every URL and every redirect hop is vetted and address-pinned
 /// before a byte leaves the process.
-pub(crate) fn probe(destination: &str) -> Observation {
+pub(crate) fn probe(destination: &str, deadline: Instant) -> Observation {
     let Some(url) = Url::parse(destination).ok().and_then(vetted) else {
         return Observation::Refused;
     };
-    match attempt(&url, false) {
-        Attempted::Answered { status, .. } if get_retries(status) => match attempt(&url, true) {
+    match attempt(&url, false, deadline) {
+        Attempted::Answered {
+            status,
+            final_destination,
+        } if get_retries(status) => match attempt(&url, true, deadline) {
             Attempted::Answered {
                 status,
                 final_destination,
@@ -51,11 +54,13 @@ pub(crate) fn probe(destination: &str) -> Observation {
                 status,
                 final_destination,
             },
-            Attempted::Failed(failure) => Observation::Failed {
-                method: "get",
-                failure,
+            // A failed retry does not erase the HEAD answer; the judge
+            // treats an unconfirmed absence as unproven anyway.
+            Attempted::Failed(_) | Attempted::Refused => Observation::Answered {
+                method: "head",
+                status,
+                final_destination,
             },
-            Attempted::Refused => Observation::Refused,
         },
         Attempted::Answered {
             status,
@@ -79,10 +84,22 @@ const fn get_retries(status: i64) -> bool {
     matches!(status, 404 | 405 | 410 | 501)
 }
 
-fn attempt(start: &Url, get: bool) -> Attempted {
+fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
     let mut url = start.clone();
     let mut standing_redirect = None;
     for _hop in 0..=MAX_HOPS {
+        // The ceiling binds between requests; one resolver lookup or one
+        // in-flight request can overhang it, nothing more.
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return match standing_redirect {
+                Some(status) => Attempted::Answered {
+                    status,
+                    final_destination: Some(url.to_string()),
+                },
+                None => Attempted::Failed("timeout"),
+            };
+        }
         // A hop whose name resolves nowhere usable keeps the redirect that
         // pointed at it: the redirect is the observation, the hop is not.
         let address = match (resolved_global(&url), standing_redirect) {
@@ -103,7 +120,8 @@ fn attempt(start: &Url, get: bool) -> Attempted {
             client.get(url.clone())
         } else {
             client.head(url.clone())
-        };
+        }
+        .timeout(OPERATION.min(left));
         let response = match request.send() {
             Ok(response) => response,
             Err(error) if error.is_timeout() => return Attempted::Failed("timeout"),
@@ -233,6 +251,7 @@ fn global(address: IpAddr) -> bool {
             !(v6.is_multicast()
                 || (segments[0] & 0xfe00) == 0xfc00
                 || (segments[0] & 0xffc0) == 0xfe80
+                || (segments[0] == 0x2001 && segments[1] == 0x0000)
                 || (segments[0] == 0x2001 && segments[1] == 0x0db8)
                 || (segments[0] == 0x2001 && segments[1] == 0x0002 && segments[2] == 0)
                 || (segments[0] == 0x2001 && (segments[1] & 0xfff0) == 0x0010)
