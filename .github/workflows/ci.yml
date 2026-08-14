@@ -111,6 +111,55 @@ jobs:
             --base "$(git rev-parse HEAD^)" --index \
             --profile observe --format json > /dev/null
 
+  # The external rail on this repository's own changes, advisory: the chain
+  # runs check, external-plan, amiss-probe, and external-assess against the
+  # base, and the assessment lands in the step summary as telemetry for the
+  # enforcement decision. Nothing here may fail the suite, so every defect
+  # degrades into one summary line and exit zero.
+  external-advisory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: .
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -u
+          advisory() {
+            echo "advisory external rail: $1" >> "$GITHUB_STEP_SUMMARY"
+            echo "advisory external rail: $1"
+            exit 0
+          }
+          if [ -z "${BASE:-}" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            advisory "no usable base commit for this event"
+          fi
+          cargo build --locked --release -p amiss -p amiss-probe \
+            || advisory "the binaries did not build"
+          ./target/release/amiss check --repo . --object-format sha1 \
+            --base "$BASE" --candidate "$(git rev-parse HEAD)" \
+            --profile observe --format json > report.json \
+            || advisory "the scan could not complete"
+          ./target/release/amiss external-plan --report report.json --format json > plan.json \
+            || advisory "the plan could not derive"
+          ./target/release/amiss-probe --plan plan.json > evidence.json \
+            || advisory "the probe could not run"
+          ./target/release/amiss external-assess --plan plan.json --evidence evidence.json \
+            > assessment.txt || advisory "the assessment could not judge"
+          cat assessment.txt
+          {
+            echo '```'
+            cat assessment.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 30

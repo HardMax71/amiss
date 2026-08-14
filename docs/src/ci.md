@@ -122,6 +122,24 @@ but lowercase. A scan is a pure function of the two snapshots and the invocation
 no baseline cache to warm between runs. As with the Action, graduate to `--profile enforce`
 once the first report is triaged.
 
+The external rail extends any direct invocation into web evidence, advisory: derive
+[the plan](external-plan.md) from the written report, probe its introduced destinations,
+and judge through [the assessment](external-assessment.md). Amiss runs exactly this chain
+on its own pull requests, in the `external-advisory` job of the same workflow linked
+above, with every defect degrading into one summary line rather than a failed check:
+
+```yaml
+- run: |
+    amiss external-plan --report amiss-report.json --format json > amiss-plan.json
+    amiss-probe --plan amiss-plan.json > amiss-evidence.json
+    amiss external-assess --plan amiss-plan.json --evidence amiss-evidence.json
+```
+
+The assessment refutes only what a probe or forge API positively disproved, so its rows
+are telemetry to read, not a gate to wire, until the rates have earned that. The prober
+is not yet a released artifact: it builds from this repository's controller workspace
+with `cargo build --locked --release -p amiss-probe`, which is what the dogfood job does.
+
 The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
 lines the findings name, with fixes rendered as suggested edits and the finding key
 deduplicating alerts across runs. Two steps after any direct invocation:
