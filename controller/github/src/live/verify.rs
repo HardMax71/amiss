@@ -1,7 +1,7 @@
 mod tests;
 
 use amiss_controller::ProviderError;
-use amiss_wire::external::{evidence_file, forge_evidence_row};
+use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
 use amiss_wire::json::Value;
 
 use super::rest::{GitHubVerification, Presence, RefFamily, Visibility};
@@ -24,10 +24,12 @@ pub(super) fn verify_external<R: GitHubVerification>(
     let introduced = plan
         .member("payload")
         .and_then(|payload| payload.member("introduced"));
-    // A value that is not a plan is the caller's defect, not the provider's.
-    let Some(Value::Array(introduced)) = introduced else {
+    // A value that is not a digest-whole plan is the caller's defect, not
+    // the provider's, and no call is spent on it.
+    let (Some(Value::Array(introduced)), true) = (introduced, bound_plan(plan)) else {
         return Err(ProviderError::InvalidResponse);
     };
+    let deadline = rest.deadline()?;
     let mut rows = Vec::new();
     for row in introduced {
         let (Some(destination), Some(repository)) =
@@ -41,7 +43,6 @@ pub(super) fn verify_external<R: GitHubVerification>(
         let (Some(owner), Some(name)) = (repository.text("owner"), repository.text("name")) else {
             continue;
         };
-        let deadline = rest.deadline()?;
         let visibility = match rest.repository_visibility(owner, name, deadline) {
             Ok(visibility) => visibility,
             Err(ProviderError::Unavailable) => break,
@@ -92,7 +93,9 @@ fn resolve_tail<R: GitHubVerification>(
     };
     let mut resolved = None;
     for family in [RefFamily::Heads, RefFamily::Tags] {
-        let names = rest.matching_refs(owner, name, family, first, deadline)?;
+        let Some(names) = rest.matching_refs(owner, name, family, first, deadline)? else {
+            return Ok(None);
+        };
         resolved = names.into_iter().find(|candidate| {
             tail == candidate
                 || tail
@@ -103,16 +106,16 @@ fn resolve_tail<R: GitHubVerification>(
             break;
         }
     }
-    let commit_shaped =
-        matches!(first.len(), 40 | 64) && first.bytes().all(|byte| byte.is_ascii_hexdigit());
+    // The commit route also resolves what no ref names: symbolic HEAD and
+    // abbreviated ids. Only its positive absence may claim revision-missing,
+    // since a false refutation is the worst answer this producer can give.
     let reference = match resolved {
         Some(reference) => reference,
-        None if commit_shaped => match rest.commit_presence(owner, name, first, deadline)? {
+        None => match rest.commit_presence(owner, name, first, deadline)? {
             Presence::Present => first.to_owned(),
             Presence::Absent => return Ok(Some("revision-missing")),
             Presence::Unknown => return Ok(None),
         },
-        None => return Ok(Some("revision-missing")),
     };
     let path = tail
         .get(reference.len()..)

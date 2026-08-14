@@ -588,6 +588,18 @@ fn judge(
     }
 }
 
+/// Whether the value is an external plan envelope whose payload matches its
+/// recorded digest: the check a producer makes before spending calls on it.
+#[must_use]
+pub fn bound_plan(plan: &Value) -> bool {
+    plan.text("schema") == Some(PLAN_ENVELOPE_SCHEMA)
+        && matches!(
+            (plan.member("payload"), plan.text("payload_digest")),
+            (Some(payload), Some(recorded))
+                if hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() == recorded
+        )
+}
+
 /// One producer's evidence file over a plan: the binding digest is read from
 /// the plan itself, so a producer never computes one.
 #[must_use]

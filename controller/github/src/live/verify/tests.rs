@@ -82,19 +82,21 @@ impl GitHubVerification for ScriptedRest {
         family: RefFamily,
         prefix: &str,
         _deadline: OperationDeadline,
-    ) -> Result<Vec<String>, ProviderError> {
+    ) -> Result<Option<Vec<String>>, ProviderError> {
         self.spend()?;
         let table = match family {
             RefFamily::Heads => &self.heads,
             RefFamily::Tags => &self.tags,
         };
-        Ok(table
-            .get(name)
-            .into_iter()
-            .flatten()
-            .filter(|candidate| candidate.starts_with(prefix))
-            .map(|candidate| (*candidate).to_owned())
-            .collect())
+        Ok(Some(
+            table
+                .get(name)
+                .into_iter()
+                .flatten()
+                .filter(|candidate| candidate.starts_with(prefix))
+                .map(|candidate| (*candidate).to_owned())
+                .collect(),
+        ))
     }
 
     fn content_presence(
@@ -148,12 +150,15 @@ const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 fn every_visibility_and_resolution_becomes_its_fact() {
     let plan = plan_over(&[
         "https://github.com/acme/bare",
-        "https://github.com/acme/bound/blob/feature-x/a.md",
+        "https://github.com/acme/bound/blob/feature/x/a.md",
         "https://github.com/acme/denied/blob/main/a.md",
+        "https://github.com/acme/deleted/blob/old-branch/a.md",
         "https://github.com/acme/gone/blob/main/missing.md",
+        "https://github.com/acme/head/blob/HEAD/README.md",
         "https://github.com/acme/large/blob/main/big.bin",
         "https://github.com/acme/missing/blob/main/a.md",
         &format!("https://github.com/acme/pinned/blob/{OID}/a.md"),
+        "https://github.com/acme/short/blob/09059d9/a.md",
         "https://github.com/acme/tagged/blob/v1.0/a.md",
         "https://github.com/acme/tickets/issues/5",
         "https://github.com/acme/widgets/blob/feature/x/docs/a.md",
@@ -164,16 +169,19 @@ fn every_visibility_and_resolution_becomes_its_fact() {
         visibility: BTreeMap::from([
             ("bare", Visibility::Readable),
             ("bound", Visibility::Readable),
+            ("deleted", Visibility::Readable),
             ("denied", Visibility::Denied),
             ("gone", Visibility::Readable),
+            ("head", Visibility::Readable),
             ("large", Visibility::Readable),
             ("pinned", Visibility::Readable),
+            ("short", Visibility::Readable),
             ("tagged", Visibility::Readable),
             ("tickets", Visibility::Readable),
             ("widgets", Visibility::Readable),
         ]),
         heads: BTreeMap::from([
-            ("bound", vec!["feature"]),
+            ("bound", vec!["feature-x"]),
             ("gone", vec!["main"]),
             ("large", vec!["main"]),
             ("widgets", vec!["feature/x"]),
@@ -185,8 +193,14 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             (("tagged", "v1.0", "a.md"), Presence::Present),
             (("pinned", OID, "a.md"), Presence::Present),
             (("large", "main", "big.bin"), Presence::Unknown),
+            (("head", "HEAD", "README.md"), Presence::Present),
+            (("short", "09059d9", "a.md"), Presence::Present),
         ]),
-        commits: BTreeMap::from([(("pinned", OID), Presence::Present)]),
+        commits: BTreeMap::from([
+            (("pinned", OID), Presence::Present),
+            (("head", "HEAD"), Presence::Present),
+            (("short", "09059d9"), Presence::Present),
+        ]),
         ..ScriptedRest::default()
     };
     let evidence =
@@ -195,13 +209,17 @@ fn every_visibility_and_resolution_becomes_its_fact() {
         facts(&evidence),
         vec![
             "https://github.com/acme/bare readable".to_owned(),
-            "https://github.com/acme/bound/blob/feature-x/a.md readable revision-missing"
+            "https://github.com/acme/bound/blob/feature/x/a.md readable revision-missing"
+                .to_owned(),
+            "https://github.com/acme/deleted/blob/old-branch/a.md readable revision-missing"
                 .to_owned(),
             "https://github.com/acme/denied/blob/main/a.md denied".to_owned(),
             "https://github.com/acme/gone/blob/main/missing.md readable path-missing".to_owned(),
+            "https://github.com/acme/head/blob/HEAD/README.md readable resolved".to_owned(),
             "https://github.com/acme/large/blob/main/big.bin readable".to_owned(),
             "https://github.com/acme/missing/blob/main/a.md missing".to_owned(),
             format!("https://github.com/acme/pinned/blob/{OID}/a.md readable resolved"),
+            "https://github.com/acme/short/blob/09059d9/a.md readable resolved".to_owned(),
             "https://github.com/acme/tagged/blob/v1.0/a.md readable resolved".to_owned(),
             "https://github.com/acme/tickets/issues/5 readable".to_owned(),
             "https://github.com/acme/widgets/blob/feature/x/docs/a.md readable resolved".to_owned(),
