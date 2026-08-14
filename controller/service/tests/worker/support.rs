@@ -30,7 +30,10 @@ const ROUTE_ID: &str = "github-main";
 pub(crate) const SOURCE_ID: &str = "source-1";
 const SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
 const STEADY_LEASE: Duration = Duration::from_secs(30);
-const RENEWAL_LEASE: Duration = Duration::from_secs(2);
+// Renewal fires at the worker's five-second poll cap, not at half-lease, so
+// a wide lease keeps the observation exact while only a thirty-second
+// scheduler stall can lose it; a tight lease made loaded CI runners flake.
+const RENEWAL_LEASE: Duration = Duration::from_secs(30);
 
 pub(crate) enum Refresh {
     Active,
