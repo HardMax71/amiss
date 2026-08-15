@@ -121,7 +121,7 @@ fn undeclared_identity_is_named_beside_the_external_count() {
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
     assert!(
-        text.contains("references: external counts any same-repository URL"),
+        text.contains("references: without a declared forge identity a same-repository URL"),
         "an undeclared identity is named beside the count: {text}"
     );
     let declared: Vec<&str> = bare
@@ -144,7 +144,7 @@ fn undeclared_identity_is_named_beside_the_external_count() {
         "the foreign URL stays external: {text}"
     );
     assert!(
-        !text.contains("since no forge identity was declared"),
+        !text.contains("without a declared forge identity"),
         "a declared identity silences the line: {text}"
     );
 }
