@@ -729,6 +729,22 @@ fn a_root_level_orphan_definition_carries_a_two_element_path() {
     assert_eq!(paths, vec![&[0, 0][..], &[1, 0][..]], "{paths:?}");
 }
 
+/// An unquoted attribute value ends only at whitespace or `>`, the HTML5 rule,
+/// so a slash inside it is a path separator, not a terminator that would
+/// truncate the destination to a directory and mismatch its type.
+#[test]
+fn an_unquoted_attribute_keeps_its_slash() {
+    let got = extraction(Adapter::Markdown, "<div><img src=images/logo.png></div>\n");
+    assert_eq!(
+        triples(&got),
+        vec![(
+            SourceConstruct::HtmlImage,
+            "images/logo.png".to_owned(),
+            "images/logo.png".to_owned()
+        )]
+    );
+}
+
 /// The two destination spellings hold for raw HTML the way they do for
 /// markdown: the raw value keeps the author's references and the semantic
 /// value decodes them, while a bare ampersand in a query stays itself. A `>`
