@@ -343,12 +343,17 @@ impl Sweep<'_> {
         let span = span_of(node)?;
         if let Some((raw, url)) = self.orphans.get(&span) {
             let (raw, url) = (raw.clone(), url.clone());
+            // A definition is a block node holding one destination, so it takes
+            // the same within-node ordinal as a mined tag; a root-level one then
+            // reaches the two-element path the address shape requires.
+            let mut definition_path = path.to_vec();
+            definition_path.push(0);
             self.push(
                 SourceConstruct::LinkReferenceDefinition,
                 raw,
                 url,
                 span,
-                path,
+                &definition_path,
                 owners,
             );
         }
