@@ -191,6 +191,7 @@ pub fn target_definition(line: &str) -> Option<String> {
 
 fn bare_target(text: &str) -> Option<String> {
     let rest = text.strip_prefix(".. _")?;
+    let rest = rest.strip_suffix('\r').unwrap_or(rest);
     let label = rest.strip_suffix(':')?.trim();
     let label = label
         .strip_prefix('`')
