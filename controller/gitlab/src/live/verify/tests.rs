@@ -268,6 +268,61 @@ fn every_visibility_and_resolution_becomes_its_fact() {
     );
 }
 
+/// The tail is sliced verbatim from the URL, so its segments still wear
+/// the URL's percent-escapes while the forge stores the decoded names.
+/// Each segment decodes exactly once after splitting on the slashes the
+/// URL wrote: %20 finds the file whose name holds the space, %2520 the
+/// name holding a literal %20, and %2F names a slashed ref inside one
+/// segment. The file route then takes the whole path as one parameter, so
+/// a decoded slash cannot be told apart from a written one, which is one
+/// more reason a spelling whose escaped slash rewrites segmentation is
+/// only ever confirmed, never refuted: veiled would otherwise be a false
+/// revision-missing and coupled a false path-missing against a live page.
+#[test]
+fn escaped_spellings_resolve_and_never_refute() {
+    let plan = plan_over(&[
+        "https://gitlab.com/acme/coupled/-/blob/main/x%2Fy.md",
+        "https://gitlab.com/acme/doubled/-/blob/main/My%2520File.md",
+        "https://gitlab.com/acme/slashed/-/blob/release%2Fx/a.md",
+        "https://gitlab.com/acme/spaced/-/blob/main/My%20File.md",
+        "https://gitlab.com/acme/veiled/-/blob/release%2Fx/a.md",
+    ]);
+    let rest = ScriptedRest {
+        visibility: BTreeMap::from([
+            ("acme/coupled", Visibility::Readable),
+            ("acme/doubled", Visibility::Readable),
+            ("acme/slashed", Visibility::Readable),
+            ("acme/spaced", Visibility::Readable),
+            ("acme/veiled", Visibility::Readable),
+        ]),
+        heads: BTreeMap::from([
+            ("acme/coupled", vec!["main"]),
+            ("acme/doubled", vec!["main"]),
+            ("acme/slashed", vec!["release/x"]),
+            ("acme/spaced", vec!["main"]),
+        ]),
+        files: BTreeMap::from([
+            (("acme/doubled", "main", "My%20File.md"), Presence::Present),
+            (("acme/slashed", "release/x", "a.md"), Presence::Present),
+            (("acme/spaced", "main", "My File.md"), Presence::Present),
+        ]),
+        ..ScriptedRest::default()
+    };
+    let evidence =
+        verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("evidence is produced");
+    assert_eq!(
+        facts(&evidence),
+        vec![
+            "https://gitlab.com/acme/coupled/-/blob/main/x%2Fy.md readable".to_owned(),
+            "https://gitlab.com/acme/doubled/-/blob/main/My%2520File.md readable resolved"
+                .to_owned(),
+            "https://gitlab.com/acme/slashed/-/blob/release%2Fx/a.md readable resolved".to_owned(),
+            "https://gitlab.com/acme/spaced/-/blob/main/My%20File.md readable resolved".to_owned(),
+            "https://gitlab.com/acme/veiled/-/blob/release%2Fx/a.md readable".to_owned(),
+        ],
+    );
+}
+
 /// A standing unavailability ends the walk with the rows already learned:
 /// partial evidence beats none, and the skipped rest stays unproven.
 #[test]

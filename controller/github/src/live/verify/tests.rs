@@ -108,13 +108,13 @@ impl GitHubVerification for ScriptedRest {
         _owner: &str,
         name: &str,
         reference: &str,
-        path: &str,
+        path: &[String],
         _deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError> {
         self.spend()?;
         Ok(*self
             .contents
-            .get(&(name, reference, path))
+            .get(&(name, reference, path.join("/").as_str()))
             .unwrap_or(&Presence::Absent))
     }
 
@@ -261,6 +261,61 @@ fn every_visibility_and_resolution_becomes_its_fact() {
         evidence.text("plan_payload_digest"),
         plan.text("payload_digest"),
         "the evidence binds the exact plan"
+    );
+}
+
+/// The tail is sliced verbatim from the URL, so its segments still wear
+/// the URL's percent-escapes while the forge stores the decoded names.
+/// Each segment decodes exactly once after splitting on the slashes the
+/// URL wrote: %20 finds the file whose name holds the space, %2520 the
+/// name holding a literal %20, and %2F names a slashed ref inside one
+/// segment, the way GitHub reads blob/release%2Fx. Decoding must not move
+/// a negative, though. An escaped slash rewrites segmentation, and
+/// GitHub's own greedy reading may place the revision boundary somewhere
+/// this walk cannot see, so such a spelling is only ever confirmed, never
+/// refuted: veiled would otherwise be a false revision-missing and
+/// coupled a false path-missing against a live page.
+#[test]
+fn escaped_spellings_resolve_and_never_refute() {
+    let plan = plan_over(&[
+        "https://github.com/acme/coupled/blob/main/x%2Fy.md",
+        "https://github.com/acme/doubled/blob/main/My%2520File.md",
+        "https://github.com/acme/slashed/blob/release%2Fx/a.md",
+        "https://github.com/acme/spaced/blob/main/My%20File.md",
+        "https://github.com/acme/veiled/blob/release%2Fx/a.md",
+    ]);
+    let rest = ScriptedRest {
+        visibility: BTreeMap::from([
+            ("coupled", Visibility::Readable),
+            ("doubled", Visibility::Readable),
+            ("slashed", Visibility::Readable),
+            ("spaced", Visibility::Readable),
+            ("veiled", Visibility::Readable),
+        ]),
+        heads: BTreeMap::from([
+            ("coupled", vec!["main"]),
+            ("doubled", vec!["main"]),
+            ("slashed", vec!["release/x"]),
+            ("spaced", vec!["main"]),
+        ]),
+        contents: BTreeMap::from([
+            (("doubled", "main", "My%20File.md"), Presence::Present),
+            (("slashed", "release/x", "a.md"), Presence::Present),
+            (("spaced", "main", "My File.md"), Presence::Present),
+        ]),
+        ..ScriptedRest::default()
+    };
+    let evidence =
+        verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("evidence is produced");
+    assert_eq!(
+        facts(&evidence),
+        vec![
+            "https://github.com/acme/coupled/blob/main/x%2Fy.md readable".to_owned(),
+            "https://github.com/acme/doubled/blob/main/My%2520File.md readable resolved".to_owned(),
+            "https://github.com/acme/slashed/blob/release%2Fx/a.md readable resolved".to_owned(),
+            "https://github.com/acme/spaced/blob/main/My%20File.md readable resolved".to_owned(),
+            "https://github.com/acme/veiled/blob/release%2Fx/a.md readable".to_owned(),
+        ],
     );
 }
 

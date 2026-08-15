@@ -1,6 +1,6 @@
 mod tests;
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ProviderError, ref_span, spelled_segments};
 use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
 use amiss_wire::json::Value;
 
@@ -74,7 +74,10 @@ pub(super) fn verify_external<R: GiteaVerification>(
 /// Resolves the opaque tail against the readable repository. The gitea
 /// grammar spells its own selector, `branch`, `tag`, or `commit`, so the
 /// named family is authoritative and no cross-family ambiguity exists.
-/// `None` means no resolution was established, never that one failed.
+/// The tail still wears the URL's percent-escapes, so each segment is
+/// decoded once after splitting, and a spelling whose escaped slash
+/// rewrites segmentation is only ever confirmed, never refuted. `None`
+/// means no resolution was established, never that one failed.
 fn resolve_tail<R: GiteaVerification>(
     rest: &R,
     repository: &Value,
@@ -88,20 +91,25 @@ fn resolve_tail<R: GiteaVerification>(
     let Some(tail) = repository.text("tail") else {
         return Ok(None);
     };
-    let tail = tail.strip_suffix('/').unwrap_or(tail);
-    let (selector, remainder) = tail.split_once('/').unwrap_or((tail, ""));
-    let family = match selector {
+    let Some(segments) = spelled_segments(tail) else {
+        return Ok(None);
+    };
+    let Some((selector, remainder)) = segments.split_first() else {
+        return Ok(None);
+    };
+    let rewritten = segments.iter().any(|segment| segment.contains('/'));
+    let family = match selector.as_str() {
         "branch" => RefFamily::Heads,
         "tag" => RefFamily::Tags,
         "commit" => {
-            return commit_resolution(rest, owner, name, remainder, deadline);
+            return commit_resolution(rest, owner, name, remainder, rewritten, deadline);
         }
         // Untyped legacy selectors are outside the grammar: no fact.
         _ => return Ok(None),
     };
     let Some(first) = remainder
-        .split('/')
-        .next()
+        .first()
+        .map(String::as_str)
         .filter(|segment| !segment.is_empty())
     else {
         return Ok(None);
@@ -109,36 +117,41 @@ fn resolve_tail<R: GiteaVerification>(
     let Some(names) = rest.matching_refs(owner, name, family, first, deadline)? else {
         return Ok(None);
     };
-    let resolved = names.into_iter().find(|candidate| {
-        remainder == candidate
-            || remainder
-                .strip_prefix(candidate.as_str())
-                .is_some_and(|rest| rest.starts_with('/'))
-    });
-    // The selector named the family, so an absent ref there is the fact.
-    let Some(reference) = resolved else {
-        return Ok(Some("revision-missing"));
+    let resolved = names
+        .into_iter()
+        .find_map(|candidate| ref_span(remainder, &candidate).map(|span| (candidate, span)));
+    // The selector named the family, so an absent ref there is the fact,
+    // unless the spelling left the revision boundary to the forge.
+    let Some((reference, span)) = resolved else {
+        return Ok(if rewritten {
+            None
+        } else {
+            Some("revision-missing")
+        });
     };
-    let path = remainder
-        .get(reference.len()..)
-        .unwrap_or_default()
-        .trim_start_matches('/');
-    finish(rest, owner, name, &reference, path, deadline)
+    let path = remainder.get(span..).unwrap_or_default();
+    finish(rest, owner, name, &reference, path, rewritten, deadline)
 }
 
 fn commit_resolution<R: GiteaVerification>(
     rest: &R,
     owner: &str,
     name: &str,
-    remainder: &str,
+    remainder: &[String],
+    rewritten: bool,
     deadline: super::rest::OperationDeadline,
 ) -> Result<Option<&'static str>, ProviderError> {
-    let (revision, path) = remainder.split_once('/').unwrap_or((remainder, ""));
-    if revision.is_empty() {
+    let Some(revision) = remainder
+        .first()
+        .map(String::as_str)
+        .filter(|segment| !segment.is_empty())
+    else {
         return Ok(None);
-    }
+    };
+    let path = remainder.get(1..).unwrap_or_default();
     match rest.commit_presence(owner, name, revision, deadline)? {
-        Presence::Present => finish(rest, owner, name, revision, path, deadline),
+        Presence::Present => finish(rest, owner, name, revision, path, rewritten, deadline),
+        Presence::Absent if rewritten => Ok(None),
         Presence::Absent => Ok(Some("revision-missing")),
         Presence::Unknown => Ok(None),
     }
@@ -149,7 +162,8 @@ fn finish<R: GiteaVerification>(
     owner: &str,
     name: &str,
     reference: &str,
-    path: &str,
+    path: &[String],
+    rewritten: bool,
     deadline: super::rest::OperationDeadline,
 ) -> Result<Option<&'static str>, ProviderError> {
     if path.is_empty() {
@@ -158,6 +172,7 @@ fn finish<R: GiteaVerification>(
     Ok(
         match rest.content_presence(owner, name, reference, path, deadline)? {
             Presence::Present => Some("resolved"),
+            Presence::Absent if rewritten => None,
             Presence::Absent => Some("path-missing"),
             Presence::Unknown => None,
         },

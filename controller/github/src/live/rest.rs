@@ -132,12 +132,14 @@ pub(super) trait GitHubVerification: Send + Sync {
         deadline: OperationDeadline,
     ) -> Result<Option<Vec<String>>, ProviderError>;
 
+    /// The path as the tail's decoded segments, each sent to the API as
+    /// exactly one segment, so an escaped slash keeps the URL's grouping.
     fn content_presence(
         &self,
         owner: &str,
         name: &str,
         reference: &str,
-        path: &str,
+        path: &[String],
         deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError>;
 
@@ -451,10 +453,10 @@ impl GitHubVerification for HttpRest {
         owner: &str,
         name: &str,
         reference: &str,
-        path: &str,
+        path: &[String],
         deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError> {
-        let encoded: Vec<String> = path.split('/').map(path_segment).collect();
+        let encoded: Vec<String> = path.iter().map(|segment| path_segment(segment)).collect();
         let route = format!(
             "/repos/{}/{}/contents/{}",
             path_segment(owner),
