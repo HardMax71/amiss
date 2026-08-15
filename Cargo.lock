@@ -110,6 +110,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "hmac",
+ "percent-encoding",
  "processkit",
  "same-file",
  "secrecy",

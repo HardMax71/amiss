@@ -1,3 +1,5 @@
+mod tests;
+
 use std::time::{Duration, Instant};
 
 use amiss_controller::ProviderError;
@@ -19,6 +21,9 @@ use self::transport::{Fact, Transport};
 
 const PAGE_SIZE: usize = 50;
 const MAX_REVIEW_PAGES: u32 = 20;
+// The paginated siblings trust at most ten hundred-row pages; one
+// unpaginated answer claiming more than that is not trusted either.
+const REF_CEILING: usize = 1000;
 
 #[derive(Clone, Copy)]
 pub(super) struct OperationDeadline(Instant);
@@ -84,7 +89,8 @@ pub(super) trait GiteaVerification: Send + Sync {
     ) -> Result<Visibility, ProviderError>;
 
     /// Ref names in the family sharing the prefix, family qualifier
-    /// stripped. A 404 here is Gitea's empty match set, not a lost fact.
+    /// stripped; `None` when the repository stopped answering for them or
+    /// the listing could not be proven complete, so no ref fact exists.
     fn matching_refs(
         &self,
         owner: &str,
@@ -94,12 +100,14 @@ pub(super) trait GiteaVerification: Send + Sync {
         deadline: OperationDeadline,
     ) -> Result<Option<Vec<String>>, ProviderError>;
 
+    /// The path as the tail's decoded segments, each sent to the API as
+    /// exactly one segment, so an escaped slash keeps the URL's grouping.
     fn content_presence(
         &self,
         owner: &str,
         name: &str,
         reference: &str,
-        path: &str,
+        path: &[String],
         deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError>;
 
@@ -324,23 +332,11 @@ impl GiteaVerification for HttpRest {
             family.as_str(),
             path_segment(prefix),
         );
-        let qualifier = format!("refs/{}/", family.as_str());
-        match self
-            .transport
-            .get_fact::<Vec<RefRecord>>(&route, deadline)?
-        {
-            Fact::Found(records) => Ok(Some(
-                records
-                    .into_iter()
-                    .filter_map(|record| {
-                        record.reference.strip_prefix(&qualifier).map(str::to_owned)
-                    })
-                    .collect(),
-            )),
-            // Gitea answers an empty match set as 404, unlike GitHub.
-            Fact::Missing => Ok(Some(Vec::new())),
-            Fact::Denied => Ok(None),
-        }
+        Ok(ref_listing(
+            self.transport
+                .get_fact::<Vec<RefRecord>>(&route, deadline)?,
+            family,
+        ))
     }
 
     fn content_presence(
@@ -348,10 +344,10 @@ impl GiteaVerification for HttpRest {
         owner: &str,
         name: &str,
         reference: &str,
-        path: &str,
+        path: &[String],
         deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError> {
-        let encoded: Vec<String> = path.split('/').map(path_segment).collect();
+        let encoded: Vec<String> = path.iter().map(|segment| path_segment(segment)).collect();
         let route = format!(
             "/repos/{}/{}/contents/{}?ref={}",
             path_segment(owner),
@@ -375,7 +371,38 @@ impl GiteaVerification for HttpRest {
             path_segment(name),
             path_segment(revision),
         );
-        self.presence(&route, deadline)
+        Ok(listed_commit(self.transport.get_fact(&route, deadline)?))
+    }
+}
+
+/// The refs route is one unpaginated answer, so completeness is a judgment:
+/// a 404 cannot say whether no ref matches or the repository stopped
+/// answering mid-walk, and a body past the ceiling is not proven whole.
+/// Either way a truncated candidate set could become a false refutation
+/// downstream: no fact. Only a 2xx listing within the ceiling is one, and
+/// its empty array is the empty match set.
+fn ref_listing(fact: Fact<Vec<RefRecord>>, family: RefFamily) -> Option<Vec<String>> {
+    let qualifier = format!("refs/{}/", family.as_str());
+    match fact {
+        Fact::Found(records) if records.len() <= REF_CEILING => Some(
+            records
+                .into_iter()
+                .filter_map(|record| record.reference.strip_prefix(&qualifier).map(str::to_owned))
+                .collect(),
+        ),
+        Fact::Found(_) | Fact::Missing | Fact::Denied => None,
+    }
+}
+
+/// The commit list route answers 200 with an empty array for an empty
+/// repository, whatever the revision asked: only a listed commit is
+/// presence, and the empty page is no fact.
+fn listed_commit(fact: Fact<Vec<serde::de::IgnoredAny>>) -> Presence {
+    match fact {
+        Fact::Found(commits) if commits.is_empty() => Presence::Unknown,
+        Fact::Found(_) => Presence::Present,
+        Fact::Missing => Presence::Absent,
+        Fact::Denied => Presence::Unknown,
     }
 }
 

@@ -1,6 +1,6 @@
 mod tests;
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ProviderError, ref_span, spelled_segments};
 use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
 use amiss_wire::json::Value;
 use serde::Deserialize;
@@ -145,8 +145,11 @@ pub(super) fn verify_external<R: GitLabVerification>(
 
 /// Resolves the opaque tail against the readable project: a whole-segment
 /// ref match under heads then tags, a commit id as the fallback the URL
-/// grammar allows, then the path under whatever resolved. `None` means no
-/// resolution was established, never that one failed.
+/// grammar allows, then the path under whatever resolved. The tail still
+/// wears the URL's percent-escapes, so each segment is decoded once after
+/// splitting, and a spelling whose escaped slash rewrites segmentation is
+/// only ever confirmed, never refuted. `None` means no resolution was
+/// established, never that one failed.
 fn resolve_tail<R: GitLabVerification>(
     rest: &R,
     repository: &Value,
@@ -162,10 +165,17 @@ fn resolve_tail<R: GitLabVerification>(
     let Some(tail) = repository.text("tail") else {
         return Ok(None);
     };
-    let tail = tail.strip_suffix('/').unwrap_or(tail);
-    let Some(first) = tail.split('/').next().filter(|segment| !segment.is_empty()) else {
+    let Some(segments) = spelled_segments(tail) else {
         return Ok(None);
     };
+    let Some(first) = segments
+        .first()
+        .map(String::as_str)
+        .filter(|segment| !segment.is_empty())
+    else {
+        return Ok(None);
+    };
+    let rewritten = segments.iter().any(|segment| segment.contains('/'));
     let mut matches = Vec::new();
     for family in [RefFamily::Heads, RefFamily::Tags] {
         let (names, spent) = rest.matching_refs(project, family, first, *budget)?;
@@ -175,12 +185,11 @@ fn resolve_tail<R: GitLabVerification>(
         };
         // Within one family a second whole-segment match cannot exist, since
         // git refuses a ref nesting under another; across families it can.
-        matches.extend(names.into_iter().find(|candidate| {
-            tail == candidate
-                || tail
-                    .strip_prefix(candidate.as_str())
-                    .is_some_and(|rest| rest.starts_with('/'))
-        }));
+        matches.extend(
+            names.into_iter().find_map(|candidate| {
+                ref_span(&segments, &candidate).map(|span| (candidate, span))
+            }),
+        );
     }
     // A branch and a differing tag both matching leave the revision split
     // ambiguous, and the forge's tie-break is its own; that is no fact.
@@ -193,34 +202,36 @@ fn resolve_tail<R: GitLabVerification>(
     // The commit route also resolves what no ref names: symbolic HEAD and
     // abbreviated ids. Only its positive absence may claim revision-missing,
     // since a false refutation is the worst answer this producer can give.
-    let reference = if let Some(reference) = resolved {
-        reference
+    let (reference, span) = if let Some(resolved) = resolved {
+        resolved
     } else {
         let (presence, spent) = rest.commit_presence(project, first, *budget)?;
         *budget = spent;
         match presence {
-            Presence::Present => first.to_owned(),
+            Presence::Present => (first.to_owned(), 1),
+            Presence::Absent if rewritten => return Ok(None),
             Presence::Absent => return Ok(Some("revision-missing")),
             Presence::Unknown => return Ok(None),
         }
     };
-    let path = tail
-        .get(reference.len()..)
-        .unwrap_or_default()
-        .trim_start_matches('/');
+    let path = segments.get(span..).unwrap_or_default();
     if path.is_empty() {
         return Ok(Some("resolved"));
     }
-    // A tree tail names a directory, which the files route would deny
-    // regardless of presence; each form asks the route that can see it.
+    // The API takes the whole path as one parameter, so the decoded
+    // segments travel joined; a tree tail names a directory, which the
+    // files route would deny regardless of presence, and each form asks
+    // the route that can see it.
+    let path = path.join("/");
     let (presence, spent) = if form == "tree" {
-        rest.tree_presence(project, &reference, path, *budget)?
+        rest.tree_presence(project, &reference, &path, *budget)?
     } else {
-        rest.file_presence(project, &reference, path, *budget)?
+        rest.file_presence(project, &reference, &path, *budget)?
     };
     *budget = spent;
     Ok(match presence {
         Presence::Present => Some("resolved"),
+        Presence::Absent if rewritten => None,
         Presence::Absent => Some("path-missing"),
         Presence::Unknown => None,
     })

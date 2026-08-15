@@ -15,6 +15,7 @@ mod ingress;
 mod orchestration;
 mod plans;
 mod provider;
+mod spelling;
 mod webhook;
 
 pub use acquiring_runner::{AcquiringRunner, Acquisition, AcquisitionTarget};
@@ -51,6 +52,7 @@ pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan,
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ProviderAdapter, ProviderError, RegistryError,
 };
+pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{
     GitHubWebhook, GitLabWebhook, GiteaWebhook, SignedRequestProof, WebhookError, WebhookKey,
     WebhookKeyring, WebhookKeyringError, WebhookProof,
