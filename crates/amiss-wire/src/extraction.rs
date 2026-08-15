@@ -83,7 +83,8 @@ impl BlockKind {
 /// the node's URL. Spans are zero-based half-open byte offsets into the raw
 /// document, while `node_path` is the child-index path from the
 /// post-frontmatter root to the syntax node itself; a destination mined out
-/// of raw HTML appends its ordinal within the node.
+/// of a block node, raw HTML or an orphaned definition, appends its ordinal
+/// within the node.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Occurrence {
     pub construct: SourceConstruct,

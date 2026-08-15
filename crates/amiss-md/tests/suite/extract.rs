@@ -715,6 +715,20 @@ fn identical_html_destinations_keep_distinct_paths() {
     assert_eq!(got.opaque.html.len(), 1, "one region carries both tags");
 }
 
+/// A root-level orphaned definition is a block child of the root, so without
+/// its within-node ordinal its address would be one element and fail the
+/// report schema's two-element floor. The ordinal lifts it to a valid path.
+#[test]
+fn a_root_level_orphan_definition_carries_a_two_element_path() {
+    let got = extraction(Adapter::Markdown, "[foo]: ./x.md\n[bar]: ./y.md\n");
+    let paths: Vec<&[usize]> = got
+        .occurrences
+        .iter()
+        .map(|entry| entry.node_path.as_slice())
+        .collect();
+    assert_eq!(paths, vec![&[0, 0][..], &[1, 0][..]], "{paths:?}");
+}
+
 /// The two destination spellings hold for raw HTML the way they do for
 /// markdown: the raw value keeps the author's references and the semantic
 /// value decodes them, while a bare ampersand in a query stays itself. A `>`
