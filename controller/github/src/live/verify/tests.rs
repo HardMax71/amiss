@@ -44,7 +44,7 @@ struct ScriptedRest {
     visibility: BTreeMap<&'static str, Visibility>,
     heads: BTreeMap<&'static str, Vec<&'static str>>,
     tags: BTreeMap<&'static str, Vec<&'static str>>,
-    contents: BTreeMap<(&'static str, &'static str, &'static str), Presence>,
+    contents: BTreeMap<(&'static str, &'static str, Vec<&'static str>), Presence>,
     commits: BTreeMap<(&'static str, &'static str), Presence>,
     refs_unanswered: BTreeSet<&'static str>,
     calls: AtomicUsize,
@@ -112,9 +112,10 @@ impl GitHubVerification for ScriptedRest {
         _deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError> {
         self.spend()?;
+        let segments: Vec<&str> = path.iter().map(String::as_str).collect();
         Ok(*self
             .contents
-            .get(&(name, reference, path.join("/").as_str()))
+            .get(&(name, reference, segments))
             .unwrap_or(&Presence::Absent))
     }
 
@@ -184,14 +185,17 @@ fn matrix_rest() -> ScriptedRest {
             ("tagged", vec!["v1.0"]),
         ]),
         contents: BTreeMap::from([
-            (("widgets", "feature/x", "docs/a.md"), Presence::Present),
-            (("widgets", "feature/x", "docs"), Presence::Present),
-            (("tagged", "v1.0", "a.md"), Presence::Present),
-            (("agreed", "v1.0", "a.md"), Presence::Present),
-            (("pinned", OID, "a.md"), Presence::Present),
-            (("large", "main", "big.bin"), Presence::Unknown),
-            (("head", "HEAD", "README.md"), Presence::Present),
-            (("short", "09059d9", "a.md"), Presence::Present),
+            (
+                ("widgets", "feature/x", vec!["docs", "a.md"]),
+                Presence::Present,
+            ),
+            (("widgets", "feature/x", vec!["docs"]), Presence::Present),
+            (("tagged", "v1.0", vec!["a.md"]), Presence::Present),
+            (("agreed", "v1.0", vec!["a.md"]), Presence::Present),
+            (("pinned", OID, vec!["a.md"]), Presence::Present),
+            (("large", "main", vec!["big.bin"]), Presence::Unknown),
+            (("head", "HEAD", vec!["README.md"]), Presence::Present),
+            (("short", "09059d9", vec!["a.md"]), Presence::Present),
         ]),
         commits: BTreeMap::from([
             (("pinned", OID), Presence::Present),
@@ -280,6 +284,7 @@ fn escaped_spellings_resolve_and_never_refute() {
     let plan = plan_over(&[
         "https://github.com/acme/coupled/blob/main/x%2Fy.md",
         "https://github.com/acme/doubled/blob/main/My%2520File.md",
+        "https://github.com/acme/nested/blob/main/docs/api.md",
         "https://github.com/acme/slashed/blob/release%2Fx/a.md",
         "https://github.com/acme/spaced/blob/main/My%20File.md",
         "https://github.com/acme/veiled/blob/release%2Fx/a.md",
@@ -288,6 +293,7 @@ fn escaped_spellings_resolve_and_never_refute() {
         visibility: BTreeMap::from([
             ("coupled", Visibility::Readable),
             ("doubled", Visibility::Readable),
+            ("nested", Visibility::Readable),
             ("slashed", Visibility::Readable),
             ("spaced", Visibility::Readable),
             ("veiled", Visibility::Readable),
@@ -295,13 +301,20 @@ fn escaped_spellings_resolve_and_never_refute() {
         heads: BTreeMap::from([
             ("coupled", vec!["main"]),
             ("doubled", vec!["main"]),
+            ("nested", vec!["main"]),
             ("slashed", vec!["release/x"]),
             ("spaced", vec!["main"]),
         ]),
         contents: BTreeMap::from([
-            (("doubled", "main", "My%20File.md"), Presence::Present),
-            (("slashed", "release/x", "a.md"), Presence::Present),
-            (("spaced", "main", "My File.md"), Presence::Present),
+            (("doubled", "main", vec!["My%20File.md"]), Presence::Present),
+            // A real path slash reaches contents as two segments, so a builder
+            // that joined and re-split would look up the wrong key and miss.
+            (
+                ("nested", "main", vec!["docs", "api.md"]),
+                Presence::Present,
+            ),
+            (("slashed", "release/x", vec!["a.md"]), Presence::Present),
+            (("spaced", "main", vec!["My File.md"]), Presence::Present),
         ]),
         ..ScriptedRest::default()
     };
@@ -312,6 +325,7 @@ fn escaped_spellings_resolve_and_never_refute() {
         vec![
             "https://github.com/acme/coupled/blob/main/x%2Fy.md readable".to_owned(),
             "https://github.com/acme/doubled/blob/main/My%2520File.md readable resolved".to_owned(),
+            "https://github.com/acme/nested/blob/main/docs/api.md readable resolved".to_owned(),
             "https://github.com/acme/slashed/blob/release%2Fx/a.md readable resolved".to_owned(),
             "https://github.com/acme/spaced/blob/main/My%20File.md readable resolved".to_owned(),
             "https://github.com/acme/veiled/blob/release%2Fx/a.md readable".to_owned(),
