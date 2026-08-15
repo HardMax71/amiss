@@ -121,8 +121,8 @@ pub(super) trait GitHubVerification: Send + Sync {
     ) -> Result<Visibility, ProviderError>;
 
     /// Ref names in the family sharing the prefix, family qualifier
-    /// stripped; `None` when the repository stopped answering for them, so
-    /// no ref fact exists.
+    /// stripped; `None` when the repository stopped answering for them or
+    /// the listing could not be proven complete, so no ref fact exists.
     fn matching_refs(
         &self,
         owner: &str,
@@ -412,20 +412,38 @@ impl GitHubVerification for HttpRest {
             path_segment(prefix),
         );
         let qualifier = format!("refs/{}/", family.as_str());
-        match self
-            .transport
-            .get_fact::<Vec<RefRecord>>(&route, deadline)?
-        {
-            Fact::Found(records) => Ok(Some(
-                records
-                    .into_iter()
-                    .filter_map(|record| {
-                        record.reference.strip_prefix(&qualifier).map(str::to_owned)
-                    })
-                    .collect(),
-            )),
-            Fact::Missing | Fact::Denied => Ok(None),
+        let mut names = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let paged = query_route(
+                &route,
+                &PageQuery {
+                    per_page: PAGE_SIZE_U8,
+                    page,
+                },
+            )?;
+            let records = match self
+                .transport
+                .get_fact::<Vec<RefRecord>>(&paged, deadline)?
+            {
+                Fact::Found(records) => records,
+                Fact::Missing | Fact::Denied => return Ok(None),
+            };
+            if records.len() > PAGE_SIZE {
+                return Err(ProviderError::InvalidResponse);
+            }
+            let complete = records.len() < PAGE_SIZE;
+            names.extend(
+                records.into_iter().filter_map(|record| {
+                    record.reference.strip_prefix(&qualifier).map(str::to_owned)
+                }),
+            );
+            if complete {
+                return Ok(Some(names));
+            }
         }
+        // Ten full pages leave the listing unproven complete, and a truncated
+        // candidate set could become a false refutation downstream: no fact.
+        Ok(None)
     }
 
     fn content_presence(
