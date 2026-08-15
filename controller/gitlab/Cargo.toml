@@ -20,6 +20,7 @@ url.workspace = true
 
 [dev-dependencies]
 amiss-controller-fixtures.workspace = true
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 
 [lints]
 workspace = true

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use amiss_controller::{ProviderError, ProviderIdentity};
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::HeaderValue;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
@@ -167,13 +167,10 @@ impl Transport {
     }
 
     pub(super) fn budget(&self) -> Result<Budget, ProviderError> {
-        let deadline = Instant::now()
-            .checked_add(self.shared.timeouts.operation)
-            .ok_or(ProviderError::Unavailable)?;
-        Ok(Budget {
-            deadline,
-            response_bytes: self.shared.timeouts.response_bytes,
-        })
+        Budget::after(
+            self.shared.timeouts.operation,
+            self.shared.timeouts.response_bytes,
+        )
     }
 
     pub(super) fn provider_instance(&self) -> &str {
@@ -211,23 +208,62 @@ impl Transport {
         self.request(url, budget, true)
     }
 
+    /// A verification GET whose negative answers are facts: the absence or
+    /// refusal of what the route names, distinct from a failed call.
+    pub(super) fn get_fact<T: DeserializeOwned>(
+        &self,
+        url: Url,
+        budget: Budget,
+    ) -> Result<(Fact<T>, Budget), ProviderError> {
+        let response = self.send(self.shared.client.get(url), budget)?;
+        match classified(response.status())? {
+            Classified::Success => {
+                let (bytes, budget) = response_bytes(response, budget)?;
+                let value = serde_json::from_slice(&bytes)
+                    .map_err(|_defect| ProviderError::InvalidResponse)?;
+                Ok((Fact::Found(value), budget))
+            }
+            Classified::Missing => Ok((Fact::Missing, budget)),
+            Classified::Denied => Ok((Fact::Denied, budget)),
+        }
+    }
+
+    /// The same classification over HEAD, for routes whose bodies carry
+    /// whole files: presence is the status, and no byte is read.
+    pub(super) fn head_fact(
+        &self,
+        url: Url,
+        budget: Budget,
+    ) -> Result<(Fact<()>, Budget), ProviderError> {
+        let response = self.send(self.shared.client.head(url), budget)?;
+        Ok((
+            match classified(response.status())? {
+                Classified::Success => Fact::Found(()),
+                Classified::Missing => Fact::Missing,
+                Classified::Denied => Fact::Denied,
+            },
+            budget,
+        ))
+    }
+
+    fn send(&self, request: RequestBuilder, budget: Budget) -> Result<Response, ProviderError> {
+        let mut token = HeaderValue::from_str(self.shared.token.expose_secret())
+            .map_err(|_defect| ProviderError::AuthorizationRevoked)?;
+        token.set_sensitive(true);
+        request
+            .header("PRIVATE-TOKEN", token)
+            .timeout(budget.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))
+    }
+
     fn request<T: DeserializeOwned>(
         &self,
         url: Url,
         budget: Budget,
         missing_allowed: bool,
     ) -> Result<(Option<T>, Budget), ProviderError> {
-        let mut token = HeaderValue::from_str(self.shared.token.expose_secret())
-            .map_err(|_defect| ProviderError::AuthorizationRevoked)?;
-        token.set_sensitive(true);
-        let response = self
-            .shared
-            .client
-            .get(url)
-            .header("PRIVATE-TOKEN", token)
-            .timeout(budget.remaining()?)
-            .send()
-            .map_err(|error| map_error(&error))?;
+        let response = self.send(self.shared.client.get(url), budget)?;
         if missing_allowed && response.status() == StatusCode::NOT_FOUND {
             return Ok((None, budget));
         }
@@ -243,11 +279,48 @@ impl Transport {
 }
 
 impl Budget {
+    pub(super) fn after(operation: Duration, response_bytes: usize) -> Result<Self, ProviderError> {
+        let deadline = Instant::now()
+            .checked_add(operation)
+            .ok_or(ProviderError::Unavailable)?;
+        Ok(Self {
+            deadline,
+            response_bytes,
+        })
+    }
+
     pub(super) fn remaining(self) -> Result<Duration, ProviderError> {
         let remaining = self.deadline.saturating_duration_since(Instant::now());
         (!remaining.is_zero())
             .then_some(remaining)
             .ok_or(ProviderError::Unavailable)
+    }
+}
+
+/// One route's verification answer.
+pub(super) enum Fact<T> {
+    Found(T),
+    Missing,
+    Denied,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Classified {
+    Success,
+    Missing,
+    Denied,
+}
+
+/// The verification statuses that are facts: a 404 is the absence of what
+/// the route names, since GitLab hides what it will not show, a 403 is a
+/// standing refusal, since GitLab rate-limits with 429, and everything else
+/// classifies as a data call would.
+fn classified(status: StatusCode) -> Result<Classified, ProviderError> {
+    match status.as_u16() {
+        200..300 => Ok(Classified::Success),
+        404 => Ok(Classified::Missing),
+        403 => Ok(Classified::Denied),
+        _ => Err(map_status(status)),
     }
 }
 

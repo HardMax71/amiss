@@ -3,6 +3,7 @@ mod tests;
 mod model;
 mod refresh;
 mod transport;
+mod verify;
 
 use std::fmt;
 use std::sync::Arc;
