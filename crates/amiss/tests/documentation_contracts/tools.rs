@@ -236,39 +236,50 @@ fn the_dispatcher_setup_action_is_sha_pinned() {
     );
 }
 
-/// The review lane's copilot version is one fact: the env literal, both
-/// engine blocks, and every installer argument in the lock spell it alike.
+/// Every agent lane's copilot version is one fact: the env literal, both
+/// engine blocks, and every installer argument in the lock spell it alike,
+/// and the three lanes spell the same version.
 #[test]
-fn the_review_lane_spells_one_copilot_version() {
+fn the_agent_lanes_spell_one_copilot_version() {
     let root = repository_root();
-    let lane = fs::read_to_string(root.join(".github/workflows/agent-review.md"))
-        .expect("the review lane is readable");
-    let spellings: Vec<&str> = lane
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            ["version: \"", "COPILOT_CLI_VERSION: \""]
-                .iter()
-                .find_map(|key| trimmed.strip_prefix(key))
-        })
-        .filter_map(|tail| tail.strip_suffix('"'))
-        .collect();
-    let version = spellings.first().copied().expect("the lane pins a version");
+    let mut versions: Vec<String> = Vec::new();
+    for lane in ["agent-review", "agent-mention", "agent-triage"] {
+        let source = fs::read_to_string(root.join(format!(".github/workflows/{lane}.md")))
+            .expect("the lane is readable");
+        let spellings: Vec<&str> = source
+            .lines()
+            .filter_map(|line| {
+                let trimmed = line.trim();
+                ["version: \"", "COPILOT_CLI_VERSION: \""]
+                    .iter()
+                    .find_map(|key| trimmed.strip_prefix(key))
+            })
+            .filter_map(|tail| tail.strip_suffix('"'))
+            .collect();
+        let version = spellings.first().copied().expect("the lane pins a version");
+        assert_eq!(
+            spellings,
+            vec![version; 3],
+            "{lane} spells more than one copilot version"
+        );
+        let lock = fs::read_to_string(root.join(format!(".github/workflows/{lane}.lock.yml")))
+            .expect("the lock is readable");
+        assert_eq!(
+            lock.matches(&format!("install_copilot_cli.sh\" {version}"))
+                .count(),
+            lock.matches("install_copilot_cli.sh").count(),
+            "a {lane} lock installer call carries another copilot version"
+        );
+        assert!(
+            lock.contains(&format!("COPILOT_CLI_VERSION: {version}")),
+            "the {lane} lock's workflow env does not carry the pinned version"
+        );
+        versions.push(version.to_owned());
+    }
+    versions.dedup();
     assert_eq!(
-        spellings,
-        vec![version; 3],
-        "the review lane spells more than one copilot version"
-    );
-    let lock = fs::read_to_string(root.join(".github/workflows/agent-review.lock.yml"))
-        .expect("the review lock is readable");
-    assert_eq!(
-        lock.matches(&format!("install_copilot_cli.sh\" {version}"))
-            .count(),
-        lock.matches("install_copilot_cli.sh").count(),
-        "a lock installer call carries another copilot version"
-    );
-    assert!(
-        lock.contains(&format!("COPILOT_CLI_VERSION: {version}")),
-        "the lock's workflow env does not carry the pinned version"
+        versions.len(),
+        1,
+        "the lanes disagree on the copilot version"
     );
 }
