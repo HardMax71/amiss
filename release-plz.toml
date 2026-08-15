@@ -12,6 +12,8 @@ changelog_include = [
   "amiss-git",
   "amiss-scan",
   "amiss-md",
+  "amiss-adoc",
+  "amiss-rst",
   "amiss-wire",
   "amiss-bootstrap",
   "amiss-fixtures",

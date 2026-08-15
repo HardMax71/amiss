@@ -29,6 +29,6 @@ source while the signed OIDC `job_source` claim and the pinned `job_config` bind
 state the provenance.
 
 What the phase defends: every supported lane's trust story now rests on verdicts the provider
-published and still holds, not on what a fixture author believed. The remaining planned milestone,
-the wire leaving experimental, is a discipline stated in the [Roadmap](../roadmap.md) rather than a
-build.
+published and still holds, not on what a fixture author believed. The milestone that was still
+open when this page closed, the wire leaving experimental, has since completed too:
+[A settled wire](a-settled-wire.md) records the freeze.

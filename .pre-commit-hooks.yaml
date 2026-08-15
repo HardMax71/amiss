@@ -1,7 +1,8 @@
 - id: amiss
   name: amiss documentation check
   description: Checks staged documentation against the repository tree it describes.
-  entry: sh -c 'amiss check --repo . --object-format "$(git rev-parse --show-object-format)" --base "$(git rev-parse HEAD)" --index --profile enforce'
+  entry: sh -c 'command -v amiss >/dev/null || { echo "amiss is not installed; run cargo install amiss" >&2; exit 1; }; amiss check --repo . --object-format "$(git rev-parse --show-object-format)" --base "$(git rev-parse HEAD)" --index --profile enforce'
+  # language rust cannot install a virtual workspace root, so the hook needs a prebuilt amiss
   language: system
   pass_filenames: false
   always_run: true
