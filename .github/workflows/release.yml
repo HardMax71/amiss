@@ -47,7 +47,7 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup target add ${{ matrix.target }}
-      - run: cargo build --release --locked --target ${{ matrix.target }} -p amiss -p amiss-bootstrap
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p amiss -p amiss-bootstrap -p amiss-probe
       - shell: bash
         run: |
           set -eu
@@ -56,6 +56,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-latest" ]; then suffix=".exe"; fi
           cp "target/${{ matrix.target }}/release/amiss$suffix" "staged/amiss-${{ matrix.platform }}$suffix"
           cp "target/${{ matrix.target }}/release/amiss-bootstrap$suffix" "staged/bootstrap-${{ matrix.platform }}$suffix"
+          cp "target/${{ matrix.target }}/release/amiss-probe$suffix" "staged/amiss-probe-${{ matrix.platform }}$suffix"
       - uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: staged/*
@@ -124,8 +125,10 @@ jobs:
           bash scripts/release-licenses.sh action-tree/THIRD_PARTY_LICENSES.txt
           install -m 0644 crates/amiss/action/runtime.yml action-tree/action.yml
           args=""
+          # The action never runs the prober; it ships as a release asset only.
           for binary in engines/amiss-*; do
             name="$(basename "$binary")"
+            case "$name" in amiss-probe-*) continue ;; esac
             install -m 0755 "$binary" "action-tree/dist/$name"
             args="$args --artifact dist/$name"
           done

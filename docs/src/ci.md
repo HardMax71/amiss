@@ -129,16 +129,26 @@ on its own pull requests, in the `external-advisory` job of the same workflow li
 above, with every defect degrading into one summary line rather than a failed check:
 
 ```yaml
+- env:
+    GH_TOKEN: ${{ github.token }}
+  run: |
+    gh release download v<reviewed-version> --repo HardMax71/amiss --pattern amiss-probe-linux-x86_64
+    gh attestation verify amiss-probe-linux-x86_64 --repo HardMax71/amiss \
+      --signer-workflow HardMax71/amiss/.github/workflows/release.yml
+    chmod +x amiss-probe-linux-x86_64
 - run: |
     amiss external-plan --report amiss-report.json --format json > amiss-plan.json
-    ./target/release/amiss-probe --plan amiss-plan.json > amiss-evidence.json
+    ./amiss-probe-linux-x86_64 --plan amiss-plan.json > amiss-evidence.json
     amiss external-assess --plan amiss-plan.json --evidence amiss-evidence.json
 ```
 
 The assessment refutes only what a probe or forge API positively disproved, so its rows
 are telemetry to read, not a gate to wire, until the rates have earned that. The prober
-is not yet a released artifact: it builds from this repository's controller workspace
-with `cargo build --locked --release -p amiss-probe`, which is what the dogfood job does.
+ships beside the engine in every release, in the same `SHA256SUMS` and sigstore bundle,
+so the download above is the same [Verified consumption](security.md) recipe with the
+pattern changed. A release cut before the prober has no such asset; there the source
+build `cargo build --locked --release -p amiss-probe` stands in, which is also what the
+dogfood job runs so it probes with the pull request's own prober.
 
 The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
 lines the findings name, with fixes rendered as suggested edits and the finding key
