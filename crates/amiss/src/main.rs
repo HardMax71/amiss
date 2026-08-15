@@ -135,16 +135,6 @@ fn render(
 /// The machine refusal lanes share one envelope; the error is the code the
 /// caller prints on stderr, and the artifact lane still answers its empty
 /// array, the one machine answer that needs no envelope.
-/// The one place a profile becomes the evaluation pair: the built-in table
-/// flag and the pre-existing lowering flag.
-fn profile_flags(profile: amiss_wire::controls::Profile) -> (bool, bool) {
-    match profile {
-        amiss_wire::controls::Profile::Observe => (false, false),
-        amiss_wire::controls::Profile::EnforceIntroduced => (true, true),
-        amiss_wire::controls::Profile::Enforce => (true, false),
-    }
-}
-
 fn machine_refusal(codes: &BTreeSet<Code>) -> Result<amiss_wire::json::Value, AnalysisErrorCode> {
     let Some(engine) = engine_provenance() else {
         return Err(AnalysisErrorCode::InternalError);
@@ -206,11 +196,9 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         snapshot: Some(hb(SNAPSHOT_REQUEST_SCHEMA, &streams.snapshot)),
         controls: Some(hb(CONTROLS_REQUEST_SCHEMA, &streams.controls)),
     };
-    let (enforce, introduced_only) = profile_flags(evaluation.profile);
     let shell = SetupShell {
         engine,
-        enforce,
-        introduced_only,
+        profile: evaluation.profile,
         repository: evaluation.repository.clone(),
         forge: evaluation.forge,
         candidate_ref: evaluation
@@ -323,11 +311,9 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         (None | Some(_), None) | (None, Some(_)) => None,
     };
     let staged_snapshot = pinned_index(invocation, &repo);
-    let (enforce, introduced_only) = profile_flags(invocation.profile);
     let shell = SetupShell {
         engine,
-        enforce,
-        introduced_only,
+        profile: invocation.profile,
         repository: invocation
             .identity
             .as_ref()
@@ -434,11 +420,9 @@ fn fatal(
             amiss_scan::report::CandidateBlock::Unavailable(vec!["not-evaluated"])
         }
     };
-    let (enforce, introduced_only) = profile_flags(invocation.profile);
     let setup = Setup {
         engine: engine.clone(),
-        enforce,
-        introduced_only,
+        profile: invocation.profile,
         repository: None,
         forge: None,
         candidate_ref: None,

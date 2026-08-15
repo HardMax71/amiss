@@ -2,15 +2,13 @@
 
 use std::path::Path;
 
-use super::{
-    ConfigError, PathRequirements, canonical_path, resolve_execution_paths, separate_roots,
-};
+use super::{PathRequirements, canonical_path, resolve_execution_paths, separate_roots};
 
 fn directory() -> PathRequirements {
     PathRequirements {
         accepts: std::fs::FileType::is_dir,
-        invalid: ConfigError("not a directory"),
-        unresolved: ConfigError("unresolved"),
+        invalid: "not a directory",
+        unresolved: "unresolved",
     }
 }
 
@@ -23,19 +21,22 @@ fn a_configured_path_is_absolute_real_and_of_its_kind() {
 
     assert!(canonical_path(root.path(), directory()).is_ok());
     assert_eq!(
-        canonical_path(&file, directory()),
-        Err(ConfigError("not a directory")),
-        "a file where a directory belongs"
+        canonical_path(&file, directory())
+            .expect_err("a file where a directory belongs")
+            .to_string(),
+        "not a directory"
     );
     assert_eq!(
-        canonical_path(Path::new("scratch"), directory()),
-        Err(ConfigError("not a directory")),
-        "a relative path names nothing certain"
+        canonical_path(Path::new("scratch"), directory())
+            .expect_err("a relative path names nothing certain")
+            .to_string(),
+        "not a directory"
     );
     assert_eq!(
-        canonical_path(&root.path().join("absent"), directory()),
-        Err(ConfigError("not a directory")),
-        "a path nothing stands at"
+        canonical_path(&root.path().join("absent"), directory())
+            .expect_err("a path nothing stands at")
+            .to_string(),
+        "not a directory"
     );
 }
 
@@ -48,23 +49,26 @@ fn roots_are_separate_in_both_directions() {
     std::fs::create_dir(&inner).expect("create");
     let sibling = outer.join("beside");
     std::fs::create_dir(&sibling).expect("create");
-    let overlap = ConfigError("roots overlap");
+    let overlap = "roots overlap";
 
-    assert_eq!(separate_roots([&inner, &sibling], overlap), Ok(()));
+    assert!(separate_roots([&inner, &sibling], overlap).is_ok());
     assert_eq!(
-        separate_roots([outer, &inner], overlap),
-        Err(overlap),
-        "the first contains the second"
+        separate_roots([outer, &inner], overlap)
+            .expect_err("the first contains the second")
+            .to_string(),
+        overlap
     );
     assert_eq!(
-        separate_roots([&inner, outer], overlap),
-        Err(overlap),
-        "the second contains the first"
+        separate_roots([&inner, outer], overlap)
+            .expect_err("the second contains the first")
+            .to_string(),
+        overlap
     );
     assert_eq!(
-        separate_roots([&inner, &inner], overlap),
-        Err(overlap),
-        "a root against itself"
+        separate_roots([&inner, &inner], overlap)
+            .expect_err("a root against itself")
+            .to_string(),
+        overlap
     );
 }
 
@@ -98,11 +102,11 @@ fn execution_paths_bind_the_bootstrap_and_the_host() {
     let other = trust.path("other-bootstrap");
     std::fs::write(&other, b"another bootstrap entirely").expect("write");
     assert_eq!(
-        resolve_execution_paths(&other, &scratch, &ledger, &plan).err(),
-        Some(ConfigError(
-            "bootstrap does not match the execution constraint"
-        )),
-        "another bootstrap under the same constraint"
+        resolve_execution_paths(&other, &scratch, &ledger, &plan)
+            .err()
+            .expect("another bootstrap under the same constraint")
+            .to_string(),
+        "bootstrap does not match the execution constraint"
     );
 
     let here = host_platform().expect("a platform for this host");
@@ -120,10 +124,9 @@ fn execution_paths_bind_the_bootstrap_and_the_host() {
             &ledger,
             &plan_over(elsewhere.as_bytes())
         )
-        .err(),
-        Some(ConfigError(
-            "execution constraint does not target this host"
-        )),
-        "the same bootstrap under a constraint aimed elsewhere"
+        .err()
+        .expect("the same bootstrap under a constraint aimed elsewhere")
+        .to_string(),
+        "execution constraint does not target this host"
     );
 }

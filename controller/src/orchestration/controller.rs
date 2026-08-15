@@ -1,6 +1,5 @@
 mod helpers;
 
-use std::fmt;
 use std::sync::Arc;
 
 use crate::{
@@ -17,55 +16,33 @@ use super::ledger::{CheckConclusion, DeliveryClaim, DeliveryLedger};
 use super::model::{ChangeState, RunRequest, Runner};
 use super::publication::publication;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ControllerError<E> {
+    #[error("no adapter handles the provider")]
     UnknownProvider,
-    Plan(PlanError),
-    Ingress(IngressError),
-    Provider(ProviderError),
+    #[error("check plan selection failed: {0}")]
+    Plan(#[source] PlanError),
+    #[error("provider ingress failed: {0}")]
+    Ingress(#[source] IngressError),
+    #[error("provider operation failed: {0}")]
+    Provider(#[source] ProviderError),
+    #[error("provider refresh changed the authenticated change identity")]
     WrongChangeIdentity,
+    #[error("provider refresh changed the authenticated provider run")]
     WrongProviderRun,
+    #[error("delivery key was rebound to another run or check plan")]
     DeliveryBindingConflict,
+    #[error("delivery lease is no longer authoritative")]
     LeaseLost,
+    #[error("published result lost its staged completion record")]
     CompletionLost,
-    Ledger(E),
-    Completion(E),
-    Publish(ProviderError),
+    #[error("delivery ledger operation failed: {0}")]
+    Ledger(#[source] E),
+    #[error("published result could not be completed: {0}")]
+    Completion(#[source] E),
+    #[error("provider publication failed: {0}")]
+    Publish(#[source] ProviderError),
 }
-
-impl<E: fmt::Display> fmt::Display for ControllerError<E> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnknownProvider => formatter.write_str("no adapter handles the provider"),
-            Self::Plan(error) => write!(formatter, "check plan selection failed: {error}"),
-            Self::Ingress(error) => write!(formatter, "provider ingress failed: {error}"),
-            Self::Provider(error) => write!(formatter, "provider operation failed: {error}"),
-            Self::WrongChangeIdentity => {
-                formatter.write_str("provider refresh changed the authenticated change identity")
-            }
-            Self::WrongProviderRun => {
-                formatter.write_str("provider refresh changed the authenticated provider run")
-            }
-            Self::DeliveryBindingConflict => {
-                formatter.write_str("delivery key was rebound to another run or check plan")
-            }
-            Self::LeaseLost => formatter.write_str("delivery lease is no longer authoritative"),
-            Self::CompletionLost => {
-                formatter.write_str("published result lost its staged completion record")
-            }
-            Self::Ledger(error) => write!(formatter, "delivery ledger operation failed: {error}"),
-            Self::Completion(error) => {
-                write!(
-                    formatter,
-                    "published result could not be completed: {error}"
-                )
-            }
-            Self::Publish(error) => write!(formatter, "provider publication failed: {error}"),
-        }
-    }
-}
-
-impl<E> std::error::Error for ControllerError<E> where E: std::error::Error + Send + Sync + 'static {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HandleOutcome {

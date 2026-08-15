@@ -1,4 +1,3 @@
-use std::fmt;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -9,8 +8,9 @@ use amiss_controller::{ControllerClock, DeliveryLedger, Runner};
 use tokio::net::TcpListener;
 
 use crate::{
-    DeliveryAdmission, DeliveryWorker, Inbox, InboxLimits, Operations, ReceiverConfig,
-    ServiceComponent, Supervision, SupervisionError, router_with_clock, supervise,
+    DeliveryAdmission, DeliveryWorker, Inbox, InboxError, InboxLimits, Operations, ReceiverConfig,
+    ReceiverConfigError, ServiceComponent, Supervision, SupervisionError, router_with_clock,
+    supervise,
 };
 
 pub struct QueuedServiceInput {
@@ -21,16 +21,29 @@ pub struct QueuedServiceInput {
     pub clock: Arc<dyn ControllerClock>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct QueuedServiceError(pub &'static str);
-
-impl fmt::Display for QueuedServiceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum QueuedServiceError {
+    #[error("shutdown signal handler cannot be installed")]
+    ShutdownInstall(#[source] std::io::Error),
+    #[error("delivery inbox cannot be opened")]
+    InboxOpen(#[source] InboxError),
+    #[error("HTTP receiver configuration is invalid")]
+    Receiver(#[source] ReceiverConfigError),
+    #[error("HTTP listener cannot bind")]
+    Listener(#[source] std::io::Error),
+    #[error("delivery worker panicked")]
+    WorkerPanicked(#[source] tokio::task::JoinError),
+    #[error("{0}")]
+    WorkerBuild(#[source] Box<dyn std::error::Error + Send + Sync>),
+    #[error(transparent)]
+    Supervision(#[from] SupervisionError),
 }
 
-impl std::error::Error for QueuedServiceError {}
+impl QueuedServiceError {
+    pub fn worker_build(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::WorkerBuild(Box::new(error))
+    }
+}
 
 /// Runs one durable receiver and its blocking delivery worker until shutdown.
 ///
@@ -49,8 +62,7 @@ where
         + Send
         + 'static,
 {
-    let shutdown = crate::shutdown_signal()
-        .map_err(|_defect| QueuedServiceError("shutdown signal handler cannot be installed"))?;
+    let shutdown = crate::shutdown_signal().map_err(QueuedServiceError::ShutdownInstall)?;
     run_queued_service_until(
         input,
         admission,
@@ -77,8 +89,7 @@ where
     S: Future<Output = std::io::Result<()>>,
 {
     let inbox = Arc::new(Mutex::new(
-        Inbox::open(input.inbox_root, input.inbox_limits)
-            .map_err(|_defect| QueuedServiceError("delivery inbox cannot be opened"))?,
+        Inbox::open(input.inbox_root, input.inbox_limits).map_err(QueuedServiceError::InboxOpen)?,
     ));
     let ready = Arc::new(AtomicBool::new(false));
     let (receiver, endpoint) = router_with_clock(
@@ -89,28 +100,28 @@ where
         operations.clone(),
         Arc::clone(&input.clock),
     )
-    .map_err(|_defect| QueuedServiceError("HTTP receiver configuration is invalid"))?;
+    .map_err(QueuedServiceError::Receiver)?;
     let listener = TcpListener::bind(input.listen)
         .await
-        .map_err(|_defect| QueuedServiceError("HTTP listener cannot bind"))?;
+        .map_err(QueuedServiceError::Listener)?;
     let worker_operations = operations.clone();
     let worker_inbox = Arc::clone(&inbox);
     let worker = tokio::task::spawn_blocking(move || build_worker(worker_inbox, worker_operations))
         .await
-        .map_err(|_panic| QueuedServiceError("delivery worker panicked"))??;
+        .map_err(QueuedServiceError::WorkerPanicked)??;
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = Arc::clone(&stop);
     let component = async move {
         tokio::task::spawn_blocking(move || worker.run(&worker_stop))
             .await
-            .map_err(|_panic| SupervisionError("delivery worker panicked"))?
-            .map_err(|_defect| SupervisionError("delivery worker stopped"))
+            .map_err(SupervisionError::WorkerPanicked)?
+            .map_err(SupervisionError::Worker)
     };
     let stop_component = move || {
         let stop_result = inbox
             .lock()
             .map(|_guard| stop.store(true, Ordering::Release))
-            .map_err(|_poisoned| SupervisionError("delivery inbox lock is unavailable"));
+            .map_err(|_poisoned| SupervisionError::InboxLock);
         if stop_result.is_err() {
             stop.store(true, Ordering::Release);
         }
@@ -130,5 +141,5 @@ where
         stop_component,
     )
     .await
-    .map_err(|error| QueuedServiceError(error.0))
+    .map_err(QueuedServiceError::Supervision)
 }

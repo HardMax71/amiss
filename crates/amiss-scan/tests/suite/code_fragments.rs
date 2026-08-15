@@ -80,8 +80,7 @@ fn run(
     };
     let shell = SetupShell {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: Some(RepositoryIdentity {
             host: host.to_owned(),
             owner: "acme".to_owned(),

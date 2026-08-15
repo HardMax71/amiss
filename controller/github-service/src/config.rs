@@ -95,16 +95,15 @@ struct RawRepository {
 
 impl RawConfig {
     fn load(self) -> Result<ServiceConfig, ConfigError> {
-        let listen = self
-            .listen
-            .parse()
-            .map_err(|_defect| ConfigError("listen must be one socket address"))?;
+        let listen = self.listen.parse().map_err(|defect| {
+            ConfigError::caused_by("listen must be one socket address", defect)
+        })?;
         let scope = checked_scope(&self.github, self.repository)?;
         let plan = Arc::new(load_plan(&self.plan)?);
         validate_action(&scope.provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let trust_set = TrustSetId::new("github-webhook-keys".to_owned())
-            .ok_or(ConfigError("trust set identity is invalid"))?;
+            .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
         let route = DeliveryRoute {
             provider: scope.provider.clone(),
             trust_set: trust_set.clone(),
@@ -129,11 +128,11 @@ impl RawConfig {
                 &plan_digest,
             ],
         )
-        .ok_or(ConfigError("route identity is invalid"))?;
+        .ok_or(ConfigError::invalid("route identity is invalid"))?;
         let webhook =
             GitHubWebhook::new(load_webhook_keyring(trust_set, self.github.webhook_keys)?);
         let api_timeouts = GitHubTimeouts::new(limits.http.connect, limits.http.request)
-            .ok_or(ConfigError("GitHub API timeouts are invalid"))?;
+            .ok_or(ConfigError::invalid("GitHub API timeouts are invalid"))?;
         let app = GitHubApp::new(
             scope.provider.clone(),
             positive(self.github.app_id)?,
@@ -143,7 +142,7 @@ impl RawConfig {
             plan.execution.required_status_name.clone(),
             api_timeouts,
         )
-        .map_err(|_defect| ConfigError("GitHub App configuration is invalid"))?;
+        .map_err(|defect| ConfigError::caused_by("GitHub App configuration is invalid", defect))?;
         let plan_scope = PlanScope {
             provider: scope.provider.clone(),
             integration: scope.integration,
@@ -212,10 +211,10 @@ fn github_provider(instance: &str) -> Result<ProviderIdentity, ConfigError> {
         && !instance.contains('/')
         && !instance.is_empty();
     if !canonical {
-        return Err(ConfigError("GitHub instance is not canonical"));
+        return Err(ConfigError::invalid("GitHub instance is not canonical"));
     }
     ProviderIdentity::new("github".to_owned(), instance.to_owned())
-        .ok_or(ConfigError("GitHub instance is invalid"))
+        .ok_or(ConfigError::invalid("GitHub instance is invalid"))
 }
 
 fn github_repository(
@@ -227,21 +226,25 @@ fn github_repository(
         && repository.name == repository.name.to_ascii_lowercase()
         && !repository.owner.contains('/');
     if !canonical {
-        return Err(ConfigError("GitHub repository spelling is not canonical"));
+        return Err(ConfigError::invalid(
+            "GitHub repository spelling is not canonical",
+        ));
     }
     RepositoryIdentity::new(
         provider.instance.as_str().to_owned(),
         repository.owner,
         repository.name,
     )
-    .ok_or(ConfigError("GitHub repository identity is invalid"))
+    .ok_or(ConfigError::invalid(
+        "GitHub repository identity is invalid",
+    ))
 }
 
 fn github_branch(branch: &str) -> Result<BranchRef, ConfigError> {
     (!branch.starts_with("refs/"))
         .then(|| BranchRef::new(format!("refs/heads/{branch}")))
         .flatten()
-        .ok_or(ConfigError("GitHub target branch is invalid"))
+        .ok_or(ConfigError::invalid("GitHub target branch is invalid"))
 }
 
 fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
@@ -249,18 +252,19 @@ fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), 
         && !plan.execution.action_repository.owner.contains('/')
         && plan.execution.action_object_format == ObjectFormat::Sha1)
         .then_some(())
-        .ok_or(ConfigError(
+        .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 GitHub instance",
         ))
 }
 
 fn positive_id(raw: u64) -> Result<IntegrationId, ConfigError> {
     positive(raw)?;
-    IntegrationId::new(raw.to_string()).ok_or(ConfigError("installation identity is invalid"))
+    IntegrationId::new(raw.to_string())
+        .ok_or(ConfigError::invalid("installation identity is invalid"))
 }
 
 fn positive(raw: u64) -> Result<u64, ConfigError> {
-    (raw > 0)
-        .then_some(raw)
-        .ok_or(ConfigError("GitHub numeric identity must be positive"))
+    (raw > 0).then_some(raw).ok_or(ConfigError::invalid(
+        "GitHub numeric identity must be positive",
+    ))
 }

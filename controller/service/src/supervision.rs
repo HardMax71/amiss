@@ -1,6 +1,5 @@
 mod tests;
 
-use std::fmt;
 use std::future::Future;
 use std::io;
 use std::sync::Arc;
@@ -23,16 +22,33 @@ pub struct Supervision {
     pub component: ServiceComponent,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SupervisionError(pub &'static str);
-
-impl fmt::Display for SupervisionError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum SupervisionError {
+    #[error("service component stop panicked")]
+    StopPanicked(#[source] tokio::task::JoinError),
+    #[error("HTTP service stopped")]
+    HttpStopped(#[source] Option<io::Error>),
+    #[error("service component stopped")]
+    ComponentStopped,
+    #[error("{0}")]
+    Component(#[source] Box<dyn std::error::Error + Send + Sync>),
+    #[error("HTTP endpoint cannot drain")]
+    EndpointDrain(#[source] tokio::sync::AcquireError),
+    #[error("shutdown signal handler stopped")]
+    Shutdown(#[source] io::Error),
+    #[error("delivery inbox lock is unavailable")]
+    InboxLock,
+    #[error("delivery worker panicked")]
+    WorkerPanicked(#[source] tokio::task::JoinError),
+    #[error("delivery worker stopped")]
+    Worker(#[source] crate::DeliveryWorkerError),
 }
 
-impl std::error::Error for SupervisionError {}
+impl SupervisionError {
+    pub fn component(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Component(Box::new(error))
+    }
+}
 
 /// Runs the HTTP listener and one required background component through drain.
 ///
@@ -138,20 +154,20 @@ where
     let stop_result = async {
         stop_component
             .await
-            .map_err(|_panic| SupervisionError("service component stop panicked"))
+            .map_err(SupervisionError::StopPanicked)
             .and_then(std::convert::identity)
     };
     let server_result = async {
         match early_server {
-            Some(_result) => Err(SupervisionError("HTTP service stopped")),
+            Some(result) => Err(SupervisionError::HttpStopped(result.err())),
             None => server
                 .await
-                .map_err(|_defect| SupervisionError("HTTP service stopped")),
+                .map_err(|error| SupervisionError::HttpStopped(Some(error))),
         }
     };
     let component_result = async {
         match early_component {
-            Some(result) => result.and(Err(SupervisionError("service component stopped"))),
+            Some(result) => result.and(Err(SupervisionError::ComponentStopped)),
             None => component.await,
         }
     };
@@ -168,9 +184,9 @@ where
         .and(
             drain_result
                 .map(|_guard| ())
-                .map_err(|_closed| SupervisionError("HTTP endpoint cannot drain")),
+                .map_err(SupervisionError::EndpointDrain),
         )
-        .and(shutdown_result.map_err(|_closed| SupervisionError("shutdown signal handler stopped")))
+        .and(shutdown_result.map_err(SupervisionError::Shutdown))
         .and(stop_result)
         .and(component_result);
     operations.emit(ServiceEvent::Stopped);

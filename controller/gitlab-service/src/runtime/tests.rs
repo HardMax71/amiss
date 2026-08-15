@@ -43,7 +43,7 @@ fn only_a_published_pass_is_an_http_success() {
         );
     }
     assert_eq!(
-        result_status::<ServiceError>(Err(ServiceError("evaluation unavailable"))),
+        result_status::<ServiceError>(Err(ServiceError::EvaluationRunner)),
         StatusCode::SERVICE_UNAVAILABLE
     );
 }
@@ -156,7 +156,7 @@ async fn periodic_maintenance_cleans_without_stopping_the_lane() {
     assert!(!maintenance.is_finished());
 
     stop.notify_one();
-    assert_eq!(maintenance.await.unwrap(), Ok(()));
+    assert!(maintenance.await.unwrap().is_ok());
 }
 
 #[tokio::test(start_paused = true)]
@@ -184,7 +184,7 @@ async fn stop_waits_for_active_maintenance() {
     assert!(!maintenance.is_finished());
 
     release.notify_one();
-    assert_eq!(maintenance.await.unwrap(), Ok(()));
+    assert!(maintenance.await.unwrap().is_ok());
 }
 
 #[tokio::test(start_paused = true)]
@@ -211,8 +211,12 @@ async fn periodic_maintenance_failure_stops_the_lane() {
     assert!(!maintenance.is_finished());
     tokio::time::advance(period).await;
     assert_eq!(
-        maintenance.await.unwrap(),
-        Err(ServiceError("delivery record maintenance failed"))
+        maintenance
+            .await
+            .unwrap()
+            .expect_err("maintenance failure")
+            .to_string(),
+        "delivery record maintenance failed"
     );
     assert_eq!(observed_operations.maintenance_runs.get(), 0);
     assert_eq!(observed_operations.maintenance_removals.get(), 0);
@@ -298,7 +302,7 @@ async fn ledger_maintenance_binds_cleanup_to_the_interval() {
     assert!(!leftover.exists(), "the interval ran one cleanup");
     assert_eq!(operations.maintenance_runs.get(), 1);
     stop.notify_one();
-    assert_eq!(task.await.unwrap(), Ok(()));
+    assert!(task.await.unwrap().is_ok());
 }
 
 /// The cloned credential exposes the same bytes, not a fresh empty secret.
@@ -308,11 +312,11 @@ fn a_cloned_secret_keeps_its_bytes() {
     assert_eq!(clone_secret(&secret).expose_secret(), "glpat-dedicated");
 }
 
-/// The service error displays its reason verbatim.
+/// The service error keeps stable operator context.
 #[test]
-fn a_service_error_displays_its_reason() {
+fn a_service_error_displays_its_context() {
     assert_eq!(
-        ServiceError("GitLab API timeouts are invalid").to_string(),
-        "GitLab API timeouts are invalid"
+        ServiceError::MaintenanceInterval.to_string(),
+        "maintenance interval overflow"
     );
 }

@@ -62,18 +62,18 @@ fn renewal_waits_half_the_remaining_lease_bounded_by_the_poll() {
 
     claimed.lease.expires_at_unix_millis = 8_000;
     assert_eq!(
-        renewal_wait(&claimed.lease, &FixedClock(Some(0))),
-        Ok(Duration::from_secs(4))
+        renewal_wait(&claimed.lease, &FixedClock(Some(0))).expect("trusted renewal"),
+        Duration::from_secs(4)
     );
     claimed.lease.expires_at_unix_millis = 1;
     assert_eq!(
-        renewal_wait(&claimed.lease, &FixedClock(Some(0))),
-        Ok(Duration::from_millis(1))
+        renewal_wait(&claimed.lease, &FixedClock(Some(0))).expect("trusted renewal"),
+        Duration::from_millis(1)
     );
     claimed.lease.expires_at_unix_millis = 60_000;
     assert_eq!(
-        renewal_wait(&claimed.lease, &FixedClock(Some(0))),
-        Ok(Duration::from_secs(5)),
+        renewal_wait(&claimed.lease, &FixedClock(Some(0))).expect("trusted renewal"),
+        Duration::from_secs(5),
         "the poll interval bounds the wait"
     );
 }
@@ -88,6 +88,9 @@ fn sleeping_until_a_deadline_takes_at_least_the_gap() {
 
 #[test]
 fn retry_time_is_now_plus_the_duration_or_refused() {
-    assert_eq!(add(1_000, Duration::from_secs(5)), Ok(6_000));
+    assert_eq!(
+        add(1_000, Duration::from_secs(5)).expect("bounded retry"),
+        6_000
+    );
     assert!(add(i64::MAX, Duration::from_millis(1)).is_err());
 }

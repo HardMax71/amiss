@@ -4,7 +4,7 @@ use amiss_md::extract::BlockKind;
 use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, SourceChange, TargetChange,
 };
-use amiss_scan::evaluate::evaluate;
+use amiss_scan::evaluate::{FindingFact, evaluate};
 use amiss_scan::policy::{DebtContext, Effects, TimeContext};
 use amiss_scan::resolve::Intent;
 use amiss_scan::scan::SpanDisplay;
@@ -39,7 +39,7 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             }
         })
         .collect();
-    let findings = evaluate(&[], &comparisons, true);
+    let findings = evaluate(&[], &comparisons, amiss_wire::controls::Profile::Enforce);
     assert_eq!(findings.len(), count, "one structural finding per target");
     let items = findings
         .iter()
@@ -54,12 +54,11 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 .remove(&observation_id)
                 .unwrap_or_else(|| panic!("benchmark control projection"));
             let accepted_fact_digest = finding
-                .candidate_fact
-                .as_ref()
-                .map_or_else(|| panic!("benchmark candidate fact"), |(_, digest)| *digest);
+                .candidate_fact()
+                .map_or_else(|| panic!("benchmark candidate fact"), FindingFact::digest);
             DebtItem {
                 debt_id: artifact_id(format!("bench/debt-{index:05}")),
-                finding_key: finding.finding_key,
+                finding_key: finding.key().digest(),
                 accepted_fact,
                 accepted_fact_digest,
                 owner: owner_id("team:benchmark"),

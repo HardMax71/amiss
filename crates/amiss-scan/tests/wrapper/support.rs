@@ -12,7 +12,9 @@ use amiss_git::Repository;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, TrustSource, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
-use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, TrustedTimeStatement, WaiverBundle};
+use amiss_wire::controls::{
+    DebtSnapshot, OrganizationFloor, Profile, TrustedTimeStatement, WaiverBundle,
+};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
@@ -85,11 +87,10 @@ pub(crate) fn floor_input() -> FloorInput {
     }
 }
 
-pub(crate) fn shell(enforce: bool) -> SetupShell {
+pub(crate) fn shell(profile: Profile) -> SetupShell {
     SetupShell {
         engine: engine(),
-        enforce,
-        introduced_only: false,
+        profile,
         repository: Some(amiss_wire::model::RepositoryIdentity {
             host: "github.com".to_owned(),
             owner: "acme".to_owned(),
@@ -118,11 +119,10 @@ pub(crate) fn identity(commit: &Oid, tree: &str) -> SnapshotIdentity {
     }
 }
 
-pub(crate) fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
+pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
     let setup = Setup {
         engine: engine(),
-        enforce,
-        introduced_only: false,
+        profile: Profile::Observe,
         repository: Some(amiss_wire::model::RepositoryIdentity {
             host: "github.com".to_owned(),
             owner: "acme".to_owned(),
@@ -163,12 +163,12 @@ pub(crate) fn time_input(fx: &Fixture, enforce: bool) -> TimeInput {
 
 /// One clean run whose report supplies the exact key and fact values the
 /// engine computes for the pre-existing structural finding.
-pub(crate) fn structural_evidence(fx: &Fixture, enforce: bool) -> (String, String, String) {
+pub(crate) fn structural_evidence(fx: &Fixture) -> (String, String, String) {
     let built = commit_pair(
         &fx.repo,
         &engine(),
         None,
-        &shell(enforce),
+        &shell(Profile::Enforce),
         &fx.base,
         &fx.candidate,
     );

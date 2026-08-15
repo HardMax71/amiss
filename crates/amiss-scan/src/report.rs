@@ -1,4 +1,4 @@
-use amiss_wire::controls::{ContentAvailability, ResourceName};
+use amiss_wire::controls::{ContentAvailability, Profile, ResourceName};
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical, canonical_length};
 use amiss_wire::model::{Adapter, RepoPath};
@@ -13,7 +13,7 @@ use amiss_wire::resolution::Resolution;
 use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
 use crate::evaluate::{
-    Attribution, DocumentInput, DocumentSide, FACT_SCHEMA, Finding, LocationSide,
+    Attribution, DocumentInput, DocumentSide, Finding, FindingFact, FindingFix, LocationSide,
 };
 use crate::feedback;
 use crate::{Impact, SpanDisplay, observe};
@@ -119,8 +119,7 @@ pub struct RequestDigests {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Setup {
     pub engine: EngineProvenance,
-    pub enforce: bool,
-    pub introduced_only: bool,
+    pub profile: Profile,
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
     pub candidate_ref: Option<String>,
@@ -568,40 +567,38 @@ fn document_input(paired: &PairedDocument<'_>) -> DocumentInput {
 
 fn finding_value(
     finding: &Finding,
-    enforce: bool,
     comparison_rows: &[(Option<Digest>, Value)],
     document_rows: &[(RepoPath, Value)],
 ) -> Value {
-    let scope = finding.kind.scope();
+    let kind = finding.kind();
+    let scope = kind.scope();
     let coverage = match scope {
         FindingScope::Control => "control-plane",
         FindingScope::Reference | FindingScope::Observation | FindingScope::Document => "none",
     };
     let candidate_fact = finding
-        .candidate_fact
-        .clone()
+        .candidate_fact()
+        .cloned()
         .or_else(|| nonreference_fact(finding, comparison_rows, document_rows));
-    let fact_pair = |fact: &Option<(Value, Digest)>| {
+    let fact_pair = |fact: Option<&FindingFact>| {
         (
-            fact.as_ref()
-                .map_or(Value::Null, |(_value, digest)| digest_value(*digest)),
-            fact.as_ref()
-                .map_or(Value::Null, |(value, _digest)| value.clone()),
+            fact.map_or(Value::Null, |fact| digest_value(fact.digest())),
+            fact.map_or(Value::Null, |fact| fact.value().clone()),
         )
     };
-    let (base_digest, base_fact) = fact_pair(&finding.base_fact);
-    let (candidate_digest, candidate_fact_value) = fact_pair(&candidate_fact);
-    let trace = trace_value(finding, enforce);
+    let (base_digest, base_fact) = fact_pair(finding.base_fact());
+    let (candidate_digest, candidate_fact_value) = fact_pair(candidate_fact.as_ref());
+    let trace = trace_value(finding);
     let location_span = location_span_value(finding);
     object(vec![
-        ("key_input", finding.key_input.clone()),
-        ("finding_key", digest_value(finding.finding_key)),
-        ("kind", string(finding.kind.as_str())),
-        ("description", string(finding.kind.meaning())),
-        ("fix", finding.fix.clone().unwrap_or(Value::Null)),
+        ("key_input", finding.key().to_value()),
+        ("finding_key", digest_value(finding.key().digest())),
+        ("kind", string(kind.as_str())),
+        ("description", string(kind.meaning())),
+        ("fix", finding.fix().map_or(Value::Null, fix_value)),
         ("coverage_requirement", string(coverage)),
-        ("evidence_class", string(finding.kind.evidence_class())),
-        ("invariant_class", string(finding.kind.invariant_class())),
+        ("evidence_class", string(kind.evidence_class())),
+        ("invariant_class", string(kind.invariant_class())),
         ("attribution", string(finding.attribution.as_str())),
         ("base_fact_digest", base_digest),
         ("base_fact", base_fact),
@@ -780,7 +777,7 @@ fn waiver_application_value(applied: &crate::evaluate::WaiverApplied) -> Value {
 }
 
 /// The policy trace renders the finding's exact step chain.
-fn trace_value(finding: &Finding, _enforce: bool) -> Vec<Value> {
+fn trace_value(finding: &Finding) -> Vec<Value> {
     finding
         .steps
         .iter()
@@ -807,14 +804,35 @@ fn location_span_value(finding: &Finding) -> Value {
     })
 }
 
+fn fix_value(fix: &FindingFix) -> Value {
+    object(vec![
+        ("path", fix.path.to_value()),
+        (
+            "span",
+            object(vec![
+                (
+                    "start_byte",
+                    integer(u64::try_from(fix.span.0).unwrap_or(u64::MAX)),
+                ),
+                (
+                    "end_byte",
+                    integer(u64::try_from(fix.span.1).unwrap_or(u64::MAX)),
+                ),
+            ]),
+        ),
+        ("replacement", string(&fix.replacement)),
+        ("description", string(fix.kind.meaning())),
+    ])
+}
+
 /// A nonreference finding carries exactly one candidate fact embedding the
 /// full constructed comparison or document row it was derived from.
 fn nonreference_fact(
     finding: &Finding,
     comparison_rows: &[(Option<Digest>, Value)],
     document_rows: &[(RepoPath, Value)],
-) -> Option<(Value, Digest)> {
-    let evidence = match finding.kind.scope() {
+) -> Option<FindingFact> {
+    let evidence = match finding.kind().scope() {
         FindingScope::Reference | FindingScope::Control => return None,
         FindingScope::Observation => {
             let id = finding.observation_ids.first()?;
@@ -833,14 +851,7 @@ fn nonreference_fact(
             object(vec![("kind", string("document")), ("document_result", row)])
         }
     };
-    let fact = object(vec![
-        ("schema", string(FACT_SCHEMA)),
-        ("finding_kind", string(finding.kind.as_str())),
-        ("key_input", finding.key_input.clone()),
-        ("evidence", evidence),
-    ]);
-    let digest = hj(crate::evaluate::FACT_DOMAIN, &fact);
-    Some((fact, digest))
+    Some(FindingFact::new(finding.key(), evidence))
 }
 
 fn snapshot_value(snapshot: &SnapshotIdentity) -> Value {
@@ -1012,14 +1023,7 @@ fn controls_value(setup: &Setup) -> Value {
     }
     let (descriptor, descriptor_digest) = sandbox_descriptor();
     object(vec![
-        (
-            "profile",
-            string(match (setup.enforce, setup.introduced_only) {
-                (true, true) => "enforce-introduced",
-                (true, false) => "enforce",
-                (false, _) => "observe",
-            }),
-        ),
+        ("profile", string(setup.profile.as_str())),
         (
             "base_repository_policy_digest",
             setup.policy.base_digest.map_or(Value::Null, digest_value),
@@ -1363,7 +1367,7 @@ fn summary_counts(
         .collect();
     let unlinked = findings
         .iter()
-        .filter(|finding| finding.kind == FindingKind::UnlinkedDocument)
+        .filter(|finding| finding.kind() == FindingKind::UnlinkedDocument)
         .count();
     let documents = document_counts(
         &candidate_records,
@@ -1485,7 +1489,7 @@ pub fn construct(
         .collect();
     let finding_rows: Vec<Value> = findings
         .iter()
-        .map(|finding| finding_value(finding, setup.enforce, &comparison_rows, &document_rows))
+        .map(|finding| finding_value(finding, &comparison_rows, &document_rows))
         .collect();
 
     let error_details = logical_error_set(&governed, &exception_errors);
@@ -1644,8 +1648,7 @@ fn evaluate_paired(
     let (findings, exception_errors) = crate::evaluate::evaluate_with_policy(
         &inputs,
         comparisons,
-        setup.enforce,
-        setup.introduced_only,
+        setup.profile,
         &setup.policy,
         &governed,
         &groups,
@@ -1775,7 +1778,7 @@ fn capability_count(findings: &[Finding]) -> Value {
         u64::try_from(
             findings
                 .iter()
-                .filter(|finding| finding.kind == FindingKind::UnsupportedCapability)
+                .filter(|finding| finding.kind() == FindingKind::UnsupportedCapability)
                 .count(),
         )
         .unwrap_or(u64::MAX),

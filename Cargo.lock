@@ -118,6 +118,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror",
  "tokio",
 ]
 
@@ -237,6 +238,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -278,6 +280,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -315,6 +318,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror",
  "tokio",
  "tower",
 ]
@@ -346,6 +350,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "tower",
@@ -432,6 +437,7 @@ dependencies = [
  "divan",
  "sha2",
  "strum",
+ "thiserror",
 ]
 
 [[package]]

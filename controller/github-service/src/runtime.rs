@@ -4,22 +4,46 @@ use std::time::Duration;
 
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryRoute, FileLedger,
-    FileLedgerConfig, IngressPolicy, PlanRegistry, ProviderAdapter, ProviderError, SystemClock,
-    register_plan,
+    FileLedgerConfig, FileLedgerError, IngressPolicy, PlanError, PlanRegistry, ProviderAdapter,
+    ProviderError, RegistryError, SystemClock, register_plan,
 };
 use amiss_controller_github::{
     GitFetchBounds, GitHubAcquisition, GitHubApp, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
-pub use amiss_controller_service::QueuedServiceError as ServiceError;
 use amiss_controller_service::{
-    AdmissionRejection, DeliveryAdmission, DeliveryWorker, DeliveryWorkerInput, Inbox, Operations,
-    QueuedServiceInput, lane_admission, run_queued_service,
+    AdmissionRejection, DeliveryAdmission, DeliveryWorker, DeliveryWorkerError,
+    DeliveryWorkerInput, Inbox, Operations, QueuedServiceError, QueuedServiceInput, lane_admission,
+    run_queued_service,
 };
 use amiss_wire::model::BranchRef;
 
 use crate::config::ServiceConfig;
 
 type GitHubWorker = DeliveryWorker<FileLedger, AcquiringRunner<GitHubAcquisition<GitHubApp>>>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ServiceError {
+    #[error("Git acquisition timeout is invalid")]
+    InvalidGitTimeout,
+    #[error("check plan cannot be registered")]
+    Plan(#[source] PlanError),
+    #[error("delivery record limits are invalid")]
+    InvalidLedgerLimits,
+    #[error("delivery record cannot be opened")]
+    Ledger(#[source] FileLedgerError),
+    #[error(transparent)]
+    Queued(#[from] QueuedServiceError),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum WorkerBuildError {
+    #[error("bootstrap runner limits are invalid")]
+    InvalidRunnerLimits,
+    #[error("GitHub adapter cannot be registered")]
+    Registry(#[source] RegistryError),
+    #[error("delivery worker cannot start")]
+    Worker(#[source] DeliveryWorkerError),
+}
 
 struct PreparedLane {
     service: QueuedServiceInput,
@@ -62,21 +86,21 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
         worker,
     } = prepare(config)?;
     run_queued_service(service, admission, move |inbox, operations| {
-        build_worker(worker, inbox, operations)
+        build_worker(worker, inbox, operations).map_err(QueuedServiceError::worker_build)
     })
-    .await
+    .await?;
+    Ok(())
 }
 
 fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
-    let bounds = GitFetchBounds::new(config.git_timeout)
-        .ok_or(ServiceError("Git acquisition timeout is invalid"))?;
+    let bounds = GitFetchBounds::new(config.git_timeout).ok_or(ServiceError::InvalidGitTimeout)?;
     let source = Arc::new(GitHubPullRequestSource::new(
         config.provider.clone(),
         config.webhook,
     ));
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, config.scope.clone(), Arc::clone(&config.plan))
-        .map_err(|_defect| ServiceError("check plan cannot be registered"))?;
+        .map_err(ServiceError::Plan)?;
     let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
     let admission = admission(
         &source,
@@ -90,9 +114,9 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
     );
     let ledger_config =
         FileLedgerConfig::new(config.ledger_lease, config.ledger_records, config.replay)
-            .ok_or(ServiceError("delivery record limits are invalid"))?;
-    let ledger = FileLedger::open(&config.ledger_root, ledger_config)
-        .map_err(|_defect| ServiceError("delivery record cannot be opened"))?;
+            .ok_or(ServiceError::InvalidLedgerLimits)?;
+    let ledger =
+        FileLedger::open(&config.ledger_root, ledger_config).map_err(ServiceError::Ledger)?;
     let service = QueuedServiceInput {
         listen: config.listen,
         receiver: config.receiver,
@@ -175,7 +199,7 @@ fn build_worker(
     input: WorkerContext,
     inbox: Arc<Mutex<Inbox>>,
     operations: Operations,
-) -> Result<GitHubWorker, ServiceError> {
+) -> Result<GitHubWorker, WorkerBuildError> {
     let settings = input.settings;
     let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
     let app = settings.app;
@@ -192,12 +216,12 @@ fn build_worker(
         settings.statement_validity,
         Arc::clone(&clock),
     )
-    .ok_or(ServiceError("bootstrap runner limits are invalid"))?;
+    .ok_or(WorkerBuildError::InvalidRunnerLimits)?;
     let mut registry = AdapterRegistry::new();
     let registered: Arc<dyn ProviderAdapter> = adapter;
     registry
         .register(registered)
-        .map_err(|_defect| ServiceError("GitHub adapter cannot be registered"))?;
+        .map_err(WorkerBuildError::Registry)?;
     let controller = Controller::new_with_clock(
         registry,
         input.plans,
@@ -219,5 +243,5 @@ fn build_worker(
         clock,
         operations,
     })
-    .map_err(|_defect| ServiceError("delivery worker cannot start"))
+    .map_err(WorkerBuildError::Worker)
 }

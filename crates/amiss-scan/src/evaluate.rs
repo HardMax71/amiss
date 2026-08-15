@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
@@ -89,17 +90,109 @@ pub struct Location {
     pub display: Option<SpanDisplay>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FindingKeyScope {
+    Document(RepoPath),
+    Observation(Digest),
+    Reference {
+        document: RepoPath,
+        source_construct: amiss_wire::controls::SourceConstruct,
+        repository_path: Option<RepoPath>,
+        target_kind: Option<amiss_wire::controls::TargetKind>,
+        query_digest: Option<Digest>,
+        fragment_digest: Option<Digest>,
+        source_projection_digest: Digest,
+    },
+    Control {
+        path: Option<RepoPath>,
+        rule_id: String,
+    },
+}
+
+/// A finding's typed identity and its canonical digest. Construction owns the
+/// key projection, so a digest cannot be paired with another key input.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FindingKey {
+    kind: FindingKind,
+    scope: FindingKeyScope,
+    digest: Digest,
+}
+
+impl FindingKey {
+    fn new(kind: FindingKind, scope: FindingKeyScope) -> Self {
+        let digest = key_digest(&key_value(kind, &scope));
+        Self {
+            kind,
+            scope,
+            digest,
+        }
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> FindingKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    pub(crate) fn to_value(&self) -> Value {
+        key_value(self.kind, &self.scope)
+    }
+}
+
+/// One canonical fact and the digest computed from those exact bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FindingFact {
+    value: Value,
+    digest: Digest,
+}
+
+impl FindingFact {
+    pub(crate) fn new(key: &FindingKey, evidence: Value) -> Self {
+        let value = Value::Object(vec![
+            ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
+            (
+                "finding_kind".to_owned(),
+                Value::String(key.kind().as_str().to_owned()),
+            ),
+            ("key_input".to_owned(), key.to_value()),
+            ("evidence".to_owned(), evidence),
+        ]);
+        let digest = hj(FACT_DOMAIN, &value);
+        Self { value, digest }
+    }
+
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    pub(crate) const fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+/// A repository edit kept as domain data until report serialization.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FindingFix {
+    pub(crate) path: RepoPath,
+    pub(crate) span: (usize, usize),
+    pub(crate) replacement: String,
+    pub(crate) kind: FixKind,
+}
+
 /// One constructed finding: its key, its facts where the reference scope
 /// defines them, its aggregation, and its built-in dispositions. Policy
 /// steps beyond the built-in table live with the control layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Finding {
-    pub kind: FindingKind,
-    pub key_input: Value,
-    pub finding_key: Digest,
+    key: FindingKey,
     pub attribution: Attribution,
-    pub base_fact: Option<(Value, Digest)>,
-    pub candidate_fact: Option<(Value, Digest)>,
+    base_fact: Option<FindingFact>,
+    candidate_fact: Option<FindingFact>,
     pub member_count: u64,
     pub observation_ids: Vec<Digest>,
     pub location: Location,
@@ -108,7 +201,33 @@ pub struct Finding {
     pub steps: Vec<PolicyStep>,
     pub debt: Option<DebtApplied>,
     pub waiver: Option<WaiverApplied>,
-    pub fix: Option<Value>,
+    fix: Option<FindingFix>,
+}
+
+impl Finding {
+    #[must_use]
+    pub const fn kind(&self) -> FindingKind {
+        self.key.kind()
+    }
+
+    #[must_use]
+    pub const fn key(&self) -> &FindingKey {
+        &self.key
+    }
+
+    #[must_use]
+    pub const fn base_fact(&self) -> Option<&FindingFact> {
+        self.base_fact.as_ref()
+    }
+
+    #[must_use]
+    pub const fn candidate_fact(&self) -> Option<&FindingFact> {
+        self.candidate_fact.as_ref()
+    }
+
+    pub(crate) const fn fix(&self) -> Option<&FindingFix> {
+        self.fix.as_ref()
+    }
 }
 
 /// A valid active debt item applied to this finding, retained as adoption
@@ -135,8 +254,8 @@ fn key_digest(input: &Value) -> Digest {
     hj(FINDING_KEY_DOMAIN, input)
 }
 
-fn key_input(kind: FindingKind, scope: Value) -> (Value, Digest) {
-    let input = Value::Object(vec![
+fn key_value(kind: FindingKind, scope: &FindingKeyScope) -> Value {
+    Value::Object(vec![
         (
             "schema".to_owned(),
             Value::String(FINDING_KEY_SCHEMA.to_owned()),
@@ -145,88 +264,113 @@ fn key_input(kind: FindingKind, scope: Value) -> (Value, Digest) {
             "finding_kind".to_owned(),
             Value::String(kind.as_str().to_owned()),
         ),
-        ("scope".to_owned(), scope),
-    ]);
-    let digest = key_digest(&input);
-    (input, digest)
-}
-
-fn document_scope(path: &RepoPath) -> Value {
-    Value::Object(vec![
-        ("kind".to_owned(), Value::String("document".to_owned())),
-        ("document".to_owned(), path.to_value()),
+        ("scope".to_owned(), scope_value(scope)),
     ])
 }
 
-fn observation_scope(id: Digest) -> Value {
-    Value::Object(vec![
-        ("kind".to_owned(), Value::String("observation".to_owned())),
-        ("observation_id".to_owned(), Value::String(id.to_string())),
-    ])
+fn document_scope(path: &RepoPath) -> FindingKeyScope {
+    FindingKeyScope::Document(path.clone())
+}
+
+const fn observation_scope(id: Digest) -> FindingKeyScope {
+    FindingKeyScope::Observation(id)
 }
 
 /// The structural reference scope: document, construct, the repository
 /// projection of the intent, and the containing source projection. Line and
 /// column are excluded, so moving a construct keeps its key, while changing
 /// the broken target resolves the old key and introduces a new one.
-fn reference_scope(observation: &Observation) -> Value {
+fn reference_scope(observation: &Observation) -> FindingKeyScope {
     let intent = &observation.intent;
-    Value::Object(vec![
-        ("kind".to_owned(), Value::String("reference".to_owned())),
-        ("document".to_owned(), observation.document.to_value()),
-        (
-            "source_construct".to_owned(),
-            Value::String(observation.construct.as_str().to_owned()),
-        ),
-        (
-            "normalized_target_intent".to_owned(),
-            Value::Object(vec![
-                (
-                    "kind".to_owned(),
-                    Value::String("repository-path".to_owned()),
-                ),
-                (
-                    "path".to_owned(),
-                    intent
-                        .repository_path
-                        .as_ref()
-                        .map_or_else(|| Value::String(String::new()), RepoPath::to_value),
-                ),
-                (
-                    "target_kind".to_owned(),
-                    Value::String(
-                        intent
-                            .target_kind
-                            .map_or("either", amiss_wire::controls::TargetKind::as_str)
-                            .to_owned(),
+    FindingKeyScope::Reference {
+        document: observation.document.clone(),
+        source_construct: observation.construct,
+        repository_path: intent.repository_path.clone(),
+        target_kind: intent.target_kind,
+        query_digest: observe::query_digest(intent),
+        fragment_digest: observe::fragment_digest(intent),
+        source_projection_digest: observation.projection_digest,
+    }
+}
+
+fn scope_value(scope: &FindingKeyScope) -> Value {
+    match scope {
+        FindingKeyScope::Document(path) => Value::Object(vec![
+            ("kind".to_owned(), Value::String("document".to_owned())),
+            ("document".to_owned(), path.to_value()),
+        ]),
+        FindingKeyScope::Observation(id) => Value::Object(vec![
+            ("kind".to_owned(), Value::String("observation".to_owned())),
+            ("observation_id".to_owned(), Value::String(id.to_string())),
+        ]),
+        FindingKeyScope::Reference {
+            document,
+            source_construct,
+            repository_path,
+            target_kind,
+            query_digest,
+            fragment_digest,
+            source_projection_digest,
+        } => Value::Object(vec![
+            ("kind".to_owned(), Value::String("reference".to_owned())),
+            ("document".to_owned(), document.to_value()),
+            (
+                "source_construct".to_owned(),
+                Value::String(source_construct.as_str().to_owned()),
+            ),
+            (
+                "normalized_target_intent".to_owned(),
+                Value::Object(vec![
+                    (
+                        "kind".to_owned(),
+                        Value::String("repository-path".to_owned()),
                     ),
-                ),
-                (
-                    "query_digest".to_owned(),
-                    observe::query_digest(intent)
-                        .map_or(Value::Null, |digest| Value::String(digest.to_string())),
-                ),
-                (
-                    "fragment_digest".to_owned(),
-                    observe::fragment_digest(intent)
-                        .map_or(Value::Null, |digest| Value::String(digest.to_string())),
-                ),
-            ]),
-        ),
-        (
-            "occurrence".to_owned(),
-            Value::Object(vec![
-                (
-                    "kind".to_owned(),
-                    Value::String("source-projection".to_owned()),
-                ),
-                (
-                    "source_projection_digest".to_owned(),
-                    Value::String(observation.projection_digest.to_string()),
-                ),
-            ]),
-        ),
-    ])
+                    (
+                        "path".to_owned(),
+                        repository_path
+                            .as_ref()
+                            .map_or_else(|| Value::String(String::new()), RepoPath::to_value),
+                    ),
+                    (
+                        "target_kind".to_owned(),
+                        Value::String(
+                            target_kind
+                                .map_or("either", amiss_wire::controls::TargetKind::as_str)
+                                .to_owned(),
+                        ),
+                    ),
+                    (
+                        "query_digest".to_owned(),
+                        query_digest
+                            .map_or(Value::Null, |digest| Value::String(digest.to_string())),
+                    ),
+                    (
+                        "fragment_digest".to_owned(),
+                        fragment_digest
+                            .map_or(Value::Null, |digest| Value::String(digest.to_string())),
+                    ),
+                ]),
+            ),
+            (
+                "occurrence".to_owned(),
+                Value::Object(vec![
+                    (
+                        "kind".to_owned(),
+                        Value::String("source-projection".to_owned()),
+                    ),
+                    (
+                        "source_projection_digest".to_owned(),
+                        Value::String(source_projection_digest.to_string()),
+                    ),
+                ]),
+            ),
+        ]),
+        FindingKeyScope::Control { path, rule_id } => Value::Object(vec![
+            ("kind".to_owned(), Value::String("control".to_owned())),
+            ("control_path".to_owned(), nullable_path(path.as_ref())),
+            ("rule_id".to_owned(), Value::String(rule_id.clone())),
+        ]),
+    }
 }
 
 fn resolution_value(observation: &Observation) -> Value {
@@ -432,33 +576,18 @@ fn version_scope_value(scope: &VersionScope<RepoPath>) -> Value {
     }
 }
 
-fn reference_fact(
-    kind: FindingKind,
-    key: &Value,
-    observation: &Observation,
-    multiplicity: u64,
-) -> (Value, Digest) {
-    let fact = Value::Object(vec![
-        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
-        (
-            "finding_kind".to_owned(),
-            Value::String(kind.as_str().to_owned()),
-        ),
-        ("key_input".to_owned(), key.clone()),
-        (
-            "evidence".to_owned(),
-            Value::Object(vec![
-                ("kind".to_owned(), Value::String("reference".to_owned())),
-                ("resolution".to_owned(), resolution_value(observation)),
-                (
-                    "occurrence_multiplicity".to_owned(),
-                    Value::Integer(i64::try_from(multiplicity).unwrap_or(i64::MAX)),
-                ),
-            ]),
-        ),
-    ]);
-    let digest = hj(FACT_DOMAIN, &fact);
-    (fact, digest)
+fn reference_fact(key: &FindingKey, observation: &Observation, multiplicity: u64) -> FindingFact {
+    FindingFact::new(
+        key,
+        Value::Object(vec![
+            ("kind".to_owned(), Value::String("reference".to_owned())),
+            ("resolution".to_owned(), resolution_value(observation)),
+            (
+                "occurrence_multiplicity".to_owned(),
+                Value::Integer(i64::try_from(multiplicity).unwrap_or(i64::MAX)),
+            ),
+        ]),
+    )
 }
 
 const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<FindingKind> {
@@ -477,7 +606,7 @@ const fn structural_kind(resolution: &crate::resolve::Resolution) -> Option<Find
 
 /// Only a missing resolution reaches a structural finding, so the match is
 /// the kind gate.
-fn missing_fix(candidates: &[&Observation]) -> Option<Value> {
+fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
     let [observation] = candidates else {
         return None;
     };
@@ -500,18 +629,18 @@ fn missing_fix(candidates: &[&Observation]) -> Option<Value> {
     }
 }
 
-fn anchor_fix(observation: &Observation, near: &str) -> Option<Value> {
-    Some(fix_value(
-        &observation.document,
-        observation.fragment_span?,
-        near.to_owned(),
-        FixKind::AnchorRespelling,
-    ))
+fn anchor_fix(observation: &Observation, near: &str) -> Option<FindingFix> {
+    Some(FindingFix {
+        path: observation.document.clone(),
+        span: observation.fragment_span?,
+        replacement: near.to_owned(),
+        kind: FixKind::AnchorRespelling,
+    })
 }
 
 /// The intent is the resolver's join, so only its tail is the author's
 /// spelling to respell.
-fn path_fix(observation: &Observation, near: &RepoPath) -> Option<Value> {
+fn path_fix(observation: &Observation, near: &RepoPath) -> Option<FindingFix> {
     let span = observation.path_span?;
     let part = observation
         .raw_destination
@@ -529,41 +658,12 @@ fn path_fix(observation: &Observation, near: &RepoPath) -> Option<Value> {
         return None;
     }
     let replacement = near.as_str()?.get(tail_at..)?.to_owned();
-    Some(fix_value(
-        &observation.document,
+    Some(FindingFix {
+        path: observation.document.clone(),
         span,
         replacement,
-        FixKind::PathRespelling,
-    ))
-}
-
-fn fix_value(
-    document: &RepoPath,
-    (start, end): (usize, usize),
-    replacement: String,
-    kind: FixKind,
-) -> Value {
-    Value::Object(vec![
-        ("path".to_owned(), document.to_value()),
-        (
-            "span".to_owned(),
-            Value::Object(vec![
-                (
-                    "start_byte".to_owned(),
-                    Value::Integer(i64::try_from(start).unwrap_or(i64::MAX)),
-                ),
-                (
-                    "end_byte".to_owned(),
-                    Value::Integer(i64::try_from(end).unwrap_or(i64::MAX)),
-                ),
-            ]),
-        ),
-        ("replacement".to_owned(), Value::String(replacement)),
-        (
-            "description".to_owned(),
-            Value::String(kind.meaning().to_owned()),
-        ),
-    ])
+        kind: FixKind::PathRespelling,
+    })
 }
 
 /// The occurrence-boundary mapping of step two: which non-structural kind one
@@ -593,22 +693,19 @@ fn observation_location(observation: &Observation, side: LocationSide) -> Locati
 
 fn simple(
     kind: FindingKind,
-    scope: Value,
+    scope: FindingKeyScope,
     attribution: Attribution,
-    candidate_fact: Option<(Value, Digest)>,
     ids: Vec<Digest>,
     location: Location,
-    enforce: bool,
+    profile: Profile,
 ) -> Finding {
-    let (key_value, digest) = key_input(kind, scope);
-    let configured = kind.built_in_disposition(enforce);
+    let key = FindingKey::new(kind, scope);
+    let configured = kind.built_in_disposition(profile);
     Finding {
-        kind,
-        key_input: key_value,
-        finding_key: digest,
+        key,
         attribution,
         base_fact: None,
-        candidate_fact,
+        candidate_fact: None,
         member_count: 1,
         observation_ids: ids,
         location,
@@ -617,19 +714,22 @@ fn simple(
         debt: None,
         waiver: None,
         fix: None,
-        steps: vec![built_in_step(kind, enforce)],
+        steps: vec![built_in_step(kind, profile)],
     }
 }
 
 /// Step one: built-in always starts from `record` and applies the defaults
 /// table for the selected profile.
-fn built_in_step(kind: FindingKind, enforce: bool) -> PolicyStep {
-    let profile = if enforce { "enforce" } else { "observe" };
+fn built_in_step(kind: FindingKind, profile: Profile) -> PolicyStep {
     PolicyStep {
         source: "built-in",
-        rule_id: format!("scanner-policy-defaults/{}/{profile}", kind.as_str()),
+        rule_id: format!(
+            "scanner-policy-defaults/{}/{}",
+            kind.as_str(),
+            profile.policy_defaults().as_str()
+        ),
         before: Disposition::Record,
-        after: kind.built_in_disposition(enforce),
+        after: kind.built_in_disposition(profile),
     }
 }
 
@@ -693,13 +793,12 @@ fn base_occurrences(comparisons: &[Comparison]) -> Vec<&Observation> {
 pub fn evaluate(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
-    enforce: bool,
+    profile: Profile,
 ) -> Vec<Finding> {
     let (findings, _no_exceptions) = evaluate_with_policy(
         documents,
         comparisons,
-        enforce,
-        false,
+        profile,
         &crate::policy::Effects::default(),
         &[],
         &[],
@@ -716,32 +815,22 @@ fn control_fact_finding(
     evidence: Value,
     member_count: u64,
     representative: (Option<(usize, usize)>, Option<SpanDisplay>),
-    enforce: bool,
+    profile: Profile,
 ) -> Finding {
-    let scope = Value::Object(vec![
-        ("kind".to_owned(), Value::String("control".to_owned())),
-        ("control_path".to_owned(), document.to_value()),
-        ("rule_id".to_owned(), Value::String(rule_id.to_owned())),
-    ]);
-    let (key_value, digest) = key_input(kind, scope);
-    let fact = Value::Object(vec![
-        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
-        (
-            "finding_kind".to_owned(),
-            Value::String(kind.as_str().to_owned()),
-        ),
-        ("key_input".to_owned(), key_value.clone()),
-        ("evidence".to_owned(), evidence),
-    ]);
-    let fact_digest = hj(FACT_DOMAIN, &fact);
-    let configured = kind.built_in_disposition(enforce);
-    Finding {
+    let key = FindingKey::new(
         kind,
-        key_input: key_value,
-        finding_key: digest,
+        FindingKeyScope::Control {
+            path: Some(document.clone()),
+            rule_id: rule_id.to_owned(),
+        },
+    );
+    let fact = FindingFact::new(&key, evidence);
+    let configured = kind.built_in_disposition(profile);
+    Finding {
+        key,
         attribution: Attribution::NotApplicable,
         base_fact: None,
-        candidate_fact: Some((fact, fact_digest)),
+        candidate_fact: Some(fact),
         member_count,
         observation_ids: Vec::new(),
         location: Location {
@@ -755,7 +844,7 @@ fn control_fact_finding(
         debt: None,
         waiver: None,
         fix: None,
-        steps: vec![built_in_step(kind, enforce)],
+        steps: vec![built_in_step(kind, profile)],
     }
 }
 
@@ -763,7 +852,7 @@ fn control_fact_finding(
 /// document under the one closed rule, with null base state, candidate
 /// `unsupported`, exact node multiplicity, and the sorted distinct source
 /// digests.
-fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
+fn governed_finding(seed: &GovernedSeed, profile: Profile) -> Finding {
     let rule_id = "unsupported/governed-claim";
     let evidence = Value::Object(vec![
         ("kind".to_owned(), Value::String("control".to_owned())),
@@ -799,7 +888,7 @@ fn governed_finding(seed: &GovernedSeed, enforce: bool) -> Finding {
         evidence,
         seed.member_count,
         (seed.representative_span, seed.representative_display),
-        enforce,
+        profile,
     )
 }
 
@@ -935,7 +1024,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
 
 /// One defective claim group as a control-scoped finding carrying the claim
 /// evidence family.
-fn claim_finding(group: &ClaimGroup, enforce: bool) -> Finding {
+fn claim_finding(group: &ClaimGroup, profile: Profile) -> Finding {
     let rule_id = format!("claim/value/{}", group.name);
     let evidence = Value::Object(vec![
         ("kind".to_owned(), Value::String("claim".to_owned())),
@@ -969,7 +1058,7 @@ fn claim_finding(group: &ClaimGroup, enforce: bool) -> Finding {
         evidence,
         group.member_count,
         (group.representative_span, group.representative_display),
-        enforce,
+        profile,
     );
     finding.fix = claim_fix(group);
     finding
@@ -978,7 +1067,7 @@ fn claim_finding(group: &ClaimGroup, enforce: bool) -> Finding {
 /// The provable rewrite for a lone broken claim, or None: grouped members
 /// share one finding but not one edit, and a target-missing claim has no
 /// derivable content.
-fn claim_fix(group: &ClaimGroup) -> Option<Value> {
+fn claim_fix(group: &ClaimGroup) -> Option<FindingFix> {
     if group.kind != FindingKind::ClaimBroken || group.member_count != 1 {
         return None;
     }
@@ -991,12 +1080,12 @@ fn claim_fix(group: &ClaimGroup) -> Option<Value> {
         group.carrier,
     )?;
     let span = group.representative_span?;
-    Some(fix_value(
-        &group.document,
+    Some(FindingFix {
+        path: group.document.clone(),
         span,
         replacement,
-        FixKind::ClaimValueRewrite,
-    ))
+        kind: FixKind::ClaimValueRewrite,
+    })
 }
 
 /// One candidate document's reserved governed definitions: the exact node
@@ -1021,18 +1110,17 @@ pub struct GovernedSeed {
 pub fn evaluate_with_policy(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
-    enforce: bool,
-    introduced_only: bool,
+    profile: Profile,
     policy: &crate::policy::Effects,
     governed: &[GovernedSeed],
     claims: &[ClaimGroup],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
-    let mut findings = ordinary(documents, comparisons, enforce);
+    let mut findings = ordinary(documents, comparisons, profile);
     for seed in governed {
-        findings.push(governed_finding(seed, enforce));
+        findings.push(governed_finding(seed, profile));
     }
     for group in claims {
-        findings.push(claim_finding(group, enforce));
+        findings.push(claim_finding(group, profile));
     }
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
@@ -1046,7 +1134,7 @@ pub fn evaluate_with_policy(
             .map_or(finding.configured_disposition, |step| step.after);
         finding.effective_disposition = finding.configured_disposition;
     }
-    if introduced_only {
+    if profile.introduced_only() {
         for finding in &mut findings {
             if finding.effective_disposition == Disposition::Fail
                 && finding.attribution == Attribution::PreExisting
@@ -1055,7 +1143,7 @@ pub fn evaluate_with_policy(
                     source: "built-in",
                     rule_id: format!(
                         "scanner-policy-defaults/{}/enforce-introduced",
-                        finding.kind.as_str()
+                        finding.kind().as_str()
                     ),
                     before: Disposition::Fail,
                     after: Disposition::Warn,
@@ -1064,12 +1152,12 @@ pub fn evaluate_with_policy(
             }
         }
     }
-    let (exception_findings, errors) = apply_exceptions(&mut findings, policy, enforce);
+    let (exception_findings, errors) = apply_exceptions(&mut findings, policy, profile);
     findings.extend(exception_findings);
     for seed in &policy.controls {
-        findings.push(control_finding(seed, policy, enforce));
+        findings.push(control_finding(seed, policy, profile));
     }
-    findings.sort_by_key(|finding| finding.finding_key);
+    findings.sort_by_key(|finding| finding.key.digest());
     (findings, errors)
 }
 
@@ -1199,14 +1287,14 @@ fn exception_targets(findings: &[Finding]) -> BTreeMap<Digest, usize> {
     let mut targets = BTreeMap::new();
     for (index, finding) in findings.iter().enumerate() {
         if finding.candidate_fact.is_some() {
-            targets.entry(finding.finding_key).or_insert(index);
+            targets.entry(finding.key.digest()).or_insert(index);
         }
     }
     targets
 }
 
 fn candidate_digest_of(finding: &Finding) -> Option<Digest> {
-    finding.candidate_fact.as_ref().map(|(_, digest)| *digest)
+    finding.candidate_fact.as_ref().map(FindingFact::digest)
 }
 
 /// Steps four and five with their defect findings: exact active debt, one
@@ -1215,7 +1303,7 @@ fn candidate_digest_of(finding: &Finding) -> Option<Digest> {
 fn apply_exceptions(
     findings: &mut [Finding],
     policy: &crate::policy::Effects,
-    enforce: bool,
+    profile: Profile,
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
     let mut extra: Vec<Finding> = Vec::new();
     if policy.debt.is_none() && policy.waiver.is_none() {
@@ -1229,8 +1317,8 @@ fn apply_exceptions(
         return (extra, Vec::new());
     };
     let targets = exception_targets(findings);
-    let debt_valid = debt_pass(findings, &targets, policy, enforce, &instant, &mut extra);
-    let waiver_valid = waiver_pass(findings, &targets, policy, enforce, &instant, &mut extra);
+    let debt_valid = debt_pass(findings, &targets, policy, profile, &instant, &mut extra);
+    let waiver_valid = waiver_pass(findings, &targets, policy, profile, &instant, &mut extra);
     let overlap = apply_valid_exceptions(findings, policy, &debt_valid, &waiver_valid);
     let errors = if overlap {
         vec![ErrorDetail {
@@ -1252,7 +1340,7 @@ fn debt_pass(
     findings: &[Finding],
     targets: &BTreeMap<Digest, usize>,
     policy: &crate::policy::Effects,
-    enforce: bool,
+    profile: Profile,
     instant: &amiss_wire::model::UtcInstant,
     extra: &mut Vec<Finding>,
 ) -> BTreeMap<Digest, usize> {
@@ -1276,7 +1364,7 @@ fn debt_pass(
                 None,
                 (None, Some(context.digest)),
                 debt_diagnostic(item, context, current),
-                enforce,
+                profile,
             ));
         }
         if !equal {
@@ -1286,7 +1374,7 @@ fn debt_pass(
                 None,
                 (None, Some(context.digest)),
                 debt_diagnostic(item, context, current),
-                enforce,
+                profile,
             ));
         }
         if !expired && equal {
@@ -1303,7 +1391,7 @@ fn waiver_pass(
     findings: &[Finding],
     targets: &BTreeMap<Digest, usize>,
     policy: &crate::policy::Effects,
-    enforce: bool,
+    profile: Profile,
     instant: &amiss_wire::model::UtcInstant,
     extra: &mut Vec<Finding>,
 ) -> BTreeMap<Digest, usize> {
@@ -1338,7 +1426,7 @@ fn waiver_pass(
         }
         if let Some(found) = target {
             if findings.get(found).is_some_and(|finding| {
-                finding.kind.as_str() != item.authorized_fact.finding_kind().as_str()
+                finding.kind().as_str() != item.authorized_fact.finding_kind().as_str()
             }) {
                 defects.push("key");
             }
@@ -1353,7 +1441,7 @@ fn waiver_pass(
                 None,
                 (None, Some(context.digest)),
                 waiver_diagnostic(item, context.digest, current),
-                enforce,
+                profile,
             ));
         }
         if defects.is_empty() && target.is_some() {
@@ -1374,8 +1462,8 @@ fn apply_valid_exceptions(
 ) -> bool {
     let mut overlap = false;
     for finding in findings.iter_mut() {
-        let debt_item = debt_valid.get(&finding.finding_key).copied();
-        let waiver_item = waiver_valid.get(&finding.finding_key).copied();
+        let debt_item = debt_valid.get(&finding.key.digest()).copied();
+        let waiver_item = waiver_valid.get(&finding.key.digest()).copied();
         match (debt_item, waiver_item) {
             (Some(_), Some(_)) => {
                 overlap = true;
@@ -1446,7 +1534,7 @@ fn apply_raise(
     source: &'static str,
     prefix: &str,
 ) {
-    let Some((_kind, target)) = raised.iter().find(|(kind, _)| *kind == finding.kind) else {
+    let Some((_kind, target)) = raised.iter().find(|(kind, _)| *kind == finding.kind()) else {
         return;
     };
     let current = finding
@@ -1456,7 +1544,7 @@ fn apply_raise(
     if *target > current {
         finding.steps.push(PolicyStep {
             source,
-            rule_id: format!("{prefix}/{}", finding.kind.as_str()),
+            rule_id: format!("{prefix}/{}", finding.kind().as_str()),
             before: current,
             after: *target,
         });
@@ -1466,7 +1554,7 @@ fn apply_raise(
 fn control_finding(
     seed: &crate::policy::ControlSeed,
     policy: &crate::policy::Effects,
-    enforce: bool,
+    profile: Profile,
 ) -> Finding {
     control_row(
         seed.kind,
@@ -1474,7 +1562,7 @@ fn control_finding(
         seed.control_path.clone(),
         (policy.base_digest, policy.candidate_digest),
         Value::Null,
-        enforce,
+        profile,
     )
 }
 
@@ -1487,64 +1575,51 @@ fn control_row(
     control_path: Option<RepoPath>,
     control_digests: (Option<Digest>, Option<Digest>),
     exception: Value,
-    enforce: bool,
+    profile: Profile,
 ) -> Finding {
-    let scope = Value::Object(vec![
-        ("kind".to_owned(), Value::String("control".to_owned())),
-        (
-            "control_path".to_owned(),
-            nullable_path(control_path.as_ref()),
-        ),
-        ("rule_id".to_owned(), Value::String(rule_id.clone())),
-    ]);
-    let (key_value, digest) = key_input(kind, scope);
+    let key = FindingKey::new(
+        kind,
+        FindingKeyScope::Control {
+            path: control_path.clone(),
+            rule_id: rule_id.clone(),
+        },
+    );
     let nullable_digest = |value: Option<Digest>| {
         value.map_or(Value::Null, |digest| Value::String(digest.to_string()))
     };
-    let fact = Value::Object(vec![
-        ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
-        (
-            "finding_kind".to_owned(),
-            Value::String(kind.as_str().to_owned()),
-        ),
-        ("key_input".to_owned(), key_value.clone()),
-        (
-            "evidence".to_owned(),
-            Value::Object(vec![
-                ("kind".to_owned(), Value::String("control".to_owned())),
-                (
-                    "control_path".to_owned(),
-                    nullable_path(control_path.as_ref()),
-                ),
-                ("rule_id".to_owned(), Value::String(rule_id)),
-                ("base_control_state".to_owned(), Value::Null),
-                (
-                    "base_control_digest".to_owned(),
-                    nullable_digest(control_digests.0),
-                ),
-                ("candidate_control_state".to_owned(), Value::Null),
-                (
-                    "candidate_control_digest".to_owned(),
-                    nullable_digest(control_digests.1),
-                ),
-                ("exception".to_owned(), exception),
-            ]),
-        ),
-    ]);
-    let fact_digest = hj(FACT_DOMAIN, &fact);
-    let configured = kind.built_in_disposition(enforce);
+    let fact = FindingFact::new(
+        &key,
+        Value::Object(vec![
+            ("kind".to_owned(), Value::String("control".to_owned())),
+            (
+                "control_path".to_owned(),
+                nullable_path(control_path.as_ref()),
+            ),
+            ("rule_id".to_owned(), Value::String(rule_id)),
+            ("base_control_state".to_owned(), Value::Null),
+            (
+                "base_control_digest".to_owned(),
+                nullable_digest(control_digests.0),
+            ),
+            ("candidate_control_state".to_owned(), Value::Null),
+            (
+                "candidate_control_digest".to_owned(),
+                nullable_digest(control_digests.1),
+            ),
+            ("exception".to_owned(), exception),
+        ]),
+    );
+    let configured = kind.built_in_disposition(profile);
     let side = if control_path.is_some() {
         LocationSide::Control
     } else {
         LocationSide::Global
     };
     Finding {
-        kind,
-        key_input: key_value,
-        finding_key: digest,
+        key,
         attribution: Attribution::NotApplicable,
         base_fact: None,
-        candidate_fact: Some((fact, fact_digest)),
+        candidate_fact: Some(fact),
         member_count: 1,
         observation_ids: Vec::new(),
         location: Location {
@@ -1558,19 +1633,19 @@ fn control_row(
         debt: None,
         waiver: None,
         fix: None,
-        steps: vec![built_in_step(kind, enforce)],
+        steps: vec![built_in_step(kind, profile)],
     }
 }
 
 fn ordinary(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
-    enforce: bool,
+    profile: Profile,
 ) -> Vec<Finding> {
     let mut findings: Vec<Finding> = Vec::new();
 
     for document in documents {
-        document_findings(document, enforce, &mut findings);
+        document_findings(document, profile, &mut findings);
     }
 
     let invalid = invalid_attributions(comparisons);
@@ -1588,10 +1663,9 @@ fn ordinary(
                 kind,
                 observation_scope(observation.id),
                 attribution,
-                None,
                 vec![observation.id],
                 observation_location(observation, LocationSide::Candidate),
-                enforce,
+                profile,
             ));
         };
         if let Some(kind) = boundary_kind(&observation.resolution) {
@@ -1602,24 +1676,23 @@ fn ordinary(
         }
     }
 
-    structural_findings(comparisons, enforce, &mut findings);
+    structural_findings(comparisons, profile, &mut findings);
 
     for comparison in comparisons {
-        comparison_findings(comparison, enforce, &mut findings);
+        comparison_findings(comparison, profile, &mut findings);
     }
 
-    findings.sort_by_key(|finding| finding.finding_key);
+    findings.sort_by_key(|finding| finding.key.digest());
     findings
 }
 
-fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec<Finding>) {
+fn document_findings(document: &DocumentInput, profile: Profile, findings: &mut Vec<Finding>) {
     let path = &document.path;
     if document.base.is_some() && document.candidate.is_none() {
         findings.push(simple(
             FindingKind::DocumentRemoved,
             document_scope(path),
             Attribution::NotApplicable,
-            None,
             Vec::new(),
             Location {
                 side: LocationSide::Base,
@@ -1627,7 +1700,7 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
                 span: None,
                 display: None,
             },
-            enforce,
+            profile,
         ));
         return;
     }
@@ -1644,10 +1717,9 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
                 FindingKind::UnsupportedDocumentFormat,
                 document_scope(path),
                 Attribution::NotApplicable,
-                None,
                 Vec::new(),
                 candidate_location(),
-                enforce,
+                profile,
             ));
         }
         Some(DocumentSide::Scanned {
@@ -1660,10 +1732,9 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
                     FindingKind::OpaqueMdxRegion,
                     document_scope(path),
                     Attribution::NotApplicable,
-                    None,
                     Vec::new(),
                     candidate_location(),
-                    enforce,
+                    profile,
                 ));
             }
             if html_regions > 0 {
@@ -1671,10 +1742,9 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
                     FindingKind::OpaqueHtmlRegion,
                     document_scope(path),
                     Attribution::NotApplicable,
-                    None,
                     Vec::new(),
                     candidate_location(),
-                    enforce,
+                    profile,
                 ));
             }
             if extracted_references == 0 {
@@ -1682,10 +1752,9 @@ fn document_findings(document: &DocumentInput, enforce: bool, findings: &mut Vec
                     FindingKind::UnlinkedDocument,
                     document_scope(path),
                     Attribution::NotApplicable,
-                    None,
                     Vec::new(),
                     candidate_location(),
-                    enforce,
+                    profile,
                 ));
             }
         }
@@ -1707,16 +1776,14 @@ pub fn structural_facts(observations: &[Observation]) -> BTreeMap<Digest, (u64, 
         .filter_map(|(digest, group)| {
             let first = group.candidate.first()?;
             let multiplicity = u64::try_from(group.candidate.len()).unwrap_or(u64::MAX);
-            let (key_value, _same) = key_input(group.kind, group.scope.clone());
-            let (_fact, fact_digest) = reference_fact(group.kind, &key_value, first, multiplicity);
-            Some((digest, (multiplicity, fact_digest)))
+            let fact = reference_fact(&group.key, first, multiplicity);
+            Some((digest, (multiplicity, fact.digest())))
         })
         .collect()
 }
 
 struct KeyGroup<'a> {
-    kind: FindingKind,
-    scope: Value,
+    key: FindingKey,
     base: Vec<&'a Observation>,
     candidate: Vec<&'a Observation>,
 }
@@ -1729,11 +1796,10 @@ fn collect_structural<'a>(
     let Some(kind) = structural_kind(&observation.resolution) else {
         return;
     };
-    let scope = reference_scope(observation);
-    let (_input, digest) = key_input(kind, scope.clone());
+    let key = FindingKey::new(kind, reference_scope(observation));
+    let digest = key.digest();
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
-        kind,
-        scope,
+        key,
         base: Vec::new(),
         candidate: Vec::new(),
     });
@@ -1748,7 +1814,7 @@ fn collect_structural<'a>(
 /// sides, one finding per key with at least one included side. Attribution
 /// follows fact presence and equality, and a base-only projection is forced
 /// to record so a deletion cannot retain an old blocking failure.
-fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut Vec<Finding>) {
+fn structural_findings(comparisons: &[Comparison], profile: Profile, findings: &mut Vec<Finding>) {
     let mut groups: BTreeMap<Digest, KeyGroup<'_>> = BTreeMap::new();
     for observation in candidate_occurrences(comparisons) {
         collect_structural(&mut groups, observation, false);
@@ -1757,20 +1823,18 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
         collect_structural(&mut groups, observation, true);
     }
 
-    for (digest, group) in groups {
-        let (key_value, _same) = key_input(group.kind, group.scope.clone());
+    for (_digest, group) in groups {
+        let kind = group.key.kind();
         let base_fact = group.base.first().map(|observation| {
             reference_fact(
-                group.kind,
-                &key_value,
+                &group.key,
                 observation,
                 u64::try_from(group.base.len()).unwrap_or(u64::MAX),
             )
         });
         let candidate_fact = group.candidate.first().map(|observation| {
             reference_fact(
-                group.kind,
-                &key_value,
+                &group.key,
                 observation,
                 u64::try_from(group.candidate.len()).unwrap_or(u64::MAX),
             )
@@ -1778,7 +1842,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
         let attribution = match (&base_fact, &candidate_fact) {
             (None, Some(_)) => Attribution::Introduced,
             (Some(_), None) => Attribution::Resolved,
-            (Some((left, _)), Some((right, _))) if left == right => Attribution::PreExisting,
+            (Some(left), Some(right)) if left == right => Attribution::PreExisting,
             (Some(_), Some(_)) => Attribution::Unknown,
             (None, None) => Attribution::NotApplicable,
         };
@@ -1793,6 +1857,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
         };
         let mut ids: Vec<Digest> = members.iter().map(|observation| observation.id).collect();
         ids.sort_unstable();
+        let member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
         let representative = members
             .iter()
             .min_by_key(|observation| {
@@ -1821,17 +1886,15 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
         let configured = if attribution == Attribution::Resolved {
             Disposition::Record
         } else {
-            group.kind.built_in_disposition(enforce)
+            kind.built_in_disposition(profile)
         };
         let fix = missing_fix(&group.candidate);
         findings.push(Finding {
-            kind: group.kind,
-            key_input: key_value,
-            finding_key: digest,
+            key: group.key,
             attribution,
             base_fact,
             candidate_fact,
-            member_count: u64::try_from(members.len()).unwrap_or(u64::MAX),
+            member_count,
             observation_ids: ids,
             location,
             configured_disposition: configured,
@@ -1847,7 +1910,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
                     after: Disposition::Record,
                 }]
             } else {
-                vec![built_in_step(group.kind, enforce)]
+                vec![built_in_step(kind, profile)]
             },
         });
     }
@@ -1855,7 +1918,7 @@ fn structural_findings(comparisons: &[Comparison], enforce: bool, findings: &mut
 
 /// Step four: one removal per base-only comparison, one ambiguity per
 /// ambiguous comparison, and the three named impact findings only.
-fn comparison_findings(comparison: &Comparison, enforce: bool, findings: &mut Vec<Finding>) {
+fn comparison_findings(comparison: &Comparison, profile: Profile, findings: &mut Vec<Finding>) {
     if comparison.outcome == Outcome::None
         && comparison.base.is_some()
         && comparison.candidate.is_none()
@@ -1865,10 +1928,9 @@ fn comparison_findings(comparison: &Comparison, enforce: bool, findings: &mut Ve
                 FindingKind::ExplicitReferenceRemoved,
                 observation_scope(base.id),
                 Attribution::NotApplicable,
-                None,
                 vec![base.id],
                 observation_location(base, LocationSide::Base),
-                enforce,
+                profile,
             ));
         }
         return;
@@ -1891,10 +1953,9 @@ fn comparison_findings(comparison: &Comparison, enforce: bool, findings: &mut Ve
             FindingKind::ObservationCorrelationAmbiguous,
             observation_scope(primary.id),
             Attribution::NotApplicable,
-            None,
             vec![primary.id],
             observation_location(primary, side),
-            enforce,
+            profile,
         ));
         return;
     }
@@ -1916,10 +1977,9 @@ fn comparison_findings(comparison: &Comparison, enforce: bool, findings: &mut Ve
             kind,
             observation_scope(primary.id),
             Attribution::NotApplicable,
-            None,
             vec![primary.id],
             observation_location(primary, side),
-            enforce,
+            profile,
         ));
     }
 }

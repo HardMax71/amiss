@@ -40,8 +40,10 @@ fn profile_table() -> String {
             table,
             "\n| `{}` | `{}` | `{}` |",
             kind.as_str(),
-            kind.built_in_disposition(false).as_str(),
-            kind.built_in_disposition(true).as_str(),
+            kind.built_in_disposition(amiss_wire::controls::Profile::Observe)
+                .as_str(),
+            kind.built_in_disposition(amiss_wire::controls::Profile::Enforce)
+                .as_str(),
         )
         .expect("writing to a String is infallible");
     }

@@ -26,17 +26,18 @@ pub fn load_plan(raw: &CheckPlanFiles) -> Result<CheckPlan, ConfigError> {
     let profile = match raw.profile.as_str() {
         "observe" => Profile::Observe,
         "enforce" => Profile::Enforce,
-        _ => return Err(ConfigError("profile must be observe or enforce")),
+        _ => return Err(ConfigError::invalid("profile must be observe or enforce")),
     };
     let execution_bytes = read_regular(&raw.execution_constraint_file, REQUEST_STREAM_BYTES)?;
     let execution = ExecutionConstraintDescriptor::parse(&execution_bytes)
-        .map_err(|_defect| ConfigError("execution constraint is invalid"))?;
+        .map_err(|defect| ConfigError::caused_by("execution constraint is invalid", defect))?;
     let policy = PolicyControls {
         organization_floor: load_control(raw.organization_floor_file.as_deref())?,
         debt_snapshot: load_control(raw.debt_snapshot_file.as_deref())?,
         waiver_bundle: load_control(raw.waiver_bundle_file.as_deref())?,
     };
-    check_plan(profile, policy, execution).map_err(|_defect| ConfigError("check plan is invalid"))
+    check_plan(profile, policy, execution)
+        .map_err(|defect| ConfigError::caused_by("check plan is invalid", defect))
 }
 
 fn load_control(path: Option<&Path>) -> Result<Option<AcquiredControl>, ConfigError> {

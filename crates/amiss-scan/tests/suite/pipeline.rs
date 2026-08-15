@@ -4,6 +4,7 @@ use std::path::Path;
 use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::{Built, RequestDigests};
+use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::{EngineProvenance, FixKind};
@@ -24,8 +25,7 @@ fn engine() -> EngineProvenance {
 fn shell() -> SetupShell {
     SetupShell {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -422,14 +422,14 @@ fn a_fix_is_emitted_only_when_provable() {
     );
 
     let missing = "[amiss:v]: <amiss:value?path=gone.md&line=L1> \"words\"";
-    let (_code, payload) = claimed_run(missing, false);
+    let (_code, payload) = claimed_run(missing, Profile::Observe);
     assert!(
         payload["findings"][0]["fix"].is_null(),
         "a missing target has no derivable content: {payload}"
     );
 
     let duplicated = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"one\"\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"two\"";
-    let (_code, payload) = claimed_run(duplicated, false);
+    let (_code, payload) = claimed_run(duplicated, Profile::Observe);
     assert_eq!(payload["findings"][0]["aggregation"]["member_count"], 2);
     assert!(
         payload["findings"][0]["fix"].is_null(),
@@ -754,7 +754,7 @@ fn a_base_side_claim_is_not_evaluated() {
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn claimed_run(claim_line: &str, enforce: bool) -> (i64, serde_json::Value) {
+fn claimed_run(claim_line: &str, profile: Profile) -> (i64, serde_json::Value) {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     let base = base_commit(root);
@@ -764,7 +764,7 @@ fn claimed_run(claim_line: &str, enforce: bool) -> (i64, serde_json::Value) {
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let mut setup = shell();
-    setup.enforce = enforce;
+    setup.profile = profile;
     let built = commit_pair(
         &repo,
         &engine(),
@@ -782,7 +782,7 @@ fn claimed_run(claim_line: &str, enforce: bool) -> (i64, serde_json::Value) {
 #[test]
 fn a_broken_claim_warns_then_fails_by_profile() {
     let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"";
-    let (code, payload) = claimed_run(claim, false);
+    let (code, payload) = claimed_run(claim, Profile::Observe);
     assert_eq!(code, 0, "observe never blocks: {payload}");
     let fix = &payload["findings"][0]["fix"];
     assert_eq!(fix["path"], "docs.md", "{payload}");
@@ -821,7 +821,7 @@ fn a_broken_claim_warns_then_fails_by_profile() {
         "the claim name heads the rule id"
     );
 
-    let (code, payload) = claimed_run(claim, true);
+    let (code, payload) = claimed_run(claim, Profile::Enforce);
     assert_eq!(code, 1, "enforce blocks on a broken claim: {payload}");
 }
 
@@ -830,7 +830,7 @@ fn a_broken_claim_warns_then_fails_by_profile() {
 #[test]
 fn a_claim_target_nothing_answers_is_missing_by_name() {
     let claim = "[amiss:v]: <amiss:value?path=absent.txt&line=L1> \"x\"";
-    let (code, payload) = claimed_run(claim, false);
+    let (code, payload) = claimed_run(claim, Profile::Observe);
     assert_eq!(code, 0, "{payload}");
     let row = payload["findings"]
         .as_array()
@@ -851,7 +851,7 @@ fn a_claim_target_nothing_answers_is_missing_by_name() {
 #[test]
 fn an_unknown_capability_beside_a_claim_keeps_the_boundary() {
     let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n[amiss:future]: <amiss:region>";
-    let (code, payload) = claimed_run(claim, false);
+    let (code, payload) = claimed_run(claim, Profile::Observe);
     assert_eq!(code, 2, "the unknown kind is still a boundary: {payload}");
     assert_eq!(payload["result"]["status"], "incomplete");
     let kinds: Vec<&str> = payload["findings"]
@@ -878,7 +878,7 @@ fn an_unknown_capability_beside_a_claim_keeps_the_boundary() {
 #[test]
 fn duplicate_claim_names_aggregate() {
     let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wronger\"";
-    let (_code, payload) = claimed_run(claim, false);
+    let (_code, payload) = claimed_run(claim, Profile::Observe);
     let rows: Vec<&serde_json::Value> = payload["findings"]
         .as_array()
         .unwrap()
@@ -924,7 +924,7 @@ fn a_staged_claim_attests_like_a_committed_one() {
 #[test]
 fn mixed_verdicts_under_one_name_split_by_kind() {
     let claim = "[amiss:v]: <amiss:value?path=README.md&line=L1> \"# Wrong\"\n[amiss:v]: <amiss:value?path=absent.txt&line=L1> \"x\"";
-    let (_code, payload) = claimed_run(claim, false);
+    let (_code, payload) = claimed_run(claim, Profile::Observe);
     let kinds: Vec<&str> = payload["findings"]
         .as_array()
         .unwrap()

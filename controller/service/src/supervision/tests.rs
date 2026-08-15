@@ -79,7 +79,7 @@ async fn signal_drains_in_order() {
     )
     .await;
 
-    assert_eq!(result, Ok(()));
+    assert!(result.is_ok());
     assert_eq!(
         events,
         [
@@ -108,7 +108,7 @@ async fn pending_shutdown_skips_readiness() {
     )
     .await;
 
-    assert_eq!(result, Ok(()));
+    assert!(result.is_ok());
     assert_eq!(
         events,
         [
@@ -137,8 +137,8 @@ async fn shutdown_handler_failure_is_not_a_signal() {
     .await;
 
     assert_eq!(
-        result,
-        Err(SupervisionError("shutdown signal handler stopped"))
+        result.expect_err("shutdown failure").to_string(),
+        "shutdown signal handler stopped"
     );
     assert_eq!(
         events,
@@ -157,7 +157,9 @@ async fn failure_while_draining_is_reported() {
         stopped_server,
         async move {
             observed.notified().await;
-            Err(SupervisionError("component failed"))
+            Err(SupervisionError::component(io::Error::other(
+                "component failed",
+            )))
         },
         async {
             tokio::task::yield_now().await;
@@ -170,7 +172,10 @@ async fn failure_while_draining_is_reported() {
     )
     .await;
 
-    assert_eq!(result, Err(SupervisionError("component failed")));
+    assert_eq!(
+        result.expect_err("component failure").to_string(),
+        "component failed"
+    );
     assert_eq!(
         events,
         [
@@ -216,7 +221,10 @@ async fn server_failure_starts_drain_before_or_after_readiness() {
             ])
             .collect::<Vec<_>>();
 
-        assert_eq!(result, Err(SupervisionError("HTTP service stopped")));
+        assert_eq!(
+            result.expect_err("server failure").to_string(),
+            "HTTP service stopped"
+        );
         assert_eq!(events, expected);
     }
 }
@@ -284,7 +292,7 @@ async fn draining_is_visible_while_component_stop_is_blocked() {
     let (lock, released) = &*release;
     *lock.lock().unwrap() = true;
     released.notify_one();
-    assert_eq!(service.await.unwrap(), Ok(()));
+    assert!(service.await.unwrap().is_ok());
     assert_eq!(
         *events.lock().unwrap(),
         [

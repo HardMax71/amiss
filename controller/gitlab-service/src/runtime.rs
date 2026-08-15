@@ -1,6 +1,5 @@
 mod tests;
 
-use std::fmt;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,16 +7,16 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use amiss_controller::{
-    AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryHeader, DeliveryRoute,
-    FileLedgerRoot, IngressPolicy, PlanRegistry, ProviderAdapter, SystemClock, UntrustedDelivery,
-    register_plan,
+    AcquiringRunner, AdapterRegistry, Controller, ControllerClock, ControllerError, DeliveryHeader,
+    DeliveryRoute, FileLedgerError, FileLedgerRoot, IngressPolicy, PlanError, PlanRegistry,
+    ProviderAdapter, RegistryError, SystemClock, UntrustedDelivery, register_plan,
 };
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EndpointDrain, EvaluationRequest, Operations, ServiceComponent,
-    Supervision, SupervisionError, check_lane, evaluation_router_with_clock, shutdown_signal,
-    supervise,
+    AdmissionRejection, EndpointDrain, EvaluationConfigError, EvaluationRequest, Operations,
+    ServiceComponent, Supervision, SupervisionError, check_lane, evaluation_router_with_clock,
+    shutdown_signal, supervise,
 };
 use axum::Router;
 use axum::http::StatusCode;
@@ -31,16 +30,35 @@ use crate::config::ServiceConfig;
 
 const LEDGER_MAINTENANCE_INTERVAL: Duration = Duration::from_mins(1);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ServiceError(pub &'static str);
-
-impl fmt::Display for ServiceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum ServiceError {
+    #[error("shutdown signal handler cannot be installed")]
+    ShutdownInstall(#[source] std::io::Error),
+    #[error("HTTP listener cannot bind")]
+    Listener(#[source] std::io::Error),
+    #[error(transparent)]
+    Supervision(#[from] SupervisionError),
+    #[error("delivery record cannot be opened")]
+    LedgerOpen(#[source] FileLedgerError),
+    #[error("check plan cannot be registered")]
+    Plan(#[source] PlanError),
+    #[error("HTTP evaluation configuration is invalid")]
+    EvaluationConfiguration(#[source] EvaluationConfigError),
+    #[error("maintenance interval overflow")]
+    MaintenanceInterval,
+    #[error("delivery record maintenance panicked")]
+    MaintenancePanicked(#[source] tokio::task::JoinError),
+    #[error("delivery record maintenance failed")]
+    Maintenance(#[source] FileLedgerError),
+    #[error("evaluation unavailable")]
+    EvaluationLedger(#[source] FileLedgerError),
+    #[error("evaluation unavailable")]
+    EvaluationRunner,
+    #[error("evaluation unavailable")]
+    EvaluationRegistry(#[source] RegistryError),
+    #[error("evaluation unavailable")]
+    EvaluationController(#[source] ControllerError<FileLedgerError>),
 }
-
-impl std::error::Error for ServiceError {}
 
 struct Prepared {
     listen: std::net::SocketAddr,
@@ -75,8 +93,7 @@ struct Lane {
 ///
 /// Returns an error when the lane cannot start or continue safely.
 pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
-    let shutdown = shutdown_signal()
-        .map_err(|_defect| ServiceError("shutdown signal handler cannot be installed"))?;
+    let shutdown = shutdown_signal().map_err(ServiceError::ShutdownInstall)?;
     let Prepared {
         listen,
         router,
@@ -87,11 +104,11 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
     } = prepare(config)?;
     let listener = TcpListener::bind(listen)
         .await
-        .map_err(|_defect| ServiceError("HTTP listener cannot bind"))?;
+        .map_err(ServiceError::Listener)?;
     let maintenance_stop = Arc::new(Notify::new());
     let component_stop = Arc::clone(&maintenance_stop);
     let component = maintain_ledger(ledger, Arc::clone(&maintenance_stop), operations.clone());
-    let component = async move { component.await.map_err(|error| SupervisionError(error.0)) };
+    let component = async move { component.await.map_err(SupervisionError::component) };
     supervise(
         Supervision {
             listener,
@@ -108,19 +125,19 @@ pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
             Ok(())
         },
     )
-    .await
-    .map_err(|error| ServiceError(error.0))
+    .await?;
+    Ok(())
 }
 
 fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
     let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
     let ledger = Arc::new(
         FileLedgerRoot::open_with_clock(&config.ledger_root, config.ledger, Arc::clone(&clock))
-            .map_err(|_defect| ServiceError("delivery record cannot be opened"))?,
+            .map_err(ServiceError::LedgerOpen)?,
     );
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, config.scope, Arc::clone(&config.plan))
-        .map_err(|_defect| ServiceError("check plan cannot be registered"))?;
+        .map_err(ServiceError::Plan)?;
     let adapter: Arc<dyn ProviderAdapter> =
         Arc::new(GitLabMergeTrainAdapter::new(config.source, config.client));
     let operations = Operations::default();
@@ -150,7 +167,7 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         Arc::clone(&lane.clock),
         move |request| evaluate(&lane, request),
     )
-    .map_err(|_defect| ServiceError("HTTP evaluation configuration is invalid"))?;
+    .map_err(ServiceError::EvaluationConfiguration)?;
     Ok(Prepared {
         listen: config.listen,
         router,
@@ -183,7 +200,7 @@ where
 {
     let start = Instant::now()
         .checked_add(period)
-        .ok_or(ServiceError("maintenance interval overflow"))?;
+        .ok_or(ServiceError::MaintenanceInterval)?;
     let mut ticks = tokio::time::interval_at(start, period);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
@@ -201,8 +218,8 @@ async fn cleanup_ledger(
 ) -> Result<(), ServiceError> {
     let removed = tokio::task::spawn_blocking(move || ledger.cleanup())
         .await
-        .map_err(|_panic| ServiceError("delivery record maintenance panicked"))?
-        .map_err(|_defect| ServiceError("delivery record maintenance failed"))?;
+        .map_err(ServiceError::MaintenancePanicked)?
+        .map_err(ServiceError::Maintenance)?;
     operations.maintenance_runs.inc();
     operations.maintenance_removals.inc_by(
         removed
@@ -252,7 +269,7 @@ fn handle(
     let ledger = lane
         .ledger
         .session()
-        .map_err(|_defect| ServiceError("evaluation unavailable"))?;
+        .map_err(ServiceError::EvaluationLedger)?;
     let acquisition = gitlab_acquisition(
         lane.git_bounds,
         lane.project_id,
@@ -267,11 +284,11 @@ fn handle(
         lane.statement_validity,
         Arc::clone(&clock),
     )
-    .ok_or(ServiceError("evaluation unavailable"))?;
+    .ok_or(ServiceError::EvaluationRunner)?;
     let mut registry = AdapterRegistry::new();
     registry
         .register(Arc::clone(&lane.adapter))
-        .map_err(|_defect| ServiceError("evaluation unavailable"))?;
+        .map_err(ServiceError::EvaluationRegistry)?;
     let mut controller = Controller::new_with_clock(
         registry,
         lane.plans.clone(),
@@ -283,7 +300,7 @@ fn handle(
     .with_external_sink(Arc::new(lane.operations.clone()));
     controller
         .handle(untrusted)
-        .map_err(|_defect| ServiceError("evaluation unavailable"))
+        .map_err(ServiceError::EvaluationController)
 }
 
 fn result_status<E>(result: Result<amiss_controller::HandleOutcome, E>) -> StatusCode {

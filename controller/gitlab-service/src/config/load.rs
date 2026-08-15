@@ -28,7 +28,7 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
     let listen = raw
         .listen
         .parse()
-        .map_err(|_defect| ConfigError("listen must be one socket address"))?;
+        .map_err(|defect| ConfigError::caused_by("listen must be one socket address", defect))?;
     let provider = provider(raw.gitlab.instance)?;
     let policy = policy(raw.policy)?;
     let plan = Arc::new(load_plan(&raw.plan)?);
@@ -49,7 +49,7 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
         policy.project_path
     );
     let git_bounds = GitFetchBounds::new(limits.git.request)
-        .ok_or(ConfigError("GitLab Git timeout is invalid"))?;
+        .ok_or(ConfigError::invalid("GitLab Git timeout is invalid"))?;
     let objects = Arc::new(
         GitLabGitObjects::new(
             paths.scratch.clone(),
@@ -59,14 +59,14 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
             clone_secret(&git_token),
             limits.git.request,
         )
-        .ok_or(ConfigError("GitLab Git credential is invalid"))?,
+        .ok_or(ConfigError::invalid("GitLab Git credential is invalid"))?,
     );
     let timeouts = GitLabTimeouts::new(
         limits.http.connect,
         operation_timeout(limits.http),
         PROVIDER_RESPONSE_BYTES,
     )
-    .ok_or(ConfigError("GitLab API timeouts are invalid"))?;
+    .ok_or(ConfigError::invalid("GitLab API timeouts are invalid"))?;
     let client = GitLabClient::new(
         provider.clone(),
         &raw.gitlab.api_base,
@@ -74,9 +74,9 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
         timeouts,
         objects,
     )
-    .map_err(|_defect| ConfigError("GitLab API configuration is invalid"))?;
+    .map_err(|defect| ConfigError::caused_by("GitLab API configuration is invalid", defect))?;
     let trust_set = TrustSetId::new(raw.gitlab.oidc.trust_set)
-        .ok_or(ConfigError("GitLab OIDC trust set is invalid"))?;
+        .ok_or(ConfigError::invalid("GitLab OIDC trust set is invalid"))?;
     let source = Arc::new(
         GitLabOidc::new(
             provider.clone(),
@@ -87,10 +87,12 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
             keys(raw.gitlab.oidc.keys)?,
             limits.future_skew.as_secs(),
         )
-        .map_err(|_defect| ConfigError("GitLab OIDC configuration is invalid"))?,
+        .map_err(|defect| ConfigError::caused_by("GitLab OIDC configuration is invalid", defect))?,
     );
     let ledger = FileLedgerConfig::new(limits.ledger.lease, limits.ledger.records, limits.replay)
-        .ok_or(ConfigError("GitLab delivery record limits are invalid"))?;
+        .ok_or(ConfigError::invalid(
+        "GitLab delivery record limits are invalid",
+    ))?;
     Ok(ServiceConfig {
         listen,
         evaluation,
@@ -119,13 +121,13 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
 
 fn load_token(path: &std::path::Path) -> Result<SecretString, ConfigError> {
     let bytes = read_regular(path, TOKEN_BYTES)?;
-    let token =
-        String::from_utf8(bytes).map_err(|_defect| ConfigError("GitLab token is invalid"))?;
+    let token = String::from_utf8(bytes)
+        .map_err(|defect| ConfigError::caused_by("GitLab token is invalid", defect))?;
     let valid = (16..=usize::try_from(TOKEN_BYTES).unwrap_or(usize::MAX)).contains(&token.len())
         && token.bytes().all(|byte| byte.is_ascii_graphic());
     valid
         .then(|| SecretString::from(token))
-        .ok_or(ConfigError("GitLab token is invalid"))
+        .ok_or(ConfigError::invalid("GitLab token is invalid"))
 }
 
 fn policy_job_endpoint(
@@ -156,7 +158,7 @@ fn validate_action(
     (plan.execution.action_repository.host == provider.instance.as_str()
         && plan.execution.action_object_format == ObjectFormat::Sha1)
         .then_some(())
-        .ok_or(ConfigError(
+        .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 GitLab instance",
         ))
 }
