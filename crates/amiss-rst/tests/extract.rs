@@ -153,8 +153,9 @@ fn only_injected_raw_output_is_opaque() {
         .any(|block| block.kind == Kind::Literal);
     assert!(literal, "a paragraph ending in :: opens a literal block");
     for source in [
-        b".. raw:: html\n\n   <a href=\"gone.html\">x</a>\n".as_slice(),
-        b".. RAW:: latex\n\n   \\href{gone}{x}\n".as_slice(),
+        b".. raw:: html\n\n   `hidden <guide.rst>`_\n".as_slice(),
+        b".. RAW:: latex\n\n   `hidden <guide.rst>`_\n".as_slice(),
+        b"* item\n\n  .. raw:: html\n\n     `hidden <guide.rst>`_\n".as_slice(),
     ] {
         let raw = extract(source).expect("utf-8 source");
         assert_eq!(
@@ -164,7 +165,7 @@ fn only_injected_raw_output_is_opaque() {
         );
         assert!(
             raw.references.is_empty(),
-            "the raw body is not reference-scanned"
+            "a reference form inside the raw body is not scanned"
         );
     }
     let image = extract(b".. image:: img/a.png\n").expect("utf-8 source");

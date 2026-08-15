@@ -223,9 +223,10 @@ fn read_titles(extraction: &mut Extraction, order: &mut Vec<char>, block: &Block
 }
 
 /// A `raw` directive injects its body into the output verbatim: rendered
-/// content the parser cannot read, which is what opaque means.
+/// content the parser cannot read, which is what opaque means. A nested
+/// directive keeps its indent in the body, so the marker is read past it.
 fn raw_directive(body: &str) -> bool {
-    let line = body.split('\n').next().unwrap_or_default();
+    let line = body.split('\n').next().unwrap_or_default().trim_start();
     line.strip_prefix(".. ")
         .and_then(|rest| rest.split_once("::"))
         .is_some_and(|(name, _argument)| name.trim().eq_ignore_ascii_case("raw"))
