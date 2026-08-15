@@ -213,6 +213,32 @@ fn a_staged_policy_raises_the_disposition_of_the_run_that_stages_it() {
     );
 }
 
+/// Two identical destinations mined from one raw-HTML block are two
+/// observations with distinct identities: the scan completes and resolves
+/// both instead of aborting on a colliding observation id.
+#[test]
+fn duplicate_html_destinations_scan_cleanly() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(root.join("a.md"), "x\n").unwrap();
+    fs::write(
+        root.join("dup.md"),
+        "<div>\n<a href=\"./a.md\">one</a>\n<a href=\"./a.md\">two</a>\n</div>\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let payload = payload(&built);
+    assert_eq!(built.exit_code, 0, "{payload}");
+    assert_eq!(payload["result"]["status"], "pass");
+    assert_eq!(payload["errors"].as_array().map(Vec::len), Some(0));
+    assert_eq!(payload["summary"]["references"]["extracted"], 2);
+    assert_eq!(payload["summary"]["references"]["resolved"], 2);
+}
+
 /// A well-formed value claim whose target agrees is attested: no finding,
 /// no boundary, and the summary counts it.
 #[test]

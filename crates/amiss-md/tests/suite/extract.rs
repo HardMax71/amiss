@@ -684,6 +684,37 @@ fn html_anchor_and_image_destinations_are_read() {
     assert_eq!(got.opaque.html.len(), 1, "the region stays declared opaque");
 }
 
+/// Two identical tags in one raw-HTML node stay two occurrences: the mined
+/// ordinal extends the node's path, so equal destinations keep distinct
+/// addresses instead of colliding into one.
+#[test]
+fn identical_html_destinations_keep_distinct_paths() {
+    let source = "<div>\n<a href=\"./a.md\">one</a>\n<a href=\"./a.md\">two</a>\n</div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![
+            (
+                SourceConstruct::HtmlAnchor,
+                "./a.md".to_owned(),
+                "./a.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "./a.md".to_owned(),
+                "./a.md".to_owned()
+            ),
+        ]
+    );
+    let paths: Vec<&[usize]> = got
+        .occurrences
+        .iter()
+        .map(|entry| entry.node_path.as_slice())
+        .collect();
+    assert_eq!(paths, vec![&[0, 0][..], &[0, 1][..]], "{paths:?}");
+    assert_eq!(got.opaque.html.len(), 1, "one region carries both tags");
+}
+
 /// The two destination spellings hold for raw HTML the way they do for
 /// markdown: the raw value keeps the author's references and the semantic
 /// value decodes them, while a bare ampersand in a query stays itself. A `>`

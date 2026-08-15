@@ -296,6 +296,9 @@ impl Sweep<'_> {
 
     /// `href` and `src` are read out of a raw-HTML node the way any destination
     /// is, references decoded; comments and raw-text bodies stay the blind spot.
+    /// Each mined tag extends the node's path with its ordinal, the way the
+    /// `AsciiDoc` and RST adapters count within a block, so two equal tags in one
+    /// node keep distinct addresses.
     fn destinations(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
         let Some(region) = self.suffix.as_bytes().get(span.0..span.1) else {
             return;
@@ -327,9 +330,11 @@ impl Sweep<'_> {
             }
             Some(end)
         });
-        for (construct, value, tag_span) in found {
+        for (within, (construct, value, tag_span)) in found.into_iter().enumerate() {
             if let Some(semantic) = decoded(&value) {
-                self.push(construct, value, semantic, tag_span, path, owners);
+                let mut tag_path = path.to_vec();
+                tag_path.push(within);
+                self.push(construct, value, semantic, tag_span, &tag_path, owners);
             }
         }
     }
