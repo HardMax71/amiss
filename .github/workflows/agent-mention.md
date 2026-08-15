@@ -34,7 +34,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: agent-mention-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
+          key: agent-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
           path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 steps:
@@ -48,7 +48,7 @@ steps:
     continue-on-error: true
     uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
     with:
-      key: agent-mention-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
+      key: agent-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
       path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 pre-agent-steps:
@@ -66,7 +66,7 @@ pre-agent-steps:
     continue-on-error: true
     uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
     with:
-      key: agent-mention-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
+      key: agent-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
       path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 timeout-minutes: 25

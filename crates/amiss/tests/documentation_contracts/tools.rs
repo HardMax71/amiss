@@ -258,6 +258,11 @@ fn the_agent_lanes_spell_one_copilot_version() {
             .collect();
         let version = spellings.first().copied().expect("the lane pins a version");
         assert_eq!(
+            spellings.len(),
+            3,
+            "{lane} gained or lost a version literal; env plus two engine blocks carry it"
+        );
+        assert_eq!(
             spellings,
             vec![version; 3],
             "{lane} spells more than one copilot version"
