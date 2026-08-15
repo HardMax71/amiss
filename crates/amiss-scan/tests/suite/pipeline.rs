@@ -239,6 +239,65 @@ fn duplicate_html_destinations_scan_cleanly() {
     assert_eq!(payload["summary"]["references"]["resolved"], 2);
 }
 
+/// The same pair against a missing target reaches the report as two rows:
+/// each keeps its own mined address and identity, and the one aggregated
+/// finding names both, where the collision once aborted the whole run.
+#[test]
+fn equal_broken_anchors_are_two_observations_in_one_finding() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(
+        root.join("nav.md"),
+        "<div>\n<a href=\"./missing.md\">one</a>\n<a href=\"./missing.md\">two</a>\n</div>\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "nav"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(payload["result"]["complete"], true, "{payload}");
+    let anchors: Vec<&serde_json::Value> = payload["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| &row["candidate"])
+        .filter(|side| side["source_construct"] == "html-anchor")
+        .collect();
+    assert_eq!(anchors.len(), 2, "both mined anchors survive: {payload}");
+    assert_ne!(
+        anchors[0]["observation_id"], anchors[1]["observation_id"],
+        "the mined ordinal keeps the identities apart"
+    );
+    assert_ne!(
+        anchors[0]["observation_id_input"]["structural_address"]["node_path"],
+        anchors[1]["observation_id_input"]["structural_address"]["node_path"],
+        "each tag carries its own address"
+    );
+    let missing = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "explicit-target-missing")
+        .unwrap_or_else(|| panic!("the shared target is reported missing: {payload}"));
+    assert_eq!(missing["aggregation"]["member_count"], 2, "{missing}");
+    assert_eq!(
+        missing["observation_ids"].as_array().map(Vec::len),
+        Some(2),
+        "the one finding names both occurrences: {missing}"
+    );
+}
+
 /// A well-formed value claim whose target agrees is attested: no finding,
 /// no boundary, and the summary counts it.
 #[test]
