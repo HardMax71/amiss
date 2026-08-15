@@ -1236,7 +1236,7 @@ fn attribute_value(region: &[u8], from: usize) -> Option<(String, usize)> {
     let mut end = start;
     while let Some(byte) = region.get(end) {
         let closes = quote.map_or_else(
-            || byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/',
+            || byte.is_ascii_whitespace() || *byte == b'>',
             |mark| *byte == mark,
         );
         if closes {
