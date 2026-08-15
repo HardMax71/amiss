@@ -39,6 +39,7 @@ fn the_deny_table_refuses_every_unroutable_family() {
         "::ffff:127.0.0.1",
         "::ffff:10.0.0.1",
         "::ffff:1.1.1.1",
+        "::1.1.1.1",
         "0.1.2.3",
         "::10.0.0.1",
         "100::1",
