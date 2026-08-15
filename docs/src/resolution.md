@@ -27,7 +27,7 @@ Each destination then passes through the generic
 trusted absolute forge spellings continue through the private
 [dialect module](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve/forge.rs).
 A relative path resolves from the document's own directory and must stay inside the
-repository; `../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
+repository; `../../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
 with `/` is a site route, not a repository-root shorthand, and is reported as unsupported
 reference semantics. Forge URLs need the complete identity group, not only the repository
 name. When the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
@@ -59,7 +59,7 @@ One document, every destination shape:
 [guide](guide.md)                     resolves beside this document
 [guide](guide)                        resolves to guide.md, the spelling a router serves
 [site](/docs/guide.md)                unsupported site route; it is not rewritten as a tree path
-[escape](../../etc/passwd)            invalid-reference: it leaves the repository
+[escape](../../../etc/passwd)         invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
 [lines](../src/lib.rs#L45-L48)         exact inclusive line selection under github or gitea
