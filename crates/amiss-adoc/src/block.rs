@@ -25,6 +25,7 @@ pub fn blocks(text: &str) -> Vec<Block> {
         let start = offset;
         offset = offset.saturating_add(raw.len());
         let line = raw.strip_suffix('\n').unwrap_or(raw);
+        let line = line.strip_suffix('\r').unwrap_or(line);
 
         if let Some((fence, delimiter, body_start)) = open.last().cloned() {
             if line == fence {

@@ -240,6 +240,24 @@ fn a_fence_is_a_run_of_four_or_its_own_word() {
     );
 }
 
+/// A CRLF closer is the same fence its opener stored, so a delimited block
+/// ends where the LF twin's does and the tail stays prose.
+#[test]
+fn a_crlf_fence_closes_like_its_lf_twin() {
+    assert_eq!(
+        shapes("----\r\ncode\r\n----\r\nafter\r\n"),
+        vec![(Some(Delimiter::Verbatim), false), (None, false)],
+    );
+    let read = extract(b"++++\r\n<div>raw</div>\r\n++++\r\n\r\nlink:gone.adoc[x]\r\n")
+        .expect("utf-8 source");
+    assert_eq!(read.opaque, vec![(6, 22)]);
+    assert_eq!(
+        read.references.len(),
+        1,
+        "the line after the closer is prose"
+    );
+}
+
 /// A list item is a marker run followed by a space, and an empty paragraph is
 /// no block at all.
 #[test]

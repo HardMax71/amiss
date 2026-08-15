@@ -139,6 +139,16 @@ fn an_internal_label_publishes_an_anchor_rather_than_a_reference() {
     assert!(extraction.references.is_empty());
 }
 
+/// A CRLF label line declares the same anchor its LF twin does, so a `:ref:`
+/// to it still has a target.
+#[test]
+fn a_crlf_label_declares_its_anchor_like_its_lf_twin() {
+    let extraction =
+        extract(b".. _install-notes:\r\n\r\nInstall\r\n=======\r\n").expect("utf-8 source");
+    assert_eq!(extraction.anchors, vec!["install-notes"]);
+    assert!(extraction.references.is_empty());
+}
+
 #[test]
 fn only_injected_raw_output_is_opaque() {
     let extraction = extract(b"Example::\n\n   `hidden <guide.rst>`_\n\n.. a plain comment\n")
@@ -368,6 +378,17 @@ fn a_flush_left_line_after_the_literal_marker_stays_text() {
 #[test]
 fn an_indented_line_stays_inside_the_open_literal() {
     assert!(kinds("intro::\n\n    one\n    `x <y.rst>`_\n").is_empty());
+}
+
+/// A CRLF paragraph ending `::` opens its literal block exactly like the LF
+/// twin, so the indented body stays code rather than prose.
+#[test]
+fn a_crlf_literal_marker_opens_the_literal_like_its_lf_twin() {
+    let literal = blocks("Example::\r\n\r\n   code\r\n")
+        .into_iter()
+        .any(|block| block.kind == Kind::Literal);
+    assert!(literal);
+    assert!(kinds("Example::\r\n\r\n   `guide <gone.rst>`_\r\n").is_empty());
 }
 
 /// A reStructuredText destination names its fragment bytes under the same
