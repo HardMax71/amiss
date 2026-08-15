@@ -26,8 +26,13 @@ node_modules  vendor  third_party  dist  build  .next  target  test  tests
 ```
 
 The names are fixed: no configuration adds one or takes one away. A repository policy can
-still name an exact path inside a skipped directory as a document include, which admits that
-one path and nothing else, because policy adds coverage and never removes it. Skipping is
+still readmit coverage underneath a skipped name, because policy adds coverage and never
+removes it: a document include admits its one exact path, and a tree include admits the
+whole subtree. That is the monorepo lever. A package legitimately named `build`, `dist`,
+`test`, or `tests` keeps its prose scanned through one tree include in
+[the repository policy](controls.md), and there is no mechanism in the other direction:
+Amiss always reads the whole repository, so a monorepo cannot scope a run down to one
+package. Skipping is
 visible in both directions: skipped documents still show up in the report's counts, as
 excluded. This repository relies on the rule itself: its vendored parser test corpus lives
 under `corpus/third_party/` exactly so that fixture files full of deliberately broken links

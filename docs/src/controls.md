@@ -11,6 +11,32 @@ observe warning to `fail` and can never downgrade or suppress it. An unknown
 field makes the whole file invalid and the run incomplete, which is what keeps the policy
 from growing into a plugin system one field at a time.
 
+The complete grammar in one example, every field required and the file valid only whole:
+
+```json
+{
+  "schema": "amiss/scanner-policy",
+  "document_includes": [
+    { "path": "build/docs", "kind": "tree" },
+    { "path": "notes/ARCHITECTURE", "kind": "document", "adapter": "markdown" }
+  ],
+  "protected_inventory": ["docs/install.md"],
+  "finding_dispositions": [
+    { "finding_kind": "explicit-target-missing", "disposition": "fail" }
+  ]
+}
+```
+
+The tree include readmits a subtree the built-in skip list would drop, which is
+[Discovery](discovery.md)'s monorepo lever. The document include reads an extensionless
+file under the markdown grammar. The protected path makes its removal a finding, and the
+disposition row promotes one kind to `fail`. The
+[scanner-policy schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-policy.schema.json)
+closes the grammar, and each array keeps the sort order the schema states. The strictness
+also sets the upgrade order: an engine that predates a policy field refuses the whole file
+and leaves the run incomplete, so a repository grows its policy only after every engine
+reading it has learned the field.
+
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching
 is bytewise, including for paths JSON cannot represent as text. Each snapshot policy can carry
