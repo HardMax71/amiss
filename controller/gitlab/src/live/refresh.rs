@@ -22,6 +22,21 @@ struct ChangeData {
 }
 
 impl GitLabApi for GitLabClient {
+    fn verify_external(
+        &self,
+        plan: &amiss_wire::json::Value,
+        checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        super::verify::verify_external(
+            self,
+            plan,
+            self.transport.provider_instance(),
+            env!("CARGO_PKG_VERSION"),
+            checked_at,
+        )
+        .map(Some)
+    }
+
     fn refresh(&self, query: &GitLabRefreshQuery) -> Result<GitLabRefresh, ProviderError> {
         validate_query(query)?;
         let project_id = query.project_id.to_string();

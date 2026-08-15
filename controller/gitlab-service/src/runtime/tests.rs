@@ -95,6 +95,7 @@ fn failed_authentication_never_touches_the_delivery_record() {
         scratch: state.path().to_path_buf(),
         bootstrap_timeout: Duration::from_secs(1),
         statement_validity: Duration::from_mins(5),
+        operations: Operations::default(),
     };
     let headers = [DeliveryHeader {
         name: "authorization".to_owned(),

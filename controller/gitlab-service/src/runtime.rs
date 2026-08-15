@@ -66,6 +66,7 @@ struct Lane {
     scratch: PathBuf,
     bootstrap_timeout: Duration,
     statement_validity: Duration,
+    operations: Operations,
 }
 
 /// Runs one synchronous GitLab policy-job lane until shutdown.
@@ -122,6 +123,7 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         .map_err(|_defect| ServiceError("check plan cannot be registered"))?;
     let adapter: Arc<dyn ProviderAdapter> =
         Arc::new(GitLabMergeTrainAdapter::new(config.source, config.client));
+    let operations = Operations::default();
     let lane = Arc::new(Lane {
         route: config.route,
         adapter,
@@ -137,10 +139,10 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         scratch: config.scratch,
         bootstrap_timeout: config.bootstrap_timeout,
         statement_validity: config.statement_validity,
+        operations: operations.clone(),
     });
     let evaluation = config.evaluation;
     let ready = Arc::new(AtomicBool::new(false));
-    let operations = Operations::default();
     let (router, endpoint) = evaluation_router_with_clock(
         &evaluation,
         Arc::clone(&ready),
@@ -277,7 +279,8 @@ fn handle(
         runner,
         lane.ingress,
         clock,
-    );
+    )
+    .with_external_sink(Arc::new(lane.operations.clone()));
     controller
         .handle(untrusted)
         .map_err(|_defect| ServiceError("evaluation unavailable"))

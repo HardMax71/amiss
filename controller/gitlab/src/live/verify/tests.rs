@@ -1,0 +1,336 @@
+#![cfg(test)]
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
+
+use amiss_controller::ProviderError;
+use amiss_wire::digest::hj;
+use amiss_wire::external::assess;
+use amiss_wire::json::{Value, parse};
+
+use super::super::transport::Budget;
+use super::{GitLabVerification, PRODUCER_NAME, Presence, RefFamily, Visibility, verify_external};
+
+fn plan_over(destinations: &[&str]) -> Value {
+    let report = amiss_fixtures::external_report(destinations);
+    let parsed = parse(&report).expect("the report is strict JSON");
+    let engine = parsed
+        .member("payload")
+        .and_then(|payload| payload.member("engine"))
+        .expect("the report names its engine");
+    amiss_wire::external::plan(
+        &parsed,
+        engine.text("engine_version").expect("a version"),
+        engine.text("engine_digest").expect("a digest"),
+    )
+    .expect("the report yields a plan")
+}
+
+#[derive(Default)]
+struct ScriptedRest {
+    visibility: BTreeMap<&'static str, Visibility>,
+    heads: BTreeMap<&'static str, Vec<&'static str>>,
+    tags: BTreeMap<&'static str, Vec<&'static str>>,
+    files: BTreeMap<(&'static str, &'static str, &'static str), Presence>,
+    trees: BTreeMap<(&'static str, &'static str, &'static str), Presence>,
+    commits: BTreeMap<(&'static str, &'static str), Presence>,
+    refs_denied: BTreeSet<&'static str>,
+    calls: AtomicUsize,
+    unavailable_from: Option<usize>,
+}
+
+impl ScriptedRest {
+    fn spend(&self) -> Result<(), ProviderError> {
+        let call = self.calls.fetch_add(1, Ordering::Relaxed);
+        if self.unavailable_from.is_some_and(|limit| call >= limit) {
+            return Err(ProviderError::Unavailable);
+        }
+        Ok(())
+    }
+}
+
+fn scripted<K: Ord + Copy>(table: &BTreeMap<K, Presence>, key: K) -> Presence {
+    *table.get(&key).unwrap_or(&Presence::Absent)
+}
+
+impl GitLabVerification for ScriptedRest {
+    fn budget(&self) -> Result<Budget, ProviderError> {
+        Budget::after(Duration::from_secs(30), 4 * 1024 * 1024)
+    }
+
+    fn project_visibility(
+        &self,
+        project: &str,
+        budget: Budget,
+    ) -> Result<(Visibility, Budget), ProviderError> {
+        self.spend()?;
+        Ok((
+            *self.visibility.get(project).unwrap_or(&Visibility::Missing),
+            budget,
+        ))
+    }
+
+    fn matching_refs(
+        &self,
+        project: &str,
+        family: RefFamily,
+        prefix: &str,
+        budget: Budget,
+    ) -> Result<(Option<Vec<String>>, Budget), ProviderError> {
+        self.spend()?;
+        if self.refs_denied.contains(project) {
+            return Ok((None, budget));
+        }
+        let table = match family {
+            RefFamily::Heads => &self.heads,
+            RefFamily::Tags => &self.tags,
+        };
+        Ok((
+            Some(
+                table
+                    .get(project)
+                    .into_iter()
+                    .flatten()
+                    .filter(|candidate| candidate.starts_with(prefix))
+                    .map(|candidate| (*candidate).to_owned())
+                    .collect(),
+            ),
+            budget,
+        ))
+    }
+
+    fn file_presence(
+        &self,
+        project: &str,
+        reference: &str,
+        path: &str,
+        budget: Budget,
+    ) -> Result<(Presence, Budget), ProviderError> {
+        self.spend()?;
+        Ok((scripted(&self.files, (project, reference, path)), budget))
+    }
+
+    fn tree_presence(
+        &self,
+        project: &str,
+        reference: &str,
+        path: &str,
+        budget: Budget,
+    ) -> Result<(Presence, Budget), ProviderError> {
+        self.spend()?;
+        Ok((scripted(&self.trees, (project, reference, path)), budget))
+    }
+
+    fn commit_presence(
+        &self,
+        project: &str,
+        revision: &str,
+        budget: Budget,
+    ) -> Result<(Presence, Budget), ProviderError> {
+        self.spend()?;
+        Ok((scripted(&self.commits, (project, revision)), budget))
+    }
+}
+
+fn facts(evidence: &Value) -> Vec<String> {
+    let Some(Value::Array(rows)) = evidence.member("rows") else {
+        panic!("the evidence holds rows");
+    };
+    rows.iter()
+        .map(|row| {
+            let destination = row.text("destination").expect("a destination");
+            let repository = row.text("repository").expect("a repository fact");
+            match row.text("tail") {
+                Some(tail) => format!("{destination} {repository} {tail}"),
+                None => format!("{destination} {repository}"),
+            }
+        })
+        .collect()
+}
+
+const OID: &str = "0123456789abcdef0123456789abcdef01234567";
+
+fn matrix_rest() -> ScriptedRest {
+    ScriptedRest {
+        visibility: BTreeMap::from([
+            ("acme/agreed", Visibility::Readable),
+            ("acme/bare", Visibility::Readable),
+            ("acme/deleted", Visibility::Readable),
+            ("acme/denied", Visibility::Denied),
+            ("acme/gone", Visibility::Readable),
+            ("acme/group/widgets", Visibility::Readable),
+            ("acme/head", Visibility::Readable),
+            ("acme/hollow", Visibility::Readable),
+            ("acme/large", Visibility::Readable),
+            ("acme/pinned", Visibility::Readable),
+            ("acme/refless", Visibility::Readable),
+            ("acme/shadow", Visibility::Readable),
+            ("acme/tagged", Visibility::Readable),
+            ("acme/tickets", Visibility::Readable),
+            ("acme/trees", Visibility::Readable),
+        ]),
+        refs_denied: BTreeSet::from(["acme/refless"]),
+        heads: BTreeMap::from([
+            ("acme/agreed", vec!["v1.0"]),
+            ("acme/gone", vec!["main"]),
+            ("acme/group/widgets", vec!["feature/x"]),
+            ("acme/hollow", vec!["main"]),
+            ("acme/large", vec!["main"]),
+            ("acme/shadow", vec!["feature"]),
+            ("acme/trees", vec!["main"]),
+        ]),
+        tags: BTreeMap::from([
+            ("acme/agreed", vec!["v1.0"]),
+            ("acme/shadow", vec!["feature/x"]),
+            ("acme/tagged", vec!["v1.0"]),
+        ]),
+        files: BTreeMap::from([
+            (("acme/agreed", "v1.0", "a.md"), Presence::Present),
+            (
+                ("acme/group/widgets", "feature/x", "docs/a.md"),
+                Presence::Present,
+            ),
+            (("acme/head", "HEAD", "README.md"), Presence::Present),
+            (("acme/large", "main", "big.bin"), Presence::Unknown),
+            (("acme/pinned", OID, "a.md"), Presence::Present),
+            (("acme/tagged", "v1.0", "a.md"), Presence::Present),
+        ]),
+        trees: BTreeMap::from([
+            (("acme/hollow", "main", "void"), Presence::Unknown),
+            (("acme/trees", "main", "docs"), Presence::Present),
+        ]),
+        commits: BTreeMap::from([
+            (("acme/head", "HEAD"), Presence::Present),
+            (("acme/pinned", OID), Presence::Present),
+        ]),
+        ..ScriptedRest::default()
+    }
+}
+
+#[test]
+fn every_visibility_and_resolution_becomes_its_fact() {
+    let plan = plan_over(&[
+        "https://github.com/acme/elsewhere",
+        "https://gitlab.com/acme/agreed/-/blob/v1.0/a.md",
+        "https://gitlab.com/acme/bare",
+        "https://gitlab.com/acme/deleted/-/blob/old-branch/a.md",
+        "https://gitlab.com/acme/denied/-/blob/main/a.md",
+        "https://gitlab.com/acme/gone/-/blob/main/missing.md",
+        "https://gitlab.com/acme/group/widgets/-/blob/feature/x/docs/a.md",
+        "https://gitlab.com/acme/head/-/blob/HEAD/README.md",
+        "https://gitlab.com/acme/hollow/-/tree/main/void",
+        "https://gitlab.com/acme/large/-/blob/main/big.bin",
+        "https://gitlab.com/acme/legacy/blob/main/a.md",
+        "https://gitlab.com/acme/missing/-/blob/main/a.md",
+        &format!("https://gitlab.com/acme/pinned/-/blob/{OID}/a.md"),
+        "https://gitlab.com/acme/refless/-/blob/main/a.md",
+        "https://gitlab.com/acme/shadow/-/blob/feature/x/y.md",
+        "https://gitlab.com/acme/tagged/-/blob/v1.0/a.md",
+        "https://gitlab.com/acme/tickets/-/issues/5",
+        "https://gitlab.com/acme/trees/-/tree/main/docs/",
+    ]);
+    let evidence = verify_external(&matrix_rest(), &plan, "gitlab.com", "0.0.0", "t0")
+        .expect("evidence is produced");
+    assert_eq!(
+        facts(&evidence),
+        vec![
+            "https://gitlab.com/acme/agreed/-/blob/v1.0/a.md readable resolved".to_owned(),
+            "https://gitlab.com/acme/bare readable".to_owned(),
+            "https://gitlab.com/acme/deleted/-/blob/old-branch/a.md readable revision-missing"
+                .to_owned(),
+            "https://gitlab.com/acme/denied/-/blob/main/a.md denied".to_owned(),
+            "https://gitlab.com/acme/gone/-/blob/main/missing.md readable path-missing".to_owned(),
+            "https://gitlab.com/acme/group/widgets/-/blob/feature/x/docs/a.md readable resolved"
+                .to_owned(),
+            "https://gitlab.com/acme/head/-/blob/HEAD/README.md readable resolved".to_owned(),
+            "https://gitlab.com/acme/hollow/-/tree/main/void readable".to_owned(),
+            "https://gitlab.com/acme/large/-/blob/main/big.bin readable".to_owned(),
+            "https://gitlab.com/acme/missing/-/blob/main/a.md missing".to_owned(),
+            format!("https://gitlab.com/acme/pinned/-/blob/{OID}/a.md readable resolved"),
+            "https://gitlab.com/acme/refless/-/blob/main/a.md readable".to_owned(),
+            "https://gitlab.com/acme/shadow/-/blob/feature/x/y.md readable".to_owned(),
+            "https://gitlab.com/acme/tagged/-/blob/v1.0/a.md readable resolved".to_owned(),
+            "https://gitlab.com/acme/tickets/-/issues/5 readable".to_owned(),
+            "https://gitlab.com/acme/trees/-/tree/main/docs/ readable resolved".to_owned(),
+        ],
+    );
+    assert_eq!(
+        evidence
+            .member("producer")
+            .and_then(|producer| producer.text("name")),
+        Some(PRODUCER_NAME)
+    );
+    assert_eq!(
+        evidence.text("plan_payload_digest"),
+        plan.text("payload_digest"),
+        "the evidence binds the exact plan"
+    );
+}
+
+/// A standing unavailability ends the walk with the rows already learned:
+/// partial evidence beats none, and the skipped rest stays unproven.
+#[test]
+fn a_rate_limit_keeps_the_partial_evidence() {
+    let plan = plan_over(&[
+        "https://gitlab.com/acme/first",
+        "https://gitlab.com/acme/second",
+    ]);
+    let rest = ScriptedRest {
+        visibility: BTreeMap::from([
+            ("acme/first", Visibility::Readable),
+            ("acme/second", Visibility::Readable),
+        ]),
+        unavailable_from: Some(1),
+        ..ScriptedRest::default()
+    };
+    let evidence =
+        verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("partial evidence");
+    assert_eq!(
+        facts(&evidence),
+        vec!["https://gitlab.com/acme/first readable".to_owned()],
+    );
+}
+
+/// The whole chain: scripted facts become evidence the engine judges.
+#[test]
+fn the_evidence_reaches_verdicts_through_the_engine() {
+    let plan = plan_over(&[
+        "https://gitlab.com/acme/gone/-/blob/main/missing.md",
+        "https://gitlab.com/acme/private",
+    ]);
+    let rest = ScriptedRest {
+        visibility: BTreeMap::from([
+            ("acme/gone", Visibility::Readable),
+            ("acme/private", Visibility::Missing),
+        ]),
+        heads: BTreeMap::from([("acme/gone", vec!["main"])]),
+        ..ScriptedRest::default()
+    };
+    let evidence =
+        verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("evidence is produced");
+    let assessment = assess(
+        &plan,
+        &evidence,
+        "0.0.0",
+        &hj("t", &Value::Null).to_string(),
+    )
+    .expect("the engine judges the evidence");
+    let Some(Value::Array(verdicts)) = assessment
+        .member("payload")
+        .and_then(|payload| payload.member("verdicts"))
+    else {
+        panic!("the assessment holds verdicts");
+    };
+    let verdicts: Vec<(Option<&str>, Option<&str>)> = verdicts
+        .iter()
+        .map(|row| (row.text("verdict"), row.text("reason")))
+        .collect();
+    assert_eq!(
+        verdicts,
+        vec![
+            (Some("refuted"), Some("path-missing")),
+            (Some("unproven"), Some("repository-unseen")),
+        ],
+    );
+}

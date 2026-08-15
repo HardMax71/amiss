@@ -285,6 +285,7 @@ version = "0.21.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
+ "amiss-fixtures",
  "amiss-wire",
  "jsonwebtoken",
  "reqwest",

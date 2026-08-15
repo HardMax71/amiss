@@ -21,6 +21,20 @@ pub trait GitLabApi: Send + Sync {
     /// The exact job, pipeline, train, change, protection, or Git objects
     /// cannot be obtained.
     fn refresh(&self, query: &GitLabRefreshQuery) -> Result<GitLabRefresh, ProviderError>;
+
+    /// Advisory external verification, `None` from the default for an API
+    /// without a verifier.
+    ///
+    /// # Errors
+    ///
+    /// No fact could be gathered before the first one.
+    fn verify_external(
+        &self,
+        _plan: &amiss_wire::json::Value,
+        _checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        Ok(None)
+    }
 }
 
 #[derive(Clone)]
@@ -68,6 +82,14 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
         frozen
             .then_some(())
             .ok_or(ProviderError::AuthorizationRevoked)
+    }
+
+    fn verify_external(
+        &self,
+        plan: &amiss_wire::json::Value,
+        checked_at: &str,
+    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+        self.api.verify_external(plan, checked_at)
     }
 }
 
