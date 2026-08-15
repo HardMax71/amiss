@@ -131,6 +131,11 @@ jobs:
       - shell: bash
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REF: ${{ github.head_ref }}
+          EVENT_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -u
           advisory() {
@@ -143,8 +148,16 @@ jobs:
           fi
           cargo build --locked --release -p amiss -p amiss-probe \
             || advisory "the binaries did not build"
+          HOST="${SERVER_URL#*://}"
+          HOST="${HOST%/}"
+          REF="${HEAD_REF:+refs/heads/$HEAD_REF}"
+          REF="${REF:-$EVENT_REF}"
           ./target/release/amiss check --repo . --object-format sha1 \
             --base "$BASE" --candidate "$(git rev-parse HEAD)" \
+            --repository "$HOST/${REPOSITORY,,}" \
+            --ref "$REF" \
+            --default-branch-ref "refs/heads/$DEFAULT_BRANCH" \
+            --forge github \
             --profile observe --format json > report.json \
             || advisory "the scan could not complete"
           ./target/release/amiss external-plan --report report.json --format json > plan.json \
