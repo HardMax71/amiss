@@ -15,7 +15,10 @@ renderer would follow: `<a href>` and `<img src>` values resolve like any markdo
 destination, character references decoded into the semantic spelling, alongside the
 headings and `id` attributes the anchor tables already harvest. A tag spelled inside a
 comment or a script, style, textarea, or title body is followed by no renderer and is
-never mined, and the rest of the region stays the declared blind spot.
+never mined, and the rest of the region stays the declared blind spot. The rule is the
+same in every dialect: AsciiDoc passthrough blocks and reStructuredText `raw` directives
+inject output the parser cannot read and count as opaque regions, while code blocks,
+literal blocks, and comments render as visible text or not at all and are never opaque.
 
 Each destination then passes through the generic
 [resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);
