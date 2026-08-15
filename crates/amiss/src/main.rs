@@ -627,6 +627,16 @@ fn totals(out: &mut Channel, payload: &View) {
         references.number("unsupported"),
         references.number("missing"),
     );
+    let undeclared = !matches!(
+        payload.view("evaluation").field("repository"),
+        Some(amiss_wire::json::Value::Object(_))
+    );
+    if undeclared && references.number("external_out_of_scope") > 0 {
+        say!(
+            out,
+            "references: external counts any same-repository URL, since no forge identity was declared"
+        );
+    }
     let findings = summary.view("findings");
     say!(
         out,

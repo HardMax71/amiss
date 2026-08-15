@@ -91,6 +91,64 @@ fn repeated_error_codes_are_explained_once() {
     );
 }
 
+/// The run says when identity absence, not reality, made URLs external.
+#[test]
+fn undeclared_identity_is_named_beside_the_external_count() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::write(
+        root.join("docs/links.md"),
+        "See [the widget docs](https://github.com/acme/widgets).\n",
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "an external link"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let bare = [
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.candidate,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+    ];
+    let (code, stdout, _stderr) = amiss(&bare);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains("references: external counts any same-repository URL"),
+        "an undeclared identity is named beside the count: {text}"
+    );
+    let declared: Vec<&str> = bare
+        .iter()
+        .copied()
+        .chain([
+            "--repository",
+            "github.com/acme/other",
+            "--ref",
+            "refs/heads/main",
+            "--default-branch-ref",
+            "refs/heads/main",
+        ])
+        .collect();
+    let (code, stdout, _stderr) = amiss(&declared);
+    assert_eq!(code, 0);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains(" external 1 "),
+        "the foreign URL stays external: {text}"
+    );
+    assert!(
+        !text.contains("since no forge identity was declared"),
+        "a declared identity silences the line: {text}"
+    );
+}
+
 #[test]
 fn pre_existing_findings_render_as_existing_rows_without_fix_or_notes() {
     let fx = fixture();

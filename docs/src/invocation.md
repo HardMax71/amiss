@@ -96,7 +96,9 @@ own it, so the spelling is strict. The host matches your documents' URLs byte fo
 is never case-folded. Owner and name must be lowercase ASCII, so a workflow passing
 `github.repository` lowercases it first. Owner segments may nest, the GitLab group form;
 an effective github or gitea dialect refuses a nested owner it could never match. A wrong
-spelling is refused, never rewritten.
+spelling is refused, never rewritten. Without the identity group every absolute forge URL
+stays external, and a human run with a nonzero external count says so beside its totals
+rather than degrading silently.
 
 `--ref` names the candidate branch for URL resolution only: no protected target branch,
 no `--target-ref`, and the report's target stays null. No spelling of these flags turns a
