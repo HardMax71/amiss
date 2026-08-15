@@ -44,6 +44,7 @@ When `base` and `candidate` stay empty, the event supplies them:
 | Event | Base | Candidate |
 | --- | --- | --- |
 | `pull_request` | the candidate's own first parent | the merge result |
+| `pull_request_target` | the payload's base tip | the pull request's head |
 | `merge_group` | the group's base commit | the group's head |
 | `push` | the event's `before` | the pushed head |
 

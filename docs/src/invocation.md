@@ -192,8 +192,9 @@ the report carried no candidate tree, or the minted bytes failed the engine's ow
 it verifies the report's own payload digest, refuses an incomplete report, and projects
 the external delta the report already carries. `--format` takes `human` or `json` here;
 the two scan-only projections are refused. Exit 0 wrote the plan. Exit 2 means the input
-could not be trusted: unreadable, not the scanner's strict JSON, not a report envelope,
-digest mismatch, or incomplete.
+could not be trusted: unreadable, larger than a scanner report can be, not the scanner's
+strict JSON, not a report envelope, digest mismatch, incomplete, or carrying a malformed
+external occurrence.
 
 `amiss external-assess` judges [an external plan](external-plan.md) against one
 producer's observations, writing [the external assessment](external-assessment.md)
@@ -218,4 +219,4 @@ pins per platform. So an installed binary matches a release row, and a report ma
 back to the binary that produced it, without running a scan. A binary that cannot read
 its own file prints `engine unavailable` and still reports its version. The other shipped
 binaries answer `--version` with one line each: `amiss-bootstrap`, `amiss-manifest`,
-`amiss-constraint`, and the three provider services.
+`amiss-constraint`, `amiss-probe`, and the three provider services.

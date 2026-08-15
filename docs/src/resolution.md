@@ -15,10 +15,12 @@ renderer would follow: `<a href>` and `<img src>` values resolve like any markdo
 destination, character references decoded into the semantic spelling, alongside the
 headings and `id` attributes the anchor tables already harvest. A tag spelled inside a
 comment or a script, style, textarea, or title body is followed by no renderer and is
-never mined, and the rest of the region stays the declared blind spot. The rule is the
-same in every dialect: AsciiDoc passthrough blocks and reStructuredText `raw` directives
-inject output the parser cannot read and count as opaque regions, while code blocks,
-literal blocks, and comments render as visible text or not at all and are never opaque.
+never mined, and the rest of the region stays the declared blind spot. Raw output
+injection is opaque in every dialect: AsciiDoc passthrough blocks and reStructuredText
+`raw` directives inject output the parser cannot read and count as opaque regions too.
+Markdown and MDX draw the line wider and treat every raw HTML region as opaque, comments
+included, while AsciiDoc and reStructuredText code blocks, literal blocks, and comments
+render as visible text or not at all and are never opaque.
 
 Each destination then passes through the generic
 [resolver](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve.rs);
@@ -57,7 +59,7 @@ One document, every destination shape:
 [guide](guide.md)                     resolves beside this document
 [guide](guide)                        resolves to guide.md, the spelling a router serves
 [site](/docs/guide.md)                unsupported site route; it is not rewritten as a tree path
-[escape](https://github.com/HardMax71/amiss/blob/main/etc/passwd)            invalid-reference: it leaves the repository
+[escape](../../etc/passwd)            invalid-reference: it leaves the repository
 [dir](sub/)                           the author promised a directory
 [gh](https://github.com/o/r/blob/main/src/lib.rs)   a path only for o/r, github, and --ref refs/heads/main
 [lines](../src/lib.rs#L45-L48)         exact inclusive line selection under github or gitea
