@@ -131,6 +131,7 @@ jobs:
       - shell: bash
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          EVENT: ${{ github.event_name }}
           SERVER_URL: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
           HEAD_REF: ${{ github.head_ref }}
@@ -143,6 +144,10 @@ jobs:
             echo "advisory external rail: $1"
             exit 0
           }
+          # base.sha races the rebuilt merge ref; the merge commit's first parent does not
+          if [ "$EVENT" = pull_request ]; then
+            BASE="$(git rev-parse HEAD^1)"
+          fi
           if [ -z "${BASE:-}" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
             advisory "no usable base commit for this event"
           fi
