@@ -1,22 +1,33 @@
 use crate::json::{self, Value};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{kind} at {path}")]
 pub struct Error {
     pub path: String,
     pub kind: ErrorKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ErrorKind {
+    #[error("{0}")]
     Json(json::Error),
+    #[error("required field is missing")]
     MissingField,
+    #[error("field is unknown")]
     UnknownField,
+    #[error("value has the wrong type")]
     WrongType,
+    #[error("value is invalid")]
     InvalidValue,
+    #[error("set is not sorted")]
     UnsortedSet,
+    #[error("set member is duplicated")]
     DuplicateMember,
+    #[error("limit is exceeded")]
     LimitExceeded,
+    #[error("digest does not match")]
     DigestMismatch,
+    #[error("values are inconsistent")]
     Inconsistent,
 }
 

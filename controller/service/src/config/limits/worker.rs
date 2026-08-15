@@ -41,7 +41,9 @@ pub(super) fn checked_execution(
         && raw.statement_validity_seconds <= statement_max;
     valid
         .then_some((ledger, git, runner))
-        .ok_or(ConfigError("runner or execution limits are invalid"))
+        .ok_or(ConfigError::invalid(
+            "runner or execution limits are invalid",
+        ))
 }
 
 pub(super) fn checked_queue(raw: &ServiceLimits) -> Result<WorkerLimits, ConfigError> {
@@ -58,5 +60,5 @@ pub(super) fn checked_queue(raw: &ServiceLimits) -> Result<WorkerLimits, ConfigE
         && worker.idle_poll <= MAX_IDLE_POLL;
     valid
         .then_some(worker)
-        .ok_or(ConfigError("delivery worker limits are invalid"))
+        .ok_or(ConfigError::invalid("delivery worker limits are invalid"))
 }

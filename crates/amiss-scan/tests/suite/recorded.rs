@@ -11,6 +11,7 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::ForgeContext;
+use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
@@ -47,11 +48,10 @@ fn spec_to_rest() -> ForgeContext {
     }
 }
 
-fn shell(enforce: bool) -> SetupShell {
+fn shell(profile: Profile) -> SetupShell {
     SetupShell {
         engine: engine(),
-        enforce,
-        introduced_only: false,
+        profile,
         repository: Some(RepositoryIdentity {
             host: "github.com".to_owned(),
             owner: "hardmax71".to_owned(),
@@ -152,13 +152,13 @@ fn recorded() -> Recorded {
     }
 }
 
-fn payload(fixture: &Recorded, enforce: bool) -> (i64, serde_json::Value) {
+fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
     let repo = Repository::open(&fixture.root, ObjectFormat::Sha1).unwrap();
     let built = commit_pair(
         &repo,
         &engine(),
         Some(&spec_to_rest()),
-        &shell(enforce),
+        &shell(profile),
         &fixture.base,
         &fixture.candidate,
     );
@@ -176,7 +176,7 @@ fn payload(fixture: &Recorded, enforce: bool) -> (i64, serde_json::Value) {
 #[test]
 fn the_recorded_broken_links_are_the_only_two_the_scanner_finds() {
     let fixture = recorded();
-    let (exit, payload) = payload(&fixture, false);
+    let (exit, payload) = payload(&fixture, Profile::Observe);
 
     let missing: Vec<(&str, &str)> = payload["findings"]
         .as_array()
@@ -223,7 +223,7 @@ fn the_recorded_broken_links_are_the_only_two_the_scanner_finds() {
 #[test]
 fn the_recorded_resolved_links_stay_in_the_trusted_class_and_resolve() {
     let fixture = recorded();
-    let (_exit, payload) = payload(&fixture, false);
+    let (_exit, payload) = payload(&fixture, Profile::Observe);
 
     let observations = payload["observations"].as_array().unwrap();
     let github: Vec<&serde_json::Value> = observations
@@ -262,7 +262,7 @@ fn the_recorded_resolved_links_stay_in_the_trusted_class_and_resolve() {
 #[test]
 fn the_recorded_breakage_blocks_under_enforce() {
     let fixture = recorded();
-    let (exit, payload) = payload(&fixture, true);
+    let (exit, payload) = payload(&fixture, Profile::Enforce);
     assert_eq!(exit, 1, "a complete run with a blocking finding");
     assert_eq!(payload["result"]["status"], "fail");
     assert_eq!(

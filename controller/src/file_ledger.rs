@@ -3,7 +3,6 @@ mod frame;
 mod store;
 mod transitions;
 
-use std::fmt;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -17,46 +16,24 @@ use crate::{
     SystemClock,
 };
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum FileLedgerError {
+    #[error("delivery record configuration differs")]
     Configuration,
+    #[error("delivery record capacity is full")]
     Full,
+    #[error("delivery replay lifetime has ended")]
     Expired,
+    #[error("controller time cannot be trusted")]
     Clock,
+    #[error("controller owner identity could not be created")]
     Random,
+    #[error("saved report exceeds the report ceiling")]
     ReportTooLarge,
+    #[error("delivery record is corrupt")]
     Corrupt,
-    Io(io::Error),
-}
-
-impl fmt::Display for FileLedgerError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Configuration => formatter.write_str("delivery record configuration differs"),
-            Self::Full => formatter.write_str("delivery record capacity is full"),
-            Self::Expired => formatter.write_str("delivery replay lifetime has ended"),
-            Self::Clock => formatter.write_str("controller time cannot be trusted"),
-            Self::Random => formatter.write_str("controller owner identity could not be created"),
-            Self::ReportTooLarge => formatter.write_str("saved report exceeds the report ceiling"),
-            Self::Corrupt => formatter.write_str("delivery record is corrupt"),
-            Self::Io(error) => write!(formatter, "delivery record I/O failed: {error}"),
-        }
-    }
-}
-
-impl std::error::Error for FileLedgerError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Io(error) => Some(error),
-            Self::Configuration
-            | Self::Full
-            | Self::Expired
-            | Self::Clock
-            | Self::Random
-            | Self::ReportTooLarge
-            | Self::Corrupt => None,
-        }
-    }
+    #[error("delivery record I/O failed: {0}")]
+    Io(#[from] io::Error),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -100,12 +77,6 @@ impl FileLedgerConfig {
 
     pub const fn replay_window(self) -> ReplayWindow {
         self.replay_window
-    }
-}
-
-impl From<io::Error> for FileLedgerError {
-    fn from(error: io::Error) -> Self {
-        Self::Io(error)
     }
 }
 

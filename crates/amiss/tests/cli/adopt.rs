@@ -173,8 +173,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     };
     let time_setup = Setup {
         engine: engine.clone(),
-        enforce: true,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity.clone()),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
@@ -203,8 +202,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     );
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
-        enforce: true,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),

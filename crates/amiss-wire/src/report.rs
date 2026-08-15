@@ -832,14 +832,14 @@ impl FindingKind {
     /// The first policy-step result for a candidate fact under
     /// `scanner-policy-defaults`, per profile.
     #[must_use]
-    pub const fn built_in_disposition(self, enforce: bool) -> Disposition {
+    pub const fn built_in_disposition(self, profile: crate::controls::Profile) -> Disposition {
         match self {
             Self::ExplicitTargetMissing
             | Self::ExplicitTargetTypeMismatch
             | Self::InvalidReference
             | Self::ClaimBroken
             | Self::ClaimTargetMissing => {
-                if enforce {
+                if profile.enforces() {
                     Disposition::Fail
                 } else {
                     Disposition::Warn

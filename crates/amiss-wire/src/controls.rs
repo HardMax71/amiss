@@ -88,6 +88,33 @@ pub enum Profile {
 }
 
 impl Profile {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Observe => "observe",
+            Self::EnforceIntroduced => "enforce-introduced",
+            Self::Enforce => "enforce",
+        }
+    }
+
+    #[must_use]
+    pub const fn enforces(self) -> bool {
+        matches!(self, Self::EnforceIntroduced | Self::Enforce)
+    }
+
+    #[must_use]
+    pub const fn introduced_only(self) -> bool {
+        matches!(self, Self::EnforceIntroduced)
+    }
+
+    #[must_use]
+    pub const fn policy_defaults(self) -> Self {
+        match self {
+            Self::Observe => Self::Observe,
+            Self::EnforceIntroduced | Self::Enforce => Self::Enforce,
+        }
+    }
+
     /// # Errors
     ///
     /// A value outside the closed `observe`/`enforce-introduced`/`enforce`

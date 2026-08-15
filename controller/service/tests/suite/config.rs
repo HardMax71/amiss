@@ -311,9 +311,19 @@ fn route_prefixes_and_field_lists_answer_their_own_clauses() {
 
 #[test]
 fn a_config_error_displays_its_reason() {
+    let invalid = amiss_controller_service::ConfigError::invalid("endpoint limits are invalid");
+    assert_eq!(invalid.to_string(), "endpoint limits are invalid");
+    assert!(std::error::Error::source(&invalid).is_none());
+
+    let caused = amiss_controller_service::ConfigError::caused_by(
+        "configuration cannot be loaded",
+        std::io::Error::other("broken input"),
+    );
     assert_eq!(
-        amiss_controller_service::ConfigError("endpoint limits are invalid").to_string(),
-        "endpoint limits are invalid"
+        std::error::Error::source(&caused)
+            .map(ToString::to_string)
+            .as_deref(),
+        Some("broken input")
     );
 }
 
@@ -380,7 +390,10 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
 #[test]
 fn a_queued_service_error_displays_its_reason() {
     assert_eq!(
-        amiss_controller_service::QueuedServiceError("delivery inbox cannot be opened").to_string(),
+        amiss_controller_service::QueuedServiceError::InboxOpen(
+            amiss_controller_service::InboxError::Corrupt,
+        )
+        .to_string(),
         "delivery inbox cannot be opened"
     );
 }
@@ -398,7 +411,7 @@ fn service_errors_name_themselves() {
         "evaluation endpoint configuration is invalid"
     );
     assert_eq!(
-        SupervisionError("delivery worker stopped").to_string(),
+        SupervisionError::Worker(amiss_controller_service::DeliveryWorkerError::Clock).to_string(),
         "delivery worker stopped"
     );
 }

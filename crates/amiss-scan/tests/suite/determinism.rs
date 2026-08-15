@@ -29,8 +29,7 @@ fn engine() -> EngineProvenance {
 fn bare_shell() -> SetupShell {
     SetupShell {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,

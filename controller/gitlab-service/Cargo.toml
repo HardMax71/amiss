@@ -28,6 +28,7 @@ amiss-wire = { path = "../../crates/amiss-wire" }
 axum.workspace = true
 secrecy.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "time"] }
 
 [dev-dependencies]

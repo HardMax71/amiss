@@ -1,3 +1,5 @@
+use amiss_wire::controls::Profile;
+
 use crate::support::{
     assert_global_location, fixture, floor_input, payload, shell, structural_evidence, time_input,
     waiver_input, waiver_json,
@@ -6,10 +8,10 @@ use crate::support::{
 #[test]
 fn a_valid_waiver_changes_fail_to_warn() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
-    let mut setup = shell(true);
-    setup.time = Some(time_input(&fx, true));
+    let mut setup = shell(Profile::Enforce);
+    setup.time = Some(time_input(&fx));
     setup.waiver = Some(waiver_input(&waiver_json(
         &floor_digest,
         &fx.candidate_tree,
@@ -49,7 +51,7 @@ fn a_valid_waiver_changes_fail_to_warn() {
 #[test]
 fn waiver_defects_emit_invalid_rows_without_suppression() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
 
     let unauthorized = waiver_json(
@@ -61,8 +63,8 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
         "team:docs-platform",
         "2026-08-01T00:00:00Z",
     );
-    let mut setup = shell(true);
-    setup.time = Some(time_input(&fx, true));
+    let mut setup = shell(Profile::Enforce);
+    setup.time = Some(time_input(&fx));
     setup.waiver = Some(waiver_input(&unauthorized));
     let report = payload(&fx, &setup);
 
@@ -111,8 +113,8 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
         "team:release-engineering",
         "2026-07-10T00:00:00Z",
     );
-    let mut setup = shell(true);
-    setup.time = Some(time_input(&fx, true));
+    let mut setup = shell(Profile::Enforce);
+    setup.time = Some(time_input(&fx));
     setup.waiver = Some(waiver_input(&expired));
     let report = payload(&fx, &setup);
     for finding in report["findings"]
@@ -149,7 +151,7 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
 #[test]
 fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
     let valid = waiver_json(
         &floor_digest,
@@ -193,8 +195,8 @@ fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() 
             doc, valid,
             "{bound_to}: the fixture did not actually change"
         );
-        let mut setup = shell(true);
-        setup.time = Some(time_input(&fx, true));
+        let mut setup = shell(Profile::Enforce);
+        setup.time = Some(time_input(&fx));
         setup.waiver = Some(waiver_input(&doc));
         let report = payload(&fx, &setup);
 
@@ -224,10 +226,10 @@ fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() 
 #[test]
 fn a_waiver_item_written_for_another_tree_is_never_selected() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
-    let mut setup = shell(true);
-    setup.time = Some(time_input(&fx, true));
+    let mut setup = shell(Profile::Enforce);
+    setup.time = Some(time_input(&fx));
     setup.waiver = Some(waiver_input(&waiver_json(
         &floor_digest,
         &fx.base_tree, // the tree before this one, not the tree under evaluation

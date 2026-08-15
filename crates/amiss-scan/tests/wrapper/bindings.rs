@@ -1,4 +1,5 @@
 use amiss_scan::pipeline::staged_index;
+use amiss_wire::controls::Profile;
 
 use crate::support::{
     debt_input, debt_json, engine, fixture, floor_input, payload, shell, structural_evidence,
@@ -8,10 +9,10 @@ use crate::support::{
 #[test]
 fn overlapping_valid_exceptions_are_fatal_and_apply_neither() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
-    let mut setup = shell(true);
-    setup.time = Some(time_input(&fx, true));
+    let mut setup = shell(Profile::Enforce);
+    setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
@@ -58,10 +59,10 @@ fn overlapping_valid_exceptions_are_fatal_and_apply_neither() {
 fn resolved_finding_is_not_an_exception_target() {
     let fx = fixture("[note](note.md)\n");
     let standing = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&standing, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&standing);
     let floor_digest = floor_input().floor.digest.to_string();
-    let mut setup = shell(true);
-    setup.time = Some(time_input(&fx, true));
+    let mut setup = shell(Profile::Enforce);
+    setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
@@ -116,9 +117,9 @@ fn resolved_finding_is_not_an_exception_target() {
 #[test]
 fn expiry_bearing_controls_require_a_trusted_instant() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
-    let mut setup = shell(true);
+    let mut setup = shell(Profile::Enforce);
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,
@@ -148,8 +149,8 @@ fn expiry_bearing_controls_require_a_trusted_instant() {
 #[test]
 fn the_statement_binding_must_identify_the_authenticated_run() {
     let fx = fixture("see [gone](missing.md)\n");
-    let mut setup = shell(false);
-    let mut time = time_input(&fx, false);
+    let mut setup = shell(Profile::Observe);
+    let mut time = time_input(&fx);
     time.provider_run_attempt = 3;
     setup.time = Some(time);
     let report = payload(&fx, &setup);
@@ -171,9 +172,9 @@ fn the_statement_binding_must_identify_the_authenticated_run() {
 #[test]
 fn index_mode_rejects_tree_bound_exceptions() {
     let fx = fixture("see [gone](missing.md)\n");
-    let (finding_key, fact, fact_digest) = structural_evidence(&fx, true);
+    let (finding_key, fact, fact_digest) = structural_evidence(&fx);
     let floor_digest = floor_input().floor.digest.to_string();
-    let mut setup = shell(true);
+    let mut setup = shell(Profile::Enforce);
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
         &fx.base_tree,

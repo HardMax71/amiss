@@ -27,6 +27,7 @@ amiss-controller-service = { path = "../service" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 secrecy.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }

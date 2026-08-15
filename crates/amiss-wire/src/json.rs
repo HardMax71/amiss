@@ -40,24 +40,38 @@ impl Value {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ErrorKind {
+    #[error("invalid UTF-8")]
     InvalidUtf8,
+    #[error("byte-order mark is forbidden")]
     ByteOrderMark,
+    #[error("unexpected end of input")]
     UnexpectedEnd,
+    #[error("unexpected byte")]
     UnexpectedByte,
+    #[error("trailing content")]
     TrailingContent,
+    #[error("nesting limit exceeded")]
     DepthLimit,
+    #[error("duplicate object key")]
     DuplicateKey,
+    #[error("unescaped control character")]
     ControlCharacter,
+    #[error("invalid escape")]
     InvalidEscape,
+    #[error("lone UTF-16 surrogate")]
     LoneSurrogate,
+    #[error("negative zero is forbidden")]
     NegativeZero,
+    #[error("fractions and exponents are forbidden")]
     FractionOrExponent,
+    #[error("integer is outside the safe range")]
     IntegerOutOfRange,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{kind} at byte {offset}")]
 pub struct Error {
     pub kind: ErrorKind,
     pub offset: usize,

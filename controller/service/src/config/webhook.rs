@@ -28,8 +28,8 @@ pub fn load_webhook_keyring(
     let keys = raw
         .into_iter()
         .map(|key| {
-            let anchor =
-                TrustAnchorId::new(key.id).ok_or(ConfigError("webhook key identity is invalid"))?;
+            let anchor = TrustAnchorId::new(key.id)
+                .ok_or(ConfigError::invalid("webhook key identity is invalid"))?;
             let secret = read_regular(&key.secret_file, WEBHOOK_SECRET_BYTES)?;
             WebhookKey::new(
                 anchor,
@@ -37,9 +37,9 @@ pub fn load_webhook_keyring(
                 key.active_from_unix_millis,
                 key.active_until_unix_millis,
             )
-            .map_err(|_defect| ConfigError("webhook key is invalid"))
+            .map_err(|defect| ConfigError::caused_by("webhook key is invalid", defect))
         })
         .collect::<Result<Vec<_>, _>>()?;
     WebhookKeyring::new(trust_set, keys)
-        .map_err(|_defect| ConfigError("webhook key set is invalid"))
+        .map_err(|defect| ConfigError::caused_by("webhook key set is invalid", defect))
 }

@@ -39,7 +39,7 @@ pub fn load_limits(raw: &ServiceLimits, webhook_path: String) -> Result<LoadedLi
     let inbox = checked_inbox(raw)?;
     let worker = checked_queue(raw)?;
     if !(1..=MAX_CONCURRENT_DELIVERIES).contains(&raw.queue.max_concurrent_deliveries) {
-        return Err(ConfigError("delivery concurrency is invalid"));
+        return Err(ConfigError::invalid("delivery concurrency is invalid"));
     }
     let receiver = ReceiverConfig {
         delivery_path: webhook_path,
@@ -49,7 +49,7 @@ pub fn load_limits(raw: &ServiceLimits, webhook_path: String) -> Result<LoadedLi
         max_concurrent_deliveries: raw.queue.max_concurrent_deliveries,
     };
     crate::receiver::validate(&receiver)
-        .map_err(|_defect| ConfigError("webhook endpoint is invalid"))?;
+        .map_err(|defect| ConfigError::caused_by("webhook endpoint is invalid", defect))?;
     Ok(LoadedLimits {
         receiver,
         inbox,
@@ -77,7 +77,7 @@ pub fn load_execution_limits(
     max_concurrent_evaluations: usize,
 ) -> Result<LoadedExecutionLimits, ConfigError> {
     if !(1..=MAX_CONCURRENT_EVALUATIONS).contains(&max_concurrent_evaluations) {
-        return Err(ConfigError("evaluation concurrency is invalid"));
+        return Err(ConfigError::invalid("evaluation concurrency is invalid"));
     }
     let common = checked_common(raw)?;
     let evaluation = EvaluationConfig {
@@ -88,7 +88,7 @@ pub fn load_execution_limits(
         max_concurrent_evaluations,
     };
     crate::evaluation::validate(&evaluation)
-        .map_err(|_defect| ConfigError("evaluation endpoint is invalid"))?;
+        .map_err(|defect| ConfigError::caused_by("evaluation endpoint is invalid", defect))?;
     Ok(LoadedExecutionLimits {
         evaluation,
         ledger: common.ledger,
@@ -104,14 +104,14 @@ pub fn load_execution_limits(
 
 fn checked_common(raw: &ExecutionLimits) -> Result<CommonLimits, ConfigError> {
     let headers = u64::try_from(raw.header_count)
-        .map_err(|_defect| ConfigError("header count is too large"))?;
+        .map_err(|defect| ConfigError::caused_by("header count is too large", defect))?;
     let header_bytes = u64::try_from(raw.header_bytes)
-        .map_err(|_defect| ConfigError("header byte limit is too large"))?;
+        .map_err(|defect| ConfigError::caused_by("header byte limit is too large", defect))?;
     if !(1..=MAX_BODY_BYTES).contains(&raw.body_bytes)
         || !(1..=MAX_HEADERS).contains(&headers)
         || !(1..=MAX_HEADER_BYTES).contains(&header_bytes)
     {
-        return Err(ConfigError("endpoint limits are invalid"));
+        return Err(ConfigError::invalid("endpoint limits are invalid"));
     }
     let (replay, ingress, future_skew) = checked_ingress(raw)?;
     let http = checked_http(raw)?;
@@ -138,14 +138,14 @@ fn checked_ingress(
     raw: &ExecutionLimits,
 ) -> Result<(ReplayWindow, IngressPolicy, Duration), ConfigError> {
     let replay = ReplayWindow::new(SIGNED_AGE, Duration::from_secs(raw.queue_age_seconds))
-        .ok_or(ConfigError("replay limits are invalid"))?;
+        .ok_or(ConfigError::invalid("replay limits are invalid"))?;
     let ingress_limits = IngressLimits::new(raw.body_bytes, raw.header_count, raw.header_bytes)
-        .ok_or(ConfigError("ingress limits are invalid"))?;
+        .ok_or(ConfigError::invalid("ingress limits are invalid"))?;
     let future_skew = Duration::from_secs(raw.future_skew_seconds);
     if future_skew > MAX_FUTURE_SKEW {
-        return Err(ConfigError("future skew is too large"));
+        return Err(ConfigError::invalid("future skew is too large"));
     }
     let ingress = IngressPolicy::new(ingress_limits, replay, future_skew)
-        .ok_or(ConfigError("ingress time limits are invalid"))?;
+        .ok_or(ConfigError::invalid("ingress time limits are invalid"))?;
     Ok((replay, ingress, future_skew))
 }

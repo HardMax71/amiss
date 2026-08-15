@@ -33,8 +33,7 @@ fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
     let shell = SetupShell {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -89,8 +88,7 @@ fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
         evaluate_with_policy(
             &[],
             black_box(&comparisons),
-            true,
-            false,
+            amiss_wire::controls::Profile::Enforce,
             black_box(&policy),
             &[],
             &[],
@@ -114,8 +112,7 @@ fn report_setup() -> Setup {
     };
     Setup {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,

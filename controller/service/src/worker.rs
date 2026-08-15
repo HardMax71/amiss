@@ -1,6 +1,5 @@
 mod tests;
 
-use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
@@ -18,16 +17,41 @@ use crate::{
 const RENEWAL_POLL: Duration = Duration::from_secs(5);
 pub(crate) const MAX_RETRY_DELAY: Duration = Duration::from_hours(24);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DeliveryWorkerError(&'static str);
-
-impl fmt::Display for DeliveryWorkerError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum DeliveryWorkerError {
+    #[error("delivery worker timing is invalid")]
+    InvalidTiming,
+    #[error("delivery inbox lock is unavailable")]
+    InboxLock,
+    #[error("delivery inbox cannot be trusted")]
+    InboxRead(#[source] InboxError),
+    #[error("delivery inbox belongs to another route")]
+    InboxRoute,
+    #[error("claimed delivery names another route")]
+    ClaimedRoute,
+    #[error("controller state cannot be trusted")]
+    Controller(#[source] Box<dyn std::error::Error + Send + Sync>),
+    #[error("controller worker cannot start")]
+    WorkerStart(#[source] std::io::Error),
+    #[error("controller worker stopped without a result")]
+    WorkerStopped(#[source] mpsc::RecvTimeoutError),
+    #[error("delivery inbox cannot be renewed")]
+    InboxRenew(#[source] InboxError),
+    #[error("delivery inbox lease was lost")]
+    InboxLeaseLost,
+    #[error("controller worker panicked")]
+    WorkerPanicked,
+    #[error("delivery inbox cannot complete a row")]
+    InboxComplete(#[source] InboxError),
+    #[error("delivery inbox cannot schedule a retry")]
+    InboxRetry(#[source] InboxError),
+    #[error("retry time is too large")]
+    RetryTimeConversion(#[source] std::num::TryFromIntError),
+    #[error("retry time is too large")]
+    RetryTimeOverflow,
+    #[error("controller time is unavailable")]
+    Clock,
 }
-
-impl std::error::Error for DeliveryWorkerError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorkOutcome {
@@ -80,20 +104,18 @@ where
             || input.retry_max > MAX_RETRY_DELAY
             || input.idle_poll.is_zero()
         {
-            return Err(DeliveryWorkerError("delivery worker timing is invalid"));
+            return Err(DeliveryWorkerError::InvalidTiming);
         }
         let routes_match = input
             .inbox
             .lock()
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox lock is unavailable"))?
+            .map_err(|_defect| DeliveryWorkerError::InboxLock)?
             .entries()
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox cannot be trusted"))?
+            .map_err(DeliveryWorkerError::InboxRead)?
             .iter()
             .all(|entry| entry.route == input.route_id);
         if !routes_match {
-            return Err(DeliveryWorkerError(
-                "delivery inbox belongs to another route",
-            ));
+            return Err(DeliveryWorkerError::InboxRoute);
         }
         Ok(Self {
             inbox: input.inbox,
@@ -130,14 +152,14 @@ where
         let mut inbox = self
             .inbox
             .lock()
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox lock is unavailable"))?;
+            .map_err(|_defect| DeliveryWorkerError::InboxLock)?;
         if stop.is_some_and(|stop| stop.load(Ordering::Acquire)) {
             return Ok(None);
         }
         inbox
             .claim(now)
             .map(Some)
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox cannot be trusted"))
+            .map_err(DeliveryWorkerError::InboxRead)
     }
 
     fn process_claim(&mut self, claim: ClaimOutcome) -> Result<WorkOutcome, DeliveryWorkerError> {
@@ -179,19 +201,19 @@ where
 
     fn process(&mut self, mut claimed: ClaimedDelivery) -> Result<(), DeliveryWorkerError> {
         if claimed.delivery.route != self.route_id {
-            return Err(DeliveryWorkerError("claimed delivery names another route"));
+            return Err(DeliveryWorkerError::ClaimedRoute);
         }
         let discarded = !self.reauthenticate(&claimed.delivery);
         let decision = if discarded {
             Disposition::Complete
         } else {
-            disposition(&self.handle(&mut claimed)?)
+            disposition(self.handle(&mut claimed)?)
         };
         match decision {
             Disposition::Complete => {
                 self.update_inbox(
                     &claimed,
-                    "delivery inbox cannot complete a row",
+                    DeliveryWorkerError::InboxComplete,
                     |inbox, lease, now| {
                         inbox
                             .complete(lease, now)
@@ -211,7 +233,7 @@ where
                 let at = add(now, delay)?;
                 self.retry(&claimed, at)
             }
-            Disposition::Fatal => Err(DeliveryWorkerError("controller state cannot be trusted")),
+            Disposition::Fatal(error) => Err(DeliveryWorkerError::Controller(Box::new(error))),
         }
     }
 
@@ -257,31 +279,27 @@ where
                     let result = controller.handle(input);
                     let _ignored = sender.send(result);
                 })
-                .map_err(|_defect| DeliveryWorkerError("controller worker cannot start"))?;
+                .map_err(DeliveryWorkerError::WorkerStart)?;
             let controller_result = loop {
                 let wait = renewal_wait(&lease, clock.as_ref())?;
                 match receiver.recv_timeout(wait) {
                     Ok(result) => break Ok(result),
                     Err(mpsc::RecvTimeoutError::Disconnected) => {
-                        break Err(DeliveryWorkerError(
-                            "controller worker stopped without a result",
+                        break Err(DeliveryWorkerError::WorkerStopped(
+                            mpsc::RecvTimeoutError::Disconnected,
                         ));
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {
                         let now = trusted_time(clock.as_ref())?;
                         let renewed = inbox
                             .lock()
-                            .map_err(|_defect| {
-                                DeliveryWorkerError("delivery inbox lock is unavailable")
-                            })?
+                            .map_err(|_defect| DeliveryWorkerError::InboxLock)?
                             .renew(&lease, now)
-                            .map_err(|_defect| {
-                                DeliveryWorkerError("delivery inbox cannot be renewed")
-                            })?;
+                            .map_err(DeliveryWorkerError::InboxRenew)?;
                         match renewed {
                             RenewOutcome::Renewed(replacement) => lease = replacement,
                             RenewOutcome::Lost => {
-                                break Err(DeliveryWorkerError("delivery inbox lease was lost"));
+                                break Err(DeliveryWorkerError::InboxLeaseLost);
                             }
                         }
                     }
@@ -291,9 +309,7 @@ where
             match (controller_result, joined) {
                 (Ok(result), Ok(())) => Ok(result),
                 (Err(error), Ok(())) => Err(error),
-                (Ok(_) | Err(_), Err(_panic)) => {
-                    Err(DeliveryWorkerError("controller worker panicked"))
-                }
+                (Ok(_) | Err(_), Err(_panic)) => Err(DeliveryWorkerError::WorkerPanicked),
             }
         })?;
         claimed.lease = lease;
@@ -307,7 +323,7 @@ where
     ) -> Result<(), DeliveryWorkerError> {
         self.update_inbox(
             claimed,
-            "delivery inbox cannot schedule a retry",
+            DeliveryWorkerError::InboxRetry,
             |inbox, lease, now| {
                 inbox
                     .retry(lease, now, requested_at.max(now))
@@ -321,19 +337,18 @@ where
     fn update_inbox(
         &self,
         claimed: &ClaimedDelivery,
-        failure: &'static str,
+        failure: fn(InboxError) -> DeliveryWorkerError,
         update: impl FnOnce(&mut Inbox, &DeliveryLease, i64) -> Result<bool, InboxError>,
     ) -> Result<(), DeliveryWorkerError> {
         let now = self.now()?;
         let mut inbox = self
             .inbox
             .lock()
-            .map_err(|_defect| DeliveryWorkerError("delivery inbox lock is unavailable"))?;
-        let owned = update(&mut inbox, &claimed.lease, now)
-            .map_err(|_defect| DeliveryWorkerError(failure))?;
+            .map_err(|_defect| DeliveryWorkerError::InboxLock)?;
+        let owned = update(&mut inbox, &claimed.lease, now).map_err(failure)?;
         owned
             .then_some(())
-            .ok_or(DeliveryWorkerError("delivery inbox lease was lost"))
+            .ok_or(DeliveryWorkerError::InboxLeaseLost)
     }
 
     fn now(&self) -> Result<i64, DeliveryWorkerError> {
@@ -341,19 +356,19 @@ where
     }
 }
 
-enum Disposition {
+enum Disposition<E> {
     Complete,
     Retry(i64),
     Backoff,
-    Fatal,
+    Fatal(ControllerError<E>),
 }
 
-fn disposition<E>(result: &Result<HandleOutcome, ControllerError<E>>) -> Disposition {
+fn disposition<E>(result: Result<HandleOutcome, ControllerError<E>>) -> Disposition<E> {
     match result {
         Ok(HandleOutcome::InProgress {
             retry_at_unix_millis,
             ..
-        }) => Disposition::Retry(*retry_at_unix_millis),
+        }) => Disposition::Retry(retry_at_unix_millis),
         Err(
             ControllerError::Provider(_)
             | ControllerError::Publish(_)
@@ -368,11 +383,11 @@ fn disposition<E>(result: &Result<HandleOutcome, ControllerError<E>>) -> Disposi
             | ControllerError::DeliveryBindingConflict,
         ) => Disposition::Complete,
         Err(
-            ControllerError::UnknownProvider
+            error @ (ControllerError::UnknownProvider
             | ControllerError::Plan(_)
             | ControllerError::Ledger(_)
-            | ControllerError::Completion(_),
-        ) => Disposition::Fatal,
+            | ControllerError::Completion(_)),
+        ) => Disposition::Fatal(error),
     }
 }
 
@@ -406,15 +421,15 @@ fn sleep_until(now: i64, ready_at: i64, maximum: Duration) {
 }
 
 fn add(now: i64, duration: Duration) -> Result<i64, DeliveryWorkerError> {
-    let millis = i64::try_from(duration.as_millis())
-        .map_err(|_defect| DeliveryWorkerError("retry time is too large"))?;
+    let millis =
+        i64::try_from(duration.as_millis()).map_err(DeliveryWorkerError::RetryTimeConversion)?;
     now.checked_add(millis)
-        .ok_or(DeliveryWorkerError("retry time is too large"))
+        .ok_or(DeliveryWorkerError::RetryTimeOverflow)
 }
 
 fn trusted_time(clock: &dyn ControllerClock) -> Result<i64, DeliveryWorkerError> {
     clock
         .now_unix_millis()
         .filter(|now| *now >= 0)
-        .ok_or(DeliveryWorkerError("controller time is unavailable"))
+        .ok_or(DeliveryWorkerError::Clock)
 }

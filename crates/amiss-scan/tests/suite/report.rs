@@ -138,8 +138,7 @@ fn report_retaining(
     let comparisons = correlate(&base_side, &candidate_side).unwrap();
     let setup = Setup {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -483,8 +482,7 @@ fn bare_setup(errors_retained: u64) -> Setup {
     };
     Setup {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -750,8 +748,7 @@ fn the_findings_counter_fires_before_the_wire_cap() {
     .unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -845,8 +842,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
 
     let setup = Setup {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -920,8 +916,7 @@ fn a_finding_location_carries_the_real_display_positions() {
     let comparisons = correlate(&base_side, &candidate_side).unwrap();
     let setup = Setup {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: None,
         forge: None,
         candidate_ref: None,
@@ -979,8 +974,7 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
         engine: engine(),
-        enforce: false,
-        introduced_only: false,
+        profile: amiss_wire::controls::Profile::Observe,
         repository: amiss_wire::model::RepositoryIdentity::new(
             "ghes.example".to_owned(),
             "acme".to_owned(),

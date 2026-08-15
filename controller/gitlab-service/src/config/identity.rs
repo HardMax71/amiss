@@ -11,14 +11,14 @@ const PUBLIC_KEY_BYTES: u64 = 65_536;
 
 pub(super) fn provider(instance: String) -> Result<ProviderIdentity, ConfigError> {
     ProviderIdentity::new("gitlab".to_owned(), instance)
-        .ok_or(ConfigError("GitLab instance is invalid"))
+        .ok_or(ConfigError::invalid("GitLab instance is invalid"))
 }
 
 pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
     let integration = IntegrationId::new(raw.integration)
-        .ok_or(ConfigError("GitLab policy integration is invalid"))?;
+        .ok_or(ConfigError::invalid("GitLab policy integration is invalid"))?;
     let config_commit = Oid::new(ObjectFormat::Sha1, raw.config_commit)
-        .ok_or(ConfigError("GitLab policy commit is invalid"))?;
+        .ok_or(ConfigError::invalid("GitLab policy commit is invalid"))?;
     let runner_count = raw.self_hosted_runner_ids.len();
     let self_hosted_ids = raw
         .self_hosted_runner_ids
@@ -27,7 +27,7 @@ pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
     let runners_valid =
         self_hosted_ids.len() == runner_count && self_hosted_ids.iter().all(|runner| *runner > 0);
     if !runners_valid {
-        return Err(ConfigError("GitLab runner trust is invalid"));
+        return Err(ConfigError::invalid("GitLab runner trust is invalid"));
     }
     let target_valid = !raw.target_branch.starts_with("refs/")
         && BranchRef::new(format!("refs/heads/{}", raw.target_branch)).is_some();
@@ -45,17 +45,20 @@ pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
                 self_hosted_ids,
             },
         })
-        .ok_or(ConfigError("GitLab policy target branch is invalid"))
+        .ok_or(ConfigError::invalid(
+            "GitLab policy target branch is invalid",
+        ))
 }
 
 pub(super) fn keys(raw: Vec<RawOidcKey>) -> Result<Vec<OidcPublicKey>, ConfigError> {
     raw.into_iter()
         .map(|key| {
             let anchor = TrustAnchorId::new(key.anchor)
-                .ok_or(ConfigError("GitLab OIDC trust anchor is invalid"))?;
+                .ok_or(ConfigError::invalid("GitLab OIDC trust anchor is invalid"))?;
             let pem = read_regular(&key.public_key_file, PUBLIC_KEY_BYTES)?;
-            OidcPublicKey::from_rsa_pem(key.kid, anchor, &pem)
-                .map_err(|_defect| ConfigError("GitLab OIDC public key is invalid"))
+            OidcPublicKey::from_rsa_pem(key.kid, anchor, &pem).map_err(|defect| {
+                ConfigError::caused_by("GitLab OIDC public key is invalid", defect)
+            })
         })
         .collect()
 }
@@ -67,13 +70,13 @@ pub(super) fn scope(
     let (owner, name) = policy
         .project_path
         .rsplit_once('/')
-        .ok_or(ConfigError("GitLab project path is invalid"))?;
+        .ok_or(ConfigError::invalid("GitLab project path is invalid"))?;
     let repository = RepositoryIdentity::new(
         provider.instance.as_str().to_owned(),
         owner.to_owned(),
         name.to_owned(),
     )
-    .ok_or(ConfigError("GitLab project identity is invalid"))?;
+    .ok_or(ConfigError::invalid("GitLab project identity is invalid"))?;
     Ok(PlanScope {
         provider: provider.clone(),
         integration: policy.integration.clone(),

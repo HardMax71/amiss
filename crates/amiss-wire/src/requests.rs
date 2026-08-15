@@ -560,14 +560,7 @@ fn optional_text(value: Option<&str>) -> Value {
 fn evaluation_value(request: &EvaluationRequest) -> Value {
     object(vec![
         ("schema", text(EVALUATION_REQUEST_SCHEMA)),
-        (
-            "profile",
-            text(match request.profile {
-                Profile::Observe => "observe",
-                Profile::EnforceIntroduced => "enforce-introduced",
-                Profile::Enforce => "enforce",
-            }),
-        ),
+        ("profile", text(request.profile.as_str())),
         ("mode", text(request.mode.as_str())),
         ("object_format", text(request.object_format.as_str())),
         (

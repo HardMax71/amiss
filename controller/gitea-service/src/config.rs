@@ -23,6 +23,8 @@ use serde::Deserialize;
 
 const ROUTE_DOMAIN: &str = "amiss/controller-gitea-family-service-route-v1";
 const TOKEN_BYTES: u64 = 4_096;
+const INVALID_GIT_CREDENTIAL: &str = "Gitea-family Git credential is invalid";
+const INVALID_API_TIMEOUTS: &str = "Gitea-family API timeouts are invalid";
 
 pub struct ServiceConfig {
     pub(crate) listen: SocketAddr,
@@ -131,10 +133,10 @@ impl RawConfig {
                 token.clone(),
                 limits.git.request,
             )
-            .ok_or(ConfigError("Gitea-family Git credential is invalid"))?,
+            .ok_or(ConfigError::invalid(INVALID_GIT_CREDENTIAL))?,
         );
         let api_timeouts = GiteaTimeouts::new(limits.http.connect, operation_timeout(limits.http))
-            .ok_or(ConfigError("Gitea-family API timeouts are invalid"))?;
+            .ok_or(ConfigError::invalid(INVALID_API_TIMEOUTS))?;
         validate_client(
             &provider,
             &reviewer,
@@ -146,7 +148,7 @@ impl RawConfig {
         )?;
 
         let trust_set = TrustSetId::new("gitea-family-webhook-keys".to_owned())
-            .ok_or(ConfigError("trust set identity is invalid"))?;
+            .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
         let route = DeliveryRoute {
             provider: provider.clone(),
             trust_set: trust_set.clone(),
@@ -170,7 +172,7 @@ impl RawConfig {
                 &plan_digest,
             ],
         )
-        .ok_or(ConfigError("route identity is invalid"))?;
+        .ok_or(ConfigError::invalid("route identity is invalid"))?;
         let webhook =
             GiteaWebhook::new(load_webhook_keyring(trust_set, self.provider.webhook_keys)?);
         let scope = PlanScope {
@@ -216,17 +218,18 @@ impl RawConfig {
 
 fn socket_address(raw: &str) -> Result<SocketAddr, ConfigError> {
     raw.parse()
-        .map_err(|_defect| ConfigError("listen must be one socket address"))
+        .map_err(|defect| ConfigError::caused_by("listen must be one socket address", defect))
 }
 
 fn provider_identity(raw: &RawProvider) -> Result<ProviderIdentity, ConfigError> {
     ProviderIdentity::new(raw.namespace.clone(), raw.instance.clone())
-        .ok_or(ConfigError("provider identity is invalid"))
+        .ok_or(ConfigError::invalid("provider identity is invalid"))
 }
 
 fn dedicated_reviewer(raw: &RawReviewer) -> Result<DedicatedReviewer, ConfigError> {
-    DedicatedReviewer::new(raw.id, raw.login.clone())
-        .ok_or(ConfigError("dedicated reviewer identity is invalid"))
+    DedicatedReviewer::new(raw.id, raw.login.clone()).ok_or(ConfigError::invalid(
+        "dedicated reviewer identity is invalid",
+    ))
 }
 
 fn repository_identity(
@@ -237,35 +240,39 @@ fn repository_identity(
         && raw.name == raw.name.to_ascii_lowercase()
         && !raw.owner.contains('/');
     if !canonical {
-        return Err(ConfigError(
+        return Err(ConfigError::invalid(
             "Gitea-family repository spelling is not canonical",
         ));
     }
-    RepositoryIdentity::new(provider.instance.as_str().to_owned(), raw.owner, raw.name)
-        .ok_or(ConfigError("Gitea-family repository identity is invalid"))
+    RepositoryIdentity::new(provider.instance.as_str().to_owned(), raw.owner, raw.name).ok_or(
+        ConfigError::invalid("Gitea-family repository identity is invalid"),
+    )
 }
 
 fn target_branch(raw: &str) -> Result<BranchRef, ConfigError> {
     (!raw.starts_with("refs/"))
         .then(|| BranchRef::new(format!("refs/heads/{raw}")))
         .flatten()
-        .ok_or(ConfigError("Gitea-family target branch is invalid"))
+        .ok_or(ConfigError::invalid(
+            "Gitea-family target branch is invalid",
+        ))
 }
 
 fn reviewer_integration(id: u64) -> Result<IntegrationId, ConfigError> {
-    IntegrationId::new(id.to_string())
-        .ok_or(ConfigError("dedicated reviewer integration is invalid"))
+    IntegrationId::new(id.to_string()).ok_or(ConfigError::invalid(
+        "dedicated reviewer integration is invalid",
+    ))
 }
 
 fn load_token(path: &Path) -> Result<SecretString, ConfigError> {
     let bytes = read_regular(path, TOKEN_BYTES)?;
-    let token =
-        String::from_utf8(bytes).map_err(|_defect| ConfigError("provider token is invalid"))?;
+    let token = String::from_utf8(bytes)
+        .map_err(|defect| ConfigError::caused_by("provider token is invalid", defect))?;
     let valid = (16..=usize::try_from(TOKEN_BYTES).unwrap_or(usize::MAX)).contains(&token.len())
         && token.bytes().all(|byte| byte.is_ascii_graphic());
     valid
         .then(|| SecretString::from(token))
-        .ok_or(ConfigError("provider token is invalid"))
+        .ok_or(ConfigError::invalid("provider token is invalid"))
 }
 
 fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
@@ -273,7 +280,7 @@ fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), 
         && !plan.execution.action_repository.owner.contains('/')
         && plan.execution.action_object_format == ObjectFormat::Sha1)
         .then_some(())
-        .ok_or(ConfigError(
+        .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 provider instance",
         ))
 }
@@ -297,7 +304,7 @@ fn validate_client(
         objects,
     )
     .map(|_client| ())
-    .map_err(|_defect| ConfigError("Gitea-family API configuration is invalid"))
+    .map_err(|defect| ConfigError::caused_by("Gitea-family API configuration is invalid", defect))
 }
 
 fn operation_timeout(limits: HttpLimits) -> Duration {
@@ -305,7 +312,7 @@ fn operation_timeout(limits: HttpLimits) -> Duration {
 }
 
 fn positive(raw: u64) -> Result<u64, ConfigError> {
-    (raw > 0).then_some(raw).ok_or(ConfigError(
+    (raw > 0).then_some(raw).ok_or(ConfigError::invalid(
         "Gitea-family numeric identity must be positive",
     ))
 }

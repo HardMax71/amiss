@@ -241,52 +241,118 @@ fn resolved_global(url: &Url) -> Result<SocketAddr, Resolution> {
     })
 }
 
-/// Globally routable or not. Every v6 form that embeds or routes toward a
-/// v4 address, mapped, compatible, NAT64 well-known and local-use, and
-/// 6to4, defers to that v4's answer, so the two tables cannot drift apart.
+#[derive(Clone, Copy)]
+struct Ipv4Prefix {
+    network: std::net::Ipv4Addr,
+    bits: u32,
+}
+
+impl Ipv4Prefix {
+    fn contains(self, address: std::net::Ipv4Addr) -> bool {
+        32_u32.checked_sub(self.bits).is_some_and(|host_bits| {
+            u32::from(address).checked_shr(host_bits)
+                == u32::from(self.network).checked_shr(host_bits)
+        })
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Ipv6Prefix {
+    network: std::net::Ipv6Addr,
+    bits: u32,
+}
+
+impl Ipv6Prefix {
+    fn contains(self, address: std::net::Ipv6Addr) -> bool {
+        128_u32.checked_sub(self.bits).is_some_and(|host_bits| {
+            u128::from(address).checked_shr(host_bits)
+                == u128::from(self.network).checked_shr(host_bits)
+        })
+    }
+}
+
+const fn v4(a: u8, b: u8, c: u8, d: u8, bits: u32) -> Ipv4Prefix {
+    Ipv4Prefix {
+        network: std::net::Ipv4Addr::new(a, b, c, d),
+        bits,
+    }
+}
+
+const fn v6(network: u128, bits: u32) -> Ipv6Prefix {
+    Ipv6Prefix {
+        network: std::net::Ipv6Addr::from_bits(network),
+        bits,
+    }
+}
+
+// IANA special-purpose registries, last updated 2025-10-09, plus multicast refusal.
+const NON_GLOBAL_V4: &[Ipv4Prefix] = &[
+    v4(0, 0, 0, 0, 8),
+    v4(10, 0, 0, 0, 8),
+    v4(100, 64, 0, 0, 10),
+    v4(127, 0, 0, 0, 8),
+    v4(169, 254, 0, 0, 16),
+    v4(172, 16, 0, 0, 12),
+    v4(192, 0, 0, 0, 24),
+    v4(192, 0, 2, 0, 24),
+    v4(192, 88, 99, 0, 24),
+    v4(192, 168, 0, 0, 16),
+    v4(198, 18, 0, 0, 15),
+    v4(198, 51, 100, 0, 24),
+    v4(203, 0, 113, 0, 24),
+    v4(224, 0, 0, 0, 4),
+    v4(240, 0, 0, 0, 4),
+];
+
+const GLOBAL_IETF_V6: &[Ipv6Prefix] = &[
+    v6(0x2001_0001_0000_0000_0000_0000_0000_0001, 128),
+    v6(0x2001_0001_0000_0000_0000_0000_0000_0002, 128),
+    v6(0x2001_0001_0000_0000_0000_0000_0000_0003, 128),
+    v6(0x2001_0003_0000_0000_0000_0000_0000_0000, 32),
+    v6(0x2001_0004_0112_0000_0000_0000_0000_0000, 48),
+    v6(0x2001_0020_0000_0000_0000_0000_0000_0000, 28),
+    v6(0x2001_0030_0000_0000_0000_0000_0000_0000, 28),
+];
+
+const NON_GLOBAL_V6: &[Ipv6Prefix] = &[
+    v6(0x0000_0000_0000_0000_0000_0000_0000_0000, 128),
+    v6(0x0000_0000_0000_0000_0000_0000_0000_0001, 128),
+    v6(0x0000_0000_0000_0000_0000_ffff_0000_0000, 96),
+    v6(0x0064_ff9b_0000_0000_0000_0000_0000_0000, 32),
+    v6(0x0100_0000_0000_0000_0000_0000_0000_0000, 64),
+    v6(0x0100_0000_0000_0001_0000_0000_0000_0000, 64),
+    v6(0x2001_0000_0000_0000_0000_0000_0000_0000, 23),
+    v6(0x2001_0db8_0000_0000_0000_0000_0000_0000, 32),
+    v6(0x2002_0000_0000_0000_0000_0000_0000_0000, 16),
+    v6(0x3fff_0000_0000_0000_0000_0000_0000_0000, 20),
+    v6(0x5f00_0000_0000_0000_0000_0000_0000_0000, 16),
+    v6(0xfc00_0000_0000_0000_0000_0000_0000_0000, 7),
+    v6(0xfe80_0000_0000_0000_0000_0000_0000_0000, 10),
+    v6(0xff00_0000_0000_0000_0000_0000_0000_0000, 8),
+];
+
 fn global(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(v4) => {
-            let octets = v4.octets();
-            !(v4.is_loopback()
-                || v4.is_private()
-                || v4.is_link_local()
-                || v4.is_unspecified()
-                || v4.is_broadcast()
-                || v4.is_multicast()
-                || v4.is_documentation()
-                || octets[0] == 0
-                || (octets[0] == 100 && (octets[1] & 0b1100_0000) == 64)
-                || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
-                || (octets[0] == 198 && (octets[1] & 0b1111_1110) == 18)
-                || octets[0] >= 240)
+            matches!(v4.octets(), [192, 0, 0, 9 | 10])
+                || !NON_GLOBAL_V4.iter().any(|prefix| prefix.contains(v4))
         }
         IpAddr::V6(v6) => {
+            let segments = v6.segments();
+            if matches!(segments, [0x0064, 0xff9b, 0, 0, 0, 0, _, _]) {
+                let embedded = (u32::from(segments[6]) << 16) | u32::from(segments[7]);
+                return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
+            }
+            if GLOBAL_IETF_V6.iter().any(|prefix| prefix.contains(v6)) {
+                return true;
+            }
+            if NON_GLOBAL_V6.iter().any(|prefix| prefix.contains(v6)) {
+                return false;
+            }
             if let Some(embedded) = v6.to_ipv4() {
                 return global(IpAddr::V4(embedded));
             }
-            let segments = v6.segments();
-            if segments[0] == 0x0064 && segments[1] == 0xff9b {
-                // The well-known and local-use prefixes embed the v4 in the
-                // last 32 bits; a NAT64 shape we cannot locate is denied.
-                if segments[2] <= 1 && segments[3..6] == [0, 0, 0] {
-                    let embedded = (u32::from(segments[6]) << 16) | u32::from(segments[7]);
-                    return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
-                }
-                return false;
-            }
-            if segments[0] == 0x2002 {
-                let embedded = (u32::from(segments[1]) << 16) | u32::from(segments[2]);
-                return global(IpAddr::V4(std::net::Ipv4Addr::from(embedded)));
-            }
-            !(v6.is_multicast()
-                || (segments[0] & 0xfe00) == 0xfc00
-                || (segments[0] & 0xffc0) == 0xfe80
-                || (segments[0] == 0x2001 && segments[1] == 0x0000)
-                || (segments[0] == 0x2001 && segments[1] == 0x0db8)
-                || (segments[0] == 0x2001 && segments[1] == 0x0002 && segments[2] == 0)
-                || (segments[0] == 0x2001 && (segments[1] & 0xfff0) == 0x0010)
-                || (segments[0] == 0x0100 && segments[1..4] == [0, 0, 0]))
+            true
         }
     }
 }

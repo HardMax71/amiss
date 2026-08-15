@@ -193,8 +193,14 @@ fn refuses_inputs_outside_the_invocation_phase() {
 #[test]
 fn removed_references_are_recorded_facts() {
     let kind = FindingKind::ExplicitReferenceRemoved;
-    assert_eq!(kind.built_in_disposition(false), Disposition::Record);
-    assert_eq!(kind.built_in_disposition(true), Disposition::Record);
+    assert_eq!(
+        kind.built_in_disposition(amiss_wire::controls::Profile::Observe),
+        Disposition::Record
+    );
+    assert_eq!(
+        kind.built_in_disposition(amiss_wire::controls::Profile::Enforce),
+        Disposition::Record
+    );
     assert_eq!(
         kind.meaning(),
         "a reference that existed in the base is gone from the candidate; the removal is recorded as a fact, never treated as evidence that the edit was wrong"

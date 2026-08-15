@@ -10,7 +10,7 @@ use amiss_scan::observe::occurrence_id;
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
-use amiss_wire::controls::{SourceConstruct, TargetKind};
+use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, IntentKind};
@@ -161,13 +161,13 @@ fn comparisons(base: Vec<Observation>, candidate: Vec<Observation>) -> Vec<Compa
 }
 
 fn kinds(findings: &[Finding]) -> Vec<FindingKind> {
-    findings.iter().map(|finding| finding.kind).collect()
+    findings.iter().map(Finding::kind).collect()
 }
 
 fn only(findings: Vec<Finding>, kind: FindingKind) -> Finding {
     let mut matching: Vec<Finding> = findings
         .into_iter()
-        .filter(|finding| finding.kind == kind)
+        .filter(|finding| finding.kind() == kind)
         .collect();
     assert_eq!(matching.len(), 1, "exactly one {kind:?}");
     matching.remove(0)
@@ -201,7 +201,7 @@ fn document_findings_follow_step_one() {
             candidate: Some(DocumentSide::ExcludedBuiltIn),
         },
     ];
-    let findings = evaluate(&documents, &[], false);
+    let findings = evaluate(&documents, &[], Profile::Observe);
     let got = kinds(&findings);
     assert_eq!(got.len(), 4);
     assert!(got.contains(&FindingKind::DocumentRemoved));
@@ -251,7 +251,11 @@ fn boundary_kinds_follow_the_mapping() {
     ];
     for (resolution, expected) in rows {
         let candidate = observation(&spec("d.md", "t.md", resolution));
-        let findings = evaluate(&[], &comparisons(Vec::new(), vec![candidate]), false);
+        let findings = evaluate(
+            &[],
+            &comparisons(Vec::new(), vec![candidate]),
+            Profile::Observe,
+        );
         assert!(
             kinds(&findings).contains(&expected),
             "typed boundary emits {expected:?}"
@@ -262,7 +266,7 @@ fn boundary_kinds_follow_the_mapping() {
     let findings = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&pointer)]),
-        false,
+        Profile::Observe,
     );
     assert_eq!(
         kinds(&findings),
@@ -283,19 +287,19 @@ fn structural_findings_aggregate_and_attribute() {
             Vec::new(),
             vec![observation(&missing), observation(&second)],
         ),
-        false,
+        Profile::Observe,
     );
     let finding = only(introduced, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.attribution, Attribution::Introduced);
     assert_eq!(finding.member_count, 2, "duplicates share one key");
     assert_eq!(finding.observation_ids.len(), 2);
-    assert!(finding.base_fact.is_none() && finding.candidate_fact.is_some());
+    assert!(finding.base_fact().is_none() && finding.candidate_fact().is_some());
     assert_eq!(finding.configured_disposition, Disposition::Warn);
 
     let pre_existing = evaluate(
         &[],
         &comparisons(vec![observation(&missing)], vec![observation(&missing)]),
-        false,
+        Profile::Observe,
     );
     let finding = only(pre_existing, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.attribution, Attribution::PreExisting);
@@ -303,13 +307,13 @@ fn structural_findings_aggregate_and_attribute() {
     let resolved = evaluate(
         &[],
         &comparisons(vec![observation(&missing)], Vec::new()),
-        false,
+        Profile::Observe,
     );
     let removal_and_projection = resolved;
     let finding = only(
         removal_and_projection
             .iter()
-            .filter(|finding| finding.kind == FindingKind::ExplicitTargetMissing)
+            .filter(|finding| finding.kind() == FindingKind::ExplicitTargetMissing)
             .cloned()
             .collect(),
         FindingKind::ExplicitTargetMissing,
@@ -325,7 +329,7 @@ fn structural_findings_aggregate_and_attribute() {
     let enforced = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&missing)]),
-        true,
+        Profile::Enforce,
     );
     assert_eq!(
         only(enforced, FindingKind::ExplicitTargetMissing).configured_disposition,
@@ -352,7 +356,11 @@ fn every_missing_reason_emits_the_structural_finding() {
     ];
     for (target, missing) in rows {
         let candidate = observation(&spec("d.md", target, Resolution::Missing(missing)));
-        let findings = evaluate(&[], &comparisons(Vec::new(), vec![candidate]), false);
+        let findings = evaluate(
+            &[],
+            &comparisons(Vec::new(), vec![candidate]),
+            Profile::Observe,
+        );
         assert!(
             kinds(&findings).contains(&FindingKind::ExplicitTargetMissing),
             "every typed missing reason is structural"
@@ -371,7 +379,7 @@ fn unknown_attribution_needs_unequal_facts_on_one_key() {
             vec![observation(&base)],
             vec![observation(&base), observation(&doubled)],
         ),
-        false,
+        Profile::Observe,
     );
     let finding = only(findings, FindingKind::ExplicitTargetMissing);
     assert_eq!(
@@ -387,7 +395,7 @@ fn comparison_findings_follow_step_four() {
     let findings = evaluate(
         &[],
         &comparisons(vec![observation(&removed_spec)], Vec::new()),
-        false,
+        Profile::Observe,
     );
     let removed = only(findings, FindingKind::ExplicitReferenceRemoved);
     assert_eq!(removed.location.side, LocationSide::Base);
@@ -407,7 +415,7 @@ fn comparison_findings_follow_step_four() {
             vec![observation(&lone_base)],
             vec![observation(&one), observation(&two)],
         ),
-        false,
+        Profile::Observe,
     );
     let finding = only(ambiguous, FindingKind::ObservationCorrelationAmbiguous);
     assert_eq!(finding.member_count, 1);
@@ -420,7 +428,7 @@ fn comparison_findings_follow_step_four() {
             vec![observation(&base_available)],
             vec![observation(&candidate_available)],
         ),
-        false,
+        Profile::Observe,
     );
     let finding = only(impact, FindingKind::DependencyChangedSubjectUnchanged);
     assert_eq!(finding.configured_disposition, Disposition::Warn);
@@ -434,9 +442,12 @@ fn findings_sort_by_canonical_key() {
     let findings = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&one), observation(&two)]),
-        false,
+        Profile::Observe,
     );
-    let keys: Vec<_> = findings.iter().map(|finding| finding.finding_key).collect();
+    let keys: Vec<_> = findings
+        .iter()
+        .map(|finding| finding.key().digest())
+        .collect();
     let mut sorted = keys.clone();
     sorted.sort_unstable();
     assert_eq!(keys, sorted);
@@ -456,13 +467,19 @@ fn invalid_spec(document: &str, target: &str) -> Spec {
 fn an_invalid_attribution_needs_the_same_destination() {
     let same = invalid_spec("d.md", "../out.md");
     let paired = comparisons(vec![observation(&same)], vec![observation(&same)]);
-    let finding = only(evaluate(&[], &paired, false), FindingKind::InvalidReference);
+    let finding = only(
+        evaluate(&[], &paired, Profile::Observe),
+        FindingKind::InvalidReference,
+    );
     assert_eq!(finding.attribution, Attribution::PreExisting);
 
     let mut base = observation(&same);
     base.raw_destination_digest = hb("amiss/scanner-raw-destination", b"elsewhere");
     let moved = comparisons(vec![base], vec![observation(&same)]);
-    let finding = only(evaluate(&[], &moved, false), FindingKind::InvalidReference);
+    let finding = only(
+        evaluate(&[], &moved, Profile::Observe),
+        FindingKind::InvalidReference,
+    );
     assert_eq!(
         finding.attribution,
         Attribution::Introduced,
@@ -491,8 +508,7 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
     let (findings, errors) = evaluate_with_policy(
         &[],
         &comparisons,
-        true,
-        true,
+        Profile::EnforceIntroduced,
         &Effects::default(),
         std::slice::from_ref(&governed),
         &[],
@@ -501,7 +517,7 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
 
     let mut demoted: Vec<(Attribution, Disposition)> = findings
         .iter()
-        .filter(|finding| finding.kind == FindingKind::ExplicitTargetMissing)
+        .filter(|finding| finding.kind() == FindingKind::ExplicitTargetMissing)
         .map(|finding| (finding.attribution, finding.effective_disposition))
         .collect();
     demoted.sort_by_key(|(attribution, _)| format!("{attribution:?}"));
@@ -539,7 +555,7 @@ fn a_raise_to_the_standing_disposition_adds_no_step() {
         ..Effects::default()
     };
     let (findings, _errors) =
-        evaluate_with_policy(&[], &comparisons, true, false, &policy, &[], &[]);
+        evaluate_with_policy(&[], &comparisons, Profile::Enforce, &policy, &[], &[]);
     let finding = only(findings, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.effective_disposition, Disposition::Fail);
     assert_eq!(
@@ -566,7 +582,7 @@ fn a_present_document_is_neither_removed_nor_opaque() {
             extracted_references: 1,
         }),
     }];
-    let got = kinds(&evaluate(&documents, &[], false));
+    let got = kinds(&evaluate(&documents, &[], Profile::Observe));
     assert!(!got.contains(&FindingKind::DocumentRemoved));
     assert!(!got.contains(&FindingKind::OpaqueMdxRegion));
 }
@@ -661,7 +677,7 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         }),
         ..Effects::default()
     };
-    let (findings, _errors) = evaluate_with_policy(&[], &[], true, false, &policy, &[], &[]);
+    let (findings, _errors) = evaluate_with_policy(&[], &[], Profile::Enforce, &policy, &[], &[]);
     assert!(
         !kinds(&findings).contains(&FindingKind::WaiverInvalid),
         "a waiver live from this instant carries no defect"

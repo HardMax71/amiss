@@ -21,5 +21,5 @@ pub(super) fn checked_http(raw: &ExecutionLimits) -> Result<HttpLimits, ConfigEr
         && phases.into_iter().all(|timeout| timeout <= limits.request);
     valid
         .then_some(limits)
-        .ok_or(ConfigError("HTTP timeouts are invalid"))
+        .ok_or(ConfigError::invalid("HTTP timeouts are invalid"))
 }

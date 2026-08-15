@@ -555,8 +555,7 @@ pub fn verify_floor(
     input: &FloorInput,
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
     target_ref: Option<&str>,
-    enforce: bool,
-    introduced_only: bool,
+    profile: amiss_wire::controls::Profile,
 ) -> Result<(), ErrorDetail> {
     let mismatch = ErrorDetail {
         code: AnalysisErrorCode::ControlBindingMismatch,
@@ -574,11 +573,7 @@ pub fn verify_floor(
     if target_ref != Some(floor.ref_name.as_str()) {
         return Err(mismatch);
     }
-    let minimum_enforce = matches!(
-        floor.minimum_profile,
-        amiss_wire::controls::Profile::Enforce
-    );
-    if minimum_enforce && (!enforce || introduced_only) {
+    if profile < floor.minimum_profile {
         return Err(mismatch);
     }
     Ok(())
