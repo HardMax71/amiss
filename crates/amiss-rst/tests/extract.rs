@@ -140,15 +140,36 @@ fn an_internal_label_publishes_an_anchor_rather_than_a_reference() {
 }
 
 #[test]
-fn what_the_parser_will_not_read_into_is_declared() {
+fn only_injected_raw_output_is_opaque() {
     let extraction = extract(b"Example::\n\n   `hidden <guide.rst>`_\n\n.. a plain comment\n")
         .expect("utf-8 source");
-    assert_eq!(extraction.opaque.len(), 2);
+    assert!(
+        extraction.opaque.is_empty(),
+        "code renders as text and a comment not at all; neither is a blind spot"
+    );
     assert!(extraction.references.is_empty());
     let literal = blocks("Example::\n\n   code\n")
         .into_iter()
         .any(|block| block.kind == Kind::Literal);
     assert!(literal, "a paragraph ending in :: opens a literal block");
+    for source in [
+        b".. raw:: html\n\n   <a href=\"gone.html\">x</a>\n".as_slice(),
+        b".. RAW:: latex\n\n   \\href{gone}{x}\n".as_slice(),
+    ] {
+        let raw = extract(source).expect("utf-8 source");
+        assert_eq!(
+            raw.opaque.len(),
+            1,
+            "rendered output the parser cannot read is declared"
+        );
+        assert!(
+            raw.references.is_empty(),
+            "the raw body is not reference-scanned"
+        );
+    }
+    let image = extract(b".. image:: img/a.png\n").expect("utf-8 source");
+    assert_eq!(image.references.len(), 1, "other directives still collect");
+    assert!(image.opaque.is_empty());
 }
 
 #[test]
@@ -441,7 +462,10 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
     ] {
         let read = extract(body.as_bytes()).unwrap();
         assert_eq!(read.governed.len(), 0, "{reason}");
-        assert_eq!(read.opaque.len(), 1, "{reason} stays an opaque comment");
+        assert!(
+            read.opaque.is_empty(),
+            "{reason} is a comment, never opaque"
+        );
     }
 
     let single = extract(b".. [amiss:q]: <amiss:v?a=1> 'single'\n").unwrap();
@@ -489,7 +513,10 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
     ] {
         let read = extract(body.as_bytes()).unwrap();
         assert_eq!(read.governed.len(), 0, "{reason}");
-        assert_eq!(read.opaque.len(), 1, "{reason} stays opaque");
+        assert!(
+            read.opaque.is_empty(),
+            "{reason} is a comment, never opaque"
+        );
     }
 
     let smuggled = extract(b".. [amiss:p]: <amiss:value?path=a\n   b&line=L1> \"t\"\n").unwrap();
@@ -498,5 +525,5 @@ fn a_reserved_comment_becomes_governed_and_only_it() {
         0,
         "an indented continuation cannot smuggle a newline into the destination"
     );
-    assert_eq!(smuggled.opaque.len(), 1);
+    assert!(smuggled.opaque.is_empty());
 }

@@ -121,7 +121,7 @@ pub fn normalized_label(label: &str) -> String {
 /// exactly the carrier line and whose remainder is blank. Returns the line's
 /// byte length so the governed span excludes the terminator and the blank
 /// tail, which is what keeps an applied fix from merging the comment into
-/// the prose after it. Anything else stays an opaque comment.
+/// the prose after it. Anything else stays an unread comment.
 fn carrier(body: &str) -> Option<(usize, (String, String, String))> {
     let (line, rest) = body
         .split_once('\n')
@@ -157,26 +157,26 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
     for (index, block) in scanned.iter().enumerate() {
         let body = text.get(block.span.0..block.span.1).unwrap_or_default();
         match block.kind {
+            // A comment never renders and a literal block renders as code, so
+            // neither is a blind spot; only injected raw output is opaque.
             Kind::Comment => {
-                match carrier(body) {
-                    Some((line_length, (label, url, title))) => {
-                        extraction.governed.push(GovernedCarrier {
-                            span: (block.span.0, block.span.0.saturating_add(line_length)),
-                            label,
-                            url,
-                            title,
-                        });
-                    }
-                    None => extraction.opaque.push(block.span),
+                if let Some((line_length, (label, url, title))) = carrier(body) {
+                    extraction.governed.push(GovernedCarrier {
+                        span: (block.span.0, block.span.0.saturating_add(line_length)),
+                        label,
+                        url,
+                        title,
+                    });
                 }
                 continue;
             }
-            Kind::Literal => {
-                extraction.opaque.push(block.span);
-                continue;
-            }
+            Kind::Literal => continue,
             Kind::Directive => {
-                collect(&mut extraction, index, block, body);
+                if raw_directive(body) {
+                    extraction.opaque.push(block.span);
+                } else {
+                    collect(&mut extraction, index, block, body);
+                }
                 continue;
             }
             Kind::Text => {}
@@ -220,6 +220,15 @@ fn read_titles(extraction: &mut Extraction, order: &mut Vec<char>, block: &Block
         }
         previous = (!line.trim().is_empty()).then_some((at, line));
     }
+}
+
+/// A `raw` directive injects its body into the output verbatim: rendered
+/// content the parser cannot read, which is what opaque means.
+fn raw_directive(body: &str) -> bool {
+    let line = body.split('\n').next().unwrap_or_default();
+    line.strip_prefix(".. ")
+        .and_then(|rest| rest.split_once("::"))
+        .is_some_and(|(name, _argument)| name.trim().eq_ignore_ascii_case("raw"))
 }
 
 fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
