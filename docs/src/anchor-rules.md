@@ -155,6 +155,22 @@ data bump made for the same reason.
 That is what the fixtures are for. A re-harvest that disagrees fails a test instead of
 silently changing a verdict.
 
+## Translated trees
+
+Translation mirrors are where anchor breaks concentrate in the wild. In
+[the ledger](ledger.md)'s survey, 103 of the 122 real anchor breaks sit in starship's
+translated pages, every one with the same shape: the heading was translated, its slug
+moved with it, and the English fragment stayed behind in the links. A translated tree is
+a first-class scanned surface, since translated readers follow the same links, and
+nothing scopes it out of a run.
+
+Two repairs hold up. Linking the translated heading's own slug stays correct in each
+language under the renderer rules this page pins. Pinning an explicit raw-HTML `id` on
+the heading survives translation entirely, since the `id` is harvested as an anchor
+identity ([Resolution](resolution.md)) and does not move when the heading text does.
+Either way the check is the same one every other page gets: the fragment must name an
+identity the target actually publishes.
+
 ## What is not modelled
 
 Renderers outside the table publish identities this check will not match, and a repository
