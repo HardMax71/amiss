@@ -33,8 +33,8 @@ is a wall, not a grave: unproven. Transport failures, unfollowed redirects, and 
 evidence are unproven too, each with its reason named. On the forge side a missing
 repository never refutes, since forges answer 404 for private repositories they will not
 name; refutation needs a readable repository whose refs resolved and whose path or
-revision then proved absent. A permanent redirect lands as a `retarget` suggestion on the
-row, never a finding. And `reachable` claims exactly what it says: something answered,
+revision then proved absent. Where redirects ended, permanent or not, lands as a `retarget`
+suggestion on the row, never a finding. And `reachable` claims exactly what it says: something answered,
 not that the content is still right.
 
 Every verdict row echoes the plan's document attribution, and the subject block binds
