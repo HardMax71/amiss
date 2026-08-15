@@ -15,6 +15,7 @@ pub fn blocks(text: &str) -> Vec<Block> {
         let start = offset;
         offset = offset.saturating_add(raw.len());
         let line = raw.strip_suffix('\n').unwrap_or(raw);
+        let line = line.strip_suffix('\r').unwrap_or(line);
         let indent = line.len().saturating_sub(line.trim_start().len());
         let blank = line.trim().is_empty();
 

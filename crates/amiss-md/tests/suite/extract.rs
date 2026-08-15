@@ -684,6 +684,78 @@ fn html_anchor_and_image_destinations_are_read() {
     assert_eq!(got.opaque.html.len(), 1, "the region stays declared opaque");
 }
 
+/// Two identical tags in one raw-HTML node stay two occurrences: the mined
+/// ordinal extends the node's path, so equal destinations keep distinct
+/// addresses instead of colliding into one.
+#[test]
+fn identical_html_destinations_keep_distinct_paths() {
+    let source = "<div>\n<a href=\"./a.md\">one</a>\n<a href=\"./a.md\">two</a>\n</div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(
+        triples(&got),
+        vec![
+            (
+                SourceConstruct::HtmlAnchor,
+                "./a.md".to_owned(),
+                "./a.md".to_owned()
+            ),
+            (
+                SourceConstruct::HtmlAnchor,
+                "./a.md".to_owned(),
+                "./a.md".to_owned()
+            ),
+        ]
+    );
+    let paths: Vec<&[usize]> = got
+        .occurrences
+        .iter()
+        .map(|entry| entry.node_path.as_slice())
+        .collect();
+    assert_eq!(paths, vec![&[0, 0][..], &[0, 1][..]], "{paths:?}");
+    assert_eq!(got.opaque.html.len(), 1, "one region carries both tags");
+}
+
+/// A root-level orphaned definition is a block child of the root, so without
+/// its within-node ordinal its address would be one element and fail the
+/// report schema's two-element floor. The ordinal lifts it to a valid path.
+#[test]
+fn a_root_level_orphan_definition_carries_a_two_element_path() {
+    let got = extraction(Adapter::Markdown, "[foo]: ./x.md\n[bar]: ./y.md\n");
+    let paths: Vec<&[usize]> = got
+        .occurrences
+        .iter()
+        .map(|entry| entry.node_path.as_slice())
+        .collect();
+    assert_eq!(paths, vec![&[0, 0][..], &[1, 0][..]], "{paths:?}");
+}
+
+/// An unquoted attribute value ends only at whitespace or `>`, the HTML5 rule,
+/// so a slash inside it is a path separator, not a terminator that would
+/// truncate the destination to a directory and mismatch its type.
+#[test]
+fn an_unquoted_attribute_keeps_its_slash() {
+    let got = extraction(Adapter::Markdown, "<div><img src=images/logo.png></div>\n");
+    assert_eq!(
+        triples(&got),
+        vec![(
+            SourceConstruct::HtmlImage,
+            "images/logo.png".to_owned(),
+            "images/logo.png".to_owned()
+        )]
+    );
+    // The self-closing slash is a value byte in the unquoted state, the way a
+    // browser reads it, so `src=a/>` is a link to `a/`, not to `a`.
+    let closed = extraction(Adapter::Markdown, "<div><img src=logo.png/></div>\n");
+    assert_eq!(
+        triples(&closed),
+        vec![(
+            SourceConstruct::HtmlImage,
+            "logo.png/".to_owned(),
+            "logo.png/".to_owned()
+        )]
+    );
+}
+
 /// The two destination spellings hold for raw HTML the way they do for
 /// markdown: the raw value keeps the author's references and the semantic
 /// value decodes them, while a bare ampersand in a query stays itself. A `>`

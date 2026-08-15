@@ -296,6 +296,9 @@ impl Sweep<'_> {
 
     /// `href` and `src` are read out of a raw-HTML node the way any destination
     /// is, references decoded; comments and raw-text bodies stay the blind spot.
+    /// Each mined tag extends the node's path with its ordinal, the way the
+    /// `AsciiDoc` and RST adapters count within a block, so two equal tags in one
+    /// node keep distinct addresses.
     fn destinations(&mut self, span: (usize, usize), path: &[usize], owners: Owners) {
         let Some(region) = self.suffix.as_bytes().get(span.0..span.1) else {
             return;
@@ -327,9 +330,11 @@ impl Sweep<'_> {
             }
             Some(end)
         });
-        for (construct, value, tag_span) in found {
+        for (within, (construct, value, tag_span)) in found.into_iter().enumerate() {
             if let Some(semantic) = decoded(&value) {
-                self.push(construct, value, semantic, tag_span, path, owners);
+                let mut tag_path = path.to_vec();
+                tag_path.push(within);
+                self.push(construct, value, semantic, tag_span, &tag_path, owners);
             }
         }
     }
@@ -338,12 +343,17 @@ impl Sweep<'_> {
         let span = span_of(node)?;
         if let Some((raw, url)) = self.orphans.get(&span) {
             let (raw, url) = (raw.clone(), url.clone());
+            // A definition is a block node holding one destination, so it takes
+            // the same within-node ordinal as a mined tag; a root-level one then
+            // reaches the two-element path the address shape requires.
+            let mut definition_path = path.to_vec();
+            definition_path.push(0);
             self.push(
                 SourceConstruct::LinkReferenceDefinition,
                 raw,
                 url,
                 span,
-                path,
+                &definition_path,
                 owners,
             );
         }
@@ -1226,7 +1236,7 @@ fn attribute_value(region: &[u8], from: usize) -> Option<(String, usize)> {
     let mut end = start;
     while let Some(byte) = region.get(end) {
         let closes = quote.map_or_else(
-            || byte.is_ascii_whitespace() || *byte == b'>' || *byte == b'/',
+            || byte.is_ascii_whitespace() || *byte == b'>',
             |mark| *byte == mark,
         );
         if closes {

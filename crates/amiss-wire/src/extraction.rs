@@ -82,7 +82,9 @@ impl BlockKind {
 /// the construct's own decoding, which is exactly what the parser publishes as
 /// the node's URL. Spans are zero-based half-open byte offsets into the raw
 /// document, while `node_path` is the child-index path from the
-/// post-frontmatter root to the syntax node itself.
+/// post-frontmatter root to the syntax node itself; a destination mined out
+/// of a block node, raw HTML or an orphaned definition, appends its ordinal
+/// within the node.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Occurrence {
     pub construct: SourceConstruct,

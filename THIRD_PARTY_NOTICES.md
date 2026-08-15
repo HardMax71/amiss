@@ -2,7 +2,7 @@
 
 This file covers third-party material stored in the source tree and assets emitted by the
 documentation build. Release binaries carry a separate `THIRD_PARTY_LICENSES.txt`, assembled
-from the locked four-platform Cargo graph by `scripts/release-licenses.sh` without an added tool.
+from the locked five-platform Cargo graph by `scripts/release-licenses.sh` without an added tool.
 
 ## Parser evidence
 
