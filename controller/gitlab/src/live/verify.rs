@@ -45,7 +45,8 @@ pub(super) trait GitLabVerification: Send + Sync {
     ) -> Result<(Visibility, Budget), ProviderError>;
 
     /// Ref names in the family sharing the prefix; `None` when the project
-    /// stopped answering for them, so no ref fact exists.
+    /// stopped answering for them or the listing could not be proven
+    /// complete, so no ref fact exists.
     fn matching_refs(
         &self,
         project: &str,
@@ -273,25 +274,39 @@ impl GitLabVerification for GitLabClient {
             RefFamily::Heads => "branches",
             RefFamily::Tags => "tags",
         };
-        let mut url = self
-            .transport
-            .endpoint(["projects", project, "repository", route])?;
-        url.query_pairs_mut()
-            .append_pair("search", &format!("^{prefix}"))
-            .append_pair("per_page", &super::PAGE_SIZE.to_string());
-        let (fact, budget) = self.transport.get_fact::<Vec<NamedRef>>(url, budget)?;
-        Ok((
-            match fact {
-                Fact::Found(refs) => Some(
-                    refs.into_iter()
-                        .map(|reference| reference.name)
-                        .filter(|name| name.starts_with(prefix))
-                        .collect(),
-                ),
-                Fact::Missing | Fact::Denied => None,
-            },
-            budget,
-        ))
+        let mut budget = budget;
+        let mut names = Vec::new();
+        for page in 1..=super::MAX_PAGES {
+            let mut url = self
+                .transport
+                .endpoint(["projects", project, "repository", route])?;
+            url.query_pairs_mut()
+                .append_pair("search", &format!("^{prefix}"))
+                .append_pair("per_page", &super::PAGE_SIZE.to_string())
+                .append_pair("page", &page.to_string());
+            let (fact, spent) = self.transport.get_fact::<Vec<NamedRef>>(url, budget)?;
+            budget = spent;
+            let batch = match fact {
+                Fact::Found(refs) => refs,
+                Fact::Missing | Fact::Denied => return Ok((None, budget)),
+            };
+            if batch.len() > super::PAGE_SIZE {
+                return Err(ProviderError::InvalidResponse);
+            }
+            let complete = batch.len() < super::PAGE_SIZE;
+            names.extend(
+                batch
+                    .into_iter()
+                    .map(|reference| reference.name)
+                    .filter(|name| name.starts_with(prefix)),
+            );
+            if complete {
+                return Ok((Some(names), budget));
+            }
+        }
+        // Ten full pages leave the listing unproven complete, and a truncated
+        // candidate set could become a false refutation downstream: no fact.
+        Ok((None, budget))
     }
 
     fn file_presence(
