@@ -6,8 +6,9 @@ Install from [crates.io](https://crates.io), or build from source:
 cargo install amiss
 ```
 
-Every release also carries the engine prebuilt for Linux on x86_64 and arm64, both macOS
-architectures, and Windows x86_64, with a `SHA256SUMS` file and the sigstore bundle that attests it.
+Every release also carries the engine and [the external prober](external-assessment.md)
+prebuilt for Linux on x86_64 and arm64, both macOS architectures, and Windows x86_64, with a
+`SHA256SUMS` file and the sigstore bundle that attests it.
 `gh attestation verify <binary> --repo HardMax71/amiss` matches a downloaded binary against the
 build that produced it.
 
