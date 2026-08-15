@@ -29,7 +29,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.21.0"
+version = "0.22.0"
 edition = "2024"
 rust-version = "1.97"
 license = "FSL-1.1-ALv2"

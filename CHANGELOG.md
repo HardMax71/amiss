@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/HardMax71/amiss/compare/v0.21.0...v0.22.0) - 2026-08-15
+
+### Changes
+
+- Share one copilot cache key across the lanes
+- Cache the copilot toolcache in the mention and triage lanes
+- State the classification rule, not the run's contents
+- Name the undeclared identity beside the external count
+- Hold the judge to its own contracts
+- Judge the external plan against producer evidence
+- Refuse an unknown identity host without a dialect
+- Bound the plan's input read and keep refusal wording in the command
+- Derive the external plan from a written report
+- Tie the review cache to one copilot pin and save it before the agent runs
+- Harden agent workflow bootstrap and tool setup
+- Put the bench where the sandbox can see it and fail the reader closed
+- Let cargo be the only parser of its own manifest
+- Tie the bench to the manifest instead of its own file
+- Declare the bench once and let everything read it
+- Read the destinations raw HTML maintains
+- Extract the definition no reference consumes
+- Decode hex once and let the action word label itself
+- Let the projection comment count both windows
+- Give the backlog its own window
+- List the carried backlog instead of only counting it
+- Return the three narrowed excludes to the workspace law
+- Link one test binary per crate, not one per file
+- Move the unit tests in beside their modules
+- Pin the reviewed div inputs against the foreign-tag consumption
+- Close the three seams the second review round named
+- Mine only what a renderer would follow
+- Read the raw marker past a nested directive's indent
+- Opaque means injected raw output in every dialect
+- Probe unshaped introduced destinations with a pinned HTTPS client
+- Treat cross-family ref shadowing as no fact
+- Never refute a revision the commit route can still resolve
+- Verify introduced forge destinations through the GitHub API
+- Keep ambiguous gitlab paths unshaped and mark directory tails
+- Attach the forge shape to plan rows on recognized hosts
+- Zero the truncated pair the way the law already reads
+
 ## [0.21.0](https://github.com/HardMax71/amiss/compare/v0.20.0...v0.21.0) - 2026-08-10
 
 ### Changes
