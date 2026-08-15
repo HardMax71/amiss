@@ -743,6 +743,17 @@ fn an_unquoted_attribute_keeps_its_slash() {
             "images/logo.png".to_owned()
         )]
     );
+    // The self-closing slash is a value byte in the unquoted state, the way a
+    // browser reads it, so `src=a/>` is a link to `a/`, not to `a`.
+    let closed = extraction(Adapter::Markdown, "<div><img src=logo.png/></div>\n");
+    assert_eq!(
+        triples(&closed),
+        vec![(
+            SourceConstruct::HtmlImage,
+            "logo.png/".to_owned(),
+            "logo.png/".to_owned()
+        )]
+    );
 }
 
 /// The two destination spellings hold for raw HTML the way they do for
