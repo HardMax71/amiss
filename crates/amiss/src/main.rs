@@ -634,7 +634,7 @@ fn totals(out: &mut Channel, payload: &View) {
     if undeclared && references.number("external_out_of_scope") > 0 {
         say!(
             out,
-            "references: external counts any same-repository URL, since no forge identity was declared"
+            "references: without a declared forge identity a same-repository URL counts as external"
         );
     }
     let findings = summary.view("findings");
