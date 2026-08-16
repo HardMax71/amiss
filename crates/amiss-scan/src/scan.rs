@@ -1,4 +1,6 @@
-use amiss_md::lines::{Line, scan};
+use std::borrow::Cow;
+
+use amiss_md::lines::scan;
 use amiss_md::{Analysis, AnalyzeError, Occurrence, Opaque, Work, analyze};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Adapter;
@@ -145,26 +147,33 @@ pub fn scan_bytes(
         });
     };
 
-    let lines: Vec<Line> = scan(source).collect();
+    let line_ends = if extraction.occurrences.is_empty() && extraction.governed.is_empty() {
+        Vec::new()
+    } else {
+        scan(source).map(|line| line.end).collect()
+    };
     let mut occurrences = Vec::with_capacity(extraction.occurrences.len());
     let mut document_references: u64 = 0;
+    let mut previous_projection = None;
     for occurrence in extraction.occurrences {
         document_references = document_references.saturating_add(1);
         resources.charge_reference(
             length(occurrence.raw_destination.as_bytes()),
             document_references,
         )?;
-        let block = source
-            .get(occurrence.block_span.0..occurrence.block_span.1)
-            .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
+        let projection_digest =
+            source_projection_digest(source, occurrence.block_span, previous_projection)?;
+        previous_projection = Some((occurrence.block_span, projection_digest));
+        let (start_line, start_column) = position(source, &line_ends, occurrence.span.0);
+        let (end_line, end_column) = position(source, &line_ends, occurrence.span.1);
         let display = SpanDisplay {
-            start_line: position(source, &lines, occurrence.span.0).0,
-            start_column: position(source, &lines, occurrence.span.0).1,
-            end_line: position(source, &lines, occurrence.span.1).0,
-            end_column: position(source, &lines, occurrence.span.1).1,
+            start_line,
+            start_column,
+            end_line,
+            end_column,
         };
         occurrences.push(ScannedOccurrence {
-            projection_digest: hb(SOURCE_PROJECTION_DOMAIN, &normalize_newlines(block)),
+            projection_digest,
             raw_destination_digest: hb(
                 RAW_DESTINATION_DOMAIN,
                 occurrence.raw_destination.as_bytes(),
@@ -182,13 +191,15 @@ pub fn scan_bytes(
         let bytes = source
             .get(span.0..span.1)
             .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
+        let (start_line, start_column) = position(source, &line_ends, span.0);
+        let (end_line, end_column) = position(source, &line_ends, span.1);
         governed.push(GovernedSource {
             span,
             display: SpanDisplay {
-                start_line: position(source, &lines, span.0).0,
-                start_column: position(source, &lines, span.0).1,
-                end_line: position(source, &lines, span.1).0,
-                end_column: position(source, &lines, span.1).1,
+                start_line,
+                start_column,
+                end_line,
+                end_column,
             },
             digest: hb(GOVERNED_SOURCE_DOMAIN, bytes),
             form: crate::claim::classify(definition),
@@ -217,6 +228,30 @@ fn length(bytes: &[u8]) -> u64 {
     u64::try_from(bytes.len()).unwrap_or(u64::MAX)
 }
 
+fn source_projection_digest(
+    source: &[u8],
+    span: (usize, usize),
+    previous: Option<((usize, usize), Digest)>,
+) -> Result<Digest, Error> {
+    previous
+        .filter(|(cached, _)| *cached == span)
+        .map(|(_, digest)| digest)
+        .map_or_else(
+            || {
+                let block = source
+                    .get(span.0..span.1)
+                    .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
+                let projected = if block.contains(&b'\r') {
+                    Cow::Owned(normalize_newlines(block))
+                } else {
+                    Cow::Borrowed(block)
+                };
+                Ok(hb(SOURCE_PROJECTION_DOMAIN, projected.as_ref()))
+            },
+            Ok,
+        )
+}
+
 /// `SourceProjection`: CRLF and bare CR become LF; every other source byte
 /// is preserved, including final-newline presence.
 #[must_use]
@@ -241,12 +276,13 @@ pub fn normalize_newlines(source: &[u8]) -> Vec<u8> {
 /// The line holding a byte offset is the first whose exclusive end is past
 /// it; an offset past the final ending sits at column one of the next line.
 /// Columns count Unicode scalars from the line start.
-fn position(source: &[u8], lines: &[Line], at: usize) -> (u64, u64) {
-    let index = lines.partition_point(|line| line.end <= at);
-    let start = lines.get(index).map_or_else(
-        || lines.last().map_or(0, |line| line.end),
-        |line| line.start,
-    );
+fn position(source: &[u8], line_ends: &[usize], at: usize) -> (u64, u64) {
+    let index = line_ends.partition_point(|end| *end <= at);
+    let start = index
+        .checked_sub(1)
+        .and_then(|previous| line_ends.get(previous))
+        .copied()
+        .unwrap_or(0);
     let line = u64::try_from(index).unwrap_or(u64::MAX).saturating_add(1);
     let scalars = source
         .get(start..at)

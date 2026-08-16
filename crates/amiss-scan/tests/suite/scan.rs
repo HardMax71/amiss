@@ -66,6 +66,37 @@ fn the_projection_normalizes_endings_and_nothing_else() {
 }
 
 #[test]
+fn references_in_one_block_keep_one_normalized_projection() {
+    let lf = scanned("Lead 😀 [a](one) and [b](two).\n");
+    let crlf = scanned("Lead 😀 [a](one) and [b](two).\r\n");
+    assert_eq!(lf.occurrences.len(), 2);
+    assert_eq!(crlf.occurrences.len(), 2);
+    let lf_digests: Vec<_> = lf
+        .occurrences
+        .iter()
+        .map(|entry| entry.projection_digest)
+        .collect();
+    let crlf_digests: Vec<_> = crlf
+        .occurrences
+        .iter()
+        .map(|entry| entry.projection_digest)
+        .collect();
+    assert_eq!(lf_digests, crlf_digests);
+    assert!(
+        lf_digests
+            .windows(2)
+            .all(|pair| pair.first() == pair.get(1))
+    );
+    assert_eq!(
+        crlf.occurrences
+            .iter()
+            .map(|entry| entry.occurrence.block_span)
+            .collect::<Vec<_>>(),
+        vec![(0, 32), (0, 32)]
+    );
+}
+
+#[test]
 fn display_positions_count_scalars_across_lines() {
     let source = "one\r\ntwo [x](y)\nthree\n";
     let got = scanned(source);
