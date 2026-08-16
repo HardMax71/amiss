@@ -11,5 +11,12 @@ exclude.workspace = true
 [dependencies]
 amiss-wire = { path = "../amiss-wire", version = "0.22.0" }
 
+[dev-dependencies]
+divan.workspace = true
+
+[[bench]]
+name = "directive"
+harness = false
+
 [lints]
 workspace = true
