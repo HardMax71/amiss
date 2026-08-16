@@ -58,14 +58,19 @@ pub(crate) fn crossing(resource: ResourceName, configured_limit: u64, observed: 
     }
 }
 
-/// Byte charging for one evaluation side: each member is charged once per
-/// selected member key, so cache hits never recharge.
+/// Byte charging for one evaluation side. Compressed objects and pack indexes
+/// have independent identity sets, and cache hits within either never recharge.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitResources {
     limits: GitLimits,
-    aggregate_compressed: u64,
-    aggregate_index: u64,
-    charged: BTreeSet<String>,
+    compressed: ByteMeter,
+    pack_indexes: ByteMeter,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct ByteMeter {
+    total: u64,
+    charged: BTreeSet<Box<str>>,
 }
 
 impl GitResources {
@@ -73,9 +78,8 @@ impl GitResources {
     pub fn new(limits: GitLimits) -> Self {
         Self {
             limits,
-            aggregate_compressed: 0,
-            aggregate_index: 0,
-            charged: BTreeSet::new(),
+            compressed: ByteMeter::default(),
+            pack_indexes: ByteMeter::default(),
         }
     }
 
@@ -89,27 +93,15 @@ impl GitResources {
     /// Fails when the stream crosses the per-stream cap or the running total
     /// crosses the aggregate cap.
     pub fn charge_compressed(&mut self, member: &str, bytes: u64) -> Result<(), Error> {
-        if bytes > self.limits.compressed_stream_bytes {
-            return Err(crossing(
-                ResourceName::GitCompressedObjectBytes,
-                self.limits.compressed_stream_bytes,
-                bytes,
-            ));
-        }
-        if self.charged.contains(member) {
-            return Ok(());
-        }
-        let total = self.aggregate_compressed.saturating_add(bytes);
-        if total > self.limits.aggregate_compressed_bytes {
-            return Err(crossing(
-                ResourceName::AggregateGitCompressedObjectBytesPerEvaluation,
-                self.limits.aggregate_compressed_bytes,
-                total,
-            ));
-        }
-        self.aggregate_compressed = total;
-        self.charged.insert(member.to_owned());
-        Ok(())
+        charge(
+            &mut self.compressed,
+            member,
+            bytes,
+            ResourceName::GitCompressedObjectBytes,
+            self.limits.compressed_stream_bytes,
+            ResourceName::AggregateGitCompressedObjectBytesPerEvaluation,
+            self.limits.aggregate_compressed_bytes,
+        )
     }
 
     /// # Errors
@@ -117,27 +109,38 @@ impl GitResources {
     /// Fails when one index crosses the per-index cap or the running total
     /// crosses the aggregate cap.
     pub fn charge_index(&mut self, member: &str, bytes: u64) -> Result<(), Error> {
-        if bytes > self.limits.pack_index_bytes {
-            return Err(crossing(
-                ResourceName::GitPackIndexBytes,
-                self.limits.pack_index_bytes,
-                bytes,
-            ));
-        }
-        let key = format!("idx:{member}");
-        if self.charged.contains(&key) {
-            return Ok(());
-        }
-        let total = self.aggregate_index.saturating_add(bytes);
-        if total > self.limits.aggregate_pack_index_bytes {
-            return Err(crossing(
-                ResourceName::AggregateGitPackIndexBytes,
-                self.limits.aggregate_pack_index_bytes,
-                total,
-            ));
-        }
-        self.aggregate_index = total;
-        self.charged.insert(key);
-        Ok(())
+        charge(
+            &mut self.pack_indexes,
+            member,
+            bytes,
+            ResourceName::GitPackIndexBytes,
+            self.limits.pack_index_bytes,
+            ResourceName::AggregateGitPackIndexBytes,
+            self.limits.aggregate_pack_index_bytes,
+        )
     }
+}
+
+fn charge(
+    meter: &mut ByteMeter,
+    member: &str,
+    bytes: u64,
+    member_resource: ResourceName,
+    member_limit: u64,
+    aggregate_resource: ResourceName,
+    aggregate_limit: u64,
+) -> Result<(), Error> {
+    if bytes > member_limit {
+        return Err(crossing(member_resource, member_limit, bytes));
+    }
+    if meter.charged.contains(member) {
+        return Ok(());
+    }
+    let total = meter.total.saturating_add(bytes);
+    if total > aggregate_limit {
+        return Err(crossing(aggregate_resource, aggregate_limit, total));
+    }
+    meter.total = total;
+    meter.charged.insert(member.into());
+    Ok(())
 }
