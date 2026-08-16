@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use amiss_fixtures::stage_symlink;
 use amiss_git::{GitLimits, GitResources, Repository};
@@ -343,6 +344,74 @@ fn a_shared_subtree_expands_at_every_path() {
     assert_eq!(
         got.tree_entries, 6,
         "two roots, two shared dup trees, two blobs: the shared subtree charges at each path"
+    );
+
+    let [first, second] = got.documents.as_slice() else {
+        panic!("the shared subtree yields two documents")
+    };
+    let (DocumentStatus::Scanned(first), DocumentStatus::Scanned(second)) =
+        (&first.status, &second.status)
+    else {
+        panic!("both shared documents scan")
+    };
+    assert!(
+        Arc::ptr_eq(first, second),
+        "one content-addressed scan backs both paths"
+    );
+
+    let tight_nodes = ScanLimits {
+        parser_nodes_per_snapshot: first.work.nodes,
+        ..ScanLimits::CONTRACT
+    };
+    assert_eq!(
+        run(root, tight_nodes, GitLimits::CONTRACT),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::ParserNodesPerSnapshot,
+            configured_limit: first.work.nodes,
+            observed_lower_bound: first.work.nodes.saturating_add(1),
+        }),
+        "a reused scan still charges its node work"
+    );
+
+    let tight_references = ScanLimits {
+        references_per_snapshot: 1,
+        ..ScanLimits::CONTRACT
+    };
+    assert_eq!(
+        run(root, tight_references, GitLimits::CONTRACT),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::ReferencesPerSnapshot,
+            configured_limit: 1,
+            observed_lower_bound: 2,
+        }),
+        "a reused scan still charges its extracted references"
+    );
+}
+
+#[test]
+fn mdx_reuse_requires_the_same_embedded_code_allowance() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    let source = "a {'}'} b\n";
+    fs::write(root.join("a.mdx"), source).unwrap();
+    fs::write(root.join("b.mdx"), source).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "mdx"]);
+
+    let got = run(root, ScanLimits::CONTRACT, GitLimits::CONTRACT).unwrap();
+    let [first, second] = got.documents.as_slice() else {
+        panic!("the fixture yields two MDX documents")
+    };
+    let (DocumentStatus::Scanned(first), DocumentStatus::Scanned(second)) =
+        (&first.status, &second.status)
+    else {
+        panic!("both MDX documents scan")
+    };
+    assert!(first.embedded_code_bytes > 0, "the source spends allowance");
+    assert!(
+        !Arc::ptr_eq(first, second),
+        "the first scan changes the allowance before the second"
     );
 }
 

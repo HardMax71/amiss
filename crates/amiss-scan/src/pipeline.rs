@@ -990,6 +990,7 @@ fn evaluated_pair(
         base_tree,
         None,
     );
+    candidate_scan.scans = std::mem::take(&mut base_scan.scans);
     let mut claims: Vec<crate::claim::ClaimOutcome> = Vec::new();
     let candidate = evaluate_tree(
         repo,
@@ -1370,6 +1371,7 @@ fn staged_index_result(
             base_tree,
             &index,
         )?;
+    candidate_scan.scans = std::mem::take(&mut base_scan.scans);
 
     let mut claims: Vec<crate::claim::ClaimOutcome> = Vec::new();
     let (candidate_discovery, candidate_side, mut failures) = staged_candidate(

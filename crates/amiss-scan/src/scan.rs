@@ -48,6 +48,7 @@ pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-sour
 pub struct Scanned {
     pub adapter: Adapter,
     pub work: Work,
+    pub embedded_code_bytes: u64,
     pub occurrences: Vec<ScannedOccurrence>,
     pub opaque: Opaque,
     pub governed: Vec<GovernedSource>,
@@ -139,6 +140,7 @@ pub fn scan_bytes(
         return Ok(Scanned {
             adapter,
             work: analysis.work,
+            embedded_code_bytes: analysis.embedded_code_bytes,
             occurrences: Vec::new(),
             opaque: Opaque::default(),
             governed: Vec::new(),
@@ -212,6 +214,7 @@ pub fn scan_bytes(
     Ok(Scanned {
         adapter,
         work: analysis.work,
+        embedded_code_bytes: analysis.embedded_code_bytes,
         occurrences,
         opaque: extraction.opaque,
         governed,
@@ -222,6 +225,32 @@ pub fn scan_bytes(
             transcluding,
         }),
     })
+}
+
+/// Replays a successful artifact against the independent snapshot ledger.
+pub(crate) fn replay_scan_charges(
+    resources: &mut ScanResources,
+    scanned: &Scanned,
+) -> Result<(), Error> {
+    if scanned.embedded_code_bytes > resources.embedded_code_allowance() {
+        return Err(resources.embedded_code_crossing(scanned.embedded_code_bytes));
+    }
+    resources.charge_embedded_code(scanned.embedded_code_bytes);
+    resources.charge_work(scanned.work.nodes, scanned.work.nesting)?;
+
+    let mut document_references = 0_u64;
+    for occurrence in &scanned.occurrences {
+        document_references = document_references.saturating_add(1);
+        resources.charge_reference(
+            length(occurrence.occurrence.raw_destination.as_bytes()),
+            document_references,
+        )?;
+    }
+    for _definition in &scanned.governed {
+        document_references = document_references.saturating_add(1);
+        resources.charge_reference(0, document_references)?;
+    }
+    Ok(())
 }
 
 fn length(bytes: &[u8]) -> u64 {
