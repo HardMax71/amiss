@@ -666,11 +666,9 @@ impl ScannerPolicy {
         let value = root(bytes)?;
         let digest = hj(SCANNER_POLICY_SCHEMA, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            SCANNER_POLICY_SCHEMA,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, SCANNER_POLICY_SCHEMA)
+        })?;
 
         let includes_path = obj.field("document_includes");
         let includes = de::array(&includes_path, obj.take("document_includes")?)?;
@@ -824,17 +822,14 @@ impl OrganizationFloor {
         let value = root(bytes)?;
         let digest = hj(ORGANIZATION_FLOOR_SCHEMA, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            ORGANIZATION_FLOOR_SCHEMA,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, ORGANIZATION_FLOOR_SCHEMA)
+        })?;
 
-        let floor_id = decode_artifact_id(&obj.field("floor_id"), obj.take("floor_id")?)?;
-        let repository = decode_repository(&obj.field("repository"), obj.take("repository")?)?;
-        let ref_name = decode_branch_ref(&obj.field("ref"), obj.take("ref")?)?;
-        let minimum_profile =
-            Profile::decode(&obj.field("minimum_profile"), obj.take("minimum_profile")?)?;
+        let floor_id = obj.required("floor_id", decode_artifact_id)?;
+        let repository = obj.required("repository", decode_repository)?;
+        let ref_name = obj.required("ref", decode_branch_ref)?;
+        let minimum_profile = obj.required("minimum_profile", Profile::decode)?;
 
         let dispositions_path = obj.field("minimum_dispositions");
         let dispositions_raw = de::array(&dispositions_path, obj.take("minimum_dispositions")?)?;
@@ -1075,24 +1070,17 @@ impl DebtSnapshot {
         let value = root(bytes)?;
         let digest = hj(DEBT_SNAPSHOT_SCHEMA, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            DEBT_SNAPSHOT_SCHEMA,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, DEBT_SNAPSHOT_SCHEMA)
+        })?;
 
-        let repository = decode_repository(&obj.field("repository"), obj.take("repository")?)?;
-        let ref_name = decode_branch_ref(&obj.field("ref"), obj.take("ref")?)?;
-        let organization_floor_digest = decode_digest(
-            &obj.field("organization_floor_digest"),
-            obj.take("organization_floor_digest")?,
-        )?;
-        let adoption_tree = decode_tree(&obj.field("adoption_tree"), obj.take("adoption_tree")?)?;
-        let adoption_report_payload_digest = decode_digest(
-            &obj.field("adoption_report_payload_digest"),
-            obj.take("adoption_report_payload_digest")?,
-        )?;
-        let created_at = decode_instant(&obj.field("created_at"), obj.take("created_at")?)?;
+        let repository = obj.required("repository", decode_repository)?;
+        let ref_name = obj.required("ref", decode_branch_ref)?;
+        let organization_floor_digest = obj.required("organization_floor_digest", decode_digest)?;
+        let adoption_tree = obj.required("adoption_tree", decode_tree)?;
+        let adoption_report_payload_digest =
+            obj.required("adoption_report_payload_digest", decode_digest)?;
+        let created_at = obj.required("created_at", decode_instant)?;
 
         let items_path = obj.field("items");
         let raw = de::array(&items_path, obj.take("items")?)?;
@@ -1195,19 +1183,14 @@ impl WaiverBundle {
         let value = root(bytes)?;
         let digest = hj(WAIVER_BUNDLE_SCHEMA, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            WAIVER_BUNDLE_SCHEMA,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, WAIVER_BUNDLE_SCHEMA)
+        })?;
 
-        let repository = decode_repository(&obj.field("repository"), obj.take("repository")?)?;
-        let ref_name = decode_branch_ref(&obj.field("ref"), obj.take("ref")?)?;
-        let organization_floor_digest = decode_digest(
-            &obj.field("organization_floor_digest"),
-            obj.take("organization_floor_digest")?,
-        )?;
-        let created_at = decode_instant(&obj.field("created_at"), obj.take("created_at")?)?;
+        let repository = obj.required("repository", decode_repository)?;
+        let ref_name = obj.required("ref", decode_branch_ref)?;
+        let organization_floor_digest = obj.required("organization_floor_digest", decode_digest)?;
+        let created_at = obj.required("created_at", decode_instant)?;
 
         let items_path = obj.field("items");
         let raw = de::array(&items_path, obj.take("items")?)?;
@@ -1297,12 +1280,12 @@ fn sorted_set<T>(
 
 fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
     let mut obj = Obj::new(path, value)?;
-    let include_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
-    let kind = IncludeKind::decode(&obj.field("kind"), obj.take("kind")?)?;
-    let adapter = match obj.take_optional("adapter") {
-        Some(value) => Some(decode_adapter(&obj.field("adapter"), value)?),
-        None => None,
-    };
+    let include_path = obj.required("path", decode_repo_path)?;
+    let kind = obj.required("kind", IncludeKind::decode)?;
+    let adapter = obj
+        .take_optional("adapter")
+        .map(|value| decode_adapter(&obj.field("adapter"), value))
+        .transpose()?;
     obj.finish()?;
     Ok(DocumentInclude {
         path: include_path,
@@ -1321,9 +1304,8 @@ fn decode_adapter(path: &str, value: Value) -> Result<Adapter, Error> {
 
 fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {
     let mut obj = Obj::new(path, value)?;
-    let finding_kind =
-        PromotableFindingKind::decode(&obj.field("finding_kind"), obj.take("finding_kind")?)?;
-    let disposition = Disposition::decode(&obj.field("disposition"), obj.take("disposition")?)?;
+    let finding_kind = obj.required("finding_kind", PromotableFindingKind::decode)?;
+    let disposition = obj.required("disposition", Disposition::decode)?;
     obj.finish()?;
     Ok(FindingDisposition {
         finding_kind,
@@ -1333,7 +1315,7 @@ fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDispositio
 
 fn decode_resource_limit(path: &str, value: Value) -> Result<ResourceLimit, Error> {
     let mut obj = Obj::new(path, value)?;
-    let resource = ResourceName::decode(&obj.field("resource"), obj.take("resource")?)?;
+    let resource = obj.required("resource", ResourceName::decode)?;
     let maximum_path = obj.field("maximum");
     let maximum = de::integer(&maximum_path, obj.take("maximum")?)?;
     obj.finish()?;
@@ -1409,9 +1391,9 @@ fn decode_nullable_digest(path: &str, value: Value) -> Result<Option<Digest>, Er
 
 pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
     let mut obj = Obj::new(path, value)?;
-    let host = de::string(&obj.field("host"), obj.take("host")?)?;
-    let owner = de::string(&obj.field("owner"), obj.take("owner")?)?;
-    let name = de::string(&obj.field("name"), obj.take("name")?)?;
+    let host = obj.required("host", de::string)?;
+    let owner = obj.required("owner", de::string)?;
+    let name = obj.required("name", de::string)?;
     obj.finish()?;
     RepositoryIdentity::new(host, owner, name)
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
@@ -1451,7 +1433,7 @@ fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {
         "sha256" => ObjectFormat::Sha256,
         _ => return fail(&format_path, ErrorKind::InvalidValue),
     };
-    let tree_oid = de::string(&obj.field("tree_oid"), obj.take("tree_oid")?)?;
+    let tree_oid = obj.required("tree_oid", de::string)?;
     obj.finish()?;
     TreeIdentity::new(object_format, tree_oid)
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
@@ -1469,13 +1451,13 @@ fn decode_reason(path: &str, value: Value) -> Result<String, Error> {
 
 fn decode_intent(path: &str, value: Value) -> Result<TargetIntent, Error> {
     let mut obj = Obj::new(path, value)?;
-    de::const_str(&obj.field("kind"), obj.take("kind")?, "repository-path")?;
-    let target_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
-    let target_kind = TargetKind::decode(&obj.field("target_kind"), obj.take("target_kind")?)?;
-    let query_digest =
-        decode_nullable_digest(&obj.field("query_digest"), obj.take("query_digest")?)?;
-    let fragment_digest =
-        decode_nullable_digest(&obj.field("fragment_digest"), obj.take("fragment_digest")?)?;
+    obj.required("kind", |path, value| {
+        de::const_str(path, value, "repository-path")
+    })?;
+    let target_path = obj.required("path", decode_repo_path)?;
+    let target_kind = obj.required("target_kind", TargetKind::decode)?;
+    let query_digest = obj.required("query_digest", decode_nullable_digest)?;
+    let fragment_digest = obj.required("fragment_digest", decode_nullable_digest)?;
     obj.finish()?;
     Ok(TargetIntent {
         path: target_path,
@@ -1487,27 +1469,19 @@ fn decode_intent(path: &str, value: Value) -> Result<TargetIntent, Error> {
 
 fn decode_scope(path: &str, value: Value) -> Result<FindingScope, Error> {
     let mut obj = Obj::new(path, value)?;
-    de::const_str(&obj.field("kind"), obj.take("kind")?, "reference")?;
-    let document = decode_repo_path(&obj.field("document"), obj.take("document")?)?;
-    let source_construct = SourceConstruct::decode(
-        &obj.field("source_construct"),
-        obj.take("source_construct")?,
-    )?;
-    let normalized_target_intent = decode_intent(
-        &obj.field("normalized_target_intent"),
-        obj.take("normalized_target_intent")?,
-    )?;
+    obj.required("kind", |path, value| {
+        de::const_str(path, value, "reference")
+    })?;
+    let document = obj.required("document", decode_repo_path)?;
+    let source_construct = obj.required("source_construct", SourceConstruct::decode)?;
+    let normalized_target_intent = obj.required("normalized_target_intent", decode_intent)?;
     let occurrence_path = obj.field("occurrence");
     let mut occurrence = Obj::new(&occurrence_path, obj.take("occurrence")?)?;
-    de::const_str(
-        &occurrence.field("kind"),
-        occurrence.take("kind")?,
-        "source-projection",
-    )?;
-    let source_projection_digest = decode_digest(
-        &occurrence.field("source_projection_digest"),
-        occurrence.take("source_projection_digest")?,
-    )?;
+    occurrence.required("kind", |path, value| {
+        de::const_str(path, value, "source-projection")
+    })?;
+    let source_projection_digest =
+        occurrence.required("source_projection_digest", decode_digest)?;
     occurrence.finish()?;
     obj.finish()?;
     Ok(FindingScope {
@@ -1521,14 +1495,11 @@ fn decode_scope(path: &str, value: Value) -> Result<FindingScope, Error> {
 fn decode_key_input(path: &str, value: Value) -> Result<(FindingKeyInput, Digest), Error> {
     let digest = hj(FINDING_KEY_DOMAIN, &value);
     let mut obj = Obj::new(path, value)?;
-    de::const_str(
-        &obj.field("schema"),
-        obj.take("schema")?,
-        FINDING_KEY_INPUT_SCHEMA,
-    )?;
-    let finding_kind =
-        EligibleFindingKind::decode(&obj.field("finding_kind"), obj.take("finding_kind")?)?;
-    let scope = decode_scope(&obj.field("scope"), obj.take("scope")?)?;
+    obj.required("schema", |path, value| {
+        de::const_str(path, value, FINDING_KEY_INPUT_SCHEMA)
+    })?;
+    let finding_kind = obj.required("finding_kind", EligibleFindingKind::decode)?;
+    let scope = obj.required("scope", decode_scope)?;
     obj.finish()?;
     Ok((
         FindingKeyInput {
@@ -1557,22 +1528,26 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
                 obj.finish()?;
                 return Ok(Resolution::Missing(Missing::LabelNotDeclared));
             }
-            let resolved_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
+            let resolved_path = obj.required("path", decode_repo_path)?;
             let missing = match reason {
                 MissingTag::PathNotFound => Missing::PathNotFound {
                     path: resolved_path,
-                    near: de::nullable(obj.take("near")?)
-                        .map(|value| decode_repo_path(&obj.field("near"), value))
-                        .transpose()?,
+                    near: obj.required("near", |path, value| {
+                        de::nullable(value)
+                            .map(|value| decode_repo_path(path, value))
+                            .transpose()
+                    })?,
                 },
                 MissingTag::LineFragmentOutOfRange => Missing::LineFragmentOutOfRange {
                     path: resolved_path,
                 },
                 MissingTag::HeadingAnchorNotFound => Missing::HeadingAnchorNotFound {
                     path: resolved_path,
-                    near: de::nullable(obj.take("near")?)
-                        .map(|value| de::string(&obj.field("near"), value))
-                        .transpose()?,
+                    near: obj.required("near", |path, value| {
+                        de::nullable(value)
+                            .map(|value| de::string(path, value))
+                            .transpose()
+                    })?,
                 },
                 MissingTag::LabelNotDeclared => Missing::LabelNotDeclared,
             };
@@ -1580,7 +1555,7 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
             Ok(Resolution::Missing(missing))
         }
         ResolutionTag::TypeMismatch => {
-            let target = decode_resolution_target(&obj.field("target"), obj.take("target")?)?;
+            let target = obj.required("target", decode_resolution_target)?;
             obj.finish()?;
             Ok(Resolution::TypeMismatch(target))
         }
@@ -1601,7 +1576,7 @@ fn decode_resolution_target(path: &str, value: Value) -> Result<Target<RepoPathT
     let Ok(kind) = kind_text.parse::<TargetTag>() else {
         return fail(&kind_path, ErrorKind::InvalidValue);
     };
-    let resolved_path = decode_repo_path(&obj.field("path"), obj.take("path")?)?;
+    let resolved_path = obj.required("path", decode_repo_path)?;
     match kind {
         TargetTag::Tree => {
             obj.finish()?;
@@ -1615,7 +1590,7 @@ fn decode_resolution_target(path: &str, value: Value) -> Result<Target<RepoPathT
             let Ok(mode) = mode_text.parse::<BlobMode>() else {
                 return fail(&mode_path, ErrorKind::InvalidValue);
             };
-            let content = decode_resolution_content(&obj.field("content"), obj.take("content")?)?;
+            let content = obj.required("content", decode_resolution_content)?;
             obj.finish()?;
             Ok(Target::Blob(BlobTarget {
                 path: resolved_path,
@@ -1633,13 +1608,10 @@ fn decode_resolution_content(path: &str, value: Value) -> Result<BlobContent, Er
     let Ok(kind) = kind_text.parse::<BlobContentTag>() else {
         return fail(&kind_path, ErrorKind::InvalidValue);
     };
-    let raw_digest = decode_digest(&obj.field("raw_digest"), obj.take("raw_digest")?)?;
+    let raw_digest = obj.required("raw_digest", decode_digest)?;
     match kind {
         BlobContentTag::Available => {
-            let projection_digest = decode_digest(
-                &obj.field("projection_digest"),
-                obj.take("projection_digest")?,
-            )?;
+            let projection_digest = obj.required("projection_digest", decode_digest)?;
             obj.finish()?;
             Ok(BlobContent::Available {
                 raw_digest,
@@ -1662,16 +1634,18 @@ struct DecodedFact {
 fn decode_fact(path: &str, value: Value) -> Result<DecodedFact, Error> {
     let fact_digest = hj(FACT_DOMAIN, &value);
     let mut obj = Obj::new(path, value)?;
-    de::const_str(&obj.field("schema"), obj.take("schema")?, FACT_SCHEMA)?;
-    let finding_kind =
-        EligibleFindingKind::decode(&obj.field("finding_kind"), obj.take("finding_kind")?)?;
+    obj.required("schema", |path, value| {
+        de::const_str(path, value, FACT_SCHEMA)
+    })?;
+    let finding_kind = obj.required("finding_kind", EligibleFindingKind::decode)?;
     let key_path = obj.field("key_input");
     let (key_input, finding_key) = decode_key_input(&key_path, obj.take("key_input")?)?;
     let evidence_path = obj.field("evidence");
     let mut evidence = Obj::new(&evidence_path, obj.take("evidence")?)?;
-    de::const_str(&evidence.field("kind"), evidence.take("kind")?, "reference")?;
-    let resolution =
-        decode_resolution(&evidence.field("resolution"), evidence.take("resolution")?)?;
+    evidence.required("kind", |path, value| {
+        de::const_str(path, value, "reference")
+    })?;
+    let resolution = evidence.required("resolution", decode_resolution)?;
     let multiplicity_path = evidence.field("occurrence_multiplicity");
     if de::integer(
         &multiplicity_path,
@@ -1720,10 +1694,10 @@ fn decode_item_core(obj: &mut Obj, fact_field: &str) -> Result<ItemCore, Error> 
     if fact_digest != decoded_fact.fact_digest {
         return fail(&fact_digest_path, ErrorKind::DigestMismatch);
     }
-    let owner = decode_owner(&obj.field("owner"), obj.take("owner")?)?;
-    let reason = decode_reason(&obj.field("reason"), obj.take("reason")?)?;
-    let created_at = decode_instant(&obj.field("created_at"), obj.take("created_at")?)?;
-    let expires_at = decode_instant(&obj.field("expires_at"), obj.take("expires_at")?)?;
+    let owner = obj.required("owner", decode_owner)?;
+    let reason = obj.required("reason", decode_reason)?;
+    let created_at = obj.required("created_at", decode_instant)?;
+    let expires_at = obj.required("expires_at", decode_instant)?;
     Ok(ItemCore {
         finding_key,
         fact: decoded_fact.fact,
@@ -1737,7 +1711,7 @@ fn decode_item_core(obj: &mut Obj, fact_field: &str) -> Result<ItemCore, Error> 
 
 fn decode_debt_item(path: &str, value: Value) -> Result<DebtItem, Error> {
     let mut obj = Obj::new(path, value)?;
-    let debt_id = decode_artifact_id(&obj.field("debt_id"), obj.take("debt_id")?)?;
+    let debt_id = obj.required("debt_id", decode_artifact_id)?;
     let core = decode_item_core(&mut obj, "accepted_fact")?;
     obj.finish()?;
     if core.created_at >= core.expires_at {
@@ -1757,16 +1731,14 @@ fn decode_debt_item(path: &str, value: Value) -> Result<DebtItem, Error> {
 
 fn decode_waiver_item(path: &str, value: Value) -> Result<WaiverItem, Error> {
     let mut obj = Obj::new(path, value)?;
-    let waiver_id = decode_artifact_id(&obj.field("waiver_id"), obj.take("waiver_id")?)?;
+    let waiver_id = obj.required("waiver_id", decode_artifact_id)?;
     let core = decode_item_core(&mut obj, "authorized_fact")?;
-    let candidate_tree = decode_tree(&obj.field("candidate_tree"), obj.take("candidate_tree")?)?;
-    let issuer = decode_owner(&obj.field("issuer"), obj.take("issuer")?)?;
-    let not_before = decode_instant(&obj.field("not_before"), obj.take("not_before")?)?;
-    de::const_str(
-        &obj.field("residual_disposition"),
-        obj.take("residual_disposition")?,
-        "warn",
-    )?;
+    let candidate_tree = obj.required("candidate_tree", decode_tree)?;
+    let issuer = obj.required("issuer", decode_owner)?;
+    let not_before = obj.required("not_before", decode_instant)?;
+    obj.required("residual_disposition", |path, value| {
+        de::const_str(path, value, "warn")
+    })?;
     obj.finish()?;
     if core.created_at > not_before || not_before >= core.expires_at {
         return fail(path, ErrorKind::Inconsistent);

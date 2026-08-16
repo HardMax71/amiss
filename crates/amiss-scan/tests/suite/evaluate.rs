@@ -157,7 +157,7 @@ fn side(observations: Vec<Observation>) -> Side {
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn comparisons(base: Vec<Observation>, candidate: Vec<Observation>) -> Vec<Comparison> {
-    correlate(&side(base), &side(candidate)).expect("correlate")
+    correlate(side(base), side(candidate)).expect("correlate")
 }
 
 fn kinds(findings: &[Finding]) -> Vec<FindingKind> {

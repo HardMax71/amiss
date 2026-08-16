@@ -765,26 +765,6 @@ fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribut
     rows
 }
 
-/// Every candidate occurrence: primaries plus alternatives on the candidate
-/// side of every comparison.
-fn candidate_occurrences(comparisons: &[Comparison]) -> Vec<&Observation> {
-    let mut out: Vec<&Observation> = Vec::new();
-    for comparison in comparisons {
-        out.extend(comparison.candidate.iter());
-        out.extend(comparison.alternatives_candidate.iter());
-    }
-    out
-}
-
-fn base_occurrences(comparisons: &[Comparison]) -> Vec<&Observation> {
-    let mut out: Vec<&Observation> = Vec::new();
-    for comparison in comparisons {
-        out.extend(comparison.base.iter());
-        out.extend(comparison.alternatives_base.iter());
-    }
-    out
-}
-
 /// The exact ordinary-finding projection: document findings, occurrence
 /// boundaries, structural aggregation by key with attribution, and the
 /// comparison-derived removal, ambiguity, and impact findings. Analysis
@@ -1652,7 +1632,12 @@ fn ordinary(
     }
 
     let invalid = invalid_attributions(comparisons);
-    for observation in candidate_occurrences(comparisons) {
+    for observation in comparisons.iter().flat_map(|comparison| {
+        comparison
+            .candidate
+            .iter()
+            .chain(&comparison.alternatives_candidate)
+    }) {
         let attribution = if matches!(observation.resolution, Resolution::Invalid(_)) {
             invalid
                 .get(&observation.id)
@@ -1819,10 +1804,18 @@ fn collect_structural<'a>(
 /// to record so a deletion cannot retain an old blocking failure.
 fn structural_findings(comparisons: &[Comparison], profile: Profile, findings: &mut Vec<Finding>) {
     let mut groups: BTreeMap<Digest, KeyGroup<'_>> = BTreeMap::new();
-    for observation in candidate_occurrences(comparisons) {
+    for observation in comparisons.iter().flat_map(|comparison| {
+        comparison
+            .candidate
+            .iter()
+            .chain(&comparison.alternatives_candidate)
+    }) {
         collect_structural(&mut groups, observation, false);
     }
-    for observation in base_occurrences(comparisons) {
+    for observation in comparisons
+        .iter()
+        .flat_map(|comparison| comparison.base.iter().chain(&comparison.alternatives_base))
+    {
         collect_structural(&mut groups, observation, true);
     }
 
@@ -1863,12 +1856,8 @@ fn structural_findings(comparisons: &[Comparison], profile: Profile, findings: &
         let member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
         let representative = members
             .iter()
-            .min_by_key(|observation| {
-                (
-                    observation.document.clone(),
-                    observation.span,
-                    observation.id,
-                )
+            .min_by(|left, right| {
+                (&left.document, left.span, left.id).cmp(&(&right.document, right.span, right.id))
             })
             .copied();
         let side = if group.candidate.is_empty() {

@@ -1,4 +1,5 @@
 use amiss_wire::ExitClass;
+use amiss_wire::de::{self, Error as DecodeError, ErrorKind as DecodeErrorKind, Obj};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
 
@@ -156,6 +157,43 @@ fn reproduces_the_normative_seed_vectors() {
 fn domain_separation_changes_the_digest() {
     assert_ne!(hb("amiss/a", b"x"), hb("amiss/b", b"x"));
     assert_ne!(hb("amiss/a", b"x"), hb("amiss/a", b"y"));
+}
+
+#[test]
+fn required_object_members_decode_through_their_exact_paths() {
+    let mut object = Obj::new(
+        "$.outer",
+        Value::Object(vec![(
+            "required".to_owned(),
+            Value::String("value".to_owned()),
+        )]),
+    )
+    .unwrap();
+    assert_eq!(object.required("required", de::string).unwrap(), "value");
+    object.finish().unwrap();
+
+    let mut missing = Obj::new("$.outer", Value::Object(Vec::new())).unwrap();
+    assert_eq!(
+        missing.required("required", de::string).unwrap_err(),
+        DecodeError {
+            path: "$.outer.required".to_owned(),
+            kind: DecodeErrorKind::MissingField,
+        }
+    );
+
+    let mut invalid = Obj::new(
+        "$.outer",
+        Value::Object(vec![("required".to_owned(), Value::Bool(true))]),
+    )
+    .unwrap();
+    assert_eq!(
+        invalid.required("required", de::integer).unwrap_err(),
+        DecodeError {
+            path: "$.outer.required".to_owned(),
+            kind: DecodeErrorKind::WrongType,
+        }
+    );
+    assert_eq!(invalid.field("next"), "$.outer.next");
 }
 
 /// The identity grammar after the host opened: a host is any nonempty

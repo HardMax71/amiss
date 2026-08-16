@@ -125,23 +125,16 @@ impl TrustedTimeStatement {
         let value = root(bytes)?;
         let digest = hj(TRUSTED_TIME_STATEMENT_SCHEMA, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            TRUSTED_TIME_STATEMENT_SCHEMA,
-        )?;
-        de::const_str(
-            &obj.field("controller"),
-            obj.take("controller")?,
-            TRUSTED_TIME_CONTROLLER,
-        )?;
-        let repository = decode_repository(&obj.field("repository"), obj.take("repository")?)?;
-        let ref_name = decode_branch_ref(&obj.field("ref"), obj.take("ref")?)?;
-        let candidate_identity_digest = decode_digest(
-            &obj.field("candidate_identity_digest"),
-            obj.take("candidate_identity_digest")?,
-        )?;
-        let provider = decode_provider_id(&obj.field("provider"), obj.take("provider")?)?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, TRUSTED_TIME_STATEMENT_SCHEMA)
+        })?;
+        obj.required("controller", |path, value| {
+            de::const_str(path, value, TRUSTED_TIME_CONTROLLER)
+        })?;
+        let repository = obj.required("repository", decode_repository)?;
+        let ref_name = obj.required("ref", decode_branch_ref)?;
+        let candidate_identity_digest = obj.required("candidate_identity_digest", decode_digest)?;
+        let provider = obj.required("provider", decode_provider_id)?;
         let run_id_path = obj.field("provider_run_id");
         let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
         let attempt_path = obj.field("provider_run_attempt");
@@ -150,10 +143,7 @@ impl TrustedTimeStatement {
             .ok()
             .filter(|attempt| *attempt >= 1)
             .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-        let evaluation_instant = decode_instant(
-            &obj.field("evaluation_instant"),
-            obj.take("evaluation_instant")?,
-        )?;
+        let evaluation_instant = obj.required("evaluation_instant", decode_instant)?;
         let until_path = obj.field("valid_until");
         let valid_until = decode_instant(&until_path, obj.take("valid_until")?)?;
         obj.finish()?;

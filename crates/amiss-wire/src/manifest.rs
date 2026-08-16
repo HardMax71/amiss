@@ -110,11 +110,11 @@ impl ReleaseManifest {
     pub fn decode(value: Value) -> Result<Self, Error> {
         let digest = hj(MANIFEST_DOMAIN, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(&obj.field("schema"), obj.take("schema")?, MANIFEST_SCHEMA)?;
-        let engine_version =
-            decode_version(&obj.field("engine_version"), obj.take("engine_version")?)?;
-        let build_source =
-            decode_build_source(&obj.field("build_source"), obj.take("build_source")?)?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, MANIFEST_SCHEMA)
+        })?;
+        let engine_version = obj.required("engine_version", decode_version)?;
+        let build_source = obj.required("build_source", decode_build_source)?;
         let lock_path = obj.field("dependency_lock");
         let lock_value = obj.take("dependency_lock")?;
         let computed_lock = hj(DEPENDENCY_LOCK_DOMAIN, &lock_value);
@@ -130,7 +130,13 @@ impl ReleaseManifest {
             );
         }
         let artifacts_path = obj.field("artifacts");
-        let artifacts = decode_artifacts(&artifacts_path, obj.take("artifacts")?)?;
+        let artifacts = decode_nonempty_set(
+            &artifacts_path,
+            obj.take("artifacts")?,
+            6,
+            decode_artifact,
+            |a, b| a.platform.as_str().cmp(b.platform.as_str()),
+        )?;
         obj.finish()?;
         Ok(Self {
             digest,
@@ -206,8 +212,7 @@ fn decode_version(path: &str, value: Value) -> Result<String, Error> {
 
 fn decode_build_source(path: &str, value: Value) -> Result<BuildSource, Error> {
     let mut obj = Obj::new(path, value)?;
-    let repository =
-        crate::controls::decode_repository(&obj.field("repository"), obj.take("repository")?)?;
+    let repository = obj.required("repository", crate::controls::decode_repository)?;
     let format_path = obj.field("object_format");
     let object_format = decode_object_format(&format_path, obj.take("object_format")?)?;
     let commit_path = obj.field("commit_oid");
@@ -234,11 +239,9 @@ fn decode_object_format(path: &str, value: Value) -> Result<ObjectFormat, Error>
 
 fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
     let mut obj = Obj::new(path, value)?;
-    de::const_str(
-        &obj.field("schema"),
-        obj.take("schema")?,
-        DEPENDENCY_LOCK_SCHEMA,
-    )?;
+    obj.required("schema", |path, value| {
+        de::const_str(path, value, DEPENDENCY_LOCK_SCHEMA)
+    })?;
     let files_path = obj.field("files");
     let rows = de::array(&files_path, obj.take("files")?)?;
     obj.finish()?;
@@ -249,8 +252,8 @@ fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
     for (index, row) in rows.into_iter().enumerate() {
         let row_path = format!("{files_path}[{index}]");
         let mut file = Obj::new(&row_path, row)?;
-        let member = decode_repo_path(&file.field("path"), file.take("path")?)?;
-        let raw_digest = decode_digest(&file.field("raw_digest"), file.take("raw_digest")?)?;
+        let member = file.required("path", decode_repo_path)?;
+        let raw_digest = file.required("raw_digest", decode_digest)?;
         file.finish()?;
         files.push((member, raw_digest));
     }
@@ -258,41 +261,27 @@ fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
     Ok(DependencyLockInput { files })
 }
 
-fn decode_artifacts(path: &str, value: Value) -> Result<Vec<ReleaseArtifact>, Error> {
-    let rows = de::array(path, value)?;
-    if rows.is_empty() || rows.len() > 6 {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    let mut artifacts: Vec<ReleaseArtifact> = Vec::with_capacity(rows.len());
-    for (index, row) in rows.into_iter().enumerate() {
-        artifacts.push(decode_artifact(&format!("{path}[{index}]"), row)?);
-    }
-    sorted_unique(path, &artifacts, |a, b| {
-        a.platform.as_str().cmp(b.platform.as_str())
-    })?;
-    Ok(artifacts)
-}
-
 fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
     let mut obj = Obj::new(path, value)?;
-    let platform = ConstraintPlatform::decode(&obj.field("platform"), obj.take("platform")?)?;
-    let artifact_name =
-        decode_artifact_id(&obj.field("artifact_name"), obj.take("artifact_name")?)?;
-    let tree_path = decode_repo_path(&obj.field("tree_path"), obj.take("tree_path")?)?;
-    let binary_sha256 = decode_digest(&obj.field("binary_sha256"), obj.take("binary_sha256")?)?;
-    let engine_digest = decode_digest(&obj.field("engine_digest"), obj.take("engine_digest")?)?;
-    de::const_str(
-        &obj.field("runtime_contract"),
-        obj.take("runtime_contract")?,
-        RUNTIME_CONTRACT,
-    )?;
-    de::const_str(
-        &obj.field("environment_contract"),
-        obj.take("environment_contract")?,
-        ENVIRONMENT_CONTRACT,
-    )?;
+    let platform = obj.required("platform", ConstraintPlatform::decode)?;
+    let artifact_name = obj.required("artifact_name", decode_artifact_id)?;
+    let tree_path = obj.required("tree_path", decode_repo_path)?;
+    let binary_sha256 = obj.required("binary_sha256", decode_digest)?;
+    let engine_digest = obj.required("engine_digest", decode_digest)?;
+    obj.required("runtime_contract", |path, value| {
+        de::const_str(path, value, RUNTIME_CONTRACT)
+    })?;
+    obj.required("environment_contract", |path, value| {
+        de::const_str(path, value, ENVIRONMENT_CONTRACT)
+    })?;
     let files_path = obj.field("runtime_files");
-    let runtime_files = decode_runtime_files(&files_path, obj.take("runtime_files")?)?;
+    let runtime_files = decode_nonempty_set(
+        &files_path,
+        obj.take("runtime_files")?,
+        256,
+        decode_runtime_file,
+        |a, b| a.path.as_str().cmp(b.path.as_str()),
+    )?;
     obj.finish()?;
     let artifact = ReleaseArtifact {
         platform,
@@ -308,34 +297,44 @@ fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
     Ok(artifact)
 }
 
-fn decode_runtime_files(path: &str, value: Value) -> Result<Vec<RuntimeFile>, Error> {
+fn decode_runtime_file(path: &str, value: Value) -> Result<RuntimeFile, Error> {
+    let mut file = Obj::new(path, value)?;
+    let member = file.required("path", decode_repo_path)?;
+    let role = file.required("role", RuntimeRole::decode)?;
+    let mode_path = file.field("git_mode");
+    let git_mode = match de::string(&mode_path, file.take("git_mode")?)?.as_str() {
+        "100644" => GitMode::RegularFile,
+        "100755" => GitMode::ExecutableFile,
+        _ => return fail(&mode_path, ErrorKind::InvalidValue),
+    };
+    let file_sha256 = file.required("file_sha256", decode_digest)?;
+    file.finish()?;
+    Ok(RuntimeFile {
+        path: member,
+        role,
+        git_mode,
+        file_sha256,
+    })
+}
+
+fn decode_nonempty_set<T>(
+    path: &str,
+    value: Value,
+    maximum: usize,
+    decode: impl Fn(&str, Value) -> Result<T, Error>,
+    compare: impl Fn(&T, &T) -> Ordering,
+) -> Result<Vec<T>, Error> {
     let rows = de::array(path, value)?;
-    if rows.is_empty() || rows.len() > 256 {
+    if rows.is_empty() || rows.len() > maximum {
         return fail(path, ErrorKind::LimitExceeded);
     }
-    let mut files: Vec<RuntimeFile> = Vec::with_capacity(rows.len());
-    for (index, row) in rows.into_iter().enumerate() {
-        let row_path = format!("{path}[{index}]");
-        let mut file = Obj::new(&row_path, row)?;
-        let member = decode_repo_path(&file.field("path"), file.take("path")?)?;
-        let role = RuntimeRole::decode(&file.field("role"), file.take("role")?)?;
-        let mode_path = file.field("git_mode");
-        let git_mode = match de::string(&mode_path, file.take("git_mode")?)?.as_str() {
-            "100644" => GitMode::RegularFile,
-            "100755" => GitMode::ExecutableFile,
-            _ => return fail(&mode_path, ErrorKind::InvalidValue),
-        };
-        let file_sha256 = decode_digest(&file.field("file_sha256"), file.take("file_sha256")?)?;
-        file.finish()?;
-        files.push(RuntimeFile {
-            path: member,
-            role,
-            git_mode,
-            file_sha256,
-        });
-    }
-    sorted_unique(path, &files, |a, b| a.path.as_str().cmp(b.path.as_str()))?;
-    Ok(files)
+    let items = rows
+        .into_iter()
+        .enumerate()
+        .map(|(index, row)| decode(&format!("{path}[{index}]"), row))
+        .collect::<Result<Vec<_>, _>>()?;
+    sorted_unique(path, &items, compare)?;
+    Ok(items)
 }
 
 fn sorted_unique<T>(
