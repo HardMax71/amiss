@@ -7,10 +7,48 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::Missing;
+use divan::counter::ItemsCount;
 use divan::{Bencher, black_box};
 
 fn main() {
     divan::main();
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PairedShape {
+    Exact,
+    Dense,
+}
+
+/// Equal snapshots take the identity path; dense snapshots take one complete
+/// ambiguity component under the same input cardinalities.
+#[divan::bench(
+    args = [
+        (PairedShape::Exact, 100_usize),
+        (PairedShape::Exact, 1_000),
+        (PairedShape::Exact, 10_000),
+        (PairedShape::Dense, 100),
+        (PairedShape::Dense, 1_000),
+        (PairedShape::Dense, 10_000),
+    ],
+    sample_count = 10
+)]
+fn paired_components(bencher: Bencher<'_, '_>, case: (PairedShape, usize)) {
+    let (shape, count) = case;
+    bencher
+        .with_inputs(|| match shape {
+            PairedShape::Exact => {
+                let base = side("same", 0, count);
+                let candidate = base.clone();
+                (base, candidate)
+            }
+            PairedShape::Dense => (
+                dense_side("base", 0, count),
+                dense_side("candidate", count, count),
+            ),
+        })
+        .counter(ItemsCount::new(count))
+        .bench_local_values(|(base, candidate)| correlate(black_box(base), black_box(candidate)));
 }
 
 /// Unmatched observations with unrelated intents. This is the scale shape
@@ -18,19 +56,9 @@ fn main() {
 /// correlation key is removed.
 #[divan::bench(args = [100_usize, 1_000, 10_000], sample_count = 10)]
 fn unrelated_intents(bencher: Bencher<'_, '_>, count: usize) {
-    let base = side("base", 0, count);
-    let candidate = side("candidate", count, count);
-    bencher.bench_local(|| correlate(black_box(&base), black_box(&candidate)));
-}
-
-/// One dense ambiguity component. Every base observation could pair with
-/// every candidate observation, but connected-component construction needs
-/// only a linear spanning tree.
-#[divan::bench(args = [100_usize, 1_000, 10_000], sample_count = 10)]
-fn dense_ambiguity(bencher: Bencher<'_, '_>, count: usize) {
-    let base = dense_side("base", 0, count);
-    let candidate = dense_side("candidate", count, count);
-    bencher.bench_local(|| correlate(black_box(&base), black_box(&candidate)));
+    bencher
+        .with_inputs(|| (side("base", 0, count), side("candidate", count, count)))
+        .bench_local_values(|(base, candidate)| correlate(black_box(base), black_box(candidate)));
 }
 
 fn side(label: &str, offset: usize, count: usize) -> Side {
