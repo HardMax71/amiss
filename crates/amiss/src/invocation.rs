@@ -822,13 +822,13 @@ fn classify_forge(
     match identity {
         Ok(Some(identity)) => {
             let Some(dialect) =
-                declared.or_else(|| ForgeDialect::default_for_host(&identity.repository.host))
+                declared.or_else(|| ForgeDialect::default_for_host(identity.repository.host()))
             else {
                 codes.insert(Code::InvalidEvent);
                 return None;
             };
             if matches!(dialect, ForgeDialect::Github | ForgeDialect::Gitea)
-                && identity.repository.owner.contains('/')
+                && identity.repository.owner().contains('/')
             {
                 codes.insert(Code::InvalidEvent);
                 return None;

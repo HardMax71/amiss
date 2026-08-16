@@ -87,7 +87,7 @@ fn the_pinned_release_validates_end_to_end() {
     assert_eq!(validated.engine_digest, release.engine_digest);
     assert_eq!(validated.manifest.engine_version, "0.1.0-experimental");
     assert_eq!(
-        validated.manifest.build_source.repository.owner,
+        validated.manifest.build_source.repository.owner(),
         "platform/security"
     );
     assert_eq!(validated.artifact.runtime_files.len(), 2);

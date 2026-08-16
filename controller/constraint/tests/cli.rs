@@ -66,19 +66,19 @@ fn writes_one_canonical_constraint_without_clobbering() {
     let descriptor = ExecutionConstraintDescriptor::parse(&bytes).unwrap();
     assert_eq!(descriptor.canonical_bytes().unwrap(), bytes);
     assert_eq!(
-        descriptor.action_repository,
-        RepositoryIdentity::new(
+        descriptor.action_repository(),
+        &RepositoryIdentity::new(
             "git.example.internal".to_owned(),
             "platform/security".to_owned(),
             "amiss".to_owned(),
         )
         .unwrap()
     );
-    assert_eq!(descriptor.action_commit_oid.as_str(), release.commit);
-    assert_eq!(descriptor.action_tree_oid.as_str(), release.tree);
+    assert_eq!(descriptor.action_commit_oid().as_str(), release.commit);
+    assert_eq!(descriptor.action_tree_oid().as_str(), release.tree);
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        format!("{}\n", descriptor.digest)
+        format!("{}\n", descriptor.digest())
     );
 
     let bootstrap = std::fs::read(BINARY).unwrap();

@@ -9,7 +9,7 @@ use crate::support::{
 fn a_valid_waiver_changes_fail_to_warn() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.waiver = Some(waiver_input(&waiver_json(
@@ -52,7 +52,7 @@ fn a_valid_waiver_changes_fail_to_warn() {
 fn waiver_defects_emit_invalid_rows_without_suppression() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
 
     let unauthorized = waiver_json(
         &floor_digest,
@@ -152,7 +152,7 @@ fn waiver_defects_emit_invalid_rows_without_suppression() {
 fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let valid = waiver_json(
         &floor_digest,
         &fx.candidate_tree,
@@ -227,7 +227,7 @@ fn a_waiver_bundle_bound_to_anything_else_verifies_nothing_and_waives_nothing() 
 fn a_waiver_item_written_for_another_tree_is_never_selected() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.waiver = Some(waiver_input(&waiver_json(

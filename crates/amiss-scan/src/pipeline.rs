@@ -664,7 +664,7 @@ fn apply_floor(
     acquire: bool,
 ) -> Option<ErrorDetail> {
     let floor = floor?;
-    effects.floor = Some((floor.floor.digest, floor.trust_source.as_str()));
+    effects.floor = Some((floor.floor.digest(), floor.trust_source.as_str()));
     effects.floor_raised = crate::policy::floor_raises(floor);
     effects.controls.extend(crate::policy::floor_inventory(
         floor,
@@ -679,7 +679,7 @@ fn apply_floor(
         &str,
         (crate::policy::ProtectedState, crate::policy::ProtectedState),
     )> = Vec::new();
-    for path in &floor.floor.protected_control_paths {
+    for path in floor.floor.protected_control_paths() {
         let read = crate::policy::protected_state(
             repo,
             git_resources,

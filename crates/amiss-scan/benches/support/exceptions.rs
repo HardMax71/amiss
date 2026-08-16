@@ -10,7 +10,7 @@ use amiss_scan::resolve::Intent;
 use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{
     DebtItem, EligibleFindingKind, Fact, FindingKeyInput, FindingScope, SourceConstruct,
-    TargetIntent, TargetKind, TrustedTimeStatement,
+    TargetIntent, TargetKind, TrustedTimeInput, TrustedTimeStatement,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::model::{
@@ -69,7 +69,20 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
         })
         .collect();
     let debt_digest = hb("amiss/bench-debt-context", b"matching debt items");
-    let time_digest = hb("amiss/bench-time-context", b"trusted time");
+    let statement = TrustedTimeStatement::new(TrustedTimeInput {
+        repository: RepositoryIdentity::github("bench".to_owned(), "docs".to_owned())
+            .unwrap_or_else(|| panic!("benchmark repository identity")),
+        ref_name: BranchRef::new("refs/heads/main".to_owned())
+            .unwrap_or_else(|| panic!("benchmark branch")),
+        candidate_identity_digest: hb("amiss/bench-candidate-identity", b"candidate"),
+        provider: "github-actions".to_owned(),
+        provider_run_id: "1".to_owned(),
+        provider_run_attempt: 1,
+        evaluation_instant: instant("2026-07-12T10:00:00Z"),
+        valid_until: instant("2026-07-12T10:05:00Z"),
+    })
+    .unwrap_or_else(|error| panic!("benchmark trusted time: {error}"));
+    let time_digest = statement.digest();
     let policy = Effects {
         debt: Some(DebtContext {
             digest: debt_digest,
@@ -78,19 +91,7 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             items,
         }),
         time: Some(TimeContext {
-            statement: TrustedTimeStatement {
-                digest: time_digest,
-                repository: RepositoryIdentity::github("bench".to_owned(), "docs".to_owned())
-                    .unwrap_or_else(|| panic!("benchmark repository identity")),
-                ref_name: BranchRef::new("refs/heads/main".to_owned())
-                    .unwrap_or_else(|| panic!("benchmark branch")),
-                candidate_identity_digest: hb("amiss/bench-candidate-identity", b"candidate"),
-                provider: "github-actions".to_owned(),
-                provider_run_id: "1".to_owned(),
-                provider_run_attempt: 1,
-                evaluation_instant: instant("2026-07-12T10:00:00Z"),
-                valid_until: instant("2026-07-12T10:05:00Z"),
-            },
+            statement,
             digest: time_digest,
         }),
         ..Effects::default()

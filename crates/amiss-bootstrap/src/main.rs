@@ -144,7 +144,7 @@ fn execute(args: &Args) -> Execution<Accepted> {
         .map_err(|_defect| tampered("constraint-invalid"))?;
     let own_path = env::current_exe().map_err(|_defect| unavailable("self-unreadable"))?;
     let own_bytes = std::fs::read(own_path).map_err(|_defect| unavailable("self-unreadable"))?;
-    let action = Repository::open(&args.action_repository, constraint.action_object_format)
+    let action = Repository::open(&args.action_repository, constraint.action_object_format())
         .map_err(|_defect| unavailable("action-tree-unavailable"))?;
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     let validated =
@@ -303,7 +303,7 @@ fn capture_requests(
     let embedded_constraint =
         ExecutionConstraintDescriptor::parse(&canonical(&supplied_constraint.value))
             .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    if embedded_constraint.digest != supplied_constraint.expected_digest
+    if embedded_constraint.digest() != supplied_constraint.expected_digest
         || embedded_constraint != *constraint
     {
         return Err(tampered("execution-constraint-mismatch"));
@@ -314,10 +314,10 @@ fn capture_requests(
         .ok_or_else(|| tampered("trusted-time-absent"))?;
     let statement = TrustedTimeStatement::parse(&canonical(&supplied_time.value))
         .map_err(|_defect| tampered("trusted-time-invalid"))?;
-    if statement.digest != supplied_time.expected_digest
-        || statement.provider != supplied_time.provider
-        || statement.provider_run_id != supplied_time.provider_run_id
-        || statement.provider_run_attempt != supplied_time.provider_run_attempt
+    if statement.digest() != supplied_time.expected_digest
+        || statement.provider() != supplied_time.provider
+        || statement.provider_run_id() != supplied_time.provider_run_id
+        || statement.provider_run_attempt() != supplied_time.provider_run_attempt
     {
         return Err(tampered("trusted-time-mismatch"));
     }
@@ -340,15 +340,15 @@ fn capture_requests(
         provider: supplied_time.provider.clone(),
         provider_run_id: supplied_time.provider_run_id.clone(),
         provider_run_attempt: supplied_time.provider_run_attempt,
-        candidate_identity_digest: statement.candidate_identity_digest.to_string(),
+        candidate_identity_digest: statement.candidate_identity_digest().to_string(),
         organization_floor: control_expectation(controls.organization_floor.as_ref()),
         debt_snapshot: control_expectation(controls.debt_snapshot.as_ref()),
         waiver_bundle: control_expectation(controls.waiver_bundle.as_ref()),
         execution_constraint: SealedControlExpectation {
-            digest: constraint.digest.to_string(),
+            digest: constraint.digest().to_string(),
             trust_source: supplied_constraint.trust_source.as_str().to_owned(),
         },
-        trusted_time_digest: statement.digest.to_string(),
+        trusted_time_digest: statement.digest().to_string(),
     };
     let mut evaluation = evaluation;
     evaluation.candidate_commit = Some(candidate);

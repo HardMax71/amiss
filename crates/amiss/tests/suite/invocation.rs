@@ -96,7 +96,7 @@ fn accepts_index_mode_with_identity_and_flags() {
     assert_eq!(invocation.format, OutputFormat::Json);
     assert!(invocation.explain_scope);
     let identity = invocation.identity.unwrap();
-    assert_eq!(identity.repository.owner, "acme");
+    assert_eq!(identity.repository.owner(), "acme");
     assert_eq!(identity.ref_name.as_str(), "refs/heads/main");
 }
 
@@ -164,7 +164,10 @@ fn classifies_profile_host_and_event_rows() {
     let amiss::invocation::Command::Scan(other_forge) = *other_forge_command else {
         panic!("expected a scan command");
     };
-    assert_eq!(other_forge.identity.unwrap().repository.host, "gitlab.com");
+    assert_eq!(
+        other_forge.identity.unwrap().repository.host(),
+        "gitlab.com"
+    );
     assert_eq!(
         other_forge.forge,
         Some(amiss_wire::model::ForgeDialect::Gitlab),
@@ -458,7 +461,10 @@ fn refuses_an_unknown_host_without_a_dialect() {
     );
 
     let flagged = scan_of(parse_tokens(&with(&identity, &["--forge", "gitlab"])));
-    assert_eq!(flagged.identity.unwrap().repository.owner, "group/subgroup");
+    assert_eq!(
+        flagged.identity.unwrap().repository.owner(),
+        "group/subgroup"
+    );
     assert_eq!(flagged.forge, Some(amiss_wire::model::ForgeDialect::Gitlab));
 }
 
@@ -498,7 +504,10 @@ fn classifies_the_forge_dialect_grammar() {
     );
     let ghes = scan_of(parse_tokens(&explicit));
     assert_eq!(ghes.forge, Some(amiss_wire::model::ForgeDialect::Github));
-    assert_eq!(ghes.identity.unwrap().repository.host, "ghes.corp.example");
+    assert_eq!(
+        ghes.identity.unwrap().repository.host(),
+        "ghes.corp.example"
+    );
 
     assert_eq!(
         rejected_codes(parse_tokens(&identity("github.com/group/subgroup/repo"))),

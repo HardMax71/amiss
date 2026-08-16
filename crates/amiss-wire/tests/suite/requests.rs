@@ -42,9 +42,9 @@ fn the_request_examples_parse_to_what_they_say() {
     let repository = evaluation
         .repository
         .expect("the example names a repository");
-    assert_eq!(repository.host, "gitlab.example.internal");
-    assert_eq!(repository.owner, "platform/security");
-    assert_eq!(repository.name, "docs");
+    assert_eq!(repository.host(), "gitlab.example.internal");
+    assert_eq!(repository.owner(), "platform/security");
+    assert_eq!(repository.name(), "docs");
     assert_eq!(evaluation.forge, Some(ForgeDialect::Gitlab));
     assert_eq!(
         evaluation.candidate_ref.as_ref().map(BranchRef::as_str),
@@ -77,7 +77,8 @@ fn the_request_examples_parse_to_what_they_say() {
     let parsed_floor = OrganizationFloor::parse(&amiss_wire::json::canonical(&floor.value))
         .expect("the embedded organization floor is valid");
     assert_eq!(
-        floor.expected_digest, parsed_floor.digest,
+        floor.expected_digest,
+        parsed_floor.digest(),
         "the request carries the floor's independently reproducible semantic digest"
     );
     let time = controls.trusted_time.expect("and a trusted instant");
@@ -87,7 +88,8 @@ fn the_request_examples_parse_to_what_they_say() {
     let parsed_time = TrustedTimeStatement::parse(&amiss_wire::json::canonical(&time.value))
         .expect("the embedded trusted-time statement is valid");
     assert_eq!(
-        time.expected_digest, parsed_time.digest,
+        time.expected_digest,
+        parsed_time.digest(),
         "the request carries the statement's independently reproducible semantic digest"
     );
     assert!(

@@ -151,7 +151,7 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
             token: config.token,
             api_base: config.api_base,
             objects: config.objects,
-            review_name: config.plan.execution.required_status_name.clone(),
+            review_name: config.plan.execution.required_status_name().to_owned(),
             api_timeouts: config.api_timeouts,
             bootstrap: config.bootstrap,
             scratch: config.scratch,

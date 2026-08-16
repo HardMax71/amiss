@@ -408,7 +408,7 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
     let descriptor = parse(&dossier_example("scanner-execution-constraint.json")).unwrap();
     let constraint_digest = ExecutionConstraintDescriptor::parse(&canonical(&descriptor))
         .unwrap()
-        .digest
+        .digest()
         .to_string();
     let mut envelope = parse(&wire).unwrap();
     let payload = member_mut(&mut envelope, "payload");
@@ -518,7 +518,7 @@ fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String
     ]);
     let digest = TrustedTimeStatement::parse(&canonical(&statement))
         .unwrap()
-        .digest
+        .digest()
         .to_string();
     (statement, digest)
 }

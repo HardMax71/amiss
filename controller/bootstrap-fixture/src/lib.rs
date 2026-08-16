@@ -15,7 +15,7 @@ pub fn run(report: &[u8]) -> ExitCode {
     let Some(mode) = std::fs::read(&output.constraint)
         .ok()
         .and_then(|bytes| ExecutionConstraintDescriptor::parse(&bytes).ok())
-        .map(|constraint| constraint.required_status_name)
+        .map(|constraint| constraint.required_status_name().to_owned())
     else {
         return ExitCode::from(2);
     };

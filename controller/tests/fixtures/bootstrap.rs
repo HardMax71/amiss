@@ -150,7 +150,7 @@ fn output(path: &Path, directory: &Path, name: &str) -> bool {
 fn read_mode(path: &Path) -> Option<Mode> {
     let bytes = std::fs::read(path).ok()?;
     let constraint = ExecutionConstraintDescriptor::parse(&bytes).ok()?;
-    match constraint.required_status_name.as_str() {
+    match constraint.required_status_name() {
         "runner-pass" => Some(Mode::Pass),
         "runner-block" => Some(Mode::Block),
         "runner-missing" => Some(Mode::MissingResult),

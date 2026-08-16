@@ -8,7 +8,6 @@ use std::collections::BTreeSet;
 use amiss_scan::policy::{InventoryState, effects};
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use divan::{Bencher, black_box};
 
@@ -35,9 +34,8 @@ fn late_tree_include(bencher: Bencher<'_, '_>, count: usize) {
     bencher.bench_local(|| black_box(&includes).matches(black_box(&query)));
 }
 
-/// Identical semantic policy sets in opposite vector order. Public policy
-/// values can be constructed directly, so comparison cannot rely on parser
-/// canonicalization even though parsed policies are sorted.
+/// Identical semantic policy sets supplied in opposite order. Construction
+/// canonicalizes them before comparison.
 #[divan::bench(args = [100_usize, 1_000, 10_000], sample_count = 10)]
 fn identical_policy_sets(bencher: Bencher<'_, '_>, count: usize) {
     let base = policy(count, false);
@@ -64,14 +62,10 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
             adapter: None,
         })
         .collect();
-    let policy = ScannerPolicy {
-        digest: hb("amiss/raw-evidence", b"benchmark policy"),
-        document_includes,
-        protected_inventory: Vec::new(),
-        finding_dispositions: Vec::new(),
-    };
+    let policy = ScannerPolicy::new(document_includes, Vec::new(), Vec::new())
+        .expect("benchmark policy is valid");
     PolicySide {
-        digest: Some(policy.digest),
+        digest: Some(policy.digest()),
         policy: Some(policy),
     }
 }

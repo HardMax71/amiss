@@ -16,8 +16,11 @@ fn parses_a_valid_debt_snapshot() {
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
     let snapshot = DebtSnapshot::parse(doc.as_bytes()).unwrap();
     assert_eq!(snapshot.schema(), "amiss/debt-snapshot");
-    assert_eq!(snapshot.items.len(), 1);
-    assert_eq!(snapshot.items.first().unwrap().finding_key.to_string(), key);
+    assert_eq!(snapshot.items().len(), 1);
+    assert_eq!(
+        snapshot.items().first().unwrap().finding_key.to_string(),
+        key
+    );
 }
 
 #[test]
@@ -33,7 +36,7 @@ fn an_item_born_at_the_snapshot_instant_is_consistent() {
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
     let snapshot = DebtSnapshot::parse(doc.as_bytes())
         .expect("an item created at the snapshot instant is not from the future");
-    assert_eq!(snapshot.items.len(), 1);
+    assert_eq!(snapshot.items().len(), 1);
 }
 
 #[test]

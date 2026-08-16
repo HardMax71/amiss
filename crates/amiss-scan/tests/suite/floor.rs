@@ -53,12 +53,9 @@ fn floor_input(extra: &str) -> FloorInput {
     }
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn identity(owner: &str, name: &str) -> RepositoryIdentity {
-    RepositoryIdentity {
-        host: "github.com".to_owned(),
-        owner: owner.to_owned(),
-        name: name.to_owned(),
-    }
+    RepositoryIdentity::github(owner.to_owned(), name.to_owned()).unwrap()
 }
 
 fn shell(floor: Option<FloorInput>) -> SetupShell {
@@ -257,7 +254,7 @@ fn a_verified_floor_raises_dispositions_and_discloses_provenance() {
         "\"minimum_dispositions\": [ { \"finding_kind\": \"explicit-target-missing\", \"disposition\": \"fail\" } ]",
     );
     let input = floor_input(&extra);
-    let floor_digest = input.floor.digest.to_string();
+    let floor_digest = input.floor.digest().to_string();
     let report = payload(&shell(Some(input)), &repo, &base, &candidate);
 
     let provenance = &report["controls"]["organization_floor"];
@@ -600,11 +597,14 @@ fn a_floor_for_another_host_fails_its_binding() {
     let (repo, base, candidate) = two_commits(root);
 
     let mut setup = shell(Some(floor_input(EMPTY_ARRAYS)));
-    setup.repository = Some(RepositoryIdentity {
-        host: "ghes.example".to_owned(),
-        owner: "acme".to_owned(),
-        name: "docs".to_owned(),
-    });
+    setup.repository = Some(
+        RepositoryIdentity::new(
+            "ghes.example".to_owned(),
+            "acme".to_owned(),
+            "docs".to_owned(),
+        )
+        .unwrap(),
+    );
     setup.forge = Some(amiss_wire::model::ForgeDialect::Github);
     let report = payload(&setup, &repo, &base, &candidate);
 

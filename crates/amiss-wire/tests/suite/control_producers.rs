@@ -93,16 +93,6 @@ fn trusted_time_constructor_and_writer_share_the_parser_contract() {
 }
 
 #[test]
-fn trusted_time_writer_rejects_a_stale_digest() {
-    let mut statement = TrustedTimeStatement::new(trusted_time_input()).unwrap();
-    statement.provider_run_id = "pipeline/01J2Z9-8".to_owned();
-
-    let error = statement.canonical_bytes().unwrap_err();
-    assert_eq!(error.path, "$.digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
-}
-
-#[test]
 fn execution_constraint_constructor_and_writer_share_the_parser_contract() {
     let descriptor = ExecutionConstraintDescriptor::new(execution_constraint_input()).unwrap();
     let bytes = descriptor.canonical_bytes().unwrap();
@@ -121,13 +111,24 @@ fn execution_constraint_constructor_and_writer_share_the_parser_contract() {
 }
 
 #[test]
-fn execution_constraint_writer_rejects_a_stale_digest() {
-    let mut descriptor = ExecutionConstraintDescriptor::new(execution_constraint_input()).unwrap();
-    descriptor.required_status_name = "amiss / docs".to_owned();
+fn producer_writers_preserve_the_validated_digests() {
+    let statement = TrustedTimeStatement::new(trusted_time_input()).unwrap();
+    let statement_bytes = statement.canonical_bytes().unwrap();
+    assert_eq!(
+        TrustedTimeStatement::parse(&statement_bytes)
+            .unwrap()
+            .digest(),
+        statement.digest()
+    );
 
-    let error = descriptor.canonical_bytes().unwrap_err();
-    assert_eq!(error.path, "$.digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    let descriptor = ExecutionConstraintDescriptor::new(execution_constraint_input()).unwrap();
+    let descriptor_bytes = descriptor.canonical_bytes().unwrap();
+    assert_eq!(
+        ExecutionConstraintDescriptor::parse(&descriptor_bytes)
+            .unwrap()
+            .digest(),
+        descriptor.digest()
+    );
 }
 
 #[test]

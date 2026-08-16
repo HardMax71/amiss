@@ -34,7 +34,7 @@ fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingSco
     let bundle = WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
         .unwrap_or_else(|error| panic!("{context} is a scope the bundle accepts: {error:?}"));
     bundle
-        .items
+        .items()
         .first()
         .unwrap()
         .authorized_fact
@@ -138,7 +138,7 @@ fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
             )
         };
         let bundle = bundle_for(&edit).unwrap_or_else(|e| panic!("{spelling}: {e:?}"));
-        let kind = bundle.items.first().map(|item| {
+        let kind = bundle.items().first().map(|item| {
             item.authorized_fact
                 .key_input()
                 .scope
@@ -168,7 +168,7 @@ fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
         )
     };
     let bundle = bundle_for(&carried).expect("a query digest is carried");
-    let got = bundle.items.first().and_then(|item| {
+    let got = bundle.items().first().and_then(|item| {
         item.authorized_fact
             .key_input()
             .scope
@@ -204,7 +204,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     let doc = waiver_bundle(&[item]);
     let bundle = WaiverBundle::parse(doc.as_bytes()).unwrap();
     assert_eq!(bundle.schema(), "amiss/waiver-bundle");
-    assert_eq!(bundle.items.len(), 1);
+    assert_eq!(bundle.items().len(), 1);
 
     let same_owner = waiver_item("waiver/one", &key, &fact, "team:docs-platform");
     let doc = waiver_bundle(&[same_owner]);

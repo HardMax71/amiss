@@ -180,7 +180,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         supplied_time(input.run, &statement, statement_value),
         SuppliedControl {
             value: constraint_value,
-            expected_digest: checked_plan.execution.digest,
+            expected_digest: checked_plan.execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
     )?;
@@ -202,8 +202,8 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
 fn binding(plan: &CheckPlan) -> CheckBinding {
     CheckBinding {
         plan_digest: plan.digest,
-        required_status_name: plan.execution.required_status_name.clone(),
-        execution_constraint_digest: plan.execution.digest,
+        required_status_name: plan.execution.required_status_name().to_owned(),
+        execution_constraint_digest: plan.execution.digest(),
     }
 }
 
@@ -249,11 +249,11 @@ fn plan_value(
         ),
         (
             "execution_constraint_digest".to_owned(),
-            Value::String(execution.digest.to_string()),
+            Value::String(execution.digest().to_string()),
         ),
         (
             "required_status_name".to_owned(),
-            Value::String(execution.required_status_name.clone()),
+            Value::String(execution.required_status_name().to_owned()),
         ),
     ])
 }
@@ -276,7 +276,7 @@ fn control_identity_value(identity: Option<controls::ControlIdentity>) -> Value 
 fn supplied_time(run: &RunRequest, statement: &TrustedTimeStatement, value: Value) -> SuppliedTime {
     SuppliedTime {
         value,
-        expected_digest: statement.digest,
+        expected_digest: statement.digest(),
         provider: run.delivery.provider.namespace.as_str().to_owned(),
         provider_run_id: run.provider_run.run_id.as_str().to_owned(),
         provider_run_attempt: run.provider_run.attempt.get(),

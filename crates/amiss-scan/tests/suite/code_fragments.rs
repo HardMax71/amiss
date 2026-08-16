@@ -81,11 +81,10 @@ fn run(
     let shell = SetupShell {
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
-        repository: Some(RepositoryIdentity {
-            host: host.to_owned(),
-            owner: "acme".to_owned(),
-            name: "widgets".to_owned(),
-        }),
+        repository: Some(
+            RepositoryIdentity::new(host.to_owned(), "acme".to_owned(), "widgets".to_owned())
+                .unwrap(),
+        ),
         forge: Some(dialect),
         candidate_ref: Some("refs/heads/main".to_owned()),
         target_ref: None,

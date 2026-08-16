@@ -225,13 +225,13 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     let statement = statement_value(&repository_value, &ties, &identity);
     let statement_digest = TrustedTimeStatement::parse(&canonical(&statement))
         .expect("a valid statement fixture")
-        .digest
+        .digest()
         .to_string();
 
     let descriptor = example("scanner-execution-constraint.json");
     let constraint_digest = ExecutionConstraintDescriptor::parse(&canonical(&descriptor))
         .expect("a valid constraint fixture")
-        .digest
+        .digest()
         .to_string();
 
     seal_controls(

@@ -36,14 +36,19 @@ fn projects_exact_fetches_for_gitea_and_forgejo() {
 #[test]
 fn rejects_wrong_host_identity_change_and_object_format() {
     let mut wrong_host = request("gitea");
-    wrong_host.run.change.repository.host = "forge.example@attacker.invalid".to_owned();
+    wrong_host.run.change.repository = RepositoryIdentity::new(
+        "forge.example@attacker.invalid".to_owned(),
+        "acme".to_owned(),
+        "widget".to_owned(),
+    )
+    .unwrap();
     assert_eq!(
         gitea_fetch_plan(&wrong_host),
         Err(GiteaPlanError::InvalidRequest)
     );
 
     let mut wrong_identity = request("gitea");
-    wrong_identity.run.change.repository.owner = "other".to_owned();
+    wrong_identity.run.change.repository = repository("other", "widget");
     assert_eq!(
         gitea_fetch_plan(&wrong_identity),
         Err(GiteaPlanError::InvalidRequest)
@@ -57,10 +62,15 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_action_host = request("forgejo");
-    Arc::make_mut(&mut wrong_action_host.plan)
-        .execution
-        .action_repository
-        .host = "other.example".to_owned();
+    replace_action_repository(
+        &mut wrong_action_host,
+        RepositoryIdentity::new(
+            "other.example".to_owned(),
+            "controller".to_owned(),
+            "amiss".to_owned(),
+        )
+        .unwrap(),
+    );
     assert_eq!(
         gitea_fetch_plan(&wrong_action_host),
         Err(GiteaPlanError::InvalidRequest)
@@ -161,9 +171,9 @@ fn provider_run(
     let fields = serde_json::to_vec(&[
         reviewer.as_str(),
         change.provider.namespace.as_str(),
-        change.repository.host.as_str(),
-        change.repository.owner.as_str(),
-        change.repository.name.as_str(),
+        change.repository.host(),
+        change.repository.owner(),
+        change.repository.name(),
         change.change.as_str(),
         candidate.as_str(),
         candidate_ref.as_str(),
@@ -207,35 +217,54 @@ fn rebound(mut request: RunRequest) -> RunRequest {
     request
 }
 
+fn replace_action_repository(request: &mut RunRequest, repository: RepositoryIdentity) {
+    let plan = Arc::make_mut(&mut request.plan);
+    let mut input = ExecutionConstraintInput::from(&plan.execution);
+    input.action_repository = repository;
+    plan.execution = ExecutionConstraintDescriptor::new(input).unwrap();
+}
+
 /// The repository identity has three separate demands, and a request that
 /// breaks one of them breaks it alone.
 #[test]
 fn each_demand_on_a_repository_identity_refuses_by_itself() {
     let mut nested = request("gitea");
-    nested.run.change.repository.owner = "group/sub".to_owned();
+    nested.run.change.repository = repository("group/sub", "widget");
     assert_eq!(
         gitea_fetch_plan(&rebound(nested)),
         Err(GiteaPlanError::InvalidRequest),
         "a nested owner is a GitLab group path, not a Gitea owner"
     );
 
-    let mut shouted = request("gitea");
-    shouted.run.change.repository.owner = "Acme".to_owned();
-    assert_eq!(
-        gitea_fetch_plan(&rebound(shouted)),
-        Err(GiteaPlanError::InvalidRequest),
-        "an owner that does not survive its own constructor"
+    assert!(
+        RepositoryIdentity::new(
+            "forge.example".to_owned(),
+            "Acme".to_owned(),
+            "widget".to_owned(),
+        )
+        .is_none(),
+        "a non-canonical owner never becomes a repository identity"
     );
 
     let mut underscored = request("gitea");
     let instance = ProviderInstance::new("forge_example".to_owned()).unwrap();
     underscored.delivery.provider.instance = instance.clone();
     underscored.run.change.provider.instance = instance;
-    underscored.run.change.repository.host = "forge_example".to_owned();
-    Arc::make_mut(&mut underscored.plan)
-        .execution
-        .action_repository
-        .host = "forge_example".to_owned();
+    underscored.run.change.repository = RepositoryIdentity::new(
+        "forge_example".to_owned(),
+        "acme".to_owned(),
+        "widget".to_owned(),
+    )
+    .unwrap();
+    replace_action_repository(
+        &mut underscored,
+        RepositoryIdentity::new(
+            "forge_example".to_owned(),
+            "controller".to_owned(),
+            "amiss".to_owned(),
+        )
+        .unwrap(),
+    );
     assert_eq!(
         gitea_fetch_plan(&rebound(underscored)),
         Err(GiteaPlanError::InvalidRequest),

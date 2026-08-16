@@ -20,7 +20,7 @@ use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
 
@@ -202,8 +202,8 @@ fn signed_body_alone_defines_the_pull_request() {
     .unwrap();
 
     assert_eq!(first.delivery().identity.integration.as_str(), "7");
-    assert_eq!(first.delivery().change.repository.owner, "hardmax71");
-    assert_eq!(first.delivery().change.repository.name, "widget");
+    assert_eq!(first.delivery().change.repository.owner(), "hardmax71");
+    assert_eq!(first.delivery().change.repository.name(), "widget");
     assert_eq!(
         first.delivery().change.change.as_str(),
         "repository/101/pull/4201/number/42"
@@ -504,9 +504,16 @@ fn every_clause_binding_the_delivery_stands_alone() {
     let mut foreign_change = delivery.clone();
     foreign_change.change.provider = elsewhere;
     let mut other_host = delivery.clone();
-    other_host.change.repository.host = "github.example".to_owned();
-    let mut shouting_owner = delivery.clone();
-    shouting_owner.change.repository.owner = "HardMax71".to_owned();
+    other_host.change.repository = RepositoryIdentity::new(
+        "github.example".to_owned(),
+        "hardmax71".to_owned(),
+        "widget".to_owned(),
+    )
+    .unwrap();
+    assert!(
+        RepositoryIdentity::github("HardMax71".to_owned(), "widget".to_owned()).is_none(),
+        "a non-canonical owner cannot enter an authenticated delivery"
+    );
     let mut retried = delivery.clone();
     retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
     let mut wider_format = delivery.clone();
@@ -519,7 +526,6 @@ fn every_clause_binding_the_delivery_stands_alone() {
         foreign_identity,
         foreign_change,
         other_host,
-        shouting_owner,
         retried,
         wider_format,
         wider_candidate,
@@ -711,9 +717,7 @@ fn snapshot(
 
 fn dummy_snapshot() -> ChangeSnapshot {
     let provider = provider();
-    let repository =
-        amiss_wire::model::RepositoryIdentity::github("acme".to_owned(), "widget".to_owned())
-            .unwrap();
+    let repository = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();
     let change = amiss_controller::ChangeLocator {
         provider,
         repository,

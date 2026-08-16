@@ -22,15 +22,15 @@ pub const STATEMENT_TTL_MAX_SECONDS: i64 = 600;
 /// attempt) are separate verification.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrustedTimeStatement {
-    pub digest: Digest,
-    pub repository: RepositoryIdentity,
-    pub ref_name: BranchRef,
-    pub candidate_identity_digest: Digest,
-    pub provider: String,
-    pub provider_run_id: String,
-    pub provider_run_attempt: u64,
-    pub evaluation_instant: UtcInstant,
-    pub valid_until: UtcInstant,
+    digest: Digest,
+    repository: RepositoryIdentity,
+    ref_name: BranchRef,
+    candidate_identity_digest: Digest,
+    provider: String,
+    provider_run_id: String,
+    provider_run_attempt: u64,
+    evaluation_instant: UtcInstant,
+    valid_until: UtcInstant,
 }
 
 /// The controller-owned fields of a trusted-time statement. The schema,
@@ -48,6 +48,51 @@ pub struct TrustedTimeInput {
 }
 
 impl TrustedTimeStatement {
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    #[must_use]
+    pub fn repository(&self) -> &RepositoryIdentity {
+        &self.repository
+    }
+
+    #[must_use]
+    pub fn ref_name(&self) -> &BranchRef {
+        &self.ref_name
+    }
+
+    #[must_use]
+    pub const fn candidate_identity_digest(&self) -> Digest {
+        self.candidate_identity_digest
+    }
+
+    #[must_use]
+    pub fn provider(&self) -> &str {
+        &self.provider
+    }
+
+    #[must_use]
+    pub fn provider_run_id(&self) -> &str {
+        &self.provider_run_id
+    }
+
+    #[must_use]
+    pub const fn provider_run_attempt(&self) -> u64 {
+        self.provider_run_attempt
+    }
+
+    #[must_use]
+    pub fn evaluation_instant(&self) -> &UtcInstant {
+        &self.evaluation_instant
+    }
+
+    #[must_use]
+    pub fn valid_until(&self) -> &UtcInstant {
+        &self.valid_until
+    }
+
     /// Builds a statement through the same grammar, lifetime, and digest
     /// rules used for untrusted wire bytes. The lifetime check is internal to
     /// the statement: the issuer must still source `evaluation_instant` from
@@ -135,8 +180,8 @@ impl TrustedTimeStatement {
     ///
     /// # Errors
     ///
-    /// A public field was changed into a value [`Self::parse`] rejects, or
-    /// changed without replacing the derived `digest`.
+    /// The stored statement no longer round-trips through [`Self::parse`] or
+    /// its derived digest does not match the canonical value.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
         let bytes = canonical(&trusted_time_value(self.into())?);
         let parsed = Self::parse(&bytes)?;

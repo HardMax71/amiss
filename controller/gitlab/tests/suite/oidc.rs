@@ -24,8 +24,8 @@ fn pinned_policy_job_claims_define_the_delivery() {
     let delivery = accepted.delivery();
 
     assert_eq!(delivery.identity.integration.as_str(), "policy/1");
-    assert_eq!(delivery.change.repository.owner, "acme");
-    assert_eq!(delivery.change.repository.name, "widget");
+    assert_eq!(delivery.change.repository.owner(), "acme");
+    assert_eq!(delivery.change.repository.name(), "widget");
     assert_eq!(
         delivery.change.change.as_str(),
         "project/101/merge-request/42"

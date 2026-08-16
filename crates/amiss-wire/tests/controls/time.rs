@@ -71,22 +71,22 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     let statement = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
     assert_eq!(statement.schema(), "amiss/scanner-trusted-time-statement");
     assert_eq!(statement.controller(), "external-required-check-clock");
-    assert_eq!(statement.provider, "gitlab-ci");
+    assert_eq!(statement.provider(), "gitlab-ci");
     assert_eq!(
-        statement.digest,
+        statement.digest(),
         hj(
             "amiss/scanner-trusted-time-statement",
             &json::parse(TIME_STATEMENT.as_bytes()).unwrap()
         )
     );
-    assert_eq!(statement.provider_run_id, "pipeline/01J2Z9-7");
-    assert_eq!(statement.provider_run_attempt, 2);
+    assert_eq!(statement.provider_run_id(), "pipeline/01J2Z9-7");
+    assert_eq!(statement.provider_run_attempt(), 2);
     assert_eq!(
-        statement.evaluation_instant.as_str(),
+        statement.evaluation_instant().as_str(),
         "2026-07-12T10:00:00Z"
     );
     assert_eq!(
-        statement.valid_until.epoch_seconds() - statement.evaluation_instant.epoch_seconds(),
+        statement.valid_until().epoch_seconds() - statement.evaluation_instant().epoch_seconds(),
         600
     );
 

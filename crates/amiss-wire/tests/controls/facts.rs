@@ -50,7 +50,7 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
     )
     .unwrap();
     assert!(matches!(
-        path_missing.items[0].accepted_fact.resolution(),
+        path_missing.items()[0].accepted_fact.resolution(),
         Resolution::Missing(Missing::PathNotFound { path, .. })
             if path.as_str() == "docs/missing.md"
     ));
@@ -66,7 +66,7 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
     )
     .unwrap();
     assert!(matches!(
-        line_missing.items[0].accepted_fact.resolution(),
+        line_missing.items()[0].accepted_fact.resolution(),
         Resolution::Missing(Missing::LineFragmentOutOfRange { path })
             if path.as_str() == "src/lib.rs"
     ));
@@ -87,7 +87,7 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
     )
     .unwrap();
     assert!(matches!(
-        tree_mismatch.items[0].accepted_fact.resolution(),
+        tree_mismatch.items()[0].accepted_fact.resolution(),
         Resolution::TypeMismatch(Target::Tree { path }) if path.as_str() == "docs"
     ));
 
@@ -112,7 +112,7 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
     )
     .unwrap();
     assert!(matches!(
-        available_blob.items[0].accepted_fact.resolution(),
+        available_blob.items()[0].accepted_fact.resolution(),
         Resolution::TypeMismatch(Target::Blob(blob))
             if blob.path.as_str() == "docs/guide.md"
                 && blob.mode == BlobMode::Regular
@@ -141,7 +141,7 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
     )
     .unwrap();
     assert!(matches!(
-        lfs_blob.items[0].accepted_fact.resolution(),
+        lfs_blob.items()[0].accepted_fact.resolution(),
         Resolution::TypeMismatch(Target::Blob(blob))
             if blob.path.as_str() == "assets/model.bin"
                 && blob.mode == BlobMode::Executable
@@ -305,7 +305,7 @@ fn structural_fact_constructor_rejects_invalid_programmatic_states() {
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#,
     )
     .unwrap();
-    let accepted = &parsed.items[0].accepted_fact;
+    let accepted = &parsed.items()[0].accepted_fact;
     let key_input = accepted.key_input().clone();
     let path = key_input.scope.normalized_target_intent.path.clone();
 

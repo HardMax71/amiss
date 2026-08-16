@@ -108,16 +108,16 @@ fn validate_delivery<'a>(
         .strip_prefix("pr:")
         .and_then(Digest::from_wire);
     let canonical_repository = RepositoryIdentity::new(
-        repository.host.clone(),
-        repository.owner.clone(),
-        repository.name.clone(),
+        repository.host().to_owned(),
+        repository.owner().to_owned(),
+        repository.name().to_owned(),
     )
     .as_ref()
         == Some(repository);
     if delivery.identity.provider != *provider
         || delivery.change.provider != *provider
-        || repository.host != provider.instance.as_str()
-        || repository.owner.contains('/')
+        || repository.host() != provider.instance.as_str()
+        || repository.owner().contains('/')
         || !canonical_repository
         || delivery.provider_run.attempt.get() != 1
         || delivery.provider_run.object_format != ObjectFormat::Sha1
@@ -139,8 +139,8 @@ fn validate_delivery<'a>(
         change: &delivery.change,
         reviewer_id,
         repository_id,
-        repository_owner: &repository.owner,
-        repository_name: &repository.name,
+        repository_owner: repository.owner(),
+        repository_name: repository.name(),
         pull_request_id,
         number,
         candidate_commit: &delivery.provider_run.candidate_commit,

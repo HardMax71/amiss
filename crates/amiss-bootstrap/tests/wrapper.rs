@@ -227,9 +227,9 @@ fn bind_statement(
     set(&mut statement, "valid_until", string(VALID_UNTIL));
     let parsed =
         TrustedTimeStatement::parse(&canonical(&statement)).expect("a valid statement fixture");
-    time.expected_digest = parsed.digest;
+    time.expected_digest = parsed.digest();
     time.value = statement.clone();
-    (statement, parsed.digest.to_string())
+    (statement, parsed.digest().to_string())
 }
 
 /// Builds the envelope the engine must print for the wrapper to accept it.
@@ -259,17 +259,17 @@ fn bind_envelope(
     set(
         &mut repository_value,
         "host",
-        string(&identity_repository.host),
+        string(identity_repository.host()),
     );
     set(
         &mut repository_value,
         "owner",
-        string(&identity_repository.owner),
+        string(identity_repository.owner()),
     );
     set(
         &mut repository_value,
         "name",
-        string(&identity_repository.name),
+        string(identity_repository.name()),
     );
 
     let (statement, statement_digest) = bind_statement(requests, &repository_value, &identity);
@@ -352,7 +352,7 @@ fn patch_controls(
         .expect("a constraint");
     let constraint_source = supplied.trust_source.as_str().to_owned();
     let constraint_value = supplied.value.clone();
-    let constraint_digest = requests.constraint.digest.to_string();
+    let constraint_digest = requests.constraint.digest().to_string();
 
     let controls = entry(payload, "controls");
     set(controls, "profile", string("enforce"));

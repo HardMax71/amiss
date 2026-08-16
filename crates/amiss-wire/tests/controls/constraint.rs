@@ -14,8 +14,8 @@ use crate::support::{
 fn controls_accept_open_forge_identities() {
     let floor = OrganizationFloor::parse(FLOOR).unwrap();
     assert_eq!(floor.schema(), "amiss/organization-floor");
-    assert_eq!(floor.repository.host, "gitlab.com");
-    assert_eq!(floor.repository.owner, "platform/security");
+    assert_eq!(floor.repository().host(), "gitlab.com");
+    assert_eq!(floor.repository().owner(), "platform/security");
 
     let (key, fact) = computed_digests();
     let item = debt_item(
@@ -31,8 +31,8 @@ fn controls_accept_open_forge_identities() {
     let debt_value = json::parse(debt.as_bytes()).unwrap();
     let debt = DebtSnapshot::parse(debt.as_bytes()).unwrap();
     assert_eq!(debt.schema(), "amiss/debt-snapshot");
-    assert_eq!(debt.repository.owner, "platform/security");
-    assert_eq!(debt.digest, hj("amiss/debt-snapshot", &debt_value));
+    assert_eq!(debt.repository().owner(), "platform/security");
+    assert_eq!(debt.digest(), hj("amiss/debt-snapshot", &debt_value));
 
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
     let waiver = waiver_bundle(&[item])
@@ -41,15 +41,15 @@ fn controls_accept_open_forge_identities() {
     let waiver_value = json::parse(waiver.as_bytes()).unwrap();
     let waiver = WaiverBundle::parse(waiver.as_bytes()).unwrap();
     assert_eq!(waiver.schema(), "amiss/waiver-bundle");
-    assert_eq!(waiver.repository.owner, "platform/security");
-    assert_eq!(waiver.digest, hj("amiss/waiver-bundle", &waiver_value));
+    assert_eq!(waiver.repository().owner(), "platform/security");
+    assert_eq!(waiver.digest(), hj("amiss/waiver-bundle", &waiver_value));
 
     let time = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
     assert_eq!(time.schema(), "amiss/scanner-trusted-time-statement");
     assert_eq!(time.controller(), "external-required-check-clock");
-    assert_eq!(time.repository.owner, "platform/security");
-    assert_eq!(time.provider, "gitlab-ci");
-    assert_eq!(time.provider_run_id, "pipeline/01J2Z9-7");
+    assert_eq!(time.repository().owner(), "platform/security");
+    assert_eq!(time.provider(), "gitlab-ci");
+    assert_eq!(time.provider_run_id(), "pipeline/01J2Z9-7");
 }
 
 const CONSTRAINT: &str = r#"{
@@ -69,9 +69,9 @@ const CONSTRAINT: &str = r#"{
 #[test]
 fn parses_an_execution_constraint_descriptor() {
     let descriptor = ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).unwrap();
-    assert_eq!(descriptor.selected_platform.as_str(), "linux-x86_64");
+    assert_eq!(descriptor.selected_platform().as_str(), "linux-x86_64");
     assert_eq!(
-        descriptor.required_status_name,
+        descriptor.required_status_name(),
         "amiss / documentation assurance"
     );
 
@@ -80,8 +80,11 @@ fn parses_an_execution_constraint_descriptor() {
         "\"host\": \"git.example.internal\", \"owner\": \"platform/security\"",
     );
     let descriptor = ExecutionConstraintDescriptor::parse(open_repository.as_bytes()).unwrap();
-    assert_eq!(descriptor.action_repository.host, "git.example.internal");
-    assert_eq!(descriptor.action_repository.owner, "platform/security");
+    assert_eq!(
+        descriptor.action_repository().host(),
+        "git.example.internal"
+    );
+    assert_eq!(descriptor.action_repository().owner(), "platform/security");
 
     let slash_host = CONSTRAINT.replace("github.com", "git.example/internal");
     assert_eq!(

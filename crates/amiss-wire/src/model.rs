@@ -364,9 +364,9 @@ impl BranchRef {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RepositoryIdentity {
-    pub host: String,
-    pub owner: String,
-    pub name: String,
+    host: String,
+    owner: String,
+    name: String,
 }
 
 impl RepositoryIdentity {
@@ -400,6 +400,21 @@ impl RepositoryIdentity {
         } else {
             None
         }
+    }
+
+    #[must_use]
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -480,41 +495,56 @@ impl ObjectFormat {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TreeIdentity {
-    pub object_format: ObjectFormat,
-    pub tree_oid: String,
+    oid: Oid,
 }
 
 impl TreeIdentity {
     #[must_use]
     pub fn new(object_format: ObjectFormat, tree_oid: String) -> Option<Self> {
-        if oid_hex(object_format, &tree_oid) {
-            Some(Self {
-                object_format,
-                tree_oid,
-            })
-        } else {
-            None
-        }
+        Oid::new(object_format, tree_oid).map(|oid| Self { oid })
+    }
+
+    #[must_use]
+    pub const fn object_format(&self) -> ObjectFormat {
+        self.oid.object_format()
+    }
+
+    #[must_use]
+    pub fn tree_oid(&self) -> &str {
+        self.oid.as_str()
+    }
+
+    #[must_use]
+    pub const fn oid(&self) -> &Oid {
+        &self.oid
     }
 }
 
 /// Full lowercase object ID for one declared object format.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Oid(String);
+pub struct Oid {
+    object_format: ObjectFormat,
+    raw: String,
+}
 
 impl Oid {
     #[must_use]
     pub fn new(object_format: ObjectFormat, raw: String) -> Option<Self> {
         if oid_hex(object_format, &raw) {
-            Some(Self(raw))
+            Some(Self { object_format, raw })
         } else {
             None
         }
     }
 
     #[must_use]
+    pub const fn object_format(&self) -> ObjectFormat {
+        self.object_format
+    }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.raw
     }
 }
 

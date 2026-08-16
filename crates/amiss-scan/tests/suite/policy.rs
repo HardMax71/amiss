@@ -4,19 +4,13 @@ use amiss_scan::policy::{
     DebtInput, InventoryState, TrustSource, WaiverInput, effects, verify_debt, verify_waiver,
 };
 use amiss_scan::{Includes, PolicySide};
-use amiss_wire::controls::ResourceName;
-use amiss_wire::controls::{DebtSnapshot, Fact, FindingKeyInput, FindingScope, TargetIntent};
 use amiss_wire::controls::{
-    Disposition, DocumentInclude, FindingDisposition, IncludeKind, PromotableFindingKind,
-    ScannerPolicy, SourceConstruct, TargetKind,
+    Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN, FindingDisposition, IncludeKind,
+    PromotableFindingKind, ResourceName, ScannerPolicy, WaiverBundle,
 };
-use amiss_wire::controls::{WaiverBundle, WaiverItem};
-use amiss_wire::digest::hb;
-use amiss_wire::model::{
-    BranchRef, ObjectFormat, RepoPath, RepoPathText, RepositoryIdentity, TreeIdentity, UtcInstant,
-};
+use amiss_wire::digest::hj;
+use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
 use amiss_wire::report::AnalysisErrorCode;
-use amiss_wire::resolution::{Missing, Resolution};
 
 #[expect(clippy::expect_used, reason = "test fixture paths are valid")]
 fn path(raw: &str) -> RepoPath {
@@ -94,14 +88,10 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         .iter()
         .map(|raw| RepoPathText::new((*raw).to_owned()).expect("valid inventory path"))
         .collect();
-    let policy = ScannerPolicy {
-        digest: hb("amiss/raw-evidence", b"policy fixture"),
-        document_includes,
-        protected_inventory,
-        finding_dispositions: Vec::new(),
-    };
+    let policy = ScannerPolicy::new(document_includes, protected_inventory, Vec::new())
+        .expect("valid policy fixture");
     PolicySide {
-        digest: Some(policy.digest),
+        digest: Some(policy.digest()),
         policy: Some(policy),
     }
 }
@@ -121,21 +111,21 @@ fn the_union_carries_both_sides_includes() {
     assert_eq!(union.trees.len(), 1);
 }
 
+#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn disposition_side(rows: &[(PromotableFindingKind, Disposition)]) -> PolicySide {
-    let policy = ScannerPolicy {
-        digest: hb("amiss/raw-evidence", b"disposition fixture"),
-        document_includes: Vec::new(),
-        protected_inventory: Vec::new(),
-        finding_dispositions: rows
-            .iter()
+    let policy = ScannerPolicy::new(
+        Vec::new(),
+        Vec::new(),
+        rows.iter()
             .map(|(finding_kind, disposition)| FindingDisposition {
                 finding_kind: *finding_kind,
                 disposition: *disposition,
             })
             .collect(),
-    };
+    )
+    .expect("valid disposition fixture");
     PolicySide {
-        digest: Some(policy.digest),
+        digest: Some(policy.digest()),
         policy: Some(policy),
     }
 }
@@ -189,111 +179,113 @@ fn a_disposition_weakens_only_by_dropping_below_the_base() {
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
-fn fixture_fact() -> Fact {
-    let scope = FindingScope {
-        document: RepoPathText::new("README.md".to_owned()).expect("path"),
-        source_construct: SourceConstruct::InlineLink,
-        normalized_target_intent: TargetIntent {
-            path: RepoPathText::new("docs/x.md".to_owned()).expect("path"),
-            target_kind: TargetKind::Either,
-            query_digest: None,
-            fragment_digest: None,
-        },
-        source_projection_digest: hb("amiss/raw-evidence", b"projection"),
-    };
-    let key_input = FindingKeyInput {
-        finding_kind: amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing,
-        scope,
-    };
-    Fact::new(
-        key_input,
-        Resolution::Missing(Missing::PathNotFound {
-            path: RepoPathText::new("docs/x.md".to_owned()).expect("path"),
-            near: None,
-        }),
-    )
-    .expect("a structural fact")
-}
-
-#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn instant() -> UtcInstant {
     UtcInstant::new("2026-07-01T00:00:00Z".to_owned()).expect("instant")
 }
 
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn cloned_first_item(document: &serde_json::Value) -> serde_json::Value {
+    document
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| items.first())
+        .cloned()
+        .expect("fixture item")
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn replace_json(value: &mut serde_json::Value, pointer: &str, replacement: serde_json::Value) {
+    *value.pointer_mut(pointer).expect("fixture field") = replacement;
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn push_item(document: &mut serde_json::Value, item: serde_json::Value) {
+    document
+        .get_mut("items")
+        .and_then(serde_json::Value::as_array_mut)
+        .expect("fixture items")
+        .push(item);
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn debt_input(item_count: usize) -> DebtInput {
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&crate::support::fixture_bytes("debt-snapshot.json"))
+            .expect("debt fixture JSON");
+    if item_count == 2 {
+        let mut second = cloned_first_item(&document);
+        replace_json(&mut second, "/debt_id", "debt/zz-second-example".into());
+        replace_json(
+            &mut second,
+            "/accepted_fact/key_input/scope/occurrence/source_projection_digest",
+            "sha256:8888888888888888888888888888888888888888888888888888888888888888".into(),
+        );
+        let key_input = serde_json::to_vec(
+            second
+                .pointer("/accepted_fact/key_input")
+                .expect("key input"),
+        )
+        .expect("key input JSON");
+        let key_input = amiss_wire::json::parse(&key_input).expect("key input wire JSON");
+        replace_json(
+            &mut second,
+            "/finding_key",
+            hj(FINDING_KEY_DOMAIN, &key_input).to_string().into(),
+        );
+        let fact =
+            serde_json::to_vec(second.pointer("/accepted_fact").expect("fact")).expect("fact JSON");
+        let fact = amiss_wire::json::parse(&fact).expect("fact wire JSON");
+        replace_json(
+            &mut second,
+            "/accepted_fact_digest",
+            hj(FACT_DOMAIN, &fact).to_string().into(),
+        );
+        push_item(&mut document, second);
+    }
+    let bytes = serde_json::to_vec(&document).expect("debt document JSON");
+    DebtInput {
+        snapshot: amiss_wire::controls::DebtSnapshot::parse(&bytes).expect("valid debt fixture"),
+        trust_source: TrustSource::ExternalRequiredCheck,
+    }
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn waiver_input(item_count: usize) -> WaiverInput {
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&crate::support::fixture_bytes("waiver-bundle.json"))
+            .expect("waiver fixture JSON");
+    if item_count == 2 {
+        let mut second = cloned_first_item(&document);
+        replace_json(&mut second, "/waiver_id", "waiver/zz-second-example".into());
+        replace_json(
+            &mut second,
+            "/candidate_tree/tree_oid",
+            "c".repeat(40).into(),
+        );
+        push_item(&mut document, second);
+    }
+    let bytes = serde_json::to_vec(&document).expect("waiver document JSON");
+    WaiverInput {
+        bundle: WaiverBundle::parse(&bytes).expect("valid waiver fixture"),
+        trust_source: TrustSource::ExternalRequiredCheck,
+    }
+}
+
 #[test]
 fn debt_and_waiver_item_ceilings_are_exact() {
-    let repository =
-        RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).expect("identity");
-    let debt_item = |id: &str| amiss_wire::controls::DebtItem {
-        debt_id: amiss_wire::model::ArtifactId::new(id.to_owned()).expect("id"),
-        finding_key: hb("amiss/raw-evidence", id.as_bytes()),
-        accepted_fact: fixture_fact(),
-        accepted_fact_digest: hb("amiss/raw-evidence", b"fact"),
-        owner: amiss_wire::model::OwnerId::new("team:docs".to_owned()).expect("owner"),
-        reason: "accepted".to_owned(),
-        created_at: instant(),
-        expires_at: UtcInstant::new("2026-08-01T00:00:00Z".to_owned()).expect("instant"),
-    };
-    let snapshot = |count: usize| DebtInput {
-        snapshot: DebtSnapshot {
-            digest: hb("amiss/raw-evidence", b"snapshot"),
-            repository: repository.clone(),
-            ref_name: BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
-            organization_floor_digest: hb("amiss/raw-evidence", b"floor"),
-            adoption_tree: TreeIdentity {
-                object_format: ObjectFormat::Sha1,
-                tree_oid: "a".repeat(40),
-            },
-            adoption_report_payload_digest: hb("amiss/raw-evidence", b"report"),
-            created_at: instant(),
-            items: (0..count)
-                .map(|index| debt_item(&format!("debt/{index}")))
-                .collect(),
-        },
-        trust_source: TrustSource::ExternalRequiredCheck,
-    };
-    let at_cap = verify_debt(&snapshot(1), None, None, None, &instant(), 1).unwrap_err();
+    let at_cap = verify_debt(&debt_input(1), None, None, None, &instant(), 1).unwrap_err();
     assert_eq!(
         at_cap.code,
         AnalysisErrorCode::ControlBindingMismatch,
         "one item under a ceiling of one is within it; only the binding fails"
     );
-    let over = verify_debt(&snapshot(2), None, None, None, &instant(), 1).unwrap_err();
+    let over = verify_debt(&debt_input(2), None, None, None, &instant(), 1).unwrap_err();
     assert_eq!(over.code, AnalysisErrorCode::ResourceLimitExceeded);
     assert_eq!(over.resource, Some((ResourceName::DebtItems, 1, 2)));
 
-    let waiver_item = |id: &str| WaiverItem {
-        waiver_id: amiss_wire::model::ArtifactId::new(id.to_owned()).expect("id"),
-        finding_key: hb("amiss/raw-evidence", id.as_bytes()),
-        authorized_fact: fixture_fact(),
-        authorized_fact_digest: hb("amiss/raw-evidence", b"fact"),
-        candidate_tree: TreeIdentity {
-            object_format: ObjectFormat::Sha1,
-            tree_oid: "b".repeat(40),
-        },
-        owner: amiss_wire::model::OwnerId::new("team:docs".to_owned()).expect("owner"),
-        issuer: amiss_wire::model::OwnerId::new("team:release".to_owned()).expect("owner"),
-        reason: "window".to_owned(),
-        created_at: instant(),
-        not_before: instant(),
-        expires_at: UtcInstant::new("2026-08-01T00:00:00Z".to_owned()).expect("instant"),
-    };
-    let bundle = |count: usize| WaiverInput {
-        bundle: WaiverBundle {
-            digest: hb("amiss/raw-evidence", b"bundle"),
-            repository: repository.clone(),
-            ref_name: BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
-            organization_floor_digest: hb("amiss/raw-evidence", b"floor"),
-            created_at: instant(),
-            items: (0..count)
-                .map(|index| waiver_item(&format!("waiver/{index}")))
-                .collect(),
-        },
-        trust_source: TrustSource::ExternalRequiredCheck,
-    };
-    let at_cap = verify_waiver(&bundle(1), None, None, None, &instant(), 1).unwrap_err();
+    let at_cap = verify_waiver(&waiver_input(1), None, None, None, &instant(), 1).unwrap_err();
     assert_eq!(at_cap.code, AnalysisErrorCode::ControlBindingMismatch);
-    let over = verify_waiver(&bundle(2), None, None, None, &instant(), 1).unwrap_err();
+    let over = verify_waiver(&waiver_input(2), None, None, None, &instant(), 1).unwrap_err();
     assert_eq!(over.code, AnalysisErrorCode::ResourceLimitExceeded);
     assert_eq!(over.resource, Some((ResourceName::WaiverItems, 1, 2)));
 }
@@ -392,18 +384,18 @@ fn bound_adapter_answers_only_policy_included_rows() {
 fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
     use amiss_wire::model::Adapter;
     let side = |adapter: Option<Adapter>| {
-        let policy = ScannerPolicy {
-            digest: hb("amiss/raw-evidence", b"binding weakening fixture"),
-            document_includes: vec![DocumentInclude {
+        let policy = ScannerPolicy::new(
+            vec![DocumentInclude {
                 path: RepoPathText::new("man".to_owned()).expect("valid include path"),
                 kind: IncludeKind::Tree,
                 adapter,
             }],
-            protected_inventory: Vec::new(),
-            finding_dispositions: Vec::new(),
-        };
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("valid binding fixture");
         PolicySide {
-            digest: Some(policy.digest),
+            digest: Some(policy.digest()),
             policy: Some(policy),
         }
     };

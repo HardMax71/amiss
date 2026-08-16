@@ -35,7 +35,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .map(|supplied| {
             let bytes = canonical(&supplied.value);
             let floor = OrganizationFloor::parse(&bytes).map_err(floor_detail)?;
-            if floor.digest != supplied.expected_digest {
+            if floor.digest() != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(FloorInput {
@@ -48,7 +48,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .debt_snapshot
         .as_ref()
         .map(|supplied| {
-            typed(supplied, DebtSnapshot::parse, |value| value.digest).map(
+            typed(supplied, DebtSnapshot::parse, DebtSnapshot::digest).map(
                 |(snapshot, trust_source)| DebtInput {
                     snapshot,
                     trust_source,
@@ -60,7 +60,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .waiver_bundle
         .as_ref()
         .map(|supplied| {
-            typed(supplied, WaiverBundle::parse, |value| value.digest).map(
+            typed(supplied, WaiverBundle::parse, WaiverBundle::digest).map(
                 |(bundle, trust_source)| WaiverInput {
                     bundle,
                     trust_source,
@@ -74,7 +74,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .map(|supplied| {
             let bytes = canonical(&supplied.value);
             let statement = TrustedTimeStatement::parse(&bytes).map_err(|error| detail(&error))?;
-            if statement.digest != supplied.expected_digest {
+            if statement.digest() != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(TimeInput {
@@ -89,9 +89,11 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .execution_constraint
         .as_ref()
         .map(|supplied| {
-            typed(supplied, ExecutionConstraintDescriptor::parse, |value| {
-                value.digest
-            })
+            typed(
+                supplied,
+                ExecutionConstraintDescriptor::parse,
+                ExecutionConstraintDescriptor::digest,
+            )
             .map(|(descriptor, trust_source)| ConstraintInput {
                 descriptor,
                 trust_source,

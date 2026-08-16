@@ -64,22 +64,22 @@ pub fn validate(
     constraint: &ExecutionConstraintDescriptor,
     bootstrap_bytes: &[u8],
 ) -> Result<Validated, Refusal> {
-    if hb(BOOTSTRAP_DOMAIN, bootstrap_bytes) != constraint.bootstrap_digest {
+    if hb(BOOTSTRAP_DOMAIN, bootstrap_bytes) != constraint.bootstrap_digest() {
         return Err(tampered("bootstrap-digest-mismatch"));
     }
     let platform = host_platform().ok_or(Refusal::Unavailable("unsupported-platform"))?;
-    if platform != constraint.selected_platform {
+    if platform != constraint.selected_platform() {
         return Err(tampered("platform-binding-mismatch"));
     }
-    if action.object_format() != constraint.action_object_format {
+    if action.object_format() != constraint.action_object_format() {
         return Err(tampered("action-tree-mismatch"));
     }
-    let tree = resolve_action_tree(action, resources, &constraint.action_commit_oid)?;
-    if tree != constraint.action_tree_oid {
+    let tree = resolve_action_tree(action, resources, constraint.action_commit_oid())?;
+    if &tree != constraint.action_tree_oid() {
         return Err(tampered("action-tree-mismatch"));
     }
-    let manifest = load_release_manifest(action, resources, &tree, &constraint.manifest_path)?;
-    if manifest.digest != constraint.release_manifest_digest {
+    let manifest = load_release_manifest(action, resources, &tree, constraint.manifest_path())?;
+    if manifest.digest != constraint.release_manifest_digest() {
         return Err(tampered("manifest-digest-mismatch"));
     }
     validate_release(action, resources, &tree, manifest, platform)

@@ -41,7 +41,7 @@ impl Includes {
             let Some(policy) = &side.policy else {
                 continue;
             };
-            for include in &policy.document_includes {
+            for include in policy.document_includes() {
                 let path = RepoPath::from(&include.path);
                 match include.kind {
                     IncludeKind::Document => {
@@ -54,7 +54,7 @@ impl Includes {
             }
         }
         if let Some(policy) = candidate.policy.as_ref().or(base.policy.as_ref()) {
-            for include in &policy.document_includes {
+            for include in policy.document_includes() {
                 let Some(adapter) = include.adapter else {
                     continue;
                 };
@@ -258,9 +258,9 @@ pub fn acquire_entry(
     match ScannerPolicy::parse(&object.body) {
         Ok(policy) => {
             let entries = [
-                policy.document_includes.len(),
-                policy.protected_inventory.len(),
-                policy.finding_dispositions.len(),
+                policy.document_includes().len(),
+                policy.protected_inventory().len(),
+                policy.finding_dispositions().len(),
             ]
             .iter()
             .map(|&len| u64::try_from(len).unwrap_or(u64::MAX))
@@ -279,7 +279,7 @@ pub fn acquire_entry(
                 }]);
             }
             Ok(PolicySide {
-                digest: Some(policy.digest),
+                digest: Some(policy.digest()),
                 policy: Some(policy),
             })
         }
@@ -301,7 +301,7 @@ fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
         return Vec::new();
     };
     policy
-        .finding_dispositions
+        .finding_dispositions()
         .iter()
         .map(|row| {
             let kind = match row.finding_kind {
@@ -410,26 +410,30 @@ pub fn effects(
     candidate_documents: &dyn Fn(&str) -> InventoryState,
 ) -> Effects {
     let mut controls: Vec<ControlSeed> = Vec::new();
-    let empty = ScannerPolicy {
-        digest: amiss_wire::digest::hb("amiss/raw-evidence", b""),
-        document_includes: Vec::new(),
-        protected_inventory: Vec::new(),
-        finding_dispositions: Vec::new(),
-    };
-    let base_policy = base.policy.as_ref().unwrap_or(&empty);
-    let candidate_policy = candidate.policy.as_ref().unwrap_or(&empty);
-    let candidate_includes: BTreeMap<(&str, IncludeKind), Option<Adapter>> = candidate_policy
-        .document_includes
+    let base_includes = base
+        .policy
+        .as_ref()
+        .map_or(&[][..], ScannerPolicy::document_includes);
+    let base_inventory = base
+        .policy
+        .as_ref()
+        .map_or(&[][..], ScannerPolicy::protected_inventory);
+    let candidate_includes: BTreeMap<(&str, IncludeKind), Option<Adapter>> = candidate
+        .policy
+        .as_ref()
+        .map_or(&[][..], ScannerPolicy::document_includes)
         .iter()
         .map(|row| ((row.path.as_str(), row.kind), row.adapter))
         .collect();
-    let candidate_inventory: BTreeSet<&str> = candidate_policy
-        .protected_inventory
+    let candidate_inventory: BTreeSet<&str> = candidate
+        .policy
+        .as_ref()
+        .map_or(&[][..], ScannerPolicy::protected_inventory)
         .iter()
         .map(amiss_wire::model::RepoPathText::as_str)
         .collect();
 
-    for include in &base_policy.document_includes {
+    for include in base_includes {
         let rule = match candidate_includes.get(&(include.path.as_str(), include.kind)) {
             Some(now) if *now == include.adapter => None,
             Some(_) if include.adapter.is_none() => None,
@@ -447,7 +451,7 @@ pub fn effects(
             });
         }
     }
-    for member in &base_policy.protected_inventory {
+    for member in base_inventory {
         if !candidate_inventory.contains(member.as_str()) {
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
@@ -474,8 +478,7 @@ pub fn effects(
 
     let mut inventory: BTreeSet<&str> = BTreeSet::new();
     inventory.extend(
-        base_policy
-            .protected_inventory
+        base_inventory
             .iter()
             .map(amiss_wire::model::RepoPathText::as_str),
     );
@@ -567,13 +570,13 @@ pub fn verify_floor(
         return Err(mismatch);
     };
     let floor = &input.floor;
-    if floor.repository != *identity {
+    if floor.repository() != identity {
         return Err(mismatch);
     }
-    if target_ref != Some(floor.ref_name.as_str()) {
+    if target_ref != Some(floor.ref_name().as_str()) {
         return Err(mismatch);
     }
-    if profile < floor.minimum_profile {
+    if profile < floor.minimum_profile() {
         return Err(mismatch);
     }
     Ok(())
@@ -643,14 +646,14 @@ pub fn verify_time(
 ) -> Result<(), ErrorDetail> {
     let statement = &input.statement;
     let bound = identity_matches(
-        &statement.repository,
-        &statement.ref_name,
+        statement.repository(),
+        statement.ref_name(),
         repository,
         target_ref,
-    ) && statement.candidate_identity_digest == *candidate_identity
-        && statement.provider == input.provider
-        && statement.provider_run_id == input.provider_run_id
-        && statement.provider_run_attempt == input.provider_run_attempt;
+    ) && statement.candidate_identity_digest() == *candidate_identity
+        && statement.provider() == input.provider
+        && statement.provider_run_id() == input.provider_run_id
+        && statement.provider_run_attempt() == input.provider_run_attempt;
     if bound {
         Ok(())
     } else {
@@ -679,7 +682,7 @@ pub fn verify_debt(
     item_limit: u64,
 ) -> Result<(), ErrorDetail> {
     let snapshot = &input.snapshot;
-    if u64::try_from(snapshot.items.len()).unwrap_or(u64::MAX) > item_limit {
+    if u64::try_from(snapshot.items().len()).unwrap_or(u64::MAX) > item_limit {
         return Err(ErrorDetail {
             code: AnalysisErrorCode::ResourceLimitExceeded,
             path: None,
@@ -695,14 +698,15 @@ pub fn verify_debt(
         return Err(binding_mismatch_row());
     };
     let bound = identity_matches(
-        &snapshot.repository,
-        &snapshot.ref_name,
+        snapshot.repository(),
+        snapshot.ref_name(),
         repository,
         target_ref,
-    ) && snapshot.organization_floor_digest == floor.floor.digest
-        && snapshot.created_at <= *instant
-        && snapshot.items.iter().all(|item| {
-            item.created_at <= *instant && floor.floor.authorized_debt_owners.contains(&item.owner)
+    ) && snapshot.organization_floor_digest() == floor.floor.digest()
+        && snapshot.created_at() <= instant
+        && snapshot.items().iter().all(|item| {
+            item.created_at <= *instant
+                && floor.floor.authorized_debt_owners().contains(&item.owner)
         });
     if bound {
         Ok(())
@@ -728,7 +732,7 @@ pub fn verify_waiver(
     item_limit: u64,
 ) -> Result<(), ErrorDetail> {
     let bundle = &input.bundle;
-    if u64::try_from(bundle.items.len()).unwrap_or(u64::MAX) > item_limit {
+    if u64::try_from(bundle.items().len()).unwrap_or(u64::MAX) > item_limit {
         return Err(ErrorDetail {
             code: AnalysisErrorCode::ResourceLimitExceeded,
             path: None,
@@ -743,9 +747,13 @@ pub fn verify_waiver(
     let Some(floor) = floor else {
         return Err(binding_mismatch_row());
     };
-    let bound = identity_matches(&bundle.repository, &bundle.ref_name, repository, target_ref)
-        && bundle.organization_floor_digest == floor.floor.digest
-        && bundle.created_at <= *instant;
+    let bound = identity_matches(
+        bundle.repository(),
+        bundle.ref_name(),
+        repository,
+        target_ref,
+    ) && bundle.organization_floor_digest() == floor.floor.digest()
+        && bundle.created_at() <= instant;
     if bound {
         Ok(())
     } else {
@@ -832,7 +840,7 @@ pub fn floor_inventory(
     candidate_documents: &dyn Fn(&str) -> InventoryState,
 ) -> Vec<ControlSeed> {
     let mut controls = Vec::new();
-    for path in &input.floor.protected_inventory {
+    for path in input.floor.protected_inventory() {
         let rule = match candidate_documents(path.as_str()) {
             InventoryState::Scanned => continue,
             InventoryState::Missing => "coverage/floor-inventory-missing",
@@ -857,7 +865,7 @@ pub fn floor_protected(
     protected: &dyn Fn(&str) -> (ProtectedState, ProtectedState),
 ) -> Vec<ControlSeed> {
     let mut controls = Vec::new();
-    for path in &input.floor.protected_control_paths {
+    for path in input.floor.protected_control_paths() {
         let (base, candidate) = protected(path.as_str());
         let unchanged = matches!(
             (base, candidate),
@@ -880,7 +888,7 @@ pub fn floor_protected(
 pub fn floor_raises(input: &FloorInput) -> Vec<(FindingKind, Disposition)> {
     input
         .floor
-        .minimum_dispositions
+        .minimum_dispositions()
         .iter()
         .map(|row| {
             let kind = match row.finding_kind {
@@ -913,7 +921,7 @@ pub fn tightened_limits(
 ) -> (crate::resources::ScanLimits, amiss_git::GitLimits) {
     let mut scan = scan;
     let mut git = git;
-    for row in &floor.resource_limits {
+    for row in floor.resource_limits() {
         let maximum = u64::try_from(row.maximum).unwrap_or(u64::MAX);
         let slot: Option<&mut u64> = match row.resource {
             ResourceName::DocumentsPerSnapshot => Some(&mut scan.documents_per_snapshot),

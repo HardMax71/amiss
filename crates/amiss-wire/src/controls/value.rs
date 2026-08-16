@@ -16,9 +16,9 @@ pub(crate) fn object(rows: Vec<(&str, Value)>) -> Value {
 
 pub(crate) fn repository(identity: &RepositoryIdentity) -> Value {
     object(vec![
-        ("host", text(&identity.host)),
-        ("owner", text(&identity.owner)),
-        ("name", text(&identity.name)),
+        ("host", text(identity.host())),
+        ("owner", text(identity.owner())),
+        ("name", text(identity.name())),
     ])
 }
 

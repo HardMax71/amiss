@@ -141,15 +141,15 @@ fn snapshot(
             Value::Object(vec![
                 (
                     "host".to_owned(),
-                    Value::String(identity.repository.host.clone()),
+                    Value::String(identity.repository.host().to_owned()),
                 ),
                 (
                     "owner".to_owned(),
-                    Value::String(identity.repository.owner.clone()),
+                    Value::String(identity.repository.owner().to_owned()),
                 ),
                 (
                     "name".to_owned(),
-                    Value::String(identity.repository.name.clone()),
+                    Value::String(identity.repository.name().to_owned()),
                 ),
             ]),
         ),

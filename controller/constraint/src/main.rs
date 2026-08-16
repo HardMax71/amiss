@@ -87,7 +87,7 @@ fn run(args: &Args) -> Result<String, &'static str> {
         .canonical_bytes()
         .map_err(|_defect| "execution-constraint-invalid")?;
     write_new(&paths.output, &bytes).map_err(|_defect| "output-unavailable")?;
-    Ok(constraint.digest.to_string())
+    Ok(constraint.digest().to_string())
 }
 
 fn parse_args(argv: &[OsString]) -> Option<Args> {

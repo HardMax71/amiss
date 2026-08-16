@@ -233,7 +233,12 @@ fn provider_setup(
         repositories.trees().unwrap(),
     );
     if matches!(case, LaneCase::WrongIdentity) {
-        "another".clone_into(&mut current.run.change.repository.name);
+        current.run.change.repository = RepositoryIdentity::new(
+            current.run.change.repository.host().to_owned(),
+            current.run.change.repository.owner().to_owned(),
+            "another".to_owned(),
+        )
+        .unwrap();
     }
     if matches!(case, LaneCase::WrongTree) {
         current.run.trees.candidate = oid('f');

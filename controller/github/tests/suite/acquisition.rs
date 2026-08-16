@@ -40,14 +40,20 @@ fn projects_only_authenticated_commit_oids_and_the_pinned_action_commit() {
 #[test]
 fn rejects_wrong_host_identity_change_and_object_format() {
     let mut wrong_host = request();
-    wrong_host.run.change.repository.host = "github.com@attacker.invalid".to_owned();
+    wrong_host.run.change.repository = RepositoryIdentity::new(
+        "github.com@attacker.invalid".to_owned(),
+        "acme".to_owned(),
+        "widget".to_owned(),
+    )
+    .unwrap();
     assert_eq!(
         github_fetch_plan(&wrong_host),
         Err(GitHubAcquireError::InvalidRequest)
     );
 
     let mut wrong_identity = request();
-    wrong_identity.run.change.repository.owner = "other".to_owned();
+    wrong_identity.run.change.repository =
+        RepositoryIdentity::github("other".to_owned(), "widget".to_owned()).unwrap();
     assert_eq!(
         github_fetch_plan(&wrong_identity),
         Err(GitHubAcquireError::InvalidRequest)
@@ -77,10 +83,15 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_action_host = request();
-    Arc::make_mut(&mut wrong_action_host.plan)
-        .execution
-        .action_repository
-        .host = "other.example".to_owned();
+    replace_action_repository(
+        &mut wrong_action_host,
+        RepositoryIdentity::new(
+            "other.example".to_owned(),
+            "hardmax71".to_owned(),
+            "amiss".to_owned(),
+        )
+        .unwrap(),
+    );
     assert_eq!(
         github_fetch_plan(&wrong_action_host),
         Err(GitHubAcquireError::InvalidRequest)
@@ -228,6 +239,13 @@ fn execution() -> ExecutionConstraintDescriptor {
     ExecutionConstraintDescriptor::new(input).unwrap()
 }
 
+fn replace_action_repository(request: &mut RunRequest, repository: RepositoryIdentity) {
+    let plan = Arc::make_mut(&mut request.plan);
+    let mut input = ExecutionConstraintInput::from(&plan.execution);
+    input.action_repository = repository;
+    plan.execution = ExecutionConstraintDescriptor::new(input).unwrap();
+}
+
 fn provider_run(
     installation: &IntegrationId,
     change: &ChangeLocator,
@@ -237,9 +255,9 @@ fn provider_run(
 ) -> ProviderRunIdentity {
     let fields = serde_json::to_vec(&[
         installation.as_str(),
-        change.repository.host.as_str(),
-        change.repository.owner.as_str(),
-        change.repository.name.as_str(),
+        change.repository.host(),
+        change.repository.owner(),
+        change.repository.name(),
         change.change.as_str(),
         candidate.as_str(),
         candidate_ref.as_str(),
