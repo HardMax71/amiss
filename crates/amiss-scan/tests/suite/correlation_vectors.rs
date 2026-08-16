@@ -297,11 +297,11 @@ fn the_published_vectors_execute_live_correlation() {
         );
 
         let rows = correlate(
-            &Side {
+            Side {
                 observations: vec![observation(&id, "left", &left, left_intent)],
                 documents: BTreeMap::new(),
             },
-            &Side {
+            Side {
                 observations: vec![observation(&id, "right", &right, right_intent)],
                 documents: BTreeMap::new(),
             },

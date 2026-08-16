@@ -282,8 +282,8 @@ fn binding_mismatch(
 /// failure, otherwise correlation and full construction.
 fn conclude(
     setup: &Setup,
-    base: (&SnapshotDiscovery, &Side),
-    candidate: (&SnapshotDiscovery, &Side),
+    base: (&SnapshotDiscovery, Side),
+    candidate: (&SnapshotDiscovery, Side),
     claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
 ) -> Built {
@@ -499,8 +499,8 @@ fn commit_pair_result(
             setup.policy.complete_findings = scan_limits.complete_findings;
             conclude(
                 &setup,
-                (&base.discovery, &base.side),
-                (&candidate.discovery, &candidate.side),
+                (&base.discovery, base.side),
+                (&candidate.discovery, candidate.side),
                 &claims,
                 &failures,
             )
@@ -1407,8 +1407,8 @@ fn staged_index_result(
         &mut git_resources,
         setup_shell,
         &setup,
-        &base_evaluated,
-        (&candidate_discovery, candidate_side.as_ref()),
+        base_evaluated,
+        (candidate_discovery, candidate_side),
         &claims,
         &failures,
         &initial,
@@ -1426,17 +1426,18 @@ fn staged_finish(
     git_resources: &mut GitResources,
     setup_shell: &SetupShell,
     setup: &Setup,
-    base_evaluated: &Evaluated,
-    candidate: (&SnapshotDiscovery, Option<&Side>),
+    base_evaluated: Evaluated,
+    candidate: (SnapshotDiscovery, Option<Side>),
     claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
     initial: &[u8],
 ) -> Built {
+    let base_identity = base_evaluated.identity.clone();
     let built = match (candidate.1, failures) {
         (Some(side), []) => conclude(
             setup,
-            (&base_evaluated.discovery, &base_evaluated.side),
-            (candidate.0, side),
+            (&base_evaluated.discovery, base_evaluated.side),
+            (&candidate.0, side),
             claims,
             &[],
         ),
@@ -1446,7 +1447,7 @@ fn staged_finish(
         repo,
         git_resources,
         setup_shell,
-        base_evaluated.identity.clone(),
+        base_identity,
         initial,
         built,
     )

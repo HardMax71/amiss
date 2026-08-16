@@ -138,7 +138,7 @@ fn report_retaining(
     let (base_identity, base_discovery, base_side) = snapshot(&repo, &mut resources, base_commit);
     let (candidate_identity, candidate_discovery, candidate_side) =
         snapshot(&repo, &mut resources, candidate_commit);
-    let comparisons = correlate(&base_side, &candidate_side).unwrap();
+    let comparisons = correlate(base_side, candidate_side).unwrap();
     let setup = Setup {
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
@@ -819,7 +819,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         snapshot(&repo, &mut git_resources, &base_commit);
     let (candidate_identity, candidate_discovery, candidate_side) =
         snapshot(&repo, &mut git_resources, &candidate_commit);
-    let comparisons = correlate(&base_side, &candidate_side).unwrap();
+    let comparisons = correlate(base_side, candidate_side).unwrap();
     let template = comparisons.first().unwrap().clone();
 
     let filler = template
@@ -916,7 +916,7 @@ fn a_finding_location_carries_the_real_display_positions() {
         snapshot(&repo, &mut git_resources, &base_commit);
     let (candidate_identity, candidate_discovery, candidate_side) =
         snapshot(&repo, &mut git_resources, &candidate_commit);
-    let comparisons = correlate(&base_side, &candidate_side).unwrap();
+    let comparisons = correlate(base_side, candidate_side).unwrap();
     let setup = Setup {
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
