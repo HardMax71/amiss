@@ -3,8 +3,12 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use amiss_controller::{ControllerClock, DeliveryLedger, Runner};
+use amiss_controller::{
+    CheckPlan, ControllerClock, DeliveryLedger, FileLedger, FileLedgerConfig, FileLedgerError,
+    PlanError, PlanRegistry, PlanScope, ReplayWindow, Runner, register_plan,
+};
 use tokio::net::TcpListener;
 
 use crate::{
@@ -19,6 +23,57 @@ pub struct QueuedServiceInput {
     pub inbox_root: PathBuf,
     pub inbox_limits: InboxLimits,
     pub clock: Arc<dyn ControllerClock>,
+}
+
+pub struct QueuedLaneSetupInput {
+    pub service: QueuedServiceInput,
+    pub plan: Arc<CheckPlan>,
+    pub scope: PlanScope,
+    pub ledger_root: PathBuf,
+    pub ledger_lease: Duration,
+    pub ledger_records: u64,
+    pub replay: ReplayWindow,
+}
+
+pub struct QueuedLaneSetup {
+    pub service: QueuedServiceInput,
+    pub plans: PlanRegistry,
+    pub ledger: FileLedger,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum QueuedLaneSetupError {
+    #[error("check plan cannot be registered")]
+    Plan(#[from] PlanError),
+    #[error("delivery record limits are invalid")]
+    InvalidLedgerLimits,
+    #[error("delivery record cannot be opened")]
+    Ledger(#[from] FileLedgerError),
+}
+
+/// Registers the lane plan and opens its file-backed delivery ledger.
+///
+/// # Errors
+///
+/// The plan conflicts, the ledger limits are invalid, or the ledger cannot be opened.
+pub fn setup_queued_lane(
+    input: QueuedLaneSetupInput,
+) -> Result<QueuedLaneSetup, QueuedLaneSetupError> {
+    let mut plans = PlanRegistry::new();
+    register_plan(&mut plans, input.scope, input.plan)?;
+    let ledger_config =
+        FileLedgerConfig::new(input.ledger_lease, input.ledger_records, input.replay)
+            .ok_or(QueuedLaneSetupError::InvalidLedgerLimits)?;
+    let ledger = FileLedger::open_with_clock(
+        &input.ledger_root,
+        ledger_config,
+        Arc::clone(&input.service.clock),
+    )?;
+    Ok(QueuedLaneSetup {
+        service: input.service,
+        plans,
+        ledger,
+    })
 }
 
 #[derive(Debug, thiserror::Error)]

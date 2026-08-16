@@ -13,7 +13,7 @@ use serde_json::json;
 use sha2::Sha256;
 
 const INSTALLATION_ID: u64 = 7;
-const REPOSITORY_ID: u64 = 101;
+pub(super) const REPOSITORY_ID: u64 = 101;
 const PULL_REQUEST_ID: u64 = 4_201;
 const PULL_REQUEST_NUMBER: u64 = 42;
 
