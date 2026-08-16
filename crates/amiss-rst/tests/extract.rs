@@ -75,6 +75,14 @@ fn the_two_sphinx_roles_are_modelled_by_name() {
     ] {
         assert!(kinds(empty).is_empty(), "{empty:?} produced a reference");
     }
+    assert_eq!(
+        kinds("`Guide <guide.rst>`_ then :doc:`intro` and :ref:`setup label`.\n"),
+        vec![
+            (ReferenceKind::InlineHyperlink, "guide.rst".to_owned()),
+            (ReferenceKind::DocRole, "intro".to_owned()),
+            (ReferenceKind::RefRole, "setup label".to_owned()),
+        ],
+    );
 }
 
 #[test]

@@ -408,6 +408,7 @@ name = "amiss-rst"
 version = "0.22.0"
 dependencies = [
  "amiss-wire",
+ "divan",
 ]
 
 [[package]]

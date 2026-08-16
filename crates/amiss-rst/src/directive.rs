@@ -45,8 +45,7 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         found.push(build(ReferenceKind::FileOption, path, at, lead, line.len()));
         return found;
     }
-    roles(line, at, &mut found);
-    inline(line, at, &mut found);
+    interpreted_text(line, at, &mut found);
     found.sort_by_key(|reference| reference.span);
     found
 }
@@ -56,46 +55,10 @@ const SPHINX_ROLES: [(&str, ReferenceKind); 2] = [
     (":ref:`", ReferenceKind::RefRole),
 ];
 
-/// The two Sphinx roles, by name. A `title <target>` body carries its target
-/// in the brackets; a bare body is the target itself. A byte that could
-/// continue a role path before the opener means a longer role, `:std:ref:` or
-/// `:external+python:std:ref:`, whose meaning the name prefix changes.
-fn roles(line: &str, at: usize, found: &mut Vec<Reference>) {
-    for (opener, kind) in SPHINX_ROLES {
-        let mut index = 0_usize;
-        while let Some(hit) = line.get(index..).and_then(|tail| tail.find(opener)) {
-            let start = index.saturating_add(hit);
-            let prefixed = start
-                .checked_sub(1)
-                .and_then(|before| line.as_bytes().get(before))
-                .is_some_and(|byte| {
-                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'.' | b'-' | b':')
-                });
-            if prefixed {
-                index = start.saturating_add(1);
-                continue;
-            }
-            let body_at = start.saturating_add(opener.len());
-            let Some(close) = line.get(body_at..).and_then(|tail| tail.find('`')) else {
-                break;
-            };
-            let end = body_at.saturating_add(close);
-            let body = line.get(body_at..end).unwrap_or_default();
-            let target = body
-                .rsplit_once('<')
-                .and_then(|(_, tail)| tail.strip_suffix('>'))
-                .unwrap_or(body)
-                .trim();
-            let phrase_allowed = matches!(kind, ReferenceKind::RefRole);
-            let acceptable = !target.is_empty()
-                && (phrase_allowed || !target.contains(char::is_whitespace))
-                && !target.contains('`');
-            if acceptable {
-                found.push(build(kind, target, at, start, end.saturating_add(1)));
-            }
-            index = end.saturating_add(1);
-        }
-    }
+struct RoleState {
+    opener: &'static str,
+    kind: ReferenceKind,
+    open: Option<usize>,
 }
 
 /// `.. _name: target` names an external hyperlink target. A line with nothing
@@ -121,40 +84,76 @@ fn file_option(trimmed: &str) -> Option<&str> {
         .then_some(value)
 }
 
-/// `` `text <target>`_ `` carries its target inline. The trailing underscore is
-/// what separates a hyperlink from an ordinary interpreted-text span.
-fn inline(line: &str, at: usize, found: &mut Vec<Reference>) {
+/// Reads the two Sphinx roles and inline hyperlinks from one stream of
+/// backticks. Each form keeps independent delimiter state because malformed
+/// forms may overlap without changing how another form is recognized.
+fn interpreted_text(line: &str, at: usize, found: &mut Vec<Reference>) {
     let bytes = line.as_bytes();
-    let mut index = 0;
-    while let Some(open) = line.get(index..).and_then(|tail| tail.find('`')) {
-        let start = index.saturating_add(open);
-        let body_at = start.saturating_add(1);
-        let Some(close) = line.get(body_at..).and_then(|tail| tail.find('`')) else {
-            return;
-        };
-        let end = body_at.saturating_add(close);
-        if bytes.get(end.saturating_add(1)) != Some(&b'_') {
-            index = end.saturating_add(1);
-            continue;
+    let mut roles = SPHINX_ROLES.map(|(opener, kind)| RoleState {
+        opener,
+        kind,
+        open: None,
+    });
+    let mut inline_open: Option<usize> = None;
+
+    for (tick, _) in line.match_indices('`') {
+        for role in &mut roles {
+            if let Some(start) = role.open.take() {
+                let body_at = start.saturating_add(role.opener.len());
+                let body = line.get(body_at..tick).unwrap_or_default();
+                let target = body
+                    .rsplit_once('<')
+                    .and_then(|(_, tail)| tail.strip_suffix('>'))
+                    .unwrap_or(body)
+                    .trim();
+                let phrase_allowed = matches!(role.kind, ReferenceKind::RefRole);
+                let acceptable = !target.is_empty()
+                    && (phrase_allowed || !target.contains(char::is_whitespace))
+                    && !target.contains('`');
+                if acceptable {
+                    found.push(build(role.kind, target, at, start, tick.saturating_add(1)));
+                }
+                continue;
+            }
+
+            let Some(start) = tick.checked_sub(role.opener.len().saturating_sub(1)) else {
+                continue;
+            };
+            let prefixed = start
+                .checked_sub(1)
+                .and_then(|before| bytes.get(before))
+                .is_some_and(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'.' | b'-' | b':')
+                });
+            if !prefixed && line.get(start..tick.saturating_add(1)) == Some(role.opener) {
+                role.open = Some(start);
+            }
         }
-        if let Some(target) = line
-            .get(body_at..end)
-            .and_then(|body| body.rsplit_once('<'))
-            .and_then(|(_, tail)| tail.strip_suffix('>'))
-            .map(str::trim)
-            .filter(|target| {
-                !target.is_empty() && !target.contains(char::is_whitespace) && !indirect(target)
-            })
-        {
-            found.push(build(
-                ReferenceKind::InlineHyperlink,
-                target,
-                at,
-                start,
-                end.saturating_add(2),
-            ));
+
+        if let Some(start) = inline_open.take() {
+            if bytes.get(tick.saturating_add(1)) == Some(&b'_')
+                && let Some(target) = line
+                    .get(start.saturating_add(1)..tick)
+                    .and_then(|body| body.rsplit_once('<'))
+                    .and_then(|(_, tail)| tail.strip_suffix('>'))
+                    .map(str::trim)
+                    .filter(|target| {
+                        !target.is_empty()
+                            && !target.contains(char::is_whitespace)
+                            && !indirect(target)
+                    })
+            {
+                found.push(build(
+                    ReferenceKind::InlineHyperlink,
+                    target,
+                    at,
+                    start,
+                    tick.saturating_add(2),
+                ));
+            }
+        } else {
+            inline_open = Some(tick);
         }
-        index = end.saturating_add(2);
     }
 }
 
