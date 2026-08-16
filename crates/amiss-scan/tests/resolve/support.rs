@@ -2,10 +2,8 @@ use std::path::Path;
 
 use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_scan::resolve::{ForgeContext, TargetCache};
-use amiss_scan::{
-    Error, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover, resolve,
-};
+use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
+use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover};
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
@@ -121,6 +119,16 @@ pub(crate) fn github_context() -> ForgeContext {
 }
 
 impl Bed {
+    pub(crate) fn resolver(&mut self) -> Resolver<'_> {
+        Resolver::new(
+            &self.repo,
+            &mut self.git_resources,
+            &mut self.scan_resources,
+            &mut self.cache,
+            &self.snapshot,
+        )
+    }
+
     pub(crate) fn run_as(
         &mut self,
         adapter: Adapter,
@@ -131,18 +139,8 @@ impl Bed {
     ) -> Result<(amiss_scan::Intent, Resolution), Error> {
         #[expect(clippy::unwrap_used, reason = "test fixture helper")]
         let document = RepoPath::new(document.to_owned()).unwrap();
-        resolve(
-            &self.repo,
-            &mut self.git_resources,
-            &mut self.scan_resources,
-            &mut self.cache,
-            &self.snapshot,
-            context,
-            adapter,
-            &document,
-            is_image,
-            destination,
-        )
+        self.resolver()
+            .resolve(context, adapter, &document, is_image, destination)
     }
 }
 

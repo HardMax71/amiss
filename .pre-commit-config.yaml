@@ -138,7 +138,7 @@ repos:
           want="similarity-rs $version"; have="$(similarity-rs --version)";
           [ "$have" = "$want" ] || { echo "the ratchet pins $want, found $have"; exit 1; };
           pairs="$(similarity-rs crates controller --threshold 0.85 --min-lines 8 | grep -c "Similarity:" || true)";
-          baseline=201;
+          baseline=196;
           [ "$pairs" -eq "$baseline" ] ||
           { echo "near-twin function pairs: $pairs, baseline $baseline
           (similarity-rs crates controller --threshold 0.85 --min-lines 8)"; exit 1; }'

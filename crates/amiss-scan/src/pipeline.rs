@@ -10,8 +10,7 @@ use crate::report::{
     Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
     synthetic_candidate,
 };
-use crate::resolve::resolve;
-use crate::resolve::{ForgeContext, TargetCache};
+use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 
 /// Verification and packaging of wrapper-supplied external controls.
@@ -77,6 +76,7 @@ pub(crate) fn side_observations(
         })
         .collect();
     let mut cache = TargetCache::default();
+    let mut resolver = Resolver::new(repo, git_resources, scan_resources, &mut cache, discovery);
     let mut observations: Vec<Observation> = Vec::new();
     let mut documents = std::collections::BTreeMap::new();
     for record in &discovery.documents {
@@ -96,21 +96,9 @@ pub(crate) fn side_observations(
                     let (intent, resolution) = if occurrence.occurrence.construct
                         == amiss_wire::controls::SourceConstruct::RstRefRole
                     {
-                        crate::resolve::resolve_label(
-                            repo,
-                            git_resources,
-                            scan_resources,
-                            &mut cache,
-                            discovery,
-                            &occurrence.occurrence.semantic_destination,
-                        )
+                        resolver.resolve_label(&occurrence.occurrence.semantic_destination)
                     } else {
-                        resolve(
-                            repo,
-                            git_resources,
-                            scan_resources,
-                            &mut cache,
-                            discovery,
+                        resolver.resolve(
                             forge,
                             adapter,
                             &record.path,
@@ -143,15 +131,7 @@ pub(crate) fn side_observations(
                     });
                 }
                 if let Some(outcomes) = claims.as_deref_mut() {
-                    document_claims(
-                        repo,
-                        git_resources,
-                        scan_resources,
-                        &mut cache,
-                        discovery,
-                        (&record.path, scanned),
-                        outcomes,
-                    )?;
+                    document_claims(&mut resolver, (&record.path, scanned), outcomes)?;
                 }
             }
         }
@@ -208,11 +188,7 @@ fn effective_limits(
 /// Evaluates one scanned document's value claims into outcomes; unknown
 /// forms stay for the governed boundary.
 fn document_claims(
-    repo: &Repository,
-    git_resources: &mut GitResources,
-    scan_resources: &mut ScanResources,
-    cache: &mut TargetCache,
-    discovery: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     document: (&RepoPath, &crate::scan::Scanned),
     outcomes: &mut Vec<crate::claim::ClaimOutcome>,
 ) -> Result<(), ErrorDetail> {
@@ -221,15 +197,9 @@ fn document_claims(
         let crate::claim::GovernedForm::Value(claim) = &governed.form else {
             continue;
         };
-        let verdict = crate::resolve::resolve_claim(
-            repo,
-            git_resources,
-            scan_resources,
-            cache,
-            discovery,
-            claim,
-        )
-        .map_err(|defect| detail(&defect, Some(path)))?;
+        let verdict = resolver
+            .resolve_claim(claim)
+            .map_err(|defect| detail(&defect, Some(path)))?;
         outcomes.push(crate::claim::ClaimOutcome {
             carrier: crate::claim::ClaimCarrier::of(scanned.adapter),
             document: path.clone(),

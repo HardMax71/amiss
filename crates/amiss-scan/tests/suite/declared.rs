@@ -1,8 +1,8 @@
 use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::declared::Declarations;
-use amiss_scan::resolve::TargetCache;
-use amiss_scan::{Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover, resolve};
+use amiss_scan::resolve::{Resolver, TargetCache};
+use amiss_scan::{Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::{Missing, UnsupportedSemantics};
 
@@ -60,23 +60,23 @@ fn bed() -> Bed {
 }
 
 impl Bed {
-    #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-    fn resolve(&mut self, destination: &str) -> Resolution {
-        let document = RepoPath::new("docs/index.md".to_owned()).unwrap();
-        resolve(
+    fn resolver(&mut self) -> Resolver<'_> {
+        Resolver::new(
             &self.repo,
             &mut self.git_resources,
             &mut self.scan_resources,
             &mut self.cache,
             &self.snapshot,
-            None,
-            Adapter::Markdown,
-            &document,
-            false,
-            destination,
         )
-        .unwrap()
-        .1
+    }
+
+    #[expect(clippy::unwrap_used, reason = "test fixture helper")]
+    fn resolve(&mut self, destination: &str) -> Resolution {
+        let document = RepoPath::new("docs/index.md".to_owned()).unwrap();
+        self.resolver()
+            .resolve(None, Adapter::Markdown, &document, false, destination)
+            .unwrap()
+            .1
     }
 }
 
@@ -203,39 +203,33 @@ fn a_tracked_target_resolves_though_an_ignore_file_names_it() {
 fn a_target_awaiting_a_build_time_attribute_is_declared_rather_than_missed() {
     let mut bed = bed();
     let document = RepoPath::new("docs/index.md".to_owned()).expect("document path");
-    let attribute = resolve(
-        &bed.repo,
-        &mut bed.git_resources,
-        &mut bed.scan_resources,
-        &mut bed.cache,
-        &bed.snapshot,
-        None,
-        Adapter::AsciiDoc,
-        &document,
-        false,
-        "{includedir}/shared.adoc",
-    )
-    .expect("resolution")
-    .1;
+    let attribute = bed
+        .resolver()
+        .resolve(
+            None,
+            Adapter::AsciiDoc,
+            &document,
+            false,
+            "{includedir}/shared.adoc",
+        )
+        .expect("resolution")
+        .1;
     assert!(matches!(
         attribute,
         Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent)
     ));
 
-    let markdown = resolve(
-        &bed.repo,
-        &mut bed.git_resources,
-        &mut bed.scan_resources,
-        &mut bed.cache,
-        &bed.snapshot,
-        None,
-        Adapter::Markdown,
-        &document,
-        false,
-        "{includedir}/shared.adoc",
-    )
-    .expect("resolution")
-    .1;
+    let markdown = bed
+        .resolver()
+        .resolve(
+            None,
+            Adapter::Markdown,
+            &document,
+            false,
+            "{includedir}/shared.adoc",
+        )
+        .expect("resolution")
+        .1;
     assert!(
         matches!(markdown, Resolution::Missing(Missing::PathNotFound { .. })),
         "only AsciiDoc substitutes attributes into a destination",
@@ -252,20 +246,11 @@ fn the_asciidoc_destinations_no_tree_can_answer_are_declared() {
         ("some-page-identity", false),
         ("some-page-identity#section", false),
     ] {
-        let row = resolve(
-            &bed.repo,
-            &mut bed.git_resources,
-            &mut bed.scan_resources,
-            &mut bed.cache,
-            &bed.snapshot,
-            None,
-            Adapter::AsciiDoc,
-            &document,
-            is_image,
-            destination,
-        )
-        .expect("resolution")
-        .1;
+        let row = bed
+            .resolver()
+            .resolve(None, Adapter::AsciiDoc, &document, is_image, destination)
+            .expect("resolution")
+            .1;
         assert!(
             matches!(
                 row,

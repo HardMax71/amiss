@@ -1,8 +1,8 @@
 use std::fs;
 
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, TARGET_PROJECTION_DOMAIN, TargetCache};
-use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, discover, discover_index, resolve};
+use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
+use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, discover, discover_index};
 use amiss_wire::controls::ResourceName;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
@@ -264,12 +264,14 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
 
     for reference in ["./sub/", "./sub", "./sub/keep.txt", "./nowhere/"] {
         let mut cache = TargetCache::default();
-        let (tree_intent, tree_row) = resolve(
+        let (tree_intent, tree_row) = Resolver::new(
             &repo,
             &mut git_resources,
             &mut scan_resources,
             &mut cache,
             &from_tree,
+        )
+        .resolve(
             None,
             Adapter::Markdown,
             &RepoPath::new("docs/guide.md".to_owned()).unwrap(),
@@ -278,12 +280,14 @@ fn a_directory_resolves_the_same_through_a_commit_and_through_the_index() {
         )
         .unwrap();
         let mut cache = TargetCache::default();
-        let (index_intent, index_row) = resolve(
+        let (index_intent, index_row) = Resolver::new(
             &repo,
             &mut git_resources,
             &mut scan_resources,
             &mut cache,
             &from_index,
+        )
+        .resolve(
             None,
             Adapter::Markdown,
             &RepoPath::new("docs/guide.md".to_owned()).unwrap(),

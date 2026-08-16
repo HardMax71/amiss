@@ -95,6 +95,104 @@ impl TargetCache {
     }
 }
 
+/// One snapshot-bound resolution session and its shared target evidence.
+pub struct Resolver<'a> {
+    repo: &'a Repository,
+    git: &'a mut GitResources,
+    scan: &'a mut ScanResources,
+    cache: &'a mut TargetCache,
+    snapshot: &'a SnapshotDiscovery,
+}
+
+impl<'a> Resolver<'a> {
+    pub fn new(
+        repo: &'a Repository,
+        git: &'a mut GitResources,
+        scan: &'a mut ScanResources,
+        cache: &'a mut TargetCache,
+        snapshot: &'a SnapshotDiscovery,
+    ) -> Self {
+        cache.bind(scan.cache_scope());
+        Self {
+            repo,
+            git,
+            scan,
+            cache,
+            snapshot,
+        }
+    }
+
+    /// Resolves one semantic destination against the bound snapshot.
+    ///
+    /// # Errors
+    ///
+    /// A target read defect or a snapshot budget crossing.
+    pub fn resolve(
+        &mut self,
+        context: Option<&ForgeContext>,
+        adapter: Adapter,
+        document_path: &RepoPath,
+        is_image: bool,
+        semantic: &str,
+    ) -> Result<(Intent, Resolution), Error> {
+        if adapter == Adapter::AsciiDoc && (is_image || awaits_attribute(semantic)) {
+            let (_, query, fragment) = split_components(semantic);
+            return Ok((
+                unsupported_intent(query, fragment),
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+            ));
+        }
+        let (path_part, query, fragment) = split_components(semantic);
+
+        if let Some(raw_fragment) = &fragment
+            && decode_fragment(raw_fragment).is_none()
+        {
+            return Ok((
+                unsupported_intent(query, fragment.clone()),
+                Resolution::Invalid(InvalidReference::FragmentEncoding),
+            ));
+        }
+
+        if path_part.starts_with("//") {
+            return Ok((
+                unsupported_intent(query, fragment),
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
+            ));
+        }
+        if let Some(scheme) = scheme_of(&path_part) {
+            return absolute(self, context, &path_part, &scheme, query, fragment);
+        }
+        if path_part.starts_with('/') {
+            return Ok((
+                Intent {
+                    kind: IntentKind::SiteRoute,
+                    repository_path: None,
+                    target_kind: None,
+                    external_scheme: None,
+                    query,
+                    fragment,
+                },
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
+            ));
+        }
+        if adapter == Adapter::AsciiDoc && names_a_page_identity(&path_part) {
+            return Ok((
+                unsupported_intent(query, fragment),
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+            ));
+        }
+        native(
+            self,
+            document_path,
+            is_image,
+            &path_part,
+            query,
+            fragment,
+            context.map(|identity| identity.dialect),
+        )
+    }
+}
+
 #[derive(Debug)]
 struct CachedContent {
     mode: GitMode,
@@ -165,86 +263,6 @@ fn unsupported_intent(query: Option<String>, fragment: Option<String>) -> Intent
 ///
 /// A target read defect or a snapshot budget crossing; every syntactic or
 /// structural outcome is a `Resolution`, never an error.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
-pub fn resolve(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
-    context: Option<&ForgeContext>,
-    adapter: Adapter,
-    document_path: &RepoPath,
-    is_image: bool,
-    semantic: &str,
-) -> Result<(Intent, Resolution), Error> {
-    cache.bind(scan.cache_scope());
-    if adapter == Adapter::AsciiDoc && (is_image || awaits_attribute(semantic)) {
-        let (_, query, fragment) = split_components(semantic);
-        return Ok((
-            unsupported_intent(query, fragment),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
-        ));
-    }
-    let (path_part, query, fragment) = split_components(semantic);
-
-    if let Some(raw_fragment) = &fragment
-        && decode_fragment(raw_fragment).is_none()
-    {
-        return Ok((
-            unsupported_intent(query, fragment.clone()),
-            Resolution::Invalid(InvalidReference::FragmentEncoding),
-        ));
-    }
-
-    if path_part.starts_with("//") {
-        return Ok((
-            unsupported_intent(query, fragment),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
-        ));
-    }
-    if let Some(scheme) = scheme_of(&path_part) {
-        return absolute(
-            repo, git, scan, cache, snapshot, context, &path_part, &scheme, query, fragment,
-        );
-    }
-    if path_part.starts_with('/') {
-        return Ok((
-            Intent {
-                kind: IntentKind::SiteRoute,
-                repository_path: None,
-                target_kind: None,
-                external_scheme: None,
-                query,
-                fragment,
-            },
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
-        ));
-    }
-    if adapter == Adapter::AsciiDoc && names_a_page_identity(&path_part) {
-        return Ok((
-            unsupported_intent(query, fragment),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
-        ));
-    }
-    native(
-        repo,
-        git,
-        scan,
-        cache,
-        snapshot,
-        document_path,
-        is_image,
-        &path_part,
-        query,
-        fragment,
-        context.map(|identity| identity.dialect),
-    )
-}
-
 /// RFC 3986 order: the first `#` opens the fragment through end; within the
 /// prefix the first `?` opens the query. `a?x?y#z?u` has query `x?y` and
 /// fragment `z?u`. A field is absent exactly when its delimiter is.
@@ -351,16 +369,8 @@ const fn hex_value(byte: u8) -> Option<u8> {
 /// spelling of the declared host opens same-repository recognition; without
 /// a declared forge context every syntactically valid absolute URI is
 /// external.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 fn absolute(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     context: Option<&ForgeContext>,
     path_part: &str,
     scheme: &str,
@@ -393,9 +403,7 @@ fn absolute(
     if let Some(identity) = context
         && let Some(suffix) = same_repo_suffix(path_part, &identity.host)
     {
-        return forge::resolve(
-            repo, git, scan, cache, snapshot, identity, suffix, query, fragment,
-        );
+        return forge::resolve(resolver, identity, suffix, query, fragment);
     }
     Ok((
         Intent {
@@ -481,16 +489,8 @@ fn authority_valid(authority: &str) -> bool {
 /// terminal slash is an authored directory hint on a link and invalid on an
 /// image; segments decode once and are contained relative to the source
 /// document's parent while normalizing `.` and internal `..`.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 fn native(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     document_path: &RepoPath,
     is_image: bool,
     path_part: &str,
@@ -504,11 +504,7 @@ fn native(
 
     if path_part.is_empty() {
         return self_target(
-            repo,
-            git,
-            scan,
-            cache,
-            snapshot,
+            resolver,
             document_path,
             is_image,
             query.as_deref(),
@@ -529,13 +525,9 @@ fn native(
         query: query.clone(),
         fragment: fragment.clone(),
     };
-    let located = routed(snapshot, &joined, target_kind);
+    let located = routed(resolver.snapshot, &joined, target_kind);
     let row = lookup(
-        repo,
-        git,
-        scan,
-        cache,
-        snapshot,
+        resolver,
         &located,
         target_kind,
         query.as_deref(),
@@ -600,14 +592,7 @@ fn awaits_attribute(semantic: &str) -> bool {
 /// The last question a path the tree does not hold is asked. Only ignore files
 /// on its own ancestor chain can name it, and the nearest one answers, so the
 /// report carries the declaration closest to the target.
-fn declared_untracked(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
-    path: &RepoPath,
-) -> Result<Resolution, Error> {
+fn declared_untracked(resolver: &mut Resolver<'_>, path: &RepoPath) -> Result<Resolution, Error> {
     let raw = path.as_bytes();
     let mut separators: Vec<usize> = raw
         .iter()
@@ -632,7 +617,7 @@ fn declared_untracked(
         let Some(ignore_path) = RepoPath::from_bytes(spelled) else {
             continue;
         };
-        if declares(repo, git, scan, cache, snapshot, &ignore_path, relative)? {
+        if declares(resolver, &ignore_path, relative)? {
             return Ok(Resolution::DeclaredUntracked(DeclaredUntracked {
                 path: path.clone(),
                 declared_by: ignore_path,
@@ -641,7 +626,7 @@ fn declared_untracked(
     }
     Ok(Resolution::Missing(Missing::PathNotFound {
         path: path.clone(),
-        near: case_neighbor(snapshot, path),
+        near: case_neighbor(resolver.snapshot, path),
     }))
 }
 
@@ -659,36 +644,37 @@ fn case_neighbor(snapshot: &SnapshotDiscovery, path: &RepoPath) -> Option<RepoPa
 }
 
 fn declares(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     ignore_path: &RepoPath,
     relative: &[u8],
 ) -> Result<bool, Error> {
-    if let Some(cached) = cache.declarations.get(ignore_path) {
+    if let Some(cached) = resolver.cache.declarations.get(ignore_path) {
         return Ok(cached.declares(relative));
     }
     let Some(Located::Entry(GitMode::RegularFile | GitMode::ExecutableFile, oid)) =
-        snapshot.locate(ignore_path)
+        resolver.snapshot.locate(ignore_path)
     else {
         return Ok(false);
     };
+    let oid = oid.clone();
     let cap = ValueCap {
         resource: ResourceName::IgnoreDeclarationBlobBytes,
-        limit: scan.limits().ignore_declaration_blob_bytes,
+        limit: resolver.scan.limits().ignore_declaration_blob_bytes,
     };
-    let object = repo
-        .read_expected_capped(git, oid, ObjectKind::Blob, cap)
+    let object = resolver
+        .repo
+        .read_expected_capped(resolver.git, &oid, ObjectKind::Blob, cap)
         .map_err(Error::from)?;
-    scan.charge(
+    resolver.scan.charge(
         Aggregate::IgnoreDeclarationBytes,
         u64::try_from(object.body.len()).unwrap_or(u64::MAX),
     )?;
     let parsed = Declarations::parse(&object.body);
     let answer = parsed.declares(relative);
-    cache.declarations.insert(ignore_path.clone(), parsed);
+    resolver
+        .cache
+        .declarations
+        .insert(ignore_path.clone(), parsed);
     Ok(answer)
 }
 
@@ -746,16 +732,8 @@ fn normalized_native_path(
 
 /// An empty native destination targets the source document itself, whether
 /// or not a query or fragment is present.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 fn self_target(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     document_path: &RepoPath,
     is_image: bool,
     query: Option<&str>,
@@ -775,18 +753,7 @@ fn self_target(
         query: query.map(str::to_owned),
         fragment: fragment.map(str::to_owned),
     };
-    let row = lookup(
-        repo,
-        git,
-        scan,
-        cache,
-        snapshot,
-        document_path,
-        self_kind,
-        query,
-        fragment,
-        forge,
-    )?;
+    let row = lookup(resolver, document_path, self_kind, query, fragment, forge)?;
     Ok((intent, row))
 }
 
@@ -798,15 +765,12 @@ fn tree_target(path: &RepoPath) -> Target<RepoPath> {
 
 /// A located regular file, with its content read and digested under the caps.
 fn blob_target(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
+    resolver: &mut Resolver<'_>,
     path: &RepoPath,
     mode: GitMode,
     oid: &Oid,
 ) -> Result<Target<RepoPath>, Error> {
-    let content = read_target(repo, git, scan, cache, path, mode, oid)?;
+    let content = read_target(resolver, path, mode, oid)?;
     let mode = match mode {
         GitMode::RegularFile => BlobMode::Regular,
         GitMode::ExecutableFile => BlobMode::Executable,
@@ -823,25 +787,17 @@ fn blob_target(
 /// content availability, query semantics, fragment semantics, and only then
 /// a resolved target. The typed target survives query and fragment boundary
 /// outcomes so downstream consumers retain the evidence they can evaluate.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
-fn lookup(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+pub(super) fn lookup(
+    resolver: &mut Resolver<'_>,
     path: &RepoPath,
     target_kind: TargetKind,
     query: Option<&str>,
     fragment: Option<&str>,
     forge: Option<ForgeDialect>,
 ) -> Result<Resolution, Error> {
-    let (mode, entry) = match snapshot.locate(path) {
+    let (mode, entry) = match resolver.snapshot.locate(path) {
         None => {
-            return declared_untracked(repo, git, scan, cache, snapshot, path);
+            return declared_untracked(resolver, path);
         }
         Some(Located::Entry(GitMode::Symlink, _)) => {
             return Ok(Resolution::UnsupportedTarget(UnsupportedTarget::Symlink {
@@ -857,18 +813,26 @@ fn lookup(
             (GitMode::Tree, tree_target(path))
         }
         Some(Located::Entry(mode @ (GitMode::RegularFile | GitMode::ExecutableFile), oid)) => {
-            (mode, blob_target(repo, git, scan, cache, path, mode, oid)?)
+            let oid = oid.clone();
+            (mode, blob_target(resolver, path, mode, &oid)?)
         }
     };
 
-    if let Some(refusal) = refusal(snapshot, path, mode, target_kind, query, entry.clone()) {
+    if let Some(refusal) = refusal(
+        resolver.snapshot,
+        path,
+        mode,
+        target_kind,
+        query,
+        entry.clone(),
+    ) {
         return Ok(refusal);
     }
 
     match fragment {
         Some(raw_fragment) if !raw_fragment.is_empty() => {
             let decoded = decode_fragment(raw_fragment).unwrap_or_default();
-            fragment_resolution(scan, cache, snapshot, path, mode, entry, forge, &decoded)
+            fragment_resolution(resolver, path, mode, entry, forge, &decoded)
         }
         Some(_) | None => Ok(Resolution::Resolved(entry)),
     }
@@ -907,14 +871,8 @@ fn refusal(
 /// The fragment precedence on a located target: a tree carries none, the line
 /// grammar wins where it applies, a document class is asked for the heading
 /// identity, and everything else keeps its unsupported answer.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the bound-adapter lookup needs the snapshot beside the seven resolution inputs"
-)]
 fn fragment_resolution(
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     path: &RepoPath,
     mode: GitMode,
     entry: Target<RepoPath>,
@@ -930,21 +888,17 @@ fn fragment_resolution(
         return Err(Error::Internal);
     };
     if let Some(range) = line_fragment(forge, decoded) {
-        return line_resolution(scan, cache, path, mode, blob, range);
+        return line_resolution(resolver, path, mode, blob, range);
     }
     match classify(path.as_bytes()) {
         Some(classification) => match classification.adapter() {
-            Some(adapter) => {
-                anchor_resolution(scan, cache, snapshot, path, mode, blob, adapter, decoded)
-            }
+            Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::Fragment(blob),
             )),
         },
-        None => match snapshot.bound_adapter(path) {
-            Some(adapter) => {
-                anchor_resolution(scan, cache, snapshot, path, mode, blob, adapter, decoded)
-            }
+        None => match resolver.snapshot.bound_adapter(path) {
+            Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::CodeFragment(Target::Blob(blob)),
             )),
@@ -956,14 +910,8 @@ fn fragment_resolution(
 /// publish for the target. A target this evaluation cannot read, parse, or
 /// afford keeps the unsupported-semantics answer, so nothing is reported
 /// missing on the strength of a parse that did not happen.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the retained-set lookup needs the snapshot beside the seven resolution inputs"
-)]
 fn anchor_resolution(
-    scan_resources: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     path: &RepoPath,
     mode: GitMode,
     blob: BlobTarget<RepoPath>,
@@ -972,7 +920,7 @@ fn anchor_resolution(
 ) -> Result<Resolution, Error> {
     let unsupported =
         Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(blob.clone()));
-    let Some(cached) = cache.read.get_mut(path) else {
+    let Some(cached) = resolver.cache.read.get_mut(path) else {
         return Err(Error::Internal);
     };
     if cached.mode != mode || cached.content.evidence() != blob.content {
@@ -988,13 +936,13 @@ fn anchor_resolution(
     };
 
     if matches!(slot, Anchors::Unread) {
-        let charged = scan_resources.charge(
+        let charged = resolver.scan.charge(
             Aggregate::HeadingAnchorBytes,
             u64::try_from(body.len()).unwrap_or(u64::MAX),
         );
-        let allowance = scan_resources.heading_anchor_allowance();
+        let allowance = resolver.scan.heading_anchor_allowance();
         *slot = match charged {
-            Ok(()) => match retained_identities(snapshot, path, adapter) {
+            Ok(()) => match retained_identities(resolver.snapshot, path, adapter) {
                 Some((identities, transcluding)) => {
                     if transcluding {
                         Anchors::Partial(identities)
@@ -1058,52 +1006,37 @@ fn fold_typography(text: &str) -> String {
     text.to_lowercase().replace('_', "-")
 }
 
-/// Answers a Sphinx `:ref:` against the labels the snapshot's documents
-/// declare. The label rides the intent as its fragment, so identity and
-/// correlation flow through the shapes every other reference already uses;
-/// a unique declaration delegates to the ordinary target lookup of the
-/// declaring document.
-pub(crate) fn resolve_label(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
-    label: &str,
-) -> Result<(Intent, Resolution), Error> {
-    let intent = Intent {
-        kind: IntentKind::Label,
-        repository_path: None,
-        target_kind: None,
-        external_scheme: None,
-        query: None,
-        fragment: Some(label.to_owned()),
-    };
-    let resolution = match snapshot.labels.get(&amiss_rst::normalized_label(label)) {
-        None if label.contains(':') => {
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
-        }
-        None => Resolution::Missing(Missing::LabelNotDeclared),
-        Some(crate::discovery::LabelState::Duplicated) => {
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::DuplicateLabel)
-        }
-        Some(crate::discovery::LabelState::Declared(owner)) => {
-            let owner = owner.clone();
-            lookup(
-                repo,
-                git,
-                scan,
-                cache,
-                snapshot,
-                &owner,
-                TargetKind::Blob,
-                None,
-                None,
-                None,
-            )?
-        }
-    };
-    Ok((intent, resolution))
+impl Resolver<'_> {
+    /// Answers a Sphinx `:ref:` against the labels the snapshot's documents
+    /// declare, delegating a unique declaration to ordinary target lookup.
+    pub(crate) fn resolve_label(&mut self, label: &str) -> Result<(Intent, Resolution), Error> {
+        let intent = Intent {
+            kind: IntentKind::Label,
+            repository_path: None,
+            target_kind: None,
+            external_scheme: None,
+            query: None,
+            fragment: Some(label.to_owned()),
+        };
+        let resolution = match self
+            .snapshot
+            .labels
+            .get(&amiss_rst::normalized_label(label))
+        {
+            None if label.contains(':') => {
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+            }
+            None => Resolution::Missing(Missing::LabelNotDeclared),
+            Some(crate::discovery::LabelState::Duplicated) => {
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::DuplicateLabel)
+            }
+            Some(crate::discovery::LabelState::Declared(owner)) => {
+                let owner = owner.clone();
+                lookup(self, &owner, TargetKind::Blob, None, None, None)?
+            }
+        };
+        Ok((intent, resolution))
+    }
 }
 
 /// A document that splices another file publishes identities this engine never
@@ -1138,82 +1071,83 @@ fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {
         .any(|occurrence| crate::scan::transcluding_construct(occurrence.construct))
 }
 
-/// Answers one value claim against the snapshot: the target must be a
-/// readable regular blob whose claimed line, terminator aside, is exactly
-/// the expected text.
-///
-/// # Errors
-///
-/// A Git defect or a crossed resource ceiling while reading the target.
-pub fn resolve_claim(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan_resources: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
-    claim: &crate::claim::ValueClaim,
-) -> Result<crate::claim::ClaimVerdict, Error> {
-    use crate::claim::{ClaimMissingReason, ClaimVerdict};
+impl Resolver<'_> {
+    /// Answers one value claim against the snapshot: the target must be a
+    /// readable regular blob whose claimed line is exactly the expected text.
+    ///
+    /// # Errors
+    ///
+    /// A Git defect or a crossed resource ceiling while reading the target.
+    pub fn resolve_claim(
+        &mut self,
+        claim: &crate::claim::ValueClaim,
+    ) -> Result<crate::claim::ClaimVerdict, Error> {
+        use crate::claim::{ClaimMissingReason, ClaimVerdict};
 
-    cache.bind(scan_resources.cache_scope());
-    let Some((mode, oid)) = snapshot.entries.get(claim.path.as_bytes()) else {
-        return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::Absent));
-    };
-    match mode {
-        GitMode::Tree | GitMode::Gitlink | GitMode::Symlink => {
-            return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::NotABlob));
+        let Some((mode, oid)) = self
+            .snapshot
+            .entries
+            .get(claim.path.as_bytes())
+            .map(|(mode, oid)| (*mode, oid.clone()))
+        else {
+            return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::Absent));
+        };
+        match mode {
+            GitMode::Tree | GitMode::Gitlink | GitMode::Symlink => {
+                return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::NotABlob));
+            }
+            GitMode::RegularFile | GitMode::ExecutableFile => {}
         }
-        GitMode::RegularFile | GitMode::ExecutableFile => {}
-    }
-    let evidence = read_target(repo, git, scan_resources, cache, &claim.path, *mode, oid)?;
-    if matches!(evidence, BlobContent::LfsPointer { .. }) {
-        return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::LfsPointer));
-    }
-    let Some(cached) = cache.read.get_mut(&claim.path) else {
-        return Err(Error::Internal);
-    };
-    if cached.mode != *mode || cached.content.evidence() != evidence {
-        return Err(Error::Internal);
-    }
-    let Content::Ordinary {
-        body,
-        line_projections,
-        ..
-    } = &mut cached.content
-    else {
-        return Err(Error::Internal);
-    };
-    let range = LineRange {
-        first: claim.line,
-        last: claim.line,
-    };
-    if let std::collections::btree_map::Entry::Vacant(slot) = line_projections.entry(range) {
-        scan_resources.charge(
-            Aggregate::LineFragmentBytes,
-            u64::try_from(body.len()).unwrap_or(u64::MAX),
-        )?;
-        let projection = selected_line_bytes(body, range).map(|selected| {
-            target_projection(
-                TARGET_LINE_PROJECTION_DOMAIN,
-                *mode,
-                hb(RAW_EVIDENCE_DOMAIN, selected),
-            )
-        });
-        slot.insert(projection);
-    }
-    let Some(selected) = selected_line_bytes(body, range) else {
-        return Ok(ClaimVerdict::TargetMissing(
-            ClaimMissingReason::LineOutOfRange,
-        ));
-    };
-    let observed = line_content(selected);
-    if observed == claim.expected.as_bytes() {
-        Ok(ClaimVerdict::Attested)
-    } else {
-        Ok(ClaimVerdict::Broken {
-            observed_digest: hb(RAW_EVIDENCE_DOMAIN, observed),
-            observed: observed.to_vec(),
-        })
+        let evidence = read_target(self, &claim.path, mode, &oid)?;
+        if matches!(evidence, BlobContent::LfsPointer { .. }) {
+            return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::LfsPointer));
+        }
+        let Some(cached) = self.cache.read.get_mut(&claim.path) else {
+            return Err(Error::Internal);
+        };
+        if cached.mode != mode || cached.content.evidence() != evidence {
+            return Err(Error::Internal);
+        }
+        let Content::Ordinary {
+            body,
+            line_projections,
+            ..
+        } = &mut cached.content
+        else {
+            return Err(Error::Internal);
+        };
+        let range = LineRange {
+            first: claim.line,
+            last: claim.line,
+        };
+        if let std::collections::btree_map::Entry::Vacant(slot) = line_projections.entry(range) {
+            self.scan.charge(
+                Aggregate::LineFragmentBytes,
+                u64::try_from(body.len()).unwrap_or(u64::MAX),
+            )?;
+            let projection = selected_line_bytes(body, range).map(|selected| {
+                target_projection(
+                    TARGET_LINE_PROJECTION_DOMAIN,
+                    mode,
+                    hb(RAW_EVIDENCE_DOMAIN, selected),
+                )
+            });
+            slot.insert(projection);
+        }
+        let Some(selected) = selected_line_bytes(body, range) else {
+            return Ok(ClaimVerdict::TargetMissing(
+                ClaimMissingReason::LineOutOfRange,
+            ));
+        };
+        let observed = line_content(selected);
+        if observed == claim.expected.as_bytes() {
+            Ok(ClaimVerdict::Attested)
+        } else {
+            Ok(ClaimVerdict::Broken {
+                observed_digest: hb(RAW_EVIDENCE_DOMAIN, observed),
+                observed: observed.to_vec(),
+            })
+        }
     }
 }
 
@@ -1234,14 +1168,13 @@ struct LineRange {
 }
 
 fn line_resolution(
-    scan_resources: &mut ScanResources,
-    cache: &mut TargetCache,
+    resolver: &mut Resolver<'_>,
     path: &RepoPath,
     mode: GitMode,
     mut blob: BlobTarget<RepoPath>,
     range: LineRange,
 ) -> Result<Resolution, Error> {
-    let Some(cached) = cache.read.get_mut(path) else {
+    let Some(cached) = resolver.cache.read.get_mut(path) else {
         return Err(Error::Internal);
     };
     if cached.mode != mode || cached.content.evidence() != blob.content {
@@ -1261,7 +1194,7 @@ fn line_resolution(
     let projection = if let Some(cached) = line_projections.get(&range).copied() {
         cached
     } else {
-        scan_resources.charge(
+        resolver.scan.charge(
             Aggregate::LineFragmentBytes,
             u64::try_from(body.len()).unwrap_or(u64::MAX),
         )?;
@@ -1367,15 +1300,12 @@ fn target_projection(domain: &str, mode: GitMode, raw_digest: Digest) -> Digest 
 /// identity in the bound scan scope. Pointer content keeps its raw digest and
 /// no projection; ordinary content carries both.
 fn read_target(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
+    resolver: &mut Resolver<'_>,
     path: &RepoPath,
     mode: GitMode,
     oid: &Oid,
 ) -> Result<BlobContent, Error> {
-    if let Some(cached) = cache.read.get(path)
+    if let Some(cached) = resolver.cache.read.get(path)
         && cached.mode == mode
         && &cached.oid == oid
     {
@@ -1383,12 +1313,13 @@ fn read_target(
     }
     let cap = ValueCap {
         resource: ResourceName::ReferencedTargetBlobBytes,
-        limit: scan.limits().referenced_target_blob_bytes,
+        limit: resolver.scan.limits().referenced_target_blob_bytes,
     };
-    let object = repo
-        .read_expected_capped(git, oid, ObjectKind::Blob, cap)
+    let object = resolver
+        .repo
+        .read_expected_capped(resolver.git, oid, ObjectKind::Blob, cap)
         .map_err(Error::from)?;
-    scan.charge(
+    resolver.scan.charge(
         Aggregate::ReferencedTargetBytes,
         u64::try_from(object.body.len()).unwrap_or(u64::MAX),
     )?;
@@ -1405,7 +1336,7 @@ fn read_target(
         }
     };
     let evidence = content.evidence();
-    cache.read.insert(
+    resolver.cache.read.insert(
         path.clone(),
         CachedContent {
             mode,

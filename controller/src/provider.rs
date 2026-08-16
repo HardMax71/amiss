@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fmt;
 use std::sync::Arc;
 
 use crate::{
@@ -14,26 +13,17 @@ pub struct AuthenticatedDelivery {
     pub provider_run: ProviderRunIdentity,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ProviderError {
+    #[error("provider delivery authentication failed")]
     Authentication,
+    #[error("provider authorization was revoked")]
     AuthorizationRevoked,
+    #[error("provider is unavailable")]
     Unavailable,
+    #[error("provider returned an invalid response")]
     InvalidResponse,
 }
-
-impl fmt::Display for ProviderError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Authentication => "provider delivery authentication failed",
-            Self::AuthorizationRevoked => "provider authorization was revoked",
-            Self::Unavailable => "provider is unavailable",
-            Self::InvalidResponse => "provider returned an invalid response",
-        })
-    }
-}
-
-impl std::error::Error for ProviderError {}
 
 pub trait ProviderAdapter: Send + Sync {
     fn namespace(&self) -> &ProviderNamespace;
@@ -85,18 +75,11 @@ pub trait ProviderAdapter: Send + Sync {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RegistryError {
+    #[error("provider namespace is already registered")]
     DuplicateNamespace,
 }
-
-impl fmt::Display for RegistryError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("provider namespace is already registered")
-    }
-}
-
-impl std::error::Error for RegistryError {}
 
 #[derive(Default)]
 pub struct AdapterRegistry {

@@ -1,7 +1,7 @@
 use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_scan::resolve::TargetCache;
-use amiss_scan::{Resolution, ScanLimits, ScanResources, discover, resolve};
+use amiss_scan::resolve::{Resolver, TargetCache};
+use amiss_scan::{Resolution, ScanLimits, ScanResources, discover};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::{Missing, Target, UnsupportedSemantics};
 
@@ -169,35 +169,34 @@ fn an_rst_include_leaves_absent_anchors_undecided() {
     )
     .unwrap();
     let mut cache = TargetCache::default();
-
-    let (_intent, held) = resolve(
+    let mut resolver = Resolver::new(
         &repo,
         &mut git_resources,
         &mut scan_resources,
         &mut cache,
         &discovery,
-        None,
-        Adapter::Markdown,
-        &RepoPath::new("README.md".to_owned()).unwrap(),
-        false,
-        "docs/host.rst#present",
-    )
-    .unwrap();
+    );
+
+    let (_intent, held) = resolver
+        .resolve(
+            None,
+            Adapter::Markdown,
+            &RepoPath::new("README.md".to_owned()).unwrap(),
+            false,
+            "docs/host.rst#present",
+        )
+        .unwrap();
     assert!(matches!(held, Resolution::Resolved(_)), "{held:?}");
 
-    let (_intent, spliced) = resolve(
-        &repo,
-        &mut git_resources,
-        &mut scan_resources,
-        &mut cache,
-        &discovery,
-        None,
-        Adapter::Markdown,
-        &RepoPath::new("README.md".to_owned()).unwrap(),
-        false,
-        "docs/host.rst#spliced",
-    )
-    .unwrap();
+    let (_intent, spliced) = resolver
+        .resolve(
+            None,
+            Adapter::Markdown,
+            &RepoPath::new("README.md".to_owned()).unwrap(),
+            false,
+            "docs/host.rst#spliced",
+        )
+        .unwrap();
     assert!(
         matches!(spliced, Resolution::UnsupportedSemantics(_)),
         "an anchor behind an include is undecided, got {spliced:?}"

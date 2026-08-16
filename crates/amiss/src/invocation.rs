@@ -433,45 +433,47 @@ fn classify(gathered: &Gathered, format: OutputFormat) -> Result<Command, BTreeS
         codes.insert(Code::InvalidInvocation);
     }
 
-    let (repo, object_format) = classify_target(&mut codes, gathered);
+    let target = record(&mut codes, classify_target(gathered));
+    let object_format = target.as_ref().ok().map(|(_, format)| *format);
 
-    let base = decode_oid(&mut codes, object_format, &gathered.base);
-    let candidate_oid = decode_oid(&mut codes, object_format, &gathered.candidate);
-    if let (Some(base), Some(candidate)) = (&base, &candidate_oid)
+    let base = record(&mut codes, decode_oid(object_format, &gathered.base));
+    let candidate_oid = record(&mut codes, decode_oid(object_format, &gathered.candidate));
+    if let (Ok(Some(base)), Ok(Some(candidate))) = (&base, &candidate_oid)
         && base == candidate
     {
         codes.insert(Code::InvalidInvocation);
     }
 
-    let profile = if gathered.verb == Some(Verb::Adopt) {
-        Some(Profile::Enforce)
-    } else {
-        match gathered.profile.unique_value() {
-            Some("observe") => Some(Profile::Observe),
-            Some("enforce-introduced") => Some(Profile::EnforceIntroduced),
-            Some("enforce") => Some(Profile::Enforce),
-            Some(_) => {
-                codes.insert(Code::InvalidProfile);
-                None
-            }
-            None => None,
-        }
-    };
-
-    let adoption = classify_adoption(&mut codes, gathered);
-
-    let identity = classify_identity(&mut codes, gathered);
-    let forge = classify_forge(&mut codes, gathered, &identity);
+    let profile = record(&mut codes, classify_profile(gathered));
+    let adoption = record(&mut codes, classify_adoption(gathered));
+    let identity = record(&mut codes, classify_identity(gathered));
+    let forge = record(&mut codes, classify_forge(gathered, &identity));
 
     if !codes.is_empty() {
         return Err(codes);
     }
-    match (gathered.verb, repo, object_format, base, profile, identity) {
-        (Some(verb), Some(repo), Some(object_format), Some(base), Some(profile), Ok(identity)) => {
-            let candidate = match candidate_oid {
-                Some(oid) => CandidateSelector::Commit(oid),
-                None => CandidateSelector::Index,
-            };
+    match (
+        gathered.verb,
+        target,
+        base,
+        candidate_oid,
+        profile,
+        adoption,
+        identity,
+        forge,
+    ) {
+        (
+            Some(verb),
+            Ok((repo, object_format)),
+            Ok(Some(base)),
+            Ok(candidate_oid),
+            Ok(profile),
+            Ok(adoption),
+            Ok(identity),
+            Ok(forge),
+        ) => {
+            let candidate =
+                candidate_oid.map_or(CandidateSelector::Index, CandidateSelector::Commit);
             Ok(Command::Scan(Box::new(Invocation {
                 verb,
                 adoption,
@@ -657,27 +659,32 @@ fn classify_assess(
     })
 }
 
-fn classify_target(
-    codes: &mut BTreeSet<Code>,
-    gathered: &Gathered,
-) -> (Option<PathBuf>, Option<ObjectFormat>) {
-    let repo = match gathered.repo.unique_value() {
-        Some("") | None => {
-            codes.insert(Code::InvalidInvocation);
-            None
-        }
-        Some(path) => Some(PathBuf::from(path)),
-    };
+fn classify_target(gathered: &Gathered) -> Validation<(PathBuf, ObjectFormat)> {
+    let repo = gathered
+        .repo
+        .unique_value()
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .ok_or(Code::InvalidInvocation)?;
     let object_format = match gathered.object_format.unique_value() {
-        Some("sha1") => Some(ObjectFormat::Sha1),
-        Some("sha256") => Some(ObjectFormat::Sha256),
-        Some(_) => {
-            codes.insert(Code::InvalidInvocation);
-            None
-        }
-        None => None,
+        Some("sha1") => ObjectFormat::Sha1,
+        Some("sha256") => ObjectFormat::Sha256,
+        Some(_) | None => return Err(Code::InvalidInvocation),
     };
-    (repo, object_format)
+    Ok((repo, object_format))
+}
+
+fn classify_profile(gathered: &Gathered) -> Validation<Profile> {
+    if gathered.verb == Some(Verb::Adopt) {
+        return Ok(Profile::Enforce);
+    }
+    match gathered.profile.unique_value() {
+        Some("observe") => Ok(Profile::Observe),
+        Some("enforce-introduced") => Ok(Profile::EnforceIntroduced),
+        Some("enforce") => Ok(Profile::Enforce),
+        Some(_) => Err(Code::InvalidProfile),
+        None => Err(Code::InvalidInvocation),
+    }
 }
 
 /// The per-verb shape: adoption bakes enforce so the profile is refused
@@ -731,18 +738,23 @@ fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
 /// Every adoption value is validated where the grammar can see it: the
 /// floor digest by its exact spelling, both instants by the wire's own
 /// clock grammar, and the free-text fields by being nonempty.
-fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<Adoption> {
+fn classify_adoption(gathered: &Gathered) -> Validation<Option<Adoption>> {
     if gathered.verb != Some(Verb::Adopt) {
-        return None;
+        return Ok(None);
     }
-    let digest = gathered.floor_digest.unique_value().filter(|value| {
-        value.strip_prefix("sha256:").is_some_and(|hex| {
-            hex.len() == 64
-                && hex
-                    .bytes()
-                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    let floor_digest = gathered
+        .floor_digest
+        .unique_value()
+        .filter(|value| {
+            value.strip_prefix("sha256:").is_some_and(|hex| {
+                hex.len() == 64
+                    && hex
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            })
         })
-    });
+        .map(str::to_owned)
+        .ok_or(Code::InvalidInvocation)?;
     let instant = |slot: &Slot| {
         slot.unique_value()
             .filter(|value| amiss_wire::model::UtcInstant::new((*value).to_owned()).is_some())
@@ -753,45 +765,22 @@ fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<
             .filter(|value| !value.is_empty())
             .map(str::to_owned)
     };
-    let ordered = matches!(
-        (
-            instant(&gathered.created_at),
-            instant(&gathered.expires_at)
-        ),
-        (Some(created), Some(expires)) if created < expires
-    );
-    if gathered.verb == Some(Verb::Adopt) && !ordered {
-        codes.insert(Code::InvalidInvocation);
+    let owner = nonempty(&gathered.debt_owner).ok_or(Code::InvalidInvocation)?;
+    let reason = nonempty(&gathered.debt_reason).ok_or(Code::InvalidInvocation)?;
+    let created_at = instant(&gathered.created_at).ok_or(Code::InvalidInvocation)?;
+    let expires_at = instant(&gathered.expires_at).ok_or(Code::InvalidInvocation)?;
+    let output = nonempty(&gathered.debt_output).ok_or(Code::InvalidInvocation)?;
+    if created_at >= expires_at {
+        return Err(Code::InvalidInvocation);
     }
-    let fields = (
-        digest.map(str::to_owned),
-        nonempty(&gathered.debt_owner),
-        nonempty(&gathered.debt_reason),
-        instant(&gathered.created_at),
-        instant(&gathered.expires_at),
-        nonempty(&gathered.debt_output),
-    );
-    if let (
-        Some(floor_digest),
-        Some(owner),
-        Some(reason),
-        Some(created_at),
-        Some(expires_at),
-        Some(output),
-    ) = fields
-    {
-        Some(Adoption {
-            floor_digest,
-            owner,
-            reason,
-            created_at,
-            expires_at,
-            output: PathBuf::from(output),
-        })
-    } else {
-        codes.insert(Code::InvalidInvocation);
-        None
-    }
+    Ok(Some(Adoption {
+        floor_digest,
+        owner,
+        reason,
+        created_at,
+        expires_at,
+        output: PathBuf::from(output),
+    }))
 }
 
 /// The dialect law: an explicit `--forge` names a grammar the engine knows
@@ -801,68 +790,58 @@ fn classify_adoption(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Option<
 /// external. The github dialect cannot match a nested owner, so that
 /// pairing is refused rather than left deterministically dead.
 fn classify_forge(
-    codes: &mut BTreeSet<Code>,
     gathered: &Gathered,
-    identity: &Result<Option<ProviderIdentity>, ()>,
-) -> Option<ForgeDialect> {
-    let declared = match (gathered.forge.present(), gathered.forge.unique_value()) {
-        (false, _) => None,
-        (true, Some(value)) => match value.parse::<ForgeDialect>() {
-            Ok(dialect) => Some(dialect),
-            Err(_unknown) => {
-                codes.insert(Code::InvalidInvocation);
-                return None;
-            }
-        },
-        (true, None) => {
-            codes.insert(Code::InvalidInvocation);
-            return None;
-        }
+    identity: &Validation<Option<ProviderIdentity>>,
+) -> Validation<Option<ForgeDialect>> {
+    let declared = if gathered.forge.present() {
+        Some(
+            gathered
+                .forge
+                .unique_value()
+                .ok_or(Code::InvalidInvocation)?
+                .parse::<ForgeDialect>()
+                .map_err(|_unknown| Code::InvalidInvocation)?,
+        )
+    } else {
+        None
     };
-    match identity {
-        Ok(Some(identity)) => {
-            let Some(dialect) =
-                declared.or_else(|| ForgeDialect::default_for_host(identity.repository.host()))
-            else {
-                codes.insert(Code::InvalidEvent);
-                return None;
-            };
-            if matches!(dialect, ForgeDialect::Github | ForgeDialect::Gitea)
-                && identity.repository.owner().contains('/')
-            {
-                codes.insert(Code::InvalidEvent);
-                return None;
-            }
-            Some(dialect)
-        }
-        Ok(None) => {
-            if gathered.forge.present() {
-                codes.insert(Code::InvalidInvocation);
-            }
-            None
-        }
-        Err(()) => None,
+    let Some(identity) = identity.as_ref().map_err(|code| *code)? else {
+        return if declared.is_some() {
+            Err(Code::InvalidInvocation)
+        } else {
+            Ok(None)
+        };
+    };
+    let dialect = declared
+        .or_else(|| ForgeDialect::default_for_host(identity.repository.host()))
+        .ok_or(Code::InvalidEvent)?;
+    if matches!(dialect, ForgeDialect::Github | ForgeDialect::Gitea)
+        && identity.repository.owner().contains('/')
+    {
+        Err(Code::InvalidEvent)
+    } else {
+        Ok(Some(dialect))
     }
 }
 
-fn decode_oid(
-    codes: &mut BTreeSet<Code>,
-    object_format: Option<ObjectFormat>,
-    slot: &Slot,
-) -> Option<Oid> {
+fn decode_oid(object_format: Option<ObjectFormat>, slot: &Slot) -> Validation<Option<Oid>> {
     let (Some(format), Some(raw)) = (object_format, slot.unique_value()) else {
-        return None;
+        return Ok(None);
     };
-    let oid = Oid::new(format, raw.to_owned());
-    if oid.is_none() {
-        codes.insert(Code::InvalidInvocation);
-    }
-    oid
+    Oid::new(format, raw.to_owned())
+        .map(Some)
+        .ok_or(Code::InvalidInvocation)
 }
 
-type IdentityResult = Result<Option<ProviderIdentity>, ()>;
+type Validation<T> = Result<T, Code>;
 
-fn classify_identity(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> IdentityResult {
+fn record<T>(codes: &mut BTreeSet<Code>, validation: Validation<T>) -> Validation<T> {
+    validation.inspect_err(|code| {
+        codes.insert(*code);
+    })
+}
+
+fn classify_identity(gathered: &Gathered) -> Validation<Option<ProviderIdentity>> {
     let present = [
         gathered.repository.present(),
         gathered.ref_name.present(),
@@ -872,30 +851,26 @@ fn classify_identity(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Identit
         return Ok(None);
     }
     if present != [true, true, true] {
-        codes.insert(Code::InvalidInvocation);
-        return Err(());
+        return Err(Code::InvalidInvocation);
     }
-    let (Some(repository), Some(ref_value), Some(default_value)) = (
-        gathered.repository.unique_value(),
-        gathered.ref_name.unique_value(),
-        gathered.default_branch_ref.unique_value(),
-    ) else {
-        return Err(());
-    };
+    let repository = gathered
+        .repository
+        .unique_value()
+        .ok_or(Code::InvalidInvocation)?;
+    let ref_value = gathered
+        .ref_name
+        .unique_value()
+        .ok_or(Code::InvalidInvocation)?;
+    let default_value = gathered
+        .default_branch_ref
+        .unique_value()
+        .ok_or(Code::InvalidInvocation)?;
+    let (host, owner_and_name) = repository.split_once('/').ok_or(Code::InvalidInvocation)?;
+    let (owner, name) = owner_and_name
+        .rsplit_once('/')
+        .ok_or(Code::InvalidInvocation)?;
 
-    let parts: Vec<&str> = repository.split('/').collect();
-    if parts.len() < 3 {
-        codes.insert(Code::InvalidInvocation);
-        return Err(());
-    }
-    let host = parts.first().copied().unwrap_or_default();
-    let name = parts.last().copied().unwrap_or_default();
-    let owner = parts
-        .get(1..parts.len().saturating_sub(1))
-        .unwrap_or_default()
-        .join("/");
-
-    let identity = RepositoryIdentity::new(host.to_owned(), owner, name.to_owned());
+    let identity = RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned());
     let ref_name = BranchRef::new(ref_value.to_owned());
     let default_branch_ref = BranchRef::new(default_value.to_owned());
     if let (Some(repository), Some(ref_name), Some(default_branch_ref)) =
@@ -907,7 +882,6 @@ fn classify_identity(codes: &mut BTreeSet<Code>, gathered: &Gathered) -> Identit
             default_branch_ref,
         }))
     } else {
-        codes.insert(Code::InvalidEvent);
-        Err(())
+        Err(Code::InvalidEvent)
     }
 }
