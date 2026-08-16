@@ -1,42 +1,25 @@
-use amiss_git::{GitResources, Repository};
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
 
 use crate::Error;
-use crate::discovery::SnapshotDiscovery;
-use crate::resources::ScanResources;
 
 use super::{
-    ForgeContext, Intent, Resolution, TargetCache, decode_segment, lookup, unsupported_intent,
+    ForgeContext, Intent, Resolution, Resolver, decode_segment, lookup, unsupported_intent,
 };
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 pub(super) fn resolve(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     context: &ForgeContext,
     suffix: &str,
     query: Option<String>,
     fragment: Option<String>,
 ) -> Result<(Intent, Resolution), Error> {
     match context.dialect {
-        ForgeDialect::Github => github(
-            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
-        ),
-        ForgeDialect::Gitlab => gitlab(
-            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
-        ),
-        ForgeDialect::Gitea => gitea(
-            repo, git, scan, cache, snapshot, context, suffix, query, fragment,
-        ),
+        ForgeDialect::Github => github(resolver, context, suffix, query, fragment),
+        ForgeDialect::Gitlab => gitlab(resolver, context, suffix, query, fragment),
+        ForgeDialect::Gitea => gitea(resolver, context, suffix, query, fragment),
     }
 }
 
@@ -60,16 +43,8 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
 /// ASCII owner and repository folded only `A`-`Z`, each later segment decoded
 /// exactly once, the trusted refs matched by whole segments, and the
 /// remaining path validated before the candidate-or-default decision.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 fn github(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     identity: &ForgeContext,
     suffix: &str,
     query: Option<String>,
@@ -123,11 +98,7 @@ fn github(
         ));
     }
     let row = lookup(
-        repo,
-        git,
-        scan,
-        cache,
-        snapshot,
+        resolver,
         &joined,
         target_kind,
         query.as_deref(),
@@ -144,16 +115,8 @@ fn github(
 /// at index two or later is the separator or the URL is nobody's; anything
 /// without one, including the legacy pre-separator form and `/-/raw/`, is
 /// foreign.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 fn gitlab(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     identity: &ForgeContext,
     suffix: &str,
     query: Option<String>,
@@ -214,11 +177,7 @@ fn gitlab(
         ));
     }
     let row = lookup(
-        repo,
-        git,
-        scan,
-        cache,
-        snapshot,
+        resolver,
         &joined,
         target_kind,
         query.as_deref(),
@@ -237,16 +196,8 @@ fn gitlab(
 /// `either`, or `tree` under a directory-hint slash. The untyped legacy
 /// `src/<ref>/` form and every other selector are foreign: only the spellings
 /// the forge's own browser emits are pinned.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the resolver context is the contract's"
-)]
 fn gitea(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    cache: &mut TargetCache,
-    snapshot: &SnapshotDiscovery,
+    resolver: &mut Resolver<'_>,
     identity: &ForgeContext,
     suffix: &str,
     query: Option<String>,
@@ -317,11 +268,7 @@ fn gitea(
         ));
     }
     let row = lookup(
-        repo,
-        git,
-        scan,
-        cache,
-        snapshot,
+        resolver,
         &joined,
         target_kind,
         query.as_deref(),

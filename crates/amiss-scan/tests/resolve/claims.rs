@@ -1,7 +1,6 @@
 #![expect(clippy::expect_used, reason = "fixed claim fixtures must fail loudly")]
 
 use amiss_scan::claim::{ClaimMissingReason, ClaimVerdict, ValueClaim};
-use amiss_scan::resolve::resolve_claim;
 use amiss_scan::{Error, ScanLimits};
 use amiss_wire::model::RepoPath;
 
@@ -22,15 +21,9 @@ fn claim(path: &str, line: u64, expected: &str) -> ValueClaim {
 fn a_claim_answers_by_the_ladder() {
     let mut bed = bed();
     let mut verdict = |value: &ValueClaim| {
-        resolve_claim(
-            &bed.repo,
-            &mut bed.git_resources,
-            &mut bed.scan_resources,
-            &mut bed.cache,
-            &bed.snapshot,
-            value,
-        )
-        .expect("a claim inside every ceiling resolves")
+        bed.resolver()
+            .resolve_claim(value)
+            .expect("a claim inside every ceiling resolves")
     };
 
     for (reason, line, expected) in [
@@ -107,38 +100,23 @@ fn a_claim_selection_charges_the_fragment_meter_once() {
         aggregate_line_fragment_evaluation_bytes_per_snapshot: body,
         ..ScanLimits::CONTRACT
     });
-    let first = resolve_claim(
-        &bed.repo,
-        &mut bed.git_resources,
-        &mut bed.scan_resources,
-        &mut bed.cache,
-        &bed.snapshot,
-        &claim("src/lines.rs", 1, "one"),
-    );
+    let first = bed
+        .resolver()
+        .resolve_claim(&claim("src/lines.rs", 1, "one"));
     assert_eq!(
         first.expect("the first selection fills the budget exactly"),
         ClaimVerdict::Attested
     );
-    let memoized = resolve_claim(
-        &bed.repo,
-        &mut bed.git_resources,
-        &mut bed.scan_resources,
-        &mut bed.cache,
-        &bed.snapshot,
-        &claim("src/lines.rs", 1, "not one"),
-    );
+    let memoized = bed
+        .resolver()
+        .resolve_claim(&claim("src/lines.rs", 1, "not one"));
     assert!(
         matches!(memoized, Ok(ClaimVerdict::Broken { .. })),
         "the same range answers from the memo with nothing left to spend: {memoized:?}"
     );
-    let second_range = resolve_claim(
-        &bed.repo,
-        &mut bed.git_resources,
-        &mut bed.scan_resources,
-        &mut bed.cache,
-        &bed.snapshot,
-        &claim("src/lines.rs", 2, "two"),
-    );
+    let second_range = bed
+        .resolver()
+        .resolve_claim(&claim("src/lines.rs", 2, "two"));
     assert!(
         matches!(second_range, Err(Error::ResourceLimit { .. })),
         "a new range needs a budget the snapshot no longer has: {second_range:?}"
@@ -148,14 +126,9 @@ fn a_claim_selection_charges_the_fragment_meter_once() {
         aggregate_line_fragment_evaluation_bytes_per_snapshot: body.saturating_sub(1),
         ..ScanLimits::CONTRACT
     });
-    let refused = resolve_claim(
-        &short.repo,
-        &mut short.git_resources,
-        &mut short.scan_resources,
-        &mut short.cache,
-        &short.snapshot,
-        &claim("src/lines.rs", 1, "one"),
-    );
+    let refused = short
+        .resolver()
+        .resolve_claim(&claim("src/lines.rs", 1, "one"));
     assert!(
         matches!(refused, Err(Error::ResourceLimit { .. })),
         "one byte short refuses the very first selection: {refused:?}"

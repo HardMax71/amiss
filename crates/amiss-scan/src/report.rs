@@ -1797,7 +1797,7 @@ fn claim_counters(
     )
 }
 
-fn zero_counts() -> Counts {
+fn zero_counts(analysis_errors: u64) -> Counts {
     Counts {
         documents: document_counts(&[], &[], 0),
         references: reference_counts(&[]),
@@ -1813,7 +1813,7 @@ fn zero_counts() -> Counts {
             ("not_applicable", integer(0)),
             ("debt_tolerated", integer(0)),
             ("waived", integer(0)),
-            ("analysis_errors", integer(0)),
+            ("analysis_errors", integer(analysis_errors)),
             ("unsupported_capabilities", integer(0)),
         ]),
     }
@@ -1828,23 +1828,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
     let retained = retained_details(details, error_ceiling(setup));
     let error_rows: Vec<Value> = retained.iter().map(error_row_value).collect();
     let error_count = u64::try_from(error_rows.len()).unwrap_or(u64::MAX);
-    let analysis_errors = error_count;
-    let counts = zero_counts();
-    let findings_with_errors = match counts.findings {
-        Value::Object(mut members) => {
-            for (key, value) in &mut members {
-                if key == "analysis_errors" {
-                    *value = integer(analysis_errors);
-                }
-            }
-            Value::Object(members)
-        }
-        other @ (Value::Null
-        | Value::Bool(_)
-        | Value::Integer(_)
-        | Value::String(_)
-        | Value::Array(_)) => other,
-    };
+    let counts = zero_counts(error_count);
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
@@ -1869,7 +1853,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
                 ("counts_complete", Value::Bool(false)),
                 ("documents", counts.documents),
                 ("references", counts.references),
-                ("findings", findings_with_errors),
+                ("findings", counts.findings),
                 ("governed_claims", integer(0)),
                 ("unattested_claims", integer(0)),
             ]),

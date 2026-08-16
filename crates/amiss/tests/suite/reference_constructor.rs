@@ -10,10 +10,9 @@ use std::path::Path;
 
 use amiss::invocation::{Outcome, parse};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
-use amiss_scan::resolve::{ForgeContext, TargetCache};
+use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{
     DocumentStatus, Intent, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover,
-    resolve,
 };
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
@@ -87,18 +86,14 @@ impl Bed {
         destination: &str,
     ) -> (Intent, Resolution) {
         let document = RepoPath::new(source.to_owned()).unwrap();
-        resolve(
+        Resolver::new(
             &self.repo,
             &mut self.git_resources,
             &mut self.scan_resources,
             &mut self.cache,
             &self.discovery,
-            context,
-            Adapter::Markdown,
-            &document,
-            is_image,
-            destination,
         )
+        .resolve(context, Adapter::Markdown, &document, is_image, destination)
         .unwrap()
     }
 

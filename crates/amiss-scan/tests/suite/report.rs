@@ -7,10 +7,10 @@ use amiss_scan::observe::occurrence_id;
 use amiss_scan::report::{
     Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
 };
-use amiss_scan::resolve::TargetCache;
+use amiss_scan::resolve::{Resolver, TargetCache};
 use amiss_scan::{
     Classification, DocumentRecord, DocumentStatus, ScanLimits, ScanResources, SnapshotDiscovery,
-    discover, resolve,
+    discover,
 };
 use amiss_wire::controls::GitMode;
 use amiss_wire::digest::hb;
@@ -53,6 +53,13 @@ fn snapshot(
     .unwrap();
 
     let mut cache = TargetCache::default();
+    let mut resolver = Resolver::new(
+        repo,
+        git_resources,
+        &mut scan_resources,
+        &mut cache,
+        &discovery,
+    );
     let mut observations: Vec<Observation> = Vec::new();
     let mut documents = std::collections::BTreeMap::new();
     for record in &discovery.documents {
@@ -67,19 +74,15 @@ fn snapshot(
         };
         for occurrence in &scanned.occurrences {
             let is_image = occurrence.occurrence.construct.is_image();
-            let (intent, resolution) = resolve(
-                repo,
-                git_resources,
-                &mut scan_resources,
-                &mut cache,
-                &discovery,
-                None,
-                adapter,
-                &record.path,
-                is_image,
-                &occurrence.occurrence.semantic_destination,
-            )
-            .unwrap();
+            let (intent, resolution) = resolver
+                .resolve(
+                    None,
+                    adapter,
+                    &record.path,
+                    is_image,
+                    &occurrence.occurrence.semantic_destination,
+                )
+                .unwrap();
             observations.push(Observation {
                 id: occurrence_id(&engine(), adapter, &record.path, occurrence, &intent),
                 document: record.path.clone(),
