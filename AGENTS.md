@@ -18,8 +18,8 @@ cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnin
 
 The toolchain is pinned by `rust-toolchain.toml`. Hooks run through prek: formatting and
 cheap checks on commit; clippy, the full suite, `cargo deny`, `cargo shear`, a
-pinned similarity-rs twin-function count, and a cargo-sweep pass over `target/` on push. CI runs the same stages, so local
-green and remote green are the same thing.
+pinned similarity-rs twin-edge gate, and a cargo-sweep pass over `target/` on push. CI
+runs the same stages, so local green and remote green are the same thing.
 
 ## Laws the linters cannot see
 
@@ -35,8 +35,8 @@ green and remote green are the same thing.
 - The fixed description sentences live in `FindingKind::meaning`,
   `AnalysisErrorCode::meaning`, and `FixKind::meaning` and nowhere else; every other
   appearance is a checked projection.
-- New function twins move the similarity baseline in `.pre-commit-config.yaml`; bump it
-  in the same change, or better, deduplicate.
+- Function-twin edges may only fall, or remain the identical set. Stable identities reject
+  an equal-count substitution; a net cleanup reports any incidental new relationship.
 - The scanner's repository I/O stays inside the repository's declared git roots, the
   checkout plus the private and common git directories one bounded gitdir/commondir
   indirection names, and it spawns nothing. Its

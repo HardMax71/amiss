@@ -1,6 +1,5 @@
 mod tests;
 
-use std::io::Read as _;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,7 +13,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ProviderError, decode_bounded_json};
 
 use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
@@ -273,33 +272,11 @@ fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderErr
             value
                 .to_str()
                 .ok()
-                .and_then(|raw| raw.parse::<usize>().ok())
+                .and_then(|raw| raw.parse::<u64>().ok())
                 .ok_or(ProviderError::InvalidResponse)
         })
         .transpose()?;
-    let bytes = bounded_bytes(declared, response)?;
-    serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)
-}
-
-fn bounded_bytes(
-    declared: Option<usize>,
-    reader: impl std::io::Read,
-) -> Result<Vec<u8>, ProviderError> {
-    if declared.is_some_and(|bytes| bytes > MAX_RESPONSE_BYTES) {
-        return Err(ProviderError::InvalidResponse);
-    }
-    let limit = u64::try_from(MAX_RESPONSE_BYTES)
-        .map_err(|_defect| ProviderError::InvalidResponse)?
-        .saturating_add(1);
-    let mut bytes = Vec::new();
-    reader
-        .take(limit)
-        .read_to_end(&mut bytes)
-        .map_err(|_defect| ProviderError::Unavailable)?;
-    if bytes.len() > MAX_RESPONSE_BYTES {
-        return Err(ProviderError::InvalidResponse);
-    }
-    Ok(bytes)
+    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GitHubClientError> {

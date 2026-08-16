@@ -1,7 +1,10 @@
 mod tests;
 
-use amiss_controller::{ProviderError, ref_span, spelled_segments};
-use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
+use amiss_controller::{
+    ForgePresence as Presence, ForgeProducer, ForgeRefFamily as RefFamily, ForgeTail,
+    ForgeVisibility as Visibility, ProviderError, forge_evidence, forge_repository_evidence,
+    ref_span, spelled_segments,
+};
 use amiss_wire::json::Value;
 use serde::Deserialize;
 
@@ -9,29 +12,6 @@ use super::GitLabClient;
 use super::transport::{Budget, Fact};
 
 pub(super) const PRODUCER_NAME: &str = "amiss-controller-gitlab";
-
-/// What the API said about a foreign project itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Visibility {
-    Readable,
-    Missing,
-    Denied,
-}
-
-/// Whether a route's subject exists; Unknown when the answer names neither
-/// presence nor absence, as the tree route's empty page does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Presence {
-    Present,
-    Absent,
-    Unknown,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum RefFamily {
-    Heads,
-    Tags,
-}
 
 /// The read-only verification surface, apart from refresh and publication
 /// on purpose: a verifier holding this can state facts and nothing else.
@@ -92,55 +72,25 @@ pub(super) fn verify_external<R: GitLabVerification>(
     producer_version: &str,
     checked_at: &str,
 ) -> Result<Value, ProviderError> {
-    let introduced = plan
-        .member("payload")
-        .and_then(|payload| payload.member("introduced"));
-    // A value that is not a digest-whole plan is the caller's defect, not
-    // the provider's, and no call is spent on it.
-    let (Some(Value::Array(introduced)), true) = (introduced, bound_plan(plan)) else {
-        return Err(ProviderError::InvalidResponse);
-    };
-    let mut budget = rest.budget()?;
-    let mut rows = Vec::new();
-    for row in introduced {
-        let (Some(destination), Some(repository)) =
-            (row.text("destination"), row.member("repository"))
-        else {
-            continue;
-        };
-        if repository.text("dialect") != Some("gitlab") || repository.text("host") != Some(host) {
-            continue;
-        }
-        let (Some(owner), Some(name)) = (repository.text("owner"), repository.text("name")) else {
-            continue;
-        };
-        let project = format!("{owner}/{name}");
-        let (visibility, spent) = match rest.project_visibility(&project, budget) {
-            Ok(answer) => answer,
-            Err(ProviderError::Unavailable) => break,
-            Err(defect) => return Err(defect),
-        };
-        budget = spent;
-        let (fact, tail) = match visibility {
-            Visibility::Missing => ("missing", None),
-            Visibility::Denied => ("denied", None),
-            Visibility::Readable => match resolve_tail(rest, repository, &project, &mut budget) {
-                Ok(resolution) => ("readable", resolution),
-                Err(ProviderError::Unavailable) => {
-                    rows.push(forge_evidence_row(
-                        destination,
-                        "readable",
-                        None,
-                        checked_at,
-                    ));
-                    break;
-                }
-                Err(defect) => return Err(defect),
-            },
-        };
-        rows.push(forge_evidence_row(destination, fact, tail, checked_at));
-    }
-    evidence_file(plan, PRODUCER_NAME, producer_version, rows).ok_or(ProviderError::InvalidResponse)
+    forge_evidence(
+        plan,
+        ForgeProducer {
+            dialect: "gitlab",
+            host,
+            name: PRODUCER_NAME,
+            version: producer_version,
+            checked_at,
+        },
+        || rest.budget(),
+        |budget, target| {
+            let project = format!("{}/{}", target.owner, target.name);
+            let (visibility, spent) = rest.project_visibility(&project, *budget)?;
+            *budget = spent;
+            forge_repository_evidence(visibility, || {
+                resolve_tail(rest, target.repository, &project, budget)
+            })
+        },
+    )
 }
 
 /// Resolves the opaque tail against the readable project: a whole-segment
@@ -155,7 +105,7 @@ fn resolve_tail<R: GitLabVerification>(
     repository: &Value,
     project: &str,
     budget: &mut Budget,
-) -> Result<Option<&'static str>, ProviderError> {
+) -> Result<Option<ForgeTail>, ProviderError> {
     let Some(form) = repository
         .text("form")
         .filter(|form| matches!(*form, "blob" | "tree" | "raw"))
@@ -210,13 +160,13 @@ fn resolve_tail<R: GitLabVerification>(
         match presence {
             Presence::Present => (first.to_owned(), 1),
             Presence::Absent if rewritten => return Ok(None),
-            Presence::Absent => return Ok(Some("revision-missing")),
+            Presence::Absent => return Ok(Some(ForgeTail::RevisionMissing)),
             Presence::Unknown => return Ok(None),
         }
     };
     let path = segments.get(span..).unwrap_or_default();
     if path.is_empty() {
-        return Ok(Some("resolved"));
+        return Ok(Some(ForgeTail::Resolved));
     }
     // The API takes the whole path as one parameter, so the decoded
     // segments travel joined; a tree tail names a directory, which the
@@ -230,9 +180,9 @@ fn resolve_tail<R: GitLabVerification>(
     };
     *budget = spent;
     Ok(match presence {
-        Presence::Present => Some("resolved"),
+        Presence::Present => Some(ForgeTail::Resolved),
         Presence::Absent if rewritten => None,
-        Presence::Absent => Some("path-missing"),
+        Presence::Absent => Some(ForgeTail::PathMissing),
         Presence::Unknown => None,
     })
 }

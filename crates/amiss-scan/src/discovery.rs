@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
 use amiss_wire::controls::{GitMode, ResourceName};
@@ -172,6 +172,86 @@ struct Frame {
     next: usize,
 }
 
+struct DocumentContext<'a> {
+    repo: &'a Repository,
+    includes: &'a Includes,
+    scope: Option<&'a BTreeSet<RepoPath>>,
+}
+
+fn empty_discovery() -> SnapshotDiscovery {
+    SnapshotDiscovery {
+        documents: Vec::new(),
+        labels: BTreeMap::new(),
+        outside_document_set: 0,
+        tree_entries: 0,
+        path_defects: Vec::new(),
+        entries: BTreeMap::new(),
+    }
+}
+
+fn charge_entry(discovery: &mut SnapshotDiscovery, limit: u64) -> Result<(), Error> {
+    discovery.tree_entries = discovery.tree_entries.saturating_add(1);
+    if discovery.tree_entries > limit {
+        Err(crossing(
+            ResourceName::GitTreeEntriesPerSnapshot,
+            limit,
+            limit.saturating_add(1),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn record_document(
+    context: &DocumentContext<'_>,
+    git: &mut GitResources,
+    scan: &mut ScanResources,
+    discovery: &mut SnapshotDiscovery,
+    path: RepoPath,
+    entry: &TreeEntry,
+) -> Result<(), Error> {
+    let classification = match classify(path.as_bytes()) {
+        Some(native) => native,
+        None if context.includes.matches(&path) => Classification::PolicyIncluded,
+        None => {
+            discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
+            return Ok(());
+        }
+    };
+    let adapter = if classification == Classification::PolicyIncluded {
+        context.includes.binding(&path)
+    } else {
+        classification.adapter()
+    };
+    if context
+        .scope
+        .is_some_and(|documents| !documents.contains(&path))
+    {
+        return Ok(());
+    }
+    let (status, byte_count, raw_digest) = side_status(
+        context.repo,
+        git,
+        scan,
+        context.includes,
+        adapter,
+        &path,
+        entry,
+    )?;
+    collect_labels(scan, &mut discovery.labels, &path, &status)?;
+    discovery.documents.push(DocumentRecord {
+        path,
+        classification,
+        adapter,
+        status,
+        oid: entry.oid.clone(),
+        mode: entry.mode,
+        byte_count,
+        raw_digest,
+    });
+    Ok(())
+}
+
 /// Vets one raw entry name under `prefix` and returns the admitted path:
 /// text or bytes alike, refusing only the byte grammar. Length is charged on
 /// the raw bytes first, so a refused name's disclosed bytes always fit the
@@ -242,7 +322,7 @@ pub(crate) fn discover_scoped(
     scan: &mut ScanResources,
     includes: &Includes,
     root_tree: &Oid,
-    scope: &std::collections::BTreeSet<RepoPath>,
+    scope: &BTreeSet<RepoPath>,
 ) -> Result<SnapshotDiscovery, Error> {
     discover_walk(repo, git, scan, includes, root_tree, Some(scope))
 }
@@ -253,16 +333,14 @@ fn discover_walk(
     scan: &mut ScanResources,
     includes: &Includes,
     root_tree: &Oid,
-    scope: Option<&std::collections::BTreeSet<RepoPath>>,
+    scope: Option<&BTreeSet<RepoPath>>,
 ) -> Result<SnapshotDiscovery, Error> {
-    let mut discovery = SnapshotDiscovery {
-        documents: Vec::new(),
-        labels: BTreeMap::new(),
-        outside_document_set: 0,
-        tree_entries: 0,
-        path_defects: Vec::new(),
-        entries: BTreeMap::new(),
+    let context = DocumentContext {
+        repo,
+        includes,
+        scope,
     };
+    let mut discovery = empty_discovery();
     let root = repo.read_expected(git, root_tree, ObjectKind::Tree)?;
     let mut frames = vec![Frame {
         oid: root_tree.clone(),
@@ -279,15 +357,7 @@ fn discover_walk(
         frame.next = frame.next.saturating_add(1);
         let prefix = frame.prefix.clone();
 
-        discovery.tree_entries = discovery.tree_entries.saturating_add(1);
-        let entry_limit = git.limits().tree_entries_per_snapshot;
-        if discovery.tree_entries > entry_limit {
-            return Err(crossing(
-                ResourceName::GitTreeEntriesPerSnapshot,
-                entry_limit,
-                entry_limit.saturating_add(1),
-            ));
-        }
+        charge_entry(&mut discovery, git.limits().tree_entries_per_snapshot)?;
 
         let Some(path) = admitted_path(
             &mut discovery.path_defects,
@@ -315,35 +385,7 @@ fn discover_walk(
             continue;
         }
 
-        let classification = match classify(path.as_bytes()) {
-            Some(native) => native,
-            None if includes.matches(&path) => Classification::PolicyIncluded,
-            None => {
-                discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
-                continue;
-            }
-        };
-        let adapter = if classification == Classification::PolicyIncluded {
-            includes.binding(&path)
-        } else {
-            classification.adapter()
-        };
-        if scope.is_some_and(|documents| !documents.contains(&path)) {
-            continue;
-        }
-        let (status, byte_count, raw_digest) =
-            side_status(repo, git, scan, includes, adapter, &path, &entry)?;
-        collect_labels(scan, &mut discovery.labels, &path, &status)?;
-        discovery.documents.push(DocumentRecord {
-            path,
-            classification,
-            adapter,
-            status,
-            oid: entry.oid.clone(),
-            mode: entry.mode,
-            byte_count,
-            raw_digest,
-        });
+        record_document(&context, git, scan, &mut discovery, path, &entry)?;
     }
     Ok(discovery)
 }
@@ -364,24 +406,14 @@ pub fn discover_index(
     includes: &Includes,
     index: &amiss_git::LogicalIndex,
 ) -> Result<SnapshotDiscovery, Error> {
-    let mut discovery = SnapshotDiscovery {
-        documents: Vec::new(),
-        labels: BTreeMap::new(),
-        outside_document_set: 0,
-        tree_entries: 0,
-        path_defects: Vec::new(),
-        entries: BTreeMap::new(),
+    let context = DocumentContext {
+        repo,
+        includes,
+        scope: None,
     };
+    let mut discovery = empty_discovery();
     for entry in &index.entries {
-        discovery.tree_entries = discovery.tree_entries.saturating_add(1);
-        let entry_limit = git.limits().tree_entries_per_snapshot;
-        if discovery.tree_entries > entry_limit {
-            return Err(crossing(
-                ResourceName::GitTreeEntriesPerSnapshot,
-                entry_limit,
-                entry_limit.saturating_add(1),
-            ));
-        }
+        charge_entry(&mut discovery, git.limits().tree_entries_per_snapshot)?;
         let Some(path) = admitted_path(
             &mut discovery.path_defects,
             git.limits().raw_path_bytes,
@@ -397,37 +429,12 @@ pub fn discover_index(
         discovery
             .entries
             .insert(path.clone(), (entry.mode, entry.oid.clone()));
-        let classification = match classify(path.as_bytes()) {
-            Some(native) => native,
-            None if includes.matches(&path) => Classification::PolicyIncluded,
-            None => {
-                discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
-                continue;
-            }
-        };
-        let adapter = if classification == Classification::PolicyIncluded {
-            includes.binding(&path)
-        } else {
-            classification.adapter()
-        };
         let tree_entry = TreeEntry {
             mode: entry.mode,
             name: entry.path.clone(),
             oid: entry.oid.clone(),
         };
-        let (status, byte_count, raw_digest) =
-            side_status(repo, git, scan, includes, adapter, &path, &tree_entry)?;
-        collect_labels(scan, &mut discovery.labels, &path, &status)?;
-        discovery.documents.push(DocumentRecord {
-            path,
-            classification,
-            adapter,
-            status,
-            oid: entry.oid.clone(),
-            mode: entry.mode,
-            byte_count,
-            raw_digest,
-        });
+        record_document(&context, git, scan, &mut discovery, path, &tree_entry)?;
     }
     Ok(discovery)
 }

@@ -24,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/tools
       # Branch runs only restore; main saves the pruned caches, so lock bumps
@@ -33,11 +34,81 @@ jobs:
           workspaces: .
           shared-key: gates
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - id: similarity
+        name: Derive the similarity comparison
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+          MERGE_BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            pull_request) base="$(git rev-parse HEAD^1)" ;;
+            merge_group) base="$MERGE_BASE" ;;
+            push) base="$BEFORE" ;;
+            *) echo "unsupported similarity event: $EVENT" >&2; exit 1 ;;
+          esac
+          if [[ ! "$base" =~ ^0+$ ]]; then
+            git cat-file -e "$base^{commit}"
+            base_tree="$(git rev-parse "$base^{tree}")"
+          else
+            base_tree=empty
+          fi
+          policy="$(scripts/similarity-gate.sh --policy)"
+          cache_safe=true
+          if [[ "$EVENT" == pull_request ]] || [[ "$base_tree" == empty ]]; then
+            cache_safe=false
+          elif ! git diff --quiet "$base" HEAD -- \
+            .github/workflows/ci.yml .pre-commit-config.yaml \
+            scripts/similarity-gate.sh Cargo.toml Cargo.lock; then
+            cache_safe=false
+          fi
+          {
+            echo "base=$base"
+            echo "base_tree=$base_tree"
+            echo "current_tree=$(git rev-parse HEAD^{tree})"
+            echo "policy=$policy"
+            echo "cache_safe=$cache_safe"
+          } >> "$GITHUB_OUTPUT"
+      - id: similarity-cache
+        name: Restore the base similarity manifest
+        if: steps.similarity.outputs.cache_safe == 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/amiss-similarity/manifest
+          key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.base_tree }}
       - run: prek run --all-files
       # The suites belong to platform-tests, on every platform rather than this one.
       - run: prek run --all-files --hook-stage pre-push
         env:
+          AMISS_SIMILARITY_BASE: ${{ steps.similarity.outputs.base }}
+          AMISS_SIMILARITY_BASE_MANIFEST: ${{ runner.temp }}/amiss-similarity/manifest
+          AMISS_SIMILARITY_CURRENT_MANIFEST: ${{ runner.temp }}/amiss-similarity/current.manifest
+          AMISS_SIMILARITY_CURRENT_TREE: ${{ steps.similarity.outputs.current_tree }}
+          AMISS_SIMILARITY_POLICY: ${{ steps.similarity.outputs.policy }}
           SKIP: nextest
+      - id: current-similarity-cache
+        name: Find the current similarity manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          lookup-only: true
+          path: ${{ runner.temp }}/amiss-similarity/manifest
+          key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.current_tree }}
+      - name: Stage the current similarity manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: install -D -m 0644 "${{ runner.temp }}/amiss-similarity/current.manifest" "${{ runner.temp }}/amiss-similarity/manifest"
+      - name: Save the current similarity manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/amiss-similarity/manifest
+          key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.current_tree }}
 
   # The scanner reads its own repository under enforce, through the very
   # action a consumer pins: the engine is built from this pull request, the

@@ -18,13 +18,17 @@ Bumping a tool is one edit.
 
 Hooks run through [prek](https://github.com/j178/prek): formatting and the cheap checks
 on commit, then [Clippy](https://github.com/rust-lang/rust-clippy) with
-warnings denied, the full test suite, `cargo deny`, `cargo shear`, and two exact-count
-[similarity-rs](https://github.com/mizchi/similarity) twin-function ratchets on push. The tool
-compares functions within one file, so the first ratchet counts twins inside every file of both
-workspaces, and the second concatenates the deliberately parallel provider files, the three
-transports, the three lane-test harnesses, and the three service runtimes, so their cross-file
-twins stay counted as well. Each baseline is exact rather than a ceiling: a new twin fails as a
-regression, and a cleanup lowers the pinned number in the same change. A last push-stage hook
+warnings denied, the full test suite, `cargo deny`, `cargo shear`, and a
+[similarity-rs](https://github.com/mizchi/similarity) twin-function gate on push. The tool
+compares functions within one file, so the gate also concatenates the deliberately parallel
+provider transports, lane-test harnesses, service runtimes, and verification files. It maps
+those generated lines back to their source paths and compares stable pair identities with the
+base Git tree. The total may fall or remain the identical set: stable identities reject an
+equal-count remove-and-replace, while a net cleanup reports any incidental new relationship.
+Main and merge-queue CI cache the derived base manifest by tree and policy identity. Pull requests
+rescan so their private cache scope cannot shadow the default branch; any missing or invalid cache
+is likewise regenerated from Git, so no mutable baseline or allowlist lives in the tree.
+A last push-stage hook
 runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) over `target/`, dropping artifacts and
 incremental sessions older than two days; cargo never collects superseded builds, and this
 repository mints a fresh copy of every test binary on each lockfile or version change. Five days
