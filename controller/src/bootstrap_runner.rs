@@ -78,7 +78,7 @@ pub fn run_bootstrap(
     let Ok(executable) = read_bounded(run.executable, BOOTSTRAP_EXECUTABLE_BYTES) else {
         return RunnerOutcome::Unavailable;
     };
-    if hb(BOOTSTRAP_DOMAIN, &executable) != request.plan.execution.bootstrap_digest {
+    if hb(BOOTSTRAP_DOMAIN, &executable) != request.plan.execution.bootstrap_digest() {
         return RunnerOutcome::TamperedRuntime;
     }
     let Ok(job) = bootstrap_job(BootstrapJobInput {

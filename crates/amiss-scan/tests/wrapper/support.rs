@@ -91,11 +91,10 @@ pub(crate) fn shell(profile: Profile) -> SetupShell {
     SetupShell {
         engine: engine(),
         profile,
-        repository: Some(amiss_wire::model::RepositoryIdentity {
-            host: "github.com".to_owned(),
-            owner: "acme".to_owned(),
-            name: "docs".to_owned(),
-        }),
+        repository: Some(
+            amiss_wire::model::RepositoryIdentity::github("acme".to_owned(), "docs".to_owned())
+                .unwrap(),
+        ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         target_ref: Some("refs/heads/main".to_owned()),
@@ -123,11 +122,10 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
     let setup = Setup {
         engine: engine(),
         profile: Profile::Observe,
-        repository: Some(amiss_wire::model::RepositoryIdentity {
-            host: "github.com".to_owned(),
-            owner: "acme".to_owned(),
-            name: "docs".to_owned(),
-        }),
+        repository: Some(
+            amiss_wire::model::RepositoryIdentity::github("acme".to_owned(), "docs".to_owned())
+                .unwrap(),
+        ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         target_ref: Some("refs/heads/main".to_owned()),

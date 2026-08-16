@@ -61,7 +61,7 @@ pub(super) fn external_gate(
                 .map_err(|row| ("invalid-external-control", row))?;
             Some(crate::policy::TimeContext {
                 statement: input.statement.clone(),
-                digest: input.statement.digest,
+                digest: input.statement.digest(),
             })
         }
     };
@@ -101,15 +101,15 @@ pub(super) fn external_gate(
                 repository,
                 target_ref,
                 verified_floor,
-                &context.statement.evaluation_instant,
+                context.statement.evaluation_instant(),
                 scan_limits.debt_items,
             )
             .map_err(|row| (external_reason(&row), row))?;
             Some(crate::policy::DebtContext {
-                digest: input.snapshot.digest,
+                digest: input.snapshot.digest(),
                 trust_source: input.trust_source.as_str(),
-                adoption_tree: input.snapshot.adoption_tree.clone(),
-                items: input.snapshot.items.clone(),
+                adoption_tree: input.snapshot.adoption_tree().clone(),
+                items: input.snapshot.items().to_vec(),
             })
         }
     };
@@ -121,22 +121,22 @@ pub(super) fn external_gate(
                 repository,
                 target_ref,
                 verified_floor,
-                &context.statement.evaluation_instant,
+                context.statement.evaluation_instant(),
                 scan_limits.waiver_items,
             )
             .map_err(|row| (external_reason(&row), row))?;
             let floor_lists = verified_floor.map(|floor| {
                 (
-                    floor.floor.authorized_waiver_issuers.clone(),
-                    floor.floor.waivable_finding_kinds.clone(),
+                    floor.floor.authorized_waiver_issuers().to_vec(),
+                    floor.floor.waivable_finding_kinds().to_vec(),
                 )
             });
             let (authorized_issuers, waivable_kinds) = floor_lists.unwrap_or_default();
             Some(crate::policy::WaiverContext {
-                digest: input.bundle.digest,
+                digest: input.bundle.digest(),
                 trust_source: input.trust_source.as_str(),
                 candidate_tree: tree,
-                items: input.bundle.items.clone(),
+                items: input.bundle.items().to_vec(),
                 authorized_issuers,
                 waivable_kinds,
             })

@@ -39,7 +39,7 @@ struct Minted {
 fn floor_digest() -> String {
     OrganizationFloor::parse(FLOOR.as_bytes())
         .unwrap()
-        .digest
+        .digest()
         .to_string()
 }
 
@@ -119,7 +119,7 @@ fn a_minted_snapshot_clears_its_own_reader_and_schema() {
     assert_eq!(code, 0, "{}", String::from_utf8(stdout).unwrap());
     let bytes = fs::read(&path).unwrap();
     let snapshot = DebtSnapshot::parse(&bytes).unwrap();
-    assert_eq!(snapshot.items.len(), 1);
+    assert_eq!(snapshot.items().len(), 1);
     let schema: serde_json::Value = serde_json::from_slice(
         &fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -156,11 +156,9 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         version: "0.0.0-test".to_owned(),
         digest: amiss_wire::digest::hb("amiss/scanner-engine", b"test engine"),
     };
-    let identity = amiss_wire::model::RepositoryIdentity {
-        host: "github.com".to_owned(),
-        owner: "acme".to_owned(),
-        name: "docs".to_owned(),
-    };
+    let identity =
+        amiss_wire::model::RepositoryIdentity::github("acme".to_owned(), "docs".to_owned())
+            .unwrap();
     let base_block = SnapshotIdentity {
         object_format: "sha1",
         commit_oid: minted.base.clone(),
@@ -284,7 +282,7 @@ fn an_ineligible_blocking_finding_is_counted_not_recorded() {
     );
     assert!(shown.contains("0 eligible rows skipped"), "{shown}");
     let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
-    assert!(snapshot.items.is_empty());
+    assert!(snapshot.items().is_empty());
 }
 
 /// An existing output path refuses the mint and keeps its bytes.

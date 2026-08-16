@@ -14,7 +14,9 @@ use amiss_controller::{
     ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, bootstrap_job, check_binding,
     check_plan,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, TrustedTimeStatement};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
+};
 use amiss_wire::json;
 use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
@@ -190,11 +192,11 @@ fn job_construction_binds_the_complete_authenticated_run() {
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let supplied_time = controls.trusted_time.unwrap();
     let statement = TrustedTimeStatement::parse(&json::canonical(&supplied_time.value)).unwrap();
-    assert_eq!(statement.provider, "gitlab");
-    assert_eq!(statement.provider_run_id, "pipeline/987654321:job-42");
-    assert_eq!(statement.provider_run_attempt, 2);
+    assert_eq!(statement.provider(), "gitlab");
+    assert_eq!(statement.provider_run_id(), "pipeline/987654321:job-42");
+    assert_eq!(statement.provider_run_attempt(), 2);
     assert_eq!(
-        statement.candidate_identity_digest,
+        statement.candidate_identity_digest(),
         commit_candidate_identity_digest(&evaluation, &oid('2'), &oid('4')).unwrap()
     );
     assert_eq!(
@@ -274,13 +276,13 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
 }
 
 #[test]
-fn a_changed_constraint_needs_a_new_semantic_digest() {
-    let mut execution = execution();
-    execution.required_status_name = "amiss / another check".to_owned();
-    assert_eq!(
-        check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap_err(),
-        BootstrapJobError::ExecutionConstraint
-    );
+fn a_changed_constraint_gets_a_new_semantic_digest() {
+    let original = execution();
+    let mut input = ExecutionConstraintInput::from(&original);
+    input.required_status_name = "amiss / another check".to_owned();
+    let changed = ExecutionConstraintDescriptor::new(input).unwrap();
+    assert_ne!(changed.digest(), original.digest());
+    assert!(check_plan(Profile::Enforce, PolicyControls::default(), changed).is_ok());
 }
 
 #[test]

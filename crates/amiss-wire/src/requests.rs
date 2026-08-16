@@ -146,7 +146,7 @@ impl EvaluationRequest {
             || matches!(forge, Some(ForgeDialect::Github | ForgeDialect::Gitea))
                 && repository
                     .as_ref()
-                    .is_some_and(|identity| identity.owner.contains('/'))
+                    .is_some_and(|identity| identity.owner().contains('/'))
         {
             return fail(&forge_path, ErrorKind::Inconsistent);
         }

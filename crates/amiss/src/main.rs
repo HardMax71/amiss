@@ -249,10 +249,10 @@ fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::F
         return None;
     };
     Some(amiss_scan::resolve::ForgeContext {
-        host: identity.host.clone(),
+        host: identity.host().to_owned(),
         dialect,
-        owner: identity.owner.clone(),
-        repository: identity.name.clone(),
+        owner: identity.owner().to_owned(),
+        repository: identity.name().to_owned(),
         candidate_ref: evaluation
             .candidate_ref
             .as_ref()
@@ -297,10 +297,10 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
 
     let forge = match (&invocation.identity, invocation.forge) {
         (Some(identity), Some(dialect)) => Some(ForgeContext {
-            host: identity.repository.host.clone(),
+            host: identity.repository.host().to_owned(),
             dialect,
-            owner: identity.repository.owner.clone(),
-            repository: identity.repository.name.clone(),
+            owner: identity.repository.owner().to_owned(),
+            repository: identity.repository.name().to_owned(),
             candidate_ref: identity.ref_name.as_str().to_owned(),
             default_ref: identity.default_branch_ref.as_str().to_owned(),
             candidate_oid: match &invocation.candidate {

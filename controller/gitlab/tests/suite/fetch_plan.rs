@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use amiss_controller::{ChangeId, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
-use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::support::identity::now_seconds;
 use crate::support::oidc::{accept, claims, oidc};
@@ -53,7 +54,7 @@ fn exact_fetch_plan_contains_no_credential_or_moving_ref() {
         plan.repository_oids,
         [snapshot.run.commits.base, snapshot.run.commits.candidate]
     );
-    assert_eq!(plan.action_oid, request.plan.execution.action_commit_oid);
+    assert_eq!(&plan.action_oid, request.plan.execution.action_commit_oid());
 }
 
 #[test]
@@ -62,9 +63,16 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     let request = run_request(&delivery, &snapshot);
 
     let mut wrong_host = request.clone();
-    wrong_host.run.change.repository.host = "gitlab.example@attacker.invalid".to_owned();
-    let mut wrong_owner = request.clone();
-    wrong_owner.run.change.repository.owner = "Acme".to_owned();
+    wrong_host.run.change.repository = repository("gitlab.example@attacker.invalid", "acme");
+    assert!(
+        RepositoryIdentity::new(
+            "gitlab.example".to_owned(),
+            "Acme".to_owned(),
+            "widget".to_owned(),
+        )
+        .is_none(),
+        "a non-canonical owner cannot enter a run request"
+    );
     let mut wrong_change = request.clone();
     wrong_change.run.change.change = ChangeId::new("merge-request/42".to_owned()).unwrap();
     let mut wrong_run = request.clone();
@@ -79,14 +87,10 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     wrong_instance.delivery.provider.instance =
         ProviderInstance::new("other.example".to_owned()).unwrap();
     let mut wrong_action = request;
-    Arc::make_mut(&mut wrong_action.plan)
-        .execution
-        .action_repository
-        .host = "other.example".to_owned();
+    replace_action_repository(&mut wrong_action, repository("other.example", "hardmax71"));
 
     for changed in [
         wrong_host,
-        wrong_owner,
         wrong_change,
         wrong_run,
         wrong_delivery,
@@ -97,6 +101,20 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     ] {
         assert!(gitlab_fetch_plan(&changed).is_err());
     }
+}
+
+fn repository(host: &str, owner: &str) -> RepositoryIdentity {
+    RepositoryIdentity::new(host.to_owned(), owner.to_owned(), "widget".to_owned()).unwrap()
+}
+
+fn replace_action_repository(
+    request: &mut amiss_controller::RunRequest,
+    repository: RepositoryIdentity,
+) {
+    let plan = Arc::make_mut(&mut request.plan);
+    let mut input = ExecutionConstraintInput::from(&plan.execution);
+    input.action_repository = repository;
+    plan.execution = ExecutionConstraintDescriptor::new(input).unwrap();
 }
 
 /// The binding is three clauses over the same run: a first attempt, a

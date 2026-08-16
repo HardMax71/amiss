@@ -592,11 +592,10 @@ fn owner(raw: &str) -> amiss_wire::model::OwnerId {
     amiss_wire::model::OwnerId::new(raw.to_owned()).expect("an owner id")
 }
 
+#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn tree() -> amiss_wire::model::TreeIdentity {
-    amiss_wire::model::TreeIdentity {
-        object_format: amiss_wire::model::ObjectFormat::Sha1,
-        tree_oid: "a".repeat(40),
-    }
+    amiss_wire::model::TreeIdentity::new(amiss_wire::model::ObjectFormat::Sha1, "a".repeat(40))
+        .expect("a tree identity")
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
@@ -647,6 +646,23 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         not_before: instant.clone(),
         expires_at: moment("2026-08-01T00:00:00Z"),
     };
+    let statement =
+        amiss_wire::controls::TrustedTimeStatement::new(amiss_wire::controls::TrustedTimeInput {
+            repository: amiss_wire::model::RepositoryIdentity::github(
+                "acme".to_owned(),
+                "widget".to_owned(),
+            )
+            .expect("identity"),
+            ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
+            candidate_identity_digest: hb("amiss/raw-evidence", b"candidate"),
+            provider: "github-actions".to_owned(),
+            provider_run_id: "run/1".to_owned(),
+            provider_run_attempt: 1,
+            evaluation_instant: instant,
+            valid_until: moment("2026-07-02T00:10:00Z"),
+        })
+        .expect("trusted time");
+    let time_digest = statement.digest();
     let policy = Effects {
         waiver: Some(WaiverContext {
             digest: hb("amiss/raw-evidence", b"bundle"),
@@ -657,23 +673,8 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
             waivable_kinds: vec![amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing],
         }),
         time: Some(TimeContext {
-            statement: amiss_wire::controls::TrustedTimeStatement {
-                digest: hb("amiss/raw-evidence", b"time"),
-                repository: amiss_wire::model::RepositoryIdentity::github(
-                    "acme".to_owned(),
-                    "widget".to_owned(),
-                )
-                .expect("identity"),
-                ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned())
-                    .expect("ref"),
-                candidate_identity_digest: hb("amiss/raw-evidence", b"candidate"),
-                provider: "github-actions".to_owned(),
-                provider_run_id: "run/1".to_owned(),
-                provider_run_attempt: 1,
-                evaluation_instant: instant,
-                valid_until: moment("2026-07-02T00:10:00Z"),
-            },
-            digest: hb("amiss/raw-evidence", b"time"),
+            statement,
+            digest: time_digest,
         }),
         ..Effects::default()
     };

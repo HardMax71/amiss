@@ -10,7 +10,7 @@ use crate::support::{
 fn overlapping_valid_exceptions_are_fatal_and_apply_neither() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
@@ -60,7 +60,7 @@ fn resolved_finding_is_not_an_exception_target() {
     let fx = fixture("[note](note.md)\n");
     let standing = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&standing);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
@@ -118,7 +118,7 @@ fn resolved_finding_is_not_an_exception_target() {
 fn expiry_bearing_controls_require_a_trusted_instant() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let mut setup = shell(Profile::Enforce);
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,
@@ -173,7 +173,7 @@ fn the_statement_binding_must_identify_the_authenticated_run() {
 fn index_mode_rejects_tree_bound_exceptions() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest.to_string();
+    let floor_digest = floor_input().floor.digest().to_string();
     let mut setup = shell(Profile::Enforce);
     setup.debt = Some(debt_input(&debt_json(
         &floor_digest,

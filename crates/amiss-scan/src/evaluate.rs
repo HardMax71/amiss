@@ -1166,14 +1166,17 @@ fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
         (
             "object_format".to_owned(),
             Value::String(
-                match tree.object_format {
+                match tree.object_format() {
                     amiss_wire::model::ObjectFormat::Sha1 => "sha1",
                     amiss_wire::model::ObjectFormat::Sha256 => "sha256",
                 }
                 .to_owned(),
             ),
         ),
-        ("tree_oid".to_owned(), Value::String(tree.tree_oid.clone())),
+        (
+            "tree_oid".to_owned(),
+            Value::String(tree.tree_oid().to_owned()),
+        ),
     ])
 }
 
@@ -1312,7 +1315,7 @@ fn apply_exceptions(
     let Some(instant) = policy
         .time
         .as_ref()
-        .map(|time| time.statement.evaluation_instant.clone())
+        .map(|time| time.statement.evaluation_instant().clone())
     else {
         return (extra, Vec::new());
     };

@@ -74,10 +74,10 @@ fn a_verified_floor_lands_typed() {
     let floor =
         amiss_wire::controls::OrganizationFloor::parse(FLOOR.as_bytes()).expect("fixture parses");
     let mut request = empty();
-    request.organization_floor = Some(supplied(FLOOR, floor.digest));
+    request.organization_floor = Some(supplied(FLOOR, floor.digest()));
     let inputs = controls(&request).expect("a matching digest passes the gate");
     let landed = inputs.floor.expect("the floor lands typed");
-    assert_eq!(landed.floor.digest, floor.digest);
+    assert_eq!(landed.floor.digest(), floor.digest());
     assert!(inputs.time.is_none() && inputs.debt.is_none());
 }
 
@@ -96,14 +96,14 @@ fn a_verified_time_statement_lands_with_its_run_context() {
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
         value: parse(TIME.as_bytes()).expect("the fixture is JSON"),
-        expected_digest: statement.digest,
+        expected_digest: statement.digest(),
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
         provider_run_attempt: 2,
     });
     let inputs = controls(&request).expect("a matching digest passes the gate");
     let landed = inputs.time.expect("the statement lands typed");
-    assert_eq!(landed.statement.digest, statement.digest);
+    assert_eq!(landed.statement.digest(), statement.digest());
     assert_eq!(landed.provider, "gitlab-ci");
     assert_eq!(landed.provider_run_id, "pipeline/01J2Z9-7");
     assert_eq!(landed.provider_run_attempt, 2);
@@ -129,10 +129,10 @@ fn a_verified_constraint_lands_through_the_shared_gate() {
         amiss_wire::controls::ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes())
             .expect("fixture parses");
     let mut request = empty();
-    request.execution_constraint = Some(supplied(CONSTRAINT, descriptor.digest));
+    request.execution_constraint = Some(supplied(CONSTRAINT, descriptor.digest()));
     let inputs = controls(&request).expect("a matching digest passes the gate");
     let landed = inputs.constraint.expect("the descriptor lands typed");
-    assert_eq!(landed.descriptor.digest, descriptor.digest);
+    assert_eq!(landed.descriptor.digest(), descriptor.digest());
 }
 
 #[test]

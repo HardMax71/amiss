@@ -189,7 +189,7 @@ fn the_open_identity_grammar_admits_claims_and_keeps_structure() {
 
     let github = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned());
     assert_eq!(
-        github.as_ref().map(|identity| identity.host.as_str()),
+        github.as_ref().map(RepositoryIdentity::host),
         Some("github.com")
     );
     assert!(RepositoryIdentity::github("group/sub".to_owned(), "widget".to_owned()).is_none());

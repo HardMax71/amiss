@@ -472,7 +472,9 @@ fn publication_conclusions_and_create_response_are_exact() {
             ),
             format!(
                 "repository: {}/{}/{}",
-                repository.host, repository.owner, repository.name
+                repository.host(),
+                repository.owner(),
+                repository.name()
             ),
             format!("change: {}", run.change.change),
             format!(

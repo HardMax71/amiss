@@ -16,9 +16,9 @@ pub(crate) fn provider_run(
     let fields = serde_json::to_vec(&[
         reviewer.as_str(),
         change.provider.namespace.as_str(),
-        change.repository.host.as_str(),
-        change.repository.owner.as_str(),
-        change.repository.name.as_str(),
+        change.repository.host(),
+        change.repository.owner(),
+        change.repository.name(),
         change.change.as_str(),
         candidate.as_str(),
         candidate_ref.as_str(),

@@ -75,7 +75,7 @@ fn identity_inputs(policy: &PolicyControls) -> [IdentityInput<'_>; 3] {
             |bytes| {
                 OrganizationFloor::parse(bytes)
                     .ok()
-                    .map(|floor| floor.digest)
+                    .map(|floor| floor.digest())
             },
             BootstrapJobError::OrganizationFloor,
         ),
@@ -84,13 +84,17 @@ fn identity_inputs(policy: &PolicyControls) -> [IdentityInput<'_>; 3] {
             |bytes| {
                 DebtSnapshot::parse(bytes)
                     .ok()
-                    .map(|snapshot| snapshot.digest)
+                    .map(|snapshot| snapshot.digest())
             },
             BootstrapJobError::DebtSnapshot,
         ),
         (
             policy.waiver_bundle.as_ref(),
-            |bytes| WaiverBundle::parse(bytes).ok().map(|bundle| bundle.digest),
+            |bytes| {
+                WaiverBundle::parse(bytes)
+                    .ok()
+                    .map(|bundle| bundle.digest())
+            },
             BootstrapJobError::WaiverBundle,
         ),
     ]
@@ -128,11 +132,11 @@ pub(super) fn validate_request_size(
             identity.waiver_bundle,
             BootstrapJobError::WaiverBundle,
         )?,
-        trusted_time: Some(maximal_trusted_time(execution.digest)?),
+        trusted_time: Some(maximal_trusted_time(execution.digest())?),
         execution_constraint: Some(SuppliedControl {
             value: json::parse(execution_bytes)
                 .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?,
-            expected_digest: execution.digest,
+            expected_digest: execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         }),
     };
@@ -194,7 +198,7 @@ fn maximal_trusted_time(
         })?;
     Ok(SuppliedTime {
         value,
-        expected_digest: statement.digest,
+        expected_digest: statement.digest(),
         provider,
         provider_run_id,
         provider_run_attempt: 9_007_199_254_740_991,
@@ -230,9 +234,9 @@ pub(super) fn request(
                 None,
                 |bytes| {
                     OrganizationFloor::parse(bytes).map(|floor| ControlBinding {
-                        digest: floor.digest,
-                        repository: floor.repository,
-                        ref_name: floor.ref_name,
+                        digest: floor.digest(),
+                        repository: floor.repository().clone(),
+                        ref_name: floor.ref_name().clone(),
                         organization_floor_digest: None,
                     })
                 },
@@ -253,10 +257,10 @@ pub(super) fn request(
                 floor_digest,
                 |bytes| {
                     DebtSnapshot::parse(bytes).map(|snapshot| ControlBinding {
-                        digest: snapshot.digest,
-                        repository: snapshot.repository,
-                        ref_name: snapshot.ref_name,
-                        organization_floor_digest: Some(snapshot.organization_floor_digest),
+                        digest: snapshot.digest(),
+                        repository: snapshot.repository().clone(),
+                        ref_name: snapshot.ref_name().clone(),
+                        organization_floor_digest: Some(snapshot.organization_floor_digest()),
                     })
                 },
                 BootstrapJobError::DebtSnapshot,
@@ -273,10 +277,10 @@ pub(super) fn request(
                 floor_digest,
                 |bytes| {
                     WaiverBundle::parse(bytes).map(|bundle| ControlBinding {
-                        digest: bundle.digest,
-                        repository: bundle.repository,
-                        ref_name: bundle.ref_name,
-                        organization_floor_digest: Some(bundle.organization_floor_digest),
+                        digest: bundle.digest(),
+                        repository: bundle.repository().clone(),
+                        ref_name: bundle.ref_name().clone(),
+                        organization_floor_digest: Some(bundle.organization_floor_digest()),
                     })
                 },
                 BootstrapJobError::WaiverBundle,

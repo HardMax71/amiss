@@ -52,16 +52,16 @@ impl ConstraintPlatform {
 /// release manifest, bootstrap contract, and required provider status name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutionConstraintDescriptor {
-    pub digest: Digest,
-    pub action_repository: RepositoryIdentity,
-    pub action_object_format: ObjectFormat,
-    pub action_commit_oid: Oid,
-    pub action_tree_oid: Oid,
-    pub manifest_path: RepoPathText,
-    pub release_manifest_digest: Digest,
-    pub selected_platform: ConstraintPlatform,
-    pub required_status_name: String,
-    pub bootstrap_digest: Digest,
+    digest: Digest,
+    action_repository: RepositoryIdentity,
+    action_object_format: ObjectFormat,
+    action_commit_oid: Oid,
+    action_tree_oid: Oid,
+    manifest_path: RepoPathText,
+    release_manifest_digest: Digest,
+    selected_platform: ConstraintPlatform,
+    required_status_name: String,
+    bootstrap_digest: Digest,
 }
 
 /// The controller-owned fields of an execution constraint. The schema and
@@ -108,6 +108,56 @@ pub fn valid_required_status_name(raw: &str) -> bool {
 }
 
 impl ExecutionConstraintDescriptor {
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    #[must_use]
+    pub fn action_repository(&self) -> &RepositoryIdentity {
+        &self.action_repository
+    }
+
+    #[must_use]
+    pub const fn action_object_format(&self) -> ObjectFormat {
+        self.action_object_format
+    }
+
+    #[must_use]
+    pub fn action_commit_oid(&self) -> &Oid {
+        &self.action_commit_oid
+    }
+
+    #[must_use]
+    pub fn action_tree_oid(&self) -> &Oid {
+        &self.action_tree_oid
+    }
+
+    #[must_use]
+    pub fn manifest_path(&self) -> &RepoPathText {
+        &self.manifest_path
+    }
+
+    #[must_use]
+    pub const fn release_manifest_digest(&self) -> Digest {
+        self.release_manifest_digest
+    }
+
+    #[must_use]
+    pub const fn selected_platform(&self) -> ConstraintPlatform {
+        self.selected_platform
+    }
+
+    #[must_use]
+    pub fn required_status_name(&self) -> &str {
+        &self.required_status_name
+    }
+
+    #[must_use]
+    pub const fn bootstrap_digest(&self) -> Digest {
+        self.bootstrap_digest
+    }
+
     /// Builds a descriptor through the same grammar, consistency, and digest
     /// rules used for untrusted wire bytes. Construction does not authenticate
     /// the action repository, tree, manifest, or bootstrap; the controller must
@@ -199,8 +249,8 @@ impl ExecutionConstraintDescriptor {
     ///
     /// # Errors
     ///
-    /// A public field was changed into a value [`Self::parse`] rejects, or
-    /// changed without replacing the derived `digest`.
+    /// The stored descriptor no longer round-trips through [`Self::parse`] or
+    /// its derived digest does not match the canonical value.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
         let bytes = canonical(&execution_constraint_value(self.into()));
         let parsed = Self::parse(&bytes)?;

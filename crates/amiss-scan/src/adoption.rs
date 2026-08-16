@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use amiss_git::{GitResources, Repository};
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::RepoPath;
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
 use crate::pipeline::{detail, side_observations};
@@ -38,12 +38,10 @@ pub fn reproduce(
     scan_limits: ScanLimits,
     context: &DebtContext,
 ) -> Result<(), ErrorDetail> {
-    if context.adoption_tree.object_format != repo.object_format() {
+    if context.adoption_tree.object_format() != repo.object_format() {
         return Err(mismatch());
     }
-    let Some(tree) = Oid::new(repo.object_format(), context.adoption_tree.tree_oid.clone()) else {
-        return Err(mismatch());
-    };
+    let tree = context.adoption_tree.oid().clone();
     let documents: BTreeSet<RepoPath> = context
         .items
         .iter()

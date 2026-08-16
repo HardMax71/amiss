@@ -220,7 +220,7 @@ fn accept_sealed(
             != Some(expected.execution_constraint.digest.as_str())
         || text(constraint, "trust_source")
             != Some(expected.execution_constraint.trust_source.as_str())
-        || descriptor.digest.to_string() != expected.execution_constraint.digest
+        || descriptor.digest().to_string() != expected.execution_constraint.digest
     {
         return Err(AcceptanceDefect::SealedControls);
     }
@@ -232,14 +232,14 @@ fn accept_sealed(
     if text(trusted, "status") != Some("verified")
         || text(trusted, "trust_source") != Some("external-required-check")
         || text(trusted, "statement_digest") != Some(expected.trusted_time_digest.as_str())
-        || statement.digest.to_string() != expected.trusted_time_digest
-        || statement.provider != expected.provider
-        || statement.provider_run_id != expected.provider_run_id
-        || statement.provider_run_attempt != expected.provider_run_attempt
-        || statement.repository != expected.repository
-        || statement.ref_name.as_str() != expected.target_ref
-        || statement.candidate_identity_digest.to_string() != identity_digest
-        || text(evaluation, "evaluation_instant") != Some(statement.evaluation_instant.as_str())
+        || statement.digest().to_string() != expected.trusted_time_digest
+        || statement.provider() != expected.provider
+        || statement.provider_run_id() != expected.provider_run_id
+        || statement.provider_run_attempt() != expected.provider_run_attempt
+        || statement.repository() != &expected.repository
+        || statement.ref_name().as_str() != expected.target_ref
+        || statement.candidate_identity_digest().to_string() != identity_digest
+        || text(evaluation, "evaluation_instant") != Some(statement.evaluation_instant().as_str())
     {
         return Err(AcceptanceDefect::SealedControls);
     }

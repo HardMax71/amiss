@@ -155,8 +155,8 @@ fn validate_action(
     provider: &amiss_controller::ProviderIdentity,
     plan: &amiss_controller::CheckPlan,
 ) -> Result<(), ConfigError> {
-    (plan.execution.action_repository.host == provider.instance.as_str()
-        && plan.execution.action_object_format == ObjectFormat::Sha1)
+    (plan.execution.action_repository().host() == provider.instance.as_str()
+        && plan.execution.action_object_format() == ObjectFormat::Sha1)
         .then_some(())
         .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 GitLab instance",

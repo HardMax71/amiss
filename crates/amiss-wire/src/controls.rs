@@ -71,6 +71,14 @@ pub enum Disposition {
 }
 
 impl Disposition {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+        }
+    }
+
     fn decode(path: &str, value: Value) -> Result<Self, Error> {
         match de::string(path, value)?.as_str() {
             "warn" => Ok(Self::Warn),
@@ -549,13 +557,107 @@ pub struct FindingDisposition {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScannerPolicy {
-    pub digest: Digest,
-    pub document_includes: Vec<DocumentInclude>,
-    pub protected_inventory: Vec<RepoPathText>,
-    pub finding_dispositions: Vec<FindingDisposition>,
+    digest: Digest,
+    document_includes: Vec<DocumentInclude>,
+    protected_inventory: Vec<RepoPathText>,
+    finding_dispositions: Vec<FindingDisposition>,
 }
 
 impl ScannerPolicy {
+    /// Builds a policy through the same ordering, uniqueness, and digest laws
+    /// used for repository-controlled bytes.
+    ///
+    /// # Errors
+    ///
+    /// The supplied sets contain duplicates or otherwise fail the
+    /// scanner-policy grammar.
+    pub fn new(
+        mut document_includes: Vec<DocumentInclude>,
+        mut protected_inventory: Vec<RepoPathText>,
+        mut finding_dispositions: Vec<FindingDisposition>,
+    ) -> Result<Self, Error> {
+        document_includes.sort_by(|left, right| {
+            (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind))
+        });
+        protected_inventory.sort();
+        finding_dispositions
+            .sort_by(|left, right| left.finding_kind.as_str().cmp(right.finding_kind.as_str()));
+        let include_rows = document_includes
+            .into_iter()
+            .map(|include| {
+                let mut rows = vec![
+                    (
+                        "path".to_owned(),
+                        Value::String(include.path.as_str().to_owned()),
+                    ),
+                    (
+                        "kind".to_owned(),
+                        Value::String(include.kind.as_str().to_owned()),
+                    ),
+                ];
+                if let Some(adapter) = include.adapter {
+                    rows.push((
+                        "adapter".to_owned(),
+                        Value::String(adapter.adapter_id().to_owned()),
+                    ));
+                }
+                Value::Object(rows)
+            })
+            .collect();
+        let inventory = protected_inventory
+            .into_iter()
+            .map(|path| Value::String(path.as_str().to_owned()))
+            .collect();
+        let dispositions = finding_dispositions
+            .into_iter()
+            .map(|row| {
+                Value::Object(vec![
+                    (
+                        "finding_kind".to_owned(),
+                        Value::String(row.finding_kind.as_str().to_owned()),
+                    ),
+                    (
+                        "disposition".to_owned(),
+                        Value::String(row.disposition.as_str().to_owned()),
+                    ),
+                ])
+            })
+            .collect();
+        let value = Value::Object(vec![
+            (
+                "schema".to_owned(),
+                Value::String(SCANNER_POLICY_SCHEMA.to_owned()),
+            ),
+            ("document_includes".to_owned(), Value::Array(include_rows)),
+            ("protected_inventory".to_owned(), Value::Array(inventory)),
+            (
+                "finding_dispositions".to_owned(),
+                Value::Array(dispositions),
+            ),
+        ]);
+        Self::parse(&json::canonical(&value))
+    }
+
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    #[must_use]
+    pub fn document_includes(&self) -> &[DocumentInclude] {
+        &self.document_includes
+    }
+
+    #[must_use]
+    pub fn protected_inventory(&self) -> &[RepoPathText] {
+        &self.protected_inventory
+    }
+
+    #[must_use]
+    pub fn finding_dispositions(&self) -> &[FindingDisposition] {
+        &self.finding_dispositions
+    }
+
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
@@ -613,18 +715,18 @@ pub struct FloorDisposition {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrganizationFloor {
-    pub digest: Digest,
-    pub floor_id: ArtifactId,
-    pub repository: RepositoryIdentity,
-    pub ref_name: BranchRef,
-    pub minimum_profile: Profile,
-    pub minimum_dispositions: Vec<FindingDisposition>,
-    pub protected_inventory: Vec<RepoPathText>,
-    pub protected_control_paths: Vec<RepoPathText>,
-    pub waivable_finding_kinds: Vec<EligibleFindingKind>,
-    pub authorized_debt_owners: Vec<OwnerId>,
-    pub authorized_waiver_issuers: Vec<OwnerId>,
-    pub resource_limits: Vec<ResourceLimit>,
+    digest: Digest,
+    floor_id: ArtifactId,
+    repository: RepositoryIdentity,
+    ref_name: BranchRef,
+    minimum_profile: Profile,
+    minimum_dispositions: Vec<FindingDisposition>,
+    protected_inventory: Vec<RepoPathText>,
+    protected_control_paths: Vec<RepoPathText>,
+    waivable_finding_kinds: Vec<EligibleFindingKind>,
+    authorized_debt_owners: Vec<OwnerId>,
+    authorized_waiver_issuers: Vec<OwnerId>,
+    resource_limits: Vec<ResourceLimit>,
 }
 
 /// A floor rejection: a schema-layer defect, or the combined
@@ -647,6 +749,66 @@ impl From<Error> for FloorDefect {
 pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 
 impl OrganizationFloor {
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    #[must_use]
+    pub const fn minimum_profile(&self) -> Profile {
+        self.minimum_profile
+    }
+
+    #[must_use]
+    pub fn floor_id(&self) -> &ArtifactId {
+        &self.floor_id
+    }
+
+    #[must_use]
+    pub fn repository(&self) -> &RepositoryIdentity {
+        &self.repository
+    }
+
+    #[must_use]
+    pub fn ref_name(&self) -> &BranchRef {
+        &self.ref_name
+    }
+
+    #[must_use]
+    pub fn minimum_dispositions(&self) -> &[FindingDisposition] {
+        &self.minimum_dispositions
+    }
+
+    #[must_use]
+    pub fn protected_inventory(&self) -> &[RepoPathText] {
+        &self.protected_inventory
+    }
+
+    #[must_use]
+    pub fn protected_control_paths(&self) -> &[RepoPathText] {
+        &self.protected_control_paths
+    }
+
+    #[must_use]
+    pub fn waivable_finding_kinds(&self) -> &[EligibleFindingKind] {
+        &self.waivable_finding_kinds
+    }
+
+    #[must_use]
+    pub fn authorized_debt_owners(&self) -> &[OwnerId] {
+        &self.authorized_debt_owners
+    }
+
+    #[must_use]
+    pub fn authorized_waiver_issuers(&self) -> &[OwnerId] {
+        &self.authorized_waiver_issuers
+    }
+
+    #[must_use]
+    pub fn resource_limits(&self) -> &[ResourceLimit] {
+        &self.resource_limits
+    }
+
     #[must_use]
     pub const fn schema(&self) -> &'static str {
         ORGANIZATION_FLOOR_SCHEMA
@@ -848,17 +1010,57 @@ pub struct DebtItem {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DebtSnapshot {
-    pub digest: Digest,
-    pub repository: RepositoryIdentity,
-    pub ref_name: BranchRef,
-    pub organization_floor_digest: Digest,
-    pub adoption_tree: TreeIdentity,
-    pub adoption_report_payload_digest: Digest,
-    pub created_at: UtcInstant,
-    pub items: Vec<DebtItem>,
+    digest: Digest,
+    repository: RepositoryIdentity,
+    ref_name: BranchRef,
+    organization_floor_digest: Digest,
+    adoption_tree: TreeIdentity,
+    adoption_report_payload_digest: Digest,
+    created_at: UtcInstant,
+    items: Vec<DebtItem>,
 }
 
 impl DebtSnapshot {
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    #[must_use]
+    pub fn repository(&self) -> &RepositoryIdentity {
+        &self.repository
+    }
+
+    #[must_use]
+    pub fn ref_name(&self) -> &BranchRef {
+        &self.ref_name
+    }
+
+    #[must_use]
+    pub const fn organization_floor_digest(&self) -> Digest {
+        self.organization_floor_digest
+    }
+
+    #[must_use]
+    pub fn adoption_tree(&self) -> &TreeIdentity {
+        &self.adoption_tree
+    }
+
+    #[must_use]
+    pub const fn adoption_report_payload_digest(&self) -> Digest {
+        self.adoption_report_payload_digest
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> &UtcInstant {
+        &self.created_at
+    }
+
+    #[must_use]
+    pub fn items(&self) -> &[DebtItem] {
+        &self.items
+    }
+
     #[must_use]
     pub const fn schema(&self) -> &'static str {
         DEBT_SNAPSHOT_SCHEMA
@@ -939,15 +1141,45 @@ pub struct WaiverItem {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WaiverBundle {
-    pub digest: Digest,
-    pub repository: RepositoryIdentity,
-    pub ref_name: BranchRef,
-    pub organization_floor_digest: Digest,
-    pub created_at: UtcInstant,
-    pub items: Vec<WaiverItem>,
+    digest: Digest,
+    repository: RepositoryIdentity,
+    ref_name: BranchRef,
+    organization_floor_digest: Digest,
+    created_at: UtcInstant,
+    items: Vec<WaiverItem>,
 }
 
 impl WaiverBundle {
+    #[must_use]
+    pub const fn digest(&self) -> Digest {
+        self.digest
+    }
+
+    #[must_use]
+    pub fn repository(&self) -> &RepositoryIdentity {
+        &self.repository
+    }
+
+    #[must_use]
+    pub fn ref_name(&self) -> &BranchRef {
+        &self.ref_name
+    }
+
+    #[must_use]
+    pub const fn organization_floor_digest(&self) -> Digest {
+        self.organization_floor_digest
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> &UtcInstant {
+        &self.created_at
+    }
+
+    #[must_use]
+    pub fn items(&self) -> &[WaiverItem] {
+        &self.items
+    }
+
     #[must_use]
     pub const fn schema(&self) -> &'static str {
         WAIVER_BUNDLE_SCHEMA
@@ -1015,8 +1247,8 @@ impl WaiverBundle {
 
 fn waiver_sort_key(item: &WaiverItem) -> (ObjectFormat, &str, Digest, &str) {
     (
-        item.candidate_tree.object_format,
-        item.candidate_tree.tree_oid.as_str(),
+        item.candidate_tree.object_format(),
+        item.candidate_tree.tree_oid(),
         item.finding_key,
         item.waiver_id.as_str(),
     )

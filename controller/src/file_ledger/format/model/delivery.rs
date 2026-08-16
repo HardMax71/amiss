@@ -142,9 +142,9 @@ struct StoredRepository {
 impl StoredRepository {
     fn new(repository: &RepositoryIdentity) -> Self {
         Self {
-            host: repository.host.clone(),
-            owner: repository.owner.clone(),
-            name: repository.name.clone(),
+            host: repository.host().to_owned(),
+            owner: repository.owner().to_owned(),
+            name: repository.name().to_owned(),
         }
     }
 

@@ -198,7 +198,7 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
             value: parse(floor_bytes).unwrap(),
-            expected_digest: floor.digest,
+            expected_digest: floor.digest(),
             trust_source: RequestTrust::OrganizationPolicy,
         }),
         ..ControlsRequest::default()

@@ -17,8 +17,8 @@ fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
     let floor =
         OrganizationFloor::parse(doc.as_bytes()).expect("warn is a disposition a floor may set");
     assert_ne!(
-        floor.digest,
-        OrganizationFloor::parse(FLOOR).unwrap().digest
+        floor.digest(),
+        OrganizationFloor::parse(FLOOR).unwrap().digest()
     );
 }
 
@@ -27,26 +27,26 @@ fn parses_the_floor_fixture() {
     let floor = OrganizationFloor::parse(FLOOR).unwrap();
     assert_eq!(floor.schema(), "amiss/organization-floor");
     assert_eq!(
-        floor.digest,
+        floor.digest(),
         hj("amiss/organization-floor", &json::parse(FLOOR).unwrap())
     );
-    assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
-    assert_eq!(floor.ref_name.as_str(), "refs/heads/main");
-    assert_eq!(floor.resource_limits.len(), 2);
+    assert_eq!(floor.floor_id().as_str(), "platform/scanner-floor-2026-07");
+    assert_eq!(floor.ref_name().as_str(), "refs/heads/main");
+    assert_eq!(floor.resource_limits().len(), 2);
     let owners: Vec<&str> = floor
-        .authorized_debt_owners
+        .authorized_debt_owners()
         .iter()
         .map(amiss_wire::model::OwnerId::as_str)
         .collect();
     assert_eq!(owners, ["team:docs-platform"]);
     let issuers: Vec<&str> = floor
-        .authorized_waiver_issuers
+        .authorized_waiver_issuers()
         .iter()
         .map(amiss_wire::model::OwnerId::as_str)
         .collect();
     assert_eq!(issuers, ["team:release-engineering"]);
     let waivable: Vec<&str> = floor
-        .waivable_finding_kinds
+        .waivable_finding_kinds()
         .iter()
         .map(|kind| kind.as_str())
         .collect();
@@ -55,7 +55,10 @@ fn parses_the_floor_fixture() {
         [EligibleFindingKind::ExplicitTargetMissing.as_str()]
     );
     assert_eq!(waivable, ["explicit-target-missing"]);
-    assert_ne!(floor.digest, ScannerPolicy::parse(POLICY).unwrap().digest);
+    assert_ne!(
+        floor.digest(),
+        ScannerPolicy::parse(POLICY).unwrap().digest()
+    );
 }
 
 #[test]
@@ -97,7 +100,7 @@ fn parses_a_floor_declaring_every_resource() {
         rows = rows.join(",")
     );
     let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
-    assert_eq!(floor.resource_limits.len(), ResourceName::all().len());
+    assert_eq!(floor.resource_limits().len(), ResourceName::all().len());
 }
 
 #[expect(clippy::panic, reason = "test helper narrowing the defect family")]
@@ -197,7 +200,7 @@ fn accepts_a_floor_at_exactly_the_combined_entry_limit() {
     let floor = OrganizationFloor::parse(doc.as_bytes())
         .expect("a floor whose entries sum to the limit exactly is within it");
     assert_eq!(
-        u64::try_from(floor.protected_inventory.len() + floor.protected_control_paths.len())
+        u64::try_from(floor.protected_inventory().len() + floor.protected_control_paths().len())
             .expect("entry counts fit"),
         ORGANIZATION_POLICY_ENTRIES_LIMIT
     );
@@ -223,7 +226,7 @@ fn accepts_a_floor_meeting_its_own_declared_entry_limit_exactly() {
 }"#;
     let floor = OrganizationFloor::parse(doc)
         .expect("three paths and one limit row meet a declared maximum of four exactly");
-    assert_eq!(floor.protected_inventory.len(), 3);
+    assert_eq!(floor.protected_inventory().len(), 3);
 }
 
 #[test]

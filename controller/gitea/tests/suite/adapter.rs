@@ -85,8 +85,8 @@ fn both_supported_namespaces_bind_the_same_signed_facts() {
         let delivery = verified.delivery();
         assert_eq!(adapter.namespace().as_str(), namespace);
         assert_eq!(delivery.identity.integration.as_str(), "77");
-        assert_eq!(delivery.change.repository.owner, "acme");
-        assert_eq!(delivery.change.repository.name, "widget");
+        assert_eq!(delivery.change.repository.owner(), "acme");
+        assert_eq!(delivery.change.repository.name(), "widget");
         assert_eq!(
             delivery.change.change.as_str(),
             "repository/101/pull/4201/number/42"

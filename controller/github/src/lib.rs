@@ -290,11 +290,11 @@ fn validate_delivery<'a>(
         .and_then(Digest::from_wire);
     if delivery.identity.provider != *provider
         || delivery.change.provider != *provider
-        || repository.host != provider.instance.as_str()
+        || repository.host() != provider.instance.as_str()
         || RepositoryIdentity::new(
-            repository.host.clone(),
-            repository.owner.clone(),
-            repository.name.clone(),
+            repository.host().to_owned(),
+            repository.owner().to_owned(),
+            repository.name().to_owned(),
         )
         .as_ref()
             != Some(repository)
@@ -316,8 +316,8 @@ fn validate_delivery<'a>(
         change: &delivery.change,
         installation_id,
         repository_id,
-        repository_owner: &repository.owner,
-        repository_name: &repository.name,
+        repository_owner: repository.owner(),
+        repository_name: repository.name(),
         pull_request_id,
         number,
         candidate_commit: &delivery.provider_run.candidate_commit,
@@ -353,9 +353,9 @@ fn provider_run(
 ) -> Option<ProviderRunIdentity> {
     let fields = serde_json::to_vec(&[
         installation.as_str(),
-        change.repository.host.as_str(),
-        change.repository.owner.as_str(),
-        change.repository.name.as_str(),
+        change.repository.host(),
+        change.repository.owner(),
+        change.repository.name(),
         change.change.as_str(),
         candidate.as_str(),
         candidate_ref.as_str(),

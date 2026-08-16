@@ -724,14 +724,8 @@ fn run_feedback_value(complete: bool, findings: &[Finding], comparisons: &[Compa
 
 fn tree_identity_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
     object(vec![
-        (
-            "object_format",
-            string(match tree.object_format {
-                amiss_wire::model::ObjectFormat::Sha1 => "sha1",
-                amiss_wire::model::ObjectFormat::Sha256 => "sha256",
-            }),
-        ),
-        ("tree_oid", string(&tree.tree_oid)),
+        ("object_format", string(tree.object_format().as_str())),
+        ("tree_oid", string(tree.tree_oid())),
     ])
 }
 
@@ -919,9 +913,9 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
             "repository",
             setup.repository.as_ref().map_or(Value::Null, |identity| {
                 object(vec![
-                    ("host", string(&identity.host)),
-                    ("owner", string(&identity.owner)),
-                    ("name", string(&identity.name)),
+                    ("host", string(identity.host())),
+                    ("owner", string(identity.owner())),
+                    ("name", string(identity.name())),
                 ])
             }),
         ),
@@ -967,7 +961,7 @@ fn evaluation_value(setup: &Setup) -> Value {
             (
                 "evaluation_instant",
                 setup.policy.time.as_ref().map_or(Value::Null, |time| {
-                    string(time.statement.evaluation_instant.as_str())
+                    string(time.statement.evaluation_instant().as_str())
                 }),
             ),
             ("trusted_time", Value::Bool(setup.policy.time.is_some())),
@@ -1067,7 +1061,7 @@ fn controls_value(setup: &Setup) -> Value {
                     object(vec![
                         ("status", string("verified")),
                         ("descriptor", constraint_descriptor_value(descriptor)),
-                        ("descriptor_digest", digest_value(descriptor.digest)),
+                        ("descriptor_digest", digest_value(descriptor.digest())),
                         ("trust_source", string(trust)),
                     ])
                 },
@@ -1108,43 +1102,40 @@ fn constraint_descriptor_value(
         (
             "action_repository",
             object(vec![
-                ("host", string(&descriptor.action_repository.host)),
-                ("owner", string(&descriptor.action_repository.owner)),
-                ("name", string(&descriptor.action_repository.name)),
+                ("host", string(descriptor.action_repository().host())),
+                ("owner", string(descriptor.action_repository().owner())),
+                ("name", string(descriptor.action_repository().name())),
             ]),
         ),
         (
             "action_object_format",
-            string(match descriptor.action_object_format {
-                amiss_wire::model::ObjectFormat::Sha1 => "sha1",
-                amiss_wire::model::ObjectFormat::Sha256 => "sha256",
-            }),
+            string(descriptor.action_object_format().as_str()),
         ),
         (
             "action_commit_oid",
-            string(descriptor.action_commit_oid.as_str()),
+            string(descriptor.action_commit_oid().as_str()),
         ),
         (
             "action_tree_oid",
-            string(descriptor.action_tree_oid.as_str()),
+            string(descriptor.action_tree_oid().as_str()),
         ),
-        ("manifest_path", string(descriptor.manifest_path.as_str())),
+        ("manifest_path", string(descriptor.manifest_path().as_str())),
         (
             "release_manifest_digest",
-            digest_value(descriptor.release_manifest_digest),
+            digest_value(descriptor.release_manifest_digest()),
         ),
         (
             "selected_platform",
-            string(descriptor.selected_platform.as_str()),
+            string(descriptor.selected_platform().as_str()),
         ),
         (
             "required_status_name",
-            string(&descriptor.required_status_name),
+            string(descriptor.required_status_name()),
         ),
         ("bootstrap_contract", string("amiss-action-bootstrap")),
         (
             "bootstrap_digest",
-            digest_value(descriptor.bootstrap_digest),
+            digest_value(descriptor.bootstrap_digest()),
         ),
     ])
 }
@@ -1156,29 +1147,29 @@ fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) 
         (
             "repository",
             object(vec![
-                ("host", string(&statement.repository.host)),
-                ("owner", string(&statement.repository.owner)),
-                ("name", string(&statement.repository.name)),
+                ("host", string(statement.repository().host())),
+                ("owner", string(statement.repository().owner())),
+                ("name", string(statement.repository().name())),
             ]),
         ),
-        ("ref", string(statement.ref_name.as_str())),
+        ("ref", string(statement.ref_name().as_str())),
         (
             "candidate_identity_digest",
-            digest_value(statement.candidate_identity_digest),
+            digest_value(statement.candidate_identity_digest()),
         ),
     ];
-    rows.push(("provider", string(&statement.provider)));
+    rows.push(("provider", string(statement.provider())));
     rows.extend([
-        ("provider_run_id", string(&statement.provider_run_id)),
+        ("provider_run_id", string(statement.provider_run_id())),
         (
             "provider_run_attempt",
-            integer(statement.provider_run_attempt),
+            integer(statement.provider_run_attempt()),
         ),
         (
             "evaluation_instant",
-            string(statement.evaluation_instant.as_str()),
+            string(statement.evaluation_instant().as_str()),
         ),
-        ("valid_until", string(statement.valid_until.as_str())),
+        ("valid_until", string(statement.valid_until().as_str())),
     ]);
     object(rows)
 }

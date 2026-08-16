@@ -39,7 +39,7 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
     let run = &request.run;
     let provider = &request.delivery.provider;
     let repository = &run.change.repository;
-    let action = &request.plan.execution.action_repository;
+    let action = request.plan.execution.action_repository();
     let integration_id = request
         .delivery
         .integration
@@ -60,14 +60,14 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
     .ok_or(GiteaPlanError::InvalidRequest)?;
 
     let identity_valid = request.delivery.provider == run.change.provider
-        && repository.host == provider.instance.as_str()
-        && action.host == provider.instance.as_str()
+        && repository.host() == provider.instance.as_str()
+        && action.host() == provider.instance.as_str()
         && canonical_repository(repository)
         && canonical_repository(action);
     let format_valid = run.refs.forge == ForgeDialect::Gitea
         && run.object_format == ObjectFormat::Sha1
         && request.provider_run.object_format == ObjectFormat::Sha1
-        && request.plan.execution.action_object_format == ObjectFormat::Sha1;
+        && request.plan.execution.action_object_format() == ObjectFormat::Sha1;
     let binding_valid = request.provider_run == expected_run
         && request.provider_run.candidate_commit == run.commits.candidate
         && exact_oids(run, request);
@@ -87,7 +87,7 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
         repository_url: repository_url(repository),
         repository_oids: [run.commits.base.clone(), run.commits.candidate.clone()],
         action_url: repository_url(action),
-        action_oid: request.plan.execution.action_commit_oid.clone(),
+        action_oid: request.plan.execution.action_commit_oid().clone(),
     })
 }
 
@@ -97,8 +97,8 @@ fn exact_oids(run: &RunIdentity, request: &RunRequest) -> bool {
         &run.commits.candidate,
         &run.trees.base,
         &run.trees.candidate,
-        &request.plan.execution.action_commit_oid,
-        &request.plan.execution.action_tree_oid,
+        request.plan.execution.action_commit_oid(),
+        request.plan.execution.action_tree_oid(),
     ]
     .into_iter()
     .all(exact_sha1)
@@ -106,14 +106,14 @@ fn exact_oids(run: &RunIdentity, request: &RunRequest) -> bool {
 
 fn canonical_repository(repository: &RepositoryIdentity) -> bool {
     RepositoryIdentity::new(
-        repository.host.clone(),
-        repository.owner.clone(),
-        repository.name.clone(),
+        repository.host().to_owned(),
+        repository.owner().to_owned(),
+        repository.name().to_owned(),
     )
     .as_ref()
         == Some(repository)
-        && !repository.owner.contains('/')
-        && canonical_host(&repository.host)
+        && !repository.owner().contains('/')
+        && canonical_host(repository.host())
 }
 
 fn exact_sha1(oid: &Oid) -> bool {
@@ -123,6 +123,8 @@ fn exact_sha1(oid: &Oid) -> bool {
 pub fn repository_url(repository: &RepositoryIdentity) -> String {
     format!(
         "https://{}/{}/{}.git",
-        repository.host, repository.owner, repository.name
+        repository.host(),
+        repository.owner(),
+        repository.name()
     )
 }

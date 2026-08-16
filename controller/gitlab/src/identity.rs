@@ -41,7 +41,7 @@ pub(crate) fn repository_identity(host: &str, project_path: &str) -> Option<Repo
 pub(crate) fn canonical_project_path(raw: &str) -> Option<String> {
     let canonical = raw.to_ascii_lowercase();
     repository_identity("gitlab.invalid", &canonical)
-        .filter(|identity| !identity.owner.is_empty() && !identity.name.is_empty())
+        .filter(|identity| !identity.owner().is_empty() && !identity.name().is_empty())
         .map(|_identity| canonical)
 }
 
@@ -59,10 +59,10 @@ pub(crate) fn repository_url(host: &str, project_path: &str) -> Option<String> {
 }
 
 pub(crate) fn canonical_repository(repository: &RepositoryIdentity) -> bool {
-    let path = format!("{}/{}", repository.owner, repository.name);
-    canonical_host(&repository.host)
+    let path = format!("{}/{}", repository.owner(), repository.name());
+    canonical_host(repository.host())
         && canonical_project_path(&path).as_deref() == Some(path.as_str())
-        && repository_identity(&repository.host, &path).as_ref() == Some(repository)
+        && repository_identity(repository.host(), &path).as_ref() == Some(repository)
 }
 
 pub(crate) fn canonical_host(host: &str) -> bool {

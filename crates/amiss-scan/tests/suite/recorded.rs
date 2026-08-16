@@ -52,11 +52,9 @@ fn shell(profile: Profile) -> SetupShell {
     SetupShell {
         engine: engine(),
         profile,
-        repository: Some(RepositoryIdentity {
-            host: "github.com".to_owned(),
-            owner: "hardmax71".to_owned(),
-            name: "spec_to_rest".to_owned(),
-        }),
+        repository: Some(
+            RepositoryIdentity::github("hardmax71".to_owned(), "spec_to_rest".to_owned()).unwrap(),
+        ),
         forge: Some(ForgeDialect::Github),
         candidate_ref: Some("refs/heads/main".to_owned()),
         target_ref: None,

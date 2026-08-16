@@ -33,16 +33,16 @@ fn request_route_matches(config: &Config, pull_request: GiteaPullRequest<'_>) ->
 fn request_subject_matches(config: &Config, pull_request: GiteaPullRequest<'_>) -> bool {
     let repository = &pull_request.change.repository;
     RepositoryIdentity::new(
-        repository.host.clone(),
-        repository.owner.clone(),
-        repository.name.clone(),
+        repository.host().to_owned(),
+        repository.owner().to_owned(),
+        repository.name().to_owned(),
     )
     .as_ref()
         == Some(repository)
-        && repository.host == config.provider.instance.as_str()
-        && repository.owner == pull_request.repository_owner
-        && repository.name == pull_request.repository_name
-        && !repository.owner.contains('/')
+        && repository.host() == config.provider.instance.as_str()
+        && repository.owner() == pull_request.repository_owner
+        && repository.name() == pull_request.repository_name
+        && !repository.owner().contains('/')
         && exact_oid(pull_request.candidate_commit.as_str()).as_ref()
             == Ok(pull_request.candidate_commit)
         && parse_change_id(pull_request.change.change.as_str())

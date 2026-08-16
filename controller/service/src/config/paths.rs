@@ -127,12 +127,12 @@ fn resolve_execution_paths(
         },
     )?;
     let bootstrap_bytes = read_regular(&bootstrap, BOOTSTRAP_EXECUTABLE_BYTES)?;
-    (hb(BOOTSTRAP_DOMAIN, &bootstrap_bytes) == plan.execution.bootstrap_digest)
+    (hb(BOOTSTRAP_DOMAIN, &bootstrap_bytes) == plan.execution.bootstrap_digest())
         .then_some(())
         .ok_or(ConfigError::invalid(
             "bootstrap does not match the execution constraint",
         ))?;
-    (host_platform() == Some(plan.execution.selected_platform))
+    (host_platform() == Some(plan.execution.selected_platform()))
         .then_some(LoadedExecutionPaths {
             bootstrap,
             scratch,

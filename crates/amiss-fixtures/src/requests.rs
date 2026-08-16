@@ -60,7 +60,7 @@ impl SealedRequests {
                     .expect("the constraint serializes"),
             )
             .expect("canonical bytes parse"),
-            expected_digest: constraint.digest,
+            expected_digest: constraint.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         });
         Self {
