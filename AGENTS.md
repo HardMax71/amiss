@@ -35,8 +35,8 @@ runs the same stages, so local green and remote green are the same thing.
 - The fixed description sentences live in `FindingKind::meaning`,
   `AnalysisErrorCode::meaning`, and `FixKind::meaning` and nowhere else; every other
   appearance is a checked projection.
-- Function-twin edges may only fall, or remain the identical set. Stable identities reject
-  an equal-count substitution; a net cleanup reports any incidental new relationship.
+- Function-twin edges may only disappear or remain the identical set. Stable identities
+  reject every new relationship, including an equal-count substitution.
 - The scanner's repository I/O stays inside the repository's declared git roots, the
   checkout plus the private and common git directories one bounded gitdir/commondir
   indirection names, and it spawns nothing. Its

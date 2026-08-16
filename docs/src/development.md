@@ -23,8 +23,8 @@ warnings denied, the full test suite, `cargo deny`, `cargo shear`, and a
 compares functions within one file, so the gate also concatenates the deliberately parallel
 provider transports, lane-test harnesses, service runtimes, and verification files. It maps
 those generated lines back to their source paths and compares stable pair identities with the
-base Git tree. The total may fall or remain the identical set: stable identities reject an
-equal-count remove-and-replace, while a net cleanup reports any incidental new relationship.
+base Git tree. Every candidate edge must already exist in that base set, so removals pass while
+new relationships, including an equal-count remove-and-replace, fail.
 Main and merge-queue CI cache the derived base manifest by tree and policy identity. Pull requests
 rescan so their private cache scope cannot shadow the default branch; any missing or invalid cache
 is likewise regenerated from Git, so no mutable baseline or allowlist lives in the tree.

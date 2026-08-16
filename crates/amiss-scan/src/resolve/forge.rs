@@ -16,11 +16,61 @@ pub(super) fn resolve(
     query: Option<String>,
     fragment: Option<String>,
 ) -> Result<(Intent, Resolution), Error> {
-    match context.dialect {
-        ForgeDialect::Github => github(resolver, context, suffix, query, fragment),
-        ForgeDialect::Gitlab => gitlab(resolver, context, suffix, query, fragment),
-        ForgeDialect::Gitea => gitea(resolver, context, suffix, query, fragment),
+    let route = match context.dialect {
+        ForgeDialect::Github => github(context, suffix),
+        ForgeDialect::Gitlab => gitlab(context, suffix),
+        ForgeDialect::Gitea => gitea(context, suffix),
+    };
+    match route {
+        ForgeRoute::Foreign => Ok(foreign_row(query, fragment)),
+        ForgeRoute::Unsupported(resolution) => {
+            Ok((unsupported_intent(query, fragment), resolution))
+        }
+        ForgeRoute::Same(matched) => {
+            let resolution = matched
+                .candidate
+                .then(|| {
+                    lookup(
+                        resolver,
+                        &matched.path,
+                        matched.target_kind,
+                        query.as_deref(),
+                        fragment.as_deref(),
+                        Some(context.dialect),
+                    )
+                })
+                .transpose()?
+                .unwrap_or_else(|| {
+                    Resolution::UnsupportedVersion(VersionScope::KnownPath {
+                        path: matched.path.clone(),
+                    })
+                });
+            Ok((
+                Intent {
+                    kind: matched.intent_kind,
+                    repository_path: Some(matched.path),
+                    target_kind: Some(matched.target_kind),
+                    external_scheme: None,
+                    query,
+                    fragment,
+                },
+                resolution,
+            ))
+        }
     }
+}
+
+enum ForgeRoute {
+    Foreign,
+    Unsupported(Resolution),
+    Same(ForgeMatch),
+}
+
+struct ForgeMatch {
+    intent_kind: IntentKind,
+    target_kind: TargetKind,
+    candidate: bool,
+    path: RepoPath,
 }
 
 /// A recognized URL that is not this repository: a valid external HTTPS
@@ -39,68 +89,16 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
     )
 }
 
-struct ForgeMatch {
-    intent_kind: IntentKind,
-    target_kind: TargetKind,
-    candidate: bool,
-    path: RepoPath,
-}
-
-fn finish_same_repository(
-    resolver: &mut Resolver<'_>,
-    context: &ForgeContext,
-    matched: ForgeMatch,
-    query: Option<String>,
-    fragment: Option<String>,
-) -> Result<(Intent, Resolution), Error> {
-    let resolution = matched
-        .candidate
-        .then(|| {
-            lookup(
-                resolver,
-                &matched.path,
-                matched.target_kind,
-                query.as_deref(),
-                fragment.as_deref(),
-                Some(context.dialect),
-            )
-        })
-        .transpose()?
-        .unwrap_or_else(|| {
-            Resolution::UnsupportedVersion(VersionScope::KnownPath {
-                path: matched.path.clone(),
-            })
-        });
-    Ok((
-        Intent {
-            kind: matched.intent_kind,
-            repository_path: Some(matched.path),
-            target_kind: Some(matched.target_kind),
-            external_scheme: None,
-            query,
-            fragment,
-        },
-        resolution,
-    ))
-}
-
 /// Foreign unless proven trusted: exact accepted `blob`/`tree` forms, literal
 /// ASCII owner and repository folded only `A`-`Z`, each later segment decoded
 /// exactly once, the trusted refs matched by whole segments, and the
 /// remaining path validated before the candidate-or-default decision.
-fn github(
-    resolver: &mut Resolver<'_>,
-    identity: &ForgeContext,
-    suffix: &str,
-    query: Option<String>,
-    fragment: Option<String>,
-) -> Result<(Intent, Resolution), Error> {
-    let foreign = foreign_row;
+fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let segments: Vec<&str> = suffix.split('/').collect();
     let (Some(owner), Some(repository), Some(form)) =
         (segments.first(), segments.get(1), segments.get(2))
     else {
-        return Ok(foreign(query, fragment));
+        return ForgeRoute::Foreign;
     };
     let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
     if !literal_ascii(owner)
@@ -108,38 +106,28 @@ fn github(
         || owner.to_ascii_lowercase() != identity.owner
         || repository.to_ascii_lowercase() != identity.repository
     {
-        return Ok(foreign(query, fragment));
+        return ForgeRoute::Foreign;
     }
     let target_kind = match *form {
         "blob" => TargetKind::Blob,
         "tree" => TargetKind::Tree,
-        _ => return Ok(foreign(query, fragment)),
+        _ => return ForgeRoute::Foreign,
     };
 
     let tolerate_terminal_slash = target_kind == TargetKind::Tree;
-    let (matched_candidate, joined) = match trusted_split(
+    match trusted_split(
         identity,
         tolerate_terminal_slash,
         segments.get(3..).unwrap_or_default(),
     ) {
-        Ok(split) => split,
-        Err(resolution) => {
-            return Ok((unsupported_intent(query, fragment), resolution));
-        }
-    };
-
-    finish_same_repository(
-        resolver,
-        identity,
-        ForgeMatch {
+        Ok((candidate, path)) => ForgeRoute::Same(ForgeMatch {
             intent_kind: IntentKind::SameRepositoryGithub,
             target_kind,
-            candidate: matched_candidate,
-            path: joined,
-        },
-        query,
-        fragment,
-    )
+            candidate,
+            path,
+        }),
+        Err(resolution) => ForgeRoute::Unsupported(resolution),
+    }
 }
 
 /// GitLab's canonical form: every segment before the reserved `-` separator
@@ -149,20 +137,14 @@ fn github(
 /// at index two or later is the separator or the URL is nobody's; anything
 /// without one, including the legacy pre-separator form and `/-/raw/`, is
 /// foreign.
-fn gitlab(
-    resolver: &mut Resolver<'_>,
-    identity: &ForgeContext,
-    suffix: &str,
-    query: Option<String>,
-    fragment: Option<String>,
-) -> Result<(Intent, Resolution), Error> {
+fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let segments: Vec<&str> = suffix.split('/').collect();
     let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
     let Some(separator) = segments.iter().position(|segment| *segment == "-") else {
-        return Ok(foreign_row(query, fragment));
+        return ForgeRoute::Foreign;
     };
     if separator < 2 {
-        return Ok(foreign_row(query, fragment));
+        return ForgeRoute::Foreign;
     }
     let name_at = separator.saturating_sub(1);
     let owner_segments = segments.get(..name_at).unwrap_or_default();
@@ -177,37 +159,26 @@ fn gitlab(
         || !literal_ascii(project)
         || project.to_ascii_lowercase() != identity.repository
     {
-        return Ok(foreign_row(query, fragment));
+        return ForgeRoute::Foreign;
     }
     let target_kind = match segments.get(separator.saturating_add(1)) {
         Some(&"blob") => TargetKind::Blob,
         Some(&"tree") => TargetKind::Tree,
-        Some(_) | None => return Ok(foreign_row(query, fragment)),
+        Some(_) | None => return ForgeRoute::Foreign,
     };
 
     let tail = segments
         .get(separator.saturating_add(2)..)
         .unwrap_or_default();
-    let (matched_candidate, joined) =
-        match trusted_split(identity, target_kind == TargetKind::Tree, tail) {
-            Ok(split) => split,
-            Err(resolution) => {
-                return Ok((unsupported_intent(query, fragment), resolution));
-            }
-        };
-
-    finish_same_repository(
-        resolver,
-        identity,
-        ForgeMatch {
+    match trusted_split(identity, target_kind == TargetKind::Tree, tail) {
+        Ok((candidate, path)) => ForgeRoute::Same(ForgeMatch {
             intent_kind: IntentKind::SameRepositoryGitlab,
             target_kind,
-            candidate: matched_candidate,
-            path: joined,
-        },
-        query,
-        fragment,
-    )
+            candidate,
+            path,
+        }),
+        Err(resolution) => ForgeRoute::Unsupported(resolution),
+    }
 }
 
 /// The gitea family's typed forms, shared by Gitea, Forgejo, and Codeberg:
@@ -219,13 +190,7 @@ fn gitlab(
 /// `either`, or `tree` under a directory-hint slash. The untyped legacy
 /// `src/<ref>/` form and every other selector are foreign: only the spellings
 /// the forge's own browser emits are pinned.
-fn gitea(
-    resolver: &mut Resolver<'_>,
-    identity: &ForgeContext,
-    suffix: &str,
-    query: Option<String>,
-    fragment: Option<String>,
-) -> Result<(Intent, Resolution), Error> {
+fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let segments: Vec<&str> = suffix.split('/').collect();
     let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
     let (Some(owner), Some(project), Some(&"src"), Some(selector)) = (
@@ -234,14 +199,14 @@ fn gitea(
         segments.get(2),
         segments.get(3),
     ) else {
-        return Ok(foreign_row(query, fragment));
+        return ForgeRoute::Foreign;
     };
     if !literal_ascii(owner)
         || !literal_ascii(project)
         || owner.to_ascii_lowercase() != identity.owner
         || project.to_ascii_lowercase() != identity.repository
     {
-        return Ok(foreign_row(query, fragment));
+        return ForgeRoute::Foreign;
     }
     let raw_tail = segments.get(5..).unwrap_or_default();
     let directory_hint = raw_tail.len() > 1 && raw_tail.last() == Some(&"");
@@ -258,7 +223,7 @@ fn gitea(
         "commit" => {
             let pinned = segments.get(4).copied().unwrap_or_default();
             if !oid_shaped(pinned) {
-                return Ok(foreign_row(query, fragment));
+                return ForgeRoute::Foreign;
             }
             match decoded_tail(directory_hint, raw_tail) {
                 Ok(decoded) => contained_path(&decoded)
@@ -267,27 +232,17 @@ fn gitea(
             }
         }
         "tag" => Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath)),
-        _ => return Ok(foreign_row(query, fragment)),
+        _ => return ForgeRoute::Foreign,
     };
-    let (matched_candidate, joined) = match split {
-        Ok(split) => split,
-        Err(resolution) => {
-            return Ok((unsupported_intent(query, fragment), resolution));
-        }
-    };
-
-    finish_same_repository(
-        resolver,
-        identity,
-        ForgeMatch {
+    match split {
+        Ok((candidate, path)) => ForgeRoute::Same(ForgeMatch {
             intent_kind: IntentKind::SameRepositoryGitea,
             target_kind,
-            candidate: matched_candidate,
-            path: joined,
-        },
-        query,
-        fragment,
-    )
+            candidate,
+            path,
+        }),
+        Err(resolution) => ForgeRoute::Unsupported(resolution),
+    }
 }
 
 /// A full lowercase object id in either frozen format; anything else after

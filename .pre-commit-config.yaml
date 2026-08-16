@@ -127,7 +127,7 @@ repos:
         pass_filenames: false
         stages: [pre-push]
       # Whole functions compared by AST edit distance: a stable edge manifest
-      # rejects growth and equal-count substitutions while admitting net cleanup.
+      # rejects every new relationship while admitting removals.
       - id: similarity-ratchet
         name: function twin edges only decrease
         entry: scripts/similarity-gate.sh
