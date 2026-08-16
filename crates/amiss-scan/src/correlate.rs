@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::Digest;
@@ -209,10 +209,11 @@ type ObservationGroups<'a> =
     BTreeMap<CorrelationKey<'a>, BTreeMap<&'a RepoPath, DocumentGroup<'a>>>;
 
 fn observation_groups<'a>(
-    observations: impl Iterator<Item = &'a Observation>,
-) -> ObservationGroups<'a> {
+    observations: impl Iterator<Item = Result<&'a Observation, Error>>,
+) -> Result<ObservationGroups<'a>, Error> {
     let mut groups: ObservationGroups<'a> = BTreeMap::new();
     for observation in observations {
+        let observation = observation?;
         let document = groups
             .entry(CorrelationKey::from(observation))
             .or_default()
@@ -225,23 +226,24 @@ fn observation_groups<'a>(
             .or_default()
             .push(observation);
     }
-    groups
+    Ok(groups)
 }
 
 /// Exact Git renames among unmatched document paths: a removed base blob and
 /// an added candidate blob pair only when their mode and raw-evidence digest
 /// agree and that pair occurs exactly once on each side. Duplicate content
 /// creates no edge and is never tie-broken.
-fn rename_pairs(base: &Side, candidate: &Side) -> BTreeMap<RepoPath, RepoPath> {
+fn rename_pairs(
+    base: &BTreeMap<RepoPath, (GitMode, Digest)>,
+    candidate: &BTreeMap<RepoPath, (GitMode, Digest)>,
+) -> BTreeMap<RepoPath, RepoPath> {
     let removed: Vec<(&RepoPath, &(GitMode, Digest))> = base
-        .documents
         .iter()
-        .filter(|(path, _)| !candidate.documents.contains_key(*path))
+        .filter(|(path, _)| !candidate.contains_key(*path))
         .collect();
     let added: Vec<(&RepoPath, &(GitMode, Digest))> = candidate
-        .documents
         .iter()
-        .filter(|(path, _)| !base.documents.contains_key(*path))
+        .filter(|(path, _)| !base.contains_key(*path))
         .collect();
     let mut removed_by_identity: BTreeMap<(GitMode, Digest), Vec<&RepoPath>> = BTreeMap::new();
     for (path, identity) in removed {
@@ -263,90 +265,136 @@ fn rename_pairs(base: &Side, candidate: &Side) -> BTreeMap<RepoPath, RepoPath> {
     pairs
 }
 
+struct ObservationPool {
+    observations: Vec<Observation>,
+    positions: BTreeMap<Digest, usize>,
+}
+
+impl ObservationPool {
+    fn new(observations: Vec<Observation>) -> Result<Self, Error> {
+        let mut positions = BTreeMap::new();
+        for (position, observation) in observations.iter().enumerate() {
+            if positions.insert(observation.id, position).is_some() {
+                return Err(Error::Internal);
+            }
+        }
+        Ok(Self {
+            observations,
+            positions,
+        })
+    }
+
+    fn observation(&self, id: Digest) -> Result<&Observation, Error> {
+        let Some(position) = self.positions.get(&id) else {
+            return Err(Error::Internal);
+        };
+        let Some(observation) = self.observations.get(*position) else {
+            return Err(Error::Internal);
+        };
+        if observation.id != id {
+            return Err(Error::Internal);
+        }
+        Ok(observation)
+    }
+
+    fn into_order(mut self, ids: &[Digest]) -> Result<Vec<Observation>, Error> {
+        if ids.len() != self.observations.len() {
+            return Err(Error::Internal);
+        }
+        let mut targets = HashMap::with_capacity(ids.len());
+        for (target, id) in ids.iter().enumerate() {
+            if targets.insert(*id, target).is_some() {
+                return Err(Error::Internal);
+            }
+        }
+        if self
+            .observations
+            .iter()
+            .any(|observation| !targets.contains_key(&observation.id))
+        {
+            return Err(Error::Internal);
+        }
+        self.observations.sort_by_cached_key(|observation| {
+            targets.get(&observation.id).copied().unwrap_or(usize::MAX)
+        });
+        Ok(self.observations)
+    }
+}
+
+type ComponentIds = BTreeMap<Digest, (Vec<Digest>, Vec<Digest>)>;
+
+fn correlation_components(
+    base: &ObservationPool,
+    candidate: &ObservationPool,
+    exact_ids: &[Digest],
+    renames: &BTreeMap<RepoPath, RepoPath>,
+) -> Result<ComponentIds, Error> {
+    let unmatched = |id: &&Digest| exact_ids.binary_search(id).is_err();
+    let mut parent: BTreeMap<Digest, Digest> = BTreeMap::new();
+    for id in base
+        .positions
+        .keys()
+        .chain(candidate.positions.keys())
+        .filter(unmatched)
+    {
+        parent.insert(*id, *id);
+    }
+    let base_groups = observation_groups(
+        base.positions
+            .keys()
+            .filter(unmatched)
+            .map(|id| base.observation(*id)),
+    )?;
+    let candidate_groups = observation_groups(
+        candidate
+            .positions
+            .keys()
+            .filter(unmatched)
+            .map(|id| candidate.observation(*id)),
+    )?;
+    connect_candidates(&mut parent, &base_groups, &candidate_groups, renames);
+
+    let mut grouped: ComponentIds = BTreeMap::new();
+    for id in base.positions.keys().filter(unmatched) {
+        grouped.entry(root(&parent, *id)).or_default().0.push(*id);
+    }
+    for id in candidate.positions.keys().filter(unmatched) {
+        grouped.entry(root(&parent, *id)).or_default().1.push(*id);
+    }
+    Ok(grouped)
+}
+
 /// Correlates the two sides: exact by equal observation identity, then
 /// plausible bipartite edges under the correlation projection, components in
 /// identity byte order, and one comparison per component. Every occurrence
-/// appears exactly once as a primary or an alternative.
+/// appears exactly once as a primary or an alternative. Both sides are
+/// consumed so their observations move into those rows without cloning.
 ///
 /// # Errors
 ///
 /// A duplicated observation identity within one side is an internal defect.
-pub fn correlate(base: &Side, candidate: &Side) -> Result<Vec<Comparison>, Error> {
-    let mut base_by_id: BTreeMap<Digest, &Observation> = BTreeMap::new();
-    for observation in &base.observations {
-        if base_by_id.insert(observation.id, observation).is_some() {
-            return Err(Error::Internal);
+pub fn correlate(base: Side, candidate: Side) -> Result<Vec<Comparison>, Error> {
+    let aligned = base.observations.len() == candidate.observations.len()
+        && base
+            .observations
+            .iter()
+            .zip(&candidate.observations)
+            .all(|(left, right)| left.id == right.id);
+    let mut comparisons = if aligned {
+        let mut identities = HashSet::with_capacity(base.observations.len());
+        for observation in &base.observations {
+            if !identities.insert(observation.id) {
+                return Err(Error::Internal);
+            }
         }
-    }
-    let mut candidate_by_id: BTreeMap<Digest, &Observation> = BTreeMap::new();
-    for observation in &candidate.observations {
-        if candidate_by_id
-            .insert(observation.id, observation)
-            .is_some()
-        {
-            return Err(Error::Internal);
+        let mut comparisons = Vec::with_capacity(base.observations.len());
+        for (left, right) in base.observations.into_iter().zip(candidate.observations) {
+            comparisons.push(exact_comparison(left, right));
         }
-    }
-
-    let mut comparisons: Vec<Comparison> = Vec::new();
-    let exact_ids: Vec<Digest> = base_by_id
-        .keys()
-        .filter(|id| candidate_by_id.contains_key(*id))
-        .copied()
-        .collect();
-    for id in &exact_ids {
-        let (Some(left), Some(right)) = (base_by_id.remove(id), candidate_by_id.remove(id)) else {
-            return Err(Error::Internal);
-        };
-        let (target_change, impact) = derive(left, right, SourceChange::Equal);
-        comparisons.push(Comparison {
-            outcome: Outcome::Exact,
-            reason: Reason::SameExtractionKeyAndProjection,
-            source_change: SourceChange::Equal,
-            base: Some(left.clone()),
-            candidate: Some(right.clone()),
-            alternatives_base: Vec::new(),
-            alternatives_candidate: Vec::new(),
-            target_change,
-            impact,
-        });
-    }
-
-    let renames = rename_pairs(base, candidate);
-    let mut parent: BTreeMap<Digest, Digest> = BTreeMap::new();
-    for id in base_by_id.keys().chain(candidate_by_id.keys()) {
-        parent.insert(*id, *id);
-    }
-
-    let base_groups = observation_groups(base_by_id.values().copied());
-    let candidate_groups = observation_groups(candidate_by_id.values().copied());
-    connect_candidates(&mut parent, &base_groups, &candidate_groups, &renames);
-
-    let mut grouped: BTreeMap<Digest, (Vec<&Observation>, Vec<&Observation>)> = BTreeMap::new();
-    for (id, observation) in &base_by_id {
-        grouped
-            .entry(root(&parent, *id))
-            .or_default()
-            .0
-            .push(observation);
-    }
-    for (id, observation) in &candidate_by_id {
-        grouped
-            .entry(root(&parent, *id))
-            .or_default()
-            .1
-            .push(observation);
-    }
-    for (base_members, candidate_members) in grouped.into_values() {
-        comparisons.push(
-            match (base_members.as_slice(), candidate_members.as_slice()) {
-                ([lone], []) => isolated(lone, true),
-                ([], [lone]) => isolated(lone, false),
-                _ => component_comparison(base_members, candidate_members, &renames),
-            },
-        );
-    }
-
+        comparisons
+    } else {
+        correlate_unaligned(base, candidate)?
+    };
     comparisons.sort_by(|left, right| {
         let key = |comparison: &Comparison| {
             (
@@ -359,6 +407,80 @@ pub fn correlate(base: &Side, candidate: &Side) -> Result<Vec<Comparison>, Error
         };
         key(left).cmp(&key(right))
     });
+    Ok(comparisons)
+}
+
+fn correlate_unaligned(base: Side, candidate: Side) -> Result<Vec<Comparison>, Error> {
+    let Side {
+        observations: base_observations,
+        documents: base_documents,
+    } = base;
+    let Side {
+        observations: candidate_observations,
+        documents: candidate_documents,
+    } = candidate;
+    let base = ObservationPool::new(base_observations)?;
+    let candidate = ObservationPool::new(candidate_observations)?;
+    let renames = rename_pairs(&base_documents, &candidate_documents);
+    let exact_ids: Vec<Digest> = base
+        .positions
+        .keys()
+        .filter(|id| candidate.positions.contains_key(*id))
+        .copied()
+        .collect();
+    let grouped = correlation_components(&base, &candidate, &exact_ids, &renames)?;
+
+    let exact_count = exact_ids.len();
+    let mut base_order = Vec::with_capacity(base.observations.len());
+    let mut candidate_order = Vec::with_capacity(candidate.observations.len());
+    base_order.extend_from_slice(&exact_ids);
+    candidate_order.extend_from_slice(&exact_ids);
+    let mut components = Vec::with_capacity(grouped.len());
+    for (base_ids, candidate_ids) in grouped.into_values() {
+        components.push((base_ids.len(), candidate_ids.len()));
+        base_order.extend(base_ids);
+        candidate_order.extend(candidate_ids);
+    }
+
+    let mut base = base.into_order(&base_order)?.into_iter();
+    let mut candidate = candidate.into_order(&candidate_order)?.into_iter();
+    let mut comparisons: Vec<Comparison> =
+        Vec::with_capacity(exact_count.saturating_add(components.len()));
+    for _ in 0..exact_count {
+        let (Some(left), Some(right)) = (base.next(), candidate.next()) else {
+            return Err(Error::Internal);
+        };
+        if left.id != right.id {
+            return Err(Error::Internal);
+        }
+        comparisons.push(exact_comparison(left, right));
+    }
+    for (base_count, candidate_count) in components {
+        let base_members: Vec<Observation> = base.by_ref().take(base_count).collect();
+        let candidate_members: Vec<Observation> =
+            candidate.by_ref().take(candidate_count).collect();
+        if base_members.len() != base_count || candidate_members.len() != candidate_count {
+            return Err(Error::Internal);
+        }
+        comparisons.push(match (base_members.len(), candidate_members.len()) {
+            (1, 0) => isolated(
+                base_members.into_iter().next().ok_or(Error::Internal)?,
+                true,
+            ),
+            (0, 1) => isolated(
+                candidate_members
+                    .into_iter()
+                    .next()
+                    .ok_or(Error::Internal)?,
+                false,
+            ),
+            _ => component_comparison(base_members, candidate_members, &renames),
+        });
+    }
+    if base.next().is_some() || candidate.next().is_some() {
+        return Err(Error::Internal);
+    }
+
     Ok(comparisons)
 }
 
@@ -435,16 +557,26 @@ fn connect(parent: &mut BTreeMap<Digest, Digest>, left: &[&Observation], right: 
     }
 }
 
+fn exact_comparison(left: Observation, right: Observation) -> Comparison {
+    let (target_change, impact) = derive(&left, &right, SourceChange::Equal);
+    Comparison {
+        outcome: Outcome::Exact,
+        reason: Reason::SameExtractionKeyAndProjection,
+        source_change: SourceChange::Equal,
+        base: Some(left),
+        candidate: Some(right),
+        alternatives_base: Vec::new(),
+        alternatives_candidate: Vec::new(),
+        target_change,
+        impact,
+    }
+}
+
 fn component_comparison(
-    mut base_members: Vec<&Observation>,
-    mut candidate_members: Vec<&Observation>,
+    mut base_members: Vec<Observation>,
+    mut candidate_members: Vec<Observation>,
     renames: &BTreeMap<RepoPath, RepoPath>,
 ) -> Comparison {
-    base_members.sort_by_key(|observation| observation.id);
-    base_members.dedup_by_key(|observation| observation.id);
-    candidate_members.sort_by_key(|observation| observation.id);
-    candidate_members.dedup_by_key(|observation| observation.id);
-
     if let ([left], [right]) = (base_members.as_slice(), candidate_members.as_slice()) {
         let across_rename =
             left.document != right.document && renames.get(&left.document) == Some(&right.document);
@@ -463,8 +595,8 @@ fn component_comparison(
             outcome: Outcome::Candidate,
             reason,
             source_change,
-            base: Some((*left).clone()),
-            candidate: Some((*right).clone()),
+            base: base_members.pop(),
+            candidate: candidate_members.pop(),
             alternatives_base: Vec::new(),
             alternatives_candidate: Vec::new(),
             target_change,
@@ -472,26 +604,27 @@ fn component_comparison(
         };
     }
 
-    let primary_base = base_members.first().copied();
-    let primary_candidate = candidate_members.first().copied();
+    let mut base_members = base_members.into_iter();
+    let mut candidate_members = candidate_members.into_iter();
     Comparison {
         outcome: Outcome::Ambiguous,
         reason: Reason::MultipleCounterparts,
         source_change: SourceChange::Unknown,
-        base: primary_base.cloned(),
-        candidate: primary_candidate.cloned(),
-        alternatives_base: base_members.iter().skip(1).map(|o| (*o).clone()).collect(),
-        alternatives_candidate: candidate_members
-            .iter()
-            .skip(1)
-            .map(|o| (*o).clone())
-            .collect(),
+        base: base_members.next(),
+        candidate: candidate_members.next(),
+        alternatives_base: base_members.collect(),
+        alternatives_candidate: candidate_members.collect(),
         target_change: TargetChange::NotComparable,
         impact: Impact::ObservationCorrelationAmbiguous,
     }
 }
 
-fn isolated(observation: &Observation, is_base: bool) -> Comparison {
+fn isolated(observation: Observation, is_base: bool) -> Comparison {
+    let (base, candidate) = if is_base {
+        (Some(observation), None)
+    } else {
+        (None, Some(observation))
+    };
     Comparison {
         outcome: Outcome::None,
         reason: if is_base {
@@ -504,8 +637,8 @@ fn isolated(observation: &Observation, is_base: bool) -> Comparison {
         } else {
             SourceChange::Added
         },
-        base: is_base.then(|| observation.clone()),
-        candidate: (!is_base).then(|| observation.clone()),
+        base,
+        candidate,
         alternatives_base: Vec::new(),
         alternatives_candidate: Vec::new(),
         target_change: TargetChange::NotComparable,

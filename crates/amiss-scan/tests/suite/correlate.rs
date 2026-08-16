@@ -142,7 +142,7 @@ fn side(observations: Vec<Observation>) -> Side {
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn run(base: &Side, candidate: &Side) -> Vec<Comparison> {
-    correlate(base, candidate).expect("correlate")
+    correlate(base.clone(), candidate.clone()).expect("correlate")
 }
 
 fn basic(document: &str, target: &str, block: &str) -> Spec {
@@ -562,7 +562,11 @@ fn duplicate_identities_within_a_side_are_internal_defects() {
         documents: std::collections::BTreeMap::new(),
     };
     assert_eq!(
-        correlate(&doubled, &Side::default()),
+        correlate(doubled.clone(), Side::default()),
+        Err(amiss_scan::Error::Internal)
+    );
+    assert_eq!(
+        correlate(doubled.clone(), doubled),
         Err(amiss_scan::Error::Internal)
     );
 }
