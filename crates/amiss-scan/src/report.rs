@@ -1740,17 +1740,9 @@ fn governed_seeds(
         if unanswered.is_empty() {
             continue;
         }
-        let mut sources: Vec<(Digest, u64)> = Vec::new();
-        for governed in &unanswered {
-            match sources
-                .iter_mut()
-                .find(|(digest, _)| *digest == governed.digest)
-            {
-                Some((_, multiplicity)) => *multiplicity = multiplicity.saturating_add(1),
-                None => sources.push((governed.digest, 1)),
-            }
-        }
-        sources.sort_by_key(|(digest, _)| *digest);
+        let sources = crate::evaluate::source_multiplicities(
+            unanswered.iter().map(|governed| governed.digest),
+        );
         let representative = unanswered.iter().min_by_key(|governed| governed.span);
         seeds.push(crate::evaluate::GovernedSeed {
             document: record.path.clone(),

@@ -894,6 +894,21 @@ fn sources_value(sources: &[(Digest, u64)]) -> Value {
     )
 }
 
+pub(crate) fn source_multiplicities(
+    digests: impl IntoIterator<Item = Digest>,
+) -> Vec<(Digest, u64)> {
+    let mut digests: Vec<Digest> = digests.into_iter().collect();
+    digests.sort_unstable();
+    digests
+        .chunk_by(|left, right| left == right)
+        .filter_map(|run| {
+            run.first()
+                .copied()
+                .map(|digest| (digest, u64::try_from(run.len()).unwrap_or(u64::MAX)))
+        })
+        .collect()
+}
+
 /// One document's defective value claims under one name: the group a claim
 /// finding stands for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -970,17 +985,8 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
         .into_values()
         .filter_map(|mut members| {
             members.sort_by_key(|member| member.outcome.span);
-            let mut sources: Vec<(Digest, u64)> = Vec::new();
-            for member in &members {
-                match sources
-                    .iter_mut()
-                    .find(|(digest, _)| *digest == member.outcome.source_digest)
-                {
-                    Some((_, multiplicity)) => *multiplicity = multiplicity.saturating_add(1),
-                    None => sources.push((member.outcome.source_digest, 1)),
-                }
-            }
-            sources.sort_by_key(|(digest, _)| *digest);
+            let sources =
+                source_multiplicities(members.iter().map(|member| member.outcome.source_digest));
             let member_count = u64::try_from(members.len()).unwrap_or(u64::MAX);
             members.first().map(|representative| ClaimGroup {
                 kind: representative.kind,

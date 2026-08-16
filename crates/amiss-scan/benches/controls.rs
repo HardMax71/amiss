@@ -5,9 +5,13 @@
 
 use std::collections::BTreeSet;
 
+use amiss_scan::claim::{ClaimCarrier, ClaimMissingReason, ClaimOutcome, ClaimVerdict};
+use amiss_scan::evaluate::claim_groups;
 use amiss_scan::policy::{InventoryState, effects};
+use amiss_scan::scan::SpanDisplay;
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy};
+use amiss_wire::digest::hb;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use divan::{Bencher, black_box};
 
@@ -44,6 +48,14 @@ fn identical_policy_sets(bencher: Bencher<'_, '_>, count: usize) {
     bencher.bench_local(|| effects(black_box(&base), black_box(&candidate), black_box(&scanned)));
 }
 
+/// One claim group whose members all carry distinct source evidence. The
+/// per-document reference ceiling fixes the largest lawful group at 16,384.
+#[divan::bench(args = [1_000_usize, 10_000, 16_384], sample_count = 10)]
+fn distinct_claim_sources(bencher: Bencher<'_, '_>, count: usize) {
+    let outcomes = claim_outcomes(count);
+    bencher.bench_local(|| claim_groups(black_box(&outcomes)));
+}
+
 fn path(raw: String) -> RepoPath {
     RepoPath::new(raw).expect("valid benchmark repository path")
 }
@@ -68,4 +80,33 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
         digest: Some(policy.digest()),
         policy: Some(policy),
     }
+}
+
+fn claim_outcomes(count: usize) -> Vec<ClaimOutcome> {
+    let document = path("docs/claims.md".to_owned());
+    let target = path("src/value.rs".to_owned());
+    let expected_digest = hb("amiss/bench-expected", b"expected");
+    (0..count)
+        .map(|index| {
+            let token = index.to_string();
+            let display_line = u64::try_from(index).unwrap_or(u64::MAX).saturating_add(1);
+            ClaimOutcome {
+                carrier: ClaimCarrier::Definition,
+                document: document.clone(),
+                name: "value".to_owned(),
+                span: (index, index.saturating_add(1)),
+                display: SpanDisplay {
+                    start_line: display_line,
+                    start_column: 1,
+                    end_line: display_line,
+                    end_column: 2,
+                },
+                source_digest: hb("amiss/bench-claim-source", token.as_bytes()),
+                path: target.clone(),
+                line: 1,
+                expected_digest,
+                verdict: ClaimVerdict::TargetMissing(ClaimMissingReason::Absent),
+            }
+        })
+        .collect()
 }
