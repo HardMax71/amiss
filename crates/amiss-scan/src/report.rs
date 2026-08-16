@@ -1350,7 +1350,7 @@ fn summary_counts(
     let scanned: Vec<&crate::scan::Scanned> = candidate_records
         .iter()
         .filter_map(|record| match &record.status {
-            DocumentStatus::Scanned(value) => Some(value),
+            DocumentStatus::Scanned(value) => Some(value.as_ref()),
             DocumentStatus::ExcludedBuiltIn
             | DocumentStatus::Unsupported(_)
             | DocumentStatus::Failed(_) => None,

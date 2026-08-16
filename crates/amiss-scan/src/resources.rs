@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_wire::controls::ResourceName;
+use amiss_wire::model::{Adapter, Oid};
 
 use crate::Error;
+use crate::scan::Scanned;
 
 /// The built-in discovery and parse ceilings. A future organization floor may
 /// tighten them and may never raise them.
@@ -75,6 +78,13 @@ pub enum Aggregate {
     HeadingAnchorBytes,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct ScanIdentity {
+    pub oid: Oid,
+    pub adapter: Adapter,
+    pub embedded_code_allowance: Option<u64>,
+}
+
 /// Snapshot-scoped charge state. Count resources observe exactly one past the
 /// limit and stop; per-value byte resources observe the exact declared value;
 /// an aggregate observes the prior charged total plus the first crossing
@@ -83,6 +93,7 @@ pub enum Aggregate {
 #[derive(Debug)]
 pub struct ScanResources {
     cache_scope: Arc<()>,
+    pub(crate) scans: BTreeMap<ScanIdentity, Arc<Scanned>>,
     limits: ScanLimits,
     documents: u64,
     document_bytes: u64,
@@ -101,6 +112,7 @@ impl Clone for ScanResources {
     fn clone(&self) -> Self {
         Self {
             cache_scope: Arc::new(()),
+            scans: BTreeMap::new(),
             limits: self.limits,
             documents: self.documents,
             labels: self.labels,
@@ -149,6 +161,7 @@ impl ScanResources {
     pub fn new(limits: ScanLimits) -> Self {
         Self {
             cache_scope: Arc::new(()),
+            scans: BTreeMap::new(),
             limits,
             documents: 0,
             document_bytes: 0,

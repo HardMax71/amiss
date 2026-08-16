@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse_tree};
 use amiss_wire::controls::{GitMode, ResourceName};
@@ -6,8 +7,8 @@ use amiss_wire::model::{Adapter, Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in};
 use crate::policy::Includes;
-use crate::resources::{ScanResources, crossing};
-use crate::scan::{Scanned, scan_bytes};
+use crate::resources::{ScanIdentity, ScanResources, crossing};
+use crate::scan::{Scanned, replay_scan_charges, scan_bytes};
 use crate::{Error, GitDefect, lfs};
 
 /// The deliberate object and format boundaries a discovered document side can
@@ -22,7 +23,7 @@ pub enum UnsupportedKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DocumentStatus {
-    Scanned(Scanned),
+    Scanned(Arc<Scanned>),
     ExcludedBuiltIn,
     Unsupported(UnsupportedKind),
     Failed(Error),
@@ -506,7 +507,20 @@ fn side_status(
             Some(raw),
         ));
     };
-    match scan_bytes(scan, adapter, &object.body) {
+    let identity = ScanIdentity {
+        oid: entry.oid.clone(),
+        adapter,
+        embedded_code_allowance: (adapter == Adapter::Mdx).then(|| scan.embedded_code_allowance()),
+    };
+    let scanned = match scan.scans.get(&identity).cloned() {
+        Some(scanned) => replay_scan_charges(scan, &scanned).map(|()| scanned),
+        None => scan_bytes(scan, adapter, &object.body)
+            .map(Arc::new)
+            .inspect(|scanned| {
+                scan.scans.insert(identity, Arc::clone(scanned));
+            }),
+    };
+    match scanned {
         Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),
         Err(defect) if defect.is_document_scoped() => {
             Ok((DocumentStatus::Failed(defect), byte_count, Some(raw)))
