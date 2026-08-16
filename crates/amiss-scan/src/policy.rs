@@ -7,7 +7,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
-use amiss_wire::model::{Adapter, Oid, RepoPath};
+use amiss_wire::model::{Adapter, Oid, RepoPath, RepoPathText};
 use amiss_wire::report::{AnalysisErrorCode, Disposition, ErrorDetail, FindingKind};
 
 use crate::resources::{Aggregate, ScanResources};
@@ -430,7 +430,7 @@ pub fn effects(
         .as_ref()
         .map_or(&[][..], ScannerPolicy::protected_inventory)
         .iter()
-        .map(amiss_wire::model::RepoPathText::as_str)
+        .map(RepoPathText::as_str)
         .collect();
 
     for include in base_includes {
@@ -477,11 +477,7 @@ pub fn effects(
     }
 
     let mut inventory: BTreeSet<&str> = BTreeSet::new();
-    inventory.extend(
-        base_inventory
-            .iter()
-            .map(amiss_wire::model::RepoPathText::as_str),
-    );
+    inventory.extend(base_inventory.iter().map(RepoPathText::as_str));
     inventory.extend(candidate_inventory);
     for path in inventory {
         let rule = match candidate_documents(path) {
@@ -855,22 +851,27 @@ pub fn floor_protected(
     input: &FloorInput,
     protected: &dyn Fn(&str) -> (ProtectedState, ProtectedState),
 ) -> Vec<ControlSeed> {
-    let mut controls = Vec::new();
-    for path in input.floor.protected_control_paths() {
-        let (base, candidate) = protected(path.as_str());
-        let unchanged = matches!(
-            (base, candidate),
-            (ProtectedState::Present(left), ProtectedState::Present(right)) if left == right
-        );
-        if !unchanged {
-            controls.push(ControlSeed {
-                kind: FindingKind::ControlPlaneChanged,
-                rule_id: "control/protected-path".to_owned(),
-                control_path: Some(RepoPath::from(path)),
-            });
-        }
-    }
-    controls
+    input
+        .floor
+        .protected_control_paths()
+        .iter()
+        .filter_map(|path| protected_control(path, protected(path.as_str())))
+        .collect()
+}
+
+pub(crate) fn protected_control(
+    path: &RepoPathText,
+    (base, candidate): (ProtectedState, ProtectedState),
+) -> Option<ControlSeed> {
+    (!matches!(
+        (base, candidate),
+        (ProtectedState::Present(left), ProtectedState::Present(right)) if left == right
+    ))
+    .then(|| ControlSeed {
+        kind: FindingKind::ControlPlaneChanged,
+        rule_id: "control/protected-path".to_owned(),
+        control_path: Some(RepoPath::from(path)),
+    })
 }
 
 /// The floor's raise-only disposition rows, applied after the repository

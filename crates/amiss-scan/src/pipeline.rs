@@ -605,7 +605,7 @@ fn pair_effects(
         &inventory_lookup(candidate.0),
     );
     external.install(&mut effects);
-    if let Some(row) = apply_floor(
+    if let Err(row) = apply_floor(
         repo,
         git_resources,
         verified_floor,
@@ -623,7 +623,7 @@ fn pair_effects(
 /// raise-only dispositions always, floor inventory coverage from the
 /// already-acquired candidate discovery, and protected control paths
 /// compared across both sides only while no earlier stage has failed. The
-/// first protected-path acquisition defect stops that comparison.
+/// first protected-path acquisition defect discards every pending comparison.
 fn apply_floor(
     repo: &Repository,
     git_resources: &mut GitResources,
@@ -632,8 +632,10 @@ fn apply_floor(
     candidate: (&SnapshotDiscovery, &mut ScanResources),
     effects: &mut crate::policy::Effects,
     acquire: bool,
-) -> Option<ErrorDetail> {
-    let floor = floor?;
+) -> Result<(), ErrorDetail> {
+    let Some(floor) = floor else {
+        return Ok(());
+    };
     effects.floor = Some((floor.floor.digest(), floor.trust_source.as_str()));
     effects.floor_raised = crate::policy::floor_raises(floor);
     effects.controls.extend(crate::policy::floor_inventory(
@@ -641,50 +643,37 @@ fn apply_floor(
         &inventory_lookup(candidate.0),
     ));
     if !acquire {
-        return None;
+        return Ok(());
     }
     let (base_discovery, base_scan) = base;
     let (candidate_discovery, candidate_scan) = candidate;
-    let mut states: Vec<(
-        &str,
-        (crate::policy::ProtectedState, crate::policy::ProtectedState),
-    )> = Vec::new();
-    for path in floor.floor.protected_control_paths() {
-        let read = crate::policy::protected_state(
-            repo,
-            git_resources,
-            base_scan,
-            &base_discovery.entries,
-            path.as_str(),
-        )
-        .and_then(|base_state| {
-            crate::policy::protected_state(
+    let controls = floor.floor.protected_control_paths().iter().try_fold(
+        Vec::new(),
+        |mut controls, path| {
+            let states = crate::policy::protected_state(
                 repo,
                 git_resources,
-                candidate_scan,
-                &candidate_discovery.entries,
+                base_scan,
+                &base_discovery.entries,
                 path.as_str(),
             )
-            .map(|candidate_state| (base_state, candidate_state))
-        });
-        match read {
-            Ok(pair) => states.push((path.as_str(), pair)),
-            Err(defect) => return Some(control_read_detail(&defect, path.as_str())),
-        }
-    }
-    let lookup = |path: &str| {
-        states.iter().find(|(known, _)| *known == path).map_or(
-            (
-                crate::policy::ProtectedState::Absent,
-                crate::policy::ProtectedState::Absent,
-            ),
-            |(_, pair)| *pair,
-        )
-    };
-    effects
-        .controls
-        .extend(crate::policy::floor_protected(floor, &lookup));
-    None
+            .and_then(|base_state| {
+                crate::policy::protected_state(
+                    repo,
+                    git_resources,
+                    candidate_scan,
+                    &candidate_discovery.entries,
+                    path.as_str(),
+                )
+                .map(|candidate_state| (base_state, candidate_state))
+            })
+            .map_err(|defect| control_read_detail(&defect, path.as_str()))?;
+            controls.extend(crate::policy::protected_control(path, states));
+            Ok::<_, ErrorDetail>(controls)
+        },
+    )?;
+    effects.controls.extend(controls);
+    Ok(())
 }
 
 /// The candidate state of one inventory path under the obligation test.
