@@ -175,50 +175,67 @@ pub fn extract(source: &[u8]) -> Result<Extraction, Refusal> {
                 if raw_directive(body) {
                     extraction.opaque.push(block.span);
                 } else {
-                    collect(&mut extraction, index, block, body);
+                    read_block(&mut extraction, None, index, block, body);
                 }
                 continue;
             }
             Kind::Text => {}
         }
-        read_titles(&mut extraction, &mut order, block, body);
-        collect(&mut extraction, index, block, body);
+        read_block(&mut extraction, Some(&mut order), index, block, body);
     }
     Ok(extraction)
 }
 
-fn read_titles(extraction: &mut Extraction, order: &mut Vec<char>, block: &Block, body: &str) {
+fn read_block(
+    extraction: &mut Extraction,
+    mut title_order: Option<&mut Vec<char>>,
+    index: usize,
+    block: &Block,
+    body: &str,
+) {
     let mut offset = 0_usize;
     let mut previous: Option<(usize, &str)> = None;
     for raw in body.split_inclusive('\n') {
-        let at = offset;
+        let text_at = offset;
+        let at = block.span.0.saturating_add(offset);
         offset = offset.saturating_add(raw.len());
         let line = raw.strip_suffix('\n').unwrap_or(raw);
-        if let Some((text_at, text)) = previous
-            && let Some(character) = title_underline(line, text)
-        {
-            let level = order
-                .iter()
-                .position(|held| *held == character)
-                .map_or_else(
-                    || {
-                        order.push(character);
-                        order.len()
-                    },
-                    |found| found.saturating_add(1),
-                );
-            extraction.titles.push(Title {
-                level,
-                text: text.trim().to_owned(),
-                span: (
-                    block.span.0.saturating_add(text_at),
-                    block.span.0.saturating_add(offset),
-                ),
+        if let Some(order) = title_order.as_deref_mut() {
+            let title = previous.and_then(|(start, text)| {
+                title_underline(line, text).map(|character| (start, text, character))
             });
-            previous = None;
-            continue;
+            if let Some((start, text, character)) = title {
+                let level = order
+                    .iter()
+                    .position(|held| *held == character)
+                    .map_or_else(
+                        || {
+                            order.push(character);
+                            order.len()
+                        },
+                        |found| found.saturating_add(1),
+                    );
+                extraction.titles.push(Title {
+                    level,
+                    text: text.trim().to_owned(),
+                    span: (
+                        block.span.0.saturating_add(start),
+                        block.span.0.saturating_add(offset),
+                    ),
+                });
+                previous = None;
+            } else {
+                previous = (!line.trim().is_empty()).then_some((text_at, line));
+            }
         }
-        previous = (!line.trim().is_empty()).then_some((at, line));
+        if let Some(label) = target_definition(line) {
+            extraction.anchors.push(label);
+        }
+        for mut reference in references(line, at) {
+            reference.block = index;
+            reference.block_span = block.span;
+            extraction.references.push(reference);
+        }
     }
 }
 
@@ -230,21 +247,4 @@ fn raw_directive(body: &str) -> bool {
     line.strip_prefix(".. ")
         .and_then(|rest| rest.split_once("::"))
         .is_some_and(|(name, _argument)| name.trim().eq_ignore_ascii_case("raw"))
-}
-
-fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str) {
-    let mut offset = 0_usize;
-    for raw in body.split_inclusive('\n') {
-        let at = block.span.0.saturating_add(offset);
-        offset = offset.saturating_add(raw.len());
-        let line = raw.strip_suffix('\n').unwrap_or(raw);
-        if let Some(label) = target_definition(line) {
-            extraction.anchors.push(label);
-        }
-        for mut reference in references(line, at) {
-            reference.block = index;
-            reference.block_span = block.span;
-            extraction.references.push(reference);
-        }
-    }
 }
