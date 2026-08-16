@@ -4,17 +4,17 @@ use std::time::Duration;
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
-    AcquiringRunner, AdapterRegistry, CheckConclusion, CheckPlan, Controller, ControllerClock,
-    DeliveryRoute, FileLedger, FileLedgerConfig, GiteaWebhook, IngressLimits, IngressPolicy,
-    OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter, ProviderError,
-    ReplayWindow, SignedTimePolicy, WebhookKey, WebhookKeyring, check_plan, register_plan,
+    AcquiringRunner, CheckConclusion, CheckPlan, ControllerClock, DeliveryRoute, FileLedger,
+    FileLedgerConfig, GiteaWebhook, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
+    PlanScope, PolicyControls, ProviderAdapter, ProviderError, ReplayWindow, SignedTimePolicy,
+    WebhookKey, WebhookKeyring, check_plan, register_plan,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_gitea::{GiteaPullRequestAdapter, GiteaPullRequestSource};
 use amiss_controller_service::{
-    AdmissionRejection, AdmissionRequest, DeliveryAdmission, DeliveryHeader, DeliveryWorker,
-    DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader, Operations,
-    WorkOutcome, lane_admission,
+    AcquiringWorkerContext, AcquiringWorkerSettings, AdmissionRejection, AdmissionRequest,
+    DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits, IncomingDelivery,
+    IncomingHeader, Operations, WorkOutcome, acquiring_worker, repository_admission,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
 use amiss_wire::digest::hb;
@@ -74,7 +74,7 @@ struct ProviderSetup {
     event: SignedEvent,
     admission: Arc<dyn DeliveryAdmission>,
     api: FakeGitea,
-    adapters: AdapterRegistry,
+    adapter: Arc<dyn ProviderAdapter>,
     plans: PlanRegistry,
 }
 
@@ -109,7 +109,7 @@ impl Harness {
             event,
             admission,
             api,
-            adapters,
+            adapter,
             plans,
         } = provider_setup(settings, &repositories, ingress, plan, Arc::clone(&clock));
         let ledger = FileLedger::open_with_clock(
@@ -118,38 +118,33 @@ impl Harness {
             Arc::clone(&clock),
         )
         .unwrap();
-        let runner = AcquiringRunner::new(
-            repositories.acquisition(),
-            executable_for(settings.tampered_runtime, &state, &executable),
-            scratch,
-            Duration::from_secs(10),
-            Duration::from_mins(5),
-            Arc::clone(&clock),
-        )
-        .unwrap();
-        let controller = Controller::new_with_clock(
-            adapters,
-            plans,
-            ledger,
-            runner,
-            ingress,
-            Arc::clone(&clock),
-        );
         let inbox = Arc::new(Mutex::new(
             Inbox::open(&inbox_root, inbox_limits()).unwrap(),
         ));
-        let worker = DeliveryWorker::new(DeliveryWorkerInput {
-            inbox: Arc::clone(&inbox),
-            controller,
-            admission: Arc::clone(&admission),
-            route,
-            route_id: ROUTE_ID.to_owned(),
-            retry_min: Duration::from_millis(20),
-            retry_max: Duration::from_millis(100),
-            idle_poll: Duration::from_millis(5),
-            clock,
-            operations: Operations::default(),
-        })
+        let worker = acquiring_worker(
+            AcquiringWorkerContext {
+                settings: AcquiringWorkerSettings {
+                    bootstrap: executable_for(settings.tampered_runtime, &state, &executable),
+                    scratch,
+                    bootstrap_timeout: Duration::from_secs(10),
+                    statement_validity: Duration::from_mins(5),
+                    ingress,
+                    route,
+                    route_id: ROUTE_ID.to_owned(),
+                    retry_min: Duration::from_millis(20),
+                    retry_max: Duration::from_millis(100),
+                    idle_poll: Duration::from_millis(5),
+                },
+                plans,
+                ledger,
+                admission: Arc::clone(&admission),
+                clock,
+            },
+            Arc::clone(&inbox),
+            Operations::default(),
+            adapter,
+            repositories.acquisition(),
+        )
         .unwrap();
         Self {
             clock: Arc::clone(&test_clock),
@@ -270,13 +265,10 @@ fn provider_setup(
         refreshes,
         settings.publish_failures,
     );
-    let adapter = Arc::new(GiteaPullRequestAdapter::from_source(
+    let adapter: Arc<dyn ProviderAdapter> = Arc::new(GiteaPullRequestAdapter::from_source(
         Arc::clone(&source),
         api.clone(),
     ));
-    let mut adapters = AdapterRegistry::new();
-    let registered: Arc<dyn ProviderAdapter> = adapter;
-    adapters.register(registered).unwrap();
     let mut plans = PlanRegistry::new();
     register_plan(
         &mut plans,
@@ -289,38 +281,21 @@ fn provider_setup(
     )
     .unwrap();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let admission: Arc<dyn DeliveryAdmission> = Arc::new(lane_admission(
+    let admission = repository_admission(
         ROUTE_ID.to_owned(),
         route.clone(),
         ingress,
         plans.clone(),
         clock,
-        move |checked| {
-            let verified = source
-                .authenticate_for_target(checked, &target)
-                .map_err(|error| {
-                    if error == ProviderError::AuthorizationRevoked {
-                        AdmissionRejection::Forbidden
-                    } else {
-                        AdmissionRejection::Unauthorized
-                    }
-                })?;
-            verified
-                .delivery()
-                .change
-                .change
-                .as_str()
-                .starts_with(&format!("repository/{REPOSITORY_ID}/"))
-                .then_some(verified)
-                .ok_or(AdmissionRejection::Forbidden)
-        },
-    ));
+        REPOSITORY_ID,
+        move |checked| source.authenticate_for_target(checked, &target),
+    );
     ProviderSetup {
         route,
         event,
         admission,
         api,
-        adapters,
+        adapter,
         plans,
     }
 }

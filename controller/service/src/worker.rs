@@ -1,12 +1,14 @@
 mod tests;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use amiss_controller::{
-    Controller, ControllerClock, ControllerError, DeliveryHeader, DeliveryLedger, DeliveryRoute,
-    HandleOutcome, Runner, UntrustedDelivery,
+    AcquiringRunner, Acquisition, AdapterRegistry, Controller, ControllerClock, ControllerError,
+    DeliveryHeader, DeliveryLedger, DeliveryRoute, HandleOutcome, IngressPolicy, PlanRegistry,
+    ProviderAdapter, RegistryError, Runner, UntrustedDelivery,
 };
 
 use crate::{
@@ -71,6 +73,88 @@ pub struct DeliveryWorkerInput<L, R> {
     pub idle_poll: Duration,
     pub clock: Arc<dyn ControllerClock>,
     pub operations: Operations,
+}
+
+pub struct AcquiringWorkerSettings {
+    pub bootstrap: PathBuf,
+    pub scratch: PathBuf,
+    pub bootstrap_timeout: Duration,
+    pub statement_validity: Duration,
+    pub ingress: IngressPolicy,
+    pub route: DeliveryRoute,
+    pub route_id: String,
+    pub retry_min: Duration,
+    pub retry_max: Duration,
+    pub idle_poll: Duration,
+}
+
+pub struct AcquiringWorkerContext<L> {
+    pub settings: AcquiringWorkerSettings,
+    pub plans: PlanRegistry,
+    pub ledger: L,
+    pub admission: Arc<dyn DeliveryAdmission>,
+    pub clock: Arc<dyn ControllerClock>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AcquiringWorkerBuildError {
+    #[error("bootstrap runner limits are invalid")]
+    InvalidRunnerLimits,
+    #[error("provider adapter cannot be registered")]
+    Registry(#[from] RegistryError),
+    #[error("delivery worker cannot start")]
+    Worker(#[from] DeliveryWorkerError),
+}
+
+/// Builds the acquisition runner, controller, and durable delivery worker for one lane.
+///
+/// # Errors
+///
+/// The runner limits, adapter registry, worker timing, or persisted route is invalid.
+pub fn acquiring_worker<L, A>(
+    context: AcquiringWorkerContext<L>,
+    inbox: Arc<Mutex<Inbox>>,
+    operations: Operations,
+    adapter: Arc<dyn ProviderAdapter>,
+    acquisition: A,
+) -> Result<DeliveryWorker<L, AcquiringRunner<A>>, AcquiringWorkerBuildError>
+where
+    L: DeliveryLedger + Send,
+    A: Acquisition + 'static,
+{
+    let settings = context.settings;
+    let runner = AcquiringRunner::new(
+        acquisition,
+        settings.bootstrap,
+        settings.scratch,
+        settings.bootstrap_timeout,
+        settings.statement_validity,
+        Arc::clone(&context.clock),
+    )
+    .ok_or(AcquiringWorkerBuildError::InvalidRunnerLimits)?;
+    let mut registry = AdapterRegistry::new();
+    registry.register(adapter)?;
+    let controller = Controller::new_with_clock(
+        registry,
+        context.plans,
+        context.ledger,
+        runner,
+        settings.ingress,
+        Arc::clone(&context.clock),
+    )
+    .with_external_sink(Arc::new(operations.clone()));
+    Ok(DeliveryWorker::new(DeliveryWorkerInput {
+        inbox,
+        controller,
+        admission: context.admission,
+        route: settings.route,
+        route_id: settings.route_id,
+        retry_min: settings.retry_min,
+        retry_max: settings.retry_max,
+        idle_poll: settings.idle_poll,
+        clock: context.clock,
+        operations,
+    })?)
 }
 
 /// Drains one durable raw-delivery inbox through the provider-neutral controller.

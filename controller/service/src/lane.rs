@@ -2,41 +2,56 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AcceptedDelivery, ControllerClock, DeliveryHeader as IngressHeader, DeliveryRoute,
-    IngressCheck, IngressPolicy, PlanRegistry, UntrustedDelivery, VerifiedDelivery, resolve_plan,
+    IngressCheck, IngressPolicy, PlanRegistry, ProviderError, UntrustedDelivery, VerifiedDelivery,
+    resolve_plan,
 };
 
 use crate::{AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission};
 
-pub struct LaneAdmission<F> {
-    pub route_id: String,
-    pub route: DeliveryRoute,
-    pub ingress: IngressPolicy,
-    pub plans: PlanRegistry,
-    pub clock: Arc<dyn ControllerClock>,
-    pub authenticate: F,
-}
-
-pub fn lane_admission<F>(
+struct RepositoryAdmission<F> {
     route_id: String,
     route: DeliveryRoute,
     ingress: IngressPolicy,
     plans: PlanRegistry,
     clock: Arc<dyn ControllerClock>,
+    repository_prefix: String,
     authenticate: F,
-) -> LaneAdmission<F>
+}
+
+/// Binds authenticated deliveries to one provider repository identifier.
+pub fn repository_admission<F>(
+    route_id: String,
+    route: DeliveryRoute,
+    ingress: IngressPolicy,
+    plans: PlanRegistry,
+    clock: Arc<dyn ControllerClock>,
+    repository_id: u64,
+    authenticate: F,
+) -> Arc<dyn DeliveryAdmission>
 where
-    F: for<'a> Fn(IngressCheck<'a>) -> Result<VerifiedDelivery, AdmissionRejection>
+    F: for<'a> Fn(IngressCheck<'a>) -> Result<VerifiedDelivery, ProviderError>
         + Send
         + Sync
         + 'static,
 {
-    LaneAdmission {
+    let repository_prefix = format!("repository/{repository_id}/");
+    Arc::new(RepositoryAdmission {
         route_id,
         route,
         ingress,
         plans,
         clock,
+        repository_prefix,
         authenticate,
+    })
+}
+
+const fn provider_rejection(error: ProviderError) -> AdmissionRejection {
+    match error {
+        ProviderError::AuthorizationRevoked => AdmissionRejection::Forbidden,
+        ProviderError::Authentication
+        | ProviderError::Unavailable
+        | ProviderError::InvalidResponse => AdmissionRejection::Unauthorized,
     }
 }
 
@@ -68,9 +83,9 @@ where
     Ok(accepted)
 }
 
-impl<F> DeliveryAdmission for LaneAdmission<F>
+impl<F> DeliveryAdmission for RepositoryAdmission<F>
 where
-    F: for<'a> Fn(IngressCheck<'a>) -> Result<VerifiedDelivery, AdmissionRejection>
+    F: for<'a> Fn(IngressCheck<'a>) -> Result<VerifiedDelivery, ProviderError>
         + Send
         + Sync
         + 'static,
@@ -95,7 +110,17 @@ where
             &self.plans,
             untrusted,
             self.clock.as_ref(),
-            &self.authenticate,
+            |checked| {
+                let verified = (self.authenticate)(checked).map_err(provider_rejection)?;
+                verified
+                    .delivery()
+                    .change
+                    .change
+                    .as_str()
+                    .starts_with(&self.repository_prefix)
+                    .then_some(verified)
+                    .ok_or(AdmissionRejection::Forbidden)
+            },
         )?;
         Ok(AdmittedDelivery {
             route: self.route_id.clone(),
