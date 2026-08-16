@@ -538,9 +538,8 @@ new_count="$(wc -l < "$new_edges")"
 removed_count="$(wc -l < "$removed_edges")"
 base_count="$(wc -l < "$base_edges")"
 current_count="$(wc -l < "$current_edges")"
-if [[ "$current_count" -gt "$base_count" ]] ||
-  [[ "$current_count" -eq "$base_count" && "$new_count" -ne 0 ]]; then
-  echo "near-twin edges grew or changed without a net cleanup" >&2
+if [[ "$new_count" -ne 0 ]]; then
+  echo "the candidate introduces near-twin function edges" >&2
   printf 'base: %s, candidate: %s, added: %s, removed: %s\n' \
     "$base_count" "$current_count" "$new_count" "$removed_count" >&2
   sed 's/\t/ <-> /' "$new_edges" >&2
@@ -549,6 +548,3 @@ if [[ "$current_count" -gt "$base_count" ]] ||
 fi
 printf 'near-twin edges: %s base, %s candidate, %s added, %s removed\n' \
   "$base_count" "$current_count" "$new_count" "$removed_count"
-if [[ "$new_count" -ne 0 ]]; then
-  sed 's/\t/ <-> /' "$new_edges"
-fi
