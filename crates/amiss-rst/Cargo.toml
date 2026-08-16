@@ -18,5 +18,9 @@ divan.workspace = true
 name = "directive"
 harness = false
 
+[[bench]]
+name = "extraction"
+harness = false
+
 [lints]
 workspace = true
