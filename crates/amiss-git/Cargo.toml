@@ -23,7 +23,12 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 amiss-fixtures = { path = "../amiss-fixtures" }
+divan.workspace = true
 tempfile.workspace = true
+
+[[bench]]
+name = "resources"
+harness = false
 
 [lints]
 workspace = true

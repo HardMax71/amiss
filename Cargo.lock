@@ -374,6 +374,7 @@ dependencies = [
  "amiss-fixtures",
  "amiss-wire",
  "crc32fast",
+ "divan",
  "flate2",
  "fs_at",
  "libc",

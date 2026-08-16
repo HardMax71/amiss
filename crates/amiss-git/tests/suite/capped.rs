@@ -162,18 +162,55 @@ fn aggregate_charges_fill_to_the_cap_exactly() {
     resources
         .charge_compressed("b", 4)
         .expect("exactly the aggregate cap still fits");
-    let over = resources.charge_compressed("c", 1).unwrap_err();
-    assert!(
-        format!("{over:?}").contains("AggregateGitCompressedObjectBytesPerEvaluation"),
-        "{over:?}"
+    assert_eq!(
+        resources.charge_compressed("c", 1),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::AggregateGitCompressedObjectBytesPerEvaluation,
+            configured_limit: 10,
+            observed_lower_bound: 11,
+        })
     );
     resources.charge_index("a", 6).unwrap();
     resources
         .charge_index("b", 4)
         .expect("exactly the aggregate cap still fits");
-    let over = resources.charge_index("c", 1).unwrap_err();
-    assert!(
-        format!("{over:?}").contains("AggregateGitPackIndexBytes"),
-        "{over:?}"
+    assert_eq!(
+        resources.charge_index("c", 1),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::AggregateGitPackIndexBytes,
+            configured_limit: 10,
+            observed_lower_bound: 11,
+        })
+    );
+}
+
+#[test]
+fn aggregate_meters_are_independent_and_idempotent() {
+    let limits = GitLimits {
+        aggregate_compressed_bytes: 1,
+        aggregate_pack_index_bytes: 1,
+        ..GitLimits::CONTRACT
+    };
+    let mut resources = GitResources::new(limits);
+    resources.charge_index("member", 1).unwrap();
+    resources.charge_compressed("idx:member", 1).unwrap();
+    resources.charge_index("member", 1).unwrap();
+    resources.charge_compressed("idx:member", 1).unwrap();
+
+    assert_eq!(
+        resources.charge_compressed("next", 1),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::AggregateGitCompressedObjectBytesPerEvaluation,
+            configured_limit: 1,
+            observed_lower_bound: 2,
+        })
+    );
+    assert_eq!(
+        resources.charge_index("next", 1),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::AggregateGitPackIndexBytes,
+            configured_limit: 1,
+            observed_lower_bound: 2,
+        })
     );
 }
