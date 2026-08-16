@@ -70,12 +70,10 @@ impl EvaluationRequest {
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         let value = root(bytes)?;
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            EVALUATION_REQUEST_SCHEMA,
-        )?;
-        let profile = Profile::decode(&obj.field("profile"), obj.take("profile")?)?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, EVALUATION_REQUEST_SCHEMA)
+        })?;
+        let profile = obj.required("profile", Profile::decode)?;
         let mode_path = obj.field("mode");
         let mode = match de::string(&mode_path, obj.take("mode")?)?.as_str() {
             "commit-pair" => RequestMode::CommitPair,
@@ -333,11 +331,9 @@ impl SnapshotRequest {
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         let value = root(bytes)?;
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            SNAPSHOT_REQUEST_SCHEMA,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, SNAPSHOT_REQUEST_SCHEMA)
+        })?;
         let materialization_path = obj.field("materialization");
         let materialization =
             match de::string(&materialization_path, obj.take("materialization")?)?.as_str() {
@@ -431,24 +427,14 @@ impl ControlsRequest {
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         let value = root(bytes)?;
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            CONTROLS_REQUEST_SCHEMA,
-        )?;
-        let organization_floor = decode_supplied(
-            &obj.field("organization_floor"),
-            obj.take("organization_floor")?,
-        )?;
-        let debt_snapshot =
-            decode_supplied(&obj.field("debt_snapshot"), obj.take("debt_snapshot")?)?;
-        let waiver_bundle =
-            decode_supplied(&obj.field("waiver_bundle"), obj.take("waiver_bundle")?)?;
-        let trusted_time = decode_time(&obj.field("trusted_time"), obj.take("trusted_time")?)?;
-        let execution_constraint = decode_supplied(
-            &obj.field("execution_constraint"),
-            obj.take("execution_constraint")?,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, CONTROLS_REQUEST_SCHEMA)
+        })?;
+        let organization_floor = obj.required("organization_floor", decode_supplied)?;
+        let debt_snapshot = obj.required("debt_snapshot", decode_supplied)?;
+        let waiver_bundle = obj.required("waiver_bundle", decode_supplied)?;
+        let trusted_time = obj.required("trusted_time", decode_time)?;
+        let execution_constraint = obj.required("execution_constraint", decode_supplied)?;
         obj.finish()?;
         Ok(Self {
             organization_floor,
@@ -682,12 +668,12 @@ fn decode_supplied(path: &str, value: Value) -> Result<Option<SuppliedControl>, 
         return Ok(None);
     };
     let mut obj = Obj::new(path, value)?;
-    let embedded = embedded_value(&obj.field("value"), obj.take("value")?)?;
+    let embedded = obj.required("value", embedded_value)?;
     let digest_path = obj.field("expected_digest");
     let expected_digest =
         Digest::from_wire(&de::string(&digest_path, obj.take("expected_digest")?)?)
             .ok_or_else(|| Error::new(&digest_path, ErrorKind::InvalidValue))?;
-    let trust_source = RequestTrust::decode(&obj.field("trust_source"), obj.take("trust_source")?)?;
+    let trust_source = obj.required("trust_source", RequestTrust::decode)?;
     obj.finish()?;
     Ok(Some(SuppliedControl {
         value: embedded,
@@ -701,12 +687,12 @@ fn decode_time(path: &str, value: Value) -> Result<Option<SuppliedTime>, Error> 
         return Ok(None);
     };
     let mut obj = Obj::new(path, value)?;
-    let embedded = embedded_value(&obj.field("value"), obj.take("value")?)?;
+    let embedded = obj.required("value", embedded_value)?;
     let digest_path = obj.field("expected_digest");
     let expected_digest =
         Digest::from_wire(&de::string(&digest_path, obj.take("expected_digest")?)?)
             .ok_or_else(|| Error::new(&digest_path, ErrorKind::InvalidValue))?;
-    let provider = decode_provider_id(&obj.field("provider"), obj.take("provider")?)?;
+    let provider = obj.required("provider", decode_provider_id)?;
     let run_id_path = obj.field("provider_run_id");
     let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
     let attempt_path = obj.field("provider_run_attempt");

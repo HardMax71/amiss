@@ -1,3 +1,4 @@
+use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, canonical, canonical_length, parse};
 use divan::counter::BytesCount;
@@ -79,4 +80,12 @@ fn digest_bytes(bencher: Bencher<'_, '_>) {
     bencher
         .counter(BytesCount::of_slice(&bytes))
         .bench_local(|| hb("amiss/raw-evidence", black_box(&bytes)));
+}
+
+#[divan::bench(sample_count = 1_000)]
+fn decode_organization_floor(bencher: Bencher<'_, '_>) {
+    const FLOOR: &[u8] = include_bytes!("../tests/fixtures/organization-floor.json");
+    bencher
+        .counter(BytesCount::of_slice(FLOOR))
+        .bench_local(|| OrganizationFloor::parse(black_box(FLOOR)));
 }
