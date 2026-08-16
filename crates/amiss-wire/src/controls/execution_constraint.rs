@@ -179,15 +179,10 @@ impl ExecutionConstraintDescriptor {
         let value = root(bytes)?;
         let digest = hj(EXECUTION_CONSTRAINT_SCHEMA, &value);
         let mut obj = Obj::new("$", value)?;
-        de::const_str(
-            &obj.field("schema"),
-            obj.take("schema")?,
-            EXECUTION_CONSTRAINT_SCHEMA,
-        )?;
-        let action_repository = decode_repository(
-            &obj.field("action_repository"),
-            obj.take("action_repository")?,
-        )?;
+        obj.required("schema", |path, value| {
+            de::const_str(path, value, EXECUTION_CONSTRAINT_SCHEMA)
+        })?;
+        let action_repository = obj.required("action_repository", decode_repository)?;
         let format_path = obj.field("action_object_format");
         let action_object_format =
             match de::string(&format_path, obj.take("action_object_format")?)?.as_str() {
@@ -207,29 +202,14 @@ impl ExecutionConstraintDescriptor {
             de::string(&tree_path, obj.take("action_tree_oid")?)?,
         )
         .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
-        let manifest_path =
-            decode_repo_path(&obj.field("manifest_path"), obj.take("manifest_path")?)?;
-        let release_manifest_digest = decode_digest(
-            &obj.field("release_manifest_digest"),
-            obj.take("release_manifest_digest")?,
-        )?;
-        let selected_platform = ConstraintPlatform::decode(
-            &obj.field("selected_platform"),
-            obj.take("selected_platform")?,
-        )?;
-        let required_status_name = decode_status_name(
-            &obj.field("required_status_name"),
-            obj.take("required_status_name")?,
-        )?;
-        de::const_str(
-            &obj.field("bootstrap_contract"),
-            obj.take("bootstrap_contract")?,
-            ACTION_BOOTSTRAP_CONTRACT,
-        )?;
-        let bootstrap_digest = decode_digest(
-            &obj.field("bootstrap_digest"),
-            obj.take("bootstrap_digest")?,
-        )?;
+        let manifest_path = obj.required("manifest_path", decode_repo_path)?;
+        let release_manifest_digest = obj.required("release_manifest_digest", decode_digest)?;
+        let selected_platform = obj.required("selected_platform", ConstraintPlatform::decode)?;
+        let required_status_name = obj.required("required_status_name", decode_status_name)?;
+        obj.required("bootstrap_contract", |path, value| {
+            de::const_str(path, value, ACTION_BOOTSTRAP_CONTRACT)
+        })?;
+        let bootstrap_digest = obj.required("bootstrap_digest", decode_digest)?;
         obj.finish()?;
         Ok(Self {
             digest,

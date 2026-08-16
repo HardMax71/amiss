@@ -94,6 +94,21 @@ impl Obj {
         }
     }
 
+    /// Removes and decodes one required member.
+    ///
+    /// # Errors
+    ///
+    /// Fails with `MissingField` when the member is absent, or returns the
+    /// decoder's error at the member path.
+    pub fn required<T>(
+        &mut self,
+        name: &str,
+        decode: impl FnOnce(&str, Value) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let value = self.take(name)?;
+        self.decode_member(name, value, decode)
+    }
+
     /// # Errors
     ///
     /// Fails with `UnknownField` at the first leftover member.
@@ -105,6 +120,20 @@ impl Obj {
                 path: format!("{}.{name}", self.path),
             }),
         }
+    }
+
+    fn decode_member<T>(
+        &mut self,
+        name: &str,
+        value: Value,
+        decode: impl FnOnce(&str, Value) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let parent_length = self.path.len();
+        self.path.push('.');
+        self.path.push_str(name);
+        let decoded = decode(&self.path, value);
+        self.path.truncate(parent_length);
+        decoded
     }
 }
 
