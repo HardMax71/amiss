@@ -720,6 +720,34 @@ fn a_control_crossing_names_a_path_only_when_one_blob_crossed() {
     );
 }
 
+#[test]
+fn a_late_control_crossing_discards_earlier_comparisons() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("a.txt"), "a").unwrap();
+    fs::write(root.join("z.txt"), "zz").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::write(root.join("a.txt"), "b").unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    let protected = "  \"protected_control_paths\": [\"a.txt\", \"z.txt\"],";
+    let extra = limited(
+        "{ \"resource\": \"selected-control-blob-bytes\", \"maximum\": 1 }",
+        "",
+    )
+    .replace("  \"protected_control_paths\": [],", protected);
+    let report = payload(&shell(Some(floor_input(&extra))), &repo, &base, &candidate);
+
+    assert_eq!(report["result"]["status"], "incomplete");
+    assert_eq!(report["errors"][0]["path"], "z.txt");
+    assert!(
+        report["findings"].as_array().unwrap().is_empty(),
+        "the earlier changed path stays pending when a later read fails"
+    );
+}
+
 /// A value claim spends the same line-fragment budget a reference would, so
 /// a floor one byte short refuses the run before any boundary is reached.
 #[test]
