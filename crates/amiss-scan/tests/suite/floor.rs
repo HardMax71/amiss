@@ -721,7 +721,7 @@ fn a_control_crossing_names_a_path_only_when_one_blob_crossed() {
 }
 
 #[test]
-fn a_late_control_crossing_discards_earlier_comparisons() {
+fn a_late_control_crossing_preserves_path_error_precedence() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -741,11 +741,9 @@ fn a_late_control_crossing_discards_earlier_comparisons() {
     let report = payload(&shell(Some(floor_input(&extra))), &repo, &base, &candidate);
 
     assert_eq!(report["result"]["status"], "incomplete");
-    assert_eq!(report["errors"][0]["path"], "z.txt");
-    assert!(
-        report["findings"].as_array().unwrap().is_empty(),
-        "the earlier changed path stays pending when a later read fails"
-    );
+    let errors = report["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0]["path"], "z.txt");
 }
 
 /// A value claim spends the same line-fragment budget a reference would, so
