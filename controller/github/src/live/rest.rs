@@ -6,6 +6,9 @@ use serde::Serialize;
 use std::time::{Duration, Instant};
 
 use amiss_controller::ProviderError;
+pub(super) use amiss_controller::{
+    ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
+};
 use amiss_wire::model::Oid;
 
 use crate::GitHubPullRequest;
@@ -41,38 +44,6 @@ impl OperationDeadline {
         (!remaining.is_zero())
             .then_some(remaining)
             .ok_or(ProviderError::Unavailable)
-    }
-}
-
-/// What the API said about a foreign repository itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Visibility {
-    Readable,
-    Missing,
-    Denied,
-}
-
-/// Whether a route's subject exists; Unknown when the API refused the one
-/// route without refusing the repository, as contents does for large blobs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Presence {
-    Present,
-    Absent,
-    Unknown,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum RefFamily {
-    Heads,
-    Tags,
-}
-
-impl RefFamily {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Heads => "heads",
-            Self::Tags => "tags",
-        }
     }
 }
 

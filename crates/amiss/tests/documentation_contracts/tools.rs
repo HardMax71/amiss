@@ -183,7 +183,7 @@ fn the_agent_lanes_ride_the_composite() {
 }
 
 /// The hook config defers to the bench: the prek floor matches, and the
-/// ratchet hooks ask cargo instead of spelling a version.
+/// similarity gate asks cargo instead of spelling a version.
 #[test]
 fn the_hook_config_defers_to_the_bench() {
     let bench = bench();
@@ -194,24 +194,22 @@ fn the_hook_config_defers_to_the_bench() {
         raw.contains(&floor),
         "the prek floor does not match the manifest: wanted {floor}"
     );
-    assert_eq!(
-        raw.matches("cargo metadata --locked --format-version 1 --no-deps --offline")
-            .count(),
-        2,
-        "both ratchet hooks must ask cargo for their pin"
-    );
-    assert_eq!(
-        raw.matches(".metadata.tools.source").count(),
-        2,
-        "both ratchet hooks must read the source tool table"
+    assert_eq!(raw.matches("entry: scripts/similarity-gate.sh").count(), 1);
+    let gate = fs::read_to_string(repository_root().join("scripts/similarity-gate.sh"))
+        .expect("the similarity gate is readable");
+    assert!(
+        gate.contains("cargo metadata --locked --format-version 1 --no-deps --offline")
+            && gate.contains(r#".metadata.tools.source["similarity-rs"]"#),
+        "the similarity gate must ask cargo for its source-tool pin"
     );
     assert!(
-        !raw.contains("scripts/tools.sh"),
-        "a ratchet hook calls the removed metadata shim"
+        !raw.contains("scripts/tools.sh") && !gate.contains("scripts/tools.sh"),
+        "the similarity gate calls the removed metadata shim"
     );
     assert!(
-        !raw.contains(&format!("similarity-rs {}", bench["similarity-rs"])),
-        "a ratchet hook spells the similarity version inline"
+        !raw.contains(&format!("similarity-rs {}", bench["similarity-rs"]))
+            && !gate.contains(&format!("similarity-rs {}", bench["similarity-rs"])),
+        "the similarity gate spells the version inline"
     );
 }
 

@@ -67,6 +67,26 @@ fn a_loose_header_past_the_cap_reports_the_smaller_resource() {
 }
 
 #[test]
+fn a_capped_read_still_requires_the_expected_kind() {
+    let dir = TempDir::new().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    fs::write(dir.path().join("doc.md"), body(1)).unwrap();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "one"]);
+    let tree = git(dir.path(), &["rev-parse", "HEAD^{tree}"])
+        .trim()
+        .to_owned();
+    let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
+    let oid = Oid::new(ObjectFormat::Sha1, tree).unwrap();
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+
+    assert_eq!(
+        repo.read_expected_capped(&mut resources, &oid, ObjectKind::Blob, doc_cap(1 << 20),),
+        Err(Error::ObjectWrongKind)
+    );
+}
+
+#[test]
 fn packed_and_deltified_objects_honor_the_cap() {
     let dir = TempDir::new().unwrap();
     git(dir.path(), &["init", "-q"]);

@@ -1,11 +1,10 @@
 mod tests;
 
 use std::fmt;
-use std::io::Read as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use amiss_controller::{ProviderError, ProviderIdentity};
+use amiss_controller::{ProviderError, ProviderIdentity, decode_bounded_json};
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::HeaderValue;
@@ -194,10 +193,7 @@ impl Transport {
         url: Url,
         budget: Budget,
     ) -> Result<(T, Budget), ProviderError> {
-        let (value, budget) = self.request(url, budget, false)?;
-        value
-            .map(|value| (value, budget))
-            .ok_or(ProviderError::InvalidResponse)
+        required_value(self.request(url, budget, false)?)
     }
 
     pub(super) fn get_optional<T: DeserializeOwned>(
@@ -218,9 +214,7 @@ impl Transport {
         let response = self.send(self.shared.client.get(url), budget)?;
         match classified(response.status())? {
             Classified::Success => {
-                let (bytes, budget) = response_bytes(response, budget)?;
-                let value = serde_json::from_slice(&bytes)
-                    .map_err(|_defect| ProviderError::InvalidResponse)?;
+                let (value, budget) = decode_response(response, budget)?;
                 Ok((Fact::Found(value), budget))
             }
             Classified::Missing => Ok((Fact::Missing, budget)),
@@ -271,11 +265,16 @@ impl Transport {
         if !status.is_success() {
             return Err(map_status(status));
         }
-        let (bytes, budget) = response_bytes(response, budget)?;
-        let value =
-            serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)?;
+        let (value, budget) = decode_response(response, budget)?;
         Ok((Some(value), budget))
     }
+}
+
+fn required_value<T>(answer: (Option<T>, Budget)) -> Result<(T, Budget), ProviderError> {
+    let (value, budget) = answer;
+    value
+        .map(|value| (value, budget))
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 impl Budget {
@@ -337,27 +336,13 @@ fn map_status(status: StatusCode) -> ProviderError {
     }
 }
 
-fn response_bytes(response: Response, budget: Budget) -> Result<(Vec<u8>, Budget), ProviderError> {
-    let limit = body_limit(response.content_length(), budget)?;
-    let mut bytes = Vec::new();
-    response
-        .take(limit)
-        .read_to_end(&mut bytes)
-        .map_err(|_defect| ProviderError::Unavailable)?;
-    let length = bytes.len();
-    Ok((bytes, consume_bytes(budget, length)?))
-}
-
-fn body_limit(content_length: Option<u64>, budget: Budget) -> Result<u64, ProviderError> {
-    let limit = budget
-        .response_bytes
-        .checked_add(1)
-        .and_then(|value| u64::try_from(value).ok())
-        .ok_or(ProviderError::InvalidResponse)?;
-    content_length
-        .is_none_or(|length| length < limit)
-        .then_some(limit)
-        .ok_or(ProviderError::InvalidResponse)
+fn decode_response<T: DeserializeOwned>(
+    response: Response,
+    budget: Budget,
+) -> Result<(T, Budget), ProviderError> {
+    let declared = response.content_length();
+    let (value, length) = decode_bounded_json(response, declared, budget.response_bytes)?;
+    Ok((value, consume_bytes(budget, length)?))
 }
 
 fn consume_bytes(budget: Budget, bytes: usize) -> Result<Budget, ProviderError> {

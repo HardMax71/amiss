@@ -346,8 +346,8 @@ fn pair_trees(
     if let Some((reason, row)) = &setup_shell.external_defect {
         return Err(controls_failure(
             setup_shell,
-            base_tree.1.clone(),
-            CandidateBlock::Commit(candidate_tree.1.clone()),
+            base_tree.1,
+            CandidateBlock::Commit(candidate_tree.1),
             reason,
             row.clone(),
         ));
@@ -1294,7 +1294,7 @@ fn staged_open(
     if let Some((reason, row)) = &setup_shell.external_defect {
         return Err(controls_failure(
             setup_shell,
-            base_tree.1.clone(),
+            base_tree.1,
             CandidateBlock::Unavailable(vec!["not-evaluated"]),
             reason,
             row.clone(),

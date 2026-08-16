@@ -631,6 +631,23 @@ fn identity_matches(
     repository == Some(control) && target_ref == Some(control_ref.as_str())
 }
 
+fn verify_item_limit(
+    resource: ResourceName,
+    item_count: usize,
+    limit: u64,
+) -> Result<(), ErrorDetail> {
+    if u64::try_from(item_count).unwrap_or(u64::MAX) <= limit {
+        Ok(())
+    } else {
+        Err(ErrorDetail {
+            code: AnalysisErrorCode::ResourceLimitExceeded,
+            path: None,
+            path_bytes: None,
+            resource: Some((resource, limit, limit.saturating_add(1))),
+        })
+    }
+}
+
 /// The statement's evaluation bindings: repository, ref, candidate identity,
 /// and the provider run the wrapper authenticated. Shape and TTL were
 /// established at parse.
@@ -682,21 +699,8 @@ pub fn verify_debt(
     item_limit: u64,
 ) -> Result<(), ErrorDetail> {
     let snapshot = &input.snapshot;
-    if u64::try_from(snapshot.items().len()).unwrap_or(u64::MAX) > item_limit {
-        return Err(ErrorDetail {
-            code: AnalysisErrorCode::ResourceLimitExceeded,
-            path: None,
-            path_bytes: None,
-            resource: Some((
-                ResourceName::DebtItems,
-                item_limit,
-                item_limit.saturating_add(1),
-            )),
-        });
-    }
-    let Some(floor) = floor else {
-        return Err(binding_mismatch_row());
-    };
+    verify_item_limit(ResourceName::DebtItems, snapshot.items().len(), item_limit)?;
+    let floor = floor.ok_or(binding_mismatch_row())?;
     let bound = identity_matches(
         snapshot.repository(),
         snapshot.ref_name(),
@@ -732,21 +736,8 @@ pub fn verify_waiver(
     item_limit: u64,
 ) -> Result<(), ErrorDetail> {
     let bundle = &input.bundle;
-    if u64::try_from(bundle.items().len()).unwrap_or(u64::MAX) > item_limit {
-        return Err(ErrorDetail {
-            code: AnalysisErrorCode::ResourceLimitExceeded,
-            path: None,
-            path_bytes: None,
-            resource: Some((
-                ResourceName::WaiverItems,
-                item_limit,
-                item_limit.saturating_add(1),
-            )),
-        });
-    }
-    let Some(floor) = floor else {
-        return Err(binding_mismatch_row());
-    };
+    verify_item_limit(ResourceName::WaiverItems, bundle.items().len(), item_limit)?;
+    let floor = floor.ok_or(binding_mismatch_row())?;
     let bound = identity_matches(
         bundle.repository(),
         bundle.ref_name(),

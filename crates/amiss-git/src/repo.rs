@@ -92,12 +92,7 @@ impl Repository {
         oid: &Oid,
         expected: ObjectKind,
     ) -> Result<Object, Error> {
-        let object = self.read_object(resources, oid)?;
-        if object.kind == expected {
-            Ok(object)
-        } else {
-            Err(Error::ObjectWrongKind)
-        }
+        require_kind(self.read_object(resources, oid)?, expected)
     }
 
     /// Reads one object under a smaller contextual inflated cap, which applies
@@ -115,12 +110,7 @@ impl Repository {
         expected: ObjectKind,
         cap: ValueCap,
     ) -> Result<Object, Error> {
-        let object = self.read_full(resources, oid, 1, Some(&cap))?;
-        if object.kind == expected {
-            Ok(object)
-        } else {
-            Err(Error::ObjectWrongKind)
-        }
+        require_kind(self.read_full(resources, oid, 1, Some(&cap))?, expected)
     }
 
     fn read_full(
@@ -427,6 +417,14 @@ impl Repository {
             resources.limits().inflated_object_bytes,
             value_cap,
         )
+    }
+}
+
+fn require_kind(object: Object, expected: ObjectKind) -> Result<Object, Error> {
+    if object.kind == expected {
+        Ok(object)
+    } else {
+        Err(Error::ObjectWrongKind)
     }
 }
 

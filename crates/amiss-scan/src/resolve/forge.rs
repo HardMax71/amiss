@@ -39,6 +39,51 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
     )
 }
 
+struct ForgeMatch {
+    intent_kind: IntentKind,
+    target_kind: TargetKind,
+    candidate: bool,
+    path: RepoPath,
+}
+
+fn finish_same_repository(
+    resolver: &mut Resolver<'_>,
+    context: &ForgeContext,
+    matched: ForgeMatch,
+    query: Option<String>,
+    fragment: Option<String>,
+) -> Result<(Intent, Resolution), Error> {
+    let resolution = matched
+        .candidate
+        .then(|| {
+            lookup(
+                resolver,
+                &matched.path,
+                matched.target_kind,
+                query.as_deref(),
+                fragment.as_deref(),
+                Some(context.dialect),
+            )
+        })
+        .transpose()?
+        .unwrap_or_else(|| {
+            Resolution::UnsupportedVersion(VersionScope::KnownPath {
+                path: matched.path.clone(),
+            })
+        });
+    Ok((
+        Intent {
+            kind: matched.intent_kind,
+            repository_path: Some(matched.path),
+            target_kind: Some(matched.target_kind),
+            external_scheme: None,
+            query,
+            fragment,
+        },
+        resolution,
+    ))
+}
+
 /// Foreign unless proven trusted: exact accepted `blob`/`tree` forms, literal
 /// ASCII owner and repository folded only `A`-`Z`, each later segment decoded
 /// exactly once, the trusted refs matched by whole segments, and the
@@ -83,29 +128,18 @@ fn github(
         }
     };
 
-    let intent = Intent {
-        kind: IntentKind::SameRepositoryGithub,
-        repository_path: Some(joined.clone()),
-        target_kind: Some(target_kind),
-        external_scheme: None,
-        query: query.clone(),
-        fragment: fragment.clone(),
-    };
-    if !matched_candidate {
-        return Ok((
-            intent,
-            Resolution::UnsupportedVersion(VersionScope::KnownPath { path: joined }),
-        ));
-    }
-    let row = lookup(
+    finish_same_repository(
         resolver,
-        &joined,
-        target_kind,
-        query.as_deref(),
-        fragment.as_deref(),
-        Some(identity.dialect),
-    )?;
-    Ok((intent, row))
+        identity,
+        ForgeMatch {
+            intent_kind: IntentKind::SameRepositoryGithub,
+            target_kind,
+            candidate: matched_candidate,
+            path: joined,
+        },
+        query,
+        fragment,
+    )
 }
 
 /// GitLab's canonical form: every segment before the reserved `-` separator
@@ -162,29 +196,18 @@ fn gitlab(
             }
         };
 
-    let intent = Intent {
-        kind: IntentKind::SameRepositoryGitlab,
-        repository_path: Some(joined.clone()),
-        target_kind: Some(target_kind),
-        external_scheme: None,
-        query: query.clone(),
-        fragment: fragment.clone(),
-    };
-    if !matched_candidate {
-        return Ok((
-            intent,
-            Resolution::UnsupportedVersion(VersionScope::KnownPath { path: joined }),
-        ));
-    }
-    let row = lookup(
+    finish_same_repository(
         resolver,
-        &joined,
-        target_kind,
-        query.as_deref(),
-        fragment.as_deref(),
-        Some(ForgeDialect::Gitlab),
-    )?;
-    Ok((intent, row))
+        identity,
+        ForgeMatch {
+            intent_kind: IntentKind::SameRepositoryGitlab,
+            target_kind,
+            candidate: matched_candidate,
+            path: joined,
+        },
+        query,
+        fragment,
+    )
 }
 
 /// The gitea family's typed forms, shared by Gitea, Forgejo, and Codeberg:
@@ -253,29 +276,18 @@ fn gitea(
         }
     };
 
-    let intent = Intent {
-        kind: IntentKind::SameRepositoryGitea,
-        repository_path: Some(joined.clone()),
-        target_kind: Some(target_kind),
-        external_scheme: None,
-        query: query.clone(),
-        fragment: fragment.clone(),
-    };
-    if !matched_candidate {
-        return Ok((
-            intent,
-            Resolution::UnsupportedVersion(VersionScope::KnownPath { path: joined }),
-        ));
-    }
-    let row = lookup(
+    finish_same_repository(
         resolver,
-        &joined,
-        target_kind,
-        query.as_deref(),
-        fragment.as_deref(),
-        Some(ForgeDialect::Gitea),
-    )?;
-    Ok((intent, row))
+        identity,
+        ForgeMatch {
+            intent_kind: IntentKind::SameRepositoryGitea,
+            target_kind,
+            candidate: matched_candidate,
+            path: joined,
+        },
+        query,
+        fragment,
+    )
 }
 
 /// A full lowercase object id in either frozen format; anything else after

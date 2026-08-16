@@ -1,6 +1,5 @@
 #![cfg(test)]
 
-use std::io::Cursor;
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
@@ -8,45 +7,12 @@ use reqwest::StatusCode;
 use secrecy::SecretString;
 
 use super::super::super::GiteaTimeouts;
-use super::{
-    MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, Transport, bounded_bytes, map_status, validate_api_base,
-};
+use super::{MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, Transport, map_status, validate_api_base};
 
 #[test]
 fn the_ceilings_are_the_documented_values() {
     assert_eq!(MAX_RESPONSE_BYTES, 8_388_608);
     assert_eq!(MAX_API_BASE_BYTES, 2_048);
-}
-
-#[test]
-fn bounded_bytes_honors_the_declared_and_the_actual_length() {
-    assert_eq!(
-        bounded_bytes(None, Cursor::new(b"abc".to_vec())),
-        Ok(b"abc".to_vec())
-    );
-    assert_eq!(
-        bounded_bytes(Some(MAX_RESPONSE_BYTES), Cursor::new(b"x".to_vec())),
-        Ok(b"x".to_vec()),
-        "a declaration exactly at the ceiling is admitted"
-    );
-    assert_eq!(
-        bounded_bytes(Some(MAX_RESPONSE_BYTES + 1), Cursor::new(b"x".to_vec())),
-        Err(ProviderError::InvalidResponse),
-        "a declaration one past the ceiling is refused unread"
-    );
-
-    let exact = vec![7_u8; MAX_RESPONSE_BYTES];
-    assert_eq!(
-        bounded_bytes(None, Cursor::new(exact.clone())),
-        Ok(exact),
-        "a body exactly at the ceiling is read whole"
-    );
-    let over = vec![7_u8; MAX_RESPONSE_BYTES + 1];
-    assert_eq!(
-        bounded_bytes(None, Cursor::new(over)),
-        Err(ProviderError::InvalidResponse),
-        "one byte past the ceiling is refused"
-    );
 }
 
 #[test]

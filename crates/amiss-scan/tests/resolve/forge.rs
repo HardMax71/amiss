@@ -7,6 +7,41 @@ use amiss_wire::resolution::{ExternalReference, Target, VersionScope};
 
 use crate::support::{bed, gitea_context, github_context, gitlab_context};
 
+#[test]
+fn same_repository_intents_retain_query_and_fragment() {
+    let cases = [
+        (
+            github_context(),
+            IntentKind::SameRepositoryGithub,
+            "https://github.com/acme/widgets/blob/feature/x/docs/guide.md?plain=1#intro",
+        ),
+        (
+            gitlab_context(),
+            IntentKind::SameRepositoryGitlab,
+            "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md?plain=1#intro",
+        ),
+        (
+            gitea_context(),
+            IntentKind::SameRepositoryGitea,
+            "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/guide.md?plain=1#intro",
+        ),
+    ];
+    for (context, kind, destination) in cases {
+        let (intent, _resolution) = bed()
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                destination,
+            )
+            .unwrap();
+        assert_eq!(intent.kind, kind, "{destination}");
+        assert_eq!(intent.query.as_deref(), Some("plain=1"), "{destination}");
+        assert_eq!(intent.fragment.as_deref(), Some("intro"), "{destination}");
+    }
+}
+
 /// The gitea family against a real tree: the typed branch form resolves
 /// with an either target, the commit form is pinned to the exact candidate
 /// OID, a tag spelled like the candidate branch stays version-scoped out,

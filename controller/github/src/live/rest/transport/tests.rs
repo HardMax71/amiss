@@ -1,6 +1,5 @@
 #![cfg(test)]
 
-use std::io::Cursor;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -13,8 +12,8 @@ use serde::Deserialize;
 
 use super::{
     AppCredential, Classified, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken,
-    OperationDeadline, Transport, app_jwt, bounded_bytes, classified, map_error, map_status,
-    rate_limited, settled, validate_api_base,
+    OperationDeadline, Transport, app_jwt, classified, map_error, map_status, rate_limited,
+    settled, validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
 
@@ -83,22 +82,6 @@ fn api_authority_is_derived_from_the_provider_instance() {
             Err(GitHubClientError::Configuration(reason))
         );
     }
-}
-
-#[test]
-fn response_bodies_are_bounded_before_json_decoding() {
-    assert_eq!(
-        bounded_bytes(Some(MAX_RESPONSE_BYTES + 1), Cursor::new(b"{}")),
-        Err(ProviderError::InvalidResponse)
-    );
-    assert_eq!(
-        bounded_bytes(None, Cursor::new(vec![0_u8; MAX_RESPONSE_BYTES + 1])),
-        Err(ProviderError::InvalidResponse)
-    );
-    assert_eq!(
-        bounded_bytes(Some(2), Cursor::new(b"{}".to_vec())),
-        Ok(b"{}".to_vec())
-    );
 }
 
 #[test]
@@ -218,18 +201,6 @@ fn offline_transport(minted: Option<MintedToken>) -> Transport {
 fn the_ceilings_are_the_documented_values() {
     assert_eq!(MAX_RESPONSE_BYTES, 8_388_608);
     assert_eq!(MAX_API_BASE_BYTES, 2_048);
-}
-
-#[test]
-fn a_body_at_exactly_the_ceiling_is_within_it() {
-    assert_eq!(
-        bounded_bytes(
-            Some(MAX_RESPONSE_BYTES),
-            Cursor::new(vec![0_u8; MAX_RESPONSE_BYTES])
-        )
-        .map(|bytes| bytes.len()),
-        Ok(MAX_RESPONSE_BYTES)
-    );
 }
 
 #[test]

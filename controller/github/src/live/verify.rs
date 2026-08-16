@@ -1,10 +1,12 @@
 mod tests;
 
-use amiss_controller::{ProviderError, ref_span, spelled_segments};
-use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
+use amiss_controller::{
+    ForgeProducer, ForgeTail, ProviderError, forge_evidence, forge_repository_evidence, ref_span,
+    spelled_segments,
+};
 use amiss_wire::json::Value;
 
-use super::rest::{GitHubVerification, Presence, RefFamily, Visibility};
+use super::rest::{GitHubVerification, Presence, RefFamily};
 
 pub(super) const PRODUCER_NAME: &str = "amiss-controller-github";
 
@@ -21,53 +23,29 @@ pub(super) fn verify_external<R: GitHubVerification>(
     producer_version: &str,
     checked_at: &str,
 ) -> Result<Value, ProviderError> {
-    let introduced = plan
-        .member("payload")
-        .and_then(|payload| payload.member("introduced"));
-    // A value that is not a digest-whole plan is the caller's defect, not
-    // the provider's, and no call is spent on it.
-    let (Some(Value::Array(introduced)), true) = (introduced, bound_plan(plan)) else {
-        return Err(ProviderError::InvalidResponse);
-    };
-    let deadline = rest.deadline()?;
-    let mut rows = Vec::new();
-    for row in introduced {
-        let (Some(destination), Some(repository)) =
-            (row.text("destination"), row.member("repository"))
-        else {
-            continue;
-        };
-        if repository.text("dialect") != Some("github") || repository.text("host") != Some(host) {
-            continue;
-        }
-        let (Some(owner), Some(name)) = (repository.text("owner"), repository.text("name")) else {
-            continue;
-        };
-        let visibility = match rest.repository_visibility(owner, name, deadline) {
-            Ok(visibility) => visibility,
-            Err(ProviderError::Unavailable) => break,
-            Err(defect) => return Err(defect),
-        };
-        let (fact, tail) = match visibility {
-            Visibility::Missing => ("missing", None),
-            Visibility::Denied => ("denied", None),
-            Visibility::Readable => match resolve_tail(rest, repository, owner, name, deadline) {
-                Ok(resolution) => ("readable", resolution),
-                Err(ProviderError::Unavailable) => {
-                    rows.push(forge_evidence_row(
-                        destination,
-                        "readable",
-                        None,
-                        checked_at,
-                    ));
-                    break;
-                }
-                Err(defect) => return Err(defect),
-            },
-        };
-        rows.push(forge_evidence_row(destination, fact, tail, checked_at));
-    }
-    evidence_file(plan, PRODUCER_NAME, producer_version, rows).ok_or(ProviderError::InvalidResponse)
+    forge_evidence(
+        plan,
+        ForgeProducer {
+            dialect: "github",
+            host,
+            name: PRODUCER_NAME,
+            version: producer_version,
+            checked_at,
+        },
+        || rest.deadline(),
+        |deadline, target| {
+            let visibility = rest.repository_visibility(target.owner, target.name, *deadline)?;
+            forge_repository_evidence(visibility, || {
+                resolve_tail(
+                    rest,
+                    target.repository,
+                    target.owner,
+                    target.name,
+                    *deadline,
+                )
+            })
+        },
+    )
 }
 
 /// Resolves the opaque tail against the readable repository: a whole-segment
@@ -83,7 +61,7 @@ fn resolve_tail<R: GitHubVerification>(
     owner: &str,
     name: &str,
     deadline: super::rest::OperationDeadline,
-) -> Result<Option<&'static str>, ProviderError> {
+) -> Result<Option<ForgeTail>, ProviderError> {
     if !matches!(repository.text("form"), Some("blob" | "tree" | "raw")) {
         return Ok(None);
     }
@@ -130,19 +108,19 @@ fn resolve_tail<R: GitHubVerification>(
         None => match rest.commit_presence(owner, name, first, deadline)? {
             Presence::Present => (first.to_owned(), 1),
             Presence::Absent if rewritten => return Ok(None),
-            Presence::Absent => return Ok(Some("revision-missing")),
+            Presence::Absent => return Ok(Some(ForgeTail::RevisionMissing)),
             Presence::Unknown => return Ok(None),
         },
     };
     let path = segments.get(span..).unwrap_or_default();
     if path.is_empty() {
-        return Ok(Some("resolved"));
+        return Ok(Some(ForgeTail::Resolved));
     }
     Ok(
         match rest.content_presence(owner, name, &reference, path, deadline)? {
-            Presence::Present => Some("resolved"),
+            Presence::Present => Some(ForgeTail::Resolved),
             Presence::Absent if rewritten => None,
-            Presence::Absent => Some("path-missing"),
+            Presence::Absent => Some(ForgeTail::PathMissing),
             Presence::Unknown => None,
         },
     )

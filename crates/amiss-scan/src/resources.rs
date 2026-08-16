@@ -129,6 +129,21 @@ pub(crate) const fn crossing(
     }
 }
 
+fn within_limit(
+    value: u64,
+    limit: u64,
+    resource: ResourceName,
+    observed_lower_bound: u64,
+) -> Result<(), Error> {
+    (value <= limit)
+        .then_some(())
+        .ok_or_else(|| crossing(resource, limit, observed_lower_bound))
+}
+
+fn bounded_value(value: u64, limit: u64, resource: ResourceName) -> Result<u64, Error> {
+    within_limit(value, limit, resource, value).map(|()| value)
+}
+
 impl ScanResources {
     #[must_use]
     pub fn new(limits: ScanLimits) -> Self {
@@ -158,11 +173,19 @@ impl ScanResources {
         declared_bytes: u64,
     ) -> Result<(), Error> {
         let charged = total.saturating_add(declared_bytes);
-        if charged > limit {
-            return Err(crossing(resource, limit, charged));
-        }
+        within_limit(charged, limit, resource, charged)?;
         *total = charged;
         Ok(())
+    }
+
+    fn charge_count(
+        total: &mut u64,
+        increment: u64,
+        limit: u64,
+        resource: ResourceName,
+    ) -> Result<(), Error> {
+        *total = total.saturating_add(increment);
+        within_limit(*total, limit, resource, limit.saturating_add(1))
     }
 
     #[must_use]
@@ -306,15 +329,12 @@ impl ScanResources {
     ///
     /// The document count crossing.
     pub fn admit_document(&mut self) -> Result<(), Error> {
-        self.documents = self.documents.saturating_add(1);
-        if self.documents > self.limits.documents_per_snapshot {
-            return Err(crossing(
-                ResourceName::DocumentsPerSnapshot,
-                self.limits.documents_per_snapshot,
-                self.limits.documents_per_snapshot.saturating_add(1),
-            ));
-        }
-        Ok(())
+        Self::charge_count(
+            &mut self.documents,
+            1,
+            self.limits.documents_per_snapshot,
+            ResourceName::DocumentsPerSnapshot,
+        )
     }
 
     /// Charges one admitted document's declared byte size.
@@ -324,19 +344,19 @@ impl ScanResources {
     /// The per-document byte crossing, then the aggregate crossing; a member
     /// rejected by the first is never charged to the second.
     pub fn charge_document_bytes(&mut self, declared_bytes: u64) -> Result<(), Error> {
-        if declared_bytes > self.limits.document_blob_bytes {
-            return Err(crossing(
-                ResourceName::DocumentBlobBytes,
-                self.limits.document_blob_bytes,
-                declared_bytes,
-            ));
-        }
-        Self::charge_aggregate(
-            &mut self.document_bytes,
-            self.limits.aggregate_document_bytes_per_snapshot,
-            ResourceName::AggregateDocumentBytesPerSnapshot,
+        bounded_value(
             declared_bytes,
+            self.limits.document_blob_bytes,
+            ResourceName::DocumentBlobBytes,
         )
+        .and_then(|bytes| {
+            Self::charge_aggregate(
+                &mut self.document_bytes,
+                self.limits.aggregate_document_bytes_per_snapshot,
+                ResourceName::AggregateDocumentBytesPerSnapshot,
+                bytes,
+            )
+        })
     }
 
     /// Charges one parsed document's node work.
@@ -346,29 +366,24 @@ impl ScanResources {
     /// The nesting, per-document node, or per-snapshot node crossing, checked
     /// in that order.
     pub fn charge_work(&mut self, nodes: u64, nesting: u64) -> Result<(), Error> {
-        if nesting > self.limits.parser_nesting {
-            return Err(crossing(
-                ResourceName::ParserNesting,
-                self.limits.parser_nesting,
-                self.limits.parser_nesting.saturating_add(1),
-            ));
-        }
-        if nodes > self.limits.parser_nodes_per_document {
-            return Err(crossing(
-                ResourceName::ParserNodesPerDocument,
-                self.limits.parser_nodes_per_document,
-                self.limits.parser_nodes_per_document.saturating_add(1),
-            ));
-        }
-        self.nodes = self.nodes.saturating_add(nodes);
-        if self.nodes > self.limits.parser_nodes_per_snapshot {
-            return Err(crossing(
-                ResourceName::ParserNodesPerSnapshot,
-                self.limits.parser_nodes_per_snapshot,
-                self.limits.parser_nodes_per_snapshot.saturating_add(1),
-            ));
-        }
-        Ok(())
+        within_limit(
+            nesting,
+            self.limits.parser_nesting,
+            ResourceName::ParserNesting,
+            self.limits.parser_nesting.saturating_add(1),
+        )?;
+        within_limit(
+            nodes,
+            self.limits.parser_nodes_per_document,
+            ResourceName::ParserNodesPerDocument,
+            self.limits.parser_nodes_per_document.saturating_add(1),
+        )?;
+        Self::charge_count(
+            &mut self.nodes,
+            nodes,
+            self.limits.parser_nodes_per_snapshot,
+            ResourceName::ParserNodesPerSnapshot,
+        )
     }
 
     /// Charges one extracted reference whose raw destination is
@@ -384,29 +399,24 @@ impl ScanResources {
         destination_bytes: u64,
         document_references: u64,
     ) -> Result<(), Error> {
-        if destination_bytes > self.limits.raw_link_destination_bytes {
-            return Err(crossing(
-                ResourceName::RawLinkDestinationBytes,
-                self.limits.raw_link_destination_bytes,
-                destination_bytes,
-            ));
-        }
-        if document_references > self.limits.references_per_document {
-            return Err(crossing(
-                ResourceName::ReferencesPerDocument,
-                self.limits.references_per_document,
-                self.limits.references_per_document.saturating_add(1),
-            ));
-        }
-        self.references = self.references.saturating_add(1);
-        if self.references > self.limits.references_per_snapshot {
-            return Err(crossing(
-                ResourceName::ReferencesPerSnapshot,
-                self.limits.references_per_snapshot,
-                self.limits.references_per_snapshot.saturating_add(1),
-            ));
-        }
-        Ok(())
+        within_limit(
+            destination_bytes,
+            self.limits.raw_link_destination_bytes,
+            ResourceName::RawLinkDestinationBytes,
+            destination_bytes,
+        )?;
+        within_limit(
+            document_references,
+            self.limits.references_per_document,
+            ResourceName::ReferencesPerDocument,
+            self.limits.references_per_document.saturating_add(1),
+        )?;
+        Self::charge_count(
+            &mut self.references,
+            1,
+            self.limits.references_per_snapshot,
+            ResourceName::ReferencesPerSnapshot,
+        )
     }
 
     /// One declared label admitted to the snapshot's table.
@@ -415,14 +425,11 @@ impl ScanResources {
     ///
     /// The `declared-labels-per-snapshot` crossing.
     pub(crate) fn charge_label(&mut self) -> Result<(), Error> {
-        self.labels = self.labels.saturating_add(1);
-        if self.labels > self.limits.declared_labels_per_snapshot {
-            return Err(crossing(
-                ResourceName::DeclaredLabelsPerSnapshot,
-                self.limits.declared_labels_per_snapshot,
-                self.limits.declared_labels_per_snapshot.saturating_add(1),
-            ));
-        }
-        Ok(())
+        Self::charge_count(
+            &mut self.labels,
+            1,
+            self.limits.declared_labels_per_snapshot,
+            ResourceName::DeclaredLabelsPerSnapshot,
+        )
     }
 }

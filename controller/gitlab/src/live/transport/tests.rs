@@ -11,8 +11,7 @@ use reqwest::StatusCode;
 use secrecy::SecretString;
 
 use super::{
-    Budget, GitLabClientError, GitLabTimeouts, Transport, body_limit, consume_bytes, map_error,
-    map_status,
+    Budget, GitLabClientError, GitLabTimeouts, Transport, consume_bytes, map_error, map_status,
 };
 
 const TOKEN: &str = "glpat-never-print-this";
@@ -76,11 +75,6 @@ fn time_and_aggregate_body_budgets_are_bounded() {
         deadline: Instant::now() + Duration::from_secs(1),
         response_bytes: 10,
     };
-    assert_eq!(body_limit(Some(10), budget), Ok(11));
-    assert_eq!(
-        body_limit(Some(11), budget),
-        Err(ProviderError::InvalidResponse)
-    );
     assert_eq!(consume_bytes(budget, 6).unwrap().response_bytes, 4);
     assert!(matches!(
         consume_bytes(budget, 11),

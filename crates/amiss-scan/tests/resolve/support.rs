@@ -175,10 +175,12 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
             Some(&context),
             "docs/guide.md",
             false,
-            "https://github.com/ACME/widgets/blob/main/docs/guide.md",
+            "https://github.com/ACME/widgets/blob/main/docs/guide.md?plain=1#intro",
         )
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.kind, IntentKind::SameRepositoryGithub);
+    assert_eq!(intent.query.as_deref(), Some("plain=1"));
+    assert_eq!(intent.fragment.as_deref(), Some("intro"));
     let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = row else {
         panic!("unexpected resolution: {row:?}");
     };
