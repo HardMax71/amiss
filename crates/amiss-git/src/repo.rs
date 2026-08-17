@@ -143,8 +143,10 @@ impl Repository {
         &'set self,
         cell: &'set OnceLock<Result<PackSet, Error>>,
         resources: &mut GitResources,
+        known: Option<&PackSet>,
     ) -> Result<&'set PackSet, Error> {
-        let built = cell.get_or_init(|| pack::build(&self.objects, self.object_format, resources));
+        let built =
+            cell.get_or_init(|| pack::build(&self.objects, self.object_format, resources, known));
         match built {
             Ok(set) => {
                 for (name, size) in &set.index_sizes {
@@ -173,11 +175,11 @@ impl Repository {
         resources: &mut GitResources,
         raw: &[u8],
     ) -> Result<Option<(&PackSet, usize, u64)>, Error> {
-        let enumerated = self.enumeration(&self.packs, resources)?;
+        let enumerated = self.enumeration(&self.packs, resources, None)?;
         if let Some((pack_index, offset)) = enumerated.locate(raw) {
             return Ok(Some((enumerated, pack_index, offset)));
         }
-        let repacked = self.enumeration(&self.repacked, resources)?;
+        let repacked = self.enumeration(&self.repacked, resources, Some(enumerated))?;
         Ok(repacked
             .locate(raw)
             .map(|(pack_index, offset)| (repacked, pack_index, offset)))

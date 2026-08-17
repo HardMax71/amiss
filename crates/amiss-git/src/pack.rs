@@ -48,6 +48,7 @@ pub(crate) fn build(
     objects: &File,
     object_format: ObjectFormat,
     resources: &mut GitResources,
+    known: Option<&PackSet>,
 ) -> Result<PackSet, Error> {
     let mut pack_dir = match open_dir(objects, "pack") {
         Ok(dir) => dir,
@@ -104,6 +105,13 @@ pub(crate) fn build(
     let mut packs = Vec::new();
     let mut index_sizes = Vec::new();
     for name_hex in pairs.keys() {
+        if known.is_some_and(|set| {
+            set.packs
+                .binary_search_by(|pack| pack.name_hex.as_str().cmp(name_hex))
+                .is_ok()
+        }) {
+            continue;
+        }
         let (pack, index_bytes) = load_pack(&pack_dir, object_format, resources, name_hex)?;
         index_sizes.push((name_hex.clone(), index_bytes));
         packs.push(pack);
