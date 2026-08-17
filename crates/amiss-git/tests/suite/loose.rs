@@ -298,6 +298,23 @@ fn parses_tree_and_commit_grammar() {
     }
 }
 
+#[test]
+fn duplicate_tree_names_are_unreadable_when_sort_keys_are_not_adjacent() {
+    let raw = [0xab_u8; 20];
+    let mut tree = Vec::new();
+    tree.extend_from_slice(b"100644 foo\0");
+    tree.extend_from_slice(&raw);
+    tree.extend_from_slice(b"100644 foo!\0");
+    tree.extend_from_slice(&raw);
+    tree.extend_from_slice(b"40000 foo\0");
+    tree.extend_from_slice(&raw);
+
+    assert_eq!(
+        parse_tree(ObjectFormat::Sha1, &tree).unwrap_err(),
+        Error::ObjectUnreadable
+    );
+}
+
 fn commit_body(extensions: &str) -> Vec<u8> {
     format!(
         "tree {}\nauthor A <a@b> 0 +0000\ncommitter C <c@d> 0 +0000\n{extensions}\n",
