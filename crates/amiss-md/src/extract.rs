@@ -1,6 +1,6 @@
 mod tests;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use amiss_wire::controls::SourceConstruct;
 pub use amiss_wire::extraction::{
@@ -58,7 +58,6 @@ struct Owners {
 }
 
 struct Definition {
-    identifier: String,
     url: String,
     raw: String,
     reserved: bool,
@@ -179,7 +178,7 @@ fn extract_tree(
 
 struct Sweep<'a> {
     suffix: &'a str,
-    definitions: Vec<Definition>,
+    definitions: HashMap<String, Definition>,
     orphans: OrphanDefinitions,
     root_span: (usize, usize),
     occurrences: Vec<Occurrence>,
@@ -255,7 +254,8 @@ impl Sweep<'_> {
             }
             Node::LinkReference(reference) => {
                 let construct = reference_link(reference.reference_kind);
-                let winning = winning(&self.definitions, &reference.identifier)?;
+                let winning = self.definitions.get(&reference.identifier);
+                let winning = winning.ok_or(Fault::ParserError)?;
                 if !winning.reserved {
                     let (raw, url) = (winning.raw.clone(), winning.url.clone());
                     self.push(construct, raw, url, span_of(node)?, path, *owners);
@@ -263,7 +263,8 @@ impl Sweep<'_> {
             }
             Node::ImageReference(reference) => {
                 let construct = reference_image(reference.reference_kind);
-                let winning = winning(&self.definitions, &reference.identifier)?;
+                let winning = self.definitions.get(&reference.identifier);
+                let winning = winning.ok_or(Fault::ParserError)?;
                 if !winning.reserved {
                     let (raw, url) = (winning.raw.clone(), winning.url.clone());
                     self.push(construct, raw, url, span_of(node)?, path, *owners);
@@ -553,7 +554,11 @@ fn run_length(bytes: &[u8], at: usize, limit: usize) -> usize {
 /// Collects reference definitions in document order; the first with a matching
 /// normalized identifier wins.
 type OrphanDefinitions = BTreeMap<(usize, usize), (String, String)>;
-type ResolvedDefinitions = (Vec<Definition>, Vec<GovernedDefinition>, OrphanDefinitions);
+type ResolvedDefinitions = (
+    HashMap<String, Definition>,
+    Vec<GovernedDefinition>,
+    OrphanDefinitions,
+);
 
 fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> {
     let mut out = Vec::new();
@@ -586,8 +591,8 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
             }
             out.push((
                 span,
+                definition.identifier.clone(),
                 Definition {
-                    identifier: definition.identifier.clone(),
                     url: definition.url.clone(),
                     raw,
                     reserved,
@@ -598,25 +603,18 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
             stack.extend(children.iter().rev());
         }
     }
-    out.sort_by_key(|(span, _)| *span);
+    out.sort_by_key(|(span, _, _)| *span);
     governed.sort_by_key(|definition| definition.span);
     let orphans = out
         .iter()
-        .filter(|(_, definition)| !definition.reserved && !used.contains(&definition.identifier))
-        .map(|(span, definition)| (*span, (definition.raw.clone(), definition.url.clone())))
+        .filter(|(_, identifier, definition)| !definition.reserved && !used.contains(identifier))
+        .map(|(span, _, definition)| (*span, (definition.raw.clone(), definition.url.clone())))
         .collect();
-    Ok((
-        out.into_iter().map(|(_, definition)| definition).collect(),
-        governed,
-        orphans,
-    ))
-}
-
-fn winning<'a>(definitions: &'a [Definition], identifier: &str) -> Result<&'a Definition, Fault> {
-    definitions
-        .iter()
-        .find(|definition| definition.identifier == identifier)
-        .ok_or(Fault::ParserError)
+    let mut resolved = HashMap::with_capacity(out.len());
+    for (_, identifier, definition) in out {
+        resolved.entry(identifier).or_insert(definition);
+    }
+    Ok((resolved, governed, orphans))
 }
 
 /// The raw destination token and whether it was written in angle brackets.

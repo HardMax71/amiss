@@ -68,6 +68,26 @@ fn dense_references(bencher: Bencher<'_, '_>, adapter: Adapter) {
         });
 }
 
+#[divan::bench(sample_count = 3, sample_size = 1)]
+fn dense_markdown_reference_definitions(bencher: Bencher<'_, '_>) {
+    let source = reference_definition_page(8_192);
+    let mut validation_resources = ScanResources::new(ScanLimits::CONTRACT);
+    let scanned = scan_document(&mut validation_resources, Adapter::Markdown, &source)
+        .unwrap_or_else(|defect| panic!("dense Markdown definition fixture: {defect:?}"));
+    assert_eq!(scanned.occurrences.len(), 8_192);
+
+    bencher
+        .counter(BytesCount::of_slice(&source))
+        .bench_local(|| {
+            let mut resources = ScanResources::new(ScanLimits::CONTRACT);
+            scan_document(
+                &mut resources,
+                black_box(Adapter::Markdown),
+                black_box(&source),
+            )
+        });
+}
+
 fn reference_page(adapter: Adapter, lines: usize) -> Vec<u8> {
     let (header, next, home) = match adapter {
         Adapter::Markdown | Adapter::Mdx => (
@@ -91,6 +111,18 @@ fn reference_page(adapter: Adapter, lines: usize) -> Vec<u8> {
     source.push_str(header);
     for index in 0..lines {
         let _infallible = writeln!(source, "Paragraph {index} links {next} and {home}.\n");
+    }
+    source.into_bytes()
+}
+
+fn reference_definition_page(count: usize) -> Vec<u8> {
+    let mut source = String::with_capacity(count.saturating_mul(80));
+    for index in 0..count {
+        let _infallible = writeln!(source, "[reference {index}][target-{index:05}]");
+    }
+    source.push('\n');
+    for index in 0..count {
+        let _infallible = writeln!(source, "[target-{index:05}]: doc.md#fragment-{index:05}");
     }
     source.into_bytes()
 }
