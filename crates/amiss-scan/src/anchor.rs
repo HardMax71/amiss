@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_md::{Heading, HeadingSource};
 use unicode_general_category::{GeneralCategory, get_general_category};
@@ -412,7 +412,7 @@ pub fn anchor_set(
 /// publishes nothing for left out.
 #[must_use]
 pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
-    let mut taken: BTreeSet<String> = BTreeSet::new();
+    let mut occupied = OccupiedIdentities::default();
     let mut out = Vec::with_capacity(headings.len());
     for heading in headings {
         if heading.source == HeadingSource::RawHtml && rule.raw_html == RawHtml::Ignored {
@@ -425,7 +425,7 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
             }
             (None, _) => slug(rule, &heading.text),
         };
-        let Some(unique) = fill(rule, base, &mut taken) else {
+        let Some(unique) = fill(rule, base, &mut occupied) else {
             continue;
         };
         out.push(unique);
@@ -433,7 +433,14 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
     out
 }
 
-fn fill(rule: &AnchorRule, base: String, taken: &mut BTreeSet<String>) -> Option<String> {
+#[derive(Default)]
+struct OccupiedIdentities {
+    taken: BTreeSet<String>,
+    numbered: BTreeMap<String, u32>,
+    bumped: BTreeMap<String, String>,
+}
+
+fn fill(rule: &AnchorRule, base: String, occupied: &mut OccupiedIdentities) -> Option<String> {
     let base = if base.is_empty() {
         match rule.empty {
             Empty::Drop => return None,
@@ -445,34 +452,44 @@ fn fill(rule: &AnchorRule, base: String, taken: &mut BTreeSet<String>) -> Option
     };
     let unique = match rule.duplicates {
         Duplicates::Collide => base,
-        Duplicates::Dash => {
-            let mut candidate = base.clone();
-            let mut count = 0_u32;
-            while taken.contains(&candidate) {
-                count = count.saturating_add(1);
-                candidate = format!("{base}-{count}");
-            }
-            candidate
-        }
-        Duplicates::UnderscoreFromTwo => {
-            let mut count = 1_u32;
-            let mut candidate = base.clone();
-            while taken.contains(&candidate) {
-                count = count.saturating_add(1);
-                candidate = format!("{base}_{count}");
-            }
-            candidate
-        }
-        Duplicates::Underscore => {
-            let mut candidate = base;
-            while taken.contains(&candidate) || candidate.is_empty() {
-                candidate = bump(&candidate);
-            }
-            candidate
-        }
+        Duplicates::Dash => numbered_identity(base, '-', 1, occupied),
+        Duplicates::UnderscoreFromTwo => numbered_identity(base, '_', 2, occupied),
+        Duplicates::Underscore => bumped_identity(base, occupied),
     };
-    taken.insert(unique.clone());
+    occupied.taken.insert(unique.clone());
     Some(unique)
+}
+
+fn numbered_identity(
+    base: String,
+    separator: char,
+    first: u32,
+    occupied: &mut OccupiedIdentities,
+) -> String {
+    if !occupied.taken.contains(&base) {
+        return base;
+    }
+    let mut count = occupied.numbered.get(&base).copied().unwrap_or(first);
+    loop {
+        let candidate = format!("{base}{separator}{count}");
+        count = count.saturating_add(1);
+        if !occupied.taken.contains(&candidate) {
+            occupied.numbered.insert(base, count);
+            return candidate;
+        }
+    }
+}
+
+fn bumped_identity(base: String, occupied: &mut OccupiedIdentities) -> String {
+    if !base.is_empty() && !occupied.taken.contains(&base) {
+        return base;
+    }
+    let mut candidate = occupied.bumped.remove(&base).unwrap_or_else(|| bump(&base));
+    while occupied.taken.contains(&candidate) || candidate.is_empty() {
+        candidate = bump(&candidate);
+    }
+    occupied.bumped.insert(base, bump(&candidate));
+    candidate
 }
 
 /// python-markdown rewrites `x_1` to `x_2` rather than appending again.

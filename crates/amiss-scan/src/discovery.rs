@@ -115,13 +115,10 @@ pub enum Located<'snapshot> {
 }
 
 impl SnapshotDiscovery {
-    /// The policy-bound adapter for a path no built-in row classifies; the
-    /// lookup only runs for those, so the linear scan prices nothing else.
+    /// The policy-bound adapter for a path no built-in row classifies.
     #[must_use]
     pub fn bound_adapter(&self, path: &RepoPath) -> Option<Adapter> {
-        self.documents
-            .iter()
-            .find(|record| record.path == *path)
+        self.document(path.as_bytes())
             .filter(|record| record.classification == Classification::PolicyIncluded)
             .and_then(|record| record.adapter)
     }
