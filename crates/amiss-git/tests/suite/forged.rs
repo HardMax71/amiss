@@ -275,18 +275,19 @@ fn a_forged_pack_reads_back_from_every_bucket_shape() {
     let zero = blob_with_first_byte(0x00, "zero bucket");
     let first = blob_with_first_byte(0xab, "shared bucket one");
     let second = blob_with_first_byte(0xab, "shared bucket two");
-    let entries = [
+    let mut entries = [
         Entry::blob(&zero),
         Entry::blob(&first),
         Entry::blob(&second),
     ];
+    entries.sort_unstable_by_key(|entry| std::cmp::Reverse(entry.oid));
     let (pack, offsets) = write_pack(&entries);
     let idx = write_idx_v1(&sorted_rows(&entries, &offsets), &pack, None);
     install(dir.path(), &pack, &idx);
 
-    assert_eq!(read(dir.path(), &entries[0].oid).unwrap(), zero);
-    assert_eq!(read(dir.path(), &entries[1].oid).unwrap(), first);
-    assert_eq!(read(dir.path(), &entries[2].oid).unwrap(), second);
+    for entry in &entries {
+        assert_eq!(read(dir.path(), &entry.oid).unwrap(), entry.payload);
+    }
 }
 
 #[test]
@@ -431,6 +432,26 @@ fn a_poisoned_offset_refuses_the_whole_pack() {
             "a poisoned row for an unread object refuses the pack at {poison}"
         );
     }
+}
+
+#[test]
+fn duplicate_pack_offsets_are_refused() {
+    let dir = forged_repo();
+    let entries = [
+        Entry::blob(b"first entry\n"),
+        Entry::blob(b"second entry\n"),
+    ];
+    let (pack, offsets) = write_pack(&entries);
+    let mut rows = sorted_rows(&entries, &offsets);
+    let duplicate = rows.first().unwrap().0;
+    rows.get_mut(1).unwrap().0 = duplicate;
+    let idx = write_idx_v1(&rows, &pack, None);
+    install(dir.path(), &pack, &idx);
+
+    assert_eq!(
+        read(dir.path(), &entries[0].oid),
+        Err(Error::ObjectUnreadable)
+    );
 }
 
 #[test]
