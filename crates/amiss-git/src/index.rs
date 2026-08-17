@@ -58,15 +58,15 @@ fn entry_mode(raw: u32) -> Result<GitMode, Error> {
 /// A later path conflicts when some earlier row is one of its directory
 /// prefixes; the sorted order guarantees the prefix would already have been
 /// seen.
-fn prefix_conflict(seen: &[Vec<u8>], path: &[u8]) -> bool {
+fn prefix_conflict(entries: &[IndexEntry], path: &[u8]) -> bool {
     let mut end = path.len();
     while let Some(at) = path
         .get(..end)
         .and_then(|prefix| prefix.iter().rposition(|&byte| byte == b'/'))
     {
         let prefix = path.get(..at).unwrap_or_default();
-        if seen
-            .binary_search_by(|candidate| candidate.as_slice().cmp(prefix))
+        if entries
+            .binary_search_by(|candidate| candidate.path.as_slice().cmp(prefix))
             .is_ok()
         {
             return true;
@@ -110,8 +110,6 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
     let count = usize::try_from(be32(content, 8)?).map_err(|_wide| Error::IndexInvalid)?;
 
     let mut entries: Vec<IndexEntry> = Vec::new();
-    let mut seen: Vec<Vec<u8>> = Vec::new();
-    let mut previous_path: Vec<u8> = Vec::new();
     let mut at = 12_usize;
     for _entry in 0..count {
         let start = at;
@@ -143,20 +141,21 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
             path_at = path_at.saturating_add(2);
         }
 
-        let (path, next) = entry_path(content, version, start, path_at, flags, &previous_path)?;
+        let previous_path = entries
+            .last()
+            .map_or(&[][..], |entry| entry.path.as_slice());
+        let (path, next) = entry_path(content, version, start, path_at, flags, previous_path)?;
         at = next;
 
         if path.is_empty() {
             return Err(Error::IndexInvalid);
         }
-        if !previous_path.is_empty() && previous_path.as_slice() >= path.as_slice() {
+        if !previous_path.is_empty() && previous_path >= path.as_slice() {
             return Err(Error::IndexInvalid);
         }
-        if prefix_conflict(&seen, &path) {
+        if prefix_conflict(&entries, &path) {
             return Err(Error::IndexInvalid);
         }
-        seen.push(path.clone());
-        previous_path.clone_from(&path);
         entries.push(IndexEntry {
             path,
             mode,

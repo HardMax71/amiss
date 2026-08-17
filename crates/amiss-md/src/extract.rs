@@ -10,7 +10,7 @@ pub use amiss_wire::extraction::{
 use amiss_wire::model::Adapter;
 use markdown::mdast::{Node, ReferenceKind};
 
-use crate::accounting::{parsed, plain, walk};
+use crate::accounting::{parsed, plain};
 use crate::frontmatter;
 
 /// Charges and extracts one document in a single guarded parse. The lexical
@@ -42,9 +42,9 @@ pub fn analyze(
         });
     };
     let frontmatter_bytes = frontmatter::recognize(source).map_or(0, |region| region.bytes);
-    let extraction = extract_tree(&tree, suffix, offset, source, frontmatter_bytes)?;
+    let (extraction, work) = extract_tree(&tree, suffix, offset, source, frontmatter_bytes)?;
     Ok(Analysis {
-        work: walk(&tree),
+        work,
         embedded_code_bytes,
         extraction: Some(extraction),
     })
@@ -63,6 +63,13 @@ struct Definition {
     reserved: bool,
 }
 
+struct Frame<'tree> {
+    node: &'tree Node,
+    parent_depth: usize,
+    index: Option<usize>,
+    owners: Owners,
+}
+
 /// A definition is reserved exactly when its decoded label scalars, before
 /// `CommonMark` whitespace and case normalization, begin with lowercase ASCII
 /// `amiss:`.
@@ -74,8 +81,13 @@ fn extract_tree(
     offset: usize,
     raw: &[u8],
     frontmatter_bytes: usize,
-) -> Result<Extraction, Fault> {
-    let (resolved, governed, orphans) = definitions(tree, suffix)?;
+) -> Result<(Extraction, Work), Fault> {
+    let CollectedDefinitions {
+        resolved,
+        governed,
+        orphans,
+        work,
+    } = definitions(tree, suffix)?;
     let mut sweep = Sweep {
         suffix,
         definitions: resolved,
@@ -87,19 +99,7 @@ fn extract_tree(
         mdx: Vec::new(),
         html: Vec::new(),
     };
-    let mut stack: Vec<(&Node, Vec<usize>, Owners)> = vec![(tree, Vec::new(), Owners::default())];
-    while let Some((node, path, mut owners)) = stack.pop() {
-        if !sweep.visit(node, &path, &mut owners)? {
-            continue;
-        }
-        if let Some(children) = node.children() {
-            for (index, child) in children.iter().enumerate().rev() {
-                let mut child_path = path.clone();
-                child_path.push(index);
-                stack.push((child, child_path, owners));
-            }
-        }
-    }
+    sweep_tree(tree, &mut sweep)?;
 
     sweep.occurrences.sort_by(|left, right| {
         left.span
@@ -125,7 +125,7 @@ fn extract_tree(
 
     let translate =
         |span: (usize, usize)| (span.0.saturating_add(offset), span.1.saturating_add(offset));
-    Ok(Extraction {
+    let extraction = Extraction {
         occurrences: sweep
             .occurrences
             .into_iter()
@@ -173,7 +173,43 @@ fn extract_tree(
             .collect(),
         html_anchors,
         declared_anchors: sweep.declared,
-    })
+    };
+    Ok((extraction, work))
+}
+
+fn sweep_tree(tree: &Node, sweep: &mut Sweep<'_>) -> Result<(), Fault> {
+    let mut stack = vec![Frame {
+        node: tree,
+        parent_depth: 0,
+        index: None,
+        owners: Owners::default(),
+    }];
+    let mut path = Vec::new();
+    while let Some(Frame {
+        node,
+        parent_depth,
+        index,
+        mut owners,
+    }) = stack.pop()
+    {
+        path.truncate(parent_depth);
+        path.extend(index);
+        if !sweep.visit(node, &path, &mut owners)? {
+            continue;
+        }
+        if let Some(children) = node.children() {
+            let parent_depth = path.len();
+            for (index, child) in children.iter().enumerate().rev() {
+                stack.push(Frame {
+                    node: child,
+                    parent_depth,
+                    index: Some(index),
+                    owners,
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 struct Sweep<'a> {
@@ -342,8 +378,7 @@ impl Sweep<'_> {
 
     fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) -> Result<(), Fault> {
         let span = span_of(node)?;
-        if let Some((raw, url)) = self.orphans.get(&span) {
-            let (raw, url) = (raw.clone(), url.clone());
+        if let Some((raw, url)) = self.orphans.remove(&span) {
             // A definition is a block node holding one destination, so it takes
             // the same within-node ordinal as a mined tag; a root-level one then
             // reaches the two-element path the address shape requires.
@@ -554,18 +589,25 @@ fn run_length(bytes: &[u8], at: usize, limit: usize) -> usize {
 /// Collects reference definitions in document order; the first with a matching
 /// normalized identifier wins.
 type OrphanDefinitions = BTreeMap<(usize, usize), (String, String)>;
-type ResolvedDefinitions = (
-    HashMap<String, Definition>,
-    Vec<GovernedDefinition>,
-    OrphanDefinitions,
-);
+struct CollectedDefinitions {
+    resolved: HashMap<String, Definition>,
+    governed: Vec<GovernedDefinition>,
+    orphans: OrphanDefinitions,
+    work: Work,
+}
 
-fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> {
+fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefinitions, Fault> {
     let mut out = Vec::new();
     let mut governed = Vec::new();
     let mut used = BTreeSet::new();
-    let mut stack = vec![tree];
-    while let Some(node) = stack.pop() {
+    let mut work = Work {
+        nodes: 0,
+        nesting: 0,
+    };
+    let mut stack = vec![(tree, 1_u64)];
+    while let Some((node, depth)) = stack.pop() {
+        work.nodes = work.nodes.saturating_add(1);
+        work.nesting = work.nesting.max(depth);
         if let Node::LinkReference(reference) = node {
             used.insert(reference.identifier.clone());
         }
@@ -600,21 +642,27 @@ fn definitions(tree: &Node, suffix: &str) -> Result<ResolvedDefinitions, Fault> 
             ));
         }
         if let Some(children) = node.children() {
-            stack.extend(children.iter().rev());
+            let below = depth.saturating_add(1);
+            stack.extend(children.iter().rev().map(|child| (child, below)));
         }
     }
     out.sort_by_key(|(span, _, _)| *span);
     governed.sort_by_key(|definition| definition.span);
-    let orphans = out
-        .iter()
-        .filter(|(_, identifier, definition)| !definition.reserved && !used.contains(identifier))
-        .map(|(span, _, definition)| (*span, (definition.raw.clone(), definition.url.clone())))
-        .collect();
     let mut resolved = HashMap::with_capacity(out.len());
-    for (_, identifier, definition) in out {
-        resolved.entry(identifier).or_insert(definition);
+    let mut orphans = BTreeMap::new();
+    for (span, identifier, definition) in out {
+        if used.contains(&identifier) {
+            resolved.entry(identifier).or_insert(definition);
+        } else if !definition.reserved {
+            orphans.insert(span, (definition.raw, definition.url));
+        }
     }
-    Ok((resolved, governed, orphans))
+    Ok(CollectedDefinitions {
+        resolved,
+        governed,
+        orphans,
+        work,
+    })
 }
 
 /// The raw destination token and whether it was written in angle brackets.
