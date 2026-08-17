@@ -136,9 +136,9 @@ impl Repository {
         self.decode(resources, oid, loose, value_cap)
     }
 
-    /// One pack enumeration, with its index sizes charged. Charging is by pack
-    /// name and idempotent, so a second enumeration pays only for the packs the
-    /// first one never saw.
+    /// One immutable pack enumeration. A refresh loads only names absent from
+    /// the initial set; every evaluation charges both sets' retained index
+    /// sizes before use.
     fn enumeration<'set>(
         &'set self,
         cell: &'set OnceLock<Result<PackSet, Error>>,
