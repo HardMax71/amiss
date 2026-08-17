@@ -104,8 +104,11 @@ pub(crate) fn build(
 
     let mut packs = Vec::new();
     let mut index_sizes = Vec::new();
+    debug_assert!(known.is_none_or(|set| {
+        set.packs
+            .is_sorted_by(|left, right| left.name_hex < right.name_hex)
+    }));
     for name_hex in pairs.keys() {
-        // Every PackSet retains the BTreeMap key order established here.
         if known.is_some_and(|set| {
             set.packs
                 .binary_search_by(|pack| pack.name_hex.as_str().cmp(name_hex))
