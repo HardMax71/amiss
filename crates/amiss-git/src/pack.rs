@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read as _;
-use std::ops::Bound;
 
 use amiss_wire::controls::ResourceName;
 use amiss_wire::model::ObjectFormat;
@@ -24,7 +23,8 @@ pub(crate) struct Pack {
     file: File,
     width: usize,
     oids: Vec<u8>,
-    rows_by_offset: BTreeMap<u64, usize>,
+    fanout_bounds: [u32; 257],
+    offset_rows: Vec<usize>,
     offsets: Vec<u64>,
     crcs: Option<Vec<u32>>,
     data_end: u64,
@@ -32,6 +32,7 @@ pub(crate) struct Pack {
 
 struct ParsedIndex {
     oids: Vec<u8>,
+    fanout_bounds: [u32; 257],
     offsets: Vec<u64>,
     crcs: Option<Vec<u32>>,
     stored_pack_checksum: Vec<u8>,
@@ -203,14 +204,15 @@ fn load_pack(
     }
 
     let data_end = size.saturating_sub(trailer);
-    let mut rows_by_offset = BTreeMap::new();
-    for (row, offset) in parsed.offsets.iter().enumerate() {
-        if *offset < 12 || *offset >= data_end {
+    let mut offset_rows: Vec<usize> = (0..parsed.offsets.len()).collect();
+    offset_rows.sort_unstable_by_key(|row| parsed.offsets.get(*row).copied());
+    let mut previous_offset = None;
+    for row in &offset_rows {
+        let offset = *parsed.offsets.get(*row).ok_or(Error::ObjectUnreadable)?;
+        if offset < 12 || offset >= data_end || previous_offset == Some(offset) {
             return Err(Error::ObjectUnreadable);
         }
-        if rows_by_offset.insert(*offset, row).is_some() {
-            return Err(Error::ObjectUnreadable);
-        }
+        previous_offset = Some(offset);
     }
 
     Ok((
@@ -219,7 +221,8 @@ fn load_pack(
             file,
             width,
             oids: parsed.oids,
-            rows_by_offset,
+            fanout_bounds: parsed.fanout_bounds,
+            offset_rows,
             offsets: parsed.offsets,
             crcs: parsed.crcs,
             data_end,
@@ -256,21 +259,21 @@ fn parse_index(bytes: &[u8], object_format: ObjectFormat) -> Result<ParsedIndex,
     }
 }
 
-fn read_fanout(body: &[u8], at: usize) -> Result<(Vec<u64>, usize), Error> {
-    let mut fanout = Vec::with_capacity(256);
-    let mut previous = 0_u64;
-    for bucket in 0..256_usize {
-        let value = u64::from(be32(body, at.saturating_add(bucket.saturating_mul(4)))?);
+fn read_fanout(body: &[u8], at: usize) -> Result<([u32; 257], usize), Error> {
+    let mut bounds = [0_u32; 257];
+    let mut previous = 0_u32;
+    for (bucket, upper) in bounds.iter_mut().skip(1).enumerate() {
+        let value = be32(body, at.saturating_add(bucket.saturating_mul(4)))?;
         if value < previous {
             return Err(Error::ObjectUnreadable);
         }
         previous = value;
-        fanout.push(value);
+        *upper = value;
     }
-    Ok((fanout, at.saturating_add(1024)))
+    Ok((bounds, at.saturating_add(1024)))
 }
 
-fn validate_oids(oids: &[u8], width: usize, fanout: &[u64]) -> Result<(), Error> {
+fn validate_oids(oids: &[u8], width: usize, fanout_bounds: &[u32; 257]) -> Result<(), Error> {
     let count = oids.len().checked_div(width).unwrap_or(0);
     let mut previous: Option<&[u8]> = None;
     for row in 0..count {
@@ -284,16 +287,12 @@ fn validate_oids(oids: &[u8], width: usize, fanout: &[u64]) -> Result<(), Error>
             return Err(Error::ObjectUnreadable);
         }
         let bucket = usize::from(*oid.first().ok_or(Error::ObjectUnreadable)?);
-        let lower = if bucket == 0 {
-            0
-        } else {
-            *fanout
-                .get(bucket.saturating_sub(1))
-                .ok_or(Error::ObjectUnreadable)?
-        };
-        let upper = *fanout.get(bucket).ok_or(Error::ObjectUnreadable)?;
-        let row_u64 = u64::try_from(row).map_err(discard_to_unreadable)?;
-        if row_u64 < lower || row_u64 >= upper {
+        let lower = *fanout_bounds.get(bucket).ok_or(Error::ObjectUnreadable)?;
+        let upper = *fanout_bounds
+            .get(bucket.saturating_add(1))
+            .ok_or(Error::ObjectUnreadable)?;
+        let row = u32::try_from(row).map_err(discard_to_unreadable)?;
+        if row < lower || row >= upper {
             return Err(Error::ObjectUnreadable);
         }
         previous = Some(oid);
@@ -310,8 +309,8 @@ fn parse_index_v2(
     if version != 2 {
         return Err(Error::ObjectUnreadable);
     }
-    let (fanout, oids_at) = read_fanout(body, 8)?;
-    let count = usize::try_from(*fanout.last().ok_or(Error::ObjectUnreadable)?)
+    let (fanout_bounds, oids_at) = read_fanout(body, 8)?;
+    let count = usize::try_from(*fanout_bounds.last().ok_or(Error::ObjectUnreadable)?)
         .map_err(discard_to_unreadable)?;
     let oids_len = count.saturating_mul(width);
     let crcs_at = oids_at.saturating_add(oids_len);
@@ -330,7 +329,7 @@ fn parse_index_v2(
         .get(oids_at..crcs_at)
         .ok_or(Error::ObjectUnreadable)?
         .to_vec();
-    validate_oids(&oids, width, &fanout)?;
+    validate_oids(&oids, width, &fanout_bounds)?;
 
     let mut crcs = Vec::with_capacity(count);
     for row in 0..count {
@@ -355,6 +354,7 @@ fn parse_index_v2(
     }
     Ok(ParsedIndex {
         oids,
+        fanout_bounds,
         offsets,
         crcs: Some(crcs),
         stored_pack_checksum,
@@ -366,8 +366,8 @@ fn parse_index_v1(
     width: usize,
     stored_pack_checksum: Vec<u8>,
 ) -> Result<ParsedIndex, Error> {
-    let (fanout, entries_at) = read_fanout(body, 0)?;
-    let count = usize::try_from(*fanout.last().ok_or(Error::ObjectUnreadable)?)
+    let (fanout_bounds, entries_at) = read_fanout(body, 0)?;
+    let count = usize::try_from(*fanout_bounds.last().ok_or(Error::ObjectUnreadable)?)
         .map_err(discard_to_unreadable)?;
     let stride = width.saturating_add(4);
     let expected = entries_at.saturating_add(count.saturating_mul(stride));
@@ -384,9 +384,10 @@ fn parse_index_v1(
             .ok_or(Error::ObjectUnreadable)?;
         oids.extend_from_slice(oid);
     }
-    validate_oids(&oids, width, &fanout)?;
+    validate_oids(&oids, width, &fanout_bounds)?;
     Ok(ParsedIndex {
         oids,
+        fanout_bounds,
         offsets,
         crcs: None,
         stored_pack_checksum,
@@ -407,9 +408,12 @@ impl PackSet {
 
 impl Pack {
     fn find(&self, oid_raw: &[u8]) -> Option<usize> {
-        let count = self.oids.len().checked_div(self.width)?;
-        let mut low = 0_usize;
-        let mut high = count;
+        if oid_raw.len() != self.width {
+            return None;
+        }
+        let bucket = usize::from(*oid_raw.first()?);
+        let mut low = usize::try_from(*self.fanout_bounds.get(bucket)?).ok()?;
+        let mut high = usize::try_from(*self.fanout_bounds.get(bucket.saturating_add(1))?).ok()?;
         while low < high {
             let middle = low.midpoint(high);
             let start = middle.saturating_mul(self.width);
@@ -423,15 +427,12 @@ impl Pack {
         None
     }
 
-    pub(crate) fn interval_end(&self, offset: u64) -> u64 {
-        self.rows_by_offset
-            .range((Bound::Excluded(offset), Bound::Unbounded))
-            .next()
-            .map_or(self.data_end, |(next, _)| *next)
-    }
-
     pub(crate) fn row_at(&self, offset: u64) -> Option<usize> {
-        self.rows_by_offset.get(&offset).copied()
+        let position = self
+            .offset_rows
+            .binary_search_by(|row| self.offsets.get(*row).cmp(&Some(&offset)))
+            .ok()?;
+        self.offset_rows.get(position).copied()
     }
 
     pub(crate) fn read_interval(
@@ -439,13 +440,24 @@ impl Pack {
         resources: &mut GitResources,
         offset: u64,
     ) -> Result<Vec<u8>, Error> {
-        let end = self.interval_end(offset);
+        let position = self
+            .offset_rows
+            .binary_search_by(|row| self.offsets.get(*row).cmp(&Some(&offset)))
+            .map_err(|_missing| Error::ObjectUnreadable)?;
+        let row = *self
+            .offset_rows
+            .get(position)
+            .ok_or(Error::ObjectUnreadable)?;
+        let end = match self.offset_rows.get(position.saturating_add(1)) {
+            Some(next_row) => *self.offsets.get(*next_row).ok_or(Error::ObjectUnreadable)?,
+            None => self.data_end,
+        };
         let length = end.checked_sub(offset).ok_or(Error::ObjectUnreadable)?;
         let member = format!("pack:{}:{offset}", self.name_hex);
         resources.charge_compressed(&member, length)?;
         let mut bytes = vec![0_u8; usize::try_from(length).map_err(discard_to_unreadable)?];
         read_exact_at(&self.file, &mut bytes, offset).map_err(discard_to_unreadable)?;
-        if let (Some(crcs), Some(row)) = (&self.crcs, self.row_at(offset)) {
+        if let Some(crcs) = &self.crcs {
             let expected = *crcs.get(row).ok_or(Error::ObjectUnreadable)?;
             if crc32fast::hash(&bytes) != expected {
                 return Err(Error::ObjectUnreadable);
