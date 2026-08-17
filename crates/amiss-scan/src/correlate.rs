@@ -375,12 +375,7 @@ fn correlation_components(
         .filter(unmatched)
         .copied()
         .collect();
-    let identity_count = identities.len();
     identities.sort_unstable();
-    identities.dedup();
-    if identities.len() != identity_count {
-        return Err(Error::Internal);
-    }
     let parents = (0..identities.len()).collect();
     let mut components = ComponentForest {
         identities,
