@@ -207,8 +207,44 @@ struct CachedContent {
 enum Anchors {
     Unread,
     Unevaluable,
-    Published(BTreeSet<String>),
-    Partial(BTreeSet<String>),
+    Published(AnchorIndex),
+    Partial(AnchorIndex),
+}
+
+#[derive(Debug)]
+struct AnchorIndex {
+    identities: Vec<String>,
+    typography: Option<BTreeMap<String, Option<usize>>>,
+}
+
+impl AnchorIndex {
+    fn new(identities: BTreeSet<String>) -> Self {
+        Self {
+            identities: identities.into_iter().collect(),
+            typography: None,
+        }
+    }
+
+    fn typography_neighbor(&mut self, fragment: &str) -> Option<String> {
+        if self.typography.is_none() {
+            let mut typography = BTreeMap::new();
+            for (index, identity) in self.identities.iter().enumerate() {
+                typography
+                    .entry(fold_typography(identity))
+                    .and_modify(|matched| *matched = None)
+                    .or_insert(Some(index));
+            }
+            self.typography = Some(typography);
+        }
+        let folded = fold_typography(fragment);
+        self.typography
+            .as_ref()?
+            .get(&folded)
+            .copied()
+            .flatten()
+            .and_then(|index| self.identities.get(index))
+            .cloned()
+    }
 }
 
 #[derive(Debug)]
@@ -954,11 +990,11 @@ fn anchor_resolution(
                     .ok()
                     .and_then(|analysis| analysis.extraction)
                     .map_or(Anchors::Unevaluable, |extraction| {
-                        let identities = anchor_set(
+                        let identities = AnchorIndex::new(anchor_set(
                             &extraction.headings,
                             &extraction.html_anchors,
                             &extraction.declared_anchors,
-                        );
+                        ));
                         if transcludes(&extraction.occurrences) {
                             Anchors::Partial(identities)
                         } else {
@@ -969,34 +1005,26 @@ fn anchor_resolution(
             Err(_crossing) => Anchors::Unevaluable,
         };
     }
-    let (identities, complete) = match slot {
-        Anchors::Published(identities) => (identities, true),
-        Anchors::Partial(identities) => (identities, false),
+    let (index, complete) = match slot {
+        Anchors::Published(index) => (index, true),
+        Anchors::Partial(index) => (index, false),
         Anchors::Unread | Anchors::Unevaluable => return Ok(unsupported),
     };
-    if identities.contains(fragment) {
+    if index
+        .identities
+        .binary_search_by(|identity| identity.as_str().cmp(fragment))
+        .is_ok()
+    {
         return Ok(Resolution::Resolved(Target::Blob(blob)));
     }
     if !complete {
         return Ok(unsupported);
     }
-    let near = typography_neighbor(identities, fragment);
+    let near = index.typography_neighbor(fragment);
     Ok(Resolution::Missing(Missing::HeadingAnchorNotFound {
         path: path.clone(),
         near,
     }))
-}
-
-/// The one published identity the fragment names apart from typography, when
-/// exactly one exists: two candidates name a real ambiguity, zero a genuine
-/// miss, and both stay bare.
-fn typography_neighbor(identities: &BTreeSet<String>, fragment: &str) -> Option<String> {
-    let folded = fold_typography(fragment);
-    let mut matches = identities
-        .iter()
-        .filter(|identity| fold_typography(identity) == folded);
-    let candidate = matches.next()?;
-    matches.next().is_none().then(|| candidate.clone())
 }
 
 /// The comparison key for a heading identity: the two spellings the pinned
@@ -1048,7 +1076,7 @@ fn retained_identities(
     snapshot: &SnapshotDiscovery,
     path: &RepoPath,
     adapter: Adapter,
-) -> Option<(BTreeSet<String>, bool)> {
+) -> Option<(AnchorIndex, bool)> {
     let record = snapshot.document(path.as_bytes())?;
     if record.adapter != Some(adapter) {
         return None;
@@ -1057,11 +1085,11 @@ fn retained_identities(
         return None;
     };
     let source = scanned.anchor_source.as_ref()?;
-    let identities = anchor_set(
+    let identities = AnchorIndex::new(anchor_set(
         &source.headings,
         &source.html_anchors,
         &scanned.declared_anchors,
-    );
+    ));
     Some((identities, source.transcluding))
 }
 

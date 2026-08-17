@@ -243,6 +243,31 @@ fn duplicate_headings_diverge_by_suffix_style() {
     }
 }
 
+#[test]
+fn generated_suffixes_skip_interleaved_authored_identities() {
+    let rule = RULES
+        .iter()
+        .find(|rule| rule.name == "github")
+        .expect("the table holds the github rule");
+    let (dash_headings, _anchors, _declared) =
+        headings("# Same\n\n# Same-1\n\n# Same\n\n# Same-2\n\n# Same\n");
+    assert_eq!(
+        identities(rule, &dash_headings),
+        ["same", "same-1", "same-2", "same-2-1", "same-3"].map(str::to_owned)
+    );
+
+    let rule = RULES
+        .iter()
+        .find(|rule| rule.name == "python-markdown")
+        .expect("the table holds the python-markdown rule");
+    let (underscore_headings, _anchors, _declared) =
+        headings("# Same\n\n# Same_1\n\n# Same\n\n# Same_2\n\n# Same\n");
+    assert_eq!(
+        identities(rule, &underscore_headings),
+        ["same", "same_1", "same_2", "same_3", "same_4"].map(str::to_owned)
+    );
+}
+
 /// A heading already ending in digits must not lose its tail to the
 /// increment parser: the first duplicate appends a fresh counter instead of
 /// bumping digits that belong to the title.
