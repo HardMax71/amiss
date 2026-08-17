@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0](https://github.com/HardMax71/amiss/compare/v0.22.0...v0.23.0) - 2026-08-17
+
+### Changes
+
+- streamline duplicate code and similarity gating
+- Streamline validation and resolution flow
+- Seal validated wire artifacts
+- Strengthen core types and error flows
+- Pin refreshed pack invariants
+- Document pack ordering invariant
+- Load only new packs on refresh
+- Parse index paths once
+- separate git resource meters
+- Index Markdown reference definitions
+- Bound anchor resolution work
+- Bound report evidence lookups
+- Bound source multiplicity aggregation
+- correct protected floor regression
+- linearize protected control checks
+- reuse unchanged document scans
+- reduce scan bookkeeping
+- move observations through correlation
+- enforce strict similarity edges
+- Reuse Markdown traversal state
+- Pin the self-closing unquoted value to its browser reading
+- Keep an unquoted html attribute's slash
+- Give a root-level orphan definition its within-node ordinal too
+- Give each mined html tag its own address
+- Strip the carriage return before the literal, label, and fence tests
+- scan rst text blocks once
+- scan rst interpreted text once
+- Index external assessment destinations
+- streamline wire member decoding
+
 ## [0.22.0](https://github.com/HardMax71/amiss/compare/v0.21.0...v0.22.0) - 2026-08-15
 
 ### Changes

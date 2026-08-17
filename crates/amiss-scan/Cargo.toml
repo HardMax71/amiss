@@ -11,11 +11,11 @@ exclude.workspace = true
 bench = false
 
 [dependencies]
-amiss-adoc = { path = "../amiss-adoc", version = "0.22.0" }
-amiss-git = { path = "../amiss-git", version = "0.22.0" }
-amiss-md = { path = "../amiss-md", version = "0.22.0" }
-amiss-rst = { path = "../amiss-rst", version = "0.22.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.22.0" }
+amiss-adoc = { path = "../amiss-adoc", version = "0.23.0" }
+amiss-git = { path = "../amiss-git", version = "0.23.0" }
+amiss-md = { path = "../amiss-md", version = "0.23.0" }
+amiss-rst = { path = "../amiss-rst", version = "0.23.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.23.0" }
 strum.workspace = true
 unicode-general-category.workspace = true
 unicode-normalization.workspace = true
