@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::io::Read as _;
 
 use amiss_wire::controls::{GitMode, ResourceName};
@@ -252,7 +253,7 @@ pub(crate) fn verify_oid(
 }
 
 pub(crate) fn hex(bytes: &[u8]) -> String {
-    let mut out = String::new();
+    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
     for byte in bytes {
         out.push(hex_digit(u32::from(byte.wrapping_shr(4))));
         out.push(hex_digit(u32::from(byte & 0xF)));
@@ -275,7 +276,6 @@ pub fn parse_tree(object_format: ObjectFormat, body: &[u8]) -> Result<Vec<TreeEn
         ObjectFormat::Sha256 => 32_usize,
     };
     let mut entries: Vec<TreeEntry> = Vec::new();
-    let mut previous_key: Option<Vec<u8>> = None;
     let mut pos = 0_usize;
     while pos < body.len() {
         let rest = body.get(pos..).ok_or(Error::ObjectUnreadable)?;
@@ -303,16 +303,26 @@ pub fn parse_tree(object_format: ObjectFormat, body: &[u8]) -> Result<Vec<TreeEn
             .ok_or(Error::ObjectUnreadable)?;
         let oid = Oid::new(object_format, hex(raw_oid)).ok_or(Error::ObjectUnreadable)?;
 
-        let mut key = name.to_vec();
-        if mode == GitMode::Tree {
-            key.push(b'/');
-        }
-        if let Some(previous) = &previous_key
-            && *previous >= key
+        let is_tree = mode == GitMode::Tree;
+        if let Some(previous) = entries.last()
+            && tree_name_order(
+                &previous.name,
+                previous.mode == GitMode::Tree,
+                name,
+                is_tree,
+            ) != Ordering::Less
         {
             return Err(Error::ObjectUnreadable);
         }
-        previous_key = Some(key);
+        if is_tree
+            && entries
+                .binary_search_by(|entry| {
+                    tree_name_order(&entry.name, entry.mode == GitMode::Tree, name, false)
+                })
+                .is_ok()
+        {
+            return Err(Error::ObjectUnreadable);
+        }
 
         entries.push(TreeEntry {
             mode,
@@ -325,6 +335,24 @@ pub fn parse_tree(object_format: ObjectFormat, body: &[u8]) -> Result<Vec<TreeEn
             .saturating_add(oid_end);
     }
     Ok(entries)
+}
+
+fn tree_name_order(
+    left_name: &[u8],
+    left_is_tree: bool,
+    right_name: &[u8],
+    right_is_tree: bool,
+) -> Ordering {
+    left_name
+        .iter()
+        .copied()
+        .chain(left_is_tree.then_some(b'/'))
+        .cmp(
+            right_name
+                .iter()
+                .copied()
+                .chain(right_is_tree.then_some(b'/')),
+        )
 }
 
 fn tree_mode(bytes: &[u8]) -> Result<GitMode, Error> {
