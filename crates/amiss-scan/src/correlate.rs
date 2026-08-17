@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::Digest;
@@ -321,7 +321,45 @@ impl ObservationPool {
     }
 }
 
-type ComponentIds = BTreeMap<Digest, (Vec<Digest>, Vec<Digest>)>;
+type ComponentIds = BTreeMap<usize, (Vec<Digest>, Vec<Digest>)>;
+
+struct ComponentForest {
+    identities: Vec<Digest>,
+    parents: Vec<usize>,
+}
+
+impl ComponentForest {
+    fn root_position(&mut self, identity: Digest) -> Result<usize, Error> {
+        let mut position = self
+            .identities
+            .binary_search(&identity)
+            .map_err(|_missing| Error::Internal)?;
+        loop {
+            let parent = *self.parents.get(position).ok_or(Error::Internal)?;
+            let grandparent = *self.parents.get(parent).ok_or(Error::Internal)?;
+            if parent == grandparent {
+                return Ok(parent);
+            }
+            *self.parents.get_mut(position).ok_or(Error::Internal)? = grandparent;
+            position = parent;
+        }
+    }
+
+    fn union(&mut self, left: Digest, right: Digest) -> Result<(), Error> {
+        let left_root = self.root_position(left)?;
+        let right_root = self.root_position(right)?;
+        if left_root == right_root {
+            return Ok(());
+        }
+        let (root, child) = if left_root < right_root {
+            (left_root, right_root)
+        } else {
+            (right_root, left_root)
+        };
+        *self.parents.get_mut(child).ok_or(Error::Internal)? = root;
+        Ok(())
+    }
+}
 
 fn correlation_components(
     base: &ObservationPool,
@@ -330,15 +368,24 @@ fn correlation_components(
     renames: &BTreeMap<RepoPath, RepoPath>,
 ) -> Result<ComponentIds, Error> {
     let unmatched = |id: &&Digest| exact_ids.binary_search(id).is_err();
-    let mut parent: BTreeMap<Digest, Digest> = BTreeMap::new();
-    for id in base
+    let mut identities: Vec<Digest> = base
         .positions
         .keys()
         .chain(candidate.positions.keys())
         .filter(unmatched)
-    {
-        parent.insert(*id, *id);
+        .copied()
+        .collect();
+    let identity_count = identities.len();
+    identities.sort_unstable();
+    identities.dedup();
+    if identities.len() != identity_count {
+        return Err(Error::Internal);
     }
+    let parents = (0..identities.len()).collect();
+    let mut components = ComponentForest {
+        identities,
+        parents,
+    };
     let base_groups = observation_groups(
         base.positions
             .keys()
@@ -352,14 +399,22 @@ fn correlation_components(
             .filter(unmatched)
             .map(|id| candidate.observation(*id)),
     )?;
-    connect_candidates(&mut parent, &base_groups, &candidate_groups, renames);
+    connect_candidates(&mut components, &base_groups, &candidate_groups, renames)?;
 
     let mut grouped: ComponentIds = BTreeMap::new();
     for id in base.positions.keys().filter(unmatched) {
-        grouped.entry(root(&parent, *id)).or_default().0.push(*id);
+        grouped
+            .entry(components.root_position(*id)?)
+            .or_default()
+            .0
+            .push(*id);
     }
     for id in candidate.positions.keys().filter(unmatched) {
-        grouped.entry(root(&parent, *id)).or_default().1.push(*id);
+        grouped
+            .entry(components.root_position(*id)?)
+            .or_default()
+            .1
+            .push(*id);
     }
     Ok(grouped)
 }
@@ -381,12 +436,6 @@ pub fn correlate(base: Side, candidate: Side) -> Result<Vec<Comparison>, Error> 
             .zip(&candidate.observations)
             .all(|(left, right)| left.id == right.id);
     let mut comparisons = if aligned {
-        let mut identities = HashSet::with_capacity(base.observations.len());
-        for observation in &base.observations {
-            if !identities.insert(observation.id) {
-                return Err(Error::Internal);
-            }
-        }
         let mut comparisons = Vec::with_capacity(base.observations.len());
         for (left, right) in base.observations.into_iter().zip(candidate.observations) {
             comparisons.push(exact_comparison(left, right));
@@ -407,6 +456,16 @@ pub fn correlate(base: Side, candidate: Side) -> Result<Vec<Comparison>, Error> 
         };
         key(left).cmp(&key(right))
     });
+    if aligned {
+        let mut previous = None;
+        for comparison in &comparisons {
+            let identity = comparison.base.as_ref().ok_or(Error::Internal)?.id;
+            if previous == Some(identity) {
+                return Err(Error::Internal);
+            }
+            previous = Some(identity);
+        }
+    }
     Ok(comparisons)
 }
 
@@ -485,11 +544,11 @@ fn correlate_unaligned(base: Side, candidate: Side) -> Result<Vec<Comparison>, E
 }
 
 fn connect_candidates(
-    parent: &mut BTreeMap<Digest, Digest>,
+    components: &mut ComponentForest,
     base_groups: &ObservationGroups<'_>,
     candidate_groups: &ObservationGroups<'_>,
     renames: &BTreeMap<RepoPath, RepoPath>,
-) {
+) -> Result<(), Error> {
     for (key, base_documents) in base_groups {
         let Some(candidate_documents) = candidate_groups.get(key) else {
             continue;
@@ -497,10 +556,10 @@ fn connect_candidates(
         for (base_document, base_group) in base_documents {
             if let Some(candidate_group) = candidate_documents.get(base_document) {
                 connect(
-                    parent,
+                    components,
                     &base_group.observations,
                     &candidate_group.observations,
-                );
+                )?;
             }
             let Some(candidate_document) = renames.get(*base_document) else {
                 continue;
@@ -510,51 +569,32 @@ fn connect_candidates(
             };
             for (projection, base_ids) in &base_group.projections {
                 if let Some(candidate_ids) = candidate_group.projections.get(projection) {
-                    connect(parent, base_ids, candidate_ids);
+                    connect(components, base_ids, candidate_ids)?;
                 }
             }
         }
     }
-}
-
-fn root(parent: &BTreeMap<Digest, Digest>, id: Digest) -> Digest {
-    let mut at = id;
-    while let Some(next) = parent.get(&at) {
-        if *next == at {
-            return at;
-        }
-        at = *next;
-    }
-    at
-}
-
-fn union(parent: &mut BTreeMap<Digest, Digest>, left: Digest, right: Digest) {
-    let left_root = root(parent, left);
-    let right_root = root(parent, right);
-    if left_root == right_root {
-        return;
-    }
-    let (low, high) = if left_root < right_root {
-        (left_root, right_root)
-    } else {
-        (right_root, left_root)
-    };
-    parent.insert(high, low);
+    Ok(())
 }
 
 /// Connects one complete bipartite edge set with a linear spanning tree.
 /// Correlation consumes connected components rather than individual edges,
 /// so this is equivalent to inserting every left-by-right pair.
-fn connect(parent: &mut BTreeMap<Digest, Digest>, left: &[&Observation], right: &[&Observation]) {
+fn connect(
+    components: &mut ComponentForest,
+    left: &[&Observation],
+    right: &[&Observation],
+) -> Result<(), Error> {
     let (Some(left_primary), Some(right_primary)) = (left.first(), right.first()) else {
-        return;
+        return Ok(());
     };
     for observation in left {
-        union(parent, observation.id, right_primary.id);
+        components.union(observation.id, right_primary.id)?;
     }
     for observation in right.iter().skip(1) {
-        union(parent, left_primary.id, observation.id);
+        components.union(left_primary.id, observation.id)?;
     }
+    Ok(())
 }
 
 fn exact_comparison(left: Observation, right: Observation) -> Comparison {
