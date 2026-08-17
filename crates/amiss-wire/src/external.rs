@@ -366,7 +366,7 @@ pub fn assess(
     // The digest only proves the plan is whole; the judged fields must still
     // fit the assessment contract, so a hand-built plan cannot smuggle rows
     // the published schema would reject.
-    let mut destinations: BTreeSet<&str> = BTreeSet::new();
+    let mut introduced_by_destination = BTreeMap::new();
     for introduced_row in introduced {
         let destination = introduced_row
             .text("destination")
@@ -378,11 +378,14 @@ pub fn assess(
         let (Some(destination), true) = (destination, documents) else {
             return Err(AssessDefect::NotAPlan);
         };
-        if !destinations.insert(destination) {
+        if introduced_by_destination
+            .insert(destination, introduced_row.member("repository"))
+            .is_some()
+        {
             return Err(AssessDefect::NotAPlan);
         }
     }
-    let observed = observed_rows(evidence_rows, introduced)?;
+    let observed = observed_rows(evidence_rows, &introduced_by_destination)?;
     let assessment = object(vec![
         ("schema", string(ASSESSMENT_PAYLOAD_SCHEMA)),
         (
@@ -421,20 +424,17 @@ pub fn assess(
 /// destination, name it once, and carry an observation instant.
 fn observed_rows<'e>(
     evidence_rows: &'e [Value],
-    introduced: &[Value],
+    introduced: &BTreeMap<&str, Option<&Value>>,
 ) -> Result<BTreeMap<&'e str, Observed>, AssessDefect> {
     let mut observed: BTreeMap<&str, Observed> = BTreeMap::new();
     for row in evidence_rows {
         let destination = row
             .text("destination")
             .ok_or(AssessDefect::MalformedEvidence)?;
-        let shaped = introduced.iter().find_map(|candidate| {
-            (candidate.text("destination") == Some(destination))
-                .then(|| candidate.member("repository"))
-        });
-        let Some(shape) = shaped else {
-            return Err(AssessDefect::UnboundEvidence);
-        };
+        let shape = introduced
+            .get(destination)
+            .copied()
+            .ok_or(AssessDefect::UnboundEvidence)?;
         if row.text("checked_at").is_none_or(str::is_empty) {
             return Err(AssessDefect::MalformedEvidence);
         }
