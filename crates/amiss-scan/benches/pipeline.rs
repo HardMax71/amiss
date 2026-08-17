@@ -1,20 +1,28 @@
 #![expect(clippy::panic, reason = "bench fixture setup fails loudly")]
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
+use amiss_scan::correlate::{Side, correlate};
 use amiss_scan::evaluate::evaluate_with_policy;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity, construct};
-use amiss_scan::{Classification, DocumentRecord, DocumentStatus, Effects, SnapshotDiscovery};
+use amiss_scan::{
+    Classification, DocumentRecord, DocumentStatus, Effects, Scanned, SnapshotDiscovery,
+};
 use amiss_wire::controls::GitMode;
 use amiss_wire::digest::hb;
-use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
+use amiss_wire::extraction::{Opaque, Work};
+use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use divan::{Bencher, black_box};
 
 #[path = "support/exceptions.rs"]
 mod exception_support;
 use exception_support::exception_fixture;
+#[path = "support/observations.rs"]
+mod observation_support;
+use observation_support::side;
 
 fn main() {
     divan::main();
@@ -51,18 +59,66 @@ fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
     bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate));
 }
 
-/// Report construction over two identical ordered document sides. This
-/// isolates the merge join from Git acquisition and parser work.
-#[divan::bench(args = [1_000_usize, 10_000], sample_count = 10)]
-fn construct_same_documents(bencher: Bencher<'_, '_>, count: usize) {
+#[derive(Clone, Copy, Debug)]
+enum ReportShape {
+    SameDocuments,
+    UnlinkedDocuments,
+    RemovedObservations,
+}
+
+/// Report construction across ordered no-finding, document-finding, and
+/// observation-finding surfaces.
+#[divan::bench(
+    args = [
+        (ReportShape::SameDocuments, 1_000_usize),
+        (ReportShape::SameDocuments, 10_000),
+        (ReportShape::UnlinkedDocuments, 1_000),
+        (ReportShape::UnlinkedDocuments, 10_000),
+        (ReportShape::RemovedObservations, 100),
+        (ReportShape::RemovedObservations, 1_000),
+        (ReportShape::RemovedObservations, 5_000),
+    ],
+    sample_count = 10
+)]
+fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
+    let (shape, count) = case;
     let setup = report_setup();
-    let discovery = document_discovery(count);
+    let (discovery, comparisons) = match shape {
+        ReportShape::SameDocuments => (
+            document_discovery(count, &DocumentStatus::ExcludedBuiltIn),
+            Vec::new(),
+        ),
+        ReportShape::UnlinkedDocuments => {
+            let scanned = Arc::new(Scanned {
+                adapter: Adapter::Markdown,
+                work: Work {
+                    nodes: 0,
+                    nesting: 0,
+                },
+                embedded_code_bytes: 0,
+                occurrences: Vec::new(),
+                opaque: Opaque::default(),
+                governed: Vec::new(),
+                declared_anchors: Vec::new(),
+                anchor_source: None,
+            });
+            (
+                document_discovery(count, &DocumentStatus::Scanned(scanned)),
+                Vec::new(),
+            )
+        }
+        ReportShape::RemovedObservations => (
+            document_discovery(0, &DocumentStatus::ExcludedBuiltIn),
+            correlate(side("base", 0, count, None), Side::default())
+                .unwrap_or_else(|defect| panic!("correlate observations: {defect:?}")),
+        ),
+    };
     bencher.bench_local(|| {
         construct(
             black_box(&setup),
             black_box(&discovery),
             black_box(&discovery),
-            black_box(&[]),
+            black_box(&comparisons),
             black_box(&[]),
         )
     });
@@ -72,7 +128,7 @@ fn construct_same_documents(bencher: Bencher<'_, '_>, count: usize) {
 /// pay for every preceding document.
 #[divan::bench(args = [1_000_usize, 10_000, 100_000])]
 fn lookup_last_document(bencher: Bencher<'_, '_>, count: usize) {
-    let discovery = document_discovery(count);
+    let discovery = document_discovery(count, &DocumentStatus::ExcludedBuiltIn);
     let path = RepoPath::new(format!("docs/{:05}.md", count.saturating_sub(1)))
         .unwrap_or_else(|| panic!("benchmark lookup path"));
     bencher.bench_local(|| black_box(&discovery).is_scanned_structured(black_box(&path)));
@@ -129,16 +185,22 @@ fn report_setup() -> Setup {
     }
 }
 
-fn document_discovery(count: usize) -> SnapshotDiscovery {
+fn document_discovery(count: usize, status: &DocumentStatus) -> SnapshotDiscovery {
     let oid = Oid::new(ObjectFormat::Sha1, "b".repeat(40))
         .unwrap_or_else(|| panic!("benchmark object id"));
+    let adapter = match status {
+        DocumentStatus::Scanned(scanned) => Some(scanned.adapter),
+        DocumentStatus::ExcludedBuiltIn
+        | DocumentStatus::Unsupported(_)
+        | DocumentStatus::Failed(_) => None,
+    };
     let documents = (0..count)
         .map(|index| DocumentRecord {
             path: RepoPath::new(format!("docs/{index:05}.md"))
                 .unwrap_or_else(|| panic!("benchmark document path")),
             classification: Classification::StructuredMarkdown,
-            adapter: None,
-            status: DocumentStatus::ExcludedBuiltIn,
+            adapter,
+            status: status.clone(),
             oid: oid.clone(),
             mode: GitMode::RegularFile,
             byte_count: 0,

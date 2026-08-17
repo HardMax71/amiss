@@ -438,6 +438,43 @@ fn a_document_fact_carries_its_own_document_row() {
     }
 }
 
+/// Observation facts resolve from both correlation-order runs: base-only
+/// rows and rows with a candidate primary.
+#[test]
+fn an_observation_fact_carries_its_own_comparison_row() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("docs/removed.md"), "[old](target.md)\n").unwrap();
+    fs::write(root.join("docs/changed.md"), "[before](target.md)\n").unwrap();
+    fs::write(root.join("docs/target.md"), "# Target\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("docs/removed.md"), "No link.\n").unwrap();
+    fs::write(root.join("docs/changed.md"), "[after](target.md)\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let wire: serde_json::Value =
+        serde_json::from_slice(&report_between(root, &base, &candidate).wire()).unwrap();
+    let findings = wire["payload"]["findings"].as_array().unwrap();
+
+    for kind in ["explicit-reference-removed", "subject-changed"] {
+        let finding = findings
+            .iter()
+            .find(|finding| finding["kind"] == kind)
+            .unwrap_or_else(|| panic!("missing {kind} finding"));
+        let observation_id = &finding["observation_ids"][0];
+        let comparison = &finding["candidate_fact"]["evidence"]["comparison"];
+        let primary = comparison["candidate"]["observation_id"]
+            .as_str()
+            .or_else(|| comparison["base"]["observation_id"].as_str());
+        assert_eq!(observation_id.as_str(), primary, "{kind} evidence row");
+    }
+}
+
 /// Every attribution counter counts its own class.
 #[test]
 fn the_summary_counts_each_attribution_it_names() {

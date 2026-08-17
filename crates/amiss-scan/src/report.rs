@@ -567,7 +567,7 @@ fn document_input(paired: &PairedDocument<'_>) -> DocumentInput {
 
 fn finding_value(
     finding: &Finding,
-    comparison_rows: &[(Option<Digest>, Value)],
+    comparison_runs: [&[(Option<Digest>, Value)]; 2],
     document_rows: &[(RepoPath, Value)],
 ) -> Value {
     let kind = finding.kind();
@@ -579,7 +579,7 @@ fn finding_value(
     let candidate_fact = finding
         .candidate_fact()
         .cloned()
-        .or_else(|| nonreference_fact(finding, comparison_rows, document_rows));
+        .or_else(|| nonreference_fact(finding, comparison_runs, document_rows));
     let fact_pair = |fact: Option<&FindingFact>| {
         (
             fact.map_or(Value::Null, |fact| digest_value(fact.digest())),
@@ -823,24 +823,27 @@ fn fix_value(fix: &FindingFix) -> Value {
 /// full constructed comparison or document row it was derived from.
 fn nonreference_fact(
     finding: &Finding,
-    comparison_rows: &[(Option<Digest>, Value)],
+    comparison_runs: [&[(Option<Digest>, Value)]; 2],
     document_rows: &[(RepoPath, Value)],
 ) -> Option<FindingFact> {
     let evidence = match finding.kind().scope() {
         FindingScope::Reference | FindingScope::Control => return None,
         FindingScope::Observation => {
             let id = finding.observation_ids.first()?;
-            let row = comparison_rows
-                .iter()
-                .find(|(primary, _)| primary.as_ref() == Some(id))
-                .map(|(_, value)| value.clone())?;
+            let row = comparison_runs.into_iter().find_map(|rows| {
+                rows.binary_search_by_key(&Some(*id), |(primary, _)| *primary)
+                    .ok()
+                    .and_then(|index| rows.get(index))
+                    .map(|(_, value)| value.clone())
+            })?;
             object(vec![("kind", string("observation")), ("comparison", row)])
         }
         FindingScope::Document => {
             let path = finding.location.path.as_ref()?;
             let row = document_rows
-                .iter()
-                .find(|(document, _)| document == path)
+                .binary_search_by(|(document, _)| document.cmp(path))
+                .ok()
+                .and_then(|index| document_rows.get(index))
                 .map(|(_, value)| value.clone())?;
             object(vec![("kind", string("document")), ("document_result", row)])
         }
@@ -1478,9 +1481,12 @@ pub fn construct(
             (primary, comparison_value(&setup.engine, comparison))
         })
         .collect();
+    let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());
+    let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
+    let comparison_runs = [base_only_rows, candidate_rows];
     let finding_rows: Vec<Value> = findings
         .iter()
-        .map(|finding| finding_value(finding, &comparison_rows, &document_rows))
+        .map(|finding| finding_value(finding, comparison_runs, &document_rows))
         .collect();
 
     let error_details = logical_error_set(&governed, &exception_errors);
