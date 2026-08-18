@@ -1,4 +1,22 @@
+use amiss_wire::digest::{hj, hj_with_length};
 use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
+
+#[test]
+fn digest_counting_matches_the_independent_operations() {
+    let value = Value::Object(vec![
+        (
+            "escaped".to_owned(),
+            Value::String("q\" b\\ n\n scalar \u{1f600}".to_owned()),
+        ),
+        (
+            "nested".to_owned(),
+            Value::Array(vec![Value::Integer(42), Value::Bool(true), Value::Null]),
+        ),
+    ]);
+    let (digest, length) = hj_with_length("amiss/test", &value);
+    assert_eq!(digest, hj("amiss/test", &value));
+    assert_eq!(length, canonical_length(&value));
+}
 
 /// Every short escape on the write side, byte for byte, and back through the
 /// parser; the counting sink must agree with the materialized bytes.
