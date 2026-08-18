@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use amiss_wire::json::Value;
 use amiss_wire::report::FindingKind;
 
@@ -8,13 +10,14 @@ use crate::view::{View, object, string};
 /// under their kind's rule, retained analysis errors become tool execution
 /// notifications, and the finding key rides as the stable fingerprint.
 pub(crate) fn log(envelope: &Value) -> Value {
-    let payload = View::of(Some(envelope)).view("payload");
+    let payload = View::of(envelope).view("payload");
     let result = payload.view("result");
     let findings = payload.rows("findings");
     let errors = payload.rows("errors");
 
+    let present_names: BTreeSet<&str> = findings.clone().map(|row| row.text("kind")).collect();
     let present: Vec<FindingKind> = FindingKind::all()
-        .filter(|kind| findings.iter().any(|row| row.text("kind") == kind.as_str()))
+        .filter(|kind| present_names.contains(kind.as_str()))
         .collect();
     let rules: Vec<Value> = present
         .iter()
@@ -29,22 +32,15 @@ pub(crate) fn log(envelope: &Value) -> Value {
         })
         .collect();
 
-    let results: Vec<Value> = findings
-        .iter()
-        .map(|row| result_value(row, &present))
-        .collect();
+    let results: Vec<Value> = findings.map(|row| result_value(row, &present)).collect();
     let notifications: Vec<Value> = errors
-        .iter()
         .map(|row| {
             object(vec![
-                (
-                    "descriptor",
-                    object(vec![("id", string(&row.text("code")))]),
-                ),
+                ("descriptor", object(vec![("id", string(row.text("code")))])),
                 ("level", string("error")),
                 (
                     "message",
-                    object(vec![("text", string(&row.text("description")))]),
+                    object(vec![("text", string(row.text("description")))]),
                 ),
             ])
         })
@@ -79,9 +75,9 @@ pub(crate) fn log(envelope: &Value) -> Value {
     ])
 }
 
-fn result_value(row: &View, present: &[FindingKind]) -> Value {
+fn result_value(row: View<'_>, present: &[FindingKind]) -> Value {
     let kind = row.text("kind");
-    let level = match row.text("effective_disposition").as_str() {
+    let level = match row.text("effective_disposition") {
         "fail" => "error",
         "warn" => "warning",
         _ => "note",
@@ -90,16 +86,16 @@ fn result_value(row: &View, present: &[FindingKind]) -> Value {
         ("level", string(level)),
         (
             "message",
-            object(vec![("text", string(&row.text("description")))]),
+            object(vec![("text", string(row.text("description")))]),
         ),
         (
             "partialFingerprints",
             object(vec![(
                 "amissFindingKey/v1",
-                string(&row.text("finding_key")),
+                string(row.text("finding_key")),
             )]),
         ),
-        ("ruleId", string(&kind)),
+        ("ruleId", string(kind)),
     ];
     if let Some(index) = present
         .iter()
@@ -108,10 +104,10 @@ fn result_value(row: &View, present: &[FindingKind]) -> Value {
     {
         members.push(("ruleIndex", Value::Integer(index)));
     }
-    if let Some(location) = location_value(&row.view("location")) {
+    if let Some(location) = location_value(row.view("location")) {
         members.push(("locations", Value::Array(vec![location])));
     }
-    if let Some(fix) = fix_value(&row.view("fix")) {
+    if let Some(fix) = fix_value(row.view("fix")) {
         members.push(("fixes", Value::Array(vec![fix])));
     }
     object(members)
@@ -119,7 +115,7 @@ fn result_value(row: &View, present: &[FindingKind]) -> Value {
 
 /// A wire fix renders as one SARIF fix: the byte region to delete and the
 /// replacement text, under the engine's own fix description.
-fn fix_value(fix: &View) -> Option<Value> {
+fn fix_value(fix: View<'_>) -> Option<Value> {
     let location = artifact_location(fix)?;
     let Some(Value::String(replacement)) = fix.field("replacement") else {
         return None;
@@ -152,14 +148,14 @@ fn fix_value(fix: &View) -> Option<Value> {
         ),
         (
             "description",
-            object(vec![("text", string(&fix.text("description")))]),
+            object(vec![("text", string(fix.text("description")))]),
         ),
     ]))
 }
 
 /// A location renders only when the wire path is printable text; a
 /// `bytes_hex` path names no artifact URI, and the row still carries it.
-fn location_value(location: &View) -> Option<Value> {
+fn location_value(location: View<'_>) -> Option<Value> {
     let mut physical = vec![("artifactLocation", artifact_location(location)?)];
     let span = location.view("span");
     if span.field("start_line").is_some() {
@@ -178,7 +174,7 @@ fn location_value(location: &View) -> Option<Value> {
 
 /// The artifact holding a location or a fix, named only when the wire path
 /// is printable text.
-fn artifact_location(holder: &View) -> Option<Value> {
+fn artifact_location(holder: View<'_>) -> Option<Value> {
     let Some(Value::String(path)) = holder.field("path") else {
         return None;
     };

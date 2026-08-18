@@ -70,6 +70,7 @@ dependencies = [
  "amiss-md",
  "amiss-scan",
  "amiss-wire",
+ "dhat",
  "jsonschema",
  "rustix 1.1.4",
  "serde_json",
