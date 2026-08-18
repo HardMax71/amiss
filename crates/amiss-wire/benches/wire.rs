@@ -91,6 +91,12 @@ fn digest_bytes(bencher: Bencher<'_, '_>) {
         .bench_local(|| hb("amiss/raw-evidence", black_box(&bytes)));
 }
 
+#[divan::bench(sample_count = 10_000)]
+fn format_digest(bencher: Bencher<'_, '_>) {
+    let digest = hb("amiss/bench", b"digest formatting");
+    bencher.bench_local(|| black_box(digest).to_string());
+}
+
 #[divan::bench(sample_count = 1_000)]
 fn decode_organization_floor(bencher: Bencher<'_, '_>) {
     const FLOOR: &[u8] = include_bytes!("../tests/fixtures/organization-floor.json");
