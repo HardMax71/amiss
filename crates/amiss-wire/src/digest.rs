@@ -81,11 +81,35 @@ pub fn hj(domain: &str, value: &Value) -> Digest {
     Digest(sink.0.finalize().into())
 }
 
+#[must_use]
+pub fn hj_with_length(domain: &str, value: &Value) -> (Digest, u64) {
+    let mut sink = HashLengthSink {
+        hasher: with_domain(domain),
+        length: 0,
+    };
+    stream(value, &mut sink);
+    (Digest(sink.hasher.finalize().into()), sink.length)
+}
+
 struct HashSink(Sha256);
 
 impl Sink for HashSink {
     fn write(&mut self, piece: &str) {
         self.0.update(piece.as_bytes());
+    }
+}
+
+struct HashLengthSink {
+    hasher: Sha256,
+    length: u64,
+}
+
+impl Sink for HashLengthSink {
+    fn write(&mut self, piece: &str) {
+        self.hasher.update(piece.as_bytes());
+        self.length = self
+            .length
+            .saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
     }
 }
 
