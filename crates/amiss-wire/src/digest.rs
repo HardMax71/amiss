@@ -102,6 +102,16 @@ pub fn hj(domain: &str, value: &Value) -> Digest {
     Digest(sink.0.finalize().into())
 }
 
+/// Hashes canonical JSON emitted directly into the supplied sink.
+///
+/// The emitter must write exactly one canonical JSON value.
+#[must_use]
+pub fn hj_stream(domain: &str, emit: impl FnOnce(&mut dyn Sink)) -> Digest {
+    let mut sink = HashSink(with_domain(domain));
+    emit(&mut sink);
+    Digest(sink.0.finalize().into())
+}
+
 #[must_use]
 pub fn hj_with_length(domain: &str, value: &Value) -> (Digest, u64) {
     let mut sink = HashLengthSink {

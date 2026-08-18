@@ -1,11 +1,11 @@
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
+use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
 
 use crate::Error;
 use crate::correlate::{Observation, Side, correlate};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
-use crate::observe::occurrence_id;
+use crate::observe::{ObservationIdentity, observation_digest};
 use crate::report::{
     Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
     synthetic_candidate,
@@ -92,6 +92,7 @@ pub(crate) fn side_observations(
                 let Some(adapter) = record.adapter else {
                     continue;
                 };
+                let (_descriptor, adapter_contract_digest) = adapter_contract(engine, adapter);
                 for occurrence in &scanned.occurrences {
                     let (intent, resolution) = if occurrence.occurrence.construct
                         == amiss_wire::controls::SourceConstruct::RstRefRole
@@ -107,8 +108,19 @@ pub(crate) fn side_observations(
                         )
                     }
                     .map_err(|defect| detail(&defect, Some(&record.path)))?;
+                    let id = observation_digest(&ObservationIdentity {
+                        adapter,
+                        contract_digest: adapter_contract_digest,
+                        document: &record.path,
+                        construct: occurrence.occurrence.construct,
+                        node_path: &occurrence.occurrence.node_path,
+                        projection_digest: occurrence.projection_digest,
+                        intent: &intent,
+                        raw_destination_digest: occurrence.raw_destination_digest,
+                    });
                     observations.push(Observation {
-                        id: occurrence_id(engine, adapter, &record.path, occurrence, &intent),
+                        id,
+                        adapter_contract_digest,
                         document: record.path.clone(),
                         span: occurrence.occurrence.span,
                         display: occurrence.display,

@@ -3,15 +3,19 @@
     reason = "integration assertions over repository-owned identity goldens"
 )]
 
+use amiss_scan::observe::{
+    OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_digest, observation_input,
+};
 use amiss_scan::report::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
     SnapshotIdentity, candidate_identity_digest, synthetic_candidate,
 };
-use amiss_wire::controls::GitMode;
+use amiss_scan::resolve::Intent;
+use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::{Value, parse};
-use amiss_wire::model::{ForgeDialect, RepoPath, RepositoryIdentity};
-use amiss_wire::report::EngineProvenance;
+use amiss_wire::model::{Adapter, ForgeDialect, RepoPath, RepositoryIdentity};
+use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 
 use crate::support;
 
@@ -51,6 +55,62 @@ fn setup(candidate: CandidateBlock) -> Setup {
         policy: amiss_scan::Effects::default(),
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
+    }
+}
+
+#[test]
+fn streamed_observation_digests_match_text_and_byte_path_values() {
+    let engine = EngineProvenance {
+        version: "quoted \"version\"\nβ".to_owned(),
+        digest: hb("amiss/scanner-engine", b"observation differential"),
+    };
+    let text_path =
+        RepoPath::new("docs/quoted-\"β.md".to_owned()).expect("the text fixture path is canonical");
+    let byte_path = RepoPath::from_bytes(b"docs/byte-\xff.md".to_vec())
+        .expect("the byte fixture path is canonical");
+    let intents = [
+        Intent {
+            kind: IntentKind::ExternalUrl,
+            repository_path: None,
+            target_kind: None,
+            external_scheme: Some("https".to_owned()),
+            query: Some(String::new()),
+            fragment: Some("fragment".to_owned()),
+        },
+        Intent {
+            kind: IntentKind::RepositoryPath,
+            repository_path: Some(byte_path.clone()),
+            target_kind: Some(TargetKind::Either),
+            external_scheme: None,
+            query: None,
+            fragment: None,
+        },
+    ];
+    let node_path = [0, 42, usize::MAX];
+    let projection_digest = hb("amiss/source-projection", b"projection");
+    let raw_destination_digest = hb("amiss/raw-destination", b"destination");
+    for adapter in Adapter::all() {
+        let contract_digest = adapter_contract(&engine, adapter).1;
+        for (document, intent) in [(&text_path, &intents[0]), (&byte_path, &intents[1])] {
+            let identity = ObservationIdentity {
+                adapter,
+                contract_digest,
+                document,
+                construct: SourceConstruct::InlineLink,
+                node_path: &node_path,
+                projection_digest,
+                intent,
+                raw_destination_digest,
+            };
+            let input = observation_input(&identity);
+            let digest = observation_digest(&identity);
+            assert_eq!(
+                digest,
+                hj(OBSERVATION_ID_DOMAIN, &input),
+                "{} {document:?}",
+                adapter.adapter_id()
+            );
+        }
     }
 }
 

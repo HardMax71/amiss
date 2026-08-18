@@ -253,7 +253,8 @@ fn utf16_cmp(a: &str, b: &str) -> Ordering {
     a.encode_utf16().cmp(b.encode_utf16())
 }
 
-fn write_string<S: Sink + ?Sized>(sink: &mut S, s: &str) {
+/// Writes one string as canonical JSON, including its quotes.
+pub fn write_string<S: Sink + ?Sized>(sink: &mut S, s: &str) {
     sink.write("\"");
     let mut plain = 0_usize;
     for (index, c) in s.char_indices() {

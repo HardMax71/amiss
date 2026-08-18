@@ -33,6 +33,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
     let target = repo_path(target.to_owned());
     Observation {
         id: hb("amiss/bench-correlation-id", token.as_bytes()),
+        adapter_contract_digest: hb("amiss/bench-adapter-contract", b"markdown"),
         document: repo_path("docs/references.md".to_owned()),
         span: (0, 0),
         display: SpanDisplay {

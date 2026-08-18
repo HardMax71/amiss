@@ -2,13 +2,13 @@ use amiss_md::extract::{BlockKind, Occurrence};
 use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, Side, SourceChange, TargetChange, correlate,
 };
-use amiss_scan::observe::occurrence_id;
+use amiss_scan::observe::{ObservationIdentity, observation_digest};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::{EngineProvenance, IntentKind};
+use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing, Target,
 };
@@ -97,15 +97,22 @@ fn observation(spec: &Spec) -> Observation {
             spec.raw_destination.as_bytes(),
         ),
     };
+    let document = rp(&spec.document);
+    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).1;
+    let id = observation_digest(&ObservationIdentity {
+        adapter: Adapter::Markdown,
+        contract_digest: adapter_contract_digest,
+        document: &document,
+        construct: scanned.occurrence.construct,
+        node_path: &scanned.occurrence.node_path,
+        projection_digest: scanned.projection_digest,
+        intent: &spec.intent,
+        raw_destination_digest: scanned.raw_destination_digest,
+    });
     Observation {
-        id: occurrence_id(
-            &engine(),
-            Adapter::Markdown,
-            &rp(&spec.document),
-            &scanned,
-            &spec.intent,
-        ),
-        document: rp(&spec.document),
+        id,
+        adapter_contract_digest,
+        document,
         span: (0, 1),
         display: scanned.display,
         block_kind: scanned.occurrence.block_kind,
