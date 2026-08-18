@@ -57,7 +57,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/amiss$suffix" "staged/amiss-${{ matrix.platform }}$suffix"
           cp "target/${{ matrix.target }}/release/amiss-bootstrap$suffix" "staged/bootstrap-${{ matrix.platform }}$suffix"
           cp "target/${{ matrix.target }}/release/amiss-probe$suffix" "staged/amiss-probe-${{ matrix.platform }}$suffix"
-      - uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: staged/*
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -329,7 +329,7 @@ jobs:
           cd assets
           sha256sum -- amiss-* > SHA256SUMS
       - id: attest
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: assets/SHA256SUMS
       - shell: bash

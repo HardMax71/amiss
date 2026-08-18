@@ -29,7 +29,7 @@ jobs:
       - uses: ./.github/actions/tools
       # Branch runs only restore; main saves the pruned caches, so lock bumps
       # on branches cannot crowd the shared budget and evict small entries.
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
           shared-key: gates
@@ -126,7 +126,7 @@ jobs:
           # and the event's before must be in the checkout, so pushes stay 0.
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo build --locked --release -p amiss -p amiss-bootstrap
@@ -195,7 +195,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -257,7 +257,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             .
@@ -312,11 +312,11 @@ jobs:
         run: |
           cargo metadata --locked --format-version 1 --no-deps --offline |
             jq -er '"nextest=\(.metadata.tools.prebuilt["cargo-nextest"])"' >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2.85.8
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
         with:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
           fallback: none
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -331,7 +331,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: rustup component add llvm-tools-preview
