@@ -98,6 +98,7 @@ fn native_paths_decode_once_and_stay_contained() {
         ("%5Cx", InvalidReference::BackslashSeparator),
         ("a\\b.md", InvalidReference::BackslashSeparator),
         ("a%zz.md", InvalidReference::PercentEncoding),
+        ("a%2Fb%zz", InvalidReference::PercentEncoding),
         ("a%00b.md", InvalidReference::DecodedPathControl),
         ("a//b.md", InvalidReference::Syntax),
         ("sub//", InvalidReference::Syntax),
@@ -118,6 +119,21 @@ fn native_paths_decode_once_and_stay_contained() {
             "{destination}: {row:?}"
         );
     }
+    let row = bed
+        .run_as(
+            Adapter::Markdown,
+            None,
+            "docs/deep/source.md",
+            false,
+            "../../src/./l%69b.rs",
+        )
+        .unwrap_or_else(|_defect| panic!("resolve a normalized deep path"))
+        .1;
+    let Resolution::Resolved(Target::Blob(blob)) = row else {
+        panic!("unexpected resolution: {row:?}");
+    };
+    assert_eq!(blob.path.as_str(), Some("src/lib.rs"));
+
     let row = bed
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "absent.md")
         .unwrap_or_else(|_defect| panic!("resolve absent path"))

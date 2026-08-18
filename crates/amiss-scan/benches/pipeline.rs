@@ -127,8 +127,14 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
     });
 }
 
-#[divan::bench]
-fn resolve_same_repository_forge(bencher: Bencher<'_, '_>) {
+#[derive(Clone, Copy, Debug)]
+enum ResolutionShape {
+    Native,
+    SameRepositoryForge,
+}
+
+#[divan::bench(args = [ResolutionShape::Native, ResolutionShape::SameRepositoryForge])]
+fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
     let dir = tempfile::TempDir::new().unwrap_or_else(|defect| panic!("tempdir: {defect}"));
     amiss_fixtures::git(dir.path(), &["init", "-q"])
         .unwrap_or_else(|defect| panic!("git init: {defect}"));
@@ -136,16 +142,6 @@ fn resolve_same_repository_forge(bencher: Bencher<'_, '_>) {
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
     let oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40))
         .unwrap_or_else(|| panic!("benchmark object id"));
-    let descendant = RepoPath::new("docs/guide/page.md".to_owned())
-        .unwrap_or_else(|| panic!("benchmark descendant"));
-    let snapshot = SnapshotDiscovery {
-        documents: Vec::new(),
-        labels: BTreeMap::new(),
-        outside_document_set: 0,
-        tree_entries: 1,
-        path_defects: Vec::new(),
-        entries: BTreeMap::from([(descendant, (GitMode::RegularFile, oid))]),
-    };
     let context = ForgeContext {
         host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
@@ -155,19 +151,44 @@ fn resolve_same_repository_forge(bencher: Bencher<'_, '_>) {
         default_ref: "refs/heads/main".to_owned(),
         candidate_oid: None,
     };
+    let (target, mode, forge, document, semantic) = match shape {
+        ResolutionShape::Native => (
+            "docs/assets/logo.png",
+            GitMode::Tree,
+            None,
+            "docs/guide/source.md",
+            "../assets/./logo%2Epng",
+        ),
+        ResolutionShape::SameRepositoryForge => (
+            "docs/guide/page.md",
+            GitMode::RegularFile,
+            Some(&context),
+            "docs/source.md",
+            "https://github.com/acme/widgets/tree/feature/x/docs/guide/",
+        ),
+    };
+    let target = RepoPath::new(target.to_owned()).unwrap_or_else(|| panic!("benchmark target"));
+    let snapshot = SnapshotDiscovery {
+        documents: Vec::new(),
+        labels: BTreeMap::new(),
+        outside_document_set: 0,
+        tree_entries: 1,
+        path_defects: Vec::new(),
+        entries: BTreeMap::from([(target, (mode, oid))]),
+    };
     let document =
-        RepoPath::new("docs/source.md".to_owned()).unwrap_or_else(|| panic!("benchmark document"));
+        RepoPath::new(document.to_owned()).unwrap_or_else(|| panic!("benchmark document"));
     let mut git = GitResources::new(GitLimits::CONTRACT);
     let mut scan = ScanResources::new(ScanLimits::CONTRACT);
     let mut cache = TargetCache::default();
     bencher.bench_local(|| {
         Resolver::new(&repo, &mut git, &mut scan, &mut cache, &snapshot)
             .resolve(
-                Some(&context),
+                forge,
                 Adapter::Markdown,
                 &document,
                 false,
-                black_box("https://github.com/acme/widgets/tree/feature/x/docs/guide/"),
+                black_box(semantic),
             )
             .unwrap_or_else(|defect| panic!("resolve: {defect:?}"))
     });
