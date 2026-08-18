@@ -130,6 +130,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
     .unwrap_or_else(|| panic!("benchmark structural fact"));
     let observation = Observation {
         id: hb("amiss/bench-exception-observation", token.as_bytes()),
+        adapter_contract_digest: hb("amiss/bench-adapter-contract", b"markdown"),
         document,
         span: (0, 0),
         display: SpanDisplay {

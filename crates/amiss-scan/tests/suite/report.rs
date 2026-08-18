@@ -3,7 +3,7 @@ use std::path::Path;
 
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::correlate::{Observation, Side, correlate};
-use amiss_scan::observe::occurrence_id;
+use amiss_scan::observe::{ObservationIdentity, observation_digest};
 use amiss_scan::report::{
     Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
 };
@@ -16,7 +16,9 @@ use amiss_wire::controls::GitMode;
 use amiss_wire::digest::hb;
 use amiss_wire::json::parse;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES};
+use amiss_wire::report::{
+    AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES, adapter_contract,
+};
 use tempfile::TempDir;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -72,6 +74,7 @@ fn snapshot(
         let Some(adapter) = record.classification.adapter() else {
             continue;
         };
+        let adapter_contract_digest = adapter_contract(&engine(), adapter).1;
         for occurrence in &scanned.occurrences {
             let is_image = occurrence.occurrence.construct.is_image();
             let (intent, resolution) = resolver
@@ -83,8 +86,19 @@ fn snapshot(
                     &occurrence.occurrence.semantic_destination,
                 )
                 .unwrap();
+            let id = observation_digest(&ObservationIdentity {
+                adapter,
+                contract_digest: adapter_contract_digest,
+                document: &record.path,
+                construct: occurrence.occurrence.construct,
+                node_path: &occurrence.occurrence.node_path,
+                projection_digest: occurrence.projection_digest,
+                intent: &intent,
+                raw_destination_digest: occurrence.raw_destination_digest,
+            });
             observations.push(Observation {
-                id: occurrence_id(&engine(), adapter, &record.path, occurrence, &intent),
+                id,
+                adapter_contract_digest,
                 document: record.path.clone(),
                 span: occurrence.occurrence.span,
                 display: occurrence.display,
