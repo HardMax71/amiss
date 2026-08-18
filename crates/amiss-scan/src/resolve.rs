@@ -630,14 +630,12 @@ fn awaits_attribute(semantic: &str) -> bool {
 /// report carries the declaration closest to the target.
 fn declared_untracked(resolver: &mut Resolver<'_>, path: &RepoPath) -> Result<Resolution, Error> {
     let raw = path.as_bytes();
-    let mut separators: Vec<usize> = raw
+    let separators = raw
         .iter()
         .enumerate()
-        .filter(|(_, byte)| **byte == b'/')
-        .map(|(index, _)| index)
-        .collect();
-    separators.reverse();
-    for split in separators.into_iter().map(Some).chain([None]) {
+        .rev()
+        .filter_map(|(index, byte)| (*byte == b'/').then_some(index));
+    for split in separators.map(Some).chain([None]) {
         let (directory, relative) = match split {
             Some(index) => (
                 raw.get(..index).unwrap_or_default(),
@@ -670,11 +668,11 @@ fn declared_untracked(resolver: &mut Resolver<'_>, path: &RepoPath) -> Result<Re
 /// one exists. A repository holding both spellings names a real ambiguity and
 /// stays bare, and so does a path nothing in the tree comes close to.
 fn case_neighbor(snapshot: &SnapshotDiscovery, path: &RepoPath) -> Option<RepoPath> {
-    let folded = path.as_bytes().to_ascii_lowercase();
+    let raw = path.as_bytes();
     let mut matches = snapshot
         .entries
         .keys()
-        .filter(|entry| entry.as_bytes().to_ascii_lowercase() == folded);
+        .filter(|entry| entry.as_bytes().eq_ignore_ascii_case(raw));
     let candidate = matches.next()?;
     matches.next().is_none().then(|| candidate.clone())
 }
