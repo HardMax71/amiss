@@ -1,5 +1,5 @@
 use amiss_wire::controls::{ContentAvailability, Profile, ResourceName};
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::{Digest, hj, hj_with_length};
 use amiss_wire::json::{Value, canonical, canonical_length};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::{
@@ -1529,22 +1529,19 @@ pub fn construct(
         ("findings", Value::Array(finding_rows)),
         ("errors", Value::Array(governed_errors)),
     ]);
-    let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
+    let (payload_digest, payload_length) = hj_with_length(PAYLOAD_SCHEMA, &payload);
     let envelope = object(vec![
         ("schema", string(ENVELOPE_SCHEMA)),
         ("payload", payload),
         ("payload_digest", digest_value(payload_digest)),
     ]);
-    output_gate(
-        setup,
-        error_details,
-        Built {
-            envelope,
-            payload_digest,
-            status,
-            exit_code,
-        },
-    )
+    let built = Built {
+        envelope,
+        payload_digest,
+        status,
+        exit_code,
+    };
+    output_gate(setup, error_details, payload_length, built)
 }
 
 fn result_value(
@@ -1575,11 +1572,27 @@ fn logical_error_set(
     details
 }
 
-/// The counting canonical-serialization pass: a non-error envelope whose
-/// wire would exceed the reservation becomes the output-limit fatal
-/// projection carrying the exact counted length.
-fn output_gate(setup: &Setup, details: Vec<ErrorDetail>, built: Built) -> Built {
-    let wire_length = canonical_length(&built.envelope).saturating_add(1);
+/// A non-error envelope whose wire would exceed the reservation becomes the
+/// output-limit fatal projection carrying the exact counted length.
+fn output_gate(
+    setup: &Setup,
+    details: Vec<ErrorDetail>,
+    payload_length: u64,
+    built: Built,
+) -> Built {
+    let envelope_shell = object(vec![
+        ("schema", string(ENVELOPE_SCHEMA)),
+        ("payload", Value::Null),
+        ("payload_digest", digest_value(built.payload_digest)),
+    ]);
+    let wire_length = canonical_length(&envelope_shell)
+        .saturating_sub(canonical_length(&Value::Null))
+        .saturating_add(payload_length)
+        .saturating_add(1);
+    debug_assert_eq!(
+        wire_length,
+        canonical_length(&built.envelope).saturating_add(1)
+    );
     if wire_length <= MACHINE_JSON_BYTES {
         return built;
     }
