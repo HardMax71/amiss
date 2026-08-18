@@ -1183,163 +1183,179 @@ struct Counts {
     findings: Value,
 }
 
-fn document_counts(
-    candidate_records: &[&DocumentRecord],
-    scanned: &[&crate::scan::Scanned],
+#[derive(Default)]
+struct DocumentCountSet {
+    discovered: u64,
+    scanned: u64,
+    unsupported: u64,
+    excluded_builtin: u64,
+    frontmatter_documents: u64,
+    frontmatter_bytes: u64,
+    opaque_mdx_documents: u64,
+    opaque_mdx_regions: u64,
+    opaque_mdx_bytes: u64,
+    opaque_html_documents: u64,
+    opaque_html_regions: u64,
+    opaque_html_bytes: u64,
+}
+
+fn region_bytes(spans: &[(usize, usize)]) -> u64 {
+    spans.iter().fold(0, |total, (start, end)| {
+        total.saturating_add(u64::try_from(end.saturating_sub(*start)).unwrap_or(u64::MAX))
+    })
+}
+
+fn document_counts<'a>(
+    candidate_records: impl IntoIterator<Item = &'a DocumentRecord>,
     unlinked: u64,
 ) -> Value {
-    let count_where = |predicate: &dyn Fn(&&&DocumentRecord) -> bool| {
-        u64::try_from(candidate_records.iter().filter(predicate).count()).unwrap_or(u64::MAX)
-    };
-    let opaque_sum = |select: &dyn Fn(&crate::scan::Scanned) -> u64| {
-        scanned.iter().map(|value| select(value)).sum::<u64>()
-    };
-    let region_bytes = |spans: &Vec<(usize, usize)>| {
-        spans
-            .iter()
-            .map(|(start, end)| u64::try_from(end.saturating_sub(*start)).unwrap_or(u64::MAX))
-            .sum::<u64>()
-    };
+    let mut counts = DocumentCountSet::default();
+    for record in candidate_records {
+        counts.discovered = counts.discovered.saturating_add(1);
+        match &record.status {
+            DocumentStatus::Scanned(scanned) => {
+                counts.scanned = counts.scanned.saturating_add(1);
+                let opaque = &scanned.opaque;
+                counts.frontmatter_documents = counts
+                    .frontmatter_documents
+                    .saturating_add(u64::from(opaque.frontmatter_bytes > 0));
+                counts.frontmatter_bytes = counts
+                    .frontmatter_bytes
+                    .saturating_add(u64::try_from(opaque.frontmatter_bytes).unwrap_or(u64::MAX));
+                counts.opaque_mdx_documents = counts
+                    .opaque_mdx_documents
+                    .saturating_add(u64::from(!opaque.mdx.is_empty()));
+                counts.opaque_mdx_regions = counts
+                    .opaque_mdx_regions
+                    .saturating_add(u64::try_from(opaque.mdx.len()).unwrap_or(u64::MAX));
+                counts.opaque_mdx_bytes = counts
+                    .opaque_mdx_bytes
+                    .saturating_add(region_bytes(&opaque.mdx));
+                counts.opaque_html_documents = counts
+                    .opaque_html_documents
+                    .saturating_add(u64::from(!opaque.html.is_empty()));
+                counts.opaque_html_regions = counts
+                    .opaque_html_regions
+                    .saturating_add(u64::try_from(opaque.html.len()).unwrap_or(u64::MAX));
+                counts.opaque_html_bytes = counts
+                    .opaque_html_bytes
+                    .saturating_add(region_bytes(&opaque.html));
+            }
+            DocumentStatus::Unsupported(_) => {
+                counts.unsupported = counts.unsupported.saturating_add(1);
+            }
+            DocumentStatus::ExcludedBuiltIn => {
+                counts.excluded_builtin = counts.excluded_builtin.saturating_add(1);
+            }
+            DocumentStatus::Failed(_) => {}
+        }
+    }
     object(vec![
-        (
-            "discovered",
-            integer(u64::try_from(candidate_records.len()).unwrap_or(u64::MAX)),
-        ),
+        ("discovered", integer(counts.discovered)),
         ("outside_document_set", integer(0)),
-        (
-            "scanned",
-            integer(count_where(&|record| {
-                matches!(record.status, DocumentStatus::Scanned(_))
-            })),
-        ),
-        (
-            "unsupported",
-            integer(count_where(&|record| {
-                matches!(record.status, DocumentStatus::Unsupported(_))
-            })),
-        ),
-        (
-            "excluded_builtin",
-            integer(count_where(&|record| {
-                matches!(record.status, DocumentStatus::ExcludedBuiltIn)
-            })),
-        ),
+        ("scanned", integer(counts.scanned)),
+        ("unsupported", integer(counts.unsupported)),
+        ("excluded_builtin", integer(counts.excluded_builtin)),
         ("unlinked", integer(unlinked)),
         (
             "frontmatter_documents",
-            integer(opaque_sum(&|value| {
-                u64::from(value.opaque.frontmatter_bytes > 0)
-            })),
+            integer(counts.frontmatter_documents),
         ),
-        (
-            "opaque_mdx_documents",
-            integer(opaque_sum(&|value| u64::from(!value.opaque.mdx.is_empty()))),
-        ),
+        ("opaque_mdx_documents", integer(counts.opaque_mdx_documents)),
         (
             "opaque_html_documents",
-            integer(opaque_sum(&|value| {
-                u64::from(!value.opaque.html.is_empty())
-            })),
+            integer(counts.opaque_html_documents),
         ),
-        (
-            "opaque_mdx_regions",
-            integer(opaque_sum(&|value| {
-                u64::try_from(value.opaque.mdx.len()).unwrap_or(u64::MAX)
-            })),
-        ),
-        (
-            "opaque_mdx_bytes",
-            integer(opaque_sum(&|value| region_bytes(&value.opaque.mdx))),
-        ),
-        (
-            "opaque_html_regions",
-            integer(opaque_sum(&|value| {
-                u64::try_from(value.opaque.html.len()).unwrap_or(u64::MAX)
-            })),
-        ),
-        (
-            "opaque_html_bytes",
-            integer(opaque_sum(&|value| region_bytes(&value.opaque.html))),
-        ),
-        (
-            "frontmatter_regions",
-            integer(opaque_sum(&|value| {
-                u64::from(value.opaque.frontmatter_bytes > 0)
-            })),
-        ),
-        (
-            "frontmatter_bytes",
-            integer(opaque_sum(&|value| {
-                u64::try_from(value.opaque.frontmatter_bytes).unwrap_or(u64::MAX)
-            })),
-        ),
+        ("opaque_mdx_regions", integer(counts.opaque_mdx_regions)),
+        ("opaque_mdx_bytes", integer(counts.opaque_mdx_bytes)),
+        ("opaque_html_regions", integer(counts.opaque_html_regions)),
+        ("opaque_html_bytes", integer(counts.opaque_html_bytes)),
+        ("frontmatter_regions", integer(counts.frontmatter_documents)),
+        ("frontmatter_bytes", integer(counts.frontmatter_bytes)),
     ])
 }
 
+#[derive(Default)]
+struct ReferenceCountSet {
+    extracted: u64,
+    explicit_local: u64,
+    same_repository: u64,
+    external_out_of_scope: u64,
+    unsupported: u64,
+    resolved: u64,
+    missing: u64,
+}
+
 fn reference_counts(comparisons: &[Comparison]) -> Value {
-    let candidate_observations: Vec<&Observation> = comparisons
-        .iter()
-        .flat_map(|comparison| {
-            comparison
-                .candidate
-                .iter()
-                .chain(comparison.alternatives_candidate.iter())
-        })
-        .collect();
-    let bucket = |kind: IntentKind| {
-        u64::try_from(
-            candidate_observations
-                .iter()
-                .filter(|observation| observation.intent.kind == kind)
-                .count(),
-        )
-        .unwrap_or(u64::MAX)
-    };
-    let (resolved, missing) =
-        candidate_observations
+    let mut counts = ReferenceCountSet::default();
+    for observation in comparisons.iter().flat_map(|comparison| {
+        comparison
+            .candidate
             .iter()
-            .fold(
-                (0_u64, 0_u64),
-                |(resolved, missing), observation| match &observation.resolution {
-                    Resolution::Resolved(_) => (resolved.saturating_add(1), missing),
-                    Resolution::Missing(_) => (resolved, missing.saturating_add(1)),
-                    Resolution::TypeMismatch(_)
-                    | Resolution::DeclaredUntracked(_)
-                    | Resolution::UnsupportedTarget(_)
-                    | Resolution::UnsupportedSemantics(_)
-                    | Resolution::UnsupportedVersion(_)
-                    | Resolution::Invalid(_)
-                    | Resolution::External(_) => (resolved, missing),
-                },
-            );
+            .chain(comparison.alternatives_candidate.iter())
+    }) {
+        counts.extracted = counts.extracted.saturating_add(1);
+        match observation.intent.kind {
+            IntentKind::RepositoryPath => {
+                counts.explicit_local = counts.explicit_local.saturating_add(1);
+            }
+            IntentKind::SameRepositoryGithub
+            | IntentKind::SameRepositoryGitlab
+            | IntentKind::SameRepositoryGitea => {
+                counts.same_repository = counts.same_repository.saturating_add(1);
+            }
+            IntentKind::ExternalUrl => {
+                counts.external_out_of_scope = counts.external_out_of_scope.saturating_add(1);
+            }
+            IntentKind::SiteRoute | IntentKind::Unsupported => {
+                counts.unsupported = counts.unsupported.saturating_add(1);
+            }
+            IntentKind::Label => {}
+        }
+        match &observation.resolution {
+            Resolution::Resolved(_) => {
+                counts.resolved = counts.resolved.saturating_add(1);
+            }
+            Resolution::Missing(_) => {
+                counts.missing = counts.missing.saturating_add(1);
+            }
+            Resolution::TypeMismatch(_)
+            | Resolution::DeclaredUntracked(_)
+            | Resolution::UnsupportedTarget(_)
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedVersion(_)
+            | Resolution::Invalid(_)
+            | Resolution::External(_) => {}
+        }
+    }
     object(vec![
-        (
-            "extracted",
-            integer(u64::try_from(candidate_observations.len()).unwrap_or(u64::MAX)),
-        ),
-        (
-            "explicit_local",
-            integer(bucket(IntentKind::RepositoryPath)),
-        ),
-        (
-            "same_repository",
-            integer(
-                bucket(IntentKind::SameRepositoryGithub)
-                    .saturating_add(bucket(IntentKind::SameRepositoryGitlab))
-                    .saturating_add(bucket(IntentKind::SameRepositoryGitea)),
-            ),
-        ),
+        ("extracted", integer(counts.extracted)),
+        ("explicit_local", integer(counts.explicit_local)),
+        ("same_repository", integer(counts.same_repository)),
         (
             "external_out_of_scope",
-            integer(bucket(IntentKind::ExternalUrl)),
+            integer(counts.external_out_of_scope),
         ),
-        (
-            "unsupported",
-            integer(bucket(IntentKind::SiteRoute).saturating_add(bucket(IntentKind::Unsupported))),
-        ),
-        ("resolved", integer(resolved)),
-        ("missing", integer(missing)),
+        ("unsupported", integer(counts.unsupported)),
+        ("resolved", integer(counts.resolved)),
+        ("missing", integer(counts.missing)),
     ])
+}
+
+#[derive(Default)]
+struct FindingCountSet {
+    record: u64,
+    warn: u64,
+    fail: u64,
+    introduced: u64,
+    pre_existing: u64,
+    resolved: u64,
+    unknown: u64,
+    not_applicable: u64,
+    debt_tolerated: u64,
+    waived: u64,
+    unsupported_capabilities: u64,
+    unlinked_documents: u64,
 }
 
 fn summary_counts(
@@ -1348,99 +1364,68 @@ fn summary_counts(
     findings: &[Finding],
     finding_rows_count: u64,
 ) -> Counts {
-    let candidate_records: Vec<&DocumentRecord> =
-        paired.iter().filter_map(|pair| pair.candidate).collect();
-    let scanned: Vec<&crate::scan::Scanned> = candidate_records
-        .iter()
-        .filter_map(|record| match &record.status {
-            DocumentStatus::Scanned(value) => Some(value.as_ref()),
-            DocumentStatus::ExcludedBuiltIn
-            | DocumentStatus::Unsupported(_)
-            | DocumentStatus::Failed(_) => None,
-        })
-        .collect();
-    let unlinked = findings
-        .iter()
-        .filter(|finding| finding.kind() == FindingKind::UnlinkedDocument)
-        .count();
+    let mut counts = FindingCountSet::default();
+    for finding in findings {
+        match finding.effective_disposition {
+            Disposition::Record => counts.record = counts.record.saturating_add(1),
+            Disposition::Warn => counts.warn = counts.warn.saturating_add(1),
+            Disposition::Fail => counts.fail = counts.fail.saturating_add(1),
+        }
+        match finding.attribution {
+            Attribution::Introduced => {
+                counts.introduced = counts.introduced.saturating_add(1);
+            }
+            Attribution::PreExisting => {
+                counts.pre_existing = counts.pre_existing.saturating_add(1);
+            }
+            Attribution::Resolved => {
+                counts.resolved = counts.resolved.saturating_add(1);
+            }
+            Attribution::Unknown => {
+                counts.unknown = counts.unknown.saturating_add(1);
+            }
+            Attribution::NotApplicable => {
+                counts.not_applicable = counts.not_applicable.saturating_add(1);
+            }
+        }
+        counts.debt_tolerated = counts
+            .debt_tolerated
+            .saturating_add(u64::from(finding.debt.is_some()));
+        counts.waived = counts
+            .waived
+            .saturating_add(u64::from(finding.waiver.is_some()));
+        counts.unsupported_capabilities = counts.unsupported_capabilities.saturating_add(
+            u64::from(finding.kind() == FindingKind::UnsupportedCapability),
+        );
+        counts.unlinked_documents = counts
+            .unlinked_documents
+            .saturating_add(u64::from(finding.kind() == FindingKind::UnlinkedDocument));
+    }
     let documents = document_counts(
-        &candidate_records,
-        &scanned,
-        u64::try_from(unlinked).unwrap_or(u64::MAX),
+        paired.iter().filter_map(|pair| pair.candidate),
+        counts.unlinked_documents,
     );
-
-    let references = reference_counts(comparisons);
-
-    let disposition_count = |disposition: Disposition| {
-        u64::try_from(
-            findings
-                .iter()
-                .filter(|finding| finding.effective_disposition == disposition)
-                .count(),
-        )
-        .unwrap_or(u64::MAX)
-    };
-    let attribution_count = |attribution: Attribution| {
-        u64::try_from(
-            findings
-                .iter()
-                .filter(|finding| finding.attribution == attribution)
-                .count(),
-        )
-        .unwrap_or(u64::MAX)
-    };
     let findings_value = object(vec![
         ("total", integer(finding_rows_count)),
-        ("record", integer(disposition_count(Disposition::Record))),
-        ("warn", integer(disposition_count(Disposition::Warn))),
-        ("fail", integer(disposition_count(Disposition::Fail))),
-        (
-            "introduced",
-            integer(attribution_count(Attribution::Introduced)),
-        ),
-        (
-            "pre_existing",
-            integer(attribution_count(Attribution::PreExisting)),
-        ),
-        (
-            "resolved",
-            integer(attribution_count(Attribution::Resolved)),
-        ),
-        ("unknown", integer(attribution_count(Attribution::Unknown))),
-        (
-            "not_applicable",
-            integer(attribution_count(Attribution::NotApplicable)),
-        ),
-        (
-            "debt_tolerated",
-            integer(
-                u64::try_from(
-                    findings
-                        .iter()
-                        .filter(|finding| finding.debt.is_some())
-                        .count(),
-                )
-                .unwrap_or(u64::MAX),
-            ),
-        ),
-        (
-            "waived",
-            integer(
-                u64::try_from(
-                    findings
-                        .iter()
-                        .filter(|finding| finding.waiver.is_some())
-                        .count(),
-                )
-                .unwrap_or(u64::MAX),
-            ),
-        ),
+        ("record", integer(counts.record)),
+        ("warn", integer(counts.warn)),
+        ("fail", integer(counts.fail)),
+        ("introduced", integer(counts.introduced)),
+        ("pre_existing", integer(counts.pre_existing)),
+        ("resolved", integer(counts.resolved)),
+        ("unknown", integer(counts.unknown)),
+        ("not_applicable", integer(counts.not_applicable)),
+        ("debt_tolerated", integer(counts.debt_tolerated)),
+        ("waived", integer(counts.waived)),
         ("analysis_errors", integer(0)),
-        ("unsupported_capabilities", capability_count(findings)),
+        (
+            "unsupported_capabilities",
+            integer(counts.unsupported_capabilities),
+        ),
     ]);
     Counts {
         documents,
-        references,
+        references: reference_counts(comparisons),
         findings: findings_value,
     }
 }
@@ -1498,6 +1483,7 @@ pub fn construct(
     let feedback = run_feedback_value(complete, &findings, comparisons);
     let finding_count = u64::try_from(finding_rows.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, comparisons, &findings, finding_count);
+    let (governed_claims, unattested_claims) = claim_counters(claims);
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
@@ -1523,8 +1509,8 @@ pub fn construct(
                 ("documents", counts.documents),
                 ("references", counts.references),
                 ("findings", counts.findings),
-                claim_counters(claims).0,
-                claim_counters(claims).1,
+                governed_claims,
+                unattested_claims,
             ]),
         ),
         (
@@ -1761,19 +1747,6 @@ fn governed_seeds(
     seeds
 }
 
-/// How many findings crossed the unsupported-capability boundary.
-fn capability_count(findings: &[Finding]) -> Value {
-    integer(
-        u64::try_from(
-            findings
-                .iter()
-                .filter(|finding| finding.kind() == FindingKind::UnsupportedCapability)
-                .count(),
-        )
-        .unwrap_or(u64::MAX),
-    )
-}
-
 /// The two summary claim counters: evaluated claims, and the defective
 /// subset that did not attest.
 fn claim_counters(
@@ -1797,7 +1770,7 @@ fn claim_counters(
 
 fn zero_counts(analysis_errors: u64) -> Counts {
     Counts {
-        documents: document_counts(&[], &[], 0),
+        documents: document_counts(std::iter::empty::<&DocumentRecord>(), 0),
         references: reference_counts(&[]),
         findings: object(vec![
             ("total", integer(0)),
