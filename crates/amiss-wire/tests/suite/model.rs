@@ -128,4 +128,5 @@ fn a_digest_debugs_as_it_displays() {
     let shown = format!("{digest}");
     assert_eq!(format!("{digest:?}"), shown);
     assert!(shown.starts_with("sha256:") && shown.len() == 71, "{shown}");
+    assert_eq!(amiss_wire::digest::Digest::from_wire(&shown), Some(digest));
 }
