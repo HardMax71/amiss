@@ -93,7 +93,7 @@ fn main() -> ExitCode {
             match machine_refusal(&codes) {
                 Ok(envelope) => emit(&mut reserve, &codequality::issues(&envelope)),
                 Err(code) => {
-                    emit(&mut reserve, &amiss_wire::json::Value::Array(Vec::new()));
+                    emit(&mut reserve, &amiss_wire::json::Value::array(Vec::new()));
                     eprintln!("amiss: {}", code.as_str());
                 }
             }

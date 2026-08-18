@@ -29,7 +29,7 @@ fn strings(value: &Value) -> Vec<String> {
             let Value::String(s) = item else {
                 panic!("not a string");
             };
-            s.clone()
+            s.to_string()
         })
         .collect()
 }
@@ -61,7 +61,10 @@ fn builds_the_fatal_incomplete_envelope() {
     let Value::String(payload_digest) = member(&envelope, "payload_digest") else {
         panic!("payload_digest is not a string");
     };
-    assert_eq!(*payload_digest, hj(PAYLOAD_SCHEMA, payload).to_string());
+    assert_eq!(
+        payload_digest.as_ref(),
+        hj(PAYLOAD_SCHEMA, payload).to_string()
+    );
 
     let evaluation = member(payload, "evaluation");
     assert_eq!(member(evaluation, "request_digest"), &Value::Null);
@@ -75,10 +78,7 @@ fn builds_the_fatal_incomplete_envelope() {
         vec!["not-parsed"]
     );
     let feedback = member(payload, "feedback");
-    assert_eq!(
-        member(feedback, "status"),
-        &Value::String("unavailable".to_owned())
-    );
+    assert_eq!(member(feedback, "status"), &Value::string("unavailable"));
     let Value::Object(feedback_members) = feedback else {
         panic!("feedback is not an object");
     };
@@ -89,7 +89,7 @@ fn builds_the_fatal_incomplete_envelope() {
     };
     let codes: Vec<String> = errors
         .iter()
-        .map(|row| strings(&Value::Array(vec![member(row, "code").clone()])).remove(0))
+        .map(|row| strings(&Value::array(vec![member(row, "code").clone()])).remove(0))
         .collect();
     assert_eq!(
         codes,
@@ -97,10 +97,7 @@ fn builds_the_fatal_incomplete_envelope() {
         "error rows sort by code bytes"
     );
     for row in errors {
-        assert_eq!(
-            member(row, "phase"),
-            &Value::String("invocation".to_owned())
-        );
+        assert_eq!(member(row, "phase"), &Value::string("invocation"));
         assert_eq!(member(row, "path"), &Value::Null);
         assert_eq!(member(row, "resource"), &Value::Null);
         assert_eq!(member(row, "configured_limit"), &Value::Null);
@@ -109,10 +106,7 @@ fn builds_the_fatal_incomplete_envelope() {
 
     let result = member(payload, "result");
     assert_eq!(member(result, "complete"), &Value::Bool(false));
-    assert_eq!(
-        member(result, "status"),
-        &Value::String("incomplete".to_owned())
-    );
+    assert_eq!(member(result, "status"), &Value::string("incomplete"));
     assert_eq!(member(result, "exit_code"), &Value::Integer(2));
     assert_eq!(member(result, "finding_count"), &Value::Integer(0));
     assert_eq!(member(result, "error_count"), &Value::Integer(2));
@@ -124,20 +118,20 @@ fn builds_the_fatal_incomplete_envelope() {
         &Value::Integer(0)
     );
     for detail in ["documents", "observations", "findings"] {
-        assert_eq!(member(payload, detail), &Value::Array(Vec::new()));
+        assert_eq!(member(payload, detail), &Value::array(Vec::new()));
     }
 
     let engine_block = member(payload, "engine");
     assert_eq!(
         member(engine_block, "engine_contract"),
-        &Value::String("amiss/scanner".to_owned())
+        &Value::string("amiss/scanner")
     );
     let Value::Array(adapters) = member(engine_block, "adapters") else {
         panic!("adapters is not an array");
     };
     let ids: Vec<String> = adapters
         .iter()
-        .map(|row| strings(&Value::Array(vec![member(row, "adapter_id").clone()])).remove(0))
+        .map(|row| strings(&Value::array(vec![member(row, "adapter_id").clone()])).remove(0))
         .collect();
     assert_eq!(
         ids,
@@ -170,7 +164,7 @@ fn orders_reasons_and_errors_independently() {
     };
     let codes: Vec<String> = errors
         .iter()
-        .map(|row| strings(&Value::Array(vec![member(row, "code").clone()])).remove(0))
+        .map(|row| strings(&Value::array(vec![member(row, "code").clone()])).remove(0))
         .collect();
     assert_eq!(
         codes,
@@ -291,15 +285,15 @@ fn the_fatal_serializer_writes_the_canonical_wire_exactly() {
             .map(|index| {
                 (
                     format!("k{index}"),
-                    Value::String("v".repeat(length / 4 + 1)),
+                    Value::string("v".repeat(length / 4 + 1)),
                 )
             })
             .chain(std::iter::once((
                 "big".to_owned(),
-                Value::String("x".repeat(length)),
+                Value::string("x".repeat(length)),
             )))
             .collect();
-        let envelope = Value::Object(members);
+        let envelope = Value::object(members);
         let mut expected = canonical(&envelope);
         expected.push(b'\n');
 

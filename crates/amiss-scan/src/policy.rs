@@ -798,18 +798,18 @@ pub fn protected_state(
         return Ok(ProtectedState::Unsupported);
     }
     let raw = amiss_wire::digest::hb(crate::resolve::RAW_EVIDENCE_DOMAIN, &object.body);
-    let descriptor = amiss_wire::json::Value::Object(vec![
+    let descriptor = amiss_wire::json::Value::object(vec![
         (
             "git_mode".to_owned(),
-            amiss_wire::json::Value::String(mode.as_str().to_owned()),
+            amiss_wire::json::Value::string(mode.as_str().to_owned()),
         ),
         (
             "path".to_owned(),
-            amiss_wire::json::Value::String(path.to_owned()),
+            amiss_wire::json::Value::string(path.to_owned()),
         ),
         (
             "raw_digest".to_owned(),
-            amiss_wire::json::Value::String(raw.to_string()),
+            amiss_wire::json::Value::string(raw.to_string()),
         ),
     ]);
     Ok(ProtectedState::Present(amiss_wire::digest::hj(

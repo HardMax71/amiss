@@ -22,11 +22,11 @@ fn the_pinned_vectors_decide_recognition() {
     };
     assert_eq!(
         field("schema"),
-        Some(&Value::String("amiss/lfs-pointer-vectors".to_owned()))
+        Some(&Value::string("amiss/lfs-pointer-vectors"))
     );
     assert_eq!(
         field("contract"),
-        Some(&Value::String("lfs-pointer-conservative".to_owned()))
+        Some(&Value::string("lfs-pointer-conservative"))
     );
     let Some((_, Value::Array(cases))) = root.iter().find(|(key, _)| key == "cases") else {
         panic!("vectors hold cases")

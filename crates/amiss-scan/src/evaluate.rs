@@ -152,11 +152,11 @@ pub struct FindingFact {
 
 impl FindingFact {
     pub(crate) fn new(key: &FindingKey, evidence: Value) -> Self {
-        let value = Value::Object(vec![
-            ("schema".to_owned(), Value::String(FACT_SCHEMA.to_owned())),
+        let value = Value::object(vec![
+            ("schema".to_owned(), Value::string(FACT_SCHEMA.to_owned())),
             (
                 "finding_kind".to_owned(),
-                Value::String(key.kind().as_str().to_owned()),
+                Value::string(key.kind().as_str().to_owned()),
             ),
             ("key_input".to_owned(), key.to_value()),
             ("evidence".to_owned(), evidence),
@@ -255,14 +255,14 @@ fn key_digest(input: &Value) -> Digest {
 }
 
 fn key_value(kind: FindingKind, scope: &FindingKeyScope) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "schema".to_owned(),
-            Value::String(FINDING_KEY_SCHEMA.to_owned()),
+            Value::string(FINDING_KEY_SCHEMA.to_owned()),
         ),
         (
             "finding_kind".to_owned(),
-            Value::String(kind.as_str().to_owned()),
+            Value::string(kind.as_str().to_owned()),
         ),
         ("scope".to_owned(), scope_value(scope)),
     ])
@@ -295,13 +295,13 @@ fn reference_scope(observation: &Observation) -> FindingKeyScope {
 
 fn scope_value(scope: &FindingKeyScope) -> Value {
     match scope {
-        FindingKeyScope::Document(path) => Value::Object(vec![
-            ("kind".to_owned(), Value::String("document".to_owned())),
+        FindingKeyScope::Document(path) => Value::object(vec![
+            ("kind".to_owned(), Value::string("document".to_owned())),
             ("document".to_owned(), path.to_value()),
         ]),
-        FindingKeyScope::Observation(id) => Value::Object(vec![
-            ("kind".to_owned(), Value::String("observation".to_owned())),
-            ("observation_id".to_owned(), Value::String(id.to_string())),
+        FindingKeyScope::Observation(id) => Value::object(vec![
+            ("kind".to_owned(), Value::string("observation".to_owned())),
+            ("observation_id".to_owned(), Value::string(id.to_string())),
         ]),
         FindingKeyScope::Reference {
             document,
@@ -311,29 +311,29 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
             query_digest,
             fragment_digest,
             source_projection_digest,
-        } => Value::Object(vec![
-            ("kind".to_owned(), Value::String("reference".to_owned())),
+        } => Value::object(vec![
+            ("kind".to_owned(), Value::string("reference".to_owned())),
             ("document".to_owned(), document.to_value()),
             (
                 "source_construct".to_owned(),
-                Value::String(source_construct.as_str().to_owned()),
+                Value::string(source_construct.as_str().to_owned()),
             ),
             (
                 "normalized_target_intent".to_owned(),
-                Value::Object(vec![
+                Value::object(vec![
                     (
                         "kind".to_owned(),
-                        Value::String("repository-path".to_owned()),
+                        Value::string("repository-path".to_owned()),
                     ),
                     (
                         "path".to_owned(),
                         repository_path
                             .as_ref()
-                            .map_or_else(|| Value::String(String::new()), RepoPath::to_value),
+                            .map_or_else(|| Value::string(String::new()), RepoPath::to_value),
                     ),
                     (
                         "target_kind".to_owned(),
-                        Value::String(
+                        Value::string(
                             target_kind
                                 .map_or("either", amiss_wire::controls::TargetKind::as_str)
                                 .to_owned(),
@@ -342,33 +342,33 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
                     (
                         "query_digest".to_owned(),
                         query_digest
-                            .map_or(Value::Null, |digest| Value::String(digest.to_string())),
+                            .map_or(Value::Null, |digest| Value::string(digest.to_string())),
                     ),
                     (
                         "fragment_digest".to_owned(),
                         fragment_digest
-                            .map_or(Value::Null, |digest| Value::String(digest.to_string())),
+                            .map_or(Value::Null, |digest| Value::string(digest.to_string())),
                     ),
                 ]),
             ),
             (
                 "occurrence".to_owned(),
-                Value::Object(vec![
+                Value::object(vec![
                     (
                         "kind".to_owned(),
-                        Value::String("source-projection".to_owned()),
+                        Value::string("source-projection".to_owned()),
                     ),
                     (
                         "source_projection_digest".to_owned(),
-                        Value::String(source_projection_digest.to_string()),
+                        Value::string(source_projection_digest.to_string()),
                     ),
                 ]),
             ),
         ]),
-        FindingKeyScope::Control { path, rule_id } => Value::Object(vec![
-            ("kind".to_owned(), Value::String("control".to_owned())),
+        FindingKeyScope::Control { path, rule_id } => Value::object(vec![
+            ("kind".to_owned(), Value::string("control".to_owned())),
             ("control_path".to_owned(), nullable_path(path.as_ref())),
-            ("rule_id".to_owned(), Value::String(rule_id.clone())),
+            ("rule_id".to_owned(), Value::string(rule_id.clone())),
         ]),
     }
 }
@@ -408,7 +408,7 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
                     (
                         "near",
                         near.as_ref()
-                            .map_or(Value::Null, |anchor| Value::String(anchor.clone())),
+                            .map_or(Value::Null, |anchor| Value::string(anchor.clone())),
                     ),
                 ],
             ),
@@ -450,18 +450,18 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
 
 fn resolution_object(kind: &str, fields: Vec<(&str, Value)>) -> Value {
     let mut members = Vec::with_capacity(fields.len().saturating_add(1));
-    members.push(("kind".to_owned(), Value::String(kind.to_owned())));
+    members.push(("kind".to_owned(), Value::string(kind.to_owned())));
     members.extend(
         fields
             .into_iter()
             .map(|(name, value)| (name.to_owned(), value)),
     );
-    Value::Object(members)
+    Value::object(members)
 }
 
 fn reasoned_resolution(kind: &str, reason: &str, fields: Vec<(&str, Value)>) -> Value {
     let mut fields = fields;
-    fields.insert(0, ("reason", Value::String(reason.to_owned())));
+    fields.insert(0, ("reason", Value::string(reason.to_owned())));
     resolution_object(kind, fields)
 }
 
@@ -502,10 +502,10 @@ fn unsupported_semantics_value(kind: &str, semantics: &UnsupportedSemantics<Repo
 
 fn target_value(target: &Target<RepoPath>) -> Value {
     match target {
-        Target::Tree { path } => Value::Object(vec![
+        Target::Tree { path } => Value::object(vec![
             (
                 "kind".to_owned(),
-                Value::String(target.discriminant().as_ref().to_owned()),
+                Value::string(target.discriminant().as_ref().to_owned()),
             ),
             ("path".to_owned(), path.to_value()),
         ]),
@@ -514,15 +514,15 @@ fn target_value(target: &Target<RepoPath>) -> Value {
 }
 
 fn blob_target_value(blob: &BlobTarget<RepoPath>) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "kind".to_owned(),
-            Value::String(TargetTag::Blob.as_ref().to_owned()),
+            Value::string(TargetTag::Blob.as_ref().to_owned()),
         ),
         ("path".to_owned(), blob.path.to_value()),
         (
             "mode".to_owned(),
-            Value::String(blob.mode.as_ref().to_owned()),
+            Value::string(blob.mode.as_ref().to_owned()),
         ),
         ("content".to_owned(), blob_content_value(blob.content)),
     ])
@@ -533,28 +533,28 @@ fn blob_content_value(content: BlobContent) -> Value {
         BlobContent::Available {
             raw_digest,
             projection_digest,
-        } => Value::Object(vec![
+        } => Value::object(vec![
             (
                 "kind".to_owned(),
-                Value::String(content.discriminant().as_ref().to_owned()),
+                Value::string(content.discriminant().as_ref().to_owned()),
             ),
             (
                 "raw_digest".to_owned(),
-                Value::String(raw_digest.to_string()),
+                Value::string(raw_digest.to_string()),
             ),
             (
                 "projection_digest".to_owned(),
-                Value::String(projection_digest.to_string()),
+                Value::string(projection_digest.to_string()),
             ),
         ]),
-        BlobContent::LfsPointer { raw_digest } => Value::Object(vec![
+        BlobContent::LfsPointer { raw_digest } => Value::object(vec![
             (
                 "kind".to_owned(),
-                Value::String(content.discriminant().as_ref().to_owned()),
+                Value::string(content.discriminant().as_ref().to_owned()),
             ),
             (
                 "raw_digest".to_owned(),
-                Value::String(raw_digest.to_string()),
+                Value::string(raw_digest.to_string()),
             ),
         ]),
     }
@@ -562,16 +562,16 @@ fn blob_content_value(content: BlobContent) -> Value {
 
 fn version_scope_value(scope: &VersionScope<RepoPath>) -> Value {
     match scope {
-        VersionScope::KnownPath { path } => Value::Object(vec![
+        VersionScope::KnownPath { path } => Value::object(vec![
             (
                 "kind".to_owned(),
-                Value::String(scope.discriminant().as_ref().to_owned()),
+                Value::string(scope.discriminant().as_ref().to_owned()),
             ),
             ("path".to_owned(), path.to_value()),
         ]),
-        VersionScope::UnknownPath => Value::Object(vec![(
+        VersionScope::UnknownPath => Value::object(vec![(
             "kind".to_owned(),
-            Value::String(scope.discriminant().as_ref().to_owned()),
+            Value::string(scope.discriminant().as_ref().to_owned()),
         )]),
     }
 }
@@ -579,8 +579,8 @@ fn version_scope_value(scope: &VersionScope<RepoPath>) -> Value {
 fn reference_fact(key: &FindingKey, observation: &Observation, multiplicity: u64) -> FindingFact {
     FindingFact::new(
         key,
-        Value::Object(vec![
-            ("kind".to_owned(), Value::String("reference".to_owned())),
+        Value::object(vec![
+            ("kind".to_owned(), Value::string("reference".to_owned())),
             ("resolution".to_owned(), resolution_value(observation)),
             (
                 "occurrence_multiplicity".to_owned(),
@@ -834,28 +834,28 @@ fn control_fact_finding(
 /// digests.
 fn governed_finding(seed: &GovernedSeed, profile: Profile) -> Finding {
     let rule_id = "unsupported/governed-claim";
-    let evidence = Value::Object(vec![
-        ("kind".to_owned(), Value::String("control".to_owned())),
+    let evidence = Value::object(vec![
+        ("kind".to_owned(), Value::string("control".to_owned())),
         ("control_path".to_owned(), seed.document.to_value()),
-        ("rule_id".to_owned(), Value::String(rule_id.to_owned())),
+        ("rule_id".to_owned(), Value::string(rule_id.to_owned())),
         ("base_control_state".to_owned(), Value::Null),
         ("base_control_digest".to_owned(), Value::Null),
         (
             "candidate_control_state".to_owned(),
-            Value::Object(vec![
+            Value::object(vec![
                 (
                     "schema".to_owned(),
-                    Value::String("amiss/scanner-control-state".to_owned()),
+                    Value::string("amiss/scanner-control-state".to_owned()),
                 ),
-                ("rule_id".to_owned(), Value::String(rule_id.to_owned())),
+                ("rule_id".to_owned(), Value::string(rule_id.to_owned())),
                 (
                     "path".to_owned(),
                     seed.document
                         .as_str()
-                        .map_or(Value::Null, |path| Value::String(path.to_owned())),
+                        .map_or(Value::Null, |path| Value::string(path.to_owned())),
                 ),
                 ("sources".to_owned(), sources_value(&seed.sources)),
-                ("state".to_owned(), Value::String("unsupported".to_owned())),
+                ("state".to_owned(), Value::string("unsupported".to_owned())),
             ]),
         ),
         ("candidate_control_digest".to_owned(), Value::Null),
@@ -875,18 +875,18 @@ fn governed_finding(seed: &GovernedSeed, profile: Profile) -> Finding {
 /// The sorted distinct source digests with their multiplicities, in the
 /// wire's control-source shape.
 fn sources_value(sources: &[(Digest, u64)]) -> Value {
-    Value::Array(
+    Value::array(
         sources
             .iter()
             .map(|(source_digest, multiplicity)| {
-                Value::Object(vec![
+                Value::object(vec![
                     (
                         "multiplicity".to_owned(),
                         Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
                     ),
                     (
                         "digest".to_owned(),
-                        Value::String(source_digest.to_string()),
+                        Value::string(source_digest.to_string()),
                     ),
                 ])
             })
@@ -1012,10 +1012,10 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
 /// evidence family.
 fn claim_finding(group: &ClaimGroup, profile: Profile) -> Finding {
     let rule_id = format!("claim/value/{}", group.name);
-    let evidence = Value::Object(vec![
-        ("kind".to_owned(), Value::String("claim".to_owned())),
-        ("claim_kind".to_owned(), Value::String("value".to_owned())),
-        ("name".to_owned(), Value::String(group.name.clone())),
+    let evidence = Value::object(vec![
+        ("kind".to_owned(), Value::string("claim".to_owned())),
+        ("claim_kind".to_owned(), Value::string("value".to_owned())),
+        ("name".to_owned(), Value::string(group.name.clone())),
         ("target_path".to_owned(), group.target_path.to_value()),
         (
             "line".to_owned(),
@@ -1023,17 +1023,17 @@ fn claim_finding(group: &ClaimGroup, profile: Profile) -> Finding {
         ),
         (
             "expected_digest".to_owned(),
-            Value::String(group.expected_digest.to_string()),
+            Value::string(group.expected_digest.to_string()),
         ),
         (
             "observed".to_owned(),
-            Value::String(group.observed.to_owned()),
+            Value::string(group.observed.to_owned()),
         ),
         (
             "observed_digest".to_owned(),
             group
                 .observed_digest
-                .map_or(Value::Null, |value| Value::String(value.to_string())),
+                .map_or(Value::Null, |value| Value::string(value.to_string())),
         ),
         ("sources".to_owned(), sources_value(&group.sources)),
     ]);
@@ -1148,10 +1148,10 @@ pub fn evaluate_with_policy(
 }
 
 fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "object_format".to_owned(),
-            Value::String(
+            Value::string(
                 match tree.object_format() {
                     amiss_wire::model::ObjectFormat::Sha1 => "sha1",
                     amiss_wire::model::ObjectFormat::Sha256 => "sha256",
@@ -1161,7 +1161,7 @@ fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
         ),
         (
             "tree_oid".to_owned(),
-            Value::String(tree.tree_oid().to_owned()),
+            Value::string(tree.tree_oid().to_owned()),
         ),
     ])
 }
@@ -1171,15 +1171,15 @@ fn debt_diagnostic(
     context: &crate::policy::DebtContext,
     current_fact_digest: Digest,
 ) -> Value {
-    Value::Object(vec![
-        ("kind".to_owned(), Value::String("debt".to_owned())),
+    Value::object(vec![
+        ("kind".to_owned(), Value::string("debt".to_owned())),
         (
             "debt_id".to_owned(),
-            Value::String(item.debt_id.as_str().to_owned()),
+            Value::string(item.debt_id.as_str().to_owned()),
         ),
         (
             "debt_snapshot_digest".to_owned(),
-            Value::String(context.digest.to_string()),
+            Value::string(context.digest.to_string()),
         ),
         (
             "adoption_tree".to_owned(),
@@ -1187,24 +1187,24 @@ fn debt_diagnostic(
         ),
         (
             "accepted_fact_digest".to_owned(),
-            Value::String(item.accepted_fact_digest.to_string()),
+            Value::string(item.accepted_fact_digest.to_string()),
         ),
         (
             "current_fact_digest".to_owned(),
-            Value::String(current_fact_digest.to_string()),
+            Value::string(current_fact_digest.to_string()),
         ),
         (
             "owner".to_owned(),
-            Value::String(item.owner.as_str().to_owned()),
+            Value::string(item.owner.as_str().to_owned()),
         ),
-        ("reason".to_owned(), Value::String(item.reason.clone())),
+        ("reason".to_owned(), Value::string(item.reason.clone())),
         (
             "created_at".to_owned(),
-            Value::String(item.created_at.as_str().to_owned()),
+            Value::string(item.created_at.as_str().to_owned()),
         ),
         (
             "expires_at".to_owned(),
-            Value::String(item.expires_at.as_str().to_owned()),
+            Value::string(item.expires_at.as_str().to_owned()),
         ),
     ])
 }
@@ -1214,15 +1214,15 @@ fn waiver_diagnostic(
     bundle_digest: Digest,
     current_fact_digest: Option<Digest>,
 ) -> Value {
-    Value::Object(vec![
-        ("kind".to_owned(), Value::String("waiver".to_owned())),
+    Value::object(vec![
+        ("kind".to_owned(), Value::string("waiver".to_owned())),
         (
             "waiver_id".to_owned(),
-            Value::String(item.waiver_id.as_str().to_owned()),
+            Value::string(item.waiver_id.as_str().to_owned()),
         ),
         (
             "waiver_bundle_digest".to_owned(),
-            Value::String(bundle_digest.to_string()),
+            Value::string(bundle_digest.to_string()),
         ),
         (
             "candidate_tree".to_owned(),
@@ -1230,40 +1230,40 @@ fn waiver_diagnostic(
         ),
         (
             "finding_key".to_owned(),
-            Value::String(item.finding_key.to_string()),
+            Value::string(item.finding_key.to_string()),
         ),
         (
             "authorized_fact_digest".to_owned(),
-            Value::String(item.authorized_fact_digest.to_string()),
+            Value::string(item.authorized_fact_digest.to_string()),
         ),
         (
             "current_fact_digest".to_owned(),
-            current_fact_digest.map_or(Value::Null, |digest| Value::String(digest.to_string())),
+            current_fact_digest.map_or(Value::Null, |digest| Value::string(digest.to_string())),
         ),
         (
             "owner".to_owned(),
-            Value::String(item.owner.as_str().to_owned()),
+            Value::string(item.owner.as_str().to_owned()),
         ),
         (
             "issuer".to_owned(),
-            Value::String(item.issuer.as_str().to_owned()),
+            Value::string(item.issuer.as_str().to_owned()),
         ),
-        ("reason".to_owned(), Value::String(item.reason.clone())),
+        ("reason".to_owned(), Value::string(item.reason.clone())),
         (
             "created_at".to_owned(),
-            Value::String(item.created_at.as_str().to_owned()),
+            Value::string(item.created_at.as_str().to_owned()),
         ),
         (
             "not_before".to_owned(),
-            Value::String(item.not_before.as_str().to_owned()),
+            Value::string(item.not_before.as_str().to_owned()),
         ),
         (
             "expires_at".to_owned(),
-            Value::String(item.expires_at.as_str().to_owned()),
+            Value::string(item.expires_at.as_str().to_owned()),
         ),
         (
             "residual_disposition".to_owned(),
-            Value::String("warn".to_owned()),
+            Value::string("warn".to_owned()),
         ),
     ])
 }
@@ -1574,17 +1574,17 @@ fn control_row(
         },
     );
     let nullable_digest = |value: Option<Digest>| {
-        value.map_or(Value::Null, |digest| Value::String(digest.to_string()))
+        value.map_or(Value::Null, |digest| Value::string(digest.to_string()))
     };
     let fact = FindingFact::new(
         &key,
-        Value::Object(vec![
-            ("kind".to_owned(), Value::String("control".to_owned())),
+        Value::object(vec![
+            ("kind".to_owned(), Value::string("control".to_owned())),
             (
                 "control_path".to_owned(),
                 nullable_path(control_path.as_ref()),
             ),
-            ("rule_id".to_owned(), Value::String(rule_id)),
+            ("rule_id".to_owned(), Value::string(rule_id)),
             ("base_control_state".to_owned(), Value::Null),
             (
                 "base_control_digest".to_owned(),

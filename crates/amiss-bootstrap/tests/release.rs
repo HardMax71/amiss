@@ -67,11 +67,11 @@ fn attempt(release: &Release, bootstrap: &[u8]) -> Result<amiss_bootstrap::Valid
 }
 
 fn string(text: &str) -> Value {
-    Value::String(text.to_owned())
+    Value::string(text)
 }
 
 fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
+    Value::object(
         members
             .into_iter()
             .map(|(key, value)| (key.to_owned(), value))
@@ -151,10 +151,12 @@ fn a_symlinked_engine_path_refuses() {
 fn edit_action_rows(value: &mut Value, edit: &impl Fn(&mut Value) -> bool) {
     match value {
         Value::Array(items) => {
-            items.retain_mut(|item| !is_action_row(item) || edit(item));
-            for item in items.iter_mut() {
+            let mut retained = std::mem::take(items).into_vec();
+            retained.retain_mut(|item| !is_action_row(item) || edit(item));
+            for item in &mut retained {
                 edit_action_rows(item, edit);
             }
+            *items = retained.into_boxed_slice();
         }
         Value::Object(members) => {
             for (_key, member) in members.iter_mut() {
@@ -222,7 +224,7 @@ fn runtime_data_off_the_action_path_is_not_a_pin() {
         };
         for (key, member) in members.iter_mut() {
             if key == "path" {
-                *member = Value::String("assets.yml".to_owned());
+                *member = Value::string("assets.yml");
             }
         }
         true

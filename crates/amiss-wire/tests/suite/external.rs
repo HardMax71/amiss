@@ -14,20 +14,11 @@ fn object(members: Vec<(&str, Value)>) -> Value {
         .map(|(key, value)| (key.to_owned(), value))
         .collect();
     members.sort_by(|left, right| left.0.cmp(&right.0));
-    Value::Object(members)
+    Value::object(members)
 }
 
 fn string(value: &str) -> Value {
-    Value::String(value.to_owned())
-}
-
-fn members(value: Value) -> Vec<(String, Value)> {
-    if let Value::Object(members) = value {
-        Some(members)
-    } else {
-        None
-    }
-    .expect("an object value")
+    Value::string(value)
 }
 
 fn field<'v>(value: &'v Value, name: &str) -> &'v Value {
@@ -44,7 +35,7 @@ fn field<'v>(value: &'v Value, name: &str) -> &'v Value {
 
 fn array(value: &Value) -> &[Value] {
     if let Value::Array(items) = value {
-        Some(items.as_slice())
+        Some(items)
     } else {
         None
     }
@@ -53,7 +44,7 @@ fn array(value: &Value) -> &[Value] {
 
 fn text(value: &Value) -> &str {
     if let Value::String(text) = value {
-        Some(text.as_str())
+        Some(text)
     } else {
         None
     }
@@ -100,7 +91,7 @@ fn report(observations: Vec<Value>) -> Value {
                 ("mode", string("commit-pair")),
             ]),
         ),
-        ("observations", Value::Array(observations)),
+        ("observations", Value::array(observations)),
     ]);
     let digest = hj(PAYLOAD_SCHEMA, &payload);
     object(vec![
@@ -220,16 +211,21 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
 
 #[test]
 fn a_tampered_payload_is_refused() {
-    let mut envelope = members(report(Vec::new()));
+    let Value::Object(envelope) = report(Vec::new()) else {
+        panic!("the report is an object");
+    };
+    let mut envelope = envelope.into_vec();
     for (key, value) in &mut envelope {
         if key == "payload"
-            && let Value::Object(payload) = value
+            && let Value::Object(payload) = std::mem::replace(value, Value::Null)
         {
+            let mut payload = payload.into_vec();
             payload.retain(|(name, _)| name != "result");
+            *value = Value::object(payload);
         }
     }
     assert_eq!(
-        plan(&Value::Object(envelope), "0.0.0", &sample_digest()),
+        plan(&Value::object(envelope), "0.0.0", &sample_digest()),
         Err(PlanDefect::DigestMismatch)
     );
 }
@@ -239,7 +235,7 @@ fn an_incomplete_report_is_refused() {
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
         ("result", object(vec![("complete", Value::Bool(false))])),
-        ("observations", Value::Array(Vec::new())),
+        ("observations", Value::array(Vec::new())),
     ]);
     let digest = hj(PAYLOAD_SCHEMA, &payload);
     let envelope = object(vec![
@@ -383,7 +379,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
                 ),
             ]),
         ),
-        ("observations", Value::Array(introduced(destination))),
+        ("observations", Value::array(introduced(destination))),
     ]);
     let digest = hj(PAYLOAD_SCHEMA, &payload);
     let envelope = object(vec![
@@ -413,7 +409,7 @@ fn evidence(plan: &Value, rows: Vec<Value>) -> Value {
                 ("version", string("0.0.0")),
             ]),
         ),
-        ("rows", Value::Array(rows)),
+        ("rows", Value::array(rows)),
     ])
 }
 
@@ -582,12 +578,14 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
             Err(AssessDefect::UnboundEvidence)
         );
     }
-    let mut foreign = evidence(&plan, Vec::new());
-    if let Value::Object(members) = &mut foreign {
-        members.retain(|(key, _)| key != "plan_payload_digest");
-        members.push(("plan_payload_digest".to_owned(), string(&sample_digest())));
-        members.sort_by(|left, right| left.0.cmp(&right.0));
-    }
+    let Value::Object(members) = evidence(&plan, Vec::new()) else {
+        panic!("the evidence is an object");
+    };
+    let mut members = members.into_vec();
+    members.retain(|(key, _)| key != "plan_payload_digest");
+    members.push(("plan_payload_digest".to_owned(), string(&sample_digest())));
+    members.sort_by(|left, right| left.0.cmp(&right.0));
+    let foreign = Value::object(members);
     assert_eq!(
         assess(&plan, &foreign, "0.0.0", &sample_digest()),
         Err(AssessDefect::UnboundEvidence)
@@ -632,14 +630,17 @@ fn malformed_evidence_rows_are_refused() {
 #[test]
 fn the_judge_is_no_laxer_than_its_contracts() {
     let plan = planned(introduced("https://a.example/x"));
-    let mut unnamed = members(evidence(&plan, Vec::new()));
+    let Value::Object(unnamed) = evidence(&plan, Vec::new()) else {
+        panic!("the evidence is an object");
+    };
+    let mut unnamed = unnamed.into_vec();
     for (key, value) in &mut unnamed {
         if key == "producer" {
             *value = object(vec![("name", string("p")), ("version", string(""))]);
         }
     }
     assert_eq!(
-        assess(&plan, &Value::Object(unnamed), "0.0.0", &sample_digest()),
+        assess(&plan, &Value::object(unnamed), "0.0.0", &sample_digest()),
         Err(AssessDefect::NotEvidence)
     );
 
@@ -653,8 +654,8 @@ fn the_judge_is_no_laxer_than_its_contracts() {
             "report",
             object(vec![("payload_digest", string(&sample_digest()))]),
         ),
-        ("introduced", Value::Array(vec![broken_row])),
-        ("removed", Value::Array(Vec::new())),
+        ("introduced", Value::array(vec![broken_row])),
+        ("removed", Value::array(Vec::new())),
         ("retained_count", Value::Integer(0)),
     ]);
     let digest = hj(PLAN_PAYLOAD_SCHEMA, &payload);
@@ -724,9 +725,12 @@ fn the_assessment_binds_the_whole_chain() {
 
 #[test]
 fn an_external_occurrence_missing_its_promise_is_refused() {
-    let mut occurrence = members(external_occurrence("docs/a.md", "https://x.example/a"));
+    let Value::Object(occurrence) = external_occurrence("docs/a.md", "https://x.example/a") else {
+        panic!("the occurrence is an object");
+    };
+    let mut occurrence = occurrence.into_vec();
     occurrence.retain(|(name, _)| name != "external_destination");
-    let source = report(vec![row(Value::Null, Value::Object(occurrence))]);
+    let source = report(vec![row(Value::Null, Value::object(occurrence))]);
     assert_eq!(
         plan(&source, "0.0.0", &sample_digest()),
         Err(PlanDefect::MalformedExternal)

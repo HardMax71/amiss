@@ -14,12 +14,12 @@ fn the_profile_vocabulary_is_the_closed_triple() {
         ("enforce", Profile::Enforce),
     ] {
         assert_eq!(
-            Profile::decode("$.minimum_profile", Value::String(name.to_owned())),
+            Profile::decode("$.minimum_profile", Value::string(name.to_owned())),
             Ok(profile),
             "{name}"
         );
     }
-    assert!(Profile::decode("$.minimum_profile", Value::String("enforced".to_owned())).is_err());
+    assert!(Profile::decode("$.minimum_profile", Value::string("enforced".to_owned())).is_err());
 }
 
 /// Every platform in the closed table answers to its own spelling, since a
@@ -38,7 +38,7 @@ fn the_platform_vocabulary_is_the_closed_six() {
     for platform in table {
         let name = platform.as_str();
         assert_eq!(
-            ConstraintPlatform::decode("$.selected_platform", Value::String(name.to_owned())),
+            ConstraintPlatform::decode("$.selected_platform", Value::string(name.to_owned())),
             Ok(platform),
             "{name}"
         );
@@ -46,7 +46,7 @@ fn the_platform_vocabulary_is_the_closed_six() {
     let spellings: BTreeSet<&str> = table.iter().map(|platform| platform.as_str()).collect();
     assert_eq!(spellings.len(), table.len(), "no two share a spelling");
     assert!(
-        ConstraintPlatform::decode("$.selected_platform", Value::String("linux-x86".to_owned()))
+        ConstraintPlatform::decode("$.selected_platform", Value::string("linux-x86".to_owned()))
             .is_err()
     );
 }

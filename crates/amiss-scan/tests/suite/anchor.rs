@@ -28,7 +28,7 @@ fn members(value: &Value, label: &str) -> Vec<(String, Value)> {
     let Value::Object(members) = value else {
         panic!("{label} is an object")
     };
-    members.clone()
+    members.to_vec()
 }
 
 fn member(value: &Value, key: &str, label: &str) -> Value {
@@ -53,7 +53,7 @@ fn text(value: &Value, key: &str, label: &str) -> String {
     let Value::String(found) = found else {
         panic!("{label}.{key} is a string, found {found:?}")
     };
-    found
+    found.into_string()
 }
 
 fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
@@ -61,7 +61,7 @@ fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
     let Value::Array(found) = found else {
         panic!("{label}.{key} is an array, found {found:?}")
     };
-    found
+    found.into_vec()
 }
 
 fn headings(source: &str) -> (Vec<Heading>, Vec<String>, Vec<String>) {
@@ -110,7 +110,7 @@ fn the_published_vectors_drive_every_rule() {
             let published = identities(rule, &headings);
             let found = member(&expected, rule.name, &format!("case {id}"));
             let want = if let Value::String(identity) = &found {
-                vec![identity.clone()]
+                vec![identity.to_string()]
             } else if found == Value::Null {
                 Vec::new()
             } else {
@@ -162,7 +162,7 @@ fn every_rendered_document_reproduces_its_identities() {
             Some(_) | None => Adapter::Markdown,
         };
         let (headings, anchors, declared) = parsed(adapter, &source);
-        if optional(document, "covers") == Some(Value::String("union".to_owned())) {
+        if optional(document, "covers") == Some(Value::string("union")) {
             let union = anchor_set(&headings, &anchors, &declared);
             for identity in &want {
                 assert!(

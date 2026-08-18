@@ -409,7 +409,7 @@ pub fn assess(
         ("producer", producer.clone()),
         (
             "verdicts",
-            Value::Array(verdict_rows(introduced, &observed)),
+            Value::Array(verdict_rows(introduced, &observed).into_boxed_slice()),
         ),
     ]);
     let digest = hj(ASSESSMENT_PAYLOAD_SCHEMA, &assessment);
@@ -495,7 +495,7 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
                     Some(*status)
                 }
                 (None | Some(Value::Null), Some(Value::String(failure)))
-                    if matches!(failure.as_str(), "dns" | "tls" | "timeout" | "refused") =>
+                    if matches!(failure.as_ref(), "dns" | "tls" | "timeout" | "refused") =>
                 {
                     None
                 }
@@ -503,7 +503,7 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
             };
             let retarget = match row.member("final_destination") {
                 Some(Value::String(final_destination)) if !final_destination.is_empty() => {
-                    Some(final_destination.clone())
+                    Some(final_destination.to_string())
                 }
                 None | Some(Value::Null) => None,
                 Some(_) => return Err(AssessDefect::MalformedEvidence),
@@ -526,7 +526,7 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
             };
             let tail = match (repository, row.member("tail")) {
                 (_, None | Some(Value::Null)) => None,
-                (Repository::Readable, Some(Value::String(tail))) => match tail.as_str() {
+                (Repository::Readable, Some(Value::String(tail))) => match tail.as_ref() {
                     "resolved" => Some(Tail::Resolved),
                     "path-missing" => Some(Tail::PathMissing),
                     "revision-missing" => Some(Tail::RevisionMissing),
@@ -623,7 +623,7 @@ pub fn evidence_file(
                 ("version", string(producer_version)),
             ]),
         ),
-        ("rows", Value::Array(rows)),
+        ("rows", Value::Array(rows.into_boxed_slice())),
     ]))
 }
 
@@ -686,9 +686,9 @@ fn object(members: Vec<(&str, Value)>) -> Value {
         .map(|(key, value)| (key.to_owned(), value))
         .collect();
     members.sort_by(|left, right| left.0.cmp(&right.0));
-    Value::Object(members)
+    Value::Object(members.into_boxed_slice())
 }
 
 fn string(value: &str) -> Value {
-    Value::String(value.to_owned())
+    Value::String(value.into())
 }

@@ -132,11 +132,13 @@ fn set(value: &mut Value, key: &str, member: Value) {
         .iter()
         .position(|(name, _)| name.as_str() > key)
         .unwrap_or(members.len());
-    members.insert(at, (key.to_owned(), member));
+    let mut expanded = std::mem::take(members).into_vec();
+    expanded.insert(at, (key.to_owned(), member));
+    *members = expanded.into_boxed_slice();
 }
 
 fn string(raw: &str) -> Value {
-    Value::String(raw.to_owned())
+    Value::string(raw)
 }
 
 /// One run the wrapper can settle end to end: a pre-acquired repository, a
@@ -194,7 +196,7 @@ fn bind_statement(
         .trusted_time
         .as_mut()
         .expect("supplied time");
-    let mut statement = Value::Object(Vec::new());
+    let mut statement = Value::object(Vec::new());
     set(
         &mut statement,
         "schema",
@@ -255,7 +257,7 @@ fn bind_envelope(
         .repository
         .as_ref()
         .expect("an identity");
-    let mut repository_value = Value::Object(Vec::new());
+    let mut repository_value = Value::object(Vec::new());
     set(
         &mut repository_value,
         "host",
@@ -356,12 +358,12 @@ fn patch_controls(
 
     let controls = entry(payload, "controls");
     set(controls, "profile", string("enforce"));
-    let mut floor_echo = Value::Object(Vec::new());
+    let mut floor_echo = Value::object(Vec::new());
     set(&mut floor_echo, "status", string("verified"));
     set(&mut floor_echo, "digest", string(&floor_digest));
     set(&mut floor_echo, "trust_source", string(&floor_source));
     set(controls, "organization_floor", floor_echo);
-    let mut constraint_echo = Value::Object(Vec::new());
+    let mut constraint_echo = Value::object(Vec::new());
     set(&mut constraint_echo, "status", string("verified"));
     set(&mut constraint_echo, "descriptor", constraint_value);
     set(
@@ -375,7 +377,7 @@ fn patch_controls(
         string(&constraint_source),
     );
     set(controls, "execution_constraint", constraint_echo);
-    let mut time_echo = Value::Object(Vec::new());
+    let mut time_echo = Value::object(Vec::new());
     set(&mut time_echo, "status", string("verified"));
     set(
         &mut time_echo,
@@ -585,9 +587,9 @@ fn symlinked_scratch(staged: &Release) {
 /// request is exactly `target` bytes long.
 fn inflate_controls(run: &mut Run, target: u64) {
     let padded = |length: usize| {
-        Value::Object(vec![(
+        Value::object(vec![(
             "padding".to_owned(),
-            Value::String("x".repeat(length)),
+            Value::string("x".repeat(length)),
         )])
     };
     let floor = run

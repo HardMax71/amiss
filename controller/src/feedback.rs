@@ -33,7 +33,7 @@ fn feedback_lines(report: Option<&[u8]>) -> Vec<String> {
         return Vec::new();
     }
     let items = match member(feedback, "items") {
-        Some(Value::Array(rows)) => rows.as_slice(),
+        Some(Value::Array(rows)) => rows.as_ref(),
         Some(
             Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Object(_),
         )
@@ -79,7 +79,7 @@ fn target_atom(item: &Value) -> String {
     match member(item, "target") {
         Some(Value::String(path)) => atom(path),
         Some(Value::Object(members)) => {
-            if let [(key, Value::String(hex))] = members.as_slice()
+            if let [(key, Value::String(hex))] = members.as_ref()
                 && key == "bytes_hex"
             {
                 atom_bytes(&decode_hex(hex))

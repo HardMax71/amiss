@@ -1,16 +1,22 @@
 use amiss_wire::digest::{hj, hj_with_length};
 use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
 
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn an_owned_value_uses_three_machine_words() {
+    assert_eq!(size_of::<Value>(), 24);
+}
+
 #[test]
 fn digest_counting_matches_the_independent_operations() {
-    let value = Value::Object(vec![
+    let value = Value::object(vec![
         (
             "escaped".to_owned(),
-            Value::String("q\" b\\ n\n scalar \u{1f600}".to_owned()),
+            Value::string("q\" b\\ n\n scalar \u{1f600}".to_owned()),
         ),
         (
             "nested".to_owned(),
-            Value::Array(vec![Value::Integer(42), Value::Bool(true), Value::Null]),
+            Value::array(vec![Value::Integer(42), Value::Bool(true), Value::Null]),
         ),
     ]);
     let (digest, length) = hj_with_length("amiss/test", &value);
@@ -23,7 +29,7 @@ fn digest_counting_matches_the_independent_operations() {
 #[test]
 fn every_escape_survives_a_round_trip() {
     let text = "q\" b\\ s\u{8} t\t n\n f\u{c} r\r e\u{1} done";
-    let value = Value::String(text.to_owned());
+    let value = Value::string(text.to_owned());
     let wire = canonical(&value);
     assert_eq!(
         String::from_utf8(wire.clone()).unwrap(),
@@ -46,7 +52,7 @@ fn surrogate_pairs_combine_exactly() {
     for (wire, expected) in pairs {
         assert_eq!(
             parse(wire).unwrap(),
-            Value::String(expected.to_owned()),
+            Value::string(expected.to_owned()),
             "{}",
             String::from_utf8_lossy(wire)
         );

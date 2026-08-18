@@ -1311,14 +1311,14 @@ fn selected_line_bytes(source: &[u8], range: LineRange) -> Option<&[u8]> {
 fn target_projection(domain: &str, mode: GitMode, raw_digest: Digest) -> Digest {
     hj(
         domain,
-        &Value::Object(vec![
+        &Value::object(vec![
             (
                 "git_mode".to_owned(),
-                Value::String(mode.as_str().to_owned()),
+                Value::string(mode.as_str().to_owned()),
             ),
             (
                 "raw_digest".to_owned(),
-                Value::String(raw_digest.to_string()),
+                Value::string(raw_digest.to_string()),
             ),
         ]),
     )

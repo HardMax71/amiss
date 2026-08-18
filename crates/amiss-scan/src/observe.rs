@@ -214,14 +214,14 @@ fn with_observation_value<R>(
 /// kind, embedding the raw-destination digest and both component digests.
 #[must_use]
 pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "kind".to_owned(),
-            Value::String(intent.kind.as_str().to_owned()),
+            Value::string(intent.kind.as_str().to_owned()),
         ),
         (
             "raw_destination_digest".to_owned(),
-            Value::String(raw_destination_digest.to_string()),
+            Value::string(raw_destination_digest.to_string()),
         ),
         (
             "repository_path".to_owned(),
@@ -234,19 +234,19 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
             "target_kind".to_owned(),
             intent
                 .target_kind
-                .map_or(Value::Null, |kind| Value::String(kind.as_str().to_owned())),
+                .map_or(Value::Null, |kind| Value::string(kind.as_str().to_owned())),
         ),
         (
             "query_digest".to_owned(),
-            query_digest(intent).map_or(Value::Null, |digest| Value::String(digest.to_string())),
+            query_digest(intent).map_or(Value::Null, |digest| Value::string(digest.to_string())),
         ),
         (
             "fragment_digest".to_owned(),
-            fragment_digest(intent).map_or(Value::Null, |digest| Value::String(digest.to_string())),
+            fragment_digest(intent).map_or(Value::Null, |digest| Value::string(digest.to_string())),
         ),
         (
             "external_scheme".to_owned(),
-            external_scheme(intent).map_or(Value::Null, |scheme| Value::String(scheme.to_owned())),
+            external_scheme(intent).map_or(Value::Null, |scheme| Value::string(scheme.to_owned())),
         ),
     ])
 }
@@ -256,18 +256,18 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
 /// contract.
 #[must_use]
 pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "schema".to_owned(),
-            Value::String(STRUCTURAL_ADDRESS_SCHEMA.to_owned()),
+            Value::string(STRUCTURAL_ADDRESS_SCHEMA.to_owned()),
         ),
         (
             "address_kind".to_owned(),
-            Value::String(adapter.structural_address().to_owned()),
+            Value::string(adapter.structural_address().to_owned()),
         ),
         (
             "node_path".to_owned(),
-            Value::Array(
+            Value::array(
                 node_path
                     .iter()
                     .map(|index| Value::Integer(i64::try_from(*index).unwrap_or(i64::MAX)))
@@ -282,23 +282,23 @@ pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
 /// The complete strict observation-identity input retained by the report.
 #[must_use]
 pub fn observation_input(input: &ObservationIdentity<'_>) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "schema".to_owned(),
-            Value::String(OBSERVATION_ID_INPUT_SCHEMA.to_owned()),
+            Value::string(OBSERVATION_ID_INPUT_SCHEMA.to_owned()),
         ),
         (
             "adapter_id".to_owned(),
-            Value::String(input.adapter.adapter_id().to_owned()),
+            Value::string(input.adapter.adapter_id().to_owned()),
         ),
         (
             "adapter_contract_digest".to_owned(),
-            Value::String(input.contract_digest.to_string()),
+            Value::string(input.contract_digest.to_string()),
         ),
         ("document".to_owned(), input.document.to_value()),
         (
             "source_construct".to_owned(),
-            Value::String(input.construct.as_str().to_owned()),
+            Value::string(input.construct.as_str().to_owned()),
         ),
         (
             "structural_address".to_owned(),
@@ -306,7 +306,7 @@ pub fn observation_input(input: &ObservationIdentity<'_>) -> Value {
         ),
         (
             "source_projection_digest".to_owned(),
-            Value::String(input.projection_digest.to_string()),
+            Value::string(input.projection_digest.to_string()),
         ),
         (
             "extracted_intent".to_owned(),

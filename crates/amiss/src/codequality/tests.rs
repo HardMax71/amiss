@@ -5,7 +5,7 @@ use amiss_wire::json::Value;
 use super::issues;
 
 fn row(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
+    Value::object(
         members
             .into_iter()
             .map(|(key, value)| (key.to_owned(), value.clone()))
@@ -19,20 +19,14 @@ fn row(members: Vec<(&str, Value)>) -> Value {
 #[test]
 fn a_global_finding_yields_a_valid_placeholder_location() {
     let finding = row(vec![
-        (
-            "kind",
-            Value::String("organization-floor-unavailable".to_owned()),
-        ),
-        (
-            "description",
-            Value::String("a control sentence".to_owned()),
-        ),
-        ("finding_key", Value::String("sha256:ab".to_owned())),
-        ("effective_disposition", Value::String("fail".to_owned())),
+        ("kind", Value::string("organization-floor-unavailable")),
+        ("description", Value::string("a control sentence")),
+        ("finding_key", Value::string("sha256:ab")),
+        ("effective_disposition", Value::string("fail")),
         (
             "location",
             row(vec![
-                ("side", Value::String("global".to_owned())),
+                ("side", Value::string("global")),
                 ("path", Value::Null),
                 ("span", Value::Null),
             ]),
@@ -40,13 +34,13 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
     ]);
     let envelope = row(vec![(
         "payload",
-        row(vec![("findings", Value::Array(vec![finding]))]),
+        row(vec![("findings", Value::array(vec![finding]))]),
     )]);
 
     let Value::Array(issues) = issues(&envelope) else {
         panic!("the artifact is an array");
     };
-    let [issue] = issues.as_slice() else {
+    let [issue] = issues.as_ref() else {
         panic!("one finding is one issue");
     };
     let Value::Object(members) = issue else {
@@ -62,7 +56,7 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
     assert!(
         location
             .iter()
-            .any(|(key, value)| key == "path" && *value == Value::String("(global)".to_owned())),
+            .any(|(key, value)| key == "path" && *value == Value::string("(global)")),
         "a null wire path answers with the placeholder, got {location:?}",
     );
     assert!(

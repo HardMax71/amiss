@@ -220,7 +220,7 @@ fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
 
 fn text(value: &Value, key: &str) -> Option<String> {
     match member(value, key) {
-        Some(Value::String(text)) => Some(text.clone()),
+        Some(Value::String(text)) => Some(text.to_string()),
         _ => None,
     }
 }
@@ -298,7 +298,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
         set_member(
             evaluation,
             "target_ref",
-            Value::String("refs/heads/other".to_owned()),
+            Value::string("refs/heads/other".to_owned()),
         );
     });
     assert_eq!(
@@ -310,7 +310,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
         let controls = member_mut(payload, "controls");
         let trusted = member_mut(controls, "trusted_time_source");
         let statement = member_mut(trusted, "statement");
-        set_member(statement, "provider", Value::String("github".to_owned()));
+        set_member(statement, "provider", Value::string("github".to_owned()));
     });
     assert_eq!(
         accept(&wrong_provider, &expectations),
@@ -319,7 +319,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
 
     let wrong_profile = rewrite(&wire, |payload| {
         let controls = member_mut(payload, "controls");
-        set_member(controls, "profile", Value::String("enforce".to_owned()));
+        set_member(controls, "profile", Value::string("enforce".to_owned()));
     });
     assert_eq!(
         accept(&wrong_profile, &expectations),
@@ -329,7 +329,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     let dropped_floor = rewrite(&wire, |payload| {
         let controls = member_mut(payload, "controls");
         let floor = member_mut(controls, "organization_floor");
-        set_member(floor, "status", Value::String("none".to_owned()));
+        set_member(floor, "status", Value::string("none".to_owned()));
     });
     assert_eq!(
         accept(&dropped_floor, &expectations),
@@ -343,7 +343,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
         set_member(
             descriptor,
             "required_status_name",
-            Value::String("amiss / changed".to_owned()),
+            Value::string("amiss / changed".to_owned()),
         );
     });
     assert_eq!(
@@ -355,7 +355,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
         insert_member(
             member_mut(payload, "evaluation"),
             "status",
-            Value::String("unavailable".to_owned()),
+            Value::string("unavailable".to_owned()),
         );
     });
     assert_eq!(
@@ -375,14 +375,14 @@ fn a_statement_issued_for_another_repository_is_refused() {
         {
             let statement = member_mut(trusted, "statement");
             let repository = member_mut(statement, "repository");
-            set_member(repository, "name", Value::String("other".to_owned()));
+            set_member(repository, "name", Value::string("other".to_owned()));
         }
         let digest = hj(
             "amiss/scanner-trusted-time-statement",
             member(trusted, "statement").unwrap(),
         )
         .to_string();
-        set_member(trusted, "statement_digest", Value::String(digest));
+        set_member(trusted, "statement_digest", Value::string(digest));
     });
     let rewritten = parse(&foreign).unwrap();
     let trusted = member(member(&rewritten, "payload").unwrap(), "controls")
@@ -392,7 +392,7 @@ fn a_statement_issued_for_another_repository_is_refused() {
         panic!("statement digest is text")
     };
     if let Some(sealed) = expectations.sealed.as_mut() {
-        sealed.trusted_time_digest = digest;
+        sealed.trusted_time_digest = digest.into_string();
     }
     assert_eq!(
         accept(&foreign, &expectations),
@@ -458,18 +458,18 @@ fn seal_evaluation(evaluation: &mut Value) -> String {
     set_member(
         evaluation,
         "candidate_ref",
-        Value::String("refs/heads/feature/docs".to_owned()),
+        Value::string("refs/heads/feature/docs".to_owned()),
     );
     set_member(
         evaluation,
         "target_ref",
-        Value::String("refs/heads/main".to_owned()),
+        Value::string("refs/heads/main".to_owned()),
     );
     set_member(evaluation, "trusted_time", Value::Bool(true));
     set_member(
         evaluation,
         "evaluation_instant",
-        Value::String("2026-07-12T10:00:00Z".to_owned()),
+        Value::string("2026-07-12T10:00:00Z".to_owned()),
     );
     let Value::Object(members) = evaluation.clone() else {
         panic!("evaluation is an object");
@@ -480,40 +480,40 @@ fn seal_evaluation(evaluation: &mut Value) -> String {
         .collect();
     identity.push((
         "schema".to_owned(),
-        Value::String(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
+        Value::string(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
     ));
-    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::Object(identity)).to_string()
+    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::object(identity)).to_string()
 }
 
 fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String) {
     let statement = object(vec![
         (
             "schema",
-            Value::String("amiss/scanner-trusted-time-statement".to_owned()),
+            Value::string("amiss/scanner-trusted-time-statement".to_owned()),
         ),
         (
             "controller",
-            Value::String("external-required-check-clock".to_owned()),
+            Value::string("external-required-check-clock".to_owned()),
         ),
-        ("provider", Value::String("gitlab".to_owned())),
+        ("provider", Value::string("gitlab".to_owned())),
         (
             "repository",
             member(evaluation, "repository").unwrap().clone(),
         ),
-        ("ref", Value::String("refs/heads/main".to_owned())),
+        ("ref", Value::string("refs/heads/main".to_owned())),
         (
             "candidate_identity_digest",
-            Value::String(identity_digest.to_owned()),
+            Value::string(identity_digest.to_owned()),
         ),
-        ("provider_run_id", Value::String("pipeline/42".to_owned())),
+        ("provider_run_id", Value::string("pipeline/42".to_owned())),
         ("provider_run_attempt", Value::Integer(2)),
         (
             "evaluation_instant",
-            Value::String("2026-07-12T10:00:00Z".to_owned()),
+            Value::string("2026-07-12T10:00:00Z".to_owned()),
         ),
         (
             "valid_until",
-            Value::String("2026-07-12T10:09:00Z".to_owned()),
+            Value::string("2026-07-12T10:09:00Z".to_owned()),
         ),
     ]);
     let digest = TrustedTimeStatement::parse(&canonical(&statement))
@@ -534,11 +534,11 @@ fn seal_controls(
         controls,
         "organization_floor",
         object(vec![
-            ("status", Value::String("verified".to_owned())),
-            ("digest", Value::String(FLOOR_DIGEST.to_owned())),
+            ("status", Value::string("verified".to_owned())),
+            ("digest", Value::string(FLOOR_DIGEST.to_owned())),
             (
                 "trust_source",
-                Value::String("organization-policy".to_owned()),
+                Value::string("organization-policy".to_owned()),
             ),
         ]),
     );
@@ -546,15 +546,15 @@ fn seal_controls(
         controls,
         "execution_constraint",
         object(vec![
-            ("status", Value::String("verified".to_owned())),
+            ("status", Value::string("verified".to_owned())),
             (
                 "descriptor_digest",
-                Value::String(constraint_digest.to_owned()),
+                Value::string(constraint_digest.to_owned()),
             ),
             ("descriptor", descriptor),
             (
                 "trust_source",
-                Value::String("external-required-check".to_owned()),
+                Value::string("external-required-check".to_owned()),
             ),
         ]),
     );
@@ -562,12 +562,12 @@ fn seal_controls(
         controls,
         "trusted_time_source",
         object(vec![
-            ("status", Value::String("verified".to_owned())),
+            ("status", Value::string("verified".to_owned())),
             (
                 "trust_source",
-                Value::String("external-required-check".to_owned()),
+                Value::string("external-required-check".to_owned()),
             ),
-            ("statement_digest", Value::String(time_digest.to_owned())),
+            ("statement_digest", Value::string(time_digest.to_owned())),
             ("statement", statement),
         ]),
     );
@@ -584,7 +584,7 @@ fn rewrite(wire: &[u8], edit: impl FnOnce(&mut Value)) -> Vec<u8> {
 
 fn refresh_digest(envelope: &mut Value) {
     let digest = hj(PAYLOAD_SCHEMA, member(envelope, "payload").unwrap()).to_string();
-    set_member(envelope, "payload_digest", Value::String(digest));
+    set_member(envelope, "payload_digest", Value::string(digest));
 }
 
 fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
@@ -607,11 +607,13 @@ fn insert_member(value: &mut Value, key: &str, member: Value) {
         panic!("value is an object");
     };
     assert!(members.iter().all(|(name, _value)| name != key));
-    members.push((key.to_owned(), member));
+    let mut expanded = std::mem::take(members).into_vec();
+    expanded.push((key.to_owned(), member));
+    *members = expanded.into_boxed_slice();
 }
 
 fn object(rows: Vec<(&str, Value)>) -> Value {
-    Value::Object(
+    Value::object(
         rows.into_iter()
             .map(|(name, value)| (name.to_owned(), value))
             .collect(),

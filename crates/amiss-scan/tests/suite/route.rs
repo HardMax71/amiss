@@ -37,7 +37,7 @@ fn text(value: &Value, key: &str, label: &str) -> String {
     let Value::String(found) = found else {
         panic!("{label}.{key} is a string, found {found:?}")
     };
-    found
+    found.into_string()
 }
 
 fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
@@ -45,7 +45,7 @@ fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
     let Value::Array(found) = found else {
         panic!("{label}.{key} is an array, found {found:?}")
     };
-    found
+    found.into_vec()
 }
 
 fn path(raw: &str) -> RepoPath {
@@ -59,7 +59,7 @@ fn tree(vectors: &Value) -> BTreeSet<String> {
             let Value::String(entry) = entry else {
                 panic!("a tree entry is a string")
             };
-            entry
+            entry.into_string()
         })
         .collect()
 }
@@ -110,7 +110,7 @@ fn the_published_vectors_drive_every_router() {
         for rule in &ROUTERS {
             let found = member(&harvest, rule.name, &format!("case {id}"));
             let want = if let Value::String(source) = found {
-                Some(source)
+                Some(source.into_string())
             } else if found == Value::Null {
                 None
             } else {

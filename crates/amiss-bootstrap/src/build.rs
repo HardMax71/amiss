@@ -65,7 +65,7 @@ pub fn build_manifest(
         ("schema", string(DEPENDENCY_LOCK_SCHEMA)),
         (
             "files",
-            Value::Array(
+            Value::array(
                 locks
                     .iter()
                     .map(|(path, digest)| {
@@ -106,7 +106,7 @@ pub fn build_manifest(
         ),
         ("dependency_lock", lock_value),
         ("dependency_lock_digest", string(&lock_digest.to_string())),
-        ("artifacts", Value::Array(rows)),
+        ("artifacts", Value::array(rows)),
     ]);
     let digest = hj(MANIFEST_DOMAIN, &manifest);
     let mut bytes = canonical(&manifest);
@@ -155,7 +155,7 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
         ("engine_digest", string(&engine_digest.to_string())),
         ("runtime_contract", string(RUNTIME_CONTRACT)),
         ("environment_contract", string(ENVIRONMENT_CONTRACT)),
-        ("runtime_files", Value::Array(files)),
+        ("runtime_files", Value::array(files)),
     ]))
 }
 
@@ -164,11 +164,11 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
 /// exists for experimental convenience; the required path never executes it.
 #[must_use]
 fn string(text: &str) -> Value {
-    Value::String(text.to_owned())
+    Value::string(text.to_owned())
 }
 
 fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
+    Value::object(
         members
             .into_iter()
             .map(|(key, value)| (key.to_owned(), value))

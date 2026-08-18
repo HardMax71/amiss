@@ -582,59 +582,53 @@ impl ScannerPolicy {
         protected_inventory.sort();
         finding_dispositions
             .sort_by(|left, right| left.finding_kind.as_str().cmp(right.finding_kind.as_str()));
-        let include_rows = document_includes
+        let include_rows: Vec<Value> = document_includes
             .into_iter()
             .map(|include| {
                 let mut rows = vec![
-                    (
-                        "path".to_owned(),
-                        Value::String(include.path.as_str().to_owned()),
-                    ),
-                    (
-                        "kind".to_owned(),
-                        Value::String(include.kind.as_str().to_owned()),
-                    ),
+                    ("path".into(), Value::String(include.path.as_str().into())),
+                    ("kind".into(), Value::String(include.kind.as_str().into())),
                 ];
                 if let Some(adapter) = include.adapter {
-                    rows.push((
-                        "adapter".to_owned(),
-                        Value::String(adapter.adapter_id().to_owned()),
-                    ));
+                    rows.push(("adapter".into(), Value::String(adapter.adapter_id().into())));
                 }
-                Value::Object(rows)
+                Value::Object(rows.into_boxed_slice())
             })
             .collect();
-        let inventory = protected_inventory
+        let inventory: Vec<Value> = protected_inventory
             .into_iter()
-            .map(|path| Value::String(path.as_str().to_owned()))
+            .map(|path| Value::String(path.as_str().into()))
             .collect();
-        let dispositions = finding_dispositions
+        let dispositions: Vec<Value> = finding_dispositions
             .into_iter()
             .map(|row| {
-                Value::Object(vec![
+                Value::Object(Box::new([
                     (
-                        "finding_kind".to_owned(),
-                        Value::String(row.finding_kind.as_str().to_owned()),
+                        "finding_kind".into(),
+                        Value::String(row.finding_kind.as_str().into()),
                     ),
                     (
-                        "disposition".to_owned(),
-                        Value::String(row.disposition.as_str().to_owned()),
+                        "disposition".into(),
+                        Value::String(row.disposition.as_str().into()),
                     ),
-                ])
+                ]))
             })
             .collect();
-        let value = Value::Object(vec![
+        let value = Value::Object(Box::new([
+            ("schema".into(), Value::String(SCANNER_POLICY_SCHEMA.into())),
             (
-                "schema".to_owned(),
-                Value::String(SCANNER_POLICY_SCHEMA.to_owned()),
+                "document_includes".into(),
+                Value::Array(include_rows.into_boxed_slice()),
             ),
-            ("document_includes".to_owned(), Value::Array(include_rows)),
-            ("protected_inventory".to_owned(), Value::Array(inventory)),
             (
-                "finding_dispositions".to_owned(),
-                Value::Array(dispositions),
+                "protected_inventory".into(),
+                Value::Array(inventory.into_boxed_slice()),
             ),
-        ]);
+            (
+                "finding_dispositions".into(),
+                Value::Array(dispositions.into_boxed_slice()),
+            ),
+        ]));
         Self::parse(&json::canonical(&value))
     }
 

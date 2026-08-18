@@ -30,17 +30,17 @@ fn accepts_the_restricted_grammar() {
     );
     assert_eq!(
         parse(br#""A\/\n""#).unwrap(),
-        Value::String("A/\n".to_owned())
+        Value::string("A/\n".to_owned())
     );
     assert_eq!(
         parse("\"\u{1f600}\"".as_bytes()).unwrap(),
-        Value::String("\u{1f600}".to_owned())
+        Value::string("\u{1f600}".to_owned())
     );
     assert_eq!(
         parse(b"[0, {\"a\": []}]").unwrap(),
-        Value::Array(vec![
+        Value::array(vec![
             Value::Integer(0),
-            Value::Object(vec![("a".to_owned(), Value::Array(Vec::new()))]),
+            Value::object(vec![("a".to_owned(), Value::array(Vec::new()))]),
         ])
     );
 }
@@ -163,16 +163,16 @@ fn domain_separation_changes_the_digest() {
 fn required_object_members_decode_through_their_exact_paths() {
     let mut object = Obj::new(
         "$.outer",
-        Value::Object(vec![(
+        Value::object(vec![(
             "required".to_owned(),
-            Value::String("value".to_owned()),
+            Value::string("value".to_owned()),
         )]),
     )
     .unwrap();
     assert_eq!(object.required("required", de::string).unwrap(), "value");
     object.finish().unwrap();
 
-    let mut missing = Obj::new("$.outer", Value::Object(Vec::new())).unwrap();
+    let mut missing = Obj::new("$.outer", Value::object(Vec::new())).unwrap();
     assert_eq!(
         missing.required("required", de::string).unwrap_err(),
         DecodeError {
@@ -183,7 +183,7 @@ fn required_object_members_decode_through_their_exact_paths() {
 
     let mut invalid = Obj::new(
         "$.outer",
-        Value::Object(vec![("required".to_owned(), Value::Bool(true))]),
+        Value::object(vec![("required".to_owned(), Value::Bool(true))]),
     )
     .unwrap();
     assert_eq!(
