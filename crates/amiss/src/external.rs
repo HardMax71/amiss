@@ -148,7 +148,7 @@ const fn describe_assess(defect: AssessDefect) -> &'static str {
 
 fn human_plan(envelope: &Value) {
     let mut out = crate::Channel::new();
-    let payload = View::of(Some(envelope)).view("payload");
+    let payload = View::of(envelope).view("payload");
     let introduced = payload.rows("introduced");
     out.line(format_args!(
         "amiss external-plan: introduced {} removed {} retained {}",
@@ -156,14 +156,14 @@ fn human_plan(envelope: &Value) {
         payload.rows("removed").len(),
         payload.number("retained_count"),
     ));
-    for row in introduced.iter().take(10) {
+    let overflow = introduced.len().saturating_sub(10);
+    for row in introduced.take(10) {
         out.line(format_args!(
             "introduced {} in {} documents",
             row.text("destination"),
             row.rows("documents").len(),
         ));
     }
-    let overflow = introduced.len().saturating_sub(10);
     if overflow > 0 {
         out.line(format_args!(
             "introduced overflow: {overflow} more in the full plan"
@@ -173,32 +173,31 @@ fn human_plan(envelope: &Value) {
 
 fn human_assessment(envelope: &Value) {
     let mut out = crate::Channel::new();
-    let payload = View::of(Some(envelope)).view("payload");
+    let payload = View::of(envelope).view("payload");
     let verdicts = payload.rows("verdicts");
     let count = |wanted: &str| {
         verdicts
-            .iter()
+            .clone()
             .filter(|row| row.text("verdict") == wanted)
             .count()
     };
+    let refuted = count("refuted");
+    let unproven = count("unproven");
+    let reachable = count("reachable");
     out.line(format_args!(
-        "amiss external-assess: refuted {} unproven {} reachable {}",
-        count("refuted"),
-        count("unproven"),
-        count("reachable"),
+        "amiss external-assess: refuted {refuted} unproven {unproven} reachable {reachable}",
     ));
-    let refuted: Vec<&View> = verdicts
-        .iter()
+    for row in verdicts
         .filter(|row| row.text("verdict") == "refuted")
-        .collect();
-    for row in refuted.iter().take(10) {
+        .take(10)
+    {
         out.line(format_args!(
             "refuted {} ({})",
             row.text("destination"),
             row.text("reason")
         ));
     }
-    let overflow = refuted.len().saturating_sub(10);
+    let overflow = refuted.saturating_sub(10);
     if overflow > 0 {
         out.line(format_args!(
             "refuted overflow: {overflow} more in the full assessment"

@@ -487,7 +487,7 @@ macro_rules! say {
 /// exact raw totals.
 fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let mut out = Channel::new();
-    let envelope = View::of(Some(&built.envelope));
+    let envelope = View::of(&built.envelope);
     let payload = envelope.view("payload");
     let result = payload.view("result");
     let feedback = payload.view("feedback");
@@ -495,11 +495,11 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
     let available = feedback.text("status") == "available";
     if available {
         let fixes = items
-            .iter()
+            .clone()
             .filter(|item| item.text("action") == "fix")
             .count();
         let checks = items
-            .iter()
+            .clone()
             .filter(|item| item.text("action") == "check")
             .count();
         say!(
@@ -521,7 +521,7 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
         );
     }
     if explain_scope {
-        explain(&mut out, &payload);
+        explain(&mut out, payload);
     }
     for row in payload.rows("errors") {
         let resource = row.text("resource");
@@ -546,19 +546,31 @@ fn human(built: &amiss_scan::report::Built, explain_scope: bool) {
             );
         }
     }
-    let (backlog, current): (Vec<&View>, Vec<&View>) = items
-        .iter()
-        .partition(|item| item.text("action") == "existing");
-    windowed(&mut out, &current, "feedback");
-    windowed(&mut out, &backlog, "existing");
-    notes(&mut out, &payload);
-    totals(&mut out, &payload);
+    windowed(
+        &mut out,
+        items
+            .clone()
+            .filter(|item| item.text("action") != "existing"),
+        "feedback",
+    );
+    windowed(
+        &mut out,
+        items.filter(|item| item.text("action") == "existing"),
+        "existing",
+    );
+    notes(&mut out, payload);
+    totals(&mut out, payload);
 }
 
 /// Ten rows and an overflow line, the wire's own action word as the label.
-fn windowed(out: &mut Channel, items: &[&View], label: &str) {
-    for item in items.iter().take(10) {
-        let mut action = item.text("action");
+fn windowed<'value>(
+    out: &mut Channel,
+    items: impl Iterator<Item = View<'value>> + Clone,
+    label: &str,
+) {
+    let overflow = items.clone().count().saturating_sub(10);
+    for item in items.take(10) {
+        let mut action = item.text("action").to_owned();
         if let Some(first) = action.get_mut(0..1) {
             first.make_ascii_uppercase();
         }
@@ -570,25 +582,24 @@ fn windowed(out: &mut Channel, items: &[&View], label: &str) {
             item.number("location_count")
         );
     }
-    let overflow = items.len().saturating_sub(10);
     if overflow > 0 {
         say!(out, "{label} overflow: {overflow} more in the full report");
     }
 }
 
 /// One `note` line per error code used by this run.
-fn notes(out: &mut Channel, payload: &View) {
-    let mut seen: BTreeSet<String> = BTreeSet::new();
+fn notes(out: &mut Channel, payload: View<'_>) {
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
     for row in payload.rows("errors") {
         let name = row.text("code");
         let description = row.text("description");
-        if !name.is_empty() && !description.is_empty() && seen.insert(name.clone()) {
+        if !name.is_empty() && !description.is_empty() && seen.insert(name) {
             say!(out, "note {name}: {description}");
         }
     }
 }
 
-fn totals(out: &mut Channel, payload: &View) {
+fn totals(out: &mut Channel, payload: View<'_>) {
     let summary = payload.view("summary");
     let documents = summary.view("documents");
     say!(
@@ -634,7 +645,7 @@ fn totals(out: &mut Channel, payload: &View) {
 
 /// The deterministic scope explanation the human projection may add: the
 /// closed built-in document classes and this run's discovered surface.
-fn explain(out: &mut Channel, payload: &View) {
+fn explain(out: &mut Channel, payload: View<'_>) {
     say!(
         out,
         "scope: built-in documents are *.md, *.mdx, *.markdown, *.adoc, *.asciidoc,"

@@ -2,41 +2,49 @@ mod tests;
 
 use amiss_wire::json::Value;
 
-pub(crate) struct View(Vec<(String, Value)>);
+#[derive(Clone, Copy)]
+pub(crate) struct View<'value>(&'value [(String, Value)]);
 
-impl View {
-    pub(crate) fn of(value: Option<&Value>) -> Self {
-        if let Some(Value::Object(members)) = value {
-            Self(members.clone())
-        } else {
-            Self(Vec::new())
+impl<'value> View<'value> {
+    pub(crate) fn of(value: &'value Value) -> Self {
+        match value {
+            Value::Object(members) => Self(members),
+            Value::Null
+            | Value::Bool(_)
+            | Value::Integer(_)
+            | Value::String(_)
+            | Value::Array(_) => Self(&[]),
         }
     }
 
-    pub(crate) fn field(&self, name: &str) -> Option<&Value> {
+    pub(crate) fn field(self, name: &str) -> Option<&'value Value> {
         self.0
             .iter()
             .find(|(key, _)| key == name)
             .map(|(_, value)| value)
     }
 
-    pub(crate) fn view(&self, name: &str) -> Self {
-        Self::of(self.field(name))
-    }
-
-    pub(crate) fn text(&self, name: &str) -> String {
-        if let Some(Value::String(value)) = self.field(name) {
-            value.clone()
+    pub(crate) fn view(self, name: &str) -> Self {
+        if let Some(value) = self.field(name) {
+            Self::of(value)
         } else {
-            String::new()
+            Self(&[])
         }
     }
 
-    pub(crate) fn flag(&self, name: &str) -> bool {
+    pub(crate) fn text(self, name: &str) -> &'value str {
+        if let Some(Value::String(value)) = self.field(name) {
+            value
+        } else {
+            ""
+        }
+    }
+
+    pub(crate) fn flag(self, name: &str) -> bool {
         matches!(self.field(name), Some(Value::Bool(true)))
     }
 
-    pub(crate) fn atom_or_dash(&self, name: &str) -> String {
+    pub(crate) fn atom_or_dash(self, name: &str) -> String {
         match self.field(name) {
             Some(Value::String(value)) => amiss_wire::human::atom(value),
             Some(Value::Object(members)) => match members.as_slice() {
@@ -51,7 +59,7 @@ impl View {
         }
     }
 
-    pub(crate) fn number(&self, name: &str) -> i64 {
+    pub(crate) fn number(self, name: &str) -> i64 {
         if let Some(Value::Integer(value)) = self.field(name) {
             *value
         } else {
@@ -59,12 +67,13 @@ impl View {
         }
     }
 
-    pub(crate) fn rows(&self, name: &str) -> Vec<Self> {
-        if let Some(Value::Array(rows)) = self.field(name) {
-            rows.iter().map(|row| Self::of(Some(row))).collect()
+    pub(crate) fn rows(self, name: &str) -> impl ExactSizeIterator<Item = Self> + Clone + 'value {
+        let rows: &'value [Value] = if let Some(Value::Array(rows)) = self.field(name) {
+            rows
         } else {
-            Vec::new()
-        }
+            &[]
+        };
+        rows.iter().map(Self::of)
     }
 }
 
