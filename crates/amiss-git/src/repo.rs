@@ -8,7 +8,9 @@ use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::Error;
 use crate::handle::{open_dir, open_file, open_root};
-use crate::object::{Object, ObjectKind, decode_loose, discard_to_unreadable, hex, verify_oid};
+use crate::object::{
+    Object, ObjectKind, decode_loose_reusing, discard_to_unreadable, hex, verify_oid,
+};
 use crate::pack::{
     self, PackSet, apply_delta, inflate_exact, kind_of, parse_entry_header, parse_ofs_distance,
 };
@@ -412,11 +414,16 @@ impl Repository {
                 stream_cap.saturating_add(1),
             ));
         }
-        decode_loose(
+        let inflated_cap = resources.limits().inflated_object_bytes;
+        let inflater = resources
+            .loose_inflater
+            .get_or_insert_with(|| flate2::Decompress::new(true));
+        decode_loose_reusing(
+            inflater,
             &compressed,
             self.object_format,
             oid,
-            resources.limits().inflated_object_bytes,
+            inflated_cap,
             value_cap,
         )
     }

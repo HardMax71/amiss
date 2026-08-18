@@ -1,5 +1,9 @@
-use amiss_git::parse_tree;
-use amiss_wire::model::ObjectFormat;
+#![expect(clippy::panic, reason = "bench fixture setup fails loudly")]
+
+use std::path::Path;
+
+use amiss_git::{GitLimits, GitResources, Repository, parse_tree};
+use amiss_wire::model::{ObjectFormat, Oid};
 use divan::{Bencher, black_box};
 
 fn main() {
@@ -15,4 +19,17 @@ fn wide_tree(bencher: Bencher<'_, '_>, entry_count: usize) {
     }
 
     bencher.bench_local(|| parse_tree(ObjectFormat::Sha1, black_box(&body)));
+}
+
+#[divan::bench(sample_count = 20)]
+fn repeated_loose_object(bencher: Bencher<'_, '_>) {
+    let pair = amiss_fixtures::commit_pair(&[("README.md", "# reusable inflater\n")], &[])
+        .unwrap_or_else(|defect| panic!("fixture repository: {defect}"));
+    let repository = Repository::open(Path::new(&pair.repo), ObjectFormat::Sha1)
+        .unwrap_or_else(|defect| panic!("open repository: {defect:?}"));
+    let oid = Oid::new(ObjectFormat::Sha1, pair.candidate)
+        .unwrap_or_else(|| panic!("invalid candidate oid"));
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+
+    bencher.bench_local(|| repository.read_object(black_box(&mut resources), black_box(&oid)));
 }

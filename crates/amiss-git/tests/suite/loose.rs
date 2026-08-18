@@ -156,6 +156,12 @@ fn rejects_corrupt_loose_objects() {
             "case {oid:?}"
         );
     }
+
+    let recovered = write_loose(dir.path(), "blob", b"valid after corrupt streams");
+    assert_eq!(
+        repo.read_object(&mut res, &recovered).unwrap().body,
+        b"valid after corrupt streams"
+    );
 }
 
 /// A file that is a symlink, which only a privileged Windows process can
