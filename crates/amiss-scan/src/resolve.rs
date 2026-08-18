@@ -336,13 +336,18 @@ fn scheme_of(path_part: &str) -> Option<&str> {
 }
 
 /// One percent decode, never repeated: `%25` becomes a literal `%` and stays
-/// one.
-fn decode_bytes(text: &str) -> Result<Vec<u8>, Resolution> {
+/// one. The caller's byte grammar is applied while malformed escapes retain
+/// precedence over decoded-byte defects anywhere in the component.
+fn decode_bytes(
+    text: &str,
+    out: &mut Vec<u8>,
+    invalid: impl Fn(u8) -> Option<InvalidReference>,
+) -> Result<(), Resolution> {
     let bytes = text.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut at = 0_usize;
+    let mut invalid_byte = None;
     while let Some(&byte) = bytes.get(at) {
-        if byte == b'%' {
+        let (decoded, consumed) = if byte == b'%' {
             let high = bytes.get(at.saturating_add(1)).copied();
             let low = bytes.get(at.saturating_add(2)).copied();
             let (Some(high), Some(low)) = (high, low) else {
@@ -351,42 +356,34 @@ fn decode_bytes(text: &str) -> Result<Vec<u8>, Resolution> {
             let (Some(high), Some(low)) = (hex_value(high), hex_value(low)) else {
                 return Err(Resolution::Invalid(InvalidReference::PercentEncoding));
             };
-            out.push(high.wrapping_shl(4) | low);
-            at = at.saturating_add(3);
-            continue;
-        }
-        out.push(byte);
-        at = at.saturating_add(1);
+            (high.wrapping_shl(4) | low, 3)
+        } else {
+            (byte, 1)
+        };
+        invalid_byte = invalid_byte.or_else(|| invalid(decoded));
+        out.push(decoded);
+        at = at.saturating_add(consumed);
     }
-    Ok(out)
+    invalid_byte.map_or(Ok(()), |reason| Err(Resolution::Invalid(reason)))
 }
 
-/// Decodes one path segment to its raw bytes. The input holds no raw
-/// separator, so a decoded slash could only create one; a decoded backslash,
-/// control, or NUL is a defect either way. Bytes outside UTF-8 are ordinary
-/// path bytes.
-fn decode_segment(segment: &str) -> Result<Vec<u8>, Resolution> {
-    let out = decode_bytes(segment)?;
-    for &byte in &out {
-        match byte {
-            b'/' => return Err(Resolution::Invalid(InvalidReference::EncodedSlash)),
-            b'\\' => return Err(Resolution::Invalid(InvalidReference::BackslashSeparator)),
-            0..=0x1f | 0x7f => {
-                return Err(Resolution::Invalid(InvalidReference::DecodedPathControl));
-            }
-            _ => {}
-        }
+const fn invalid_path_byte(byte: u8) -> Option<InvalidReference> {
+    match byte {
+        b'/' => Some(InvalidReference::EncodedSlash),
+        b'\\' => Some(InvalidReference::BackslashSeparator),
+        0..=0x1f | 0x7f => Some(InvalidReference::DecodedPathControl),
+        _ => None,
     }
-    Ok(out)
 }
 
 /// Decodes a fragment: only invalid escapes, invalid UTF-8, and control bytes
 /// invalidate it; separators are ordinary fragment characters.
 fn decode_fragment(fragment: &str) -> Option<String> {
-    let out = decode_bytes(fragment).ok()?;
-    if out.iter().any(|&byte| matches!(byte, 0..=0x1f | 0x7f)) {
-        return None;
-    }
+    let mut out = Vec::with_capacity(fragment.len());
+    decode_bytes(fragment, &mut out, |byte| {
+        matches!(byte, 0..=0x1f | 0x7f).then_some(InvalidReference::DecodedPathControl)
+    })
+    .ok()?;
     String::from_utf8(out).ok()
 }
 
@@ -719,12 +716,9 @@ fn normalized_native_path(
     if path_part.contains('\\') {
         return Err(Resolution::Invalid(InvalidReference::BackslashSeparator));
     }
-    let mut segments: Vec<&str> = path_part.split('/').collect();
-    let trailing_slash = segments.len() > 1 && segments.last() == Some(&"");
-    if trailing_slash {
-        segments.pop();
-    }
-    if segments.iter().any(|segment| segment.is_empty()) || (trailing_slash && is_image) {
+    let trailing_slash = path_part.len() > 1 && path_part.ends_with('/');
+    let path = path_part.strip_suffix('/').unwrap_or(path_part);
+    if path.split('/').any(str::is_empty) || (trailing_slash && is_image) {
         return Err(Resolution::Invalid(InvalidReference::Syntax));
     }
     let target_kind = if trailing_slash {
@@ -736,28 +730,37 @@ fn normalized_native_path(
     };
 
     let raw_document = document_path.as_bytes();
-    let mut resolved: Vec<Vec<u8>> = match raw_document.iter().rposition(|byte| *byte == b'/') {
-        Some(split) => raw_document
-            .get(..split)
-            .unwrap_or_default()
-            .split(|byte| *byte == b'/')
-            .map(<[u8]>::to_vec)
-            .collect(),
-        None => Vec::new(),
-    };
-    for segment in segments {
-        let decoded = decode_segment(segment)?;
-        match decoded.as_slice() {
-            b"." => {}
+    let parent = raw_document
+        .iter()
+        .rposition(|byte| *byte == b'/')
+        .and_then(|split| raw_document.get(..split))
+        .unwrap_or_default();
+    let mut resolved =
+        Vec::with_capacity(parent.len().saturating_add(path.len()).saturating_add(1));
+    resolved.extend_from_slice(parent);
+    for segment in path.split('/') {
+        let prior = resolved.len();
+        if prior > 0 {
+            resolved.push(b'/');
+        }
+        let decoded = resolved.len();
+        decode_bytes(segment, &mut resolved, invalid_path_byte)?;
+        match resolved.get(decoded..).unwrap_or_default() {
+            b"." => resolved.truncate(prior),
             b".." => {
-                if resolved.pop().is_none() {
+                resolved.truncate(prior);
+                if resolved.is_empty() {
                     return Err(Resolution::Invalid(InvalidReference::PathTraversal));
                 }
+                match resolved.iter().rposition(|byte| *byte == b'/') {
+                    Some(separator) => resolved.truncate(separator),
+                    None => resolved.clear(),
+                }
             }
-            _ => resolved.push(decoded),
+            _ => {}
         }
     }
-    let Some(joined) = RepoPath::from_bytes(resolved.join(&b'/')) else {
+    let Some(joined) = RepoPath::from_bytes(resolved) else {
         return Err(Resolution::Invalid(InvalidReference::Syntax));
     };
     Ok((joined, target_kind))

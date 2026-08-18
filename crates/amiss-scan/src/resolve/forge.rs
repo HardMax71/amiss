@@ -6,7 +6,8 @@ use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
 use crate::Error;
 
 use super::{
-    ForgeContext, Intent, Resolution, Resolver, decode_segment, lookup, unsupported_intent,
+    ForgeContext, Intent, Resolution, Resolver, decode_bytes, invalid_path_byte, lookup,
+    unsupported_intent,
 };
 
 pub(super) fn resolve(
@@ -310,7 +311,9 @@ fn decoded_tail(
         if segment.is_empty() {
             return Err(Resolution::Invalid(InvalidReference::Syntax));
         }
-        decoded.push(decode_segment(segment)?);
+        let mut bytes = Vec::with_capacity(segment.len());
+        decode_bytes(segment, &mut bytes, invalid_path_byte)?;
+        decoded.push(bytes);
     }
     Ok(decoded)
 }
