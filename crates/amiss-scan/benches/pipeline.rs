@@ -3,17 +3,20 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use amiss_git::{GitLimits, GitResources};
 use amiss_scan::correlate::{Side, correlate};
 use amiss_scan::evaluate::evaluate_with_policy;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity, construct};
+use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{
-    Classification, DocumentRecord, DocumentStatus, Effects, Scanned, SnapshotDiscovery,
+    Classification, DocumentRecord, DocumentStatus, Effects, ScanLimits, ScanResources, Scanned,
+    SnapshotDiscovery,
 };
 use amiss_wire::controls::GitMode;
 use amiss_wire::digest::hb;
 use amiss_wire::extraction::{Opaque, Work};
-use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use divan::{Bencher, black_box};
 
@@ -121,6 +124,52 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
             black_box(&comparisons),
             black_box(&[]),
         )
+    });
+}
+
+#[divan::bench]
+fn resolve_same_repository_forge(bencher: Bencher<'_, '_>) {
+    let dir = tempfile::TempDir::new().unwrap_or_else(|defect| panic!("tempdir: {defect}"));
+    amiss_fixtures::git(dir.path(), &["init", "-q"])
+        .unwrap_or_else(|defect| panic!("git init: {defect}"));
+    let repo = amiss_git::Repository::open(dir.path(), ObjectFormat::Sha1)
+        .unwrap_or_else(|defect| panic!("open: {defect:?}"));
+    let oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40))
+        .unwrap_or_else(|| panic!("benchmark object id"));
+    let descendant = RepoPath::new("docs/guide/page.md".to_owned())
+        .unwrap_or_else(|| panic!("benchmark descendant"));
+    let snapshot = SnapshotDiscovery {
+        documents: Vec::new(),
+        labels: BTreeMap::new(),
+        outside_document_set: 0,
+        tree_entries: 1,
+        path_defects: Vec::new(),
+        entries: BTreeMap::from([(descendant, (GitMode::RegularFile, oid))]),
+    };
+    let context = ForgeContext {
+        host: "github.com".to_owned(),
+        dialect: ForgeDialect::Github,
+        owner: "acme".to_owned(),
+        repository: "widgets".to_owned(),
+        candidate_ref: "refs/heads/feature/x".to_owned(),
+        default_ref: "refs/heads/main".to_owned(),
+        candidate_oid: None,
+    };
+    let document =
+        RepoPath::new("docs/source.md".to_owned()).unwrap_or_else(|| panic!("benchmark document"));
+    let mut git = GitResources::new(GitLimits::CONTRACT);
+    let mut scan = ScanResources::new(ScanLimits::CONTRACT);
+    let mut cache = TargetCache::default();
+    bencher.bench_local(|| {
+        Resolver::new(&repo, &mut git, &mut scan, &mut cache, &snapshot)
+            .resolve(
+                Some(&context),
+                Adapter::Markdown,
+                &document,
+                false,
+                black_box("https://github.com/acme/widgets/tree/feature/x/docs/guide/"),
+            )
+            .unwrap_or_else(|defect| panic!("resolve: {defect:?}"))
     });
 }
 

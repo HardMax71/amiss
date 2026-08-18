@@ -103,8 +103,8 @@ fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
     if !literal_ascii(owner)
         || !literal_ascii(repository)
-        || owner.to_ascii_lowercase() != identity.owner
-        || repository.to_ascii_lowercase() != identity.repository
+        || !owner.eq_ignore_ascii_case(&identity.owner)
+        || !repository.eq_ignore_ascii_case(&identity.repository)
     {
         return ForgeRoute::Foreign;
     }
@@ -148,16 +148,16 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     }
     let name_at = separator.saturating_sub(1);
     let owner_segments = segments.get(..name_at).unwrap_or_default();
-    let identity_segments: Vec<&str> = identity.owner.split('/').collect();
-    let owner_matches = owner_segments.len() == identity_segments.len()
+    let identity_segments = identity.owner.split('/');
+    let owner_matches = owner_segments.len() == identity_segments.clone().count()
         && owner_segments
             .iter()
-            .zip(&identity_segments)
-            .all(|(url, own)| literal_ascii(url) && url.to_ascii_lowercase() == **own);
+            .zip(identity_segments)
+            .all(|(url, own)| literal_ascii(url) && url.eq_ignore_ascii_case(own));
     let project = segments.get(name_at).copied().unwrap_or_default();
     if !owner_matches
         || !literal_ascii(project)
-        || project.to_ascii_lowercase() != identity.repository
+        || !project.eq_ignore_ascii_case(&identity.repository)
     {
         return ForgeRoute::Foreign;
     }
@@ -203,8 +203,8 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     };
     if !literal_ascii(owner)
         || !literal_ascii(project)
-        || owner.to_ascii_lowercase() != identity.owner
-        || project.to_ascii_lowercase() != identity.repository
+        || !owner.eq_ignore_ascii_case(&identity.owner)
+        || !project.eq_ignore_ascii_case(&identity.repository)
     {
         return ForgeRoute::Foreign;
     }
@@ -265,10 +265,16 @@ fn trusted_split(
 ) -> Result<(bool, RepoPath), Resolution> {
     let decoded = decoded_tail(tolerate_terminal_slash, raw_tail)?;
 
-    let candidate = ref_segments(&identity.candidate_ref);
-    let default = ref_segments(&identity.default_ref);
-    let candidate_split = split_after(&decoded, &candidate);
-    let default_split = split_after(&decoded, &default);
+    let candidate = identity
+        .candidate_ref
+        .strip_prefix("refs/heads/")
+        .unwrap_or(identity.candidate_ref.as_str());
+    let default = identity
+        .default_ref
+        .strip_prefix("refs/heads/")
+        .unwrap_or(identity.default_ref.as_str());
+    let candidate_split = split_after(&decoded, candidate);
+    let default_split = split_after(&decoded, default);
     let (matched_candidate, remaining) = match (candidate_split, default_split) {
         (Some(after_candidate), Some(_after_default)) => {
             if candidate == default {
@@ -283,7 +289,7 @@ fn trusted_split(
             return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
         }
     };
-    Ok((matched_candidate, contained_path(&remaining)?))
+    Ok((matched_candidate, contained_path(remaining)?))
 }
 
 /// One decode per segment, empties refused, a lone terminal empty segment
@@ -292,12 +298,15 @@ fn decoded_tail(
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
 ) -> Result<Vec<Vec<u8>>, Resolution> {
-    let mut tail: Vec<&str> = raw_tail.to_vec();
-    if tolerate_terminal_slash && tail.len() > 1 && tail.last() == Some(&"") {
-        tail.pop();
-    }
-    let mut decoded: Vec<Vec<u8>> = Vec::new();
-    for segment in &tail {
+    let tail = if tolerate_terminal_slash && raw_tail.len() > 1 && raw_tail.last() == Some(&"") {
+        raw_tail
+            .get(..raw_tail.len().saturating_sub(1))
+            .unwrap_or_default()
+    } else {
+        raw_tail
+    };
+    let mut decoded: Vec<Vec<u8>> = Vec::with_capacity(tail.len());
+    for segment in tail {
         if segment.is_empty() {
             return Err(Resolution::Invalid(InvalidReference::Syntax));
         }
@@ -321,19 +330,13 @@ fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, Resolution> {
     RepoPath::from_bytes(remaining.join(&b'/')).ok_or(Resolution::Invalid(InvalidReference::Syntax))
 }
 
-fn ref_segments(full_ref: &str) -> Vec<Vec<u8>> {
-    full_ref
-        .strip_prefix("refs/heads/")
-        .unwrap_or(full_ref)
-        .split('/')
-        .map(|segment| segment.as_bytes().to_vec())
-        .collect()
-}
-
-fn split_after(decoded: &[Vec<u8>], reference: &[Vec<u8>]) -> Option<Vec<Vec<u8>>> {
-    if decoded.len() < reference.len() {
-        return None;
+fn split_after<'a>(decoded: &'a [Vec<u8>], reference: &str) -> Option<&'a [Vec<u8>]> {
+    let mut consumed = 0_usize;
+    for expected in reference.split('/') {
+        if decoded.get(consumed).map(Vec::as_slice) != Some(expected.as_bytes()) {
+            return None;
+        }
+        consumed = consumed.saturating_add(1);
     }
-    let (head, tail) = decoded.split_at(reference.len());
-    (head == reference).then(|| tail.to_vec())
+    decoded.get(consumed..)
 }
