@@ -22,11 +22,11 @@ static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 const WIRE_CAP: u64 = MACHINE_JSON_BYTES;
 
 fn string(text: &str) -> Value {
-    Value::String(text.to_owned())
+    Value::string(text)
 }
 
 fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
+    Value::object(
         members
             .into_iter()
             .map(|(key, value)| (key.to_owned(), value))
@@ -87,7 +87,7 @@ fn artifact(platform: &str) -> Value {
         ("engine_digest", string(DIGEST)),
         ("runtime_contract", string("manifest-closed")),
         ("environment_contract", string("scanner-process-env")),
-        ("runtime_files", Value::Array(files)),
+        ("runtime_files", Value::array(files)),
     ])
 }
 
@@ -140,11 +140,11 @@ fn maximal_provenance() -> Value {
             "dependency_lock",
             object(vec![
                 ("schema", string("amiss/scanner-dependency-lock-input")),
-                ("files", Value::Array(locks)),
+                ("files", Value::array(locks)),
             ]),
         ),
         ("dependency_lock_digest", string(DIGEST)),
-        ("artifacts", Value::Array(artifacts)),
+        ("artifacts", Value::array(artifacts)),
     ]);
     object(vec![
         ("kind", string("forge-action")),
@@ -253,7 +253,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     set_member(
         member_mut(payload, "controls"),
         "reasons",
-        Value::Array(
+        Value::array(
             [
                 "not-parsed",
                 "invalid-profile",
@@ -267,7 +267,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
         ),
     );
     let errors: Vec<Value> = (0..64).map(maximal_error).collect();
-    set_member(payload, "errors", Value::Array(errors));
+    set_member(payload, "errors", Value::array(errors));
     set_member(
         member_mut(payload, "result"),
         "error_count",

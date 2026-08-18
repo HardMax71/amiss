@@ -62,14 +62,14 @@ fn expected_line_projection(mode: GitMode, selected: &[u8]) -> amiss_wire::diges
     let selected_raw = hb(RAW_EVIDENCE_DOMAIN, selected);
     hj(
         TARGET_LINE_PROJECTION_DOMAIN,
-        &Value::Object(vec![
+        &Value::object(vec![
             (
                 "git_mode".to_owned(),
-                Value::String(mode.as_str().to_owned()),
+                Value::string(mode.as_str().to_owned()),
             ),
             (
                 "raw_digest".to_owned(),
-                Value::String(selected_raw.to_string()),
+                Value::string(selected_raw.to_string()),
             ),
         ]),
     )

@@ -281,7 +281,10 @@ fn execution_constraint_value(input: ExecutionConstraintInput) -> Value {
             text(&release_manifest_digest.to_string()),
         ),
         ("selected_platform", text(selected_platform.as_str())),
-        ("required_status_name", Value::String(required_status_name)),
+        (
+            "required_status_name",
+            Value::String(required_status_name.into()),
+        ),
         ("bootstrap_contract", text(ACTION_BOOTSTRAP_CONTRACT)),
         ("bootstrap_digest", text(&bootstrap_digest.to_string())),
     ])

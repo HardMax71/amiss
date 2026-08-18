@@ -76,11 +76,11 @@ impl RepoPath {
     #[must_use]
     pub fn to_value(&self) -> Value {
         match &self.0 {
-            Repr::Text(text) => Value::String(text.clone()),
-            Repr::Bytes(bytes) => Value::Object(vec![(
-                "bytes_hex".to_owned(),
-                Value::String(hex_lower(bytes)),
-            )]),
+            Repr::Text(text) => Value::String(text.clone().into()),
+            Repr::Bytes(bytes) => Value::Object(Box::new([(
+                "bytes_hex".into(),
+                Value::String(hex_lower(bytes).into()),
+            )])),
         }
     }
 }

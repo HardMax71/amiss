@@ -23,28 +23,28 @@ fn synthetic_value() -> Value {
     let mut rows = Vec::new();
     for index in 0..8_192_usize {
         let text = format!("row {index} \"quoted\" and\ttabbed and plain padding text");
-        rows.push(Value::Object(vec![
-            ("path".to_owned(), Value::String(text.repeat(8))),
+        rows.push(Value::object(vec![
+            ("path".to_owned(), Value::string(text.repeat(8))),
             (
                 "index".to_owned(),
                 Value::Integer(i64::try_from(index).unwrap_or(0)),
             ),
             (
                 "nested".to_owned(),
-                Value::Array(vec![
-                    Value::String("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned()),
+                Value::array(vec![
+                    Value::string("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned()),
                     Value::Bool(index.is_multiple_of(2)),
                     Value::Null,
                 ]),
             ),
         ]));
     }
-    Value::Object(vec![
+    Value::object(vec![
         (
             "schema".to_owned(),
-            Value::String("bench/synthetic".to_owned()),
+            Value::string("bench/synthetic".to_owned()),
         ),
-        ("rows".to_owned(), Value::Array(rows)),
+        ("rows".to_owned(), Value::array(rows)),
     ])
 }
 
@@ -141,37 +141,37 @@ fn assessment_fixture(count: usize) -> (Value, Value) {
     let introduced = destinations
         .iter()
         .map(|destination| {
-            Value::Object(vec![
-                ("destination".to_owned(), Value::String(destination.clone())),
+            Value::object(vec![
+                ("destination".to_owned(), Value::string(destination.clone())),
                 (
                     "documents".to_owned(),
-                    Value::Array(vec![Value::String("docs/bench.md".to_owned())]),
+                    Value::array(vec![Value::string("docs/bench.md".to_owned())]),
                 ),
-                ("scheme".to_owned(), Value::String("https".to_owned())),
+                ("scheme".to_owned(), Value::string("https".to_owned())),
             ])
         })
         .collect();
-    let payload = Value::Object(vec![
-        ("introduced".to_owned(), Value::Array(introduced)),
+    let payload = Value::object(vec![
+        ("introduced".to_owned(), Value::array(introduced)),
         (
             "report".to_owned(),
-            Value::Object(vec![(
+            Value::object(vec![(
                 "payload_digest".to_owned(),
-                Value::String(SAMPLE_DIGEST.to_owned()),
+                Value::string(SAMPLE_DIGEST.to_owned()),
             )]),
         ),
         (
             "schema".to_owned(),
-            Value::String(PLAN_PAYLOAD_SCHEMA.to_owned()),
+            Value::string(PLAN_PAYLOAD_SCHEMA.to_owned()),
         ),
     ]);
     let payload_digest = hj(PLAN_PAYLOAD_SCHEMA, &payload).to_string();
-    let plan = Value::Object(vec![
+    let plan = Value::object(vec![
         ("payload".to_owned(), payload),
-        ("payload_digest".to_owned(), Value::String(payload_digest)),
+        ("payload_digest".to_owned(), Value::string(payload_digest)),
         (
             "schema".to_owned(),
-            Value::String(PLAN_ENVELOPE_SCHEMA.to_owned()),
+            Value::string(PLAN_ENVELOPE_SCHEMA.to_owned()),
         ),
     ]);
     let rows = destinations

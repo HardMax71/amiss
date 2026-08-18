@@ -96,23 +96,23 @@ fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize, usize) {
             continue;
         };
         let full = key.strip_prefix("sha256:").unwrap_or(key);
-        rows.push(Value::Object(vec![
-            ("debt_id".to_owned(), Value::String(format!("debt/{full}"))),
-            ("finding_key".to_owned(), Value::String(key.to_owned())),
+        rows.push(Value::object(vec![
+            ("debt_id".to_owned(), Value::string(format!("debt/{full}"))),
+            ("finding_key".to_owned(), Value::string(key.to_owned())),
             ("accepted_fact".to_owned(), fact.clone()),
             (
                 "accepted_fact_digest".to_owned(),
-                Value::String(fact_digest.to_owned()),
+                Value::string(fact_digest.to_owned()),
             ),
-            ("owner".to_owned(), Value::String(adoption.owner.clone())),
-            ("reason".to_owned(), Value::String(adoption.reason.clone())),
+            ("owner".to_owned(), Value::string(adoption.owner.clone())),
+            ("reason".to_owned(), Value::string(adoption.reason.clone())),
             (
                 "created_at".to_owned(),
-                Value::String(adoption.created_at.clone()),
+                Value::string(adoption.created_at.clone()),
             ),
             (
                 "expires_at".to_owned(),
-                Value::String(adoption.expires_at.clone()),
+                Value::string(adoption.expires_at.clone()),
             ),
         ]));
     }
@@ -131,54 +131,54 @@ fn snapshot(
         .and_then(|evaluation| member(evaluation, "candidate"))?;
     let tree = member(candidate, "tree_oid").and_then(text)?;
     let object_format = member(candidate, "object_format").and_then(text)?;
-    Some(Value::Object(vec![
+    Some(Value::object(vec![
         (
             "schema".to_owned(),
-            Value::String("amiss/debt-snapshot".to_owned()),
+            Value::string("amiss/debt-snapshot".to_owned()),
         ),
         (
             "repository".to_owned(),
-            Value::Object(vec![
+            Value::object(vec![
                 (
                     "host".to_owned(),
-                    Value::String(identity.repository.host().to_owned()),
+                    Value::string(identity.repository.host().to_owned()),
                 ),
                 (
                     "owner".to_owned(),
-                    Value::String(identity.repository.owner().to_owned()),
+                    Value::string(identity.repository.owner().to_owned()),
                 ),
                 (
                     "name".to_owned(),
-                    Value::String(identity.repository.name().to_owned()),
+                    Value::string(identity.repository.name().to_owned()),
                 ),
             ]),
         ),
         (
             "ref".to_owned(),
-            Value::String(identity.ref_name.as_str().to_owned()),
+            Value::string(identity.ref_name.as_str().to_owned()),
         ),
         (
             "organization_floor_digest".to_owned(),
-            Value::String(adoption.floor_digest.clone()),
+            Value::string(adoption.floor_digest.clone()),
         ),
         (
             "adoption_tree".to_owned(),
-            Value::Object(vec![
+            Value::object(vec![
                 (
                     "object_format".to_owned(),
-                    Value::String(object_format.to_owned()),
+                    Value::string(object_format.to_owned()),
                 ),
-                ("tree_oid".to_owned(), Value::String(tree.to_owned())),
+                ("tree_oid".to_owned(), Value::string(tree.to_owned())),
             ]),
         ),
         (
             "adoption_report_payload_digest".to_owned(),
-            Value::String(built.payload_digest.to_string()),
+            Value::string(built.payload_digest.to_string()),
         ),
         (
             "created_at".to_owned(),
-            Value::String(adoption.created_at.clone()),
+            Value::string(adoption.created_at.clone()),
         ),
-        ("items".to_owned(), Value::Array(items)),
+        ("items".to_owned(), Value::array(items)),
     ]))
 }

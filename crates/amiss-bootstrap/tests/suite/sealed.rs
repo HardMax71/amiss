@@ -66,7 +66,9 @@ fn set(value: &mut Value, key: &str, member: Value) {
         .iter()
         .position(|(name, _)| name.as_str() > key)
         .unwrap_or(members.len());
-    members.insert(at, (key.to_owned(), member));
+    let mut expanded = std::mem::take(members).into_vec();
+    expanded.insert(at, (key.to_owned(), member));
+    *members = expanded.into_boxed_slice();
 }
 
 fn text(value: &Value, key: &str) -> String {
@@ -74,13 +76,13 @@ fn text(value: &Value, key: &str) -> String {
         panic!("not an object");
     };
     match members.iter().find(|(name, _)| name == key) {
-        Some((_, Value::String(text))) => text.clone(),
+        Some((_, Value::String(text))) => text.to_string(),
         _ => panic!("no text member {key}"),
     }
 }
 
 fn string(raw: &str) -> Value {
-    Value::String(raw.to_owned())
+    Value::string(raw)
 }
 
 type Patch = Box<dyn FnOnce(&mut Value)>;
@@ -134,13 +136,13 @@ fn identity_digest(evaluation: &Value) -> String {
         .collect();
     identity.push((
         "schema".to_owned(),
-        Value::String(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
+        Value::string(CANDIDATE_IDENTITY_DOMAIN),
     ));
-    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::Object(identity)).to_string()
+    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::object(identity)).to_string()
 }
 
 fn statement_value(repository: &Value, ties: &StatementTies, identity: &str) -> Value {
-    let mut statement = Value::Object(Vec::new());
+    let mut statement = Value::object(Vec::new());
     set(
         &mut statement,
         "schema",
@@ -185,7 +187,7 @@ struct StatementTies {
 }
 
 fn verified_control(digest: &str) -> Value {
-    let mut control = Value::Object(Vec::new());
+    let mut control = Value::object(Vec::new());
     set(&mut control, "status", string("verified"));
     set(&mut control, "digest", string(digest));
     set(&mut control, "trust_source", string(TRUST_SOURCE));
@@ -287,7 +289,7 @@ fn seal_controls(
         "organization_floor",
         verified_control(FLOOR_DIGEST),
     );
-    let mut constraint = Value::Object(Vec::new());
+    let mut constraint = Value::object(Vec::new());
     set(&mut constraint, "status", string("verified"));
     set(&mut constraint, "descriptor", descriptor);
     set(
@@ -297,7 +299,7 @@ fn seal_controls(
     );
     set(&mut constraint, "trust_source", string(TRUST_SOURCE));
     set(controls, "execution_constraint", constraint);
-    let mut trusted = Value::Object(Vec::new());
+    let mut trusted = Value::object(Vec::new());
     set(&mut trusted, "status", string("verified"));
     set(
         &mut trusted,

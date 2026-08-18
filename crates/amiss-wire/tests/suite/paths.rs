@@ -94,14 +94,14 @@ fn construction_classifies_and_the_forms_never_overlap() {
 #[test]
 fn the_wire_form_is_the_string_or_the_hex_object() {
     let text = RepoPath::new("docs/guide.md".to_owned()).unwrap();
-    assert_eq!(text.to_value(), Value::String("docs/guide.md".to_owned()));
+    assert_eq!(text.to_value(), Value::string("docs/guide.md".to_owned()));
 
     let bytes = RepoPath::from_bytes(b"docs/b\xff.md".to_vec()).unwrap();
     assert_eq!(
         bytes.to_value(),
-        Value::Object(vec![(
+        Value::object(vec![(
             "bytes_hex".to_owned(),
-            Value::String("646f63732f62ff2e6d64".to_owned()),
+            Value::string("646f63732f62ff2e6d64".to_owned()),
         )])
     );
 }

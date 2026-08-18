@@ -76,9 +76,9 @@ fn target_digests_recompute_exactly() {
     assert_eq!(raw_digest, raw);
     let projection = hj(
         TARGET_PROJECTION_DOMAIN,
-        &Value::Object(vec![
-            ("git_mode".to_owned(), Value::String("100644".to_owned())),
-            ("raw_digest".to_owned(), Value::String(raw.to_string())),
+        &Value::object(vec![
+            ("git_mode".to_owned(), Value::string("100644".to_owned())),
+            ("raw_digest".to_owned(), Value::string(raw.to_string())),
         ]),
     );
     assert_eq!(projection_digest, projection);

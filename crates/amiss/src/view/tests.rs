@@ -11,7 +11,7 @@ use super::View;
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
 fn object(members: &[(&str, Value)]) -> Value {
-    Value::Object(
+    Value::object(
         members
             .iter()
             .map(|(key, value)| ((*key).to_owned(), value.clone()))
@@ -24,11 +24,11 @@ fn object(members: &[(&str, Value)]) -> Value {
 /// said were bytes.
 #[test]
 fn only_the_bytes_atom_is_read_as_bytes() {
-    let hex = Value::String("646f6373".to_owned());
+    let hex = Value::string("646f6373");
     let row = object(&[
         ("path", object(&[("bytes_hex", hex.clone())])),
         ("target", object(&[("hex", hex)])),
-        ("code", Value::String("plain".to_owned())),
+        ("code", Value::string("plain")),
         ("count", Value::Integer(3)),
     ]);
     let view = View::of(&row);
@@ -80,8 +80,8 @@ fn measurement_report(finding_count: usize) -> Value {
     super::object(vec![(
         "payload",
         super::object(vec![
-            ("errors", Value::Array(Vec::new())),
-            ("findings", Value::Array(findings)),
+            ("errors", Value::array(Vec::new())),
+            ("findings", Value::array(findings)),
             (
                 "result",
                 super::object(vec![

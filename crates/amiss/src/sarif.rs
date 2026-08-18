@@ -49,7 +49,7 @@ pub(crate) fn log(envelope: &Value) -> Value {
     let invocation = object(vec![
         ("executionSuccessful", Value::Bool(result.flag("complete"))),
         ("exitCode", Value::Integer(result.number("exit_code"))),
-        ("toolExecutionNotifications", Value::Array(notifications)),
+        ("toolExecutionNotifications", Value::array(notifications)),
     ]);
     let driver = object(vec![
         (
@@ -57,12 +57,12 @@ pub(crate) fn log(envelope: &Value) -> Value {
             string("https://hardmax71.github.io/amiss/"),
         ),
         ("name", string("amiss")),
-        ("rules", Value::Array(rules)),
+        ("rules", Value::array(rules)),
         ("semanticVersion", string(env!("CARGO_PKG_VERSION"))),
     ]);
     let run = object(vec![
-        ("invocations", Value::Array(vec![invocation])),
-        ("results", Value::Array(results)),
+        ("invocations", Value::array(vec![invocation])),
+        ("results", Value::array(results)),
         ("tool", object(vec![("driver", driver)])),
     ]);
     object(vec![
@@ -70,7 +70,7 @@ pub(crate) fn log(envelope: &Value) -> Value {
             "$schema",
             string("https://json.schemastore.org/sarif-2.1.0.json"),
         ),
-        ("runs", Value::Array(vec![run])),
+        ("runs", Value::array(vec![run])),
         ("version", string("2.1.0")),
     ])
 }
@@ -105,10 +105,10 @@ fn result_value(row: View<'_>, present: &[FindingKind]) -> Value {
         members.push(("ruleIndex", Value::Integer(index)));
     }
     if let Some(location) = location_value(row.view("location")) {
-        members.push(("locations", Value::Array(vec![location])));
+        members.push(("locations", Value::array(vec![location])));
     }
     if let Some(fix) = fix_value(row.view("fix")) {
-        members.push(("fixes", Value::Array(vec![fix])));
+        members.push(("fixes", Value::array(vec![fix])));
     }
     object(members)
 }
@@ -126,11 +126,11 @@ fn fix_value(fix: View<'_>) -> Option<Value> {
     Some(object(vec![
         (
             "artifactChanges",
-            Value::Array(vec![object(vec![
+            Value::array(vec![object(vec![
                 ("artifactLocation", location),
                 (
                     "replacements",
-                    Value::Array(vec![object(vec![
+                    Value::array(vec![object(vec![
                         (
                             "deletedRegion",
                             object(vec![

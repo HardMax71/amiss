@@ -104,7 +104,7 @@ pub fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
                 return Err(Defect::NotAnExampleArray);
             };
             let text = |key: &str| match members.iter().find(|(name, _)| name == key) {
-                Some((_, Value::String(value))) => Ok(value.clone()),
+                Some((_, Value::String(value))) => Ok(value.to_string()),
                 _ => Err(Defect::MissingMember),
             };
             let number = match members.iter().find(|(name, _)| name == "example") {
@@ -448,22 +448,22 @@ fn rfind_within(hay: &[u8], needle: &[u8], from: usize, before: usize) -> Option
 }
 
 fn span_value(span: (usize, usize)) -> Value {
-    Value::Array(vec![
+    Value::array(vec![
         Value::Integer(clamp(span.0)),
         Value::Integer(clamp(span.1)),
     ])
 }
 
 fn occurrence_value(entry: &Occurrence) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "block_kind".to_owned(),
-            Value::String(entry.block_kind.as_str().to_owned()),
+            Value::string(entry.block_kind.as_str().to_owned()),
         ),
         ("block_span".to_owned(), span_value(entry.block_span)),
         (
             "node_path".to_owned(),
-            Value::Array(
+            Value::array(
                 entry
                     .node_path
                     .iter()
@@ -473,15 +473,15 @@ fn occurrence_value(entry: &Occurrence) -> Value {
         ),
         (
             "raw_destination".to_owned(),
-            Value::String(entry.raw_destination.clone()),
+            Value::string(entry.raw_destination.clone()),
         ),
         (
             "semantic_destination".to_owned(),
-            Value::String(entry.semantic_destination.clone()),
+            Value::string(entry.semantic_destination.clone()),
         ),
         (
             "source_construct".to_owned(),
-            Value::String(entry.construct.as_str().to_owned()),
+            Value::string(entry.construct.as_str().to_owned()),
         ),
         ("span".to_owned(), span_value(entry.span)),
     ])
@@ -489,19 +489,19 @@ fn occurrence_value(entry: &Occurrence) -> Value {
 
 fn heading_value(heading: &Heading) -> Value {
     let attribute = heading.attribute.as_ref().map_or(Value::Null, |attribute| {
-        Value::Object(vec![
-            ("id".to_owned(), Value::String(attribute.id.clone())),
-            ("suffix".to_owned(), Value::String(attribute.suffix.clone())),
+        Value::object(vec![
+            ("id".to_owned(), Value::string(attribute.id.clone())),
+            ("suffix".to_owned(), Value::string(attribute.suffix.clone())),
         ])
     });
-    Value::Object(vec![
+    Value::object(vec![
         ("attribute".to_owned(), attribute),
         (
             "source".to_owned(),
-            Value::String(heading.source.as_str().to_owned()),
+            Value::string(heading.source.as_str().to_owned()),
         ),
         ("span".to_owned(), span_value(heading.span)),
-        ("text".to_owned(), Value::String(heading.text.clone())),
+        ("text".to_owned(), Value::string(heading.text.clone())),
     ])
 }
 
@@ -509,31 +509,31 @@ fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
     vec![
         (
             "declared_anchors".to_owned(),
-            Value::Array(
+            Value::array(
                 extraction
                     .declared_anchors
                     .iter()
-                    .map(|anchor| Value::String(anchor.clone()))
+                    .map(|anchor| Value::string(anchor.clone()))
                     .collect(),
             ),
         ),
         (
             "headings".to_owned(),
-            Value::Array(extraction.headings.iter().map(heading_value).collect()),
+            Value::array(extraction.headings.iter().map(heading_value).collect()),
         ),
         (
             "html_anchors".to_owned(),
-            Value::Array(
+            Value::array(
                 extraction
                     .html_anchors
                     .iter()
-                    .map(|anchor| Value::String(anchor.clone()))
+                    .map(|anchor| Value::string(anchor.clone()))
                     .collect(),
             ),
         ),
         (
             "occurrences".to_owned(),
-            Value::Array(
+            Value::array(
                 extraction
                     .occurrences
                     .iter()
@@ -543,14 +543,14 @@ fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
         ),
         (
             "opaque".to_owned(),
-            Value::Object(vec![
+            Value::object(vec![
                 (
                     "frontmatter_bytes".to_owned(),
                     Value::Integer(clamp(extraction.opaque.frontmatter_bytes)),
                 ),
                 (
                     "html".to_owned(),
-                    Value::Array(
+                    Value::array(
                         extraction
                             .opaque
                             .html
@@ -561,7 +561,7 @@ fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
                 ),
                 (
                     "mdx".to_owned(),
-                    Value::Array(
+                    Value::array(
                         extraction
                             .opaque
                             .mdx
@@ -593,7 +593,7 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
             }
             // Canonical JSON wants sorted keys, and every key here is ASCII.
             members.sort_by(|left, right| left.0.cmp(&right.0));
-            Value::Object(members)
+            Value::object(members)
         }
         Err(error) => {
             let code = match error {
@@ -602,9 +602,9 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
                     AnalysisErrorCode::ResourceLimitExceeded
                 }
             };
-            Value::Object(vec![(
+            Value::object(vec![(
                 "fault".to_owned(),
-                Value::String(code.as_str().to_owned()),
+                Value::string(code.as_str().to_owned()),
             )])
         }
     }
@@ -625,24 +625,24 @@ fn case_value(case: &Case) -> Value {
         })
         .collect();
     let mut members = vec![
-        ("case_id".to_owned(), Value::String(case.case_id())),
-        ("section".to_owned(), Value::String(case.section.clone())),
-        ("source".to_owned(), Value::String(case.source.clone())),
+        ("case_id".to_owned(), Value::string(case.case_id())),
+        ("section".to_owned(), Value::string(case.section.clone())),
+        ("source".to_owned(), Value::string(case.source.clone())),
     ];
     match &case.expect {
         Expect::Html(_) | Expect::Accepted => {
-            members.push(("upstream".to_owned(), Value::String("accepted".to_owned())));
+            members.push(("upstream".to_owned(), Value::string("accepted".to_owned())));
         }
         Expect::Rejected(reason) => {
-            members.push(("upstream".to_owned(), Value::String("rejected".to_owned())));
-            members.push(("upstream_reason".to_owned(), Value::String(reason.clone())));
+            members.push(("upstream".to_owned(), Value::string("rejected".to_owned())));
+            members.push(("upstream_reason".to_owned(), Value::string(reason.clone())));
         }
     }
     if let Some(tag) = &case.tag {
-        members.push(("tag".to_owned(), Value::String(tag.clone())));
+        members.push(("tag".to_owned(), Value::string(tag.clone())));
     }
-    members.push(("work".to_owned(), Value::Object(charged)));
-    Value::Object(members)
+    members.push(("work".to_owned(), Value::object(charged)));
+    Value::object(members)
 }
 
 /// Builds the manifest: every case's raw source, what upstream says about it,
@@ -667,25 +667,25 @@ pub fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
                 .iter()
                 .find(|(name, _)| name == family)
                 .map_or(0, |(_, count)| *count);
-            Value::Object(vec![
+            Value::object(vec![
                 ("cases".to_owned(), Value::Integer(clamp(count))),
-                ("family".to_owned(), Value::String((*family).to_owned())),
-                ("input_digest".to_owned(), Value::String((*pin).to_owned())),
+                ("family".to_owned(), Value::string((*family).to_owned())),
+                ("input_digest".to_owned(), Value::string((*pin).to_owned())),
                 ("not_a_literal".to_owned(), Value::Integer(clamp(dropped))),
             ])
         })
         .collect();
     let profiles: Vec<Value> = PROFILES
         .iter()
-        .map(|adapter| Value::String(adapter.grammar_profile().to_owned()))
+        .map(|adapter| Value::string(adapter.grammar_profile().to_owned()))
         .collect();
-    Value::Object(vec![
-        ("schema".to_owned(), Value::String(SCHEMA.to_owned())),
-        ("families".to_owned(), Value::Array(family_rows)),
-        ("profiles".to_owned(), Value::Array(profiles)),
+    Value::object(vec![
+        ("schema".to_owned(), Value::string(SCHEMA.to_owned())),
+        ("families".to_owned(), Value::array(family_rows)),
+        ("profiles".to_owned(), Value::array(profiles)),
         (
             "cases".to_owned(),
-            Value::Array(cases.iter().map(case_value).collect()),
+            Value::array(cases.iter().map(case_value).collect()),
         ),
     ])
 }
@@ -716,7 +716,7 @@ pub fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
 pub fn directory_digest(files: &[(String, String)]) -> String {
     let members: Vec<(String, Value)> = files
         .iter()
-        .map(|(name, body)| (name.clone(), Value::String(body.clone())))
+        .map(|(name, body)| (name.clone(), Value::string(body.clone())))
         .collect();
-    hb(GITHUB_FOOTNOTE_FAMILY, &canonical(&Value::Object(members))).to_string()
+    hb(GITHUB_FOOTNOTE_FAMILY, &canonical(&Value::object(members))).to_string()
 }

@@ -53,7 +53,7 @@ pub fn synthetic_candidate(
         .collect();
     let projection = object(vec![
         ("schema", string(INDEX_PROJECTION_SCHEMA)),
-        ("entries", Value::Array(rows)),
+        ("entries", Value::array(rows)),
     ]);
     let projection_digest = hj(INDEX_PROJECTION_SCHEMA, &projection);
     let snapshot_input = object(vec![
@@ -155,7 +155,7 @@ impl Built {
 }
 
 fn string(text: &str) -> Value {
-    Value::String(text.to_owned())
+    Value::string(text.to_owned())
 }
 
 fn nullable(text: Option<&str>) -> Value {
@@ -171,11 +171,11 @@ fn integer(value: u64) -> Value {
 }
 
 fn digest_value(digest: Digest) -> Value {
-    Value::String(digest.to_string())
+    Value::string(digest.to_string())
 }
 
 fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
+    Value::object(
         members
             .into_iter()
             .map(|(key, value)| (key.to_owned(), value))
@@ -293,7 +293,7 @@ fn comparison_value(comparison: &Comparison) -> Value {
         observation.as_ref().map_or(Value::Null, occurrence_value)
     };
     let list =
-        |members: &[Observation]| Value::Array(members.iter().map(occurrence_value).collect());
+        |members: &[Observation]| Value::array(members.iter().map(occurrence_value).collect());
     object(vec![
         ("base", side(&comparison.base)),
         ("candidate", side(&comparison.candidate)),
@@ -628,7 +628,7 @@ fn finding_value(
         ),
         (
             "observation_ids",
-            Value::Array(
+            Value::array(
                 finding
                     .observation_ids
                     .iter()
@@ -644,7 +644,7 @@ fn finding_value(
             "effective_disposition",
             string(finding.effective_disposition.as_str()),
         ),
-        ("policy_trace", Value::Array(trace)),
+        ("policy_trace", Value::array(trace)),
         (
             "debt",
             finding
@@ -681,7 +681,7 @@ fn feedback_value(projected: feedback::Feedback) -> Value {
                 ("target", nullable_path(item.target.as_ref())),
                 (
                     "finding_kinds",
-                    Value::Array(
+                    Value::array(
                         item.finding_kinds
                             .into_iter()
                             .map(|kind| string(kind.as_str()))
@@ -699,7 +699,7 @@ fn feedback_value(projected: feedback::Feedback) -> Value {
         .collect();
     object(vec![
         ("status", string("available")),
-        ("items", Value::Array(items)),
+        ("items", Value::array(items)),
         ("existing_count", integer(projected.existing_count)),
     ])
 }
@@ -878,7 +878,7 @@ fn candidate_value(candidate: &CandidateBlock, snapshot_request: Option<Digest>)
             ),
             (
                 "reasons",
-                Value::Array(reasons.iter().map(|reason| string(reason)).collect()),
+                Value::array(reasons.iter().map(|reason| string(reason)).collect()),
             ),
         ]),
     }
@@ -1009,7 +1009,7 @@ fn controls_value(setup: &Setup) -> Value {
                 "request_digest",
                 setup.requests.controls.map_or(Value::Null, digest_value),
             ),
-            ("reasons", Value::Array(vec![string(reason)])),
+            ("reasons", Value::array(vec![string(reason)])),
         ]);
     }
     let (descriptor, descriptor_digest) = sandbox_descriptor();
@@ -1509,19 +1509,19 @@ pub fn construct(
         ),
         (
             "documents",
-            Value::Array(document_rows.into_iter().map(|(_path, row)| row).collect()),
+            Value::array(document_rows.into_iter().map(|(_path, row)| row).collect()),
         ),
         (
             "observations",
-            Value::Array(
+            Value::array(
                 comparison_rows
                     .into_iter()
                     .map(|(_primary, row)| row)
                     .collect(),
             ),
         ),
-        ("findings", Value::Array(finding_rows)),
-        ("errors", Value::Array(governed_errors)),
+        ("findings", Value::array(finding_rows)),
+        ("errors", Value::array(governed_errors)),
     ]);
     let (payload_digest, payload_length) = hj_with_length(PAYLOAD_SCHEMA, &payload);
     let envelope = object(vec![
@@ -1836,10 +1836,10 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
                 ("unattested_claims", integer(0)),
             ]),
         ),
-        ("documents", Value::Array(Vec::new())),
-        ("observations", Value::Array(Vec::new())),
-        ("findings", Value::Array(Vec::new())),
-        ("errors", Value::Array(error_rows)),
+        ("documents", Value::array(Vec::new())),
+        ("observations", Value::array(Vec::new())),
+        ("findings", Value::array(Vec::new())),
+        ("errors", Value::array(error_rows)),
     ]);
     let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
     let envelope = object(vec![

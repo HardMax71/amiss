@@ -219,14 +219,14 @@ fn plan_value(
     policy: &controls::PolicyIdentity,
     execution: &ExecutionConstraintDescriptor,
 ) -> Value {
-    Value::Object(vec![
+    Value::object(vec![
         (
             "schema".to_owned(),
-            Value::String(CHECK_PLAN_DOMAIN.to_owned()),
+            Value::string(CHECK_PLAN_DOMAIN.to_owned()),
         ),
         (
             "profile".to_owned(),
-            Value::String(
+            Value::string(
                 match profile {
                     Profile::Observe => "observe",
                     Profile::EnforceIntroduced => "enforce-introduced",
@@ -249,25 +249,25 @@ fn plan_value(
         ),
         (
             "execution_constraint_digest".to_owned(),
-            Value::String(execution.digest().to_string()),
+            Value::string(execution.digest().to_string()),
         ),
         (
             "required_status_name".to_owned(),
-            Value::String(execution.required_status_name().to_owned()),
+            Value::string(execution.required_status_name().to_owned()),
         ),
     ])
 }
 
 fn control_identity_value(identity: Option<controls::ControlIdentity>) -> Value {
     identity.map_or(Value::Null, |control| {
-        Value::Object(vec![
+        Value::object(vec![
             (
                 "digest".to_owned(),
-                Value::String(control.digest.to_string()),
+                Value::string(control.digest.to_string()),
             ),
             (
                 "trust_source".to_owned(),
-                Value::String(control.trust_source.as_str().to_owned()),
+                Value::string(control.trust_source.as_str().to_owned()),
             ),
         ])
     })

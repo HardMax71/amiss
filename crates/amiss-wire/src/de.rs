@@ -61,7 +61,7 @@ impl Obj {
         match value {
             Value::Object(members) => Ok(Self {
                 path: path.to_owned(),
-                members,
+                members: members.into_vec(),
             }),
             Value::Null
             | Value::Bool(_)
@@ -142,7 +142,7 @@ impl Obj {
 /// Fails with `WrongType` when the value is not a string.
 pub fn string(path: &str, value: Value) -> Result<String, Error> {
     match value {
-        Value::String(s) => Ok(s),
+        Value::String(s) => Ok(s.into_string()),
         Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_) => {
             fail(path, ErrorKind::WrongType)
         }
@@ -170,7 +170,7 @@ pub fn integer(path: &str, value: Value) -> Result<i64, Error> {
 /// Fails with `WrongType` when the value is not an array.
 pub fn array(path: &str, value: Value) -> Result<Vec<Value>, Error> {
     match value {
-        Value::Array(items) => Ok(items),
+        Value::Array(items) => Ok(items.into_vec()),
         Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Object(_) => {
             fail(path, ErrorKind::WrongType)
         }

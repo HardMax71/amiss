@@ -1,21 +1,107 @@
 use std::cmp::Ordering;
 use std::fmt;
+use std::ops::Deref;
 
 pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 const MAX_DEPTH: usize = 512;
 
+/// An owned JSON string with no spare mutable capacity.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Text(Box<str>);
+
+impl Text {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self
+    }
+
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0.into()
+    }
+}
+
+impl Deref for Text {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<str> for Text {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
+
+impl fmt::Display for Text {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self)
+    }
+}
+
+impl From<&str> for Text {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<String> for Text {
+    fn from(value: String) -> Self {
+        Self(value.into_boxed_str())
+    }
+}
+
+impl From<Box<str>> for Text {
+    fn from(value: Box<str>) -> Self {
+        Self(value)
+    }
+}
+
+impl PartialEq<str> for Text {
+    fn eq(&self, other: &str) -> bool {
+        **self == *other
+    }
+}
+
+impl PartialEq<&str> for Text {
+    fn eq(&self, other: &&str) -> bool {
+        **self == **other
+    }
+}
+
+/// An owned strict-JSON tree with fixed-size strings, arrays, and objects.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Null,
     Bool(bool),
     Integer(i64),
-    String(String),
-    Array(Vec<Value>),
+    String(Text),
+    Array(Box<[Value]>),
     /// Keys sorted by UTF-16 code units and unique; `parse` enforces both.
-    Object(Vec<(String, Value)>),
+    Object(Box<[(String, Value)]>),
 }
 
 impl Value {
+    /// Freezes one owned string into a JSON string value.
+    #[must_use]
+    pub fn string(value: impl Into<Text>) -> Self {
+        Self::String(value.into())
+    }
+
+    /// Freezes a completed sequence into a JSON array value.
+    #[must_use]
+    pub fn array(values: Vec<Self>) -> Self {
+        Self::Array(values.into_boxed_slice())
+    }
+
+    /// Freezes a completed member sequence into a JSON object value.
+    #[must_use]
+    pub fn object(values: Vec<(String, Self)>) -> Self {
+        Self::Object(values.into_boxed_slice())
+    }
+
     /// The named member of an object value, or `None` off objects.
     #[must_use]
     pub fn member(&self, name: &str) -> Option<&Self> {
@@ -236,8 +322,8 @@ impl Scratch {
         level.clear();
         level.extend(0..members.len());
         level.sort_by(|&a, &b| {
-            let left = members.get(a).map_or("", |(key, _)| key.as_str());
-            let right = members.get(b).map_or("", |(key, _)| key.as_str());
+            let left = members.get(a).map_or("", |(key, _)| key);
+            let right = members.get(b).map_or("", |(key, _)| key);
             utf16_cmp(left, right)
         });
     }
@@ -375,7 +461,7 @@ impl Parser<'_> {
         let mut items = Vec::new();
         if self.peek() == Some(b']') {
             self.advance();
-            return Ok(Value::Array(items));
+            return Ok(Value::Array(items.into_boxed_slice()));
         }
         loop {
             self.skip_whitespace();
@@ -385,7 +471,7 @@ impl Parser<'_> {
                 Some(b',') => self.advance(),
                 Some(b']') => {
                     self.advance();
-                    return Ok(Value::Array(items));
+                    return Ok(Value::Array(items.into_boxed_slice()));
                 }
                 _ => return Err(self.end_or_unexpected()),
             }
@@ -398,7 +484,7 @@ impl Parser<'_> {
         self.skip_whitespace();
         if self.peek() == Some(b'}') {
             self.advance();
-            return Ok(Value::Object(Vec::new()));
+            return Ok(Value::Object(Box::default()));
         }
         let mut members: Vec<(String, Value, usize)> = Vec::new();
         loop {
@@ -407,7 +493,7 @@ impl Parser<'_> {
             if self.peek() != Some(b'"') {
                 return Err(self.end_or_unexpected());
             }
-            let key = self.string()?;
+            let key = self.string()?.into_string();
             self.skip_whitespace();
             self.expect(b':')?;
             self.skip_whitespace();
@@ -435,11 +521,14 @@ impl Parser<'_> {
             }
         }
         Ok(Value::Object(
-            members.into_iter().map(|(k, v, _)| (k, v)).collect(),
+            members
+                .into_iter()
+                .map(|(key, value, _)| (key, value))
+                .collect(),
         ))
     }
 
-    fn string(&mut self) -> Result<String, Error> {
+    fn string(&mut self) -> Result<Text, Error> {
         self.expect(b'"')?;
         let mut out = String::new();
         let mut segment_start = self.pos;
@@ -449,7 +538,7 @@ impl Parser<'_> {
                 Some(b'"') => {
                     self.flush(segment_start, &mut out)?;
                     self.advance();
-                    return Ok(out);
+                    return Ok(out.into());
                 }
                 Some(b'\\') => {
                     self.flush(segment_start, &mut out)?;

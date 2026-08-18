@@ -47,7 +47,7 @@ impl<'value> View<'value> {
     pub(crate) fn atom_or_dash(self, name: &str) -> String {
         match self.field(name) {
             Some(Value::String(value)) => amiss_wire::human::atom(value),
-            Some(Value::Object(members)) => match members.as_slice() {
+            Some(Value::Object(members)) => match members.as_ref() {
                 [(key, Value::String(hex))] if key == "bytes_hex" => {
                     amiss_wire::human::atom_bytes(&amiss_wire::human::decode_hex(hex))
                 }
@@ -85,9 +85,9 @@ pub(crate) fn object(members: Vec<(&str, Value)>) -> Value {
         .map(|(key, value)| (key.to_owned(), value))
         .collect();
     members.sort_by(|left, right| left.0.cmp(&right.0));
-    Value::Object(members)
+    Value::object(members)
 }
 
 pub(crate) fn string(value: &str) -> Value {
-    Value::String(value.to_owned())
+    Value::string(value)
 }

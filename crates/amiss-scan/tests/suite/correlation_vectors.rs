@@ -59,13 +59,13 @@ fn text(value: &Value, label: &str) -> String {
     let Value::String(text) = value else {
         panic!("{label} must be a string, found {value:?}")
     };
-    text.clone()
+    text.to_string()
 }
 
 fn optional_text(value: &Value, label: &str) -> Option<String> {
     match value {
         Value::Null => None,
-        Value::String(text) => Some(text.clone()),
+        Value::String(text) => Some(text.to_string()),
         other @ (Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_)) => {
             panic!("{label} must be a string or null, found {other:?}")
         }
@@ -252,11 +252,11 @@ fn the_published_vectors_execute_live_correlation() {
     assert_eq!(root.len(), 5, "the vector root shape is closed");
     assert_eq!(
         field(&root, "schema"),
-        &Value::String("amiss/correlation-intent-vectors".to_owned())
+        &Value::string("amiss/correlation-intent-vectors")
     );
     assert_eq!(
         field(&root, "contract"),
-        &Value::String("correlation-intent".to_owned())
+        &Value::string("correlation-intent")
     );
     let query_preimages = preimages(field(&root, "query_preimages"), "query_preimages");
     let fragment_preimages = preimages(field(&root, "fragment_preimages"), "fragment_preimages");

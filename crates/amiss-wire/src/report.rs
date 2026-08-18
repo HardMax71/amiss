@@ -496,7 +496,7 @@ pub fn unavailable_evaluation_envelope(
     }
     let mut reasons = Vec::new();
     for code in codes {
-        reasons.push(Value::String(code.evaluation_reason()?.to_owned()));
+        reasons.push(Value::String(code.evaluation_reason()?.into()));
     }
 
     let mut errors: Vec<(AnalysisErrorCode, &'static str)> = Vec::new();
@@ -533,7 +533,7 @@ pub fn unavailable_evaluation_envelope(
                     evaluation_request_digest
                         .map_or(Value::Null, |digest| string(&digest.to_string())),
                 ),
-                ("reasons", Value::Array(reasons)),
+                ("reasons", Value::Array(reasons.into_boxed_slice())),
             ]),
         ),
         (
@@ -545,7 +545,7 @@ pub fn unavailable_evaluation_envelope(
                     controls_request_digest
                         .map_or(Value::Null, |digest| string(&digest.to_string())),
                 ),
-                ("reasons", Value::Array(vec![string("not-parsed")])),
+                ("reasons", Value::Array(Box::new([string("not-parsed")]))),
             ]),
         ),
         ("feedback", object(vec![("status", string("unavailable"))])),
@@ -560,10 +560,10 @@ pub fn unavailable_evaluation_envelope(
             ]),
         ),
         ("summary", zero_summary()),
-        ("documents", Value::Array(Vec::new())),
-        ("observations", Value::Array(Vec::new())),
-        ("findings", Value::Array(Vec::new())),
-        ("errors", Value::Array(error_rows)),
+        ("documents", Value::Array(Box::default())),
+        ("observations", Value::Array(Box::default())),
+        ("findings", Value::Array(Box::default())),
+        ("errors", Value::Array(error_rows.into_boxed_slice())),
     ]);
 
     let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
@@ -615,7 +615,7 @@ pub fn engine_block(engine: &EngineProvenance) -> Value {
         ("engine_digest", string(&engine.digest.to_string())),
         ("action_provenance", object(vec![("kind", string("local"))])),
         ("built_in_policy", string(BUILT_IN_POLICY)),
-        ("adapters", Value::Array(adapter_rows)),
+        ("adapters", Value::Array(adapter_rows.into_boxed_slice())),
     ])
 }
 
@@ -675,7 +675,7 @@ fn zero_counts(fields: &[&str]) -> Value {
     Value::Object(
         fields
             .iter()
-            .map(|field| ((*field).to_owned(), Value::Integer(0)))
+            .map(|field| ((*field).into(), Value::Integer(0)))
             .collect(),
     )
 }
@@ -684,13 +684,13 @@ fn object(members: Vec<(&str, Value)>) -> Value {
     Value::Object(
         members
             .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
+            .map(|(key, value)| (key.into(), value))
             .collect(),
     )
 }
 
 fn string(value: &str) -> Value {
-    Value::String(value.to_owned())
+    Value::String(value.into())
 }
 
 /// The target-intent variants an occurrence can carry, in schema
@@ -1156,7 +1156,7 @@ fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
         (
             "path_bytes_hex",
             detail.path_bytes.as_deref().map_or(Value::Null, |bytes| {
-                Value::String(crate::model::hex_lower(bytes))
+                Value::String(crate::model::hex_lower(bytes).into())
             }),
         ),
         ("resource", resource),

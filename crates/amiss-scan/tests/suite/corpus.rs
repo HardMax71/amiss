@@ -17,7 +17,7 @@ fn text(value: Option<&Value>) -> String {
     let Some(Value::String(text)) = value else {
         panic!("expected a string, found {value:?}")
     };
-    text.clone()
+    text.to_string()
 }
 
 #[expect(clippy::panic, clippy::unwrap_used, reason = "test fixture helper")]

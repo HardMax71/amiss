@@ -191,9 +191,9 @@ fn accept_sealed(
         .collect();
     identity_members.push((
         "schema".to_owned(),
-        Value::String(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
+        Value::string(CANDIDATE_IDENTITY_DOMAIN),
     ));
-    let identity = Value::Object(identity_members);
+    let identity = Value::object(identity_members);
     let identity_digest = hj(CANDIDATE_IDENTITY_DOMAIN, &identity).to_string();
     if identity_digest != expected.candidate_identity_digest {
         return Err(AcceptanceDefect::SealedIdentity);
