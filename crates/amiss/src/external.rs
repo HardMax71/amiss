@@ -14,54 +14,56 @@ use crate::view::View;
 pub(crate) fn run_plan(invocation: &PlanInvocation, reserve: &mut FatalSerializer) -> ExitCode {
     run_pure(
         "external-plan",
-        &[&invocation.report],
         invocation.format,
         reserve,
-        |values, version, digest| {
-            let [report] = values else {
-                return Err("the input set is not one report");
-            };
-            amiss_wire::external::plan(report, version, digest).map_err(describe_plan)
+        || strict_value(&invocation.report),
+        |report, version, digest| {
+            amiss_wire::external::plan(&report, version, digest).map_err(describe_plan)
         },
+        human_plan,
     )
 }
 
 pub(crate) fn run_assess(invocation: &AssessInvocation, reserve: &mut FatalSerializer) -> ExitCode {
     run_pure(
         "external-assess",
-        &[&invocation.plan, &invocation.evidence],
         invocation.format,
         reserve,
-        |values, version, digest| {
-            let [plan, evidence] = values else {
-                return Err("the input set is not a plan and its evidence");
-            };
-            amiss_wire::external::assess(plan, evidence, version, digest).map_err(describe_assess)
+        || {
+            Ok((
+                strict_value(&invocation.plan)?,
+                strict_value(&invocation.evidence)?,
+            ))
         },
+        |(plan, evidence), version, digest| {
+            amiss_wire::external::assess(&plan, &evidence, version, digest).map_err(describe_assess)
+        },
+        human_assessment,
     )
 }
 
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
-fn run_pure(
+fn run_pure<T>(
     command: &str,
-    inputs: &[&Path],
     format: OutputFormat,
     reserve: &mut FatalSerializer,
-    derive: impl FnOnce(&[Value], &str, &str) -> Result<Value, &'static str>,
+    load: impl FnOnce() -> Result<T, String>,
+    derive: impl FnOnce(T, &str, &str) -> Result<Value, &'static str>,
+    human: fn(&Value),
 ) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
-    let mut values = Vec::new();
-    for path in inputs {
-        let Some(value) = strict_value(command, path) else {
+    let input = match load() {
+        Ok(input) => input,
+        Err(defect) => {
+            eprintln!("amiss {command}: {defect}");
             return failure;
-        };
-        values.push(value);
-    }
+        }
+    };
     let Some(engine) = crate::engine_provenance() else {
         return internal_error();
     };
-    match derive(&values, &engine.version, &engine.digest.to_string()) {
-        Ok(envelope) => project(command, &envelope, format, reserve),
+    match derive(input, &engine.version, &engine.digest.to_string()) {
+        Ok(envelope) => project(command, &envelope, format, reserve, human),
         Err(defect) => {
             eprintln!("amiss {command}: {defect}");
             failure
@@ -71,30 +73,17 @@ fn run_pure(
 
 /// The writer caps an envelope at `MACHINE_JSON_BYTES`, so a larger input
 /// is provably not the scanner's artifact.
-#[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
-fn strict_value(command: &str, path: &Path) -> Option<Value> {
+fn strict_value(path: &Path) -> Result<Value, String> {
     let shown = path.display();
-    let Ok(file) = fs::File::open(path) else {
-        eprintln!("amiss {command}: {shown} is unreadable");
-        return None;
-    };
+    let file = fs::File::open(path).map_err(|_error| format!("{shown} is unreadable"))?;
     let mut bytes = Vec::new();
-    let bounded = file
-        .take(MACHINE_JSON_BYTES.saturating_add(1))
-        .read_to_end(&mut bytes);
-    if bounded.is_err() {
-        eprintln!("amiss {command}: {shown} is unreadable");
-        return None;
-    }
+    file.take(MACHINE_JSON_BYTES.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|_error| format!("{shown} is unreadable"))?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES {
-        eprintln!("amiss {command}: {shown} is larger than a scanner report can be");
-        return None;
+        return Err(format!("{shown} is larger than a scanner report can be"));
     }
-    let Ok(parsed) = json::parse(&bytes) else {
-        eprintln!("amiss {command}: {shown} is not the scanner's strict JSON");
-        return None;
-    };
-    Some(parsed)
+    json::parse(&bytes).map_err(|_error| format!("{shown} is not the scanner's strict JSON"))
 }
 
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
@@ -113,6 +102,7 @@ fn project(
     envelope: &Value,
     format: OutputFormat,
     reserve: &mut FatalSerializer,
+    human: fn(&Value),
 ) -> ExitCode {
     match format {
         OutputFormat::Json => {
@@ -125,11 +115,7 @@ fn project(
         }
         // The grammar admits human and json only; the other two never reach here.
         OutputFormat::Human | OutputFormat::Sarif | OutputFormat::CodeQuality => {
-            if command == "external-plan" {
-                human_plan(envelope);
-            } else {
-                human_assessment(envelope);
-            }
+            human(envelope);
         }
     }
     ExitCode::from(ExitClass::Success.code())
