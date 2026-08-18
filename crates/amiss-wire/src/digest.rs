@@ -43,11 +43,32 @@ fn hex_value(byte: u8) -> Option<u8> {
 
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("sha256:")?;
-        for byte in self.0 {
-            write!(f, "{byte:02x}")?;
+        const PREFIX: &[u8; 7] = b"sha256:";
+        let mut wire = [b'0'; PREFIX.len() + 64];
+        for (slot, byte) in wire.iter_mut().zip(PREFIX) {
+            *slot = *byte;
         }
-        Ok(())
+        let Some(encoded) = wire.get_mut(PREFIX.len()..) else {
+            return Err(fmt::Error);
+        };
+        for (pair, byte) in encoded.chunks_exact_mut(2).zip(self.0) {
+            let [high, low] = pair else {
+                return Err(fmt::Error);
+            };
+            *high = hex_digit(byte.wrapping_shr(4));
+            *low = hex_digit(byte & 0x0f);
+        }
+        let Ok(text) = std::str::from_utf8(&wire) else {
+            return Err(fmt::Error);
+        };
+        f.write_str(text)
+    }
+}
+
+const fn hex_digit(nibble: u8) -> u8 {
+    match nibble {
+        0..=9 => b'0'.wrapping_add(nibble),
+        _ => b'a'.wrapping_add(nibble.wrapping_sub(10)),
     }
 }
 
