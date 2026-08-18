@@ -159,8 +159,8 @@ impl<'a> Resolver<'a> {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
             ));
         }
-        if let Some(scheme) = scheme_of(&path_part) {
-            return absolute(self, context, &path_part, &scheme, query, fragment);
+        if let Some(scheme) = scheme_of(path_part) {
+            return absolute(self, context, path_part, scheme, query, fragment);
         }
         if path_part.starts_with('/') {
             return Ok((
@@ -175,7 +175,7 @@ impl<'a> Resolver<'a> {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
             ));
         }
-        if adapter == Adapter::AsciiDoc && names_a_page_identity(&path_part) {
+        if adapter == Adapter::AsciiDoc && names_a_page_identity(path_part) {
             return Ok((
                 unsupported_intent(query, fragment),
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
@@ -185,7 +185,7 @@ impl<'a> Resolver<'a> {
             self,
             document_path,
             is_image,
-            &path_part,
+            path_part,
             query,
             fragment,
             context.map(|identity| identity.dialect),
@@ -302,7 +302,7 @@ fn unsupported_intent(query: Option<String>, fragment: Option<String>) -> Intent
 /// RFC 3986 order: the first `#` opens the fragment through end; within the
 /// prefix the first `?` opens the query. `a?x?y#z?u` has query `x?y` and
 /// fragment `z?u`. A field is absent exactly when its delimiter is.
-fn split_components(semantic: &str) -> (String, Option<String>, Option<String>) {
+fn split_components(semantic: &str) -> (&str, Option<String>, Option<String>) {
     let (before, fragment) = match semantic.split_once('#') {
         Some((before, after)) => (before, Some(after.to_owned())),
         None => (semantic, None),
@@ -311,10 +311,10 @@ fn split_components(semantic: &str) -> (String, Option<String>, Option<String>) 
         Some((path, after)) => (path, Some(after.to_owned())),
         None => (before, None),
     };
-    (path.to_owned(), query, fragment)
+    (path, query, fragment)
 }
 
-fn scheme_of(path_part: &str) -> Option<String> {
+fn scheme_of(path_part: &str) -> Option<&str> {
     let mut bytes = path_part.bytes();
     let first = bytes.next()?;
     if !first.is_ascii_alphabetic() {
@@ -324,7 +324,7 @@ fn scheme_of(path_part: &str) -> Option<String> {
     for byte in bytes {
         match byte {
             b':' => {
-                return path_part.get(..length).map(str::to_owned);
+                return path_part.get(..length);
             }
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'.' | b'-' => {
                 length = length.saturating_add(1);
@@ -422,11 +422,10 @@ fn absolute(
     if !uri_bytes_valid(path_part) || query.as_deref().is_some_and(|text| !uri_bytes_valid(text)) {
         return Ok(invalid(query, fragment));
     }
-    let lower = scheme.to_ascii_lowercase();
     let after_scheme = path_part
         .get(scheme.len().saturating_add(1)..)
         .unwrap_or_default();
-    if lower == "http" || lower == "https" {
+    if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
         let Some(rest) = after_scheme.strip_prefix("//") else {
             return Ok(invalid(query, fragment));
         };
@@ -446,7 +445,7 @@ fn absolute(
             kind: IntentKind::ExternalUrl,
             repository_path: None,
             target_kind: None,
-            external_scheme: Some(lower),
+            external_scheme: Some(scheme.to_ascii_lowercase()),
             query,
             fragment,
         },
