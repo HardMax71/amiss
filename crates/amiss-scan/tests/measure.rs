@@ -87,7 +87,7 @@ fn representative_repository_latency_and_memory() {
 }
 
 /// A late case-only match isolates the missing-target fallback from discovery
-/// while retaining the contract-maximum entry count.
+/// across a large ordered entry inventory.
 #[test]
 #[ignore = "promotion evidence, run explicitly in release"]
 fn late_case_neighbor_latency_and_memory() {
