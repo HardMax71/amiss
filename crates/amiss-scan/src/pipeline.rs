@@ -313,7 +313,7 @@ fn conclude(
         return construct_incomplete(setup, failures);
     }
     match correlate(base.1, candidate.1) {
-        Ok(comparisons) => construct(setup, base.0, candidate.0, &comparisons, claims),
+        Ok(comparisons) => construct(setup, base.0, candidate.0, comparisons, claims),
         Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
     }
 }
