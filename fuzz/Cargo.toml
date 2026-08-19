@@ -9,6 +9,9 @@ cargo-fuzz = true
 
 [workspace]
 
+[patch.crates-io]
+markdown = { path = "../third_party/markdown-rs-1.0.0" }
+
 [dependencies]
 amiss-git = { path = "../crates/amiss-git" }
 amiss-scan = { path = "../crates/amiss-scan" }
