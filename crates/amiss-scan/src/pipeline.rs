@@ -77,7 +77,17 @@ pub(crate) fn side_observations(
         .collect();
     let mut cache = TargetCache::default();
     let mut resolver = Resolver::new(repo, git_resources, scan_resources, &mut cache, discovery);
-    let mut observations: Vec<Observation> = Vec::new();
+    let observation_count = discovery
+        .documents
+        .iter()
+        .filter_map(|record| {
+            let DocumentStatus::Scanned(scanned) = &record.status else {
+                return None;
+            };
+            Some(scanned.occurrences.len())
+        })
+        .fold(0_usize, usize::saturating_add);
+    let mut observations: Vec<Observation> = Vec::with_capacity(observation_count);
     let mut documents = std::collections::BTreeMap::new();
     for record in &discovery.documents {
         if let Some(raw) = record.raw_digest {
