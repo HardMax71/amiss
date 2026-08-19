@@ -201,7 +201,7 @@ fn source_span_value(span: (usize, usize), display: SpanDisplay) -> Value {
 }
 
 fn occurrence_value(observation: &Observation) -> Value {
-    let input = observe::observation_input(&observe::ObservationIdentity {
+    let identity = observe::ObservationIdentity {
         adapter: observation.adapter,
         contract_digest: observation.adapter_contract_digest,
         document: &observation.document,
@@ -210,10 +210,12 @@ fn occurrence_value(observation: &Observation) -> Value {
         projection_digest: observation.projection_digest,
         intent: &observation.intent,
         raw_destination_digest: observation.raw_destination_digest,
-    });
+    };
+    let id = observe::observation_digest(&identity);
+    let input = observe::observation_input(&identity);
     let resolution = crate::evaluate::resolution_row(&observation.resolution);
     let mut members = vec![
-        ("observation_id", digest_value(observation.id)),
+        ("observation_id", digest_value(id)),
         ("observation_id_input", input),
         ("adapter_id", string(observation.adapter.adapter_id())),
         ("document", observation.document.to_value()),
