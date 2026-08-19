@@ -5,10 +5,8 @@ use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
 
 use crate::Error;
 
-use super::{
-    ForgeContext, Intent, Resolution, Resolver, decode_bytes, invalid_path_byte, lookup,
-    unsupported_intent,
-};
+use super::syntax::{decode_bytes, invalid_path_byte, unsupported_intent};
+use super::{ForgeContext, Intent, Resolution, Resolver, lookup};
 
 pub(super) fn resolve(
     resolver: &mut Resolver<'_>,
