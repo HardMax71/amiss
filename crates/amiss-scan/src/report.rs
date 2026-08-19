@@ -200,17 +200,19 @@ fn source_span_value(span: (usize, usize), display: SpanDisplay) -> Value {
     ])
 }
 
-fn occurrence_value(engine: &EngineProvenance, observation: &Observation) -> Value {
-    let (input, id) = observe::observation_id(
-        engine,
-        observation.adapter,
-        &observation.document,
-        observation.construct,
-        &observation.node_path,
-        observation.projection_digest,
-        &observation.intent,
-        observation.raw_destination_digest,
-    );
+fn occurrence_value(observation: &Observation) -> Value {
+    let identity = observe::ObservationIdentity {
+        adapter: observation.adapter,
+        contract_digest: observation.adapter_contract_digest,
+        document: &observation.document,
+        construct: observation.construct,
+        node_path: &observation.node_path,
+        projection_digest: observation.projection_digest,
+        intent: &observation.intent,
+        raw_destination_digest: observation.raw_destination_digest,
+    };
+    let id = observe::observation_digest(&identity);
+    let input = observe::observation_input(&identity);
     let resolution = crate::evaluate::resolution_row(&observation.resolution);
     let mut members = vec![
         ("observation_id", digest_value(id)),
@@ -286,20 +288,12 @@ const fn impact_str(impact: Impact) -> &'static str {
     }
 }
 
-fn comparison_value(engine: &EngineProvenance, comparison: &Comparison) -> Value {
+fn comparison_value(comparison: &Comparison) -> Value {
     let side = |observation: &Option<Observation>| {
-        observation
-            .as_ref()
-            .map_or(Value::Null, |value| occurrence_value(engine, value))
+        observation.as_ref().map_or(Value::Null, occurrence_value)
     };
-    let list = |members: &[Observation]| {
-        Value::Array(
-            members
-                .iter()
-                .map(|member| occurrence_value(engine, member))
-                .collect(),
-        )
-    };
+    let list =
+        |members: &[Observation]| Value::Array(members.iter().map(occurrence_value).collect());
     object(vec![
         ("base", side(&comparison.base)),
         ("candidate", side(&comparison.candidate)),
@@ -1463,7 +1457,7 @@ pub fn construct(
                 .as_ref()
                 .or(comparison.base.as_ref())
                 .map(|observation| observation.id);
-            (primary, comparison_value(&setup.engine, comparison))
+            (primary, comparison_value(comparison))
         })
         .collect();
     let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());

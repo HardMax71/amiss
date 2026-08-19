@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
-use std::io::Read as _;
+use std::io::{self, Read as _};
 
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{ObjectFormat, Oid};
-use flate2::bufread::ZlibDecoder;
+use flate2::{Decompress, FlushDecompress, Status};
 use sha1_checked::Digest as _;
 use sha2::Digest as _;
 
@@ -82,7 +82,26 @@ pub fn decode_loose(
     inflated_cap: u64,
     value_cap: Option<&ValueCap>,
 ) -> Result<Object, Error> {
-    let mut decoder = ZlibDecoder::new(compressed);
+    let mut inflater = Decompress::new(true);
+    decode_loose_reusing(
+        &mut inflater,
+        compressed,
+        object_format,
+        oid,
+        inflated_cap,
+        value_cap,
+    )
+}
+
+pub(crate) fn decode_loose_reusing(
+    inflater: &mut Decompress,
+    compressed: &[u8],
+    object_format: ObjectFormat,
+    oid: &Oid,
+    inflated_cap: u64,
+    value_cap: Option<&ValueCap>,
+) -> Result<Object, Error> {
+    let mut decoder = ZlibReader::new(inflater, compressed);
     let header = read_header(&mut decoder, inflated_cap, value_cap)?;
     let mut body = vec![0_u8; header.size];
     fill_exact(&mut decoder, &mut body)?;
@@ -91,7 +110,9 @@ pub fn decode_loose(
         Ok(0) => {}
         Ok(_) | Err(_) => return Err(Error::ObjectUnreadable),
     }
-    if decoder.total_in() != u64::try_from(compressed.len()).map_err(discard_to_unreadable)? {
+    if decoder.inflater.total_in()
+        != u64::try_from(compressed.len()).map_err(discard_to_unreadable)?
+    {
         return Err(Error::ObjectUnreadable);
     }
     verify_oid(object_format, oid, &header.raw, &body)?;
@@ -101,6 +122,77 @@ pub fn decode_loose(
     })
 }
 
+struct ZlibReader<'a> {
+    inflater: &'a mut Decompress,
+    compressed: &'a [u8],
+    consumed: usize,
+    finished: bool,
+}
+
+impl<'a> ZlibReader<'a> {
+    fn new(inflater: &'a mut Decompress, compressed: &'a [u8]) -> Self {
+        inflater.reset(true);
+        Self {
+            inflater,
+            compressed,
+            consumed: 0,
+            finished: false,
+        }
+    }
+}
+
+impl io::Read for ZlibReader<'_> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if output.is_empty() || self.finished {
+            return Ok(0);
+        }
+        loop {
+            let input = self
+                .compressed
+                .get(self.consumed..)
+                .ok_or_else(invalid_stream)?;
+            let input_before = self.inflater.total_in();
+            let output_before = self.inflater.total_out();
+            let flush = if input.is_empty() {
+                FlushDecompress::Finish
+            } else {
+                FlushDecompress::None
+            };
+            let status = self
+                .inflater
+                .decompress(input, output, flush)
+                .map_err(|_defect| invalid_stream())?;
+            let consumed = self
+                .inflater
+                .total_in()
+                .checked_sub(input_before)
+                .and_then(|value| usize::try_from(value).ok())
+                .ok_or_else(invalid_stream)?;
+            let written = self
+                .inflater
+                .total_out()
+                .checked_sub(output_before)
+                .and_then(|value| usize::try_from(value).ok())
+                .ok_or_else(invalid_stream)?;
+            self.consumed = self
+                .consumed
+                .checked_add(consumed)
+                .ok_or_else(invalid_stream)?;
+            self.finished = status == Status::StreamEnd;
+            if written != 0 || self.finished || input.is_empty() {
+                return Ok(written);
+            }
+            if consumed == 0 {
+                return Err(invalid_stream());
+            }
+        }
+    }
+}
+
+fn invalid_stream() -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, "corrupt zlib stream")
+}
+
 struct Header {
     kind: ObjectKind,
     size: usize,
@@ -108,7 +200,7 @@ struct Header {
 }
 
 fn read_header(
-    decoder: &mut ZlibDecoder<&[u8]>,
+    decoder: &mut ZlibReader<'_>,
     inflated_cap: u64,
     value_cap: Option<&ValueCap>,
 ) -> Result<Header, Error> {
@@ -176,7 +268,7 @@ fn read_header(
     Ok(Header { kind, size, raw })
 }
 
-fn next_byte(decoder: &mut ZlibDecoder<&[u8]>) -> Result<u8, Error> {
+fn next_byte(decoder: &mut ZlibReader<'_>) -> Result<u8, Error> {
     let mut buf = [0_u8; 1];
     match decoder.read(&mut buf) {
         Ok(1) => buf.first().copied().ok_or(Error::ObjectUnreadable),
@@ -184,7 +276,7 @@ fn next_byte(decoder: &mut ZlibDecoder<&[u8]>) -> Result<u8, Error> {
     }
 }
 
-fn fill_exact(decoder: &mut ZlibDecoder<&[u8]>, body: &mut [u8]) -> Result<(), Error> {
+fn fill_exact(decoder: &mut ZlibReader<'_>, body: &mut [u8]) -> Result<(), Error> {
     let mut filled = 0_usize;
     while filled < body.len() {
         let target = body.get_mut(filled..).ok_or(Error::ObjectUnreadable)?;

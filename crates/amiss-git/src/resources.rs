@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fmt;
 
 use amiss_wire::controls::ResourceName;
 
@@ -58,14 +59,47 @@ pub(crate) fn crossing(resource: ResourceName, configured_limit: u64, observed: 
     }
 }
 
-/// Byte charging for one evaluation side. Compressed objects and pack indexes
-/// have independent identity sets, and cache hits within either never recharge.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Resource accounting and reusable decode state for one evaluation side.
+/// Compressed objects and pack indexes have independent identity sets, and
+/// cache hits within either never recharge.
 pub struct GitResources {
     limits: GitLimits,
     compressed: ByteMeter,
     pack_indexes: ByteMeter,
+    pub(crate) loose_inflater: Option<flate2::Decompress>,
 }
+
+impl Clone for GitResources {
+    fn clone(&self) -> Self {
+        Self {
+            limits: self.limits,
+            compressed: self.compressed.clone(),
+            pack_indexes: self.pack_indexes.clone(),
+            loose_inflater: None,
+        }
+    }
+}
+
+impl fmt::Debug for GitResources {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GitResources")
+            .field("limits", &self.limits)
+            .field("compressed", &self.compressed)
+            .field("pack_indexes", &self.pack_indexes)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for GitResources {
+    fn eq(&self, other: &Self) -> bool {
+        self.limits == other.limits
+            && self.compressed == other.compressed
+            && self.pack_indexes == other.pack_indexes
+    }
+}
+
+impl Eq for GitResources {}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct ByteMeter {
@@ -80,6 +114,7 @@ impl GitResources {
             limits,
             compressed: ByteMeter::default(),
             pack_indexes: ByteMeter::default(),
+            loose_inflater: None,
         }
     }
 
