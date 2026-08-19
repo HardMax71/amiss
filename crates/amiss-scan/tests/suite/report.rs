@@ -3,7 +3,7 @@ use std::path::Path;
 
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::correlate::{Observation, Side, correlate};
-use amiss_scan::observe::occurrence_id;
+use amiss_scan::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_digest};
 use amiss_scan::report::{
     Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
 };
@@ -13,10 +13,12 @@ use amiss_scan::{
     discover,
 };
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::hb;
+use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::parse;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES};
+use amiss_wire::report::{
+    AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES, adapter_contract,
+};
 use tempfile::TempDir;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -72,6 +74,7 @@ fn snapshot(
         let Some(adapter) = record.classification.adapter() else {
             continue;
         };
+        let adapter_contract_digest = adapter_contract(&engine(), adapter).1;
         for occurrence in &scanned.occurrences {
             let is_image = occurrence.occurrence.construct.is_image();
             let (intent, resolution) = resolver
@@ -83,8 +86,19 @@ fn snapshot(
                     &occurrence.occurrence.semantic_destination,
                 )
                 .unwrap();
+            let id = observation_digest(&ObservationIdentity {
+                adapter,
+                contract_digest: adapter_contract_digest,
+                document: &record.path,
+                construct: occurrence.occurrence.construct,
+                node_path: &occurrence.occurrence.node_path,
+                projection_digest: occurrence.projection_digest,
+                intent: &intent,
+                raw_destination_digest: occurrence.raw_destination_digest,
+            });
             observations.push(Observation {
-                id: occurrence_id(&engine(), adapter, &record.path, occurrence, &intent),
+                id,
+                adapter_contract_digest,
                 document: record.path.clone(),
                 span: occurrence.occurrence.span,
                 display: occurrence.display,
@@ -537,6 +551,41 @@ fn bare_setup(errors_retained: u64) -> Setup {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     }
+}
+
+#[test]
+fn an_observation_row_hashes_the_identity_input_it_renders() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "[target](target.md)\n").unwrap();
+    fs::write(root.join("target.md"), "# Target\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "snapshot"]);
+    let commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let (identity, discovery, base) = snapshot(&repo, &mut resources, &commit);
+    let (_, _, candidate) = snapshot(&repo, &mut resources, &commit);
+    let mut comparisons = correlate(base, candidate).unwrap();
+    let wrong = hb("amiss/test-wrong-observation-id", b"wrong");
+    let comparison = comparisons.first_mut().unwrap();
+    comparison.base.as_mut().unwrap().id = wrong;
+    comparison.candidate.as_mut().unwrap().id = wrong;
+
+    let mut setup = bare_setup(64);
+    setup.base = identity.clone();
+    setup.candidate = CandidateBlock::Commit(identity);
+    let built = construct(&setup, &discovery, &discovery, &comparisons, &[]);
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let row = &envelope["payload"]["observations"][0]["candidate"];
+    let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
+    let input = parse(&input_bytes).unwrap();
+    let expected = hj(OBSERVATION_ID_DOMAIN, &input).to_string();
+
+    assert_ne!(row["observation_id"], wrong.to_string());
+    assert_eq!(row["observation_id"], expected);
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]

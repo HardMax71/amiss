@@ -190,6 +190,7 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
     let projection = format!("{id}:{side}:projection");
     Observation {
         id: hb("amiss/test-correlation-vector-id", identity.as_bytes()),
+        adapter_contract_digest: hb("amiss/test-adapter-contract", b"markdown"),
         document: RepoPath::new("docs/source.md".to_owned()).expect("the test path is canonical"),
         span: (0, 1),
         display: SpanDisplay {

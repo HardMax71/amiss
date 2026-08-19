@@ -14,6 +14,7 @@ use crate::{Error, observe};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Observation {
     pub id: Digest,
+    pub adapter_contract_digest: Digest,
     pub document: RepoPath,
     pub span: (usize, usize),
     pub display: crate::scan::SpanDisplay,
