@@ -22,6 +22,12 @@ from the locked five-platform Cargo graph by `scripts/release-licenses.sh` witho
 extraction results. Source-derived material remains under its upstream terms; the selection,
 measurements, and Amiss-authored fields remain under the project license.
 
+## Vendored parser
+
+`third_party/markdown-rs-1.0.0/` is `markdown-rs` 1.0.0 from commit
+`1506572f9b406431402928f3a8b3df0b4ae2d8f5`, licensed under MIT and copyright Titus Wormer.
+Amiss replaces the event edit-map rebuild with an equivalent single-allocation pass.
+
 ## Documentation and fonts
 
 The four Latin Modern WOFF2 files are byte-identical to `vincentdoerig/latex-css` commit
