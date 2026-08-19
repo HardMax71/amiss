@@ -3,7 +3,9 @@
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::extraction::{BlockKind, Fault, Heading, HeadingSource, Occurrence, Opaque};
 
-use super::{image_label_end, run_length, skip_code_span, skip_whitespace, validate};
+use super::source::image_label_end;
+use super::span::validate;
+use super::{run_length, skip_code_span, skip_whitespace};
 
 const RAW: &[u8] = b"xx\r\nyyyy\rz";
 
