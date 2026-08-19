@@ -440,17 +440,14 @@ pub fn correlate(base: Side, candidate: Side) -> Result<Vec<Comparison>, Error> 
     } else {
         correlate_unaligned(base, candidate)?
     };
-    comparisons.sort_by(|left, right| {
-        let key = |comparison: &Comparison| {
-            (
-                comparison
-                    .candidate
-                    .as_ref()
-                    .map(|observation| observation.id),
-                comparison.base.as_ref().map(|observation| observation.id),
-            )
-        };
-        key(left).cmp(&key(right))
+    comparisons.sort_unstable_by_key(|comparison| {
+        (
+            comparison
+                .candidate
+                .as_ref()
+                .map(|observation| observation.id),
+            comparison.base.as_ref().map(|observation| observation.id),
+        )
     });
     if aligned {
         let mut previous = None;
