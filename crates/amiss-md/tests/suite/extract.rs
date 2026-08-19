@@ -852,6 +852,18 @@ fn html_destinations_stay_opaque_when_uncertain() {
     assert_eq!(mdx.opaque.mdx.len(), 1, "the JSX region is the blind spot");
 }
 
+#[test]
+fn an_opaque_html_destination_does_not_renumber_the_next_tag() {
+    let source = "<div><a href=\"a&copy;b.md\">opaque</a><a href=\"live.md\">live</a></div>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(got.occurrences.len(), 1);
+    let Some(only) = got.occurrences.first() else {
+        return;
+    };
+    assert_eq!(only.semantic_destination, "live.md");
+    assert_eq!(only.node_path, [0, 1]);
+}
+
 /// A GFM task checkbox is a checkbox, not a shortcut reference, even when a
 /// definition spells its label; the unconsumed definition then extracts as
 /// its own occurrence rather than vanishing.
