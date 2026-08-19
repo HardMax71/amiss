@@ -11,13 +11,11 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::report::{EngineProvenance, FindingScope, sandbox_descriptor};
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
-use crate::correlate::{Comparison, Observation, Outcome, Reason, SourceChange, TargetChange};
+use crate::correlate::{Comparison, Observation};
 use crate::discovery::{DocumentRecord, DocumentStatus};
-use crate::evaluate::{
-    DocumentInput, DocumentSide, Finding, FindingFact, FindingFix, LocationSide,
-};
+use crate::evaluate::{DocumentInput, DocumentSide, Finding, FindingFact, FindingFix};
 use crate::feedback;
-use crate::{Impact, SpanDisplay, observe};
+use crate::{SpanDisplay, observe};
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection";
@@ -242,53 +240,6 @@ fn occurrence_value(observation: &Observation) -> Value {
     object(members)
 }
 
-const fn reason_str(reason: Reason) -> &'static str {
-    reason.as_str()
-}
-
-const fn outcome_str(outcome: Outcome) -> &'static str {
-    match outcome {
-        Outcome::Exact => "exact",
-        Outcome::Candidate => "candidate",
-        Outcome::Ambiguous => "ambiguous",
-        Outcome::None => "none",
-    }
-}
-
-const fn source_change_str(change: SourceChange) -> &'static str {
-    match change {
-        SourceChange::Equal => "equal",
-        SourceChange::Changed => "changed",
-        SourceChange::Unknown => "unknown",
-        SourceChange::Added => "added",
-        SourceChange::Removed => "removed",
-    }
-}
-
-const fn target_change_str(change: TargetChange) -> &'static str {
-    match change {
-        TargetChange::Equal => "equal",
-        TargetChange::Changed => "changed",
-        TargetChange::NewlyResolved => "newly-resolved",
-        TargetChange::BecameMissing => "became-missing",
-        TargetChange::NotComparable => "not-comparable",
-    }
-}
-
-const fn impact_str(impact: Impact) -> &'static str {
-    match impact {
-        Impact::None => "none",
-        Impact::SubjectChanged => "subject-changed",
-        Impact::DependencyChangedSubjectUnchanged => "dependency-changed-subject-unchanged",
-        Impact::DependencyAndSubjectCochanged => "dependency-and-subject-cochanged",
-        Impact::ReferenceResolved => "reference-resolved",
-        Impact::NotApplicable => "not-applicable",
-        Impact::ObservationCorrelationAmbiguous => "observation-correlation-ambiguous",
-        Impact::NewObservation => "new-observation",
-        Impact::RemovedObservation => "removed-observation",
-    }
-}
-
 fn comparison_value(comparison: &Comparison) -> Value {
     let side = |observation: &Option<Observation>| {
         observation.as_ref().map_or(Value::Null, occurrence_value)
@@ -298,8 +249,8 @@ fn comparison_value(comparison: &Comparison) -> Value {
     object(vec![
         ("base", side(&comparison.base)),
         ("candidate", side(&comparison.candidate)),
-        ("correlation", string(outcome_str(comparison.outcome))),
-        ("correlation_reason", string(reason_str(comparison.reason))),
+        ("correlation", string(comparison.outcome.as_ref())),
+        ("correlation_reason", string(comparison.reason.as_str())),
         (
             "alternatives",
             object(vec![
@@ -307,15 +258,9 @@ fn comparison_value(comparison: &Comparison) -> Value {
                 ("candidate", list(&comparison.alternatives_candidate)),
             ]),
         ),
-        (
-            "source_change",
-            string(source_change_str(comparison.source_change)),
-        ),
-        (
-            "target_change",
-            string(target_change_str(comparison.target_change)),
-        ),
-        ("impact", string(impact_str(comparison.impact))),
+        ("source_change", string(comparison.source_change.as_ref())),
+        ("target_change", string(comparison.target_change.as_ref())),
+        ("impact", string(comparison.impact.as_ref())),
     ])
 }
 
@@ -392,15 +337,7 @@ fn finding_value(
         (
             "location",
             object(vec![
-                (
-                    "side",
-                    string(match finding.location.side {
-                        LocationSide::Base => "base",
-                        LocationSide::Candidate => "candidate",
-                        LocationSide::Control => "control",
-                        LocationSide::Global => "global",
-                    }),
-                ),
+                ("side", string(finding.location.side.as_ref())),
                 ("path", nullable_path(finding.location.path.as_ref())),
                 ("span", location_span),
             ]),

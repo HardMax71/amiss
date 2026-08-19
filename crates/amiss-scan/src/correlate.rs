@@ -43,7 +43,8 @@ pub struct Side {
     pub documents: BTreeMap<RepoPath, (GitMode, Digest)>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Outcome {
     Exact,
     Candidate,
@@ -62,7 +63,8 @@ pub enum Reason {
     RemovedObservation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SourceChange {
     Equal,
     Changed,
@@ -71,7 +73,8 @@ pub enum SourceChange {
     Removed,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum TargetChange {
     Equal,
     Changed,
@@ -80,7 +83,8 @@ pub enum TargetChange {
     NotComparable,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Impact {
     None,
     SubjectChanged,

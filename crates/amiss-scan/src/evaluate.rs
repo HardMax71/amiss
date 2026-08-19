@@ -63,7 +63,8 @@ impl Attribution {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum LocationSide {
     Base,
     Candidate,
