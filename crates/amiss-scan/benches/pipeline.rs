@@ -116,15 +116,17 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 .unwrap_or_else(|defect| panic!("correlate observations: {defect:?}")),
         ),
     };
-    bencher.bench_local(|| {
-        construct(
-            black_box(&setup),
-            black_box(&discovery),
-            black_box(&discovery),
-            black_box(&comparisons),
-            black_box(&[]),
-        )
-    });
+    bencher
+        .with_inputs(|| comparisons.clone())
+        .bench_local_values(|comparisons| {
+            construct(
+                black_box(&setup),
+                black_box(&discovery),
+                black_box(&discovery),
+                black_box(comparisons),
+                black_box(&[]),
+            )
+        });
 }
 
 #[derive(Clone, Copy, Debug)]

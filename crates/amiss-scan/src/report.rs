@@ -1432,12 +1432,12 @@ pub fn construct(
     setup: &Setup,
     base: &SnapshotDiscovery,
     candidate: &SnapshotDiscovery,
-    comparisons: &[Comparison],
+    comparisons: Vec<Comparison>,
     claims: &[crate::claim::ClaimOutcome],
 ) -> Built {
     let paired = paired_documents(base, candidate);
     let (governed, findings, exception_errors) =
-        evaluate_paired(setup, &paired, candidate, comparisons, claims);
+        evaluate_paired(setup, &paired, candidate, &comparisons, claims);
 
     if let Some(crossing) = findings_ceiling_crossing(setup, &findings) {
         let mut details = logical_error_set(&governed, &exception_errors);
@@ -1449,35 +1449,32 @@ pub fn construct(
         .iter()
         .map(|pair| (pair.path.clone(), document_result_value(pair)))
         .collect();
-    let comparison_rows: Vec<(Option<Digest>, Value)> = comparisons
-        .iter()
-        .map(|comparison| {
-            let primary = comparison
-                .candidate
-                .as_ref()
-                .or(comparison.base.as_ref())
-                .map(|observation| observation.id);
-            (primary, comparison_value(comparison))
-        })
-        .collect();
-    let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());
-    let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
-    let comparison_runs = [base_only_rows, candidate_rows];
-    let finding_rows: Vec<Value> = findings
-        .iter()
-        .map(|finding| finding_value(finding, comparison_runs, &document_rows))
-        .collect();
-
     let error_details = logical_error_set(&governed, &exception_errors);
     if error_details.len() > error_ceiling(setup) {
         return construct_incomplete(setup, &error_details);
     }
     let governed_errors: Vec<Value> = error_details.iter().map(error_row_value).collect();
     let (complete, status, exit_code) = run_result(&findings, &governed_errors);
-    let feedback = run_feedback_value(complete, &findings, comparisons);
-    let finding_count = u64::try_from(finding_rows.len()).unwrap_or(u64::MAX);
-    let counts = summary_counts(&paired, comparisons, &findings, finding_count);
+    let feedback = run_feedback_value(complete, &findings, &comparisons);
+    let finding_count = u64::try_from(findings.len()).unwrap_or(u64::MAX);
+    let counts = summary_counts(&paired, &comparisons, &findings, finding_count);
     let (governed_claims, unattested_claims) = claim_counters(claims);
+    let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());
+    let mut comparison_rows = Vec::with_capacity(comparisons.len());
+    for comparison in comparisons {
+        let primary = comparison
+            .candidate
+            .as_ref()
+            .or(comparison.base.as_ref())
+            .map(|observation| observation.id);
+        comparison_rows.push((primary, comparison_value(&comparison)));
+    }
+    let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
+    let comparison_runs = [base_only_rows, candidate_rows];
+    let finding_rows: Vec<Value> = findings
+        .iter()
+        .map(|finding| finding_value(finding, comparison_runs, &document_rows))
+        .collect();
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),

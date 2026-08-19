@@ -354,7 +354,7 @@ fn assert_report(
     );
     let base = discovery(base_scanned, base_source, '1');
     let candidate = discovery(candidate_scanned, candidate_source, '2');
-    let built = construct(&setup(), &base, &candidate, &[], &[]);
+    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
     let wire = built.wire();
     parse(&wire).expect("the emitted report clears the strict JSON reader");
     let envelope: Value = serde_json::from_slice(&wire).expect("the emitted report is JSON");
@@ -538,7 +538,7 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
         raw_digest: Some(hb(RAW_EVIDENCE_DOMAIN, base_source.as_bytes())),
     });
     candidate.tree_entries = 2;
-    let built = construct(&setup(), &base, &candidate, &[], &[]);
+    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
     let envelope: Value = serde_json::from_slice(&built.wire()).expect("the report is JSON");
     assert_eq!(built.exit_code, 2, "an unanswered claim is a boundary");
     let findings = envelope
