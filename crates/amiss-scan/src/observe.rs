@@ -171,7 +171,7 @@ fn with_observation_value<R>(
             input
                 .intent
                 .target_kind
-                .map(amiss_wire::controls::TargetKind::as_str)
+                .map(Into::into)
                 .map_or(IdentityValue::Null, IdentityValue::String),
         ),
     ];
@@ -199,7 +199,7 @@ fn with_observation_value<R>(
         ("schema", IdentityValue::String(OBSERVATION_ID_INPUT_SCHEMA)),
         (
             "source_construct",
-            IdentityValue::String(input.construct.as_str()),
+            IdentityValue::String(input.construct.into()),
         ),
         (
             "source_projection_digest",
@@ -232,9 +232,9 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
         ),
         (
             "target_kind".to_owned(),
-            intent
-                .target_kind
-                .map_or(Value::Null, |kind| Value::string(kind.as_str().to_owned())),
+            intent.target_kind.map_or(Value::Null, |kind| {
+                Value::string(Into::<&'static str>::into(kind).to_owned())
+            }),
         ),
         (
             "query_digest".to_owned(),
@@ -298,7 +298,7 @@ pub fn observation_input(input: &ObservationIdentity<'_>) -> Value {
         ("document".to_owned(), input.document.to_value()),
         (
             "source_construct".to_owned(),
-            Value::string(input.construct.as_str().to_owned()),
+            Value::string(Into::<&'static str>::into(input.construct).to_owned()),
         ),
         (
             "structural_address".to_owned(),

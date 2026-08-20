@@ -59,7 +59,7 @@ pub(super) fn target_projection(domain: &str, mode: GitMode, raw_digest: Digest)
         &Value::object(vec![
             (
                 "git_mode".to_owned(),
-                Value::string(mode.as_str().to_owned()),
+                Value::string(mode.as_ref().to_owned()),
             ),
             (
                 "raw_digest".to_owned(),

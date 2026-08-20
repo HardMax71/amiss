@@ -481,7 +481,7 @@ fn occurrence_value(entry: &Occurrence) -> Value {
         ),
         (
             "source_construct".to_owned(),
-            Value::string(entry.construct.as_str().to_owned()),
+            Value::string(entry.construct.as_ref().to_owned()),
         ),
         ("span".to_owned(), span_value(entry.span)),
     ])

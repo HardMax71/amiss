@@ -389,13 +389,7 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
             matches!(&row, Resolution::UnsupportedVersion(_)),
             "{id}: expected an unsupported version, got {row:?}"
         ),
-        expected => assert_eq!(
-            intent
-                .target_kind
-                .map(amiss_wire::controls::TargetKind::as_str),
-            Some(expected),
-            "{id}"
-        ),
+        expected => assert_eq!(intent.target_kind.map(Into::into), Some(expected), "{id}"),
     }
 }
 
@@ -426,9 +420,7 @@ fn target_kind_case(bed: &mut Bed, case: &Value, id: &str) {
     );
     let (intent, _row) = bed.run(Some(&run_context), "README.md", is_image, &destination);
     assert_eq!(
-        intent
-            .target_kind
-            .map(amiss_wire::controls::TargetKind::as_str),
+        intent.target_kind.map(Into::into),
         Some(text(case, "expected")),
         "{id}"
     );

@@ -83,7 +83,7 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
             ("document".to_owned(), document.to_value()),
             (
                 "source_construct".to_owned(),
-                Value::string(source_construct.as_str().to_owned()),
+                Value::string(source_construct.as_ref().to_owned()),
             ),
             (
                 "normalized_target_intent".to_owned(),
@@ -100,11 +100,7 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
                     ),
                     (
                         "target_kind".to_owned(),
-                        Value::string(
-                            target_kind
-                                .map_or("either", amiss_wire::controls::TargetKind::as_str)
-                                .to_owned(),
-                        ),
+                        Value::string(target_kind.map_or("either", Into::into).to_owned()),
                     ),
                     (
                         "query_digest".to_owned(),
@@ -292,7 +288,7 @@ pub(super) fn built_in_step(kind: FindingKind, profile: Profile) -> PolicyStep {
         rule_id: format!(
             "scanner-policy-defaults/{}/{}",
             kind.as_ref(),
-            profile.policy_defaults().as_str()
+            Into::<&'static str>::into(profile.policy_defaults())
         ),
         before: Disposition::Record,
         after: kind.built_in_disposition(profile),

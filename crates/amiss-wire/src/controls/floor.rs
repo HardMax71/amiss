@@ -5,7 +5,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdent
 use super::{
     Disposition, EligibleFindingKind, FindingDisposition, ORGANIZATION_FLOOR_SCHEMA, Profile,
     PromotableFindingKind, ResourceName, decode_artifact_id, decode_branch_ref,
-    decode_disposition_rule, decode_items, decode_owner_items, decode_path_items,
+    decode_disposition_rule, decode_enum, decode_items, decode_owner_items, decode_path_items,
     decode_repository, decode_resource_limit, root, sorted_set,
 };
 
@@ -139,7 +139,7 @@ impl OrganizationFloor {
         let floor_id = obj.required("floor_id", decode_artifact_id)?;
         let repository = obj.required("repository", decode_repository)?;
         let ref_name = obj.required("ref", decode_branch_ref)?;
-        let minimum_profile = obj.required("minimum_profile", Profile::decode)?;
+        let minimum_profile = obj.required("minimum_profile", decode_enum)?;
 
         let dispositions_path = obj.field("minimum_dispositions");
         let dispositions_raw = de::array(&dispositions_path, obj.take("minimum_dispositions")?)?;
@@ -183,16 +183,14 @@ impl OrganizationFloor {
             decode_disposition_rule,
         )?;
         sorted_set(&dispositions_path, &minimum_dispositions, |a, b| {
-            a.finding_kind.as_str().cmp(b.finding_kind.as_str())
+            a.finding_kind.as_ref().cmp(b.finding_kind.as_ref())
         })?;
         let protected_inventory = decode_path_items(&inventory_path, inventory_raw)?;
         let protected_control_paths = decode_path_items(&control_paths_path, control_paths_raw)?;
-        let waivable_finding_kinds =
-            decode_items(&waivable_path, waivable_raw, 2, |path, value| {
-                EligibleFindingKind::decode(path, value)
-            })?;
+        let waivable_finding_kinds: Vec<EligibleFindingKind> =
+            decode_items(&waivable_path, waivable_raw, 2, decode_enum)?;
         sorted_set(&waivable_path, &waivable_finding_kinds, |a, b| {
-            a.as_str().cmp(b.as_str())
+            a.as_ref().cmp(b.as_ref())
         })?;
         let authorized_debt_owners = decode_owner_items(&owners_path, owners_raw)?;
         let authorized_waiver_issuers = decode_owner_items(&issuers_path, issuers_raw)?;

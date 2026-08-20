@@ -46,13 +46,13 @@ fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingSco
 #[test]
 fn every_scope_spelling_survives_the_waiver_round_trip() {
     for construct in SourceConstruct::iter() {
-        let named = construct.as_str();
+        let named: &'static str = construct.into();
         let scope = roundtrip_scope(named, &|doc| doc.replace(DEFAULT_CONSTRUCT, named));
         assert_eq!(scope.source_construct, construct, "{named}");
         assert_eq!(construct.is_image(), named.contains("image"), "{named}");
     }
     for target_kind in TargetKind::iter() {
-        let named = target_kind.as_str();
+        let named: &'static str = target_kind.into();
         let scope = roundtrip_scope(named, &|doc| {
             doc.replace(
                 r#""target_kind": "either""#,
@@ -100,13 +100,15 @@ fn waiver_instants_bind_at_their_exact_boundaries() {
 
 #[test]
 fn wire_spellings_are_the_ones_the_contract_publishes() {
-    assert_eq!(IncludeKind::Document.as_str(), "document");
-    assert_eq!(IncludeKind::Tree.as_str(), "tree");
-    assert_eq!(EntryKind::Blob.as_str(), "blob");
-    assert_eq!(EntryKind::Gitlink.as_str(), "gitlink");
     assert_eq!(
-        PromotableFindingKind::InvalidReference.as_str(),
-        "invalid-reference"
+        [
+            IncludeKind::Document.as_ref(),
+            IncludeKind::Tree.as_ref(),
+            EntryKind::Blob.as_ref(),
+            EntryKind::Gitlink.as_ref(),
+            PromotableFindingKind::InvalidReference.as_ref(),
+        ],
+        ["document", "tree", "blob", "gitlink", "invalid-reference"]
     );
 }
 

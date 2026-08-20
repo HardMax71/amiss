@@ -65,7 +65,7 @@ fn expected_line_projection(mode: GitMode, selected: &[u8]) -> amiss_wire::diges
         &Value::object(vec![
             (
                 "git_mode".to_owned(),
-                Value::string(mode.as_str().to_owned()),
+                Value::string(mode.as_ref().to_owned()),
             ),
             (
                 "raw_digest".to_owned(),
