@@ -12,7 +12,7 @@ use crate::object::{
     Object, ObjectKind, decode_loose_reusing, discard_to_unreadable, hex, verify_oid,
 };
 use crate::pack::{
-    self, PackSet, apply_delta, inflate_exact, kind_of, parse_entry_header, parse_ofs_distance,
+    self, EntryKind, PackSet, apply_delta, inflate_exact, parse_entry_header, parse_ofs_distance,
 };
 use crate::resources::{GitResources, ValueCap, crossing};
 
@@ -228,17 +228,17 @@ impl Repository {
             .get(header.header_len..)
             .ok_or(Error::ObjectUnreadable)?;
 
-        match header.type_code {
-            1..=4 => {
+        match header.kind {
+            EntryKind::Object(kind) => {
                 if let Some(value) = value_cap
                     && header.size > value.limit
                 {
                     return Err(crossing(value.resource, value.limit, header.size));
                 }
                 let body = inflate_exact(after_header, header.size, inflated_cap)?;
-                Ok((kind_of(header.type_code)?, body))
+                Ok((kind, body))
             }
-            6 => {
+            EntryKind::OffsetDelta => {
                 let (distance, used) = parse_ofs_distance(after_header)?;
                 let base_offset = offset
                     .checked_sub(distance)
@@ -262,7 +262,7 @@ impl Repository {
                 let script = inflate_exact(script_bytes, header.size, inflated_cap)?;
                 Ok((kind, apply_delta(&base, &script, inflated_cap, value_cap)?))
             }
-            7 => {
+            EntryKind::ReferenceDelta => {
                 let width = self.oid_width();
                 let base_raw = after_header.get(..width).ok_or(Error::ObjectUnreadable)?;
                 let base_oid =
@@ -275,7 +275,6 @@ impl Repository {
                     apply_delta(&base.body, &script, inflated_cap, value_cap)?,
                 ))
             }
-            _ => Err(Error::ObjectUnreadable),
         }
     }
 
