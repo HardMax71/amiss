@@ -53,12 +53,13 @@ fn fixture() -> TempDir {
     dir
 }
 
+#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn run(
     dir: &Path,
     scan_limits: ScanLimits,
     git_limits: GitLimits,
 ) -> Result<amiss_scan::SnapshotDiscovery, Error> {
-    let repo = Repository::open(dir, ObjectFormat::Sha1).map_err(Error::from)?;
+    let repo = Repository::open(dir, ObjectFormat::Sha1).expect("fixture repository opens");
     let mut git_resources = GitResources::new(git_limits);
     let mut scan_resources = ScanResources::new(scan_limits);
     discover(

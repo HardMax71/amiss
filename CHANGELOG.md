@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changes
 
+- Separate repository-opening failures from post-open Git access defects and project repository unavailability only at process boundaries
 - Split the wire report subsystems and consolidate their taxonomies behind Strum spellings and immutable `FindingKind::metadata()`, replacing the public `as_str`, `fixed_phase`, `scope`, `evidence_class`, and `invariant_class` projection helpers
 - Split scanner policy acquisition, effects, and floor enforcement into focused modules, and remove the unused public `floor_protected` batch helper
 - Split scanner evaluation models and execution into focused modules, consolidate resolution-to-finding classification, and replace `Attribution::as_str` with Strum's `AsRef<str>` projection

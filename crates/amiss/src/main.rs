@@ -277,12 +277,12 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     };
     let repo = match amiss_git::Repository::open(&invocation.repo, invocation.object_format) {
         Ok(repo) => repo,
-        Err(defect) => {
+        Err(_defect) => {
             return fatal(
                 invocation,
                 &engine,
                 &[ErrorDetail {
-                    code: open_code(&defect),
+                    code: AnalysisErrorCode::GitRepositoryUnavailable,
                     path: None,
                     path_bytes: None,
                     resource: None,
@@ -378,21 +378,6 @@ fn pinned_index(invocation: &Invocation, repo: &amiss_git::Repository) -> Option
             repo.read_index_bytes(&mut resources).ok()
         })
         .flatten()
-}
-
-const fn open_code(defect: &amiss_git::Error) -> AnalysisErrorCode {
-    match defect {
-        amiss_git::Error::RepositoryUnavailable => AnalysisErrorCode::GitRepositoryUnavailable,
-        amiss_git::Error::ObjectMissing => AnalysisErrorCode::GitObjectMissing,
-        amiss_git::Error::ObjectWrongKind => AnalysisErrorCode::GitObjectWrongKind,
-        amiss_git::Error::ObjectUnreadable | amiss_git::Error::ResourceLimit { .. } => {
-            AnalysisErrorCode::GitObjectUnreadable
-        }
-        amiss_git::Error::IndexInvalid => AnalysisErrorCode::GitIndexInvalid,
-        amiss_git::Error::IndexUnmerged => AnalysisErrorCode::GitIndexUnmerged,
-        amiss_git::Error::IntentToAdd => AnalysisErrorCode::GitIntentToAdd,
-        amiss_git::Error::SnapshotChanged => AnalysisErrorCode::GitSnapshotChanged,
-    }
 }
 
 fn fatal(

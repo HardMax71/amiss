@@ -4,7 +4,7 @@ use std::fs::{File, Metadata, OpenOptions};
 use std::io;
 use std::path::Path;
 
-use crate::Error;
+use crate::RepositoryOpenError;
 
 /// The handle boundary, in safe Rust on every supported platform. The root's
 /// final entry is opened without following it, and every later entry is
@@ -19,17 +19,15 @@ use crate::Error;
 ///
 /// # Errors
 ///
-/// `RepositoryUnavailable` when the root is absent, is not a directory, or is
+/// [`RepositoryOpenError`] when the root is absent, is not a directory, or is
 /// a symlink, junction, or other reparse point.
-pub(crate) fn open_root(root: &Path) -> Result<File, Error> {
+pub(crate) fn open_root(root: &Path) -> Result<File, RepositoryOpenError> {
     let file = root_options()
         .open(root)
-        .map_err(|_defect| Error::RepositoryUnavailable)?;
-    let metadata = file
-        .metadata()
-        .map_err(|_defect| Error::RepositoryUnavailable)?;
+        .map_err(|_defect| RepositoryOpenError)?;
+    let metadata = file.metadata().map_err(|_defect| RepositoryOpenError)?;
     if !metadata.is_dir() || !ordinary(&metadata) {
-        return Err(Error::RepositoryUnavailable);
+        return Err(RepositoryOpenError);
     }
     Ok(file)
 }

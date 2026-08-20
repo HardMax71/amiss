@@ -59,7 +59,6 @@ pub enum Error {
 /// into the shared crossing shape.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitDefect {
-    RepositoryUnavailable,
     ObjectMissing,
     ObjectWrongKind,
     ObjectUnreadable,
@@ -72,7 +71,6 @@ pub enum GitDefect {
 impl From<amiss_git::Error> for Error {
     fn from(defect: amiss_git::Error) -> Self {
         match defect {
-            amiss_git::Error::RepositoryUnavailable => Self::Git(GitDefect::RepositoryUnavailable),
             amiss_git::Error::ObjectMissing => Self::Git(GitDefect::ObjectMissing),
             amiss_git::Error::ObjectWrongKind => Self::Git(GitDefect::ObjectWrongKind),
             amiss_git::Error::ObjectUnreadable => Self::Git(GitDefect::ObjectUnreadable),
@@ -98,9 +96,6 @@ impl Error {
     pub fn code(&self) -> AnalysisErrorCode {
         match self {
             Self::Parse(fault) => AnalysisErrorCode::from(*fault),
-            Self::Git(GitDefect::RepositoryUnavailable) => {
-                AnalysisErrorCode::GitRepositoryUnavailable
-            }
             Self::Git(GitDefect::ObjectMissing) => AnalysisErrorCode::GitObjectMissing,
             Self::Git(GitDefect::ObjectWrongKind) => AnalysisErrorCode::GitObjectWrongKind,
             Self::Git(GitDefect::ObjectUnreadable) => AnalysisErrorCode::GitObjectUnreadable,
