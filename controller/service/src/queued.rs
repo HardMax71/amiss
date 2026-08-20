@@ -7,26 +7,33 @@ use std::time::Duration;
 
 use amiss_controller::{
     CheckPlan, ControllerClock, DeliveryLedger, FileLedger, FileLedgerConfig, FileLedgerError,
-    PlanError, PlanRegistry, PlanScope, ReplayWindow, Runner, register_plan,
+    IngressCheck, PlanError, PlanRegistry, PlanScope, ProviderError, ReplayWindow, Runner,
+    VerifiedDelivery, register_plan,
 };
 use tokio::net::TcpListener;
 
 use crate::{
-    DeliveryAdmission, DeliveryWorker, Inbox, InboxError, InboxLimits, Operations, ReceiverConfig,
-    ReceiverConfigError, ServiceComponent, Supervision, SupervisionError, router_with_clock,
-    supervise,
+    AcquiringWorkerContext, AcquiringWorkerSettings, DeliveryAdmission, DeliveryWorker, Inbox,
+    InboxError, InboxLimits, Operations, ReceiverConfig, ReceiverConfigError, ServiceComponent,
+    Supervision, SupervisionError, repository_admission, router_with_clock, supervise,
 };
 
-pub struct QueuedServiceInput {
+pub struct QueuedServiceSettings {
     pub listen: SocketAddr,
     pub receiver: ReceiverConfig,
     pub inbox_root: PathBuf,
     pub inbox_limits: InboxLimits,
+}
+
+pub struct QueuedService<W> {
+    pub settings: QueuedServiceSettings,
     pub clock: Arc<dyn ControllerClock>,
+    pub admission: Arc<dyn DeliveryAdmission>,
+    pub worker: W,
 }
 
 pub struct QueuedLaneSetupInput {
-    pub service: QueuedServiceInput,
+    pub service: QueuedServiceSettings,
     pub plan: Arc<CheckPlan>,
     pub scope: PlanScope,
     pub ledger_root: PathBuf,
@@ -35,44 +42,70 @@ pub struct QueuedLaneSetupInput {
     pub replay: ReplayWindow,
 }
 
-pub struct QueuedLaneSetup {
-    pub service: QueuedServiceInput,
-    pub plans: PlanRegistry,
-    pub ledger: FileLedger,
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum QueuedLaneSetupError {
     #[error("check plan cannot be registered")]
-    Plan(#[from] PlanError),
+    Plan(#[source] PlanError),
     #[error("delivery record limits are invalid")]
     InvalidLedgerLimits,
     #[error("delivery record cannot be opened")]
-    Ledger(#[from] FileLedgerError),
+    Ledger(#[source] FileLedgerError),
 }
 
-/// Registers the lane plan and opens its file-backed delivery ledger.
+/// Opens one queued repository lane and binds its admission and worker state to one clock.
 ///
 /// # Errors
 ///
 /// The plan conflicts, the ledger limits are invalid, or the ledger cannot be opened.
-pub fn setup_queued_lane(
+pub fn setup_repository_lane<F>(
     input: QueuedLaneSetupInput,
-) -> Result<QueuedLaneSetup, QueuedLaneSetupError> {
+    settings: AcquiringWorkerSettings,
+    repository_id: u64,
+    clock: Arc<dyn ControllerClock>,
+    authenticate: F,
+) -> Result<QueuedService<AcquiringWorkerContext<FileLedger>>, QueuedLaneSetupError>
+where
+    F: for<'a> Fn(IngressCheck<'a>) -> Result<VerifiedDelivery, ProviderError>
+        + Send
+        + Sync
+        + 'static,
+{
+    let QueuedLaneSetupInput {
+        service,
+        plan,
+        scope,
+        ledger_root,
+        ledger_lease,
+        ledger_records,
+        replay,
+    } = input;
     let mut plans = PlanRegistry::new();
-    register_plan(&mut plans, input.scope, input.plan)?;
-    let ledger_config =
-        FileLedgerConfig::new(input.ledger_lease, input.ledger_records, input.replay)
-            .ok_or(QueuedLaneSetupError::InvalidLedgerLimits)?;
-    let ledger = FileLedger::open_with_clock(
-        &input.ledger_root,
-        ledger_config,
-        Arc::clone(&input.service.clock),
-    )?;
-    Ok(QueuedLaneSetup {
-        service: input.service,
+    register_plan(&mut plans, scope, plan).map_err(QueuedLaneSetupError::Plan)?;
+    let ledger_config = FileLedgerConfig::new(ledger_lease, ledger_records, replay)
+        .ok_or(QueuedLaneSetupError::InvalidLedgerLimits)?;
+    let ledger = FileLedger::open_with_clock(&ledger_root, ledger_config, Arc::clone(&clock))
+        .map_err(QueuedLaneSetupError::Ledger)?;
+    let admission = repository_admission(
+        settings.route_id.clone(),
+        settings.route.clone(),
+        settings.ingress,
+        plans.clone(),
+        Arc::clone(&clock),
+        repository_id,
+        authenticate,
+    );
+    let worker = AcquiringWorkerContext {
+        settings,
         plans,
         ledger,
+        admission: Arc::clone(&admission),
+        clock: Arc::clone(&clock),
+    };
+    Ok(QueuedService {
+        settings: service,
+        clock,
+        admission,
+        worker,
     })
 }
 
@@ -91,13 +124,7 @@ pub enum QueuedServiceError {
     #[error("{0}")]
     WorkerBuild(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error(transparent)]
-    Supervision(#[from] SupervisionError),
-}
-
-impl QueuedServiceError {
-    pub fn worker_build(error: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Self::WorkerBuild(Box::new(error))
-    }
+    Supervision(SupervisionError),
 }
 
 /// Runs one durable receiver and its blocking delivery worker until shutdown.
@@ -105,32 +132,23 @@ impl QueuedServiceError {
 /// # Errors
 ///
 /// The inbox, receiver, listener, worker, server, or shutdown signal fails.
-pub async fn run_queued_service<L, R, F>(
-    input: QueuedServiceInput,
-    admission: Arc<dyn DeliveryAdmission>,
+pub async fn run_queued_service<L, R, W, F, E>(
+    service: QueuedService<W>,
     build_worker: F,
 ) -> Result<(), QueuedServiceError>
 where
     L: DeliveryLedger + Send + 'static,
     R: Runner + Send + 'static,
-    F: FnOnce(Arc<Mutex<Inbox>>, Operations) -> Result<DeliveryWorker<L, R>, QueuedServiceError>
-        + Send
-        + 'static,
+    W: Send + 'static,
+    F: FnOnce(W, Arc<Mutex<Inbox>>, Operations) -> Result<DeliveryWorker<L, R>, E> + Send + 'static,
+    E: std::error::Error + Send + Sync + 'static,
 {
     let shutdown = crate::shutdown_signal().map_err(QueuedServiceError::ShutdownInstall)?;
-    run_queued_service_until(
-        input,
-        admission,
-        build_worker,
-        Operations::default(),
-        shutdown,
-    )
-    .await
+    run_queued_service_until(service, build_worker, Operations::default(), shutdown).await
 }
 
-async fn run_queued_service_until<L, R, F, S>(
-    input: QueuedServiceInput,
-    admission: Arc<dyn DeliveryAdmission>,
+async fn run_queued_service_until<L, R, W, F, E, S>(
+    service: QueuedService<W>,
     build_worker: F,
     operations: Operations,
     shutdown: S,
@@ -138,32 +156,41 @@ async fn run_queued_service_until<L, R, F, S>(
 where
     L: DeliveryLedger + Send + 'static,
     R: Runner + Send + 'static,
-    F: FnOnce(Arc<Mutex<Inbox>>, Operations) -> Result<DeliveryWorker<L, R>, QueuedServiceError>
-        + Send
-        + 'static,
+    W: Send + 'static,
+    F: FnOnce(W, Arc<Mutex<Inbox>>, Operations) -> Result<DeliveryWorker<L, R>, E> + Send + 'static,
+    E: std::error::Error + Send + Sync + 'static,
     S: Future<Output = std::io::Result<()>>,
 {
+    let QueuedService {
+        settings,
+        clock,
+        admission,
+        worker,
+    } = service;
     let inbox = Arc::new(Mutex::new(
-        Inbox::open(input.inbox_root, input.inbox_limits).map_err(QueuedServiceError::InboxOpen)?,
+        Inbox::open(settings.inbox_root, settings.inbox_limits)
+            .map_err(QueuedServiceError::InboxOpen)?,
     ));
     let ready = Arc::new(AtomicBool::new(false));
     let (receiver, endpoint) = router_with_clock(
-        &input.receiver,
+        &settings.receiver,
         Arc::clone(&inbox),
         admission,
         Arc::clone(&ready),
         operations.clone(),
-        Arc::clone(&input.clock),
+        Arc::clone(&clock),
     )
     .map_err(QueuedServiceError::Receiver)?;
-    let listener = TcpListener::bind(input.listen)
+    let listener = TcpListener::bind(settings.listen)
         .await
         .map_err(QueuedServiceError::Listener)?;
     let worker_operations = operations.clone();
     let worker_inbox = Arc::clone(&inbox);
-    let worker = tokio::task::spawn_blocking(move || build_worker(worker_inbox, worker_operations))
-        .await
-        .map_err(QueuedServiceError::WorkerPanicked)??;
+    let worker =
+        tokio::task::spawn_blocking(move || build_worker(worker, worker_inbox, worker_operations))
+            .await
+            .map_err(QueuedServiceError::WorkerPanicked)?
+            .map_err(|error| QueuedServiceError::WorkerBuild(Box::new(error)))?;
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = Arc::clone(&stop);
     let component = async move {

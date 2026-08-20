@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use amiss_controller::{
-    AcquiringRunner, ControllerClock, FileLedger, ProviderAdapter, ProviderIdentity, RunRequest,
-    SystemClock,
+    AcquiringRunner, FileLedger, ProviderAdapter, ProviderIdentity, RunRequest, SystemClock,
 };
 use amiss_controller_git::{GitAcquisition, GitAcquisitionPlan, GitFetchBounds, GitRemote};
 use amiss_controller_gitea::{
@@ -11,10 +10,9 @@ use amiss_controller_gitea::{
     gitea_fetch_plan,
 };
 use amiss_controller_service::{
-    AcquiringWorkerBuildError, AcquiringWorkerContext, AcquiringWorkerSettings, DeliveryAdmission,
-    DeliveryWorker, Inbox, Operations, QueuedLaneSetup, QueuedLaneSetupError, QueuedLaneSetupInput,
-    QueuedServiceError, QueuedServiceInput, acquiring_worker, repository_admission,
-    run_queued_service, setup_queued_lane,
+    AcquiringWorkerBuildError, AcquiringWorkerContext, DeliveryWorker, Inbox, Operations,
+    QueuedLaneSetupError, QueuedService, QueuedServiceError, acquiring_worker, run_queued_service,
+    setup_repository_lane,
 };
 use secrecy::{ExposeSecret as _, SecretString};
 
@@ -31,9 +29,9 @@ pub enum ServiceError {
     #[error("Gitea-family webhook source cannot be created")]
     InvalidWebhookSource,
     #[error(transparent)]
-    Setup(#[from] QueuedLaneSetupError),
+    Setup(QueuedLaneSetupError),
     #[error(transparent)]
-    Queued(#[from] QueuedServiceError),
+    Queued(QueuedServiceError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -41,13 +39,7 @@ enum WorkerBuildError {
     #[error("Gitea-family client cannot start")]
     Client(#[source] GiteaClientError),
     #[error(transparent)]
-    Shared(#[from] AcquiringWorkerBuildError),
-}
-
-struct PreparedLane {
-    service: QueuedServiceInput,
-    admission: Arc<dyn DeliveryAdmission>,
-    worker: WorkerContext,
+    Shared(AcquiringWorkerBuildError),
 }
 
 struct WorkerContext {
@@ -73,19 +65,13 @@ struct WorkerSettings {
 ///
 /// A credential, state root, route, listener, worker, or controller invariant failed.
 pub async fn run(config: ServiceConfig) -> Result<(), ServiceError> {
-    let PreparedLane {
-        service,
-        admission,
-        worker,
-    } = prepare(config)?;
-    run_queued_service(service, admission, move |inbox, operations| {
-        build_worker(worker, inbox, operations).map_err(QueuedServiceError::worker_build)
-    })
-    .await?;
-    Ok(())
+    let service = prepare(config)?;
+    run_queued_service(service, build_worker)
+        .await
+        .map_err(ServiceError::Queued)
 }
 
-fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
+fn prepare(config: ServiceConfig) -> Result<QueuedService<WorkerContext>, ServiceError> {
     let bounds = GitFetchBounds::new(config.git_timeout).ok_or(ServiceError::InvalidGitTimeout)?;
     let source = Arc::new(
         GiteaPullRequestSource::new(
@@ -95,72 +81,34 @@ fn prepare(config: ServiceConfig) -> Result<PreparedLane, ServiceError> {
         )
         .ok_or(ServiceError::InvalidWebhookSource)?,
     );
-    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
-    let QueuedLaneSetup {
-        service,
-        plans,
-        ledger,
-    } = setup_queued_lane(QueuedLaneSetupInput {
-        service: QueuedServiceInput {
-            listen: config.listen,
-            receiver: config.receiver,
-            inbox_root: config.inbox_root,
-            inbox_limits: config.inbox,
-            clock: Arc::clone(&clock),
-        },
-        plan: Arc::clone(&config.plan),
-        scope: config.scope.clone(),
-        ledger_root: config.ledger_root,
-        ledger_lease: config.ledger_lease,
-        ledger_records: config.ledger_records,
-        replay: config.replay,
-    })?;
     let admission_source = Arc::clone(&source);
     let target = config.target;
-    let admission = repository_admission(
-        config.route_id.clone(),
-        config.route.clone(),
-        config.ingress,
-        plans.clone(),
-        Arc::clone(&clock),
+    let queued = setup_repository_lane(
+        config.lane,
+        config.worker,
         config.repository_id,
+        Arc::new(SystemClock),
         move |checked| admission_source.authenticate_for_target(checked, &target),
-    );
-    let worker = WorkerContext {
-        settings: WorkerSettings {
-            provider: config.provider,
-            reviewer: config.reviewer,
-            token: config.token,
-            api_base: config.api_base,
-            objects: config.objects,
-            review_name: config.plan.execution.required_status_name().to_owned(),
-            api_timeouts: config.api_timeouts,
-        },
-        worker: AcquiringWorkerContext {
-            settings: AcquiringWorkerSettings {
-                bootstrap: config.bootstrap,
-                scratch: config.scratch,
-                bootstrap_timeout: config.bootstrap_timeout,
-                statement_validity: config.statement_validity,
-                ingress: config.ingress,
-                route: config.route,
-                route_id: config.route_id,
-                retry_min: config.retry_min,
-                retry_max: config.retry_max,
-                idle_poll: config.idle_poll,
+    )
+    .map_err(ServiceError::Setup)?;
+    Ok(QueuedService {
+        settings: queued.settings,
+        clock: queued.clock,
+        admission: queued.admission,
+        worker: WorkerContext {
+            settings: WorkerSettings {
+                provider: config.provider,
+                reviewer: config.reviewer,
+                token: config.token,
+                api_base: config.api_base,
+                objects: config.objects,
+                review_name: config.review_name,
+                api_timeouts: config.api_timeouts,
             },
-            plans,
-            ledger,
-            admission: Arc::clone(&admission),
-            clock,
+            worker: queued.worker,
+            bounds,
+            source,
         },
-        bounds,
-        source,
-    };
-    Ok(PreparedLane {
-        service,
-        admission,
-        worker,
     })
 }
 
@@ -183,13 +131,8 @@ fn build_worker(
     let adapter: Arc<dyn ProviderAdapter> =
         Arc::new(GiteaPullRequestAdapter::from_source(input.source, client));
     let acquisition = git_acquisition(input.bounds, settings.reviewer, settings.token);
-    Ok(acquiring_worker(
-        input.worker,
-        inbox,
-        operations,
-        adapter,
-        acquisition,
-    )?)
+    acquiring_worker(input.worker, inbox, operations, adapter, acquisition)
+        .map_err(WorkerBuildError::Shared)
 }
 
 fn git_acquisition(
