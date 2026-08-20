@@ -14,7 +14,7 @@ pub(super) struct ExternalVerified {
     time: Option<crate::policy::TimeContext>,
     constraint: Option<(
         amiss_wire::controls::ExecutionConstraintDescriptor,
-        &'static str,
+        amiss_wire::requests::RequestTrust,
     )>,
 }
 
@@ -68,7 +68,7 @@ pub(super) fn external_gate(
     let constraint = setup_shell
         .constraint
         .as_ref()
-        .map(|input| (input.descriptor.clone(), input.trust_source.as_str()));
+        .map(|input| (input.descriptor.clone(), input.trust_source));
     let Some(tree) = candidate_tree else {
         // Debt and waiver values are tree-bound and legal only for a
         // complete Git candidate snapshot; the staged mode rejects them.
@@ -107,7 +107,7 @@ pub(super) fn external_gate(
             .map_err(|row| (external_reason(&row), row))?;
             Some(crate::policy::DebtContext {
                 digest: input.snapshot.digest(),
-                trust_source: input.trust_source.as_str(),
+                trust_source: input.trust_source,
                 adoption_tree: input.snapshot.adoption_tree().clone(),
                 items: input.snapshot.items().to_vec(),
             })
@@ -134,7 +134,7 @@ pub(super) fn external_gate(
             let (authorized_issuers, waivable_kinds) = floor_lists.unwrap_or_default();
             Some(crate::policy::WaiverContext {
                 digest: input.bundle.digest(),
-                trust_source: input.trust_source.as_str(),
+                trust_source: input.trust_source,
                 candidate_tree: tree,
                 items: input.bundle.items().to_vec(),
                 authorized_issuers,

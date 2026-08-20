@@ -36,18 +36,8 @@ impl EvaluationRequest {
             de::const_str(path, value, EVALUATION_REQUEST_SCHEMA)
         })?;
         let profile = obj.required("profile", decode_enum)?;
-        let mode_path = obj.field("mode");
-        let mode = match de::string(&mode_path, obj.take("mode")?)?.as_str() {
-            "commit-pair" => RequestMode::CommitPair,
-            "index" => RequestMode::Index,
-            _ => return fail(&mode_path, ErrorKind::InvalidValue),
-        };
-        let format_path = obj.field("object_format");
-        let object_format = match de::string(&format_path, obj.take("object_format")?)?.as_str() {
-            "sha1" => ObjectFormat::Sha1,
-            "sha256" => ObjectFormat::Sha256,
-            _ => return fail(&format_path, ErrorKind::InvalidValue),
-        };
+        let mode = obj.required("mode", decode_enum)?;
+        let object_format = obj.required("object_format", decode_enum)?;
         let repository_path = obj.field("repository");
         let repository = match de::nullable(obj.take("repository")?) {
             None => None,
@@ -55,7 +45,7 @@ impl EvaluationRequest {
         };
         let forge_path = obj.field("forge");
         let forge = de::nullable(obj.take("forge")?)
-            .map(|value| decode_forge(&forge_path, value))
+            .map(|value| decode_enum(&forge_path, value))
             .transpose()?;
         let candidate_ref_path = obj.field("candidate_ref");
         let candidate_ref = match de::nullable(obj.take("candidate_ref")?) {
@@ -237,7 +227,7 @@ pub fn commit_candidate_identity_digest(
             "forge",
             evaluation
                 .forge
-                .map_or(Value::Null, |forge| text(forge.as_str())),
+                .map_or(Value::Null, |forge| text(forge.as_ref())),
         ),
     ]);
     Some(hj(CANDIDATE_IDENTITY_DOMAIN, &value))
@@ -247,8 +237,8 @@ fn evaluation_value(request: &EvaluationRequest) -> Value {
     object(vec![
         ("schema", text(EVALUATION_REQUEST_SCHEMA)),
         ("profile", text(request.profile.as_ref())),
-        ("mode", text(request.mode.as_str())),
-        ("object_format", text(request.object_format.as_str())),
+        ("mode", text(request.mode.as_ref())),
+        ("object_format", text(request.object_format.as_ref())),
         (
             "repository",
             request.repository.as_ref().map_or(Value::Null, repository),
@@ -257,7 +247,7 @@ fn evaluation_value(request: &EvaluationRequest) -> Value {
             "forge",
             request
                 .forge
-                .map_or(Value::Null, |forge| text(forge.as_str())),
+                .map_or(Value::Null, |forge| text(forge.as_ref())),
         ),
         (
             "candidate_ref",
@@ -282,7 +272,7 @@ fn evaluation_value(request: &EvaluationRequest) -> Value {
 fn commit_snapshot_value(object_format: ObjectFormat, commit: &Oid, tree: &Oid) -> Value {
     object(vec![
         ("kind", text("git-commit")),
-        ("object_format", text(object_format.as_str())),
+        ("object_format", text(object_format.as_ref())),
         ("commit_oid", text(commit.as_str())),
         ("tree_oid", text(tree.as_str())),
     ])
@@ -290,12 +280,6 @@ fn commit_snapshot_value(object_format: ObjectFormat, commit: &Oid, tree: &Oid) 
 
 fn optional_text(value: Option<&str>) -> Value {
     value.map_or(Value::Null, text)
-}
-
-fn decode_forge(path: &str, value: Value) -> Result<ForgeDialect, Error> {
-    let raw = de::string(path, value)?;
-    raw.parse()
-        .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
 }
 
 fn decode_ref(path: &str, value: Value) -> Result<BranchRef, Error> {

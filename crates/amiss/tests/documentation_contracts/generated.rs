@@ -14,6 +14,7 @@ use amiss_wire::report::{
     AnalysisErrorCode, EVALUATOR_MANAGED_MEMORY_BYTES, FindingKind, MACHINE_JSON_BYTES,
     PRIVATE_TEMPORARY_STORAGE_BYTES,
 };
+use strum::IntoEnumIterator;
 
 use crate::support::{report_schema, repository_root, schema_enum};
 
@@ -366,8 +367,8 @@ fn documented_enum_sources_match_the_active_report_schema() {
     let resources: Vec<String> = ResourceName::all()
         .map(|resource| resource.as_str().to_owned())
         .collect();
-    let forges: Vec<String> = ForgeDialect::all()
-        .map(|forge| forge.as_str().to_owned())
+    let forges: Vec<String> = ForgeDialect::iter()
+        .map(|forge| forge.as_ref().to_owned())
         .collect();
 
     assert_eq!(

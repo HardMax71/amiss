@@ -237,5 +237,5 @@ fn the_open_identity_grammar_admits_claims_and_keeps_structure() {
         Some(ForgeDialect::Github)
     );
     assert_eq!(ForgeDialect::default_for_host("ghes.corp.example"), None);
-    assert_eq!(ForgeDialect::Github.as_str(), "github");
+    assert_eq!(ForgeDialect::Github.as_ref(), "github");
 }

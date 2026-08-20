@@ -49,7 +49,7 @@ fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
             "release_manifest_digest",
             string(&release.manifest_digest.to_string()),
         ),
-        ("selected_platform", string(release.platform.as_str())),
+        ("selected_platform", string(release.platform.as_ref())),
         ("required_status_name", string("amiss / assure")),
         ("bootstrap_contract", string("amiss-action-bootstrap")),
         (
@@ -136,7 +136,7 @@ fn a_bootstrap_whose_bytes_differ_refuses_before_anything_else() {
 fn a_symlinked_engine_path_refuses() {
     let release = release(|root| {
         let platform = host_platform().unwrap();
-        let staged = root.join(format!("dist/amiss-{}", platform.as_str()));
+        let staged = root.join(format!("dist/amiss-{}", platform.as_ref()));
         fs::remove_file(&staged).unwrap();
         std::os::unix::fs::symlink("../Cargo.lock", &staged).unwrap();
     });
@@ -282,10 +282,10 @@ fn an_engine_whose_header_names_another_platform_refuses() {
 
     let binary = engine_bytes(other);
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
-    let binary_path = format!("dist/amiss-{}", platform.as_str());
+    let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let mut artifacts = vec![StagedArtifact {
         platform,
-        artifact_name: format!("amiss-{}", platform.as_str()),
+        artifact_name: format!("amiss-{}", platform.as_ref()),
         files: vec![
             StagedFile {
                 path: binary_path.clone(),
@@ -420,7 +420,7 @@ fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescri
             staged.commit,
             staged.tree,
             staged.manifest_digest,
-            staged.platform.as_str(),
+            staged.platform.as_ref(),
             status,
             hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
         )

@@ -69,7 +69,7 @@ const CONSTRAINT: &str = r#"{
 #[test]
 fn parses_an_execution_constraint_descriptor() {
     let descriptor = ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).unwrap();
-    assert_eq!(descriptor.selected_platform().as_str(), "linux-x86_64");
+    assert_eq!(descriptor.selected_platform().as_ref(), "linux-x86_64");
     assert_eq!(
         descriptor.required_status_name(),
         "amiss / documentation assurance"

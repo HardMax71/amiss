@@ -11,7 +11,7 @@ use super::external::{external_gate, external_reason};
 use super::{
     Evaluated, ExternalVerified, PipelineFailure, PipelineResult, ResolvedTree, SetupShell,
     binding_mismatch, conclude, controls_failure, detail, effective_limits, effective_shell,
-    evaluate_tree, floor_gate, format_str, pair_effects, policy_unavailable_reason, resolve_tree,
+    evaluate_tree, floor_gate, pair_effects, policy_unavailable_reason, resolve_tree,
 };
 
 /// The fallback identity projection when a snapshot cannot be established:
@@ -23,7 +23,7 @@ fn oid_fallback(
     candidate_oid: &Oid,
 ) -> Setup {
     let placeholder = |oid: &Oid| SnapshotIdentity {
-        object_format: format_str(repo.object_format()),
+        object_format: repo.object_format().into(),
         commit_oid: oid.as_str().to_owned(),
         tree_oid: oid.as_str().to_owned(),
     };

@@ -1,7 +1,8 @@
 use amiss_git::Repository;
-use amiss_scan::policy::{ConstraintInput, TrustSource};
+use amiss_scan::policy::ConstraintInput;
 use amiss_wire::controls::{ExecutionConstraintDescriptor, OrganizationFloor, Profile};
 use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::requests::RequestTrust;
 
 use crate::support::{
     Fixture, INSTANT, assert_global_location, debt_input, debt_json, fixture, floor_input, payload,
@@ -41,7 +42,7 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
 }"#,
         )
         .unwrap(),
-        trust_source: TrustSource::OrganizationPolicy,
+        trust_source: RequestTrust::OrganizationPolicy,
     });
     let report = payload(&fx, &setup);
 
@@ -380,7 +381,7 @@ fn a_debt_snapshot_over_the_tightened_ceiling_is_not_parsed() {
     let mut setup = shell(Profile::Enforce);
     setup.floor = Some(amiss_scan::policy::FloorInput {
         floor,
-        trust_source: TrustSource::OrganizationPolicy,
+        trust_source: RequestTrust::OrganizationPolicy,
     });
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(

@@ -8,7 +8,7 @@ use amiss_wire::json::{ErrorKind as JsonErrorKind, canonical};
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
 
-use crate::policy::{ConstraintInput, DebtInput, FloorInput, TimeInput, TrustSource, WaiverInput};
+use crate::policy::{ConstraintInput, DebtInput, FloorInput, TimeInput, WaiverInput};
 
 /// Typed external inputs after the request's embedded values and independent
 /// expected digests have both been verified.
@@ -40,7 +40,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
             }
             Ok(FloorInput {
                 floor,
-                trust_source: trust(supplied.trust_source),
+                trust_source: supplied.trust_source,
             })
         })
         .transpose()?;
@@ -132,20 +132,13 @@ fn typed<T>(
     supplied: &SuppliedControl,
     parse: impl FnOnce(&[u8]) -> Result<T, Error>,
     digest: impl FnOnce(&T) -> Digest,
-) -> Result<(T, TrustSource), ErrorDetail> {
+) -> Result<(T, RequestTrust), ErrorDetail> {
     let bytes = canonical(&supplied.value);
     let value = parse(&bytes).map_err(|error| detail(&error))?;
     if digest(&value) != supplied.expected_digest {
         return Err(code(AnalysisErrorCode::DigestMismatch));
     }
-    Ok((value, trust(supplied.trust_source)))
-}
-
-const fn trust(source: RequestTrust) -> TrustSource {
-    match source {
-        RequestTrust::ExternalRequiredCheck => TrustSource::ExternalRequiredCheck,
-        RequestTrust::OrganizationPolicy => TrustSource::OrganizationPolicy,
-    }
+    Ok((value, supplied.trust_source))
 }
 
 fn detail(error: &Error) -> ErrorDetail {

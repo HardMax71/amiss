@@ -56,24 +56,13 @@ impl From<Fault> for AnalyzeError {
 /// nearest ancestor list item if any, otherwise the nearest table cell,
 /// otherwise the nearest paragraph, otherwise the document root. Raw HTML can
 /// never own an extracted construct.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum BlockKind {
     Paragraph,
     ListItem,
     TableCell,
     DocumentRoot,
-}
-
-impl BlockKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Paragraph => "paragraph",
-            Self::ListItem => "list-item",
-            Self::TableCell => "table-cell",
-            Self::DocumentRoot => "document-root",
-        }
-    }
 }
 
 /// One extracted reference. `raw_destination` is the exact source-token byte
@@ -125,24 +114,14 @@ pub struct HeadingAttribute {
 
 /// Where a heading was written. Only some renderers build an identity from one
 /// written as raw HTML, so the two are kept apart in one ordered list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum HeadingSource {
     Markdown,
+    #[strum(serialize = "asciidoc")]
     AsciiDoc,
     Rst,
     RawHtml,
-}
-
-impl HeadingSource {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Markdown => "markdown",
-            Self::AsciiDoc => "asciidoc",
-            Self::Rst => "rst",
-            Self::RawHtml => "raw-html",
-        }
-    }
 }
 
 /// One heading's rendered text content, in document order with its siblings.

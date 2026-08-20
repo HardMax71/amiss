@@ -12,14 +12,14 @@ fn block_and_heading_names_are_nonempty_and_distinct() {
         BlockKind::TableCell,
         BlockKind::DocumentRoot,
     ]
-    .map(BlockKind::as_str);
+    .map(Into::<&'static str>::into);
     let sources = [
         HeadingSource::Markdown,
         HeadingSource::AsciiDoc,
         HeadingSource::Rst,
         HeadingSource::RawHtml,
     ]
-    .map(HeadingSource::as_str);
+    .map(Into::<&'static str>::into);
     for table in [&blocks, &sources] {
         assert!(table.iter().all(|name| !name.is_empty()));
         let unique: BTreeSet<&str> = table.iter().copied().collect();

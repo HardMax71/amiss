@@ -86,15 +86,15 @@ fn classifications_map_to_their_adapters() {
     );
     assert_eq!(Classification::StructuredMdx.adapter(), Some(Adapter::Mdx));
     assert_eq!(
-        Classification::StructuredMarkdown.as_str(),
+        Classification::StructuredMarkdown.as_ref(),
         "structured-markdown"
     );
-    assert_eq!(Classification::StructuredMdx.as_str(), "structured-mdx");
+    assert_eq!(Classification::StructuredMdx.as_ref(), "structured-mdx");
     assert_eq!(
-        Classification::ExtensionlessMarkdown.as_str(),
+        Classification::ExtensionlessMarkdown.as_ref(),
         "extensionless-markdown"
     );
-    assert_eq!(Classification::PlainAdvisory.as_str(), "plain-advisory");
+    assert_eq!(Classification::PlainAdvisory.as_ref(), "plain-advisory");
 }
 
 #[test]

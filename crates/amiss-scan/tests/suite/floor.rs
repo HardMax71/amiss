@@ -5,11 +5,12 @@ use amiss_fixtures::stage_symlink;
 use amiss_git::Repository;
 use amiss_scan::SetupShell;
 use amiss_scan::pipeline::commit_pair;
-use amiss_scan::policy::{FloorInput, TrustSource, verify_floor};
+use amiss_scan::policy::{FloorInput, verify_floor};
 use amiss_wire::controls::{OrganizationFloor, Profile};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -49,7 +50,7 @@ const EMPTY_ARRAYS: &str = r#"  "minimum_dispositions": [],
 fn floor_input(extra: &str) -> FloorInput {
     FloorInput {
         floor: OrganizationFloor::parse(floor_json(extra).as_bytes()).unwrap(),
-        trust_source: TrustSource::ExternalRequiredCheck,
+        trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
 
@@ -162,7 +163,7 @@ fn the_floor_binding_is_repository_ref_and_profile_ordering() {
         )
         .map_err(|defect| format!("{defect:?}"))
         .unwrap(),
-        trust_source: TrustSource::OrganizationPolicy,
+        trust_source: RequestTrust::OrganizationPolicy,
     };
     assert!(
         verify_floor(

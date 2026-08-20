@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 
 use amiss_git::Repository;
-use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, TrustSource, WaiverInput};
+use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
 use amiss_wire::controls::{
@@ -18,6 +18,7 @@ use amiss_wire::controls::{
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::requests::RequestTrust;
 
 pub(crate) const INSTANT: &str = "2026-07-12T10:00:00Z";
 
@@ -83,7 +84,7 @@ pub(crate) fn floor_input() -> FloorInput {
 }"#;
     FloorInput {
         floor: OrganizationFloor::parse(doc.as_bytes()).unwrap(),
-        trust_source: TrustSource::OrganizationPolicy,
+        trust_source: RequestTrust::OrganizationPolicy,
     }
 }
 
@@ -224,7 +225,7 @@ pub(crate) fn debt_input(doc: &str) -> DebtInput {
         snapshot: DebtSnapshot::parse(doc.as_bytes())
             .map_err(|defect| format!("{defect:?}"))
             .unwrap(),
-        trust_source: TrustSource::ExternalRequiredCheck,
+        trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
 
@@ -267,7 +268,7 @@ pub(crate) fn waiver_input(doc: &str) -> WaiverInput {
         bundle: WaiverBundle::parse(doc.as_bytes())
             .map_err(|defect| format!("{defect:?}"))
             .unwrap(),
-        trust_source: TrustSource::ExternalRequiredCheck,
+        trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
 

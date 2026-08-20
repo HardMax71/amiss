@@ -369,9 +369,9 @@ fn runtime_files_hold_one_to_two_hundred_fifty_six_rows() {
 #[test]
 fn runtime_roles_project_distinct_nonempty_spellings() {
     let spellings = [
-        RuntimeRole::Executable.as_str(),
-        RuntimeRole::DynamicLibrary.as_str(),
-        RuntimeRole::RuntimeData.as_str(),
+        RuntimeRole::Executable.as_ref(),
+        RuntimeRole::DynamicLibrary.as_ref(),
+        RuntimeRole::RuntimeData.as_ref(),
     ];
     assert!(spellings.iter().all(|role| !role.is_empty()));
     let unique: std::collections::BTreeSet<&str> = spellings.iter().copied().collect();

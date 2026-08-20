@@ -255,11 +255,12 @@ fn classify_target(gathered: &Gathered) -> Validation<(PathBuf, ObjectFormat)> {
         .filter(|path| !path.is_empty())
         .map(PathBuf::from)
         .ok_or(Code::InvalidInvocation)?;
-    let object_format = match gathered.object_format.unique_value() {
-        Some("sha1") => ObjectFormat::Sha1,
-        Some("sha256") => ObjectFormat::Sha256,
-        Some(_) | None => return Err(Code::InvalidInvocation),
-    };
+    let object_format = gathered
+        .object_format
+        .unique_value()
+        .ok_or(Code::InvalidInvocation)?
+        .parse()
+        .map_err(|_unknown| Code::InvalidInvocation)?;
     Ok((repo, object_format))
 }
 

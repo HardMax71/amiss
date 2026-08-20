@@ -133,13 +133,13 @@ fn every_forge_dialect_compares_the_selected_lines() {
         assert!(
             kinds(&payload).contains(&"dependency-changed-subject-unchanged"),
             "{} must evaluate its own line-range spelling",
-            dialect.as_str(),
+            dialect.as_ref(),
         );
         assert_eq!(
             payload["observations"][0]["target_change"],
             "changed",
             "{} compares the selected bytes",
-            dialect.as_str(),
+            dialect.as_ref(),
         );
     }
 }

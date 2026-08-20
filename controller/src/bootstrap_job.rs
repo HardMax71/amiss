@@ -267,7 +267,7 @@ fn control_identity_value(identity: Option<controls::ControlIdentity>) -> Value 
             ),
             (
                 "trust_source".to_owned(),
-                Value::string(control.trust_source.as_str().to_owned()),
+                Value::string(control.trust_source.as_ref().to_owned()),
             ),
         ])
     })

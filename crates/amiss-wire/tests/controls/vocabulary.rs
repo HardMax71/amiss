@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use amiss_wire::controls::{
     ConstraintPlatform, ContentAvailability, GitMode, Profile, ResourceName,
 };
-use amiss_wire::json::Value;
 use strum::IntoEnumIterator;
 
 #[test]
@@ -32,19 +31,12 @@ fn the_platform_vocabulary_is_the_closed_six() {
         ConstraintPlatform::WindowsAarch64,
     ];
     for platform in table {
-        let name = platform.as_str();
-        assert_eq!(
-            ConstraintPlatform::decode("$.selected_platform", Value::string(name.to_owned())),
-            Ok(platform),
-            "{name}"
-        );
+        let name = platform.as_ref();
+        assert_eq!(name.parse(), Ok(platform), "{name}");
     }
-    let spellings: BTreeSet<&str> = table.iter().map(|platform| platform.as_str()).collect();
+    let spellings: BTreeSet<&str> = table.iter().map(AsRef::as_ref).collect();
     assert_eq!(spellings.len(), table.len(), "no two share a spelling");
-    assert!(
-        ConstraintPlatform::decode("$.selected_platform", Value::string("linux-x86".to_owned()))
-            .is_err()
-    );
+    assert!("linux-x86".parse::<ConstraintPlatform>().is_err());
 }
 
 #[test]

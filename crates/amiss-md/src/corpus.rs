@@ -458,7 +458,7 @@ fn occurrence_value(entry: &Occurrence) -> Value {
     Value::object(vec![
         (
             "block_kind".to_owned(),
-            Value::string(entry.block_kind.as_str().to_owned()),
+            Value::string(entry.block_kind.as_ref().to_owned()),
         ),
         ("block_span".to_owned(), span_value(entry.block_span)),
         (
@@ -498,7 +498,7 @@ fn heading_value(heading: &Heading) -> Value {
         ("attribute".to_owned(), attribute),
         (
             "source".to_owned(),
-            Value::string(heading.source.as_str().to_owned()),
+            Value::string(heading.source.as_ref().to_owned()),
         ),
         ("span".to_owned(), span_value(heading.span)),
         ("text".to_owned(), Value::string(heading.text.clone())),
@@ -619,7 +619,7 @@ fn case_value(case: &Case) -> Value {
         .iter()
         .map(|adapter| {
             (
-                adapter.grammar_profile().to_owned(),
+                adapter.metadata().grammar_profile.to_owned(),
                 profile_value(*adapter, case.source.as_bytes()),
             )
         })
@@ -677,7 +677,7 @@ pub fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
         .collect();
     let profiles: Vec<Value> = PROFILES
         .iter()
-        .map(|adapter| Value::string(adapter.grammar_profile().to_owned()))
+        .map(|adapter| Value::string(adapter.metadata().grammar_profile.to_owned()))
         .collect();
     Value::object(vec![
         ("schema".to_owned(), Value::string(SCHEMA.to_owned())),

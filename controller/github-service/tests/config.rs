@@ -134,7 +134,7 @@ fn execution_constraint_must_target_the_host() {
     .unwrap();
     let mut constraint: Value =
         serde_json::from_slice(&std::fs::read(&fixture.constraint).unwrap()).unwrap();
-    *constraint.pointer_mut("/selected_platform").unwrap() = json!(wrong_platform.as_str());
+    *constraint.pointer_mut("/selected_platform").unwrap() = json!(wrong_platform.as_ref());
     std::fs::write(
         &fixture.constraint,
         serde_json::to_vec_pretty(&constraint).unwrap(),

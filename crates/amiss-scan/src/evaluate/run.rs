@@ -137,13 +137,7 @@ pub(super) fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
     Value::object(vec![
         (
             "object_format".to_owned(),
-            Value::string(
-                match tree.object_format() {
-                    amiss_wire::model::ObjectFormat::Sha1 => "sha1",
-                    amiss_wire::model::ObjectFormat::Sha256 => "sha256",
-                }
-                .to_owned(),
-            ),
+            Value::string(tree.object_format().as_ref().to_owned()),
         ),
         (
             "tree_oid".to_owned(),

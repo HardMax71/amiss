@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
 use crate::controls::value::{object, positive_safe_integer, text};
-use crate::controls::{decode_provider_id, decode_provider_run_id, root};
+use crate::controls::{decode_enum, decode_provider_id, decode_provider_run_id, root};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
 use crate::json::{Value, canonical};
@@ -30,20 +30,13 @@ pub const REQUEST_STREAM_BYTES: u64 = 16_777_216;
 /// in-process and future subprocess lanes.
 pub const REPOSITORY_HANDLE_ORDINAL: i64 = 3;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum RequestMode {
     CommitPair,
     Index,
-}
-
-impl RequestMode {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::CommitPair => "commit-pair",
-            Self::Index => "index",
-        }
-    }
 }
 
 /// The materialization request. `git-objects` pairs with mode `commit-pair`
@@ -118,28 +111,13 @@ pub struct SuppliedControl {
     pub trust_source: RequestTrust,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum RequestTrust {
     ExternalRequiredCheck,
     OrganizationPolicy,
-}
-
-impl RequestTrust {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ExternalRequiredCheck => "external-required-check",
-            Self::OrganizationPolicy => "organization-policy",
-        }
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "external-required-check" => Ok(Self::ExternalRequiredCheck),
-            "organization-policy" => Ok(Self::OrganizationPolicy),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
 }
 
 /// The supplied trusted-time statement with the provider-authenticated run
@@ -304,7 +282,7 @@ fn snapshot_value(request: SnapshotRequest) -> Value {
 
 fn supplied_value(control: &SuppliedControl) -> Value {
     let mut rows = supplied_rows(&control.value, control.expected_digest);
-    rows.push(("trust_source", text(control.trust_source.as_str())));
+    rows.push(("trust_source", text(control.trust_source.as_ref())));
     object(rows)
 }
 
@@ -378,7 +356,7 @@ fn decode_supplied(path: &str, value: Value) -> Result<Option<SuppliedControl>, 
     let expected_digest =
         Digest::from_wire(&de::string(&digest_path, obj.take("expected_digest")?)?)
             .ok_or_else(|| Error::new(&digest_path, ErrorKind::InvalidValue))?;
-    let trust_source = obj.required("trust_source", RequestTrust::decode)?;
+    let trust_source = obj.required("trust_source", decode_enum)?;
     obj.finish()?;
     Ok(Some(SuppliedControl {
         value: embedded,

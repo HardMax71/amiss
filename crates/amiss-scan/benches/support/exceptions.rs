@@ -86,7 +86,7 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
     let policy = Effects {
         debt: Some(DebtContext {
             digest: debt_digest,
-            trust_source: "benchmark",
+            trust_source: amiss_wire::requests::RequestTrust::OrganizationPolicy,
             adoption_tree: tree("a"),
             items,
         }),

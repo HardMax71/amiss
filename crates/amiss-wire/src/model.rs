@@ -1,4 +1,4 @@
-use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
+use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 use crate::json::Value;
 
@@ -445,7 +445,7 @@ fn identity_byte(byte: u8) -> bool {
 
 /// The same-repository URL dialect a run applies: named in the report's
 /// evaluation and selecting the recognition grammar in the resolver.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter, EnumString, IntoStaticStr)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumIter, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]
 pub enum ForgeDialect {
     Github,
@@ -454,17 +454,6 @@ pub enum ForgeDialect {
 }
 
 impl ForgeDialect {
-    /// Every supported URL dialect in wire-contract order.
-    #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        self.into()
-    }
-
     /// The known-host default table; an explicit flag always wins over it.
     #[must_use]
     pub fn default_for_host(host: &str) -> Option<Self> {
@@ -477,20 +466,13 @@ impl ForgeDialect {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, IntoStaticStr,
+)]
+#[strum(serialize_all = "lowercase")]
 pub enum ObjectFormat {
     Sha1,
     Sha256,
-}
-
-impl ObjectFormat {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Sha1 => "sha1",
-            Self::Sha256 => "sha256",
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -559,11 +541,25 @@ fn oid_hex(object_format: ObjectFormat, raw: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-/// The three closed source adapters. Every wire string an adapter contributes
+/// The five closed source adapters. Every wire string an adapter contributes
 /// (identity, grammar profile, frontmatter contract, projection, address
 /// scheme) is frozen here so no call site can spell one by hand.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Adapter {
+    #[strum(serialize = "asciidoc")]
     AsciiDoc,
     Markdown,
     Mdx,
@@ -571,70 +567,60 @@ pub enum Adapter {
     Rst,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AdapterMetadata {
+    pub parser_name: &'static str,
+    pub grammar_profile: &'static str,
+    pub frontmatter_contract: &'static str,
+    pub source_projection: &'static str,
+    pub structural_address: &'static str,
+}
+
+const MARKDOWN_METADATA: AdapterMetadata = AdapterMetadata {
+    parser_name: "amiss-markdown-adapter",
+    grammar_profile: "commonmark-gfm",
+    frontmatter_contract: "frontmatter",
+    source_projection: "source-projection",
+    structural_address: "markdown-ast-node-path",
+};
+const MDX_METADATA: AdapterMetadata = AdapterMetadata {
+    parser_name: "amiss-mdx-adapter",
+    grammar_profile: "mdx-source",
+    frontmatter_contract: "frontmatter",
+    source_projection: "source-projection",
+    structural_address: "mdx-ast-node-path",
+};
+const ASCIIDOC_METADATA: AdapterMetadata = AdapterMetadata {
+    parser_name: "amiss-asciidoc-adapter",
+    grammar_profile: "asciidoctor-2",
+    frontmatter_contract: "none",
+    source_projection: "source-projection",
+    structural_address: "asciidoc-block-path",
+};
+const RST_METADATA: AdapterMetadata = AdapterMetadata {
+    parser_name: "amiss-rst-adapter",
+    grammar_profile: "docutils-rst-sphinx-refs",
+    frontmatter_contract: "none",
+    source_projection: "source-projection",
+    structural_address: "rst-block-path",
+};
+const PLAIN_ADVISORY_METADATA: AdapterMetadata = AdapterMetadata {
+    parser_name: "amiss-plain-advisory",
+    grammar_profile: "plain-zero-lexer",
+    frontmatter_contract: "none",
+    source_projection: "none",
+    structural_address: "none",
+};
+
 impl Adapter {
-    /// Every source adapter in wire-contract order.
     #[must_use]
-    pub fn all() -> impl ExactSizeIterator<Item = Self> {
-        Self::iter()
-    }
-
-    #[must_use]
-    pub const fn adapter_id(self) -> &'static str {
+    pub const fn metadata(self) -> &'static AdapterMetadata {
         match self {
-            Self::Markdown => "markdown",
-            Self::Mdx => "mdx",
-            Self::AsciiDoc => "asciidoc",
-            Self::Rst => "rst",
-            Self::PlainAdvisory => "plain-advisory",
-        }
-    }
-
-    #[must_use]
-    pub const fn parser_name(self) -> &'static str {
-        match self {
-            Self::Markdown => "amiss-markdown-adapter",
-            Self::Mdx => "amiss-mdx-adapter",
-            Self::AsciiDoc => "amiss-asciidoc-adapter",
-            Self::Rst => "amiss-rst-adapter",
-            Self::PlainAdvisory => "amiss-plain-advisory",
-        }
-    }
-
-    #[must_use]
-    pub const fn grammar_profile(self) -> &'static str {
-        match self {
-            Self::Markdown => "commonmark-gfm",
-            Self::Mdx => "mdx-source",
-            Self::AsciiDoc => "asciidoctor-2",
-            Self::Rst => "docutils-rst-sphinx-refs",
-            Self::PlainAdvisory => "plain-zero-lexer",
-        }
-    }
-
-    #[must_use]
-    pub const fn frontmatter_contract(self) -> &'static str {
-        match self {
-            Self::Markdown | Self::Mdx => "frontmatter",
-            Self::AsciiDoc | Self::Rst | Self::PlainAdvisory => "none",
-        }
-    }
-
-    #[must_use]
-    pub const fn source_projection(self) -> &'static str {
-        match self {
-            Self::Markdown | Self::Mdx | Self::AsciiDoc | Self::Rst => "source-projection",
-            Self::PlainAdvisory => "none",
-        }
-    }
-
-    #[must_use]
-    pub const fn structural_address(self) -> &'static str {
-        match self {
-            Self::Markdown => "markdown-ast-node-path",
-            Self::Mdx => "mdx-ast-node-path",
-            Self::AsciiDoc => "asciidoc-block-path",
-            Self::Rst => "rst-block-path",
-            Self::PlainAdvisory => "none",
+            Self::Markdown => &MARKDOWN_METADATA,
+            Self::Mdx => &MDX_METADATA,
+            Self::AsciiDoc => &ASCIIDOC_METADATA,
+            Self::Rst => &RST_METADATA,
+            Self::PlainAdvisory => &PLAIN_ADVISORY_METADATA,
         }
     }
 }

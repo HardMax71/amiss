@@ -9,21 +9,12 @@ use crate::correlate::{Comparison, Observation};
 use crate::evaluate::{Attribution, Finding, LocationSide};
 use crate::scan::SpanDisplay;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub(crate) enum Action {
     Fix,
     Check,
     Existing,
-}
-
-impl Action {
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Fix => "fix",
-            Self::Check => "check",
-            Self::Existing => "existing",
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
