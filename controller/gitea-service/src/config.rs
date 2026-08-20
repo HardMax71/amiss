@@ -5,17 +5,17 @@ use std::time::Duration;
 
 use crate::objects::GiteaGitObjects;
 use amiss_controller::{
-    CheckPlan, DeliveryRoute, GiteaWebhook, IngressPolicy, IntegrationId, PlanScope,
-    ProviderIdentity, ReplayWindow, SignedTimePolicy, TrustSetId,
+    CheckPlan, DeliveryRoute, GiteaWebhook, IntegrationId, PlanScope, ProviderIdentity,
+    SignedTimePolicy, TrustSetId,
 };
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaClient, GiteaObjectResolver, GiteaTimeouts, gitea_repository_url,
 };
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
-    CheckPlanFiles, HttpLimits, InboxLimits, ServiceLimits, ServicePaths, WebhookKeyFile,
-    framed_route_id, load_limits, load_paths, load_plan, load_webhook_keyring, read_regular,
-    read_strict_json,
+    AcquiringWorkerSettings, CheckPlanFiles, HttpLimits, QueuedLaneSetupInput,
+    QueuedServiceSettings, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
+    load_limits, load_paths, load_plan, load_webhook_keyring, read_regular, read_strict_json,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use secrecy::{ExposeSecret as _, SecretString};
@@ -27,15 +27,8 @@ const INVALID_GIT_CREDENTIAL: &str = "Gitea-family Git credential is invalid";
 const INVALID_API_TIMEOUTS: &str = "Gitea-family API timeouts are invalid";
 
 pub struct ServiceConfig {
-    pub(crate) listen: SocketAddr,
-    pub(crate) receiver: amiss_controller_service::ReceiverConfig,
-    pub(crate) inbox: InboxLimits,
-    pub(crate) ledger_lease: Duration,
-    pub(crate) ledger_records: u64,
-    pub(crate) ingress: IngressPolicy,
-    pub(crate) replay: ReplayWindow,
-    pub(crate) route: DeliveryRoute,
-    pub(crate) route_id: String,
+    pub(crate) lane: QueuedLaneSetupInput,
+    pub(crate) worker: AcquiringWorkerSettings,
     pub(crate) provider: ProviderIdentity,
     pub(crate) reviewer: DedicatedReviewer,
     pub(crate) repository_id: u64,
@@ -46,17 +39,7 @@ pub struct ServiceConfig {
     pub(crate) webhook: GiteaWebhook,
     pub(crate) api_timeouts: GiteaTimeouts,
     pub(crate) git_timeout: Duration,
-    pub(crate) plan: Arc<CheckPlan>,
-    pub(crate) scope: PlanScope,
-    pub(crate) bootstrap: PathBuf,
-    pub(crate) scratch: PathBuf,
-    pub(crate) inbox_root: PathBuf,
-    pub(crate) ledger_root: PathBuf,
-    pub(crate) bootstrap_timeout: Duration,
-    pub(crate) statement_validity: Duration,
-    pub(crate) retry_min: Duration,
-    pub(crate) retry_max: Duration,
-    pub(crate) idle_poll: Duration,
+    pub(crate) review_name: String,
 }
 
 impl ServiceConfig {
@@ -154,25 +137,14 @@ impl RawConfig {
             trust_set: trust_set.clone(),
             signed_time: SignedTimePolicy::ReplayOnly,
         };
-        let reviewer_id = reviewer.id.to_string();
-        let repository_id_field = repository_id.to_string();
-        let plan_digest = plan.digest.to_string();
-        let route_id = framed_route_id(
-            ROUTE_DOMAIN,
-            "gitea-family",
-            &[
-                provider.namespace.as_str(),
-                provider.instance.as_str(),
-                &reviewer_id,
-                &reviewer.login,
-                &repository_id_field,
-                repository.owner(),
-                repository.name(),
-                target.as_str(),
-                &plan_digest,
-            ],
-        )
-        .ok_or(ConfigError::invalid("route identity is invalid"))?;
+        let route_id = gitea_route_id(
+            &provider,
+            &reviewer,
+            repository_id,
+            &repository,
+            &target,
+            &plan,
+        )?;
         let webhook =
             GiteaWebhook::new(load_webhook_keyring(trust_set, self.provider.webhook_keys)?);
         let scope = PlanScope {
@@ -180,17 +152,37 @@ impl RawConfig {
             integration: reviewer_integration(reviewer.id)?,
             repository,
         };
-
-        Ok(ServiceConfig {
-            listen,
-            receiver: limits.receiver,
-            inbox: limits.inbox,
-            ledger_lease: limits.ledger.lease,
-            ledger_records: limits.ledger.records,
+        let review_name = plan.execution.required_status_name().to_owned();
+        let worker = AcquiringWorkerSettings {
+            bootstrap: paths.bootstrap,
+            scratch: paths.scratch,
+            bootstrap_timeout: limits.runner.bootstrap,
+            statement_validity: limits.runner.statement_validity,
             ingress: limits.ingress,
-            replay: limits.replay,
             route,
             route_id,
+            retry_min: limits.worker.retry_min,
+            retry_max: limits.worker.retry_max,
+            idle_poll: limits.worker.idle_poll,
+        };
+        let lane = QueuedLaneSetupInput {
+            service: QueuedServiceSettings {
+                listen,
+                receiver: limits.receiver,
+                inbox_root: paths.inbox,
+                inbox_limits: limits.inbox,
+            },
+            plan,
+            scope,
+            ledger_root: paths.ledger,
+            ledger_lease: limits.ledger.lease,
+            ledger_records: limits.ledger.records,
+            replay: limits.replay,
+        };
+
+        Ok(ServiceConfig {
+            lane,
+            worker,
             provider,
             reviewer,
             repository_id,
@@ -201,19 +193,38 @@ impl RawConfig {
             webhook,
             api_timeouts,
             git_timeout: limits.git.request,
-            plan,
-            scope,
-            bootstrap: paths.bootstrap,
-            scratch: paths.scratch,
-            inbox_root: paths.inbox,
-            ledger_root: paths.ledger,
-            bootstrap_timeout: limits.runner.bootstrap,
-            statement_validity: limits.runner.statement_validity,
-            retry_min: limits.worker.retry_min,
-            retry_max: limits.worker.retry_max,
-            idle_poll: limits.worker.idle_poll,
+            review_name,
         })
     }
+}
+
+fn gitea_route_id(
+    provider: &ProviderIdentity,
+    reviewer: &DedicatedReviewer,
+    repository_id: u64,
+    repository: &RepositoryIdentity,
+    target: &BranchRef,
+    plan: &CheckPlan,
+) -> Result<String, ConfigError> {
+    let reviewer_id = reviewer.id.to_string();
+    let repository_id = repository_id.to_string();
+    let plan_digest = plan.digest.to_string();
+    framed_route_id(
+        ROUTE_DOMAIN,
+        "gitea-family",
+        &[
+            provider.namespace.as_str(),
+            provider.instance.as_str(),
+            &reviewer_id,
+            &reviewer.login,
+            &repository_id,
+            repository.owner(),
+            repository.name(),
+            target.as_str(),
+            &plan_digest,
+        ],
+    )
+    .ok_or(ConfigError::invalid("route identity is invalid"))
 }
 
 fn socket_address(raw: &str) -> Result<SocketAddr, ConfigError> {

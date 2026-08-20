@@ -1,17 +1,16 @@
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use amiss_controller::{
-    CheckPlan, DeliveryRoute, GitHubWebhook, IngressPolicy, IntegrationId, PlanScope,
-    ProviderIdentity, ReplayWindow, SignedTimePolicy, TrustSetId,
+    CheckPlan, DeliveryRoute, GitHubWebhook, IntegrationId, PlanScope, ProviderIdentity,
+    SignedTimePolicy, TrustSetId,
 };
 use amiss_controller_github::{GitHubApp, GitHubTimeouts};
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
-    CheckPlanFiles, InboxLimits, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
-    load_limits, load_paths, load_plan, load_webhook_keyring, read_regular, read_strict_json,
+    AcquiringWorkerSettings, CheckPlanFiles, QueuedLaneSetupInput, QueuedServiceSettings,
+    ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id, load_limits, load_paths,
+    load_plan, load_webhook_keyring, read_regular, read_strict_json,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use serde::Deserialize;
@@ -20,32 +19,14 @@ const PRIVATE_KEY_BYTES: u64 = 65_536;
 const ROUTE_DOMAIN: &str = "amiss/controller-github-service-route-v1";
 
 pub struct ServiceConfig {
-    pub(crate) listen: SocketAddr,
-    pub(crate) receiver: amiss_controller_service::ReceiverConfig,
-    pub(crate) inbox: InboxLimits,
-    pub(crate) ledger_lease: Duration,
-    pub(crate) ledger_records: u64,
-    pub(crate) ingress: IngressPolicy,
-    pub(crate) replay: ReplayWindow,
-    pub(crate) route: DeliveryRoute,
-    pub(crate) route_id: String,
+    pub(crate) lane: QueuedLaneSetupInput,
+    pub(crate) worker: AcquiringWorkerSettings,
     pub(crate) provider: ProviderIdentity,
     pub(crate) app: GitHubApp,
     pub(crate) repository_id: u64,
     pub(crate) target: BranchRef,
     pub(crate) webhook: GitHubWebhook,
-    pub(crate) git_timeout: Duration,
-    pub(crate) plan: Arc<CheckPlan>,
-    pub(crate) scope: PlanScope,
-    pub(crate) bootstrap: PathBuf,
-    pub(crate) scratch: PathBuf,
-    pub(crate) inbox_root: PathBuf,
-    pub(crate) ledger_root: PathBuf,
-    pub(crate) bootstrap_timeout: Duration,
-    pub(crate) statement_validity: Duration,
-    pub(crate) retry_min: Duration,
-    pub(crate) retry_max: Duration,
-    pub(crate) idle_poll: Duration,
+    pub(crate) git_timeout: std::time::Duration,
 }
 
 impl ServiceConfig {
@@ -149,33 +130,41 @@ impl RawConfig {
             repository: scope.repository,
         };
         let paths = load_paths(&self.paths, &plan)?;
-        Ok(ServiceConfig {
-            listen,
-            receiver: limits.receiver,
-            inbox: limits.inbox,
-            ledger_lease: limits.ledger.lease,
-            ledger_records: limits.ledger.records,
+        let worker = AcquiringWorkerSettings {
+            bootstrap: paths.bootstrap,
+            scratch: paths.scratch,
+            bootstrap_timeout: limits.runner.bootstrap,
+            statement_validity: limits.runner.statement_validity,
             ingress: limits.ingress,
-            replay: limits.replay,
             route,
             route_id,
+            retry_min: limits.worker.retry_min,
+            retry_max: limits.worker.retry_max,
+            idle_poll: limits.worker.idle_poll,
+        };
+        let lane = QueuedLaneSetupInput {
+            service: QueuedServiceSettings {
+                listen,
+                receiver: limits.receiver,
+                inbox_root: paths.inbox,
+                inbox_limits: limits.inbox,
+            },
+            plan,
+            scope: plan_scope,
+            ledger_root: paths.ledger,
+            ledger_lease: limits.ledger.lease,
+            ledger_records: limits.ledger.records,
+            replay: limits.replay,
+        };
+        Ok(ServiceConfig {
+            lane,
+            worker,
             provider: scope.provider,
             app,
             repository_id: positive(scope.repository_id)?,
             target: scope.target,
             webhook,
             git_timeout: limits.git.request,
-            plan,
-            scope: plan_scope,
-            bootstrap: paths.bootstrap,
-            scratch: paths.scratch,
-            inbox_root: paths.inbox,
-            ledger_root: paths.ledger,
-            bootstrap_timeout: limits.runner.bootstrap,
-            statement_validity: limits.runner.statement_validity,
-            retry_min: limits.worker.retry_min,
-            retry_max: limits.worker.retry_max,
-            idle_poll: limits.worker.idle_poll,
         })
     }
 }

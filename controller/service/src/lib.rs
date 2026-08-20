@@ -46,8 +46,8 @@ pub use objects::{GitObjectSource, ResolveWant, ResolvedCommit};
 pub use operations::{Operations, ServiceComponent, ServiceEvent};
 pub use probe::EndpointDrain;
 pub use queued::{
-    QueuedLaneSetup, QueuedLaneSetupError, QueuedLaneSetupInput, QueuedServiceError,
-    QueuedServiceInput, run_queued_service, setup_queued_lane,
+    QueuedLaneSetupError, QueuedLaneSetupInput, QueuedService, QueuedServiceError,
+    QueuedServiceSettings, run_queued_service, setup_repository_lane,
 };
 pub use receiver::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, ReceiverConfig,
