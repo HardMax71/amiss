@@ -604,7 +604,7 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
             };
             Value::object(vec![(
                 "fault".to_owned(),
-                Value::string(code.as_str().to_owned()),
+                Value::string(code.as_ref().to_owned()),
             )])
         }
     }

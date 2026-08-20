@@ -149,7 +149,7 @@ fn with_observation_value<R>(
             "fragment_digest",
             fragment_digest(input.intent).map_or(IdentityValue::Null, IdentityValue::Digest),
         ),
-        ("kind", IdentityValue::String(input.intent.kind.as_str())),
+        ("kind", IdentityValue::String(input.intent.kind.as_ref())),
         (
             "query_digest",
             query_digest(input.intent).map_or(IdentityValue::Null, IdentityValue::Digest),
@@ -217,7 +217,7 @@ pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
     Value::object(vec![
         (
             "kind".to_owned(),
-            Value::string(intent.kind.as_str().to_owned()),
+            Value::string(intent.kind.as_ref().to_owned()),
         ),
         (
             "raw_destination_digest".to_owned(),

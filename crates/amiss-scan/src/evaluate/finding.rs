@@ -29,7 +29,7 @@ pub(super) fn key_value(kind: FindingKind, scope: &FindingKeyScope) -> Value {
         ),
         (
             "finding_kind".to_owned(),
-            Value::string(kind.as_str().to_owned()),
+            Value::string(kind.as_ref().to_owned()),
         ),
         ("scope".to_owned(), scope_value(scope)),
     ])
@@ -291,7 +291,7 @@ pub(super) fn built_in_step(kind: FindingKind, profile: Profile) -> PolicyStep {
         source: "built-in",
         rule_id: format!(
             "scanner-policy-defaults/{}/{}",
-            kind.as_str(),
+            kind.as_ref(),
             profile.policy_defaults().as_str()
         ),
         before: Disposition::Record,

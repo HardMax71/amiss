@@ -110,7 +110,7 @@ pub(super) fn waiver_pass(
         }
         if let Some(found) = target {
             if findings.get(found).is_some_and(|finding| {
-                finding.kind().as_str() != item.authorized_fact.finding_kind().as_str()
+                finding.kind().as_ref() != item.authorized_fact.finding_kind().as_str()
             }) {
                 defects.push("key");
             }

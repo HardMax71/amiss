@@ -90,7 +90,7 @@ fn strict_value(path: &Path) -> Result<Value, String> {
 fn internal_error() -> ExitCode {
     eprintln!(
         "amiss: {}",
-        amiss_wire::report::AnalysisErrorCode::InternalError.as_str()
+        amiss_wire::report::AnalysisErrorCode::InternalError.as_ref()
     );
     ExitCode::from(ExitClass::Failure.code())
 }

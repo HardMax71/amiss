@@ -72,7 +72,7 @@ fn main() -> ExitCode {
         } => {
             match machine_refusal(&codes) {
                 Ok(envelope) => emit(&mut reserve, &envelope),
-                Err(code) => eprintln!("amiss: {}", code.as_str()),
+                Err(code) => eprintln!("amiss: {}", code.as_ref()),
             }
             failure
         }
@@ -82,7 +82,7 @@ fn main() -> ExitCode {
         } => {
             match machine_refusal(&codes) {
                 Ok(envelope) => emit(&mut reserve, &sarif::log(&envelope)),
-                Err(code) => eprintln!("amiss: {}", code.as_str()),
+                Err(code) => eprintln!("amiss: {}", code.as_ref()),
             }
             failure
         }
@@ -94,7 +94,7 @@ fn main() -> ExitCode {
                 Ok(envelope) => emit(&mut reserve, &codequality::issues(&envelope)),
                 Err(code) => {
                     emit(&mut reserve, &amiss_wire::json::Value::array(Vec::new()));
-                    eprintln!("amiss: {}", code.as_str());
+                    eprintln!("amiss: {}", code.as_ref());
                 }
             }
             failure
@@ -151,11 +151,11 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
 
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
-        eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
+        eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_ref());
         return failure;
     };
     let Ok(streams) = RequestStreams::read_from(&mut std::io::stdin().lock()) else {
-        eprintln!("amiss: {}", AnalysisErrorCode::RequestUnreadable.as_str());
+        eprintln!("amiss: {}", AnalysisErrorCode::RequestUnreadable.as_ref());
         return failure;
     };
     let parsed = (
@@ -164,14 +164,14 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         ControlsRequest::parse(&streams.controls),
     );
     let (Ok(evaluation), Ok(snapshot), Ok(controls)) = parsed else {
-        eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_str());
+        eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     };
     let canonical = evaluation.canonical_bytes().ok().as_deref() == Some(&streams.evaluation)
         && snapshot.canonical_bytes().ok().as_deref() == Some(&streams.snapshot)
         && controls.canonical_bytes().ok().as_deref() == Some(&streams.controls);
     if !canonical || evaluation.mode != snapshot.materialization {
-        eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_str());
+        eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     }
     let control_result = amiss_scan::request::controls(&controls);
@@ -185,7 +185,7 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
             Err(_defect) => {
                 eprintln!(
                     "amiss: {}",
-                    AnalysisErrorCode::GitRepositoryUnavailable.as_str()
+                    AnalysisErrorCode::GitRepositoryUnavailable.as_ref()
                 );
                 return failure;
             }
@@ -275,7 +275,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
 
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
-        eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_str());
+        eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_ref());
         return failure;
     };
     let repo = match amiss_git::Repository::open(&invocation.repo, invocation.object_format) {
@@ -446,7 +446,7 @@ fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
     {
         eprintln!(
             "amiss: {}",
-            AnalysisErrorCode::ReportConstructionFailed.as_str()
+            AnalysisErrorCode::ReportConstructionFailed.as_ref()
         );
     }
 }

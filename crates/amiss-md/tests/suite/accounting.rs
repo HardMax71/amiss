@@ -121,11 +121,11 @@ fn only_a_parsing_adapter_requires_utf8() {
         })
     );
     assert_eq!(
-        AnalysisErrorCode::from(Fault::DocumentInvalid).as_str(),
+        AnalysisErrorCode::from(Fault::DocumentInvalid).as_ref(),
         "DOCUMENT_INVALID"
     );
     assert_eq!(
-        AnalysisErrorCode::from(Fault::ParserPanic).as_str(),
+        AnalysisErrorCode::from(Fault::ParserPanic).as_ref(),
         "PARSER_PANIC"
     );
 }

@@ -452,7 +452,7 @@ fn report_example_is_schema_clean_and_matches_its_canonical_form() {
     for row in payload["errors"].as_array().expect("errors is an array") {
         let code = row["code"].as_str().expect("an error row names its code");
         let meaning = AnalysisErrorCode::all()
-            .find(|candidate| candidate.as_str() == code)
+            .find(|candidate| candidate.as_ref() == code)
             .expect("the example uses schema error codes")
             .meaning();
         assert_eq!(
@@ -466,7 +466,7 @@ fn report_example_is_schema_clean_and_matches_its_canonical_form() {
     {
         let kind = row["kind"].as_str().expect("a finding row names its kind");
         let meaning = FindingKind::all()
-            .find(|candidate| candidate.as_str() == kind)
+            .find(|candidate| candidate.as_ref() == kind)
             .expect("the example uses schema finding kinds")
             .meaning();
         assert_eq!(

@@ -470,7 +470,7 @@ pub fn effects(
         if now.is_none_or(|disposition| disposition < *strength) {
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,
-                rule_id: format!("policy/disposition/{}", kind.as_str()),
+                rule_id: format!("policy/disposition/{}", kind.as_ref()),
                 control_path: RepoPath::new(SCANNER_POLICY_PATH.to_owned()),
             });
         }
