@@ -38,7 +38,7 @@ impl TrustFiles {
                 "action_tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 "manifest_path": "release/manifest.json",
                 "release_manifest_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                "selected_platform": platform.as_str(),
+                "selected_platform": platform.as_ref(),
                 "required_status_name": "amiss / documentation assurance",
                 "bootstrap_contract": "amiss-action-bootstrap",
                 "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, BOOTSTRAP_BYTES).to_string()

@@ -4,48 +4,27 @@ use crate::json::{Value, canonical};
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 use super::value::{object, repository, text};
-use super::{decode_digest, decode_repo_path, decode_repository, root};
+use super::{decode_digest, decode_enum, decode_repo_path, decode_repository, root};
 
 const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+)]
 pub enum ConstraintPlatform {
+    #[strum(serialize = "linux-x86_64")]
     LinuxX8664,
+    #[strum(serialize = "linux-aarch64")]
     LinuxAarch64,
+    #[strum(serialize = "macos-x86_64")]
     MacosX8664,
+    #[strum(serialize = "macos-aarch64")]
     MacosAarch64,
+    #[strum(serialize = "windows-x86_64")]
     WindowsX8664,
+    #[strum(serialize = "windows-aarch64")]
     WindowsAarch64,
-}
-
-impl ConstraintPlatform {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::LinuxX8664 => "linux-x86_64",
-            Self::LinuxAarch64 => "linux-aarch64",
-            Self::MacosX8664 => "macos-x86_64",
-            Self::MacosAarch64 => "macos-aarch64",
-            Self::WindowsX8664 => "windows-x86_64",
-            Self::WindowsAarch64 => "windows-aarch64",
-        }
-    }
-
-    /// # Errors
-    ///
-    /// A value outside the closed six-platform table.
-    pub fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "linux-x86_64" => Ok(Self::LinuxX8664),
-            "linux-aarch64" => Ok(Self::LinuxAarch64),
-            "macos-x86_64" => Ok(Self::MacosX8664),
-            "macos-aarch64" => Ok(Self::MacosAarch64),
-            "windows-x86_64" => Ok(Self::WindowsX8664),
-            "windows-aarch64" => Ok(Self::WindowsAarch64),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
 }
 
 /// The externally protected allow-list entry for one scanner action tree,
@@ -183,13 +162,7 @@ impl ExecutionConstraintDescriptor {
             de::const_str(path, value, EXECUTION_CONSTRAINT_SCHEMA)
         })?;
         let action_repository = obj.required("action_repository", decode_repository)?;
-        let format_path = obj.field("action_object_format");
-        let action_object_format =
-            match de::string(&format_path, obj.take("action_object_format")?)?.as_str() {
-                "sha1" => ObjectFormat::Sha1,
-                "sha256" => ObjectFormat::Sha256,
-                _ => return fail(&format_path, ErrorKind::InvalidValue),
-            };
+        let action_object_format = obj.required("action_object_format", decode_enum)?;
         let commit_path = obj.field("action_commit_oid");
         let action_commit_oid = Oid::new(
             action_object_format,
@@ -204,7 +177,7 @@ impl ExecutionConstraintDescriptor {
         .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
         let manifest_path = obj.required("manifest_path", decode_repo_path)?;
         let release_manifest_digest = obj.required("release_manifest_digest", decode_digest)?;
-        let selected_platform = obj.required("selected_platform", ConstraintPlatform::decode)?;
+        let selected_platform = obj.required("selected_platform", decode_enum)?;
         let required_status_name = obj.required("required_status_name", decode_status_name)?;
         obj.required("bootstrap_contract", |path, value| {
             de::const_str(path, value, ACTION_BOOTSTRAP_CONTRACT)
@@ -272,7 +245,7 @@ fn execution_constraint_value(input: ExecutionConstraintInput) -> Value {
     object(vec![
         ("schema", text(EXECUTION_CONSTRAINT_SCHEMA)),
         ("action_repository", repository(&action_repository)),
-        ("action_object_format", text(action_object_format.as_str())),
+        ("action_object_format", text(action_object_format.as_ref())),
         ("action_commit_oid", text(action_commit_oid.as_str())),
         ("action_tree_oid", text(action_tree_oid.as_str())),
         ("manifest_path", text(manifest_path.as_str())),
@@ -280,7 +253,7 @@ fn execution_constraint_value(input: ExecutionConstraintInput) -> Value {
             "release_manifest_digest",
             text(&release_manifest_digest.to_string()),
         ),
-        ("selected_platform", text(selected_platform.as_str())),
+        ("selected_platform", text(selected_platform.as_ref())),
         (
             "required_status_name",
             Value::String(required_status_name.into()),

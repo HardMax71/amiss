@@ -103,7 +103,7 @@ fn wrapper_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
         commit = staged.commit,
         tree = staged.tree,
         manifest = staged.manifest_digest,
-        platform = staged.platform.as_str(),
+        platform = staged.platform.as_ref(),
         bootstrap = hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
     );
     ExecutionConstraintDescriptor::parse(raw.as_bytes()).unwrap()
@@ -346,13 +346,13 @@ fn patch_controls(
         .as_ref()
         .expect("a floor");
     let floor_digest = floor.expected_digest.to_string();
-    let floor_source = floor.trust_source.as_str().to_owned();
+    let floor_source = floor.trust_source.as_ref().to_owned();
     let supplied = requests
         .controls
         .execution_constraint
         .as_ref()
         .expect("a constraint");
-    let constraint_source = supplied.trust_source.as_str().to_owned();
+    let constraint_source = supplied.trust_source.as_ref().to_owned();
     let constraint_value = supplied.value.clone();
     let constraint_digest = requests.constraint.digest().to_string();
 

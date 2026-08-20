@@ -46,14 +46,14 @@ fn occurrence_value(observation: &Observation) -> Value {
     let mut members = vec![
         ("observation_id", digest_value(id)),
         ("observation_id_input", input),
-        ("adapter_id", string(observation.adapter.adapter_id())),
+        ("adapter_id", string(observation.adapter.as_ref())),
         ("document", observation.document.to_value()),
         ("source_construct", string(observation.construct.as_ref())),
         (
             "source_span",
             source_span_value(observation.span, observation.display),
         ),
-        ("block_kind", string(observation.block_kind.as_str())),
+        ("block_kind", string(observation.block_kind.as_ref())),
         (
             "source_projection_digest",
             digest_value(observation.projection_digest),
@@ -219,7 +219,7 @@ fn available_feedback_value(projected: feedback::Feedback) -> Value {
                 ])
             });
             object(vec![
-                ("action", string(item.action.as_str())),
+                ("action", string(item.action.as_ref())),
                 ("target", nullable_path(item.target.as_ref())),
                 (
                     "finding_kinds",
@@ -260,7 +260,7 @@ pub(super) fn feedback_value(
 
 fn tree_identity_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
     object(vec![
-        ("object_format", string(tree.object_format().as_str())),
+        ("object_format", string(tree.object_format().as_ref())),
         ("tree_oid", string(tree.tree_oid())),
     ])
 }

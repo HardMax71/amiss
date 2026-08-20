@@ -25,10 +25,10 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     let platform = host_platform().unwrap();
     let binary = amiss_fixtures::executable_bytes(platform);
     let lock = b"# Cargo.lock fixture\nversion = 4\n";
-    let binary_path = format!("dist/amiss-{}", platform.as_str());
+    let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let mut artifacts = [StagedArtifact {
         platform,
-        artifact_name: format!("amiss-{}", platform.as_str()),
+        artifact_name: format!("amiss-{}", platform.as_ref()),
         files: vec![
             StagedFile {
                 path: binary_path.clone(),

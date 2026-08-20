@@ -538,7 +538,7 @@ fn dialect_default_case(case: &Value, id: &str) {
         panic!("{id}: expected a scan command");
     };
     assert_eq!(
-        invocation.forge.map(ForgeDialect::as_str),
+        invocation.forge.map(Into::<&'static str>::into),
         case.get("expected").and_then(Value::as_str),
         "{id}"
     );

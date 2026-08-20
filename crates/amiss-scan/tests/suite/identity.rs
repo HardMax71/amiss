@@ -16,6 +16,7 @@ use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{Adapter, ForgeDialect, RepoPath, RepositoryIdentity};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
+use strum::IntoEnumIterator;
 
 use crate::support;
 
@@ -89,7 +90,7 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
     let node_path = [0, 42, usize::MAX];
     let projection_digest = hb("amiss/source-projection", b"projection");
     let raw_destination_digest = hb("amiss/raw-destination", b"destination");
-    for adapter in Adapter::all() {
+    for adapter in Adapter::iter() {
         let contract_digest = adapter_contract(&engine, adapter).1;
         for (document, intent) in [(&text_path, &intents[0]), (&byte_path, &intents[1])] {
             let identity = ObservationIdentity {
@@ -108,7 +109,7 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
                 digest,
                 hj(OBSERVATION_ID_DOMAIN, &input),
                 "{} {document:?}",
-                adapter.adapter_id()
+                adapter.as_ref()
             );
         }
     }

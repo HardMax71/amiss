@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use crate::digest::{Digest, hj};
 use crate::json::{Value, canonical};
 use crate::model::Adapter;
+use strum::IntoEnumIterator;
 
 use super::error::error_row;
 use super::{
@@ -157,18 +158,19 @@ pub fn unavailable_evaluation_envelope(
 /// occurrence embeds through its observation-identity input.
 #[must_use]
 pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, Digest) {
+    let metadata = adapter.metadata();
     let descriptor = object(vec![
         ("schema", string(ADAPTER_CONTRACT_SCHEMA)),
-        ("adapter_id", string(adapter.adapter_id())),
-        ("parser_name", string(adapter.parser_name())),
+        ("adapter_id", string(adapter.as_ref())),
+        ("parser_name", string(metadata.parser_name)),
         ("parser_version", string(&engine.version)),
-        ("grammar_profile", string(adapter.grammar_profile())),
+        ("grammar_profile", string(metadata.grammar_profile)),
         (
             "frontmatter_contract",
-            string(adapter.frontmatter_contract()),
+            string(metadata.frontmatter_contract),
         ),
-        ("source_projection", string(adapter.source_projection())),
-        ("structural_address", string(adapter.structural_address())),
+        ("source_projection", string(metadata.source_projection)),
+        ("structural_address", string(metadata.structural_address)),
     ]);
     let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
     (descriptor, digest)
@@ -178,11 +180,11 @@ pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, 
 /// version, and the three adapter descriptors with their digests.
 #[must_use]
 pub fn engine_block(engine: &EngineProvenance) -> Value {
-    let adapter_rows: Vec<Value> = Adapter::all()
+    let adapter_rows: Vec<Value> = Adapter::iter()
         .map(|adapter| {
             let (descriptor, digest) = adapter_contract(engine, adapter);
             object(vec![
-                ("adapter_id", string(adapter.adapter_id())),
+                ("adapter_id", string(adapter.as_ref())),
                 ("contract_descriptor", descriptor),
                 ("contract_digest", string(&digest.to_string())),
             ])

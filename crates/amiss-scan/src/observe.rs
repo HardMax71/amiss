@@ -178,7 +178,7 @@ fn with_observation_value<R>(
     let address = [
         (
             "address_kind",
-            IdentityValue::String(input.adapter.structural_address()),
+            IdentityValue::String(input.adapter.metadata().structural_address),
         ),
         ("construct_index", IdentityValue::Integer(0)),
         ("duplicate_index", IdentityValue::Integer(0)),
@@ -190,10 +190,7 @@ fn with_observation_value<R>(
             "adapter_contract_digest",
             IdentityValue::Digest(input.contract_digest),
         ),
-        (
-            "adapter_id",
-            IdentityValue::String(input.adapter.adapter_id()),
-        ),
+        ("adapter_id", IdentityValue::String(input.adapter.as_ref())),
         ("document", IdentityValue::Path(input.document)),
         ("extracted_intent", IdentityValue::Object(&intent)),
         ("schema", IdentityValue::String(OBSERVATION_ID_INPUT_SCHEMA)),
@@ -263,7 +260,7 @@ pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
         ),
         (
             "address_kind".to_owned(),
-            Value::string(adapter.structural_address().to_owned()),
+            Value::string(adapter.metadata().structural_address.to_owned()),
         ),
         (
             "node_path".to_owned(),
@@ -289,7 +286,7 @@ pub fn observation_input(input: &ObservationIdentity<'_>) -> Value {
         ),
         (
             "adapter_id".to_owned(),
-            Value::string(input.adapter.adapter_id().to_owned()),
+            Value::string(input.adapter.as_ref().to_owned()),
         ),
         (
             "adapter_contract_digest".to_owned(),

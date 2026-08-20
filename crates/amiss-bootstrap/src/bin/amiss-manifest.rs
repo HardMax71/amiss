@@ -93,7 +93,7 @@ fn run(args: &Args) -> Result<(), String> {
         ];
         staged.push(StagedArtifact {
             platform,
-            artifact_name: format!("amiss-{}", platform.as_str()),
+            artifact_name: format!("amiss-{}", platform.as_ref()),
             files,
         });
     }

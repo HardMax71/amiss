@@ -56,7 +56,7 @@ impl ScannerPolicy {
                     ("kind".into(), Value::String(include.kind.as_ref().into())),
                 ];
                 if let Some(adapter) = include.adapter {
-                    rows.push(("adapter".into(), Value::String(adapter.adapter_id().into())));
+                    rows.push(("adapter".into(), Value::String(adapter.as_ref().into())));
                 }
                 Value::Object(rows.into_boxed_slice())
             })

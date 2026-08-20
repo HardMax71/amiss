@@ -15,7 +15,7 @@ use super::external::external_gate;
 use super::{
     Evaluated, ExternalVerified, PipelineFailure, PipelineResult, ResolvedTree, SetupShell,
     binding_mismatch, conclude, controls_failure, detail, effective_limits, effective_shell,
-    evaluate_tree, floor_gate, format_str, pair_effects, policy_unavailable_reason, resolve_tree,
+    evaluate_tree, floor_gate, pair_effects, policy_unavailable_reason, resolve_tree,
     side_observations,
 };
 
@@ -220,7 +220,7 @@ fn index_candidate_block(
         return Err(failures);
     }
     Ok(CandidateBlock::Index(synthetic_candidate(
-        format_str(repo.object_format()),
+        repo.object_format().into(),
         base_oid.as_str(),
         &entries,
         skip_worktree_paths,
@@ -345,7 +345,7 @@ fn staged_open(
     let (scan_limits, git_limits) = effective_limits(verified_floor);
     let mut git_resources = GitResources::new(git_limits);
     let base_placeholder = SnapshotIdentity {
-        object_format: format_str(repo.object_format()),
+        object_format: repo.object_format().into(),
         commit_oid: base_oid.as_str().to_owned(),
         tree_oid: base_oid.as_str().to_owned(),
     };

@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::controls::{ConstraintPlatform, GitMode, root};
+use crate::controls::{ConstraintPlatform, GitMode, decode_enum, root};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::Value;
@@ -23,31 +23,14 @@ pub struct RuntimeFile {
     pub file_sha256: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum RuntimeRole {
     Executable,
     DynamicLibrary,
     RuntimeData,
-}
-
-impl RuntimeRole {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Executable => "executable",
-            Self::DynamicLibrary => "dynamic-library",
-            Self::RuntimeData => "runtime-data",
-        }
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "executable" => Ok(Self::Executable),
-            "dynamic-library" => Ok(Self::DynamicLibrary),
-            "runtime-data" => Ok(Self::RuntimeData),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
 }
 
 /// One published platform artifact and its complete runtime closure.
@@ -135,7 +118,7 @@ impl ReleaseManifest {
             obj.take("artifacts")?,
             6,
             decode_artifact,
-            |a, b| a.platform.as_str().cmp(b.platform.as_str()),
+            |a, b| a.platform.as_ref().cmp(b.platform.as_ref()),
         )?;
         obj.finish()?;
         Ok(Self {
@@ -214,7 +197,7 @@ fn decode_build_source(path: &str, value: Value) -> Result<BuildSource, Error> {
     let mut obj = Obj::new(path, value)?;
     let repository = obj.required("repository", crate::controls::decode_repository)?;
     let format_path = obj.field("object_format");
-    let object_format = decode_object_format(&format_path, obj.take("object_format")?)?;
+    let object_format = decode_enum(&format_path, obj.take("object_format")?)?;
     let commit_path = obj.field("commit_oid");
     let commit_oid = Oid::new(
         object_format,
@@ -227,14 +210,6 @@ fn decode_build_source(path: &str, value: Value) -> Result<BuildSource, Error> {
         object_format,
         commit_oid,
     })
-}
-
-fn decode_object_format(path: &str, value: Value) -> Result<ObjectFormat, Error> {
-    match de::string(path, value)?.as_str() {
-        "sha1" => Ok(ObjectFormat::Sha1),
-        "sha256" => Ok(ObjectFormat::Sha256),
-        _ => fail(path, ErrorKind::InvalidValue),
-    }
 }
 
 fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
@@ -263,7 +238,7 @@ fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
 
 fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
     let mut obj = Obj::new(path, value)?;
-    let platform = obj.required("platform", ConstraintPlatform::decode)?;
+    let platform = obj.required("platform", decode_enum)?;
     let artifact_name = obj.required("artifact_name", decode_artifact_id)?;
     let tree_path = obj.required("tree_path", decode_repo_path)?;
     let binary_sha256 = obj.required("binary_sha256", decode_digest)?;
@@ -300,7 +275,7 @@ fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
 fn decode_runtime_file(path: &str, value: Value) -> Result<RuntimeFile, Error> {
     let mut file = Obj::new(path, value)?;
     let member = file.required("path", decode_repo_path)?;
-    let role = file.required("role", RuntimeRole::decode)?;
+    let role = file.required("role", decode_enum)?;
     let mode_path = file.field("git_mode");
     let git_mode = match de::string(&mode_path, file.take("git_mode")?)?.as_str() {
         "100644" => GitMode::RegularFile,

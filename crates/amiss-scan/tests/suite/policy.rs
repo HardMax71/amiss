@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use amiss_scan::policy::{
-    DebtInput, InventoryState, TrustSource, WaiverInput, effects, verify_debt, verify_waiver,
+    DebtInput, InventoryState, WaiverInput, effects, verify_debt, verify_waiver,
 };
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{
@@ -11,6 +11,7 @@ use amiss_wire::controls::{
 use amiss_wire::digest::hj;
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
 use amiss_wire::report::AnalysisErrorCode;
+use amiss_wire::requests::RequestTrust;
 
 #[expect(clippy::expect_used, reason = "test fixture paths are valid")]
 fn path(raw: &str) -> RepoPath {
@@ -245,7 +246,7 @@ fn debt_input(item_count: usize) -> DebtInput {
     let bytes = serde_json::to_vec(&document).expect("debt document JSON");
     DebtInput {
         snapshot: amiss_wire::controls::DebtSnapshot::parse(&bytes).expect("valid debt fixture"),
-        trust_source: TrustSource::ExternalRequiredCheck,
+        trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
 
@@ -267,7 +268,7 @@ fn waiver_input(item_count: usize) -> WaiverInput {
     let bytes = serde_json::to_vec(&document).expect("waiver document JSON");
     WaiverInput {
         bundle: WaiverBundle::parse(&bytes).expect("valid waiver fixture"),
-        trust_source: TrustSource::ExternalRequiredCheck,
+        trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
 

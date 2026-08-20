@@ -112,11 +112,11 @@ fn execution_paths_bind_the_bootstrap_and_the_host() {
     let here = host_platform().expect("a platform for this host");
     let there = ["linux-x86_64", "macos-aarch64"]
         .into_iter()
-        .find(|name| *name != here.as_str())
+        .find(|name| *name != here.as_ref())
         .expect("a platform this host is not");
     let elsewhere = String::from_utf8(bytes)
         .expect("constraint text")
-        .replace(here.as_str(), there);
+        .replace(here.as_ref(), there);
     assert_eq!(
         resolve_execution_paths(
             &trust.bootstrap,

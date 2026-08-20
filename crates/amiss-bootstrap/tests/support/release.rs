@@ -35,10 +35,10 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
 
     let binary = engine.to_vec();
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
-    let binary_path = format!("dist/amiss-{}", platform.as_str());
+    let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let mut artifacts = vec![StagedArtifact {
         platform,
-        artifact_name: format!("amiss-{}", platform.as_str()),
+        artifact_name: format!("amiss-{}", platform.as_ref()),
         files: vec![
             StagedFile {
                 path: binary_path.clone(),

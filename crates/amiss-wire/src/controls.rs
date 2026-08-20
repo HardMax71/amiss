@@ -5,8 +5,7 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::{self, Value};
 use crate::model::{
-    Adapter, ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPathText, RepositoryIdentity,
-    TreeIdentity, UtcInstant,
+    ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity, UtcInstant,
 };
 use crate::resolution::{
     BlobContent, BlobContentTag, BlobMode, BlobTarget, Missing, MissingTag, Resolution,
@@ -111,7 +110,7 @@ fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
     let kind = obj.required("kind", decode_enum)?;
     let adapter = obj
         .take_optional("adapter")
-        .map(|value| decode_adapter(&obj.field("adapter"), value))
+        .map(|value| decode_enum(&obj.field("adapter"), value))
         .transpose()?;
     obj.finish()?;
     Ok(DocumentInclude {
@@ -119,14 +118,6 @@ fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
         kind,
         adapter,
     })
-}
-
-fn decode_adapter(path: &str, value: Value) -> Result<Adapter, Error> {
-    let name = de::string(path, value)?;
-    match Adapter::all().find(|adapter| adapter.adapter_id() == name) {
-        Some(adapter) => Ok(adapter),
-        None => fail(path, ErrorKind::InvalidValue),
-    }
 }
 
 fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {
@@ -254,12 +245,7 @@ pub(crate) fn decode_provider_id(path: &str, value: Value) -> Result<String, Err
 
 fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {
     let mut obj = Obj::new(path, value)?;
-    let format_path = obj.field("object_format");
-    let object_format = match de::string(&format_path, obj.take("object_format")?)?.as_str() {
-        "sha1" => ObjectFormat::Sha1,
-        "sha256" => ObjectFormat::Sha256,
-        _ => return fail(&format_path, ErrorKind::InvalidValue),
-    };
+    let object_format = obj.required("object_format", decode_enum)?;
     let tree_oid = obj.required("tree_oid", de::string)?;
     obj.finish()?;
     TreeIdentity::new(object_format, tree_oid)

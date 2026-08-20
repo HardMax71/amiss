@@ -7,6 +7,7 @@ use amiss_wire::controls::{
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
 use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::requests::RequestTrust;
 
 use super::acquire::PolicySide;
 
@@ -53,7 +54,7 @@ fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DebtContext {
     pub digest: Digest,
-    pub trust_source: &'static str,
+    pub trust_source: RequestTrust,
     pub adoption_tree: amiss_wire::model::TreeIdentity,
     pub items: Vec<amiss_wire::controls::DebtItem>,
 }
@@ -64,7 +65,7 @@ pub struct DebtContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WaiverContext {
     pub digest: Digest,
-    pub trust_source: &'static str,
+    pub trust_source: RequestTrust,
     pub candidate_tree: amiss_wire::model::TreeIdentity,
     pub items: Vec<amiss_wire::controls::WaiverItem>,
     pub authorized_issuers: Vec<amiss_wire::model::OwnerId>,
@@ -90,13 +91,13 @@ pub struct Effects {
     pub controls: Vec<ControlSeed>,
     pub base_digest: Option<Digest>,
     pub candidate_digest: Option<Digest>,
-    pub floor: Option<(Digest, &'static str)>,
+    pub floor: Option<(Digest, RequestTrust)>,
     pub debt: Option<DebtContext>,
     pub waiver: Option<WaiverContext>,
     pub time: Option<TimeContext>,
     pub constraint: Option<(
         amiss_wire::controls::ExecutionConstraintDescriptor,
-        &'static str,
+        RequestTrust,
     )>,
     /// The effective typed-analysis-errors-retained ceiling `E`:
     /// `min(64, verified floor limit)`, the built-in 64 without a floor.

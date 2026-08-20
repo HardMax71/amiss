@@ -144,12 +144,12 @@ fn identity_value(
         "forge",
         setup
             .forge
-            .map_or(Value::Null, |dialect| string(dialect.as_str())),
+            .map_or(Value::Null, |dialect| string(dialect.as_ref())),
     ));
     object(rows)
 }
 
-fn verified_provenance(control: Option<(Digest, &'static str)>) -> Value {
+fn verified_provenance(control: Option<(Digest, amiss_wire::requests::RequestTrust)>) -> Value {
     control.map_or_else(
         || {
             object(vec![
@@ -162,7 +162,7 @@ fn verified_provenance(control: Option<(Digest, &'static str)>) -> Value {
             object(vec![
                 ("status", string("verified")),
                 ("digest", digest_value(digest)),
-                ("trust_source", string(trust)),
+                ("trust_source", string(trust.as_ref())),
             ])
         },
     )
@@ -226,7 +226,7 @@ pub(super) fn controls_value(setup: &Setup) -> Value {
                         ("status", string("verified")),
                         ("descriptor", constraint_descriptor_value(descriptor)),
                         ("descriptor_digest", digest_value(descriptor.digest())),
-                        ("trust_source", string(trust)),
+                        ("trust_source", string(trust.as_ref())),
                     ])
                 },
             ),
@@ -269,7 +269,7 @@ fn constraint_descriptor_value(
         ),
         (
             "action_object_format",
-            string(descriptor.action_object_format().as_str()),
+            string(descriptor.action_object_format().as_ref()),
         ),
         (
             "action_commit_oid",
@@ -286,7 +286,7 @@ fn constraint_descriptor_value(
         ),
         (
             "selected_platform",
-            string(descriptor.selected_platform().as_str()),
+            string(descriptor.selected_platform().as_ref()),
         ),
         (
             "required_status_name",

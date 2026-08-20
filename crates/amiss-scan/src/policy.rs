@@ -5,6 +5,7 @@ mod floor;
 use amiss_wire::controls::ResourceName;
 use amiss_wire::digest::Digest;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
+use amiss_wire::requests::RequestTrust;
 
 pub use acquire::{Includes, PolicySide, acquire, acquire_entry};
 pub use effects::{
@@ -21,23 +22,7 @@ pub use floor::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FloorInput {
     pub floor: amiss_wire::controls::OrganizationFloor,
-    pub trust_source: TrustSource,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TrustSource {
-    ExternalRequiredCheck,
-    OrganizationPolicy,
-}
-
-impl TrustSource {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ExternalRequiredCheck => "external-required-check",
-            Self::OrganizationPolicy => "organization-policy",
-        }
-    }
+    pub trust_source: RequestTrust,
 }
 
 /// The floor's binding: its repository and full ref must equal the run's,
@@ -80,14 +65,14 @@ pub fn verify_floor(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DebtInput {
     pub snapshot: amiss_wire::controls::DebtSnapshot,
-    pub trust_source: TrustSource,
+    pub trust_source: RequestTrust,
 }
 
 /// A verified waiver bundle as the wrapper supplies it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WaiverInput {
     pub bundle: amiss_wire::controls::WaiverBundle,
-    pub trust_source: TrustSource,
+    pub trust_source: RequestTrust,
 }
 
 /// The trusted-time statement plus the wrapper's provider-authenticated run
@@ -104,7 +89,7 @@ pub struct TimeInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstraintInput {
     pub descriptor: amiss_wire::controls::ExecutionConstraintDescriptor,
-    pub trust_source: TrustSource,
+    pub trust_source: RequestTrust,
 }
 
 const fn binding_mismatch_row() -> ErrorDetail {

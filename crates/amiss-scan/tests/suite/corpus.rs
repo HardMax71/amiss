@@ -136,7 +136,7 @@ fn the_scan_layer_reproduces_the_corpus_goldens() {
                 );
                 assert_eq!(ours_span, (start, end), "{case_id} {profile}");
                 assert_eq!(
-                    entry.block_kind.as_str(),
+                    entry.block_kind.as_ref(),
                     text(field(row, "block_kind")),
                     "{case_id} {profile}"
                 );

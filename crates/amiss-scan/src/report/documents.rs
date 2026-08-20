@@ -95,7 +95,7 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
         ("content_availability", string(availability.as_ref())),
         (
             "adapter_id",
-            adapter.map_or(Value::Null, |value: Adapter| string(value.adapter_id())),
+            adapter.map_or(Value::Null, |value: Adapter| string(value.as_ref())),
         ),
         ("byte_count", integer(record.byte_count)),
         (
@@ -202,7 +202,7 @@ fn paired_document<'a>(
 ) -> PairedDocument<'a> {
     PairedDocument {
         path: record.path.clone(),
-        classification: record.classification.as_str(),
+        classification: record.classification.into(),
         base,
         candidate,
     }

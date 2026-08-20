@@ -80,7 +80,7 @@ pub fn build_manifest(
     ]);
     let lock_digest = hj(DEPENDENCY_LOCK_DOMAIN, &lock_value);
 
-    artifacts.sort_by_key(|artifact| artifact.platform.as_str());
+    artifacts.sort_by(|left, right| left.platform.as_ref().cmp(right.platform.as_ref()));
     let mut rows: Vec<Value> = Vec::with_capacity(artifacts.len());
     for artifact in artifacts.iter_mut() {
         rows.push(artifact_value(artifact)?);
@@ -137,7 +137,7 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
         .map(|file| {
             object(vec![
                 ("path", string(&file.path)),
-                ("role", string(file.role.as_str())),
+                ("role", string(file.role.as_ref())),
                 (
                     "git_mode",
                     string(if file.executable { "100755" } else { "100644" }),
@@ -148,7 +148,7 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
         .collect();
 
     Ok(object(vec![
-        ("platform", string(artifact.platform.as_str())),
+        ("platform", string(artifact.platform.as_ref())),
         ("artifact_name", string(&artifact.artifact_name)),
         ("tree_path", string(&tree_path)),
         ("binary_sha256", string(&binary_sha256.to_string())),

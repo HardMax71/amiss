@@ -674,7 +674,7 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
     let policy = Effects {
         waiver: Some(WaiverContext {
             digest: hb("amiss/raw-evidence", b"bundle"),
-            trust_source: "organization-policy",
+            trust_source: amiss_wire::requests::RequestTrust::OrganizationPolicy,
             candidate_tree: tree(),
             items: vec![item],
             authorized_issuers: vec![owner("team:release")],

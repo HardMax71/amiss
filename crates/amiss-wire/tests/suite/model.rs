@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::model::{Adapter, ForgeDialect, OwnerId, RepoPath, RepositoryIdentity, UtcInstant};
+use strum::IntoEnumIterator;
 
 #[test]
 fn repo_paths_order_and_borrow_as_their_bytes() {
@@ -95,26 +96,40 @@ fn the_known_host_table_is_exact() {
     assert_eq!(ForgeDialect::default_for_host("forge.example"), None);
 }
 
-type Projection = fn(Adapter) -> &'static str;
-
 /// Every adapter projection is populated; profiles are distinct per adapter,
 /// while the shared contracts must still name more than one value.
 #[test]
 fn the_adapter_tables_are_populated_and_distinct() {
-    let adapters: Vec<Adapter> = Adapter::all().collect();
-    let parser_names: BTreeSet<&str> = adapters.iter().map(|a| a.parser_name()).collect();
+    let adapters: Vec<Adapter> = Adapter::iter().collect();
+    let ids: BTreeSet<&str> = adapters.iter().map(AsRef::as_ref).collect();
+    assert_eq!(ids.len(), adapters.len());
+    let parser_names: BTreeSet<&str> = adapters
+        .iter()
+        .map(|adapter| adapter.metadata().parser_name)
+        .collect();
     assert_eq!(parser_names.len(), adapters.len());
     assert!(parser_names.iter().all(|text| !text.is_empty()));
-    let profiles: BTreeSet<&str> = adapters.iter().map(|a| a.grammar_profile()).collect();
+    let profiles: BTreeSet<&str> = adapters
+        .iter()
+        .map(|adapter| adapter.metadata().grammar_profile)
+        .collect();
     assert_eq!(profiles.len(), adapters.len());
     assert!(profiles.iter().all(|text| !text.is_empty()));
-    let projections: [Projection; 3] = [
-        Adapter::frontmatter_contract,
-        Adapter::source_projection,
-        Adapter::structural_address,
+    let projections = [
+        adapters
+            .iter()
+            .map(|adapter| adapter.metadata().frontmatter_contract)
+            .collect::<BTreeSet<_>>(),
+        adapters
+            .iter()
+            .map(|adapter| adapter.metadata().source_projection)
+            .collect(),
+        adapters
+            .iter()
+            .map(|adapter| adapter.metadata().structural_address)
+            .collect(),
     ];
-    for projection in projections {
-        let values: BTreeSet<&str> = adapters.iter().map(|a| projection(*a)).collect();
+    for values in projections {
         assert!(values.len() > 1, "more than one contract value");
         assert!(values.iter().all(|text| !text.is_empty()));
     }

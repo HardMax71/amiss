@@ -91,7 +91,7 @@ fn a_snapshot_discovers_every_class_in_path_order() {
             };
             (
                 record.path.as_str().unwrap().to_owned(),
-                record.classification.as_str(),
+                record.classification.into(),
                 status,
             )
         })

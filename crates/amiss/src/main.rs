@@ -389,10 +389,7 @@ fn fatal(
     use amiss_scan::report::{Setup, SnapshotIdentity, construct_incomplete};
 
     let identity = |oid: &amiss_wire::model::Oid| SnapshotIdentity {
-        object_format: match invocation.object_format {
-            amiss_wire::model::ObjectFormat::Sha1 => "sha1",
-            amiss_wire::model::ObjectFormat::Sha256 => "sha256",
-        },
+        object_format: invocation.object_format.into(),
         commit_oid: oid.as_str().to_owned(),
         tree_oid: oid.as_str().to_owned(),
     };

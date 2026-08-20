@@ -1,5 +1,5 @@
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
 
 use crate::Error;
@@ -33,13 +33,6 @@ struct Evaluated {
 
 /// One resolved snapshot root: its tree OID plus the full identity block.
 type ResolvedTree = (Oid, SnapshotIdentity);
-
-const fn format_str(object_format: ObjectFormat) -> &'static str {
-    match object_format {
-        ObjectFormat::Sha1 => "sha1",
-        ObjectFormat::Sha256 => "sha256",
-    }
-}
 
 pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
     let resource = match error {
@@ -414,7 +407,7 @@ fn apply_floor(
     let Some(floor) = floor else {
         return Ok(());
     };
-    effects.floor = Some((floor.floor.digest(), floor.trust_source.as_str()));
+    effects.floor = Some((floor.floor.digest(), floor.trust_source));
     effects.floor_raised = crate::policy::floor_raises(floor);
     effects.controls.extend(crate::policy::floor_inventory(
         floor,
@@ -488,7 +481,7 @@ fn resolve_tree(
     Ok((
         commit.tree.clone(),
         SnapshotIdentity {
-            object_format: format_str(repo.object_format()),
+            object_format: repo.object_format().into(),
             commit_oid: commit_oid.as_str().to_owned(),
             tree_oid: commit.tree.as_str().to_owned(),
         },

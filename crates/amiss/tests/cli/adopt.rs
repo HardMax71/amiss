@@ -5,10 +5,11 @@ use std::fs;
 use amiss_fixtures::commit_chain;
 use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
-use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, TrustSource};
+use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
 use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, TrustedTimeStatement};
 use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
 
 use crate::support::amiss;
@@ -208,11 +209,11 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         default_branch_ref: None,
         floor: Some(FloorInput {
             floor: OrganizationFloor::parse(FLOOR.as_bytes()).unwrap(),
-            trust_source: TrustSource::OrganizationPolicy,
+            trust_source: RequestTrust::OrganizationPolicy,
         }),
         debt: Some(DebtInput {
             snapshot,
-            trust_source: TrustSource::ExternalRequiredCheck,
+            trust_source: RequestTrust::ExternalRequiredCheck,
         }),
         waiver: None,
         time: Some(TimeInput {

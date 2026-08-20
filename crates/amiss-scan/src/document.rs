@@ -3,10 +3,12 @@ use amiss_wire::model::Adapter;
 /// The intrinsic built-in classification rows, applied first match wins. The
 /// fifth row, `policy-included`, needs a repository policy and is not a
 /// property of the path alone, so it lives with the policy layer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Classification {
     StructuredMarkdown,
     StructuredMdx,
+    #[strum(serialize = "structured-asciidoc")]
     StructuredAsciiDoc,
     StructuredRst,
     ExtensionlessMarkdown,
@@ -37,20 +39,6 @@ const EXCLUDED_TREES: [&str; 9] = [
 ];
 
 impl Classification {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::StructuredMarkdown => "structured-markdown",
-            Self::StructuredMdx => "structured-mdx",
-            Self::StructuredAsciiDoc => "structured-asciidoc",
-            Self::StructuredRst => "structured-rst",
-            Self::ExtensionlessMarkdown => "extensionless-markdown",
-            Self::PlainAdvisory => "plain-advisory",
-            Self::UnparsedMarkup => "unparsed-markup",
-            Self::PolicyIncluded => "policy-included",
-        }
-    }
-
     /// The native adapter, where one exists. A policy include installs no
     /// parser, and neither does a markup this engine does not read.
     #[must_use]

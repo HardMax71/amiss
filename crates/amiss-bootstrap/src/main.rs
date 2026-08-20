@@ -346,7 +346,7 @@ fn capture_requests(
         waiver_bundle: control_expectation(controls.waiver_bundle.as_ref()),
         execution_constraint: SealedControlExpectation {
             digest: constraint.digest().to_string(),
-            trust_source: supplied_constraint.trust_source.as_str().to_owned(),
+            trust_source: supplied_constraint.trust_source.as_ref().to_owned(),
         },
         trusted_time_digest: statement.digest().to_string(),
     };
@@ -401,7 +401,7 @@ fn control_expectation(
 ) -> Option<SealedControlExpectation> {
     supplied.map(|control| SealedControlExpectation {
         digest: control.expected_digest.to_string(),
-        trust_source: control.trust_source.as_str().to_owned(),
+        trust_source: control.trust_source.as_ref().to_owned(),
     })
 }
 
