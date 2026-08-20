@@ -12,11 +12,11 @@ use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::evaluate::{DocumentInput, Finding};
 
 use super::documents::{PairedDocument, document_result_value, paired_documents};
+use super::identity::{controls_value, evaluation_value};
 use super::summary::{summary_counts, zero_counts};
 use super::{
-    Built, ENVELOPE_SCHEMA, Setup, comparison_value, controls_value, digest_value, document_input,
-    evaluation_value, finding_value, integer, object, run_feedback_value, string,
-    unavailable_feedback_value,
+    Built, ENVELOPE_SCHEMA, Setup, comparison_value, digest_value, document_input, finding_value,
+    integer, object, run_feedback_value, string, unavailable_feedback_value,
 };
 
 /// Constructs the complete report for a local commit-pair run with no
