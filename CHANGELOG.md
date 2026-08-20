@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Split correlation data, component-graph construction, and comparison derivation into focused modules, derive correlation-reason spellings, and avoid temporary removed/added document vectors while detecting exact renames
 - Separate the declarative renderer anchor contract from identity construction and duplicate resolution while preserving the public anchor API
 - Separate report evaluation identity and control provenance projection from observation and finding projection, share repository-identity serialization, and preserve the public candidate-identity digest API
+- Separate report observation, finding, and feedback projection from its public data model, project debt and waiver applications together with shared common rows, and inline the one-use location projection
 
 ## [0.23.0](https://github.com/HardMax71/amiss/compare/v0.22.0...v0.23.0) - 2026-08-17
 

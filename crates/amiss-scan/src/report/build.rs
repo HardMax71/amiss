@@ -11,13 +11,11 @@ use crate::correlate::Comparison;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::evaluate::{DocumentInput, Finding};
 
+use super::analysis::{comparison_value, document_input, feedback_value, finding_value};
 use super::documents::{PairedDocument, document_result_value, paired_documents};
 use super::identity::{controls_value, evaluation_value};
 use super::summary::{summary_counts, zero_counts};
-use super::{
-    Built, ENVELOPE_SCHEMA, Setup, comparison_value, digest_value, document_input, finding_value,
-    integer, object, run_feedback_value, string, unavailable_feedback_value,
-};
+use super::{Built, ENVELOPE_SCHEMA, Setup, digest_value, integer, object, string};
 
 /// Constructs the complete report for a local commit-pair run with no
 /// external controls: canonical payload, envelope, wire bytes, digest, and
@@ -50,7 +48,7 @@ pub fn construct(
     }
     let governed_errors: Vec<Value> = error_details.iter().map(error_row_value).collect();
     let (complete, status, exit_code) = run_result(&findings, &governed_errors);
-    let feedback = run_feedback_value(complete, &findings, &comparisons);
+    let feedback = feedback_value(complete, &findings, &comparisons);
     let finding_count = u64::try_from(findings.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, &comparisons, &findings, finding_count);
     let (governed_claims, unattested_claims) = claim_counters(claims);
@@ -394,7 +392,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
                 ("error_count", integer(error_count)),
             ]),
         ),
-        ("feedback", unavailable_feedback_value()),
+        ("feedback", feedback_value(false, &[], &[])),
         (
             "summary",
             object(vec![
