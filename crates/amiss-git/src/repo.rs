@@ -25,6 +25,9 @@ pub struct Repository {
     repacked: OnceLock<Result<PackSet, Error>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RepositoryOpenError;
+
 impl Repository {
     /// Opens the non-bare checkout forms, all through no-follow handles. A
     /// `.git` directory is the primary form. A `.git` file is one bounded
@@ -36,29 +39,27 @@ impl Repository {
     ///
     /// # Errors
     ///
-    /// `RepositoryUnavailable` for a bare repository, a malformed or
+    /// [`RepositoryOpenError`] for a bare repository, a malformed or
     /// oversized pointer, a symlinked target, or a missing object database.
-    pub fn open(root: &Path, object_format: ObjectFormat) -> Result<Self, Error> {
+    pub fn open(root: &Path, object_format: ObjectFormat) -> Result<Self, RepositoryOpenError> {
         let root_dir = open_root(root)?;
         if let Ok(git_dir) = open_dir(&root_dir, ".git") {
-            let objects =
-                open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?;
+            let objects = open_dir(&git_dir, "objects").map_err(|_defect| RepositoryOpenError)?;
             return Ok(Self::from_handles(git_dir, objects, object_format));
         }
-        let pointer =
-            open_file(&root_dir, ".git").map_err(|_defect| Error::RepositoryUnavailable)?;
+        let pointer = open_file(&root_dir, ".git").map_err(|_defect| RepositoryOpenError)?;
         let private_path = root.join(pointer_line(pointer, "gitdir: ")?);
         let git_dir = open_root(&private_path)?;
         let objects = match open_file(&git_dir, "commondir") {
             Ok(commondir) => {
                 let common_path = private_path.join(pointer_line(commondir, "")?);
                 let common = open_root(&common_path)?;
-                open_dir(&common, "objects").map_err(|_defect| Error::RepositoryUnavailable)?
+                open_dir(&common, "objects").map_err(|_defect| RepositoryOpenError)?
             }
             Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => {
-                open_dir(&git_dir, "objects").map_err(|_defect| Error::RepositoryUnavailable)?
+                open_dir(&git_dir, "objects").map_err(|_defect| RepositoryOpenError)?
             }
-            Err(_defect) => return Err(Error::RepositoryUnavailable),
+            Err(_defect) => return Err(RepositoryOpenError),
         };
         Ok(Self::from_handles(git_dir, objects, object_format))
     }
@@ -360,8 +361,7 @@ impl Repository {
                 });
             }
             Err(
-                Error::RepositoryUnavailable
-                | Error::ObjectMissing
+                Error::ObjectMissing
                 | Error::ObjectWrongKind
                 | Error::ObjectUnreadable
                 | Error::IndexInvalid
@@ -442,21 +442,19 @@ const GITDIR_POINTER_BYTES: u64 = 16_384;
 
 /// One bounded pointer line: `prefix`, a nonempty single-line UTF-8 path,
 /// one optional trailing newline, and nothing else.
-fn pointer_line(file: File, prefix: &str) -> Result<PathBuf, Error> {
+fn pointer_line(file: File, prefix: &str) -> Result<PathBuf, RepositoryOpenError> {
     let mut bytes = Vec::new();
     file.take(GITDIR_POINTER_BYTES.saturating_add(1))
         .read_to_end(&mut bytes)
-        .map_err(|_defect| Error::RepositoryUnavailable)?;
+        .map_err(|_defect| RepositoryOpenError)?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > GITDIR_POINTER_BYTES {
-        return Err(Error::RepositoryUnavailable);
+        return Err(RepositoryOpenError);
     }
-    let text = std::str::from_utf8(&bytes).map_err(|_defect| Error::RepositoryUnavailable)?;
-    let rest = text
-        .strip_prefix(prefix)
-        .ok_or(Error::RepositoryUnavailable)?;
+    let text = std::str::from_utf8(&bytes).map_err(|_defect| RepositoryOpenError)?;
+    let rest = text.strip_prefix(prefix).ok_or(RepositoryOpenError)?;
     let path = rest.strip_suffix('\n').unwrap_or(rest);
     if path.is_empty() || path.contains('\n') || path.contains('\r') {
-        return Err(Error::RepositoryUnavailable);
+        return Err(RepositoryOpenError);
     }
     Ok(PathBuf::from(path))
 }

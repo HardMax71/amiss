@@ -7,7 +7,7 @@ pub mod resources;
 
 pub use index::{IndexEntry, LogicalIndex, parse_index_file};
 pub use object::{Commit, Object, ObjectKind, TreeEntry, parse_commit, parse_tree};
-pub use repo::Repository;
+pub use repo::{Repository, RepositoryOpenError};
 pub use resources::{GitLimits, GitResources, ValueCap};
 
 use amiss_wire::controls::ResourceName;
@@ -24,7 +24,6 @@ compile_error!(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
-    RepositoryUnavailable,
     ObjectMissing,
     ObjectWrongKind,
     ObjectUnreadable,

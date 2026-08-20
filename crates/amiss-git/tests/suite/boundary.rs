@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use amiss_fixtures::directory_link;
-use amiss_git::{Error, GitLimits, GitResources, Repository};
+use amiss_git::{Error, GitLimits, GitResources, Repository, RepositoryOpenError};
 use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
 
@@ -38,7 +38,7 @@ fn a_reparse_point_at_the_root_is_refused() {
     directory_link(&real, &alias).unwrap();
     assert_eq!(
         Repository::open(&alias, ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "the root's final entry is never followed"
     );
 }
@@ -53,7 +53,7 @@ fn a_reparse_point_at_the_git_directory_is_refused() {
     directory_link(&store, &root.join(".git")).unwrap();
     assert_eq!(
         Repository::open(&root, ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "the .git child is never followed"
     );
 }
@@ -68,7 +68,7 @@ fn a_reparse_point_at_the_objects_directory_is_refused() {
     directory_link(&store, &root.join(".git/objects")).unwrap();
     assert_eq!(
         Repository::open(&root, ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "the objects directory is never followed"
     );
 }
@@ -132,7 +132,7 @@ fn a_malformed_or_dangling_gitdir_pointer_is_refused() {
         fs::write(dir.path().join(".git"), pointer).unwrap();
         assert_eq!(
             Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
-            Error::RepositoryUnavailable,
+            RepositoryOpenError,
             "{reason}"
         );
     }
@@ -154,7 +154,7 @@ fn a_grammar_clause_refuses_even_when_the_loose_path_would_resolve() {
         fs::write(dir.path().join(".git"), pointer).unwrap();
         assert_eq!(
             Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
-            Error::RepositoryUnavailable,
+            RepositoryOpenError,
             "{reason}"
         );
     }
@@ -170,7 +170,7 @@ fn a_grammar_clause_refuses_even_when_the_loose_path_would_resolve() {
             fs::write(dir.path().join(".git"), pointer).unwrap();
             assert_eq!(
                 Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
-                Error::RepositoryUnavailable,
+                RepositoryOpenError,
                 "{reason}"
             );
         }
@@ -203,7 +203,7 @@ fn a_gitdir_pointer_to_a_file_or_reparse_point_is_refused() {
     fs::write(dir.path().join(".git"), "gitdir: plain\n").unwrap();
     assert_eq!(
         Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "a pointer to a regular file"
     );
 
@@ -214,7 +214,7 @@ fn a_gitdir_pointer_to_a_file_or_reparse_point_is_refused() {
     fs::write(linked.path().join(".git"), "gitdir: alias\n").unwrap();
     assert_eq!(
         Repository::open(linked.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "a pointer target is never followed through a reparse point"
     );
 }
@@ -229,7 +229,7 @@ fn a_commondir_that_reaches_no_object_store_is_refused() {
     fs::write(dir.path().join(".git"), "gitdir: private\n").unwrap();
     assert_eq!(
         Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "a common directory without objects"
     );
 
@@ -241,7 +241,7 @@ fn a_commondir_that_reaches_no_object_store_is_refused() {
     fs::write(chained.path().join(".git"), "gitdir: private\n").unwrap();
     assert_eq!(
         Repository::open(chained.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "a present commondir binds; private objects are never a fallback"
     );
 
@@ -254,7 +254,7 @@ fn a_commondir_that_reaches_no_object_store_is_refused() {
     fs::write(refused.path().join(".git"), "gitdir: private\n").unwrap();
     assert_eq!(
         Repository::open(refused.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "a refused commondir is present, not absent; the fallback is NotFound-only"
     );
 }
@@ -292,12 +292,12 @@ fn an_absent_repository_is_refused() {
     let dir = TempDir::new().unwrap();
     assert_eq!(
         Repository::open(&dir.path().join("nowhere"), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "an absent root"
     );
     assert_eq!(
         Repository::open(dir.path(), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "an absent .git"
     );
 }
@@ -364,7 +364,7 @@ fn real_git_worktree_layouts_open_through_the_boundary() {
     .unwrap();
     assert_eq!(
         Repository::open(&bare, ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable,
+        RepositoryOpenError,
         "a bare repository stays refused directly"
     );
     let bare_worktree = dir.path().join("bare-wt");

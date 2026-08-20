@@ -2,7 +2,10 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use amiss_git::{Error, GitLimits, GitResources, ObjectKind, Repository, parse_commit, parse_tree};
+use amiss_git::{
+    Error, GitLimits, GitResources, ObjectKind, Repository, RepositoryOpenError, parse_commit,
+    parse_tree,
+};
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{ObjectFormat, Oid};
 use flate2::Compression;
@@ -95,7 +98,7 @@ fn missing_and_unavailable_are_distinct() {
 
     assert_eq!(
         Repository::open(&dir.path().join("nowhere"), ObjectFormat::Sha1).unwrap_err(),
-        Error::RepositoryUnavailable
+        RepositoryOpenError
     );
 }
 

@@ -249,7 +249,7 @@ fn sorted_rows(entries: &[Entry], offsets: &[u64]) -> Vec<(u64, [u8; 20])> {
 }
 
 fn read_with(root: &Path, oid: &[u8; 20], limits: GitLimits) -> Result<Vec<u8>, Error> {
-    let repo = Repository::open(root, ObjectFormat::Sha1)?;
+    let repo = Repository::open(root, ObjectFormat::Sha1).expect("fixture repository opens");
     let oid = Oid::new(ObjectFormat::Sha1, to_hex(oid)).unwrap();
     let mut resources = GitResources::new(limits);
     repo.read_expected(&mut resources, &oid, ObjectKind::Blob)

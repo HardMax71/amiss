@@ -306,7 +306,6 @@ fn recheck_index(
 
 const fn unavailable_reason(defect: &Error) -> &'static str {
     match defect {
-        Error::Git(crate::GitDefect::RepositoryUnavailable) => "repository-unavailable",
         Error::Git(crate::GitDefect::ObjectMissing) => "missing-object",
         Error::Git(crate::GitDefect::ObjectWrongKind) => "wrong-object-kind",
         Error::Git(crate::GitDefect::ObjectUnreadable) => "unreadable-object",
