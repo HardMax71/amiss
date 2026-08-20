@@ -317,7 +317,7 @@ fn finding_value(
         ("coverage_requirement", string(coverage)),
         ("evidence_class", string(metadata.evidence_class)),
         ("invariant_class", string(metadata.invariant_class)),
-        ("attribution", string(finding.attribution.as_str())),
+        ("attribution", string(finding.attribution.as_ref())),
         ("base_fact_digest", base_digest),
         ("base_fact", base_fact),
         ("candidate_fact_digest", candidate_digest),

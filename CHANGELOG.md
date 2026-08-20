@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Split the wire report subsystems and consolidate their taxonomies behind Strum spellings and immutable `FindingKind::metadata()`, replacing the public `as_str`, `fixed_phase`, `scope`, `evidence_class`, and `invariant_class` projection helpers
 - Split scanner policy acquisition, effects, and floor enforcement into focused modules, and remove the unused public `floor_protected` batch helper
+- Split scanner evaluation models and execution into focused modules, consolidate resolution-to-finding classification, and replace `Attribution::as_str` with Strum's `AsRef<str>` projection
 
 ## [0.23.0](https://github.com/HardMax71/amiss/compare/v0.22.0...v0.23.0) - 2026-08-17
 

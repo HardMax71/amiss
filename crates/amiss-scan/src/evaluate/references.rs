@@ -11,7 +11,7 @@ use super::finding::{
     reference_scope, simple,
 };
 use super::{
-    Attribution, Finding, FindingKey, Location, LocationSide, PolicyStep, structural_kind,
+    Attribution, Finding, FindingKey, Location, LocationSide, PolicyStep, resolution_kinds,
 };
 
 /// The adoption-reproduction projection: every structural key among the
@@ -46,7 +46,7 @@ fn collect_structural<'a>(
     observation: &'a Observation,
     is_base: bool,
 ) {
-    let Some(kind) = structural_kind(&observation.resolution) else {
+    let Some(kind) = resolution_kinds(&observation.resolution).structural else {
         return;
     };
     let key = FindingKey::new(kind, reference_scope(observation));
