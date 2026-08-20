@@ -76,13 +76,11 @@ pub fn unavailable_evaluation_envelope(
         return None;
     }
     let mut reasons = Vec::new();
-    for code in codes {
-        reasons.push(Value::String(code.evaluation_reason()?.into()));
-    }
-
     let mut errors: Vec<(AnalysisErrorCode, &'static str)> = Vec::new();
     for code in codes {
-        errors.push((*code, code.fixed_phase()?));
+        let route = code.route()?;
+        reasons.push(Value::String(route.evaluation_reason?.into()));
+        errors.push((*code, route.phase));
     }
     errors.sort_by(|a, b| a.0.as_ref().cmp(b.0.as_ref()));
     let error_rows: Vec<Value> = errors
