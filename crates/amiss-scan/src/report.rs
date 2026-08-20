@@ -250,7 +250,7 @@ fn comparison_value(comparison: &Comparison) -> Value {
         ("base", side(&comparison.base)),
         ("candidate", side(&comparison.candidate)),
         ("correlation", string(comparison.outcome.as_ref())),
-        ("correlation_reason", string(comparison.reason.as_str())),
+        ("correlation_reason", string(comparison.reason.as_ref())),
         (
             "alternatives",
             object(vec![
