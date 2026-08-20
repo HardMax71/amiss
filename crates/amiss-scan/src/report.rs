@@ -289,8 +289,8 @@ fn finding_value(
     document_rows: &[(RepoPath, Value)],
 ) -> Value {
     let kind = finding.kind();
-    let scope = kind.scope();
-    let coverage = match scope {
+    let metadata = kind.metadata();
+    let coverage = match metadata.scope {
         FindingScope::Control => "control-plane",
         FindingScope::Reference | FindingScope::Observation | FindingScope::Document => "none",
     };
@@ -315,8 +315,8 @@ fn finding_value(
         ("description", string(kind.meaning())),
         ("fix", finding.fix().map_or(Value::Null, fix_value)),
         ("coverage_requirement", string(coverage)),
-        ("evidence_class", string(kind.evidence_class())),
-        ("invariant_class", string(kind.invariant_class())),
+        ("evidence_class", string(metadata.evidence_class)),
+        ("invariant_class", string(metadata.invariant_class)),
         ("attribution", string(finding.attribution.as_str())),
         ("base_fact_digest", base_digest),
         ("base_fact", base_fact),
@@ -536,7 +536,7 @@ fn nonreference_fact(
     comparison_runs: [&[(Option<Digest>, Value)]; 2],
     document_rows: &[(RepoPath, Value)],
 ) -> Option<FindingFact> {
-    let evidence = match finding.kind().scope() {
+    let evidence = match finding.kind().metadata().scope {
         FindingScope::Reference | FindingScope::Control => return None,
         FindingScope::Observation => {
             let id = finding.observation_ids.first()?;

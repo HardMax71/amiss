@@ -260,9 +260,15 @@ fn the_kind_projections_are_populated_and_distinct() {
     let kind_names: BTreeSet<&str> = kinds.iter().map(AsRef::as_ref).collect();
     assert_eq!(kind_names.len(), kinds.len());
     assert!(kind_names.iter().all(|text| !text.is_empty()));
-    let evidence: BTreeSet<&str> = kinds.iter().map(|kind| kind.evidence_class()).collect();
+    let evidence: BTreeSet<&str> = kinds
+        .iter()
+        .map(|kind| kind.metadata().evidence_class)
+        .collect();
     assert!(evidence.len() > 1 && evidence.iter().all(|text| !text.is_empty()));
-    let invariants: BTreeSet<&str> = kinds.iter().map(|kind| kind.invariant_class()).collect();
+    let invariants: BTreeSet<&str> = kinds
+        .iter()
+        .map(|kind| kind.metadata().invariant_class)
+        .collect();
     assert!(invariants.len() > 1 && invariants.iter().all(|text| !text.is_empty()));
 }
 
