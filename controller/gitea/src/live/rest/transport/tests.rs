@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ForgeNegative, ProviderError};
 use reqwest::StatusCode;
 use secrecy::SecretString;
 
@@ -141,14 +141,13 @@ fn a_deadline_keeps_a_positive_remainder_or_refuses() {
 
 #[test]
 fn verification_statuses_classify_facts_apart_from_failures() {
-    use super::Classified;
     let of = |code: u16| super::classified(StatusCode::from_u16(code).unwrap());
-    assert_eq!(of(200), Ok(Classified::Success));
-    assert_eq!(of(404), Ok(Classified::Missing));
-    assert_eq!(of(422), Ok(Classified::Missing));
-    assert_eq!(of(403), Ok(Classified::Denied));
-    assert_eq!(of(429), Err(ProviderError::Unavailable));
-    assert_eq!(of(500), Err(ProviderError::Unavailable));
-    assert_eq!(of(401), Err(ProviderError::AuthorizationRevoked));
-    assert_eq!(of(302), Err(ProviderError::InvalidResponse));
+    assert_eq!(of(200), Some(Ok(())));
+    assert_eq!(of(404), Some(Err(ForgeNegative::Missing)));
+    assert_eq!(of(422), Some(Err(ForgeNegative::Missing)));
+    assert_eq!(of(403), Some(Err(ForgeNegative::Denied)));
+    assert_eq!(of(429), None);
+    assert_eq!(of(500), None);
+    assert_eq!(of(401), None);
+    assert_eq!(of(302), None);
 }

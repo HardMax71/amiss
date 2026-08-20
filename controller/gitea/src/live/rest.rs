@@ -1,8 +1,7 @@
 mod tests;
 
-use std::time::{Duration, Instant};
-
-use amiss_controller::ProviderError;
+pub(super) use amiss_controller::OperationDeadline;
+use amiss_controller::{ForgeFact, ForgeNegative, ProviderError};
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
@@ -20,32 +19,13 @@ use super::{Config, GiteaClientError, GiteaTimeouts};
 
 mod transport;
 
-use self::transport::{Fact, Transport};
+use self::transport::Transport;
 
 const PAGE_SIZE: usize = 50;
 const MAX_REVIEW_PAGES: u32 = 20;
 // The paginated siblings trust at most ten hundred-row pages; one
 // unpaginated answer claiming more than that is not trusted either.
 const REF_CEILING: usize = 1000;
-
-#[derive(Clone, Copy)]
-pub(super) struct OperationDeadline(Instant);
-
-impl OperationDeadline {
-    pub(super) fn after(timeout: Duration) -> Result<Self, ProviderError> {
-        Instant::now()
-            .checked_add(timeout)
-            .map(Self)
-            .ok_or(ProviderError::Unavailable)
-    }
-
-    pub(super) fn remaining(self) -> Result<Duration, ProviderError> {
-        let remaining = self.0.saturating_duration_since(Instant::now());
-        (!remaining.is_zero())
-            .then_some(remaining)
-            .ok_or(ProviderError::Unavailable)
-    }
-}
 
 /// The read-only verification surface, apart from refresh and publication
 /// on purpose: a verifier holding this can state facts and nothing else.
@@ -156,23 +136,6 @@ impl HttpRest {
         }
         Err(ProviderError::InvalidResponse)
     }
-
-    fn presence(
-        &self,
-        route: &str,
-        deadline: OperationDeadline,
-    ) -> Result<Presence, ProviderError> {
-        Ok(
-            match self
-                .transport
-                .get_fact::<serde::de::IgnoredAny>(route, deadline)?
-            {
-                Fact::Found(_) => Presence::Present,
-                Fact::Missing => Presence::Absent,
-                Fact::Denied => Presence::Unknown,
-            },
-        )
-    }
 }
 
 impl GiteaRest for HttpRest {
@@ -281,9 +244,9 @@ impl GiteaVerification for HttpRest {
                 .transport
                 .get_fact::<serde::de::IgnoredAny>(&route, deadline)?
             {
-                Fact::Found(_) => Visibility::Readable,
-                Fact::Missing => Visibility::Missing,
-                Fact::Denied => Visibility::Denied,
+                Ok(_) => Visibility::Readable,
+                Err(ForgeNegative::Missing) => Visibility::Missing,
+                Err(ForgeNegative::Denied) => Visibility::Denied,
             },
         )
     }
@@ -326,7 +289,16 @@ impl GiteaVerification for HttpRest {
             encoded.join("/"),
             path_segment(reference),
         );
-        self.presence(&route, deadline)
+        let fact = self
+            .transport
+            .get_fact::<serde::de::IgnoredAny>(&route, deadline)?;
+        Ok(fact.map_or_else(
+            |negative| match negative {
+                ForgeNegative::Missing => Presence::Absent,
+                ForgeNegative::Denied => Presence::Unknown,
+            },
+            |_content| Presence::Present,
+        ))
     }
 
     fn commit_presence(
@@ -342,7 +314,7 @@ impl GiteaVerification for HttpRest {
             path_segment(name),
             path_segment(revision),
         );
-        Ok(listed_commit(self.transport.get_fact(&route, deadline)?))
+        self.transport.get_fact(&route, deadline).map(listed_commit)
     }
 }
 
@@ -352,28 +324,28 @@ impl GiteaVerification for HttpRest {
 /// Either way a truncated candidate set could become a false refutation
 /// downstream: no fact. Only a 2xx listing within the ceiling is one, and
 /// its empty array is the empty match set.
-fn ref_listing(fact: Fact<Vec<RefRecord>>, family: RefFamily) -> Option<Vec<String>> {
+fn ref_listing(fact: ForgeFact<Vec<RefRecord>>, family: RefFamily) -> Option<Vec<String>> {
     let qualifier = format!("refs/{}/", family.as_str());
     match fact {
-        Fact::Found(records) if records.len() <= REF_CEILING => Some(
+        Ok(records) if records.len() <= REF_CEILING => Some(
             records
                 .into_iter()
                 .filter_map(|record| record.reference.strip_prefix(&qualifier).map(str::to_owned))
                 .collect(),
         ),
-        Fact::Found(_) | Fact::Missing | Fact::Denied => None,
+        Ok(_) | Err(ForgeNegative::Missing | ForgeNegative::Denied) => None,
     }
 }
 
 /// The commit list route answers 200 with an empty array for an empty
 /// repository, whatever the revision asked: only a listed commit is
 /// presence, and the empty page is no fact.
-fn listed_commit(fact: Fact<Vec<serde::de::IgnoredAny>>) -> Presence {
+fn listed_commit(fact: ForgeFact<Vec<serde::de::IgnoredAny>>) -> Presence {
     match fact {
-        Fact::Found(commits) if commits.is_empty() => Presence::Unknown,
-        Fact::Found(_) => Presence::Present,
-        Fact::Missing => Presence::Absent,
-        Fact::Denied => Presence::Unknown,
+        Ok(commits) if commits.is_empty() => Presence::Unknown,
+        Ok(_) => Presence::Present,
+        Err(ForgeNegative::Missing) => Presence::Absent,
+        Err(ForgeNegative::Denied) => Presence::Unknown,
     }
 }
 

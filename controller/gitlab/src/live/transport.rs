@@ -4,7 +4,9 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use amiss_controller::{ProviderError, ProviderIdentity, decode_bounded_json};
+use amiss_controller::{
+    ForgeFact, ForgeNegative, ProviderError, ProviderIdentity, decode_bounded_json,
+};
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::HeaderValue;
@@ -210,15 +212,15 @@ impl Transport {
         &self,
         url: Url,
         budget: Budget,
-    ) -> Result<(Fact<T>, Budget), ProviderError> {
+    ) -> Result<(ForgeFact<T>, Budget), ProviderError> {
         let response = self.send(self.shared.client.get(url), budget)?;
-        match classified(response.status())? {
-            Classified::Success => {
+        let status = response.status();
+        match classified(status).ok_or_else(|| map_status(status))? {
+            Ok(()) => {
                 let (value, budget) = decode_response(response, budget)?;
-                Ok((Fact::Found(value), budget))
+                Ok((Ok(value), budget))
             }
-            Classified::Missing => Ok((Fact::Missing, budget)),
-            Classified::Denied => Ok((Fact::Denied, budget)),
+            Err(negative) => Ok((Err(negative), budget)),
         }
     }
 
@@ -228,16 +230,11 @@ impl Transport {
         &self,
         url: Url,
         budget: Budget,
-    ) -> Result<(Fact<()>, Budget), ProviderError> {
+    ) -> Result<(ForgeFact<()>, Budget), ProviderError> {
         let response = self.send(self.shared.client.head(url), budget)?;
-        Ok((
-            match classified(response.status())? {
-                Classified::Success => Fact::Found(()),
-                Classified::Missing => Fact::Missing,
-                Classified::Denied => Fact::Denied,
-            },
-            budget,
-        ))
+        let status = response.status();
+        let fact = classified(status).ok_or_else(|| map_status(status))?;
+        Ok((fact, budget))
     }
 
     fn send(&self, request: RequestBuilder, budget: Budget) -> Result<Response, ProviderError> {
@@ -296,30 +293,16 @@ impl Budget {
     }
 }
 
-/// One route's verification answer.
-pub(super) enum Fact<T> {
-    Found(T),
-    Missing,
-    Denied,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Classified {
-    Success,
-    Missing,
-    Denied,
-}
-
 /// The verification statuses that are facts: a 404 is the absence of what
 /// the route names, since GitLab hides what it will not show, a 403 is a
 /// standing refusal, since GitLab rate-limits with 429, and everything else
 /// classifies as a data call would.
-fn classified(status: StatusCode) -> Result<Classified, ProviderError> {
+fn classified(status: StatusCode) -> Option<ForgeFact<()>> {
     match status.as_u16() {
-        200..300 => Ok(Classified::Success),
-        404 => Ok(Classified::Missing),
-        403 => Ok(Classified::Denied),
-        _ => Err(map_status(status)),
+        200..300 => Some(Ok(())),
+        404 => Some(Err(ForgeNegative::Missing)),
+        403 => Some(Err(ForgeNegative::Denied)),
+        _ => None,
     }
 }
 

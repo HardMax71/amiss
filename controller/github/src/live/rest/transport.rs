@@ -5,15 +5,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::{
-    ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER,
-};
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use amiss_controller::{ProviderError, decode_bounded_json};
+use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
 
 use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
@@ -27,28 +25,14 @@ const JWT_BACKDATE_SECONDS: u64 = 60;
 const JWT_LIFETIME_SECONDS: u64 = 540;
 const TOKEN_REUSE: Duration = Duration::from_mins(5);
 
-/// One route's verification answer.
-pub(super) enum Fact<T> {
-    Found(T),
-    Missing,
-    Denied,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Classified {
-    Success,
-    Missing,
-    Denied,
-}
-
 /// The verification statuses that are facts: 404 and 422 are the absence of
 /// what the route names, an unlimited 403 is a standing refusal, and every
 /// other status classifies exactly as a settled data call would.
-fn classified(status: u16, headers: &HeaderMap) -> Result<Classified, ProviderError> {
+fn classified(status: u16, headers: &HeaderMap) -> Result<ForgeFact<()>, ProviderError> {
     match status {
-        200..300 => Ok(Classified::Success),
-        404 | 422 => Ok(Classified::Missing),
-        403 if !rate_limited(headers) => Ok(Classified::Denied),
+        200..300 => Ok(Ok(())),
+        404 | 422 => Ok(Err(ForgeNegative::Missing)),
+        403 if !rate_limited(headers) => Ok(Err(ForgeNegative::Denied)),
         _ => match settled(status, headers, ProviderError::AuthorizationRevoked) {
             Ok(()) => Err(ProviderError::InvalidResponse),
             Err(defect) => Err(defect),
@@ -142,7 +126,7 @@ impl Transport {
         &self,
         route: &str,
         deadline: OperationDeadline,
-    ) -> Result<Fact<T>, ProviderError> {
+    ) -> Result<ForgeFact<T>, ProviderError> {
         let token = self.token(deadline)?;
         let request = self.client.get(self.url(route)?);
         let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
@@ -150,9 +134,8 @@ impl Transport {
             .send()
             .map_err(|error| map_error(&error))?;
         match classified(response.status().as_u16(), response.headers())? {
-            Classified::Success => Ok(Fact::Found(decode_body(response)?)),
-            Classified::Missing => Ok(Fact::Missing),
-            Classified::Denied => Ok(Fact::Denied),
+            Ok(()) => decode_body(response).map(Ok),
+            Err(negative) => Ok(Err(negative)),
         }
     }
 
@@ -265,17 +248,7 @@ fn github_headers(
 }
 
 fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
-    let declared = response
-        .headers()
-        .get(CONTENT_LENGTH)
-        .map(|value| {
-            value
-                .to_str()
-                .ok()
-                .and_then(|raw| raw.parse::<u64>().ok())
-                .ok_or(ProviderError::InvalidResponse)
-        })
-        .transpose()?;
+    let declared = response.content_length();
     decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
 }
 

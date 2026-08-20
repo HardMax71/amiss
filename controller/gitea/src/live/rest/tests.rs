@@ -2,8 +2,9 @@
 
 use serde::de::IgnoredAny;
 
+use amiss_controller::ForgeNegative;
+
 use super::super::model::RefRecord;
-use super::transport::Fact;
 use super::{Presence, REF_CEILING, RefFamily, listed_commit, ref_listing};
 
 fn named(reference: &str) -> RefRecord {
@@ -20,16 +21,22 @@ fn named(reference: &str) -> RefRecord {
 /// not proven whole.
 #[test]
 fn a_ref_listing_is_a_fact_only_when_positively_complete() {
-    assert_eq!(ref_listing(Fact::Missing, RefFamily::Heads), None);
-    assert_eq!(ref_listing(Fact::Denied, RefFamily::Heads), None);
     assert_eq!(
-        ref_listing(Fact::Found(Vec::new()), RefFamily::Heads),
+        ref_listing(Err(ForgeNegative::Missing), RefFamily::Heads),
+        None
+    );
+    assert_eq!(
+        ref_listing(Err(ForgeNegative::Denied), RefFamily::Heads),
+        None
+    );
+    assert_eq!(
+        ref_listing(Ok(Vec::new()), RefFamily::Heads),
         Some(Vec::new()),
         "an empty 2xx array positively means no refs under the prefix"
     );
     assert_eq!(
         ref_listing(
-            Fact::Found(vec![named("refs/heads/main"), named("refs/tags/v1")]),
+            Ok(vec![named("refs/heads/main"), named("refs/tags/v1")]),
             RefFamily::Heads
         ),
         Some(vec!["main".to_owned()]),
@@ -39,14 +46,14 @@ fn a_ref_listing_is_a_fact_only_when_positively_complete() {
         .map(|index| named(&format!("refs/heads/b{index}")))
         .collect();
     assert_eq!(
-        ref_listing(Fact::Found(overfull), RefFamily::Heads),
+        ref_listing(Ok(overfull), RefFamily::Heads),
         None,
         "past the ceiling nothing proves the set complete"
     );
     let bounded: Vec<RefRecord> = (0..REF_CEILING)
         .map(|index| named(&format!("refs/heads/b{index}")))
         .collect();
-    assert!(ref_listing(Fact::Found(bounded), RefFamily::Heads).is_some());
+    assert!(ref_listing(Ok(bounded), RefFamily::Heads).is_some());
 }
 
 /// An empty repository answers the commit list route 200 with an empty
@@ -56,11 +63,8 @@ fn a_ref_listing_is_a_fact_only_when_positively_complete() {
 /// and the empty page is no fact.
 #[test]
 fn an_empty_commit_page_is_no_fact() {
-    assert_eq!(listed_commit(Fact::Found(Vec::new())), Presence::Unknown);
-    assert_eq!(
-        listed_commit(Fact::Found(vec![IgnoredAny])),
-        Presence::Present
-    );
-    assert_eq!(listed_commit(Fact::Missing), Presence::Absent);
-    assert_eq!(listed_commit(Fact::Denied), Presence::Unknown);
+    assert_eq!(listed_commit(Ok(Vec::new())), Presence::Unknown);
+    assert_eq!(listed_commit(Ok(vec![IgnoredAny])), Presence::Present);
+    assert_eq!(listed_commit(Err(ForgeNegative::Missing)), Presence::Absent);
+    assert_eq!(listed_commit(Err(ForgeNegative::Denied)), Presence::Unknown);
 }

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::{
     ChangeLocator, ChangeSnapshot, DeliveryIdentity, IngressCheck, ProviderNamespace,
@@ -23,6 +24,43 @@ pub enum ProviderError {
     Unavailable,
     #[error("provider returned an invalid response")]
     InvalidResponse,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ForgeNegative {
+    Missing,
+    Denied,
+}
+
+pub type ForgeFact<T> = Result<T, ForgeNegative>;
+
+#[derive(Clone, Copy)]
+pub struct OperationDeadline(Instant);
+
+impl OperationDeadline {
+    /// Starts an operation budget from the current instant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProviderError::Unavailable`] when the deadline cannot be represented.
+    pub fn after(timeout: Duration) -> Result<Self, ProviderError> {
+        Instant::now()
+            .checked_add(timeout)
+            .map(Self)
+            .ok_or(ProviderError::Unavailable)
+    }
+
+    /// Returns the operation's unspent time.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProviderError::Unavailable`] once the deadline has expired.
+    pub fn remaining(self) -> Result<Duration, ProviderError> {
+        let remaining = self.0.saturating_duration_since(Instant::now());
+        (!remaining.is_zero())
+            .then_some(remaining)
+            .ok_or(ProviderError::Unavailable)
+    }
 }
 
 pub trait ProviderAdapter: Send + Sync {

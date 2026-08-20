@@ -2,10 +2,10 @@ mod tests;
 
 use std::time::Duration;
 
-use amiss_controller::{ProviderError, decode_bounded_json};
+use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH, HeaderValue};
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -76,17 +76,17 @@ impl Transport {
         &self,
         route: &str,
         deadline: OperationDeadline,
-    ) -> Result<Fact<T>, ProviderError> {
+    ) -> Result<ForgeFact<T>, ProviderError> {
         let request = self.client.get(self.url(route)?);
         let response = self
             .authorized(request)?
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        match classified(response.status())? {
-            Classified::Success => Ok(Fact::Found(decode_body(response)?)),
-            Classified::Missing => Ok(Fact::Missing),
-            Classified::Denied => Ok(Fact::Denied),
+        let status = response.status();
+        match classified(status).ok_or_else(|| map_status(status))? {
+            Ok(()) => decode_body(response).map(Ok),
+            Err(negative) => Ok(Err(negative)),
         }
     }
 
@@ -126,17 +126,7 @@ impl Transport {
 }
 
 fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
-    let declared = response
-        .headers()
-        .get(CONTENT_LENGTH)
-        .map(|value| {
-            value
-                .to_str()
-                .ok()
-                .and_then(|raw| raw.parse::<u64>().ok())
-                .ok_or(ProviderError::InvalidResponse)
-        })
-        .transpose()?;
+    let declared = response.content_length();
     decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
 }
 
@@ -185,29 +175,15 @@ fn map_error(error: &reqwest::Error) -> ProviderError {
     }
 }
 
-/// One route's verification answer.
-pub(super) enum Fact<T> {
-    Found(T),
-    Missing,
-    Denied,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Classified {
-    Success,
-    Missing,
-    Denied,
-}
-
 /// The verification statuses that are facts: 404 and 422 are the absence of
 /// what the route names, a 403 is a standing refusal since Gitea carries no
 /// rate-limit signal, and everything else classifies as a data call would.
-fn classified(status: StatusCode) -> Result<Classified, ProviderError> {
+fn classified(status: StatusCode) -> Option<ForgeFact<()>> {
     match status.as_u16() {
-        200..300 => Ok(Classified::Success),
-        404 | 422 => Ok(Classified::Missing),
-        403 => Ok(Classified::Denied),
-        _ => Err(map_status(status)),
+        200..300 => Some(Ok(())),
+        404 | 422 => Some(Err(ForgeNegative::Missing)),
+        403 => Some(Err(ForgeNegative::Denied)),
+        _ => None,
     }
 }
 

@@ -1,15 +1,15 @@
 mod tests;
 
 use amiss_controller::{
-    ForgePresence as Presence, ForgeProducer, ForgeRefFamily as RefFamily, ForgeTail,
-    ForgeVisibility as Visibility, ProviderError, forge_evidence, forge_repository_evidence,
-    ref_span, spelled_segments,
+    ForgeFact, ForgeNegative, ForgePresence as Presence, ForgeProducer,
+    ForgeRefFamily as RefFamily, ForgeTail, ForgeVisibility as Visibility, ProviderError,
+    forge_evidence, forge_repository_evidence, ref_span, spelled_segments,
 };
 use amiss_wire::json::Value;
 use serde::Deserialize;
 
 use super::GitLabClient;
-use super::transport::{Budget, Fact};
+use super::transport::Budget;
 
 pub(super) const PRODUCER_NAME: &str = "amiss-controller-gitlab";
 
@@ -192,11 +192,11 @@ struct NamedRef {
     name: String,
 }
 
-fn presence<T>(fact: &Fact<T>) -> Presence {
+fn presence<T>(fact: &ForgeFact<T>) -> Presence {
     match fact {
-        Fact::Found(_) => Presence::Present,
-        Fact::Missing => Presence::Absent,
-        Fact::Denied => Presence::Unknown,
+        Ok(_) => Presence::Present,
+        Err(ForgeNegative::Missing) => Presence::Absent,
+        Err(ForgeNegative::Denied) => Presence::Unknown,
     }
 }
 
@@ -216,9 +216,9 @@ impl GitLabVerification for GitLabClient {
             .get_fact::<serde::de::IgnoredAny>(url, budget)?;
         Ok((
             match fact {
-                Fact::Found(_) => Visibility::Readable,
-                Fact::Missing => Visibility::Missing,
-                Fact::Denied => Visibility::Denied,
+                Ok(_) => Visibility::Readable,
+                Err(ForgeNegative::Missing) => Visibility::Missing,
+                Err(ForgeNegative::Denied) => Visibility::Denied,
             },
             budget,
         ))
@@ -248,8 +248,10 @@ impl GitLabVerification for GitLabClient {
             let (fact, spent) = self.transport.get_fact::<Vec<NamedRef>>(url, budget)?;
             budget = spent;
             let batch = match fact {
-                Fact::Found(refs) => refs,
-                Fact::Missing | Fact::Denied => return Ok((None, budget)),
+                Ok(refs) => refs,
+                Err(ForgeNegative::Missing | ForgeNegative::Denied) => {
+                    return Ok((None, budget));
+                }
             };
             if batch.len() > super::PAGE_SIZE {
                 return Err(ProviderError::InvalidResponse);
@@ -306,8 +308,8 @@ impl GitLabVerification for GitLabClient {
             match &fact {
                 // An empty page is either an empty directory or a path the
                 // route ignores, and GitLab does not say which: no fact.
-                Fact::Found(rows) if rows.is_empty() => Presence::Unknown,
-                Fact::Found(_) | Fact::Missing | Fact::Denied => presence(&fact),
+                Ok(rows) if rows.is_empty() => Presence::Unknown,
+                Ok(_) | Err(ForgeNegative::Missing | ForgeNegative::Denied) => presence(&fact),
             },
             budget,
         ))

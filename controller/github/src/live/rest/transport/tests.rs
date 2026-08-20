@@ -3,7 +3,7 @@
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ForgeNegative, ProviderError};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use reqwest::blocking::Client;
@@ -11,9 +11,9 @@ use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::Deserialize;
 
 use super::{
-    AppCredential, Classified, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken,
-    OperationDeadline, Transport, app_jwt, classified, map_error, map_status, rate_limited,
-    settled, validate_api_base,
+    AppCredential, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken, OperationDeadline,
+    Transport, app_jwt, classified, map_error, map_status, rate_limited, settled,
+    validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
 
@@ -306,10 +306,10 @@ fn the_api_base_length_bounds_are_exact() {
 #[test]
 fn verification_statuses_classify_facts_apart_from_failures() {
     let plain = reqwest::header::HeaderMap::new();
-    assert_eq!(classified(200, &plain), Ok(Classified::Success));
-    assert_eq!(classified(404, &plain), Ok(Classified::Missing));
-    assert_eq!(classified(422, &plain), Ok(Classified::Missing));
-    assert_eq!(classified(403, &plain), Ok(Classified::Denied));
+    assert_eq!(classified(200, &plain), Ok(Ok(())));
+    assert_eq!(classified(404, &plain), Ok(Err(ForgeNegative::Missing)));
+    assert_eq!(classified(422, &plain), Ok(Err(ForgeNegative::Missing)));
+    assert_eq!(classified(403, &plain), Ok(Err(ForgeNegative::Denied)));
     let mut limited = reqwest::header::HeaderMap::new();
     limited.insert("retry-after", "30".parse().expect("a header value"));
     assert_eq!(classified(403, &limited), Err(ProviderError::Unavailable));
