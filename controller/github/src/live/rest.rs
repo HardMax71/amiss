@@ -3,9 +3,9 @@ mod tests;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use secrecy::{SecretSlice, SecretString};
 use serde::Serialize;
-use std::time::{Duration, Instant};
 
-use amiss_controller::ProviderError;
+pub(super) use amiss_controller::OperationDeadline;
+use amiss_controller::{ForgeNegative, ProviderError};
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
@@ -22,30 +22,11 @@ use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
 
-use self::transport::{Fact, Transport};
+use self::transport::Transport;
 
 const PAGE_SIZE: usize = 100;
 const PAGE_SIZE_U8: u8 = 100;
 const MAX_PAGES: u32 = 10;
-
-#[derive(Clone, Copy)]
-pub(super) struct OperationDeadline(Instant);
-
-impl OperationDeadline {
-    pub(super) fn after(timeout: Duration) -> Result<Self, ProviderError> {
-        Instant::now()
-            .checked_add(timeout)
-            .map(Self)
-            .ok_or(ProviderError::Unavailable)
-    }
-
-    fn remaining(self) -> Result<Duration, ProviderError> {
-        let remaining = self.0.saturating_duration_since(Instant::now());
-        (!remaining.is_zero())
-            .then_some(remaining)
-            .ok_or(ProviderError::Unavailable)
-    }
-}
 
 pub(super) trait GitHubRest: Send + Sync {
     fn deadline(&self) -> Result<OperationDeadline, ProviderError>;
@@ -201,9 +182,9 @@ impl HttpRest {
                 .transport
                 .get_fact::<serde::de::IgnoredAny>(route, deadline)?
             {
-                Fact::Found(_) => Presence::Present,
-                Fact::Missing => Presence::Absent,
-                Fact::Denied => Presence::Unknown,
+                Ok(_) => Presence::Present,
+                Err(ForgeNegative::Missing) => Presence::Absent,
+                Err(ForgeNegative::Denied) => Presence::Unknown,
             },
         )
     }
@@ -362,9 +343,9 @@ impl GitHubVerification for HttpRest {
                 .transport
                 .get_fact::<serde::de::IgnoredAny>(&route, deadline)?
             {
-                Fact::Found(_) => Visibility::Readable,
-                Fact::Missing => Visibility::Missing,
-                Fact::Denied => Visibility::Denied,
+                Ok(_) => Visibility::Readable,
+                Err(ForgeNegative::Missing) => Visibility::Missing,
+                Err(ForgeNegative::Denied) => Visibility::Denied,
             },
         )
     }
@@ -398,8 +379,8 @@ impl GitHubVerification for HttpRest {
                 .transport
                 .get_fact::<Vec<RefRecord>>(&paged, deadline)?
             {
-                Fact::Found(records) => records,
-                Fact::Missing | Fact::Denied => return Ok(None),
+                Ok(records) => records,
+                Err(ForgeNegative::Missing | ForgeNegative::Denied) => return Ok(None),
             };
             if records.len() > PAGE_SIZE {
                 return Err(ProviderError::InvalidResponse);

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changes
 
+- Share forge verification facts and operation deadlines directly across provider transports, removing their parallel result enums and deadline implementations
 - Derive closed wire and scanner vocabulary parsing and projection with Strum, keep control trust typed through evaluation, and collapse adapter properties into one immutable metadata record
 - Separate repository-opening failures from post-open Git access defects and project repository unavailability only at process boundaries
 - Split the wire report subsystems and consolidate their taxonomies behind Strum spellings and immutable `FindingKind::metadata()`, replacing the public `as_str`, `fixed_phase`, `scope`, `evidence_class`, and `invariant_class` projection helpers
