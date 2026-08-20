@@ -115,7 +115,7 @@ fn the_scan_layer_reproduces_the_corpus_goldens() {
                 };
                 let entry = &ours.occurrence;
                 assert_eq!(
-                    entry.construct.as_str(),
+                    entry.construct.as_ref(),
                     text(field(row, "source_construct")),
                     "{case_id} {profile}"
                 );

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
+use std::str::FromStr;
 
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
@@ -21,6 +21,7 @@ mod fact;
 mod floor;
 mod policy;
 mod resources;
+mod taxonomy;
 /// Trusted-time statement grammar, digest, and bounded-lifetime parser.
 mod trusted_time;
 pub(crate) mod value;
@@ -38,6 +39,10 @@ pub use floor::{
 };
 pub use policy::{DocumentInclude, FindingDisposition, ScannerPolicy};
 pub use resources::{ResourceName, ResourceNameIter};
+pub use taxonomy::{
+    ContentAvailability, Disposition, EligibleFindingKind, EntryKind, GitMode, IncludeKind,
+    Profile, PromotableFindingKind, SourceConstruct, TargetKind,
+};
 pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeInput, TrustedTimeStatement};
 pub use waiver::{WaiverBundle, WaiverItem};
 
@@ -53,381 +58,10 @@ const FACT_SCHEMA: &str = "amiss/scanner-fact";
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
 pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum IncludeKind {
-    Document,
-    Tree,
-}
-
-impl IncludeKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Document => "document",
-            Self::Tree => "tree",
-        }
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "document" => Ok(Self::Document),
-            "tree" => Ok(Self::Tree),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Disposition {
-    Warn,
-    Fail,
-}
-
-impl Disposition {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Warn => "warn",
-            Self::Fail => "fail",
-        }
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "warn" => Ok(Self::Warn),
-            "fail" => Ok(Self::Fail),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Profile {
-    Observe,
-    EnforceIntroduced,
-    Enforce,
-}
-
-impl Profile {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Observe => "observe",
-            Self::EnforceIntroduced => "enforce-introduced",
-            Self::Enforce => "enforce",
-        }
-    }
-
-    #[must_use]
-    pub const fn enforces(self) -> bool {
-        matches!(self, Self::EnforceIntroduced | Self::Enforce)
-    }
-
-    #[must_use]
-    pub const fn introduced_only(self) -> bool {
-        matches!(self, Self::EnforceIntroduced)
-    }
-
-    #[must_use]
-    pub const fn policy_defaults(self) -> Self {
-        match self {
-            Self::Observe => Self::Observe,
-            Self::EnforceIntroduced | Self::Enforce => Self::Enforce,
-        }
-    }
-
-    /// # Errors
-    ///
-    /// A value outside the closed `observe`/`enforce-introduced`/`enforce`
-    /// triple.
-    pub fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "observe" => Ok(Self::Observe),
-            "enforce-introduced" => Ok(Self::EnforceIntroduced),
-            "enforce" => Ok(Self::Enforce),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    AsRefStr,
-    EnumIter,
-    EnumString,
-    IntoStaticStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum PromotableFindingKind {
-    ExplicitTargetMissing,
-    ExplicitTargetTypeMismatch,
-    InvalidReference,
-}
-
-impl PromotableFindingKind {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        self.into()
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        let raw = de::string(path, value)?;
-        raw.parse()
-            .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
-    }
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    AsRefStr,
-    EnumIter,
-    EnumString,
-    IntoStaticStr,
-)]
-#[strum(serialize_all = "kebab-case")]
-pub enum EligibleFindingKind {
-    ExplicitTargetMissing,
-    ExplicitTargetTypeMismatch,
-}
-
-impl EligibleFindingKind {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        self.into()
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        let raw = de::string(path, value)?;
-        raw.parse()
-            .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
-pub enum SourceConstruct {
-    InlineLink,
-    FullReferenceLink,
-    CollapsedReferenceLink,
-    ShortcutReferenceLink,
-    Autolink,
-    InlineImage,
-    FullReferenceImage,
-    CollapsedReferenceImage,
-    ShortcutReferenceImage,
-    AsciidocCrossReference,
-    AsciidocInternalCrossReference,
-    AsciidocLinkMacro,
-    AsciidocBlockImage,
-    AsciidocInlineImage,
-    AsciidocInclude,
-    RstInlineHyperlink,
-    RstNamedTarget,
-    RstImageDirective,
-    RstIncludeDirective,
-    RstFileOption,
-    RstDocRole,
-    RstRefRole,
-    LinkReferenceDefinition,
-    HtmlAnchor,
-    HtmlImage,
-}
-
-impl SourceConstruct {
-    /// Whether the consuming syntax node is an image form, which fixes the
-    /// authored target kind.
-    #[must_use]
-    pub const fn is_image(self) -> bool {
-        match self {
-            Self::InlineImage
-            | Self::FullReferenceImage
-            | Self::CollapsedReferenceImage
-            | Self::ShortcutReferenceImage
-            | Self::AsciidocBlockImage
-            | Self::AsciidocInlineImage
-            | Self::RstImageDirective
-            | Self::HtmlImage => true,
-            Self::InlineLink
-            | Self::FullReferenceLink
-            | Self::CollapsedReferenceLink
-            | Self::ShortcutReferenceLink
-            | Self::Autolink
-            | Self::AsciidocCrossReference
-            | Self::AsciidocInternalCrossReference
-            | Self::AsciidocLinkMacro
-            | Self::AsciidocInclude
-            | Self::RstInlineHyperlink
-            | Self::RstNamedTarget
-            | Self::RstIncludeDirective
-            | Self::RstFileOption
-            | Self::RstDocRole
-            | Self::RstRefRole
-            | Self::LinkReferenceDefinition
-            | Self::HtmlAnchor => false,
-        }
-    }
-
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::InlineLink => "markdown-inline-link",
-            Self::FullReferenceLink => "markdown-full-reference-link",
-            Self::CollapsedReferenceLink => "markdown-collapsed-reference-link",
-            Self::ShortcutReferenceLink => "markdown-shortcut-reference-link",
-            Self::Autolink => "markdown-autolink",
-            Self::InlineImage => "markdown-inline-image",
-            Self::FullReferenceImage => "markdown-full-reference-image",
-            Self::CollapsedReferenceImage => "markdown-collapsed-reference-image",
-            Self::ShortcutReferenceImage => "markdown-shortcut-reference-image",
-            Self::AsciidocCrossReference => "asciidoc-xref-macro",
-            Self::AsciidocInternalCrossReference => "asciidoc-internal-xref",
-            Self::AsciidocLinkMacro => "asciidoc-link-macro",
-            Self::AsciidocBlockImage => "asciidoc-block-image",
-            Self::AsciidocInlineImage => "asciidoc-inline-image",
-            Self::AsciidocInclude => "asciidoc-include",
-            Self::RstInlineHyperlink => "rst-inline-hyperlink",
-            Self::RstNamedTarget => "rst-named-target",
-            Self::RstImageDirective => "rst-image-directive",
-            Self::RstIncludeDirective => "rst-include-directive",
-            Self::RstFileOption => "rst-file-option",
-            Self::RstDocRole => "rst-doc-role",
-            Self::RstRefRole => "rst-ref-role",
-            Self::LinkReferenceDefinition => "markdown-link-reference-definition",
-            Self::HtmlAnchor => "html-anchor",
-            Self::HtmlImage => "html-image",
-        }
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "markdown-inline-link" => Ok(Self::InlineLink),
-            "markdown-full-reference-link" => Ok(Self::FullReferenceLink),
-            "markdown-collapsed-reference-link" => Ok(Self::CollapsedReferenceLink),
-            "markdown-shortcut-reference-link" => Ok(Self::ShortcutReferenceLink),
-            "markdown-autolink" => Ok(Self::Autolink),
-            "markdown-inline-image" => Ok(Self::InlineImage),
-            "markdown-full-reference-image" => Ok(Self::FullReferenceImage),
-            "markdown-collapsed-reference-image" => Ok(Self::CollapsedReferenceImage),
-            "markdown-shortcut-reference-image" => Ok(Self::ShortcutReferenceImage),
-            "asciidoc-xref-macro" => Ok(Self::AsciidocCrossReference),
-            "asciidoc-internal-xref" => Ok(Self::AsciidocInternalCrossReference),
-            "asciidoc-link-macro" => Ok(Self::AsciidocLinkMacro),
-            "asciidoc-block-image" => Ok(Self::AsciidocBlockImage),
-            "asciidoc-inline-image" => Ok(Self::AsciidocInlineImage),
-            "asciidoc-include" => Ok(Self::AsciidocInclude),
-            "rst-inline-hyperlink" => Ok(Self::RstInlineHyperlink),
-            "rst-named-target" => Ok(Self::RstNamedTarget),
-            "rst-image-directive" => Ok(Self::RstImageDirective),
-            "rst-include-directive" => Ok(Self::RstIncludeDirective),
-            "rst-file-option" => Ok(Self::RstFileOption),
-            "rst-doc-role" => Ok(Self::RstDocRole),
-            "rst-ref-role" => Ok(Self::RstRefRole),
-            "markdown-link-reference-definition" => Ok(Self::LinkReferenceDefinition),
-            "html-anchor" => Ok(Self::HtmlAnchor),
-            "html-image" => Ok(Self::HtmlImage),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
-pub enum TargetKind {
-    Blob,
-    Tree,
-    Either,
-}
-
-impl TargetKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Blob => "blob",
-            Self::Tree => "tree",
-            Self::Either => "either",
-        }
-    }
-
-    fn decode(path: &str, value: Value) -> Result<Self, Error> {
-        match de::string(path, value)?.as_str() {
-            "blob" => Ok(Self::Blob),
-            "tree" => Ok(Self::Tree),
-            "either" => Ok(Self::Either),
-            _ => fail(path, ErrorKind::InvalidValue),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EntryKind {
-    Blob,
-    Tree,
-    Symlink,
-    Gitlink,
-}
-
-impl EntryKind {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Blob => "blob",
-            Self::Tree => "tree",
-            Self::Symlink => "symlink",
-            Self::Gitlink => "gitlink",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
-pub enum GitMode {
-    RegularFile,
-    ExecutableFile,
-    Tree,
-    Symlink,
-    Gitlink,
-}
-
-impl GitMode {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::RegularFile => "100644",
-            Self::ExecutableFile => "100755",
-            Self::Tree => "040000",
-            Self::Symlink => "120000",
-            Self::Gitlink => "160000",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumIter)]
-pub enum ContentAvailability {
-    Available,
-    NotRead,
-    NotApplicable,
-    LfsPointerOnly,
-}
-
-impl ContentAvailability {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Available => "available",
-            Self::NotRead => "not-read",
-            Self::NotApplicable => "not-applicable",
-            Self::LfsPointerOnly => "lfs-pointer-only",
-        }
-    }
+pub(crate) fn decode_enum<T: FromStr>(path: &str, value: Value) -> Result<T, Error> {
+    let raw = de::string(path, value)?;
+    raw.parse()
+        .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
 }
 
 /// The one restricted-JSON root every control document parses through.
@@ -474,7 +108,7 @@ fn sorted_set<T>(
 fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
     let mut obj = Obj::new(path, value)?;
     let include_path = obj.required("path", decode_repo_path)?;
-    let kind = obj.required("kind", IncludeKind::decode)?;
+    let kind = obj.required("kind", decode_enum)?;
     let adapter = obj
         .take_optional("adapter")
         .map(|value| decode_adapter(&obj.field("adapter"), value))
@@ -497,8 +131,8 @@ fn decode_adapter(path: &str, value: Value) -> Result<Adapter, Error> {
 
 fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {
     let mut obj = Obj::new(path, value)?;
-    let finding_kind = obj.required("finding_kind", PromotableFindingKind::decode)?;
-    let disposition = obj.required("disposition", Disposition::decode)?;
+    let finding_kind = obj.required("finding_kind", decode_enum)?;
+    let disposition = obj.required("disposition", decode_enum)?;
     obj.finish()?;
     Ok(FindingDisposition {
         finding_kind,
@@ -648,7 +282,7 @@ fn decode_intent(path: &str, value: Value) -> Result<TargetIntent, Error> {
         de::const_str(path, value, "repository-path")
     })?;
     let target_path = obj.required("path", decode_repo_path)?;
-    let target_kind = obj.required("target_kind", TargetKind::decode)?;
+    let target_kind = obj.required("target_kind", decode_enum)?;
     let query_digest = obj.required("query_digest", decode_nullable_digest)?;
     let fragment_digest = obj.required("fragment_digest", decode_nullable_digest)?;
     obj.finish()?;
@@ -666,7 +300,7 @@ fn decode_scope(path: &str, value: Value) -> Result<FindingScope, Error> {
         de::const_str(path, value, "reference")
     })?;
     let document = obj.required("document", decode_repo_path)?;
-    let source_construct = obj.required("source_construct", SourceConstruct::decode)?;
+    let source_construct = obj.required("source_construct", decode_enum)?;
     let normalized_target_intent = obj.required("normalized_target_intent", decode_intent)?;
     let occurrence_path = obj.field("occurrence");
     let mut occurrence = Obj::new(&occurrence_path, obj.take("occurrence")?)?;
@@ -691,7 +325,7 @@ fn decode_key_input(path: &str, value: Value) -> Result<(FindingKeyInput, Digest
     obj.required("schema", |path, value| {
         de::const_str(path, value, FINDING_KEY_INPUT_SCHEMA)
     })?;
-    let finding_kind = obj.required("finding_kind", EligibleFindingKind::decode)?;
+    let finding_kind = obj.required("finding_kind", decode_enum)?;
     let scope = obj.required("scope", decode_scope)?;
     obj.finish()?;
     Ok((
@@ -830,7 +464,7 @@ fn decode_fact(path: &str, value: Value) -> Result<DecodedFact, Error> {
     obj.required("schema", |path, value| {
         de::const_str(path, value, FACT_SCHEMA)
     })?;
-    let finding_kind = obj.required("finding_kind", EligibleFindingKind::decode)?;
+    let finding_kind = obj.required("finding_kind", decode_enum)?;
     let key_path = obj.field("key_input");
     let (key_input, finding_key) = decode_key_input(&key_path, obj.take("key_input")?)?;
     let evidence_path = obj.field("evidence");

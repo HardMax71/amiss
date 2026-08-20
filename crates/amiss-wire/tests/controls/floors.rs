@@ -48,13 +48,11 @@ fn parses_the_floor_fixture() {
     let waivable: Vec<&str> = floor
         .waivable_finding_kinds()
         .iter()
-        .map(|kind| kind.as_str())
+        .map(AsRef::as_ref)
         .collect();
-    assert_eq!(
-        waivable,
-        [EligibleFindingKind::ExplicitTargetMissing.as_str()]
-    );
-    assert_eq!(waivable, ["explicit-target-missing"]);
+    let expected: &'static str = EligibleFindingKind::ExplicitTargetMissing.into();
+    assert_eq!(waivable, [expected]);
+    assert_eq!(expected, "explicit-target-missing");
     assert_ne!(
         floor.digest(),
         ScannerPolicy::parse(POLICY).unwrap().digest()

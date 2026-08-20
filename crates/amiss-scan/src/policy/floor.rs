@@ -64,7 +64,7 @@ pub fn protected_state(
     let descriptor = amiss_wire::json::Value::object(vec![
         (
             "git_mode".to_owned(),
-            amiss_wire::json::Value::string(mode.as_str().to_owned()),
+            amiss_wire::json::Value::string(mode.as_ref().to_owned()),
         ),
         (
             "path".to_owned(),

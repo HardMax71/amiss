@@ -13,13 +13,9 @@ fn the_profile_vocabulary_is_the_closed_triple() {
         ("enforce-introduced", Profile::EnforceIntroduced),
         ("enforce", Profile::Enforce),
     ] {
-        assert_eq!(
-            Profile::decode("$.minimum_profile", Value::string(name.to_owned())),
-            Ok(profile),
-            "{name}"
-        );
+        assert_eq!(name.parse(), Ok(profile), "{name}");
     }
-    assert!(Profile::decode("$.minimum_profile", Value::string("enforced".to_owned())).is_err());
+    assert!("enforced".parse::<Profile>().is_err());
 }
 
 /// Every platform in the closed table answers to its own spelling, since a
@@ -53,16 +49,14 @@ fn the_platform_vocabulary_is_the_closed_six() {
 
 #[test]
 fn git_modes_project_distinct_nonempty_spellings() {
-    let spellings: BTreeSet<&str> = GitMode::iter().map(GitMode::as_str).collect();
+    let spellings: BTreeSet<&str> = GitMode::iter().map(Into::into).collect();
     assert!(spellings.iter().all(|mode| !mode.is_empty()));
     assert_eq!(spellings.len(), GitMode::iter().len());
 }
 
 #[test]
 fn availability_states_project_distinct_nonempty_spellings() {
-    let spellings: BTreeSet<&str> = ContentAvailability::iter()
-        .map(ContentAvailability::as_str)
-        .collect();
+    let spellings: BTreeSet<&str> = ContentAvailability::iter().map(Into::into).collect();
     assert!(spellings.iter().all(|state| !state.is_empty()));
     assert_eq!(spellings.len(), ContentAvailability::iter().len());
 }

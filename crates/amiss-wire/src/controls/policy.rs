@@ -47,13 +47,13 @@ impl ScannerPolicy {
         });
         protected_inventory.sort();
         finding_dispositions
-            .sort_by(|left, right| left.finding_kind.as_str().cmp(right.finding_kind.as_str()));
+            .sort_by(|left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()));
         let include_rows: Vec<Value> = document_includes
             .into_iter()
             .map(|include| {
                 let mut rows = vec![
                     ("path".into(), Value::String(include.path.as_str().into())),
-                    ("kind".into(), Value::String(include.kind.as_str().into())),
+                    ("kind".into(), Value::String(include.kind.as_ref().into())),
                 ];
                 if let Some(adapter) = include.adapter {
                     rows.push(("adapter".into(), Value::String(adapter.adapter_id().into())));
@@ -71,11 +71,11 @@ impl ScannerPolicy {
                 Value::Object(Box::new([
                     (
                         "finding_kind".into(),
-                        Value::String(row.finding_kind.as_str().into()),
+                        Value::String(row.finding_kind.as_ref().into()),
                     ),
                     (
                         "disposition".into(),
-                        Value::String(row.disposition.as_str().into()),
+                        Value::String(row.disposition.as_ref().into()),
                     ),
                 ]))
             })
@@ -146,7 +146,7 @@ impl ScannerPolicy {
         let finding_dispositions =
             decode_items(&dispositions_path, raw, 3, decode_disposition_rule)?;
         sorted_set(&dispositions_path, &finding_dispositions, |a, b| {
-            a.finding_kind.as_str().cmp(b.finding_kind.as_str())
+            a.finding_kind.as_ref().cmp(b.finding_kind.as_ref())
         })?;
 
         obj.finish()?;

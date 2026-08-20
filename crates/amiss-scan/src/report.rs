@@ -43,7 +43,7 @@ pub fn synthetic_candidate(
             object(vec![
                 ("path", path.to_value()),
                 ("entry_kind", string(entry_kind)),
-                ("git_mode", string(mode.as_str())),
+                ("git_mode", string(mode.as_ref())),
                 ("object_format", string(base_object_format)),
                 ("object_oid", string(oid)),
                 ("skip_worktree", Value::Bool(*skip)),
@@ -218,7 +218,7 @@ fn occurrence_value(observation: &Observation) -> Value {
         ("observation_id_input", input),
         ("adapter_id", string(observation.adapter.adapter_id())),
         ("document", observation.document.to_value()),
-        ("source_construct", string(observation.construct.as_str())),
+        ("source_construct", string(observation.construct.as_ref())),
         (
             "source_span",
             source_span_value(observation.span, observation.display),
@@ -730,7 +730,7 @@ fn controls_value(setup: &Setup) -> Value {
     }
     let (descriptor, descriptor_digest) = sandbox_descriptor();
     object(vec![
-        ("profile", string(setup.profile.as_str())),
+        ("profile", string(setup.profile.as_ref())),
         (
             "base_repository_policy_digest",
             setup.policy.base_digest.map_or(Value::Null, digest_value),

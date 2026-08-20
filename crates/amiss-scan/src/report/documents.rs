@@ -85,14 +85,14 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
     object(vec![
         ("entry_kind", string(entry_kind)),
         ("entry_oid", string(record.oid.as_str())),
-        ("git_mode", string(record.mode.as_str())),
+        ("git_mode", string(record.mode.as_ref())),
         (
             "raw_digest",
             record.raw_digest.map_or(Value::Null, digest_value),
         ),
         ("status", string(status)),
         ("unsupported_reason", nullable(reason)),
-        ("content_availability", string(availability.as_str())),
+        ("content_availability", string(availability.as_ref())),
         (
             "adapter_id",
             adapter.map_or(Value::Null, |value: Adapter| string(value.adapter_id())),

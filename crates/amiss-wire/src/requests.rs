@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 
 use crate::controls::value::{object, positive_safe_integer, repository, text};
 use crate::controls::{
-    Profile, decode_provider_id, decode_provider_run_id, decode_repository, root,
+    Profile, decode_enum, decode_provider_id, decode_provider_run_id, decode_repository, root,
 };
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
@@ -73,7 +73,7 @@ impl EvaluationRequest {
         obj.required("schema", |path, value| {
             de::const_str(path, value, EVALUATION_REQUEST_SCHEMA)
         })?;
-        let profile = obj.required("profile", Profile::decode)?;
+        let profile = obj.required("profile", decode_enum)?;
         let mode_path = obj.field("mode");
         let mode = match de::string(&mode_path, obj.take("mode")?)?.as_str() {
             "commit-pair" => RequestMode::CommitPair,
@@ -546,7 +546,7 @@ fn optional_text(value: Option<&str>) -> Value {
 fn evaluation_value(request: &EvaluationRequest) -> Value {
     object(vec![
         ("schema", text(EVALUATION_REQUEST_SCHEMA)),
-        ("profile", text(request.profile.as_str())),
+        ("profile", text(request.profile.as_ref())),
         ("mode", text(request.mode.as_str())),
         ("object_format", text(request.object_format.as_str())),
         (
