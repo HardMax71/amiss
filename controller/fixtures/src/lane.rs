@@ -5,13 +5,19 @@ use std::sync::atomic::Ordering;
 
 use amiss_controller::{Acquisition, AcquisitionTarget, OidPair, RunRequest};
 use amiss_fixtures::{CommitPair, commit_pair};
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput};
+use amiss_wire::digest::Digest;
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 /// The checked repository and the action repository a provider lane acquires,
 /// each with a base and a candidate commit.
 pub struct Repositories {
     repository: CommitPair,
     action: CommitPair,
+    pub commits: OidPair,
+    pub trees: OidPair,
+    pub action_commit: Oid,
+    pub action_tree: Oid,
 }
 
 impl Repositories {
@@ -19,47 +25,29 @@ impl Repositories {
     ///
     /// Any git or filesystem failure, as plain I/O errors.
     pub fn new() -> io::Result<Self> {
+        let repository = commit_pair(&[("README.md", "base\n")], &[("README.md", "candidate\n")])?;
+        let action = commit_pair(
+            &[("release/engine", "first\n")],
+            &[("release/engine", "second\n")],
+        )?;
+        let commits = OidPair {
+            base: oid(&repository.base)?,
+            candidate: oid(&repository.candidate)?,
+        };
+        let trees = OidPair {
+            base: oid(&repository.base_tree)?,
+            candidate: oid(&repository.candidate_tree)?,
+        };
+        let action_commit = oid(&action.candidate)?;
+        let action_tree = oid(&action.candidate_tree)?;
         Ok(Self {
-            repository: commit_pair(&[("README.md", "base\n")], &[("README.md", "candidate\n")])?,
-            action: commit_pair(
-                &[("release/engine", "first\n")],
-                &[("release/engine", "second\n")],
-            )?,
+            repository,
+            action,
+            commits,
+            trees,
+            action_commit,
+            action_tree,
         })
-    }
-
-    /// # Errors
-    ///
-    /// A fixture commit that is not a valid object name.
-    pub fn commits(&self) -> io::Result<OidPair> {
-        Ok(OidPair {
-            base: oid(&self.repository.base)?,
-            candidate: oid(&self.repository.candidate)?,
-        })
-    }
-
-    /// # Errors
-    ///
-    /// A tree that is not a valid object name.
-    pub fn trees(&self) -> io::Result<OidPair> {
-        Ok(OidPair {
-            base: oid(&self.repository.base_tree)?,
-            candidate: oid(&self.repository.candidate_tree)?,
-        })
-    }
-
-    /// # Errors
-    ///
-    /// An action commit that is not a valid object name.
-    pub fn action_commit(&self) -> io::Result<Oid> {
-        oid(&self.action.candidate)
-    }
-
-    /// # Errors
-    ///
-    /// An action tree that is not a valid object name.
-    pub fn action_tree(&self) -> io::Result<Oid> {
-        oid(&self.action.candidate_tree)
     }
 
     pub fn acquisition(&self) -> CopyAcquisition {
@@ -68,6 +56,35 @@ impl Repositories {
             action: self.action.root().to_path_buf(),
         }
     }
+}
+
+/// Builds the execution constraint shared by the provider lane fixtures.
+///
+/// # Errors
+///
+/// The published template or a generated fixture identity is invalid.
+pub fn execution_constraint(
+    repositories: &Repositories,
+    action_repository: RepositoryIdentity,
+    required_status_name: &str,
+    bootstrap_digest: Digest,
+) -> io::Result<ExecutionConstraintDescriptor> {
+    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+        "../../../spec/examples/scanner-execution-constraint.json"
+    ))
+    .map_err(io::Error::other)?;
+    ExecutionConstraintDescriptor::new(ExecutionConstraintInput {
+        action_repository,
+        action_object_format: ObjectFormat::Sha1,
+        action_commit_oid: repositories.action_commit.clone(),
+        action_tree_oid: repositories.action_tree.clone(),
+        manifest_path: template.manifest_path().clone(),
+        release_manifest_digest: template.release_manifest_digest(),
+        selected_platform: template.selected_platform(),
+        required_status_name: required_status_name.to_owned(),
+        bootstrap_digest,
+    })
+    .map_err(io::Error::other)
 }
 
 /// Places both fixture trees by copy, so a lane runs without a network.

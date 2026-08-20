@@ -14,7 +14,7 @@ use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
     AdmissionRejection, EvaluationConfig, Operations, check_lane, evaluation_router_with_clock,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use axum::Router;
@@ -26,7 +26,7 @@ use tower::ServiceExt as _;
 
 use super::provider::{FakeGitLab, HOST, claims, policy, provider, refresh, sign, source};
 use amiss_controller_fixtures::clock::TestClock;
-use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
 
 const ENDPOINT: &str = "/gitlab/policy/evaluate";
 
@@ -75,14 +75,20 @@ impl Harness {
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-gitlab-service-bootstrap-fixture"));
         let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
-        let plan = Arc::new(
-            check_plan(
-                Profile::Enforce,
-                PolicyControls::default(),
-                execution(&repositories, case.status(), bootstrap_digest),
+        let execution = execution_constraint(
+            &repositories,
+            RepositoryIdentity::new(
+                HOST.to_owned(),
+                "security".to_owned(),
+                "amiss-action".to_owned(),
             )
             .unwrap(),
-        );
+            case.status(),
+            bootstrap_digest,
+        )
+        .unwrap();
+        let plan =
+            Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap());
         let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
         let ingress = IngressPolicy::new(
             IngressLimits::new(1_024, 32, 32 * 1_024).unwrap(),
@@ -152,10 +158,7 @@ impl Harness {
             move |request| evaluate(&lane, request),
         )
         .unwrap();
-        let token = sign(&claims(
-            &repositories.commits().unwrap().candidate,
-            test_clock.now(),
-        ));
+        let token = sign(&claims(&repositories.commits.candidate, test_clock.now()));
         Self {
             clock: test_clock,
             _state: state,
@@ -189,10 +192,7 @@ impl Harness {
     }
 
     pub(super) fn claims(&self) -> Value {
-        claims(
-            &self.repositories.commits().unwrap().candidate,
-            self.clock.now(),
-        )
+        claims(&self.repositories.commits.candidate, self.clock.now())
     }
 
     pub(super) fn cleanup_leftover(&self) -> PathBuf {
@@ -326,30 +326,6 @@ impl LaneCase {
             | Self::TamperedBootstrap => [first, second, third],
         }
     }
-}
-
-fn execution(
-    repositories: &Repositories,
-    status: &str,
-    bootstrap_digest: amiss_wire::digest::Digest,
-) -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../../../spec/examples/scanner-execution-constraint.json"
-    ))
-    .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_repository = RepositoryIdentity::new(
-        HOST.to_owned(),
-        "security".to_owned(),
-        "amiss-action".to_owned(),
-    )
-    .unwrap();
-    input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = repositories.action_commit().unwrap();
-    input.action_tree_oid = repositories.action_tree().unwrap();
-    status.clone_into(&mut input.required_status_name);
-    input.bootstrap_digest = bootstrap_digest;
-    ExecutionConstraintDescriptor::new(input).unwrap()
 }
 
 fn executable_for(case: LaneCase, state: &TempDir, executable: &std::path::Path) -> PathBuf {

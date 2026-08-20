@@ -16,7 +16,7 @@ use amiss_controller_service::{
     DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits, IncomingDelivery,
     IncomingHeader, Operations, WorkOutcome, acquiring_worker, repository_admission,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
@@ -24,7 +24,7 @@ use tempfile::TempDir;
 use super::provider::{
     FakeGitea, REPOSITORY_ID, SignedEvent, last_conclusion, provider, reviewer, snapshot,
 };
-use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
 
 const SECRET: &[u8] = b"gitea-family-provider-lane-secret-2026";
 const ROUTE_ID: &str = "gitea-family-provider-lane";
@@ -87,14 +87,20 @@ impl Harness {
         let repositories = Repositories::new().unwrap();
         let executable = PathBuf::from(env!("CARGO_BIN_EXE_amiss-gitea-service-bootstrap-fixture"));
         let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
-        let plan = Arc::new(
-            check_plan(
-                Profile::Enforce,
-                PolicyControls::default(),
-                execution(&repositories, bootstrap_digest),
+        let execution = execution_constraint(
+            &repositories,
+            RepositoryIdentity::new(
+                "forge.example".to_owned(),
+                "hardmax71".to_owned(),
+                "amiss".to_owned(),
             )
             .unwrap(),
-        );
+            "runner-pass",
+            bootstrap_digest,
+        )
+        .unwrap();
+        let plan =
+            Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap());
         let replay = ReplayWindow::new(Duration::from_mins(5), queue_age).unwrap();
         let ingress = IngressPolicy::new(
             IngressLimits::new(1_000_000, 32, 8_192).unwrap(),
@@ -199,11 +205,7 @@ impl Harness {
     }
 
     pub(super) fn target_rejection(&self, target: &str) -> Option<AdmissionRejection> {
-        let event = SignedEvent::for_target(
-            &self.repositories.commits().unwrap().candidate,
-            target,
-            SECRET,
-        );
+        let event = SignedEvent::for_target(&self.repositories.commits.candidate, target, SECRET);
         let headers: Vec<DeliveryHeader> = self
             .signature_headers
             .iter()
@@ -246,12 +248,12 @@ fn provider_setup(
     let route = route(&provider);
     let source =
         Arc::new(GiteaPullRequestSource::new(provider.clone(), reviewer(), webhook()).unwrap());
-    let event = SignedEvent::new(&repositories.commits().unwrap().candidate, SECRET);
+    let event = SignedEvent::new(&repositories.commits.candidate, SECRET);
     let delivery = event.delivery(&route, ingress, &source, settings.signature_headers);
     let mut current = snapshot(
         &delivery,
-        repositories.commits().unwrap(),
-        repositories.trees().unwrap(),
+        repositories.commits.clone(),
+        repositories.trees.clone(),
     );
     if settings.wrong_tree {
         current.run.trees.candidate = oid('f');
@@ -298,29 +300,6 @@ fn provider_setup(
         adapter,
         plans,
     }
-}
-
-fn execution(
-    repositories: &Repositories,
-    bootstrap_digest: amiss_wire::digest::Digest,
-) -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../../../spec/examples/scanner-execution-constraint.json"
-    ))
-    .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_repository = RepositoryIdentity::new(
-        "forge.example".to_owned(),
-        "hardmax71".to_owned(),
-        "amiss".to_owned(),
-    )
-    .unwrap();
-    input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = repositories.action_commit().unwrap();
-    input.action_tree_oid = repositories.action_tree().unwrap();
-    "runner-pass".clone_into(&mut input.required_status_name);
-    input.bootstrap_digest = bootstrap_digest;
-    ExecutionConstraintDescriptor::new(input).unwrap()
 }
 
 fn route(provider: &amiss_controller::ProviderIdentity) -> DeliveryRoute {
