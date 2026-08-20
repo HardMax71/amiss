@@ -7612,7 +7612,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-aws-lc-rs 1.17.3
+aws-lc-rs 1.18.0
 License: ISC AND (Apache-2.0 OR ISC)
 Source: https://github.com/aws/aws-lc-rs
 
@@ -7822,7 +7822,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ================================================================================
-aws-lc-sys 0.43.0
+aws-lc-sys 0.44.0
 License: ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)
 Source: https://github.com/aws/aws-lc-rs
 
@@ -27183,7 +27183,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-thiserror 2.0.19
+thiserror 2.0.20
 License: MIT OR Apache-2.0
 Source: https://github.com/dtolnay/thiserror
 
@@ -27393,7 +27393,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-thiserror-impl 2.0.19
+thiserror-impl 2.0.20
 License: MIT OR Apache-2.0
 Source: https://github.com/dtolnay/thiserror
 
