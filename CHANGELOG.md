@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changes
 
+- Expose validated provider-lane object identities directly and build their execution constraint once in shared fixtures
 - Bind queued provider configuration directly into one shared repository-lane setup, removing parallel runtime assembly and automatic error conversions
 - Share forge verification facts and operation deadlines directly across provider transports, removing their parallel result enums and deadline implementations
 - Derive closed wire and scanner vocabulary parsing and projection with Strum, keep control trust typed through evaluation, and collapse adapter properties into one immutable metadata record

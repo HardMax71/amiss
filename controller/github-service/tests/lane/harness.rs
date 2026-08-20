@@ -16,13 +16,13 @@ use amiss_controller_service::{
     DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits, IncomingDelivery,
     IncomingHeader, Operations, WorkOutcome, acquiring_worker, repository_admission,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
 use super::provider::{FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
-use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
 
 const SECRET: &[u8] = b"provider-lane-webhook-secret-2026";
 const ROUTE_ID: &str = "github-provider-lane";
@@ -68,14 +68,15 @@ impl Harness {
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-github-service-bootstrap-fixture"));
         let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
-        let plan = Arc::new(
-            check_plan(
-                Profile::Enforce,
-                PolicyControls::default(),
-                execution(&repositories, case.status(), bootstrap_digest),
-            )
-            .unwrap(),
-        );
+        let execution = execution_constraint(
+            &repositories,
+            RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap(),
+            case.status(),
+            bootstrap_digest,
+        )
+        .unwrap();
+        let plan =
+            Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap());
         let replay = ReplayWindow::new(Duration::from_mins(5), queue_age).unwrap();
         let ingress = IngressPolicy::new(
             IngressLimits::new(1_000_000, 32, 8_192).unwrap(),
@@ -171,11 +172,7 @@ impl Harness {
     }
 
     pub(super) fn target_rejection(&self, target: &str) -> Option<AdmissionRejection> {
-        let event = SignedEvent::for_target(
-            &self.repositories.commits().unwrap().candidate,
-            target,
-            SECRET,
-        );
+        let event = SignedEvent::for_target(&self.repositories.commits.candidate, target, SECRET);
         let headers = [DeliveryHeader {
             name: "x-hub-signature-256".to_owned(),
             value: event.signature,
@@ -217,13 +214,13 @@ fn provider_setup(
     let provider = provider();
     let route = route(&provider);
     let source = Arc::new(GitHubPullRequestSource::new(provider.clone(), webhook()));
-    let event = SignedEvent::new(&repositories.commits().unwrap().candidate, SECRET);
+    let event = SignedEvent::new(&repositories.commits.candidate, SECRET);
     let delivery = event.delivery(&route, ingress, &source);
     let mut current = snapshot(
         &delivery,
         case.state(),
-        repositories.commits().unwrap(),
-        repositories.trees().unwrap(),
+        repositories.commits.clone(),
+        repositories.trees.clone(),
     );
     if matches!(case, LaneCase::WrongIdentity) {
         current.run.change.repository = RepositoryIdentity::new(
@@ -300,26 +297,6 @@ impl LaneCase {
             Duration::from_secs(10)
         }
     }
-}
-
-fn execution(
-    repositories: &Repositories,
-    status: &str,
-    bootstrap_digest: amiss_wire::digest::Digest,
-) -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
-        "../../../../spec/examples/scanner-execution-constraint.json"
-    ))
-    .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_repository =
-        RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap();
-    input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = repositories.action_commit().unwrap();
-    input.action_tree_oid = repositories.action_tree().unwrap();
-    status.clone_into(&mut input.required_status_name);
-    input.bootstrap_digest = bootstrap_digest;
-    ExecutionConstraintDescriptor::new(input).unwrap()
 }
 
 fn provider() -> ProviderIdentity {

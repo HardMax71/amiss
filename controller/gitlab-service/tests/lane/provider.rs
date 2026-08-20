@@ -152,8 +152,8 @@ pub(super) fn sign(claims: &Value) -> String {
 }
 
 pub(super) fn refresh(repositories: &Repositories) -> GitLabRefresh {
-    let commits = repositories.commits().unwrap();
-    let trees = repositories.trees().unwrap();
+    let commits = &repositories.commits;
+    let trees = &repositories.trees;
     let gate = commits.candidate.as_str().to_owned();
     let base = commits.base.as_str().to_owned();
     let source = oid('c').as_str().to_owned();
