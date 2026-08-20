@@ -521,7 +521,7 @@ fn dialect_default_case(case: &Value, id: &str) {
             panic!("{id}: expected a refusal");
         };
         assert_eq!(
-            codes.iter().map(|code| code.as_str()).collect::<Vec<_>>(),
+            codes.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
             vec![
                 case.pointer("/expected/code")
                     .and_then(Value::as_str)

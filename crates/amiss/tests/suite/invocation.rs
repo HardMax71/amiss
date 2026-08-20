@@ -105,6 +105,7 @@ fn rejects_structural_defects_as_invalid_invocation() {
     let cases: Vec<Vec<String>> = vec![
         vec![],
         argv_strings(&["scan"]),
+        replace_value(&valid_pair(), "check", "Check"),
         argv_strings(&["check", "extra"]),
         with(&valid_pair(), &["--unknown"]),
         with(&valid_pair(), &["--"]),
@@ -327,6 +328,7 @@ fn output_selection_follows_the_format_law() {
 
     for malformed in [
         with(&valid_pair(), &["--format", "yaml"]),
+        with(&valid_pair(), &["--format", "Json"]),
         with(&valid_pair(), &["--format"]),
         with(&valid_pair(), &["--format", "json", "--format", "json"]),
         with(&valid_pair(), &["--format", "--explain-scope"]),

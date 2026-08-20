@@ -104,8 +104,8 @@ fn main() -> ExitCode {
             codes,
         } => {
             for code in &codes {
-                eprintln!("amiss: {}", code.as_str());
-                eprintln!("  {}", code.contract());
+                eprintln!("amiss: {}", code.as_ref());
+                eprintln!("  {}", code.meaning());
             }
             eprintln!("{}", invocation::GRAMMAR);
             failure
@@ -139,9 +139,7 @@ fn machine_refusal(codes: &BTreeSet<Code>) -> Result<amiss_wire::json::Value, An
     let Some(engine) = engine_provenance() else {
         return Err(AnalysisErrorCode::InternalError);
     };
-    let codes: BTreeSet<AnalysisErrorCode> =
-        codes.iter().map(|code| analysis_code(*code)).collect();
-    report::invocation_failure_envelope(&engine, &codes)
+    report::invocation_failure_envelope(&engine, codes)
         .ok_or(AnalysisErrorCode::ReportConstructionFailed)
 }
 
@@ -701,12 +699,4 @@ fn engine_provenance() -> Option<EngineProvenance> {
         version: env!("CARGO_PKG_VERSION").to_owned(),
         digest: hb(report::ENGINE_DOMAIN, &bytes),
     })
-}
-
-fn analysis_code(code: Code) -> AnalysisErrorCode {
-    match code {
-        Code::InvalidEvent => AnalysisErrorCode::InvalidEvent,
-        Code::InvalidInvocation => AnalysisErrorCode::InvalidInvocation,
-        Code::InvalidProfile => AnalysisErrorCode::InvalidProfile,
-    }
 }
