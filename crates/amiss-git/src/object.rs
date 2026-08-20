@@ -29,16 +29,6 @@ impl ObjectKind {
         }
     }
 
-    pub(crate) const fn from_pack_type(code: u8) -> Option<Self> {
-        match code {
-            1 => Some(Self::Commit),
-            2 => Some(Self::Tree),
-            3 => Some(Self::Blob),
-            4 => Some(Self::Tag),
-            _ => None,
-        }
-    }
-
     fn from_token(token: &[u8]) -> Option<Self> {
         match token {
             b"blob" => Some(Self::Blob),
