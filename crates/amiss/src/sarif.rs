@@ -17,13 +17,13 @@ pub(crate) fn log(envelope: &Value) -> Value {
 
     let present_names: BTreeSet<&str> = findings.clone().map(|row| row.text("kind")).collect();
     let present: Vec<FindingKind> = FindingKind::all()
-        .filter(|kind| present_names.contains(kind.as_str()))
+        .filter(|kind| present_names.contains(kind.as_ref()))
         .collect();
     let rules: Vec<Value> = present
         .iter()
         .map(|kind| {
             object(vec![
-                ("id", string(kind.as_str())),
+                ("id", string(kind.as_ref())),
                 (
                     "shortDescription",
                     object(vec![("text", string(kind.meaning()))]),
@@ -99,7 +99,7 @@ fn result_value(row: View<'_>, present: &[FindingKind]) -> Value {
     ];
     if let Some(index) = present
         .iter()
-        .position(|candidate| candidate.as_str() == kind)
+        .position(|candidate| candidate.as_ref() == kind)
         .and_then(|position| i64::try_from(position).ok())
     {
         members.push(("ruleIndex", Value::Integer(index)));

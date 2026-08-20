@@ -39,11 +39,11 @@ fn profile_table() -> String {
         write!(
             table,
             "\n| `{}` | `{}` | `{}` |",
-            kind.as_str(),
+            kind.as_ref(),
             kind.built_in_disposition(amiss_wire::controls::Profile::Observe)
-                .as_str(),
+                .as_ref(),
             kind.built_in_disposition(amiss_wire::controls::Profile::Enforce)
-                .as_str(),
+                .as_ref(),
         )
         .expect("writing to a String is infallible");
     }
@@ -168,7 +168,9 @@ fn documented_finding_meanings_are_generated_from_the_engine_text() {
     let document = fs::read_to_string(&path).expect("profiles documentation is readable");
     assert_eq!(
         documented_contract(&document, "finding-meanings"),
-        meanings_list(FindingKind::all().map(|kind| (kind.as_str(), kind.meaning()))),
+        meanings_list(
+            FindingKind::all().map(|kind| (Into::<&'static str>::into(kind), kind.meaning())),
+        ),
         "{} drifted from FindingKind::meaning",
         path.display(),
     );
@@ -180,7 +182,9 @@ fn documented_error_meanings_are_generated_from_the_engine_text() {
     let document = fs::read_to_string(&path).expect("limits documentation is readable");
     assert_eq!(
         documented_contract(&document, "error-meanings"),
-        meanings_list(AnalysisErrorCode::all().map(|code| (code.as_str(), code.meaning()))),
+        meanings_list(
+            AnalysisErrorCode::all().map(|code| (Into::<&'static str>::into(code), code.meaning())),
+        ),
         "{} drifted from AnalysisErrorCode::meaning",
         path.display(),
     );
@@ -245,8 +249,10 @@ fn the_status_page_names_every_grammar_form() {
 #[test]
 fn meaning_sentences_stay_inside_the_wire_bounds() {
     let sentences = FindingKind::all()
-        .map(|kind| (kind.as_str(), kind.meaning()))
-        .chain(AnalysisErrorCode::all().map(|code| (code.as_str(), code.meaning())));
+        .map(|kind| (Into::<&'static str>::into(kind), kind.meaning()))
+        .chain(
+            AnalysisErrorCode::all().map(|code| (Into::<&'static str>::into(code), code.meaning())),
+        );
     for (name, sentence) in sentences {
         assert!(
             (1..=400).contains(&sentence.len()),
@@ -352,10 +358,10 @@ fn documented_limits_are_generated_from_runtime_constants() {
 fn documented_enum_sources_match_the_active_report_schema() {
     let schema = report_schema();
     let findings: Vec<String> = FindingKind::all()
-        .map(|kind| kind.as_str().to_owned())
+        .map(|kind| kind.as_ref().to_owned())
         .collect();
     let codes: Vec<String> = AnalysisErrorCode::all()
-        .map(|code| code.as_str().to_owned())
+        .map(|code| code.as_ref().to_owned())
         .collect();
     let resources: Vec<String> = ResourceName::all()
         .map(|resource| resource.as_str().to_owned())

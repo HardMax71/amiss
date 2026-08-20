@@ -311,7 +311,7 @@ fn finding_value(
     object(vec![
         ("key_input", finding.key().to_value()),
         ("finding_key", digest_value(finding.key().digest())),
-        ("kind", string(kind.as_str())),
+        ("kind", string(kind.as_ref())),
         ("description", string(kind.meaning())),
         ("fix", finding.fix().map_or(Value::Null, fix_value)),
         ("coverage_requirement", string(coverage)),
@@ -354,11 +354,11 @@ fn finding_value(
         ),
         (
             "configured_disposition",
-            string(finding.configured_disposition.as_str()),
+            string(finding.configured_disposition.as_ref()),
         ),
         (
             "effective_disposition",
-            string(finding.effective_disposition.as_str()),
+            string(finding.effective_disposition.as_ref()),
         ),
         ("policy_trace", Value::array(trace)),
         (
@@ -400,14 +400,14 @@ fn feedback_value(projected: feedback::Feedback) -> Value {
                     Value::array(
                         item.finding_kinds
                             .into_iter()
-                            .map(|kind| string(kind.as_str()))
+                            .map(|kind| string(kind.as_ref()))
                             .collect(),
                     ),
                 ),
                 ("location_count", integer(item.location_count)),
                 (
                     "effective_disposition",
-                    string(item.effective_disposition.as_str()),
+                    string(item.effective_disposition.as_ref()),
                 ),
                 ("annotation", annotation),
             ])
@@ -489,8 +489,8 @@ fn trace_value(finding: &Finding) -> Vec<Value> {
             object(vec![
                 ("source", string(step.source)),
                 ("rule_id", string(&step.rule_id)),
-                ("before", string(step.before.as_str())),
-                ("after", string(step.after.as_str())),
+                ("before", string(step.before.as_ref())),
+                ("after", string(step.after.as_ref())),
             ])
         })
         .collect()

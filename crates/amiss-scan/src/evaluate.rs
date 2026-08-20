@@ -176,7 +176,7 @@ impl FindingFact {
             ("schema".to_owned(), Value::string(FACT_SCHEMA.to_owned())),
             (
                 "finding_kind".to_owned(),
-                Value::string(key.kind().as_str().to_owned()),
+                Value::string(key.kind().as_ref().to_owned()),
             ),
             ("key_input".to_owned(), key.to_value()),
             ("evidence".to_owned(), evidence),
@@ -595,7 +595,7 @@ pub fn evaluate_with_policy(
                     source: "built-in",
                     rule_id: format!(
                         "scanner-policy-defaults/{}/enforce-introduced",
-                        finding.kind().as_str()
+                        finding.kind().as_ref()
                     ),
                     before: Disposition::Fail,
                     after: Disposition::Warn,
@@ -779,7 +779,7 @@ fn apply_raise(
     if *target > current {
         finding.steps.push(PolicyStep {
             source,
-            rule_id: format!("{prefix}/{}", finding.kind().as_str()),
+            rule_id: format!("{prefix}/{}", finding.kind().as_ref()),
             before: current,
             after: *target,
         });

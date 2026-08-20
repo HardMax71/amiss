@@ -247,18 +247,17 @@ fn the_kind_projections_are_populated_and_distinct() {
         IntentKind::Label,
         IntentKind::Unsupported,
     ];
-    let intent_names: BTreeSet<&str> = intents.iter().map(|kind| kind.as_str()).collect();
+    let intent_names: BTreeSet<&str> = intents.iter().map(AsRef::as_ref).collect();
     assert_eq!(intent_names.len(), intents.len());
     assert!(intent_names.iter().all(|text| !text.is_empty()));
 
     let dispositions = [Disposition::Record, Disposition::Warn, Disposition::Fail];
-    let disposition_names: BTreeSet<&str> =
-        dispositions.iter().map(|value| value.as_str()).collect();
+    let disposition_names: BTreeSet<&str> = dispositions.iter().map(AsRef::as_ref).collect();
     assert_eq!(disposition_names.len(), dispositions.len());
     assert!(disposition_names.iter().all(|text| !text.is_empty()));
 
     let kinds: Vec<FindingKind> = FindingKind::all().collect();
-    let kind_names: BTreeSet<&str> = kinds.iter().map(|kind| kind.as_str()).collect();
+    let kind_names: BTreeSet<&str> = kinds.iter().map(AsRef::as_ref).collect();
     assert_eq!(kind_names.len(), kinds.len());
     assert!(kind_names.iter().all(|text| !text.is_empty()));
     let evidence: BTreeSet<&str> = kinds.iter().map(|kind| kind.evidence_class()).collect();

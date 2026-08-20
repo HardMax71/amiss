@@ -82,7 +82,7 @@ fn the_scan_layer_reproduces_the_corpus_goldens() {
                 };
                 assert_eq!(
                     text(Some(fault)),
-                    defect.code().as_str(),
+                    defect.code().as_ref(),
                     "{case_id} {profile}"
                 );
                 continue;
