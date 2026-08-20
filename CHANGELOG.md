@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/HardMax71/amiss/compare/v0.23.0...v0.24.0) - 2026-08-20
+
+### Changes
+
+- Derive closed vocabulary spellings
+- Narrow repository open errors
+- Split human projections
+- Streamline invocation parsing
+- Derive wire control taxonomies
+- Split wire report subsystems
+- Compact immutable JSON values
+- Borrow CLI report projections
+- Use Result-based external command inputs
+- Split pack entry decoder
+- Split pack index decoder
+- Reuse loose object inflater state
+- Compact Git pack index lookups
+- Reject duplicate Git tree names
+- Split report analysis projection
+- Split report identity projection
+- Split anchor identity engine
+- Split correlation engine
+- Split scanner evaluation subsystems
+- Split scanner policy subsystems
+- Consolidate report taxonomies
+- Split resolution subsystems
+- Split scan pipeline orchestration
+- Split evaluation by responsibility
+- Derive report enum spellings
+- Split report construction by responsibility
+- Consume comparisons during report construction
+- Reduce scan allocation churn
+- Keep rendered observation identities coherent
+- Stream observation identity hashes
+- Resolve native paths in one buffer
+- Avoid transient resolver allocations
+- Count report payload once
+- Correct case-neighbor measurement scope
+- Make case-neighbor lookup allocation-free
+- Aggregate report summaries in one pass
+- Remove unreachable correlation duplicate check
+- Index correlation component roots
+- Split Markdown extraction subsystems
+- Split evaluation request engine
+- Split external plan engine
+- Split external assessment engine
+- Split control document models
+- Encode digest wire form once
+
 ### Changes
 
 - Expose validated provider-lane object identities directly and build their execution constraint once in shared fixtures
