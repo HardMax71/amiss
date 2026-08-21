@@ -88,7 +88,11 @@ fn prepare(config: ServiceConfig) -> Result<QueuedService<WorkerContext>, Servic
         config.worker,
         config.repository_id,
         Arc::new(SystemClock),
-        move |checked| admission_source.authenticate_for_target(checked, &target),
+        move |checked| {
+            admission_source
+                .authenticate_for_target(checked, &target)
+                .map(Some)
+        },
     )
     .map_err(ServiceError::Setup)?;
     Ok(QueuedService {

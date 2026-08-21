@@ -290,7 +290,7 @@ impl DeliveryAdmission for BlockingAdmission {
     fn admit(
         &self,
         _request: AdmissionRequest<'_>,
-    ) -> Result<AdmittedDelivery, AdmissionRejection> {
+    ) -> Result<Option<AdmittedDelivery>, AdmissionRejection> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if let Some(started) = self
             .started
@@ -309,10 +309,10 @@ impl DeliveryAdmission for BlockingAdmission {
                 .wait(released)
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
         }
-        Ok(AdmittedDelivery {
+        Ok(Some(AdmittedDelivery {
             route: "github-main".to_owned(),
             source_id: "delivery-1".to_owned(),
-        })
+        }))
     }
 }
 

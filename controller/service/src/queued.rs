@@ -66,7 +66,7 @@ pub fn setup_repository_lane<F>(
     authenticate: F,
 ) -> Result<QueuedService<AcquiringWorkerContext<FileLedger>>, QueuedLaneSetupError>
 where
-    F: for<'a> Fn(IngressCheck<'a>) -> Result<VerifiedDelivery, ProviderError>
+    F: for<'a> Fn(IngressCheck<'a>) -> Result<Option<VerifiedDelivery>, ProviderError>
         + Send
         + Sync
         + 'static,

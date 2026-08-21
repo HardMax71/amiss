@@ -55,7 +55,10 @@ impl Admission {
 }
 
 impl DeliveryAdmission for Admission {
-    fn admit(&self, request: AdmissionRequest<'_>) -> Result<AdmittedDelivery, AdmissionRejection> {
+    fn admit(
+        &self,
+        request: AdmissionRequest<'_>,
+    ) -> Result<Option<AdmittedDelivery>, AdmissionRejection> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         if !self.accept.load(Ordering::Acquire)
             || request.body != BODY
@@ -73,10 +76,10 @@ impl DeliveryAdmission for Admission {
             .and_then(|header| std::str::from_utf8(&header.value).ok())
             .filter(|value| !value.is_empty())
             .ok_or(AdmissionRejection::Malformed)?;
-        Ok(AdmittedDelivery {
+        Ok(Some(AdmittedDelivery {
             route: ROUTE_ID.to_owned(),
             source_id: source_id.to_owned(),
-        })
+        }))
     }
 }
 
@@ -342,6 +345,7 @@ pub(crate) fn enqueue_stored(
             headers: &headers,
             body: BODY,
         })
+        .unwrap()
         .unwrap();
     let incoming_headers = [
         IncomingHeader {

@@ -77,7 +77,8 @@ fn dispatch(
         headers,
         body,
     }) {
-        Ok(admitted) => admitted,
+        Ok(Some(admitted)) => admitted,
+        Ok(None) => return DispatchOutcome::Accepted,
         Err(rejection) => return DispatchOutcome::Rejected(rejection),
     };
     enqueue(inbox, &admitted, received_at_unix_millis, headers, body)

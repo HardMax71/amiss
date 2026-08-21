@@ -13,10 +13,10 @@ secret, App key, policy files, bootstrap, and state live outside the repository 
 ## Flow
 
 The receiver accepts only the configured `POST` path with no query string. It bounds headers
-and body before admission, verifies GitHub's HMAC over the exact body, decodes only supported
-pull-request events, checks the configured repository, target branch, and plan, then saves the raw
-request before returning `202 Accepted`. The worker authenticates the saved bytes again before
-use.
+and body before admission and verifies GitHub's HMAC over the exact body. A supported pull-request
+event is checked against the configured repository, target branch, and plan, then saved raw before
+the receiver returns `202 Accepted`; the worker authenticates the saved bytes again before use.
+Other authenticated events return the same success without creating an inbox row.
 
 ```dot process
 digraph provider_controls {
@@ -50,7 +50,9 @@ digraph provider_controls {
 
 The supported pull-request actions are `opened`, `reopened`, and `synchronize`. An `edited`
 event is accepted only when its signed `changes.base.ref.from` field records a base-branch
-change. Other edits do not create work.
+change. Other edits and non-pull-request events do not create work. Classification uses the signed
+body, not the unsigned `X-GitHub-Event` header. Invalid JSON and malformed supported events still
+fail authentication.
 
 Using an App installation token, the adapter refreshes the exact repository, pull request,
 base and candidate commits and trees, default branch, GitHub test merge, and effective rules for
@@ -85,6 +87,10 @@ to read it too. GHES operators must therefore mirror and pin the action on their
 the lane will not cross from GHES to `github.com` for runtime code. The service does not need
 repository Administration permission: it reads the effective rule and refuses when the expected
 rule is absent.
+
+GitHub automatically subscribes Apps with Checks write access to [`check_run` and `check_suite`
+events](https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_run). The lane
+authenticates those deliveries and returns `202` without queueing work.
 
 Create an active branch ruleset for the configured target branch. Enable strict required checks,
 so GitHub requires the pull request to be up to date with that branch. Add a required status check
@@ -138,7 +144,7 @@ The delivery endpoint returns:
 
 | Status | Meaning |
 | --- | --- |
-| `202` | The authenticated raw request is durable, or the exact request was already saved. |
+| `202` | The authenticated request is durable, was already saved, or requires no work. |
 | `400` | The request shape, path query, or stored delivery is invalid. |
 | `401` | Authentication failed. |
 | `403` | The signed event names another repository, target, or plan. |

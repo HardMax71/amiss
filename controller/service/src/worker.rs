@@ -328,7 +328,9 @@ where
             body: &delivery.body,
         };
         self.admission.admit(request).is_ok_and(|admitted| {
-            admitted.route == delivery.route && admitted.source_id == delivery.source_id
+            admitted.is_some_and(|admitted| {
+                admitted.route == delivery.route && admitted.source_id == delivery.source_id
+            })
         })
     }
 
