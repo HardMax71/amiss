@@ -213,7 +213,7 @@ impl PullRequestFacts {
 
         let payload: PullRequestPayload =
             serde_json::from_slice(body).map_err(|_defect| Authentication)?;
-        if !supported_action(&payload) {
+        if payload.pull_request.is_none() || !supported_action(&payload) {
             return Ok(None);
         }
         let installation = payload.installation.ok_or(Authentication)?;

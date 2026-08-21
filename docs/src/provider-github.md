@@ -51,8 +51,8 @@ digraph provider_controls {
 The supported pull-request actions are `opened`, `reopened`, and `synchronize`. An `edited`
 event is accepted only when its signed `changes.base.ref.from` field records a base-branch
 change. Other edits and non-pull-request events do not create work. Classification uses the signed
-body, not the unsigned `X-GitHub-Event` header. Invalid JSON and malformed supported events still
-fail authentication.
+body, not the unsigned `X-GitHub-Event` header. Invalid JSON and malformed supported pull-request
+payloads still fail authentication.
 
 Using an App installation token, the adapter refreshes the exact repository, pull request,
 base and candidate commits and trees, default branch, GitHub test merge, and effective rules for
