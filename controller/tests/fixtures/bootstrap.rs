@@ -13,11 +13,9 @@ use amiss_wire::report::MACHINE_JSON_BYTES;
 const MALFORMED_RESULT: &[u8] = b"not-an-amiss-bootstrap-result\n";
 const STARTED_MARKER: &str = "runner-started";
 const GRANDCHILD_READY_MARKER: &str = "runner-ready";
-const GRANDCHILD_MARKER: &str = "runner-escaped";
 const GRANDCHILD_LOCK: &str = "runner-lock";
 const REPLACED_MARKER: &str = "runner-replaced";
 const RENEWAL_GATE: &str = "runner-renewal-gate";
-const GRANDCHILD_DELAY: Duration = Duration::from_millis(500);
 const GRANDCHILD_READY_TIMEOUT: Duration = Duration::from_secs(2);
 const GRANDCHILD_READY_POLL: Duration = Duration::from_millis(5);
 
@@ -285,7 +283,6 @@ fn replace_outputs(args: &RunnerArgs) -> ExitCode {
 
 fn spawn_grandchild(args: &RunnerArgs) -> bool {
     let ready = args.repository.join(GRANDCHILD_READY_MARKER);
-    let marker = args.repository.join(GRANDCHILD_MARKER);
     let lock = args.repository.join(GRANDCHILD_LOCK);
     let Ok(executable) = env::current_exe() else {
         return false;
@@ -294,7 +291,6 @@ fn spawn_grandchild(args: &RunnerArgs) -> bool {
     command
         .arg("--grandchild")
         .arg(&ready)
-        .arg(marker)
         .arg(lock)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -322,17 +318,10 @@ fn grandchild(mut argv: impl Iterator<Item = OsString>) -> ExitCode {
     let Some(ready) = argv.next().map(PathBuf::from) else {
         return ExitCode::from(2);
     };
-    let Some(marker) = argv.next().map(PathBuf::from) else {
-        return ExitCode::from(2);
-    };
     let Some(lock_path) = argv.next().map(PathBuf::from) else {
         return ExitCode::from(2);
     };
-    if argv.next().is_some()
-        || !ready.is_absolute()
-        || !marker.is_absolute()
-        || !lock_path.is_absolute()
-    {
+    if argv.next().is_some() || !ready.is_absolute() || !lock_path.is_absolute() {
         return ExitCode::from(2);
     }
     let Ok(lock) = OpenOptions::new()
@@ -349,11 +338,9 @@ fn grandchild(mut argv: impl Iterator<Item = OsString>) -> ExitCode {
     if write_new(&ready, b"ready\n").is_err() {
         return ExitCode::from(2);
     }
-    std::thread::sleep(GRANDCHILD_DELAY);
-    if write_new(&marker, b"escaped\n").is_err() {
-        return ExitCode::from(2);
+    loop {
+        std::thread::park();
     }
-    ExitCode::SUCCESS
 }
 
 fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

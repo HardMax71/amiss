@@ -8,7 +8,7 @@ use crate::file_ledger::FileLedgerError;
 use crate::file_ledger::format::ReportRef;
 use crate::{FileLedgerConfig, ReplayWindow};
 
-use super::super::Row;
+use super::super::{Row, read_bounded};
 
 fn row(root: &Path) -> Row {
     let window =
@@ -56,4 +56,17 @@ fn a_report_answers_only_to_its_own_reference() {
         ),
         "other bytes at the path are corruption, not a slot to overwrite"
     );
+}
+
+#[test]
+fn bounded_reads_include_the_exact_limit() {
+    let dir = tempfile::tempdir().expect("a scratch directory");
+    let path = dir.path().join("bounded");
+    fs::write(&path, b"four").expect("write the bounded file");
+
+    assert_eq!(read_bounded(&path, 4).expect("read at the limit"), b"four");
+    assert!(matches!(
+        read_bounded(&path, 3),
+        Err(FileLedgerError::Corrupt)
+    ));
 }

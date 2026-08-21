@@ -1,3 +1,5 @@
+mod tests;
+
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -155,7 +157,7 @@ pub(in crate::file_ledger) struct ReportRef {
 
 impl ReportRef {
     pub(in crate::file_ledger) fn new(report: &[u8]) -> Result<Self, FileLedgerError> {
-        let length = report_length(report)?;
+        let length = report_length(report.len())?;
         Ok(Self {
             digest: hb(REPORT_DOMAIN, report).to_string(),
             length,
@@ -179,8 +181,8 @@ impl ReportRef {
     }
 }
 
-fn report_length(report: &[u8]) -> Result<u64, FileLedgerError> {
-    let length = u64::try_from(report.len()).map_err(|_defect| FileLedgerError::ReportTooLarge)?;
+fn report_length(length: usize) -> Result<u64, FileLedgerError> {
+    let length = u64::try_from(length).map_err(|_defect| FileLedgerError::ReportTooLarge)?;
     (length <= MACHINE_JSON_BYTES)
         .then_some(length)
         .ok_or(FileLedgerError::ReportTooLarge)
