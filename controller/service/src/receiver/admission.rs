@@ -21,12 +21,16 @@ pub enum AdmissionRejection {
 /// Authenticates and admits one bounded request using controller-local state.
 ///
 /// Implementations must not perform provider network I/O. Returning
-/// [`AdmittedDelivery`] asserts that authentication and local plan admission
-/// bind its route and stable source identity to the supplied raw request.
+/// `Some` asserts that authentication and local plan admission bind the work's
+/// route and stable source identity to the supplied raw request. `None` means
+/// the authenticated request requires no work.
 pub trait DeliveryAdmission: Send + Sync + 'static {
     /// # Errors
     ///
     /// Returns a bounded client rejection when authentication, request shape,
     /// or local plan admission fails.
-    fn admit(&self, request: AdmissionRequest<'_>) -> Result<AdmittedDelivery, AdmissionRejection>;
+    fn admit(
+        &self,
+        request: AdmissionRequest<'_>,
+    ) -> Result<Option<AdmittedDelivery>, AdmissionRejection>;
 }

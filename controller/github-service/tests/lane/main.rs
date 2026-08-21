@@ -39,6 +39,14 @@ fn signed_delivery_for_another_target_is_forbidden_before_storage() {
 }
 
 #[test]
+fn signed_check_run_is_no_work_before_storage() {
+    let harness = Harness::new(LaneCase::Pass, Duration::from_secs(30));
+
+    assert!(matches!(harness.no_work(), Ok(None)));
+    assert!(harness.inbox.lock().unwrap().entries().unwrap().is_empty());
+}
+
+#[test]
 fn wrong_provider_identity_never_reaches_publication() {
     let mut harness = Harness::new(LaneCase::WrongIdentity, Duration::from_secs(30));
     harness.enqueue();

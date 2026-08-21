@@ -88,11 +88,14 @@ impl GitHubPullRequestSource {
     ///
     /// The route, signature, or signed pull-request payload is invalid.
     pub fn authenticate(&self, check: IngressCheck<'_>) -> Result<VerifiedDelivery, ProviderError> {
-        let (proof, facts) = self.authenticate_facts(check)?;
+        let (proof, facts) = self
+            .authenticate_facts(check)?
+            .ok_or(ProviderError::Authentication)?;
         Ok(proof.bind(facts.delivery))
     }
 
-    /// Authenticates one delivery only when its signed target is this lane's target.
+    /// Authenticates work only when its signed target is this lane's target.
+    /// Authenticated deliveries without work return `None`.
     ///
     /// # Errors
     ///
@@ -101,18 +104,20 @@ impl GitHubPullRequestSource {
         &self,
         check: IngressCheck<'_>,
         target: &BranchRef,
-    ) -> Result<VerifiedDelivery, ProviderError> {
-        let (proof, facts) = self.authenticate_facts(check)?;
+    ) -> Result<Option<VerifiedDelivery>, ProviderError> {
+        let Some((proof, facts)) = self.authenticate_facts(check)? else {
+            return Ok(None);
+        };
         if facts.target_ref != *target {
             return Err(ProviderError::AuthorizationRevoked);
         }
-        Ok(proof.bind(facts.delivery))
+        Ok(Some(proof.bind(facts.delivery)))
     }
 
     fn authenticate_facts(
         &self,
         check: IngressCheck<'_>,
-    ) -> Result<(WebhookProof, PullRequestFacts), ProviderError> {
+    ) -> Result<Option<(WebhookProof, PullRequestFacts)>, ProviderError> {
         let proof = self
             .webhook
             .verify(check)
@@ -123,9 +128,10 @@ impl GitHubPullRequestSource {
         {
             return Err(ProviderError::Authentication);
         }
-        let facts = PullRequestFacts::decode(input.body, &self.provider)
-            .ok_or(ProviderError::Authentication)?;
-        Ok((proof, facts))
+        let Some(facts) = PullRequestFacts::decode(input.body, &self.provider)? else {
+            return Ok(None);
+        };
+        Ok(Some((proof, facts)))
     }
 }
 
@@ -202,71 +208,79 @@ struct PullRequestFacts {
 }
 
 impl PullRequestFacts {
-    fn decode(body: &[u8], provider: &ProviderIdentity) -> Option<Self> {
-        let payload: PullRequestPayload = serde_json::from_slice(body).ok()?;
+    fn decode(body: &[u8], provider: &ProviderIdentity) -> Result<Option<Self>, ProviderError> {
+        use ProviderError::Authentication;
+
+        let payload: PullRequestPayload =
+            serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         if !supported_action(&payload) {
-            return None;
+            return Ok(None);
         }
-        let installation_id = positive(payload.installation.id)?;
-        let repository_id = positive(payload.repository.id)?;
-        let pull_request_id = positive(payload.pull_request.id)?;
-        let number = positive(payload.number)?;
-        if payload.pull_request.number != payload.number
-            || payload.repository != payload.pull_request.base.repo
-            || payload.repository.full_name
-                != format!(
-                    "{}/{}",
-                    payload.repository.owner.login, payload.repository.name
-                )
+        let installation = payload.installation.ok_or(Authentication)?;
+        let repository = payload.repository.ok_or(Authentication)?;
+        let number = payload.number.ok_or(Authentication)?;
+        let pull_request = payload.pull_request.ok_or(Authentication)?;
+        let installation_id = positive(installation.id).ok_or(Authentication)?;
+        let repository_id = positive(repository.id).ok_or(Authentication)?;
+        let pull_request_id = positive(pull_request.id).ok_or(Authentication)?;
+        let number = positive(number).ok_or(Authentication)?;
+        if pull_request.number != number
+            || repository != pull_request.base.repo
+            || repository.full_name != format!("{}/{}", repository.owner.login, repository.name)
         {
-            return None;
+            return Err(Authentication);
         }
 
         let repository = RepositoryIdentity::new(
             provider.instance.as_str().to_owned(),
-            payload.repository.owner.login.to_ascii_lowercase(),
-            payload.repository.name.to_ascii_lowercase(),
-        )?;
+            repository.owner.login.to_ascii_lowercase(),
+            repository.name.to_ascii_lowercase(),
+        )
+        .ok_or(Authentication)?;
         let change = ChangeLocator {
             provider: provider.clone(),
             repository,
-            change: change_id(repository_id, pull_request_id, number)?,
+            change: change_id(repository_id, pull_request_id, number).ok_or(Authentication)?,
         };
-        let integration = IntegrationId::new(installation_id.to_string())?;
-        let candidate = Oid::new(ObjectFormat::Sha1, payload.pull_request.head.sha)?;
-        let candidate_ref = github_ref(&payload.pull_request.head.branch)?;
-        let target_ref = github_ref(&payload.pull_request.base.branch)?;
+        let integration = IntegrationId::new(installation_id.to_string()).ok_or(Authentication)?;
+        let candidate =
+            Oid::new(ObjectFormat::Sha1, pull_request.head.sha).ok_or(Authentication)?;
+        let candidate_ref = github_ref(&pull_request.head.branch).ok_or(Authentication)?;
+        let target_ref = github_ref(&pull_request.base.branch).ok_or(Authentication)?;
         let provider_run = provider_run(
             &integration,
             &change,
             &candidate,
             &candidate_ref,
             &target_ref,
-        )?;
+        )
+        .ok_or(Authentication)?;
 
-        Some(Self {
+        Ok(Some(Self {
             delivery: AuthenticatedDelivery {
                 identity: DeliveryIdentity {
                     provider: provider.clone(),
                     integration,
-                    delivery: DeliveryId::new("signed-body".to_owned())?,
+                    delivery: DeliveryId::new("signed-body".to_owned()).ok_or(Authentication)?,
                 },
                 change,
                 provider_run,
             },
             target_ref,
-        })
+        }))
     }
 }
 
 fn supported_action(payload: &PullRequestPayload) -> bool {
-    SUPPORTED_ACTIONS.contains(&payload.action.as_str())
-        || payload.action == "edited"
-            && payload
-                .changes
-                .as_ref()
-                .and_then(|changes| changes.base.as_ref())
-                .is_some_and(|base| github_ref(&base.reference.from).is_some())
+    payload.action.as_deref().is_some_and(|action| {
+        SUPPORTED_ACTIONS.contains(&action)
+            || action == "edited"
+                && payload
+                    .changes
+                    .as_ref()
+                    .and_then(|changes| changes.base.as_ref())
+                    .is_some_and(|base| github_ref(&base.reference.from).is_some())
+    })
 }
 
 fn validate_delivery<'a>(
@@ -400,12 +414,12 @@ fn github_ref(branch: &str) -> Option<BranchRef> {
 
 #[derive(Deserialize)]
 struct PullRequestPayload {
-    action: String,
+    action: Option<String>,
     changes: Option<PullRequestChanges>,
-    installation: Installation,
-    repository: Repository,
-    number: u64,
-    pull_request: PullRequest,
+    installation: Option<Installation>,
+    repository: Option<Repository>,
+    number: Option<u64>,
+    pull_request: Option<PullRequest>,
 }
 
 #[derive(Deserialize)]

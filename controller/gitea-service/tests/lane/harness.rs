@@ -182,6 +182,7 @@ impl Harness {
                 headers: &headers,
                 body: &self.event.body,
             })
+            .unwrap()
             .unwrap();
         let stored_headers: Vec<IncomingHeader<'_>> = self
             .signature_headers
@@ -290,7 +291,7 @@ fn provider_setup(
         plans.clone(),
         clock,
         REPOSITORY_ID,
-        move |checked| source.authenticate_for_target(checked, &target),
+        move |checked| source.authenticate_for_target(checked, &target).map(Some),
     );
     ProviderSetup {
         route,

@@ -16,6 +16,26 @@ const INSTALLATION_ID: u64 = 7;
 pub(super) const REPOSITORY_ID: u64 = 101;
 const PULL_REQUEST_ID: u64 = 4_201;
 const PULL_REQUEST_NUMBER: u64 = 42;
+pub(super) const CHECK_RUN_BODY: &[u8] = br#"{
+  "action":"completed",
+  "check_run":{
+    "id":89721586894,
+    "name":"amiss / documentation assurance",
+    "head_sha":"3f1c8ab5ff36fbab9c0aa044271225cb3df69a60",
+    "status":"completed",
+    "conclusion":"success",
+    "app":{"id":4392947},
+    "pull_requests":[]
+  },
+  "installation":{"id":7},
+  "repository":{
+    "id":101,
+    "name":"widget",
+    "full_name":"acme/widget",
+    "owner":{"login":"acme"}
+  },
+  "sender":{"id":1,"login":"github"}
+}"#;
 
 pub(super) struct SignedEvent {
     pub body: Vec<u8>,
@@ -58,6 +78,10 @@ impl SignedEvent {
             }
         }))
         .unwrap();
+        Self::signed(body, secret)
+    }
+
+    pub(super) fn signed(body: Vec<u8>, secret: &[u8]) -> Self {
         let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
         mac.update(&body);
         let signature = format!("sha256={}", hex::encode(mac.finalize().into_bytes())).into_bytes();

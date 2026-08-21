@@ -244,10 +244,54 @@ fn signed_target_must_belong_to_the_configured_lane() {
     let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let release = BranchRef::new("refs/heads/release".to_owned()).unwrap();
 
-    assert!(authenticate_target(&source, BODY, &main).is_ok());
+    assert!(matches!(
+        authenticate_target(&source, BODY, &main),
+        Ok(Some(_))
+    ));
     assert_eq!(
         authenticate_target(&source, BODY, &release),
         Err(ProviderError::AuthorizationRevoked)
+    );
+}
+
+#[test]
+fn signed_irrelevant_deliveries_are_authenticated_without_work() {
+    let source = source();
+    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    for action in ["created", "completed"] {
+        let body = format!(
+            r#"{{"action":"{action}","check_run":{{"id":89721586894}},"installation":{{"id":7}}}}"#
+        );
+        assert_eq!(
+            authenticate_target(&source, body.as_bytes(), &main),
+            Ok(None)
+        );
+    }
+
+    let check_suite =
+        br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7}}"#;
+    assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
+
+    let closed = replaced_once(BODY, r#""action":"opened""#, r#""action":"closed""#);
+    assert_eq!(authenticate_target(&source, &closed, &main), Ok(None));
+
+    let title_change = replaced_once(
+        BODY,
+        r#""action":"opened","#,
+        r#""action":"edited","changes":{"title":{"from":"old title"}},"#,
+    );
+    assert_eq!(authenticate_target(&source, &title_change, &main), Ok(None));
+}
+
+#[test]
+fn malformed_supported_delivery_is_not_no_work() {
+    let source = source();
+    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let malformed = br#"{"action":"opened","pull_request":{}}"#;
+
+    assert_eq!(
+        authenticate_target(&source, malformed, &main),
+        Err(ProviderError::Authentication)
     );
 }
 
@@ -651,7 +695,7 @@ fn authenticate_target(
     source: &GitHubPullRequestSource,
     body: &[u8],
     target: &BranchRef,
-) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
+) -> Result<Option<amiss_controller::VerifiedDelivery>, ProviderError> {
     let signature = signature(body);
     let headers = [DeliveryHeader {
         name: "x-hub-signature-256",

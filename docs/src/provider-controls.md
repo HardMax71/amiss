@@ -124,7 +124,7 @@ provider `POST` returns `503` while readiness is false;
 | Counter | Counts |
 | --- | --- |
 | `amiss_controller_provider_requests_total` | Configured provider `POST` requests answered. |
-| `amiss_controller_provider_acceptances_total` | Provider requests accepted for durable or synchronous work. |
+| `amiss_controller_provider_acceptances_total` | Provider requests answered successfully, including authenticated no-work deliveries. |
 | `amiss_controller_provider_refusals_total` | Provider requests refused by authentication, bounds, request shape, or policy. |
 | `amiss_controller_provider_unavailable_total` | Provider requests that returned an unavailable result. |
 | `amiss_controller_delivery_attempts_total` | Durable deliveries attempted by a webhook worker. |

@@ -18,6 +18,7 @@ pub(crate) const BODY: &[u8] = b"provider-body-82a9";
 pub(crate) struct TestAdmission {
     calls: AtomicUsize,
     rejection: Option<AdmissionRejection>,
+    work: bool,
 }
 
 impl TestAdmission {
@@ -25,6 +26,15 @@ impl TestAdmission {
         Self {
             calls: AtomicUsize::new(0),
             rejection: None,
+            work: true,
+        }
+    }
+
+    pub(crate) const fn no_work() -> Self {
+        Self {
+            calls: AtomicUsize::new(0),
+            rejection: None,
+            work: false,
         }
     }
 
@@ -32,6 +42,7 @@ impl TestAdmission {
         Self {
             calls: AtomicUsize::new(0),
             rejection: Some(rejection),
+            work: true,
         }
     }
 
@@ -41,7 +52,10 @@ impl TestAdmission {
 }
 
 impl DeliveryAdmission for TestAdmission {
-    fn admit(&self, request: AdmissionRequest<'_>) -> Result<AdmittedDelivery, AdmissionRejection> {
+    fn admit(
+        &self,
+        request: AdmissionRequest<'_>,
+    ) -> Result<Option<AdmittedDelivery>, AdmissionRejection> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if let Some(rejection) = self.rejection {
             return Err(rejection);
@@ -54,14 +68,17 @@ impl DeliveryAdmission for TestAdmission {
         if request.body.is_empty() {
             return Err(AdmissionRejection::Malformed);
         }
+        if !self.work {
+            return Ok(None);
+        }
         let source_id = header(request.headers, "x-source-id")
             .and_then(|value| std::str::from_utf8(value).ok())
             .filter(|value| !value.is_empty())
             .ok_or(AdmissionRejection::Malformed)?;
-        Ok(AdmittedDelivery {
+        Ok(Some(AdmittedDelivery {
             route: "github-main".to_owned(),
             source_id: source_id.to_owned(),
-        })
+        }))
     }
 }
 

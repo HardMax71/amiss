@@ -186,7 +186,11 @@ pub fn provider_webhooks(data: &[u8]) {
                 value: signature.as_bytes(),
             },
             &exercise,
-            |source, check| source.authenticate_for_target(check, &TARGET_BRANCH),
+            |source, check| {
+                source
+                    .authenticate_for_target(check, &TARGET_BRANCH)
+                    .map(Some)
+            },
         );
     }
 }
@@ -397,7 +401,7 @@ fn authenticate_webhook<S>(
         &S,
         amiss_controller::IngressCheck<'a>,
     ) -> Result<
-        amiss_controller::VerifiedDelivery,
+        Option<amiss_controller::VerifiedDelivery>,
         amiss_controller::ProviderError,
     >,
 ) {
@@ -416,11 +420,13 @@ fn authenticate_webhook<S>(
         )
         .expect("the generated request is inside the ingress bounds");
     let accepted = authenticate(source, check).is_ok_and(|verified| {
-        let accepted = policy
-            .post_auth(check, verified)
-            .expect("a webhook proof from this route satisfies ingress");
-        assert_eq!(&accepted.delivery().identity.provider, &route.provider);
-        true
+        verified.is_some_and(|verified| {
+            let accepted = policy
+                .post_auth(check, verified)
+                .expect("a webhook proof from this route satisfies ingress");
+            assert_eq!(&accepted.delivery().identity.provider, &route.provider);
+            true
+        })
     });
     if selection(exercise.data, 10) == 8 {
         assert_eq!(

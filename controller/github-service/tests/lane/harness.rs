@@ -13,15 +13,16 @@ use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::{GitHubPullRequestAdapter, GitHubPullRequestSource};
 use amiss_controller_service::{
     AcquiringWorkerContext, AcquiringWorkerSettings, AdmissionRejection, AdmissionRequest,
-    DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits, IncomingDelivery,
-    IncomingHeader, Operations, WorkOutcome, acquiring_worker, repository_admission,
+    AdmittedDelivery, DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits,
+    IncomingDelivery, IncomingHeader, Operations, WorkOutcome, acquiring_worker,
+    repository_admission,
 };
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
-use super::provider::{FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
+use super::provider::{CHECK_RUN_BODY, FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
 use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
 
 const SECRET: &[u8] = b"provider-lane-webhook-secret-2026";
@@ -153,6 +154,7 @@ impl Harness {
                 headers: &headers,
                 body: &self.event.body,
             })
+            .unwrap()
             .unwrap();
         let stored_headers = [IncomingHeader {
             name: "x-hub-signature-256",
@@ -184,6 +186,19 @@ impl Harness {
                 body: &event.body,
             })
             .err()
+    }
+
+    pub(super) fn no_work(&self) -> Result<Option<AdmittedDelivery>, AdmissionRejection> {
+        let event = SignedEvent::signed(CHECK_RUN_BODY.to_vec(), SECRET);
+        let headers = [DeliveryHeader {
+            name: "x-hub-signature-256".to_owned(),
+            value: event.signature,
+        }];
+        self.admission.admit(AdmissionRequest {
+            received_at_unix_millis: event.received_at_unix_millis,
+            headers: &headers,
+            body: &event.body,
+        })
     }
 
     pub(super) fn work(&mut self) -> WorkOutcome {

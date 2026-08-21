@@ -52,6 +52,28 @@ async fn accepted_response_follows_durable_storage() {
 }
 
 #[tokio::test]
+async fn authenticated_no_work_is_accepted_without_storage() {
+    let fixture = Fixture::new(&receiver_config(), inbox_limits(), TestAdmission::no_work());
+    let response = fixture
+        .app
+        .clone()
+        .oneshot(delivery_request(
+            Method::POST,
+            DELIVERY_PATH,
+            "unused",
+            BODY,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(fixture.admission.calls(), 1);
+    assert_eq!(fixture.operations.provider_requests.get(), 1);
+    assert_eq!(fixture.operations.provider_acceptances.get(), 1);
+    assert!(fixture.inbox.lock().unwrap().entries().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn duplicate_bytes_are_accepted_without_a_second_row() {
     let fixture = Fixture::new(
         &receiver_config(),
