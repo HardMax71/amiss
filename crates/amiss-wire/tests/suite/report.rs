@@ -55,7 +55,7 @@ fn builds_the_fatal_incomplete_envelope() {
     let Value::String(schema) = member(&envelope, "schema") else {
         panic!("schema is not a string");
     };
-    assert_eq!(schema, ENVELOPE_SCHEMA);
+    assert_eq!(schema.as_ref(), ENVELOPE_SCHEMA);
 
     let payload = member(&envelope, "payload");
     let Value::String(payload_digest) = member(&envelope, "payload_digest") else {

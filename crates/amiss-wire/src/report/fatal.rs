@@ -18,7 +18,7 @@ impl FatalSerializer {
     pub fn new() -> Self {
         Self {
             staging: Vec::with_capacity(FATAL_SCRATCH_BYTES),
-            scratch: Scratch::new(),
+            scratch: Scratch::reserved(),
         }
     }
 

@@ -142,7 +142,7 @@ pub fn string(path: &str, value: Value) -> Result<String, Error> {
     let Value::String(string) = value else {
         return fail(path, ErrorKind::WrongType);
     };
-    Ok(string.into_string())
+    Ok(string.into())
 }
 
 /// # Errors
