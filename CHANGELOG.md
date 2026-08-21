@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/HardMax71/amiss/compare/v0.24.0...v0.25.0) - 2026-08-21
+
+### Changes
+
+- Accelerate anchor identity collisions
+- Harden JavaScript Unicode fixture decoding
+- Streamline JSON storage and hashing
+- Preserve truncated escape errors
+- Streamline strict JSON parsing
+- Streamline validated model construction
+- Streamline JSON value narrowing
+- Split bootstrap entrypoint
+- Reject repeated manifest flags
+- Declare errors with thiserror
+
 ## [0.24.0](https://github.com/HardMax71/amiss/compare/v0.23.0...v0.24.0) - 2026-08-20
 
 ### Changes

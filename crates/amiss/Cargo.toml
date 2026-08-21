@@ -12,10 +12,10 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
-amiss-git = { path = "../amiss-git", version = "0.24.0" }
-amiss-md = { path = "../amiss-md", version = "0.24.0" }
-amiss-scan = { path = "../amiss-scan", version = "0.24.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.24.0" }
+amiss-git = { path = "../amiss-git", version = "0.25.0" }
+amiss-md = { path = "../amiss-md", version = "0.25.0" }
+amiss-scan = { path = "../amiss-scan", version = "0.25.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.25.0" }
 strum.workspace = true
 
 [target.'cfg(unix)'.dependencies]
