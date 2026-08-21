@@ -193,7 +193,7 @@ fn is_action_row(value: &Value) -> bool {
         return false;
     };
     members.iter().any(|(key, member)| {
-        key == "role" && matches!(member, Value::String(role) if role == "runtime-data")
+        key == "role" && matches!(member, Value::String(role) if role.as_ref() == "runtime-data")
     })
 }
 

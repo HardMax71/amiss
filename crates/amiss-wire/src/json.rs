@@ -1,75 +1,11 @@
 use std::cmp::Ordering;
 use std::fmt;
-use std::ops::Deref;
 
 pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 const MAX_DEPTH: usize = 512;
 
 /// An owned JSON string with no spare mutable capacity.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Text(Box<str>);
-
-impl Text {
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        self
-    }
-
-    #[must_use]
-    pub fn into_string(self) -> String {
-        self.0.into()
-    }
-}
-
-impl Deref for Text {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl AsRef<str> for Text {
-    fn as_ref(&self) -> &str {
-        self
-    }
-}
-
-impl fmt::Display for Text {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self)
-    }
-}
-
-impl From<&str> for Text {
-    fn from(value: &str) -> Self {
-        Self(value.into())
-    }
-}
-
-impl From<String> for Text {
-    fn from(value: String) -> Self {
-        Self(value.into_boxed_str())
-    }
-}
-
-impl From<Box<str>> for Text {
-    fn from(value: Box<str>) -> Self {
-        Self(value)
-    }
-}
-
-impl PartialEq<str> for Text {
-    fn eq(&self, other: &str) -> bool {
-        **self == *other
-    }
-}
-
-impl PartialEq<&str> for Text {
-    fn eq(&self, other: &&str) -> bool {
-        **self == **other
-    }
-}
+pub type Text = Box<str>;
 
 /// An owned strict-JSON tree with fixed-size strings, arrays, and objects.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -209,13 +145,17 @@ pub fn canonical(value: &Value) -> Vec<u8> {
 /// it: the counting canonical-serialization pass.
 #[must_use]
 pub fn canonical_length(value: &Value) -> u64 {
-    let mut count = ByteCount(0);
-    stream(value, &mut count);
-    count.0
+    let mut count = 0_u64;
+    stream(
+        value,
+        &mut Callback(|piece: &str| {
+            count = count.saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
+        }),
+    );
+    count
 }
 
-/// A canonicalization output: receives the serialization in pieces, in
-/// order. Concatenating every piece yields exactly the `canonical` bytes.
+/// A canonicalization output receives the serialization in ordered pieces.
 pub trait Sink {
     fn write(&mut self, piece: &str);
 }
@@ -226,22 +166,18 @@ impl Sink for String {
     }
 }
 
-/// A counting sink: the total byte length of every piece written.
-pub struct ByteCount(pub u64);
+pub(crate) struct Callback<F>(pub(crate) F);
 
-impl Sink for ByteCount {
+impl<F: FnMut(&str)> Sink for Callback<F> {
     fn write(&mut self, piece: &str) {
-        self.0 = self
-            .0
-            .saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
+        self.0(piece);
     }
 }
 
 /// Streams the canonical serialization into the sink using its own
-/// transient scratch. For the fixed-scratch fatal lane use
-/// [`Scratch::stream`] with a reused scratch instead.
+/// transient scratch; the fatal lane reuses one reserved scratch instead.
 pub fn stream<S: Sink + ?Sized>(value: &Value, sink: &mut S) {
-    let mut scratch = Scratch::new();
+    let mut scratch = Scratch::reserved();
     scratch.stream(value, sink);
 }
 
@@ -249,21 +185,21 @@ pub fn stream<S: Sink + ?Sized>(value: &Value, sink: &mut S) {
 /// nesting level, reused across every sibling at that level, and one
 /// integer-format buffer. Streaming allocates nothing else, so a reserved
 /// `Scratch` makes serialization scratch a fixed space.
-pub struct Scratch {
+pub(crate) struct Scratch {
     order: Vec<Vec<usize>>,
     number: String,
 }
 
 impl Scratch {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn reserved() -> Self {
         Self {
             order: Vec::new(),
             number: String::with_capacity(24),
         }
     }
 
-    pub fn stream<S: Sink + ?Sized>(&mut self, value: &Value, sink: &mut S) {
+    pub(crate) fn stream<S: Sink + ?Sized>(&mut self, value: &Value, sink: &mut S) {
         self.write_value(value, sink, 0);
     }
 
@@ -277,7 +213,7 @@ impl Scratch {
                 let _infallible = fmt::Write::write_fmt(&mut self.number, format_args!("{n}"));
                 sink.write(&self.number);
             }
-            Value::String(s) => write_string(sink, s),
+            Value::String(s) => write_string(sink, s.as_ref()),
             Value::Array(items) => {
                 sink.write("[");
                 for (i, item) in items.iter().enumerate() {
@@ -326,12 +262,6 @@ impl Scratch {
             let right = members.get(b).map_or("", |(key, _)| key);
             utf16_cmp(left, right)
         });
-    }
-}
-
-impl Default for Scratch {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -495,7 +425,7 @@ impl Parser<'_> {
             if self.peek() != Some(b'"') {
                 return Err(self.end_or_unexpected());
             }
-            let key = self.string()?.into_string();
+            let key = String::from(self.string()?);
             self.skip_whitespace();
             self.expect(b':')?;
             self.skip_whitespace();
@@ -540,7 +470,7 @@ impl Parser<'_> {
                 Some(b'"') => {
                     self.flush(segment_start, &mut out)?;
                     self.advance();
-                    return Ok(out.into());
+                    return Ok(out.into_boxed_str());
                 }
                 Some(b'\\') => {
                     self.flush(segment_start, &mut out)?;

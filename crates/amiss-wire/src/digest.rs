@@ -2,7 +2,7 @@ use core::fmt;
 
 use sha2::{Digest as _, Sha256};
 
-use crate::json::{Sink, Value, stream};
+use crate::json::{Callback, Sink, Value, stream};
 
 /// The domain for a digest over exact raw bytes taken as evidence: a resolved
 /// target's blob, or one build lockfile as the release manifest records it.
@@ -90,63 +90,51 @@ pub fn sha256(bytes: &[u8]) -> Digest {
 
 #[must_use]
 pub fn hb(domain: &str, bytes: &[u8]) -> Digest {
-    let mut hasher = with_domain(domain);
-    hasher.update(bytes);
-    Digest(hasher.finalize().into())
+    hash(domain, |hasher| hasher.update(bytes))
 }
 
 #[must_use]
 pub fn hj(domain: &str, value: &Value) -> Digest {
-    let mut sink = HashSink(with_domain(domain));
-    stream(value, &mut sink);
-    Digest(sink.0.finalize().into())
+    canonical_hash(domain, value, |_| {})
 }
 
-/// Hashes canonical JSON emitted directly into the supplied sink.
+/// Hashes canonical JSON pieces directly into its domain-separated hasher.
 ///
 /// The emitter must write exactly one canonical JSON value.
 #[must_use]
 pub fn hj_stream(domain: &str, emit: impl FnOnce(&mut dyn Sink)) -> Digest {
-    let mut sink = HashSink(with_domain(domain));
-    emit(&mut sink);
-    Digest(sink.0.finalize().into())
+    hash(domain, |hasher| {
+        emit(&mut Callback(|piece: &str| {
+            hasher.update(piece.as_bytes());
+        }));
+    })
 }
 
 #[must_use]
 pub fn hj_with_length(domain: &str, value: &Value) -> (Digest, u64) {
-    let mut sink = HashLengthSink {
-        hasher: with_domain(domain),
-        length: 0,
-    };
-    stream(value, &mut sink);
-    (Digest(sink.hasher.finalize().into()), sink.length)
+    let mut length = 0_u64;
+    let digest = canonical_hash(domain, value, |piece| {
+        length = length.saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
+    });
+    (digest, length)
 }
 
-struct HashSink(Sha256);
-
-impl Sink for HashSink {
-    fn write(&mut self, piece: &str) {
-        self.0.update(piece.as_bytes());
-    }
+fn canonical_hash(domain: &str, value: &Value, mut observe: impl FnMut(&str)) -> Digest {
+    hash(domain, |hasher| {
+        stream(
+            value,
+            &mut Callback(|piece: &str| {
+                hasher.update(piece.as_bytes());
+                observe(piece);
+            }),
+        );
+    })
 }
 
-struct HashLengthSink {
-    hasher: Sha256,
-    length: u64,
-}
-
-impl Sink for HashLengthSink {
-    fn write(&mut self, piece: &str) {
-        self.hasher.update(piece.as_bytes());
-        self.length = self
-            .length
-            .saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
-    }
-}
-
-fn with_domain(domain: &str) -> Sha256 {
+fn hash(domain: &str, update: impl FnOnce(&mut Sha256)) -> Digest {
     let mut hasher = Sha256::new();
     hasher.update(domain.as_bytes());
     hasher.update([0_u8]);
-    hasher
+    update(&mut hasher);
+    Digest(hasher.finalize().into())
 }

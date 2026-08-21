@@ -103,9 +103,9 @@ fn newline(members: &[(String, Value)], context: &str) -> &'static [u8] {
         .map(|(_key, value)| value)
     {
         None => b"\n",
-        Some(Value::String(value)) if value == "crlf" => b"\r\n",
-        Some(Value::String(value)) if value == "cr" => b"\r",
-        Some(Value::String(value)) if value == "lf" => b"\n",
+        Some(Value::String(value)) if value.as_ref() == "crlf" => b"\r\n",
+        Some(Value::String(value)) if value.as_ref() == "cr" => b"\r",
+        Some(Value::String(value)) if value.as_ref() == "lf" => b"\n",
         Some(Value::String(value)) => panic!("{context}.newline has unknown value {value:?}"),
         Some(
             Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_),

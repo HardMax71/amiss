@@ -110,7 +110,7 @@ fn member<'a>(value: &'a Value, name: &str) -> Option<&'a Value> {
 
 fn as_text(value: &Value) -> Option<&str> {
     if let Value::String(text) = value {
-        Some(text.as_str())
+        Some(text)
     } else {
         None
     }
