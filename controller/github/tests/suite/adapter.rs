@@ -272,6 +272,19 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
         br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7}}"#;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
+    let issue = br#"{
+      "action":"opened",
+      "issue":{"id":1,"number":5},
+      "repository":{
+        "id":101,
+        "name":"widget",
+        "full_name":"HardMax71/widget",
+        "owner":{"login":"HardMax71"}
+      },
+      "installation":{"id":7}
+    }"#;
+    assert_eq!(authenticate_target(&source, issue, &main), Ok(None));
+
     let closed = replaced_once(BODY, r#""action":"opened""#, r#""action":"closed""#);
     assert_eq!(authenticate_target(&source, &closed, &main), Ok(None));
 
