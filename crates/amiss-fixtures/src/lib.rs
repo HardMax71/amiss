@@ -1,4 +1,8 @@
+mod external;
+
 pub mod requests;
+
+pub use external::{external_facts, external_plan, external_report};
 
 use std::collections::BTreeMap;
 use std::io::Write as _;
@@ -838,31 +842,4 @@ pub fn configure_git_command(command: &mut Command, dir: &Path) {
         .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
         .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
         .stdin(Stdio::null());
-}
-
-/// A minimal complete scanner report whose candidate side introduces the
-/// given external destinations, digest-true, for producer and lane tests.
-#[must_use]
-pub fn external_report(destinations: &[&str]) -> Vec<u8> {
-    let rows: Vec<String> = destinations
-        .iter()
-        .map(|destination| {
-            let scheme = destination.split(':').next().unwrap_or("https");
-            format!(
-                r#"{{"base":null,"candidate":{{"document":"docs/a.md","external_destination":"{destination}","intent":{{"external_scheme":"{scheme}"}},"resolution":{{"kind":"external","reason":"url"}}}}}}"#
-            )
-        })
-        .collect();
-    let payload = format!(
-        r#"{{"engine":{{"engine_digest":"{digest}","engine_version":"0.0.0"}},"evaluation":{{"base":{{"commit_oid":"a"}},"candidate":{{"commit_oid":"b"}},"mode":"commit-pair"}},"observations":[{rows}],"result":{{"complete":true}},"schema":"amiss/scanner-report-payload"}}"#,
-        digest = amiss_wire::digest::hb("amiss/fixture-engine", b"fixture"),
-        rows = rows.join(","),
-    );
-    // The spelling above is already canonical, so the byte hash is the
-    // payload digest.
-    let payload_digest = amiss_wire::digest::hb("amiss/scanner-report-payload", payload.as_bytes());
-    format!(
-        r#"{{"payload":{payload},"payload_digest":"{payload_digest}","schema":"amiss/scanner-report-envelope"}}"#
-    )
-    .into_bytes()
 }

@@ -5,27 +5,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
+use amiss_fixtures::{external_facts, external_plan};
 use amiss_wire::digest::hj;
 use amiss_wire::external::assess;
-use amiss_wire::json::{Value, parse};
+use amiss_wire::json::Value;
 
 use super::super::transport::Budget;
 use super::{GitLabVerification, PRODUCER_NAME, Presence, RefFamily, Visibility, verify_external};
-
-fn plan_over(destinations: &[&str]) -> Value {
-    let report = amiss_fixtures::external_report(destinations);
-    let parsed = parse(&report).expect("the report is strict JSON");
-    let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"))
-        .expect("the report names its engine");
-    amiss_wire::external::plan(
-        &parsed,
-        engine.text("engine_version").expect("a version"),
-        engine.text("engine_digest").expect("a digest"),
-    )
-    .expect("the report yields a plan")
-}
 
 #[derive(Default)]
 struct ScriptedRest {
@@ -133,22 +119,6 @@ impl GitLabVerification for ScriptedRest {
     }
 }
 
-fn facts(evidence: &Value) -> Vec<String> {
-    let Some(Value::Array(rows)) = evidence.member("rows") else {
-        panic!("the evidence holds rows");
-    };
-    rows.iter()
-        .map(|row| {
-            let destination = row.text("destination").expect("a destination");
-            let repository = row.text("repository").expect("a repository fact");
-            match row.text("tail") {
-                Some(tail) => format!("{destination} {repository} {tail}"),
-                None => format!("{destination} {repository}"),
-            }
-        })
-        .collect()
-}
-
 const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 
 fn matrix_rest() -> ScriptedRest {
@@ -210,7 +180,7 @@ fn matrix_rest() -> ScriptedRest {
 
 #[test]
 fn every_visibility_and_resolution_becomes_its_fact() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://github.com/acme/elsewhere",
         "https://gitlab.com/acme/agreed/-/blob/v1.0/a.md",
         "https://gitlab.com/acme/bare",
@@ -229,11 +199,12 @@ fn every_visibility_and_resolution_becomes_its_fact() {
         "https://gitlab.com/acme/tagged/-/blob/v1.0/a.md",
         "https://gitlab.com/acme/tickets/-/issues/5",
         "https://gitlab.com/acme/trees/-/tree/main/docs/",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let evidence = verify_external(&matrix_rest(), &plan, "gitlab.com", "0.0.0", "t0")
         .expect("evidence is produced");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec![
             "https://gitlab.com/acme/agreed/-/blob/v1.0/a.md readable resolved".to_owned(),
             "https://gitlab.com/acme/bare readable".to_owned(),
@@ -280,13 +251,14 @@ fn every_visibility_and_resolution_becomes_its_fact() {
 /// revision-missing and coupled a false path-missing against a live page.
 #[test]
 fn escaped_spellings_resolve_and_never_refute() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://gitlab.com/acme/coupled/-/blob/main/x%2Fy.md",
         "https://gitlab.com/acme/doubled/-/blob/main/My%2520File.md",
         "https://gitlab.com/acme/slashed/-/blob/release%2Fx/a.md",
         "https://gitlab.com/acme/spaced/-/blob/main/My%20File.md",
         "https://gitlab.com/acme/veiled/-/blob/release%2Fx/a.md",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("acme/coupled", Visibility::Readable),
@@ -311,7 +283,7 @@ fn escaped_spellings_resolve_and_never_refute() {
     let evidence =
         verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("evidence is produced");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec![
             "https://gitlab.com/acme/coupled/-/blob/main/x%2Fy.md readable".to_owned(),
             "https://gitlab.com/acme/doubled/-/blob/main/My%2520File.md readable resolved"
@@ -327,10 +299,11 @@ fn escaped_spellings_resolve_and_never_refute() {
 /// partial evidence beats none, and the skipped rest stays unproven.
 #[test]
 fn a_rate_limit_keeps_the_partial_evidence() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://gitlab.com/acme/first",
         "https://gitlab.com/acme/second",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("acme/first", Visibility::Readable),
@@ -342,7 +315,7 @@ fn a_rate_limit_keeps_the_partial_evidence() {
     let evidence =
         verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("partial evidence");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec!["https://gitlab.com/acme/first readable".to_owned()],
     );
 }
@@ -350,10 +323,11 @@ fn a_rate_limit_keeps_the_partial_evidence() {
 /// The whole chain: scripted facts become evidence the engine judges.
 #[test]
 fn the_evidence_reaches_verdicts_through_the_engine() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://gitlab.com/acme/gone/-/blob/main/missing.md",
         "https://gitlab.com/acme/private",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("acme/gone", Visibility::Readable),

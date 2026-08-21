@@ -24,6 +24,7 @@ url.workspace = true
 
 [dev-dependencies]
 amiss-controller-fixtures.workspace = true
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 hex.workspace = true
 hmac.workspace = true
 sha2.workspace = true
