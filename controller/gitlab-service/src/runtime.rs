@@ -14,7 +14,7 @@ use amiss_controller::{
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EndpointDrain, EvaluationConfigError, EvaluationRequest, Operations,
+    AdmissionRejection, EndpointConfigError, EndpointDrain, EvaluationRequest, Operations,
     ServiceComponent, Supervision, SupervisionError, check_lane, evaluation_router_with_clock,
     shutdown_signal, supervise,
 };
@@ -43,7 +43,7 @@ pub enum ServiceError {
     #[error("check plan cannot be registered")]
     Plan(#[source] PlanError),
     #[error("HTTP evaluation configuration is invalid")]
-    EvaluationConfiguration(#[source] EvaluationConfigError),
+    EvaluationConfiguration(#[source] EndpointConfigError),
     #[error("maintenance interval overflow")]
     MaintenanceInterval,
     #[error("delivery record maintenance panicked")]

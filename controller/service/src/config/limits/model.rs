@@ -2,10 +2,10 @@ use std::time::Duration;
 
 use amiss_controller::{IngressPolicy, ReplayWindow};
 
-use crate::{EvaluationConfig, InboxLimits, ReceiverConfig};
+use crate::{EndpointConfig, InboxLimits};
 
 pub struct LoadedLimits {
-    pub receiver: ReceiverConfig,
+    pub receiver: EndpointConfig,
     pub inbox: InboxLimits,
     pub ledger: LedgerLimits,
     pub ingress: IngressPolicy,
@@ -19,7 +19,7 @@ pub struct LoadedLimits {
 }
 
 pub struct LoadedExecutionLimits {
-    pub evaluation: EvaluationConfig,
+    pub evaluation: EndpointConfig,
     pub ledger: LedgerLimits,
     pub ingress: IngressPolicy,
     pub replay: ReplayWindow,

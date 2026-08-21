@@ -13,14 +13,15 @@ use amiss_controller::{
 use tokio::net::TcpListener;
 
 use crate::{
-    AcquiringWorkerContext, AcquiringWorkerSettings, DeliveryAdmission, DeliveryWorker, Inbox,
-    InboxError, InboxLimits, Operations, ReceiverConfig, ReceiverConfigError, ServiceComponent,
-    Supervision, SupervisionError, repository_admission, router_with_clock, supervise,
+    AcquiringWorkerContext, AcquiringWorkerSettings, DeliveryAdmission, DeliveryWorker,
+    EndpointConfig, EndpointConfigError, Inbox, InboxError, InboxLimits, Operations,
+    ServiceComponent, Supervision, SupervisionError, repository_admission, router_with_clock,
+    supervise,
 };
 
 pub struct QueuedServiceSettings {
     pub listen: SocketAddr,
-    pub receiver: ReceiverConfig,
+    pub receiver: EndpointConfig,
     pub inbox_root: PathBuf,
     pub inbox_limits: InboxLimits,
 }
@@ -116,7 +117,7 @@ pub enum QueuedServiceError {
     #[error("delivery inbox cannot be opened")]
     InboxOpen(#[source] InboxError),
     #[error("HTTP receiver configuration is invalid")]
-    Receiver(#[source] ReceiverConfigError),
+    Receiver(#[source] EndpointConfigError),
     #[error("HTTP listener cannot bind")]
     Listener(#[source] std::io::Error),
     #[error("delivery worker panicked")]

@@ -11,12 +11,12 @@ use amiss_controller::{CheckPlan, DeliveryRoute, FileLedgerConfig, IngressPolicy
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabClient, GitLabOidc};
 pub use amiss_controller_service::ConfigError;
-use amiss_controller_service::EvaluationConfig;
+use amiss_controller_service::EndpointConfig;
 use secrecy::SecretString;
 
 pub struct ServiceConfig {
     pub(crate) listen: SocketAddr,
-    pub(crate) evaluation: EvaluationConfig,
+    pub(crate) evaluation: EndpointConfig,
     pub(crate) ledger: FileLedgerConfig,
     pub(crate) ingress: IngressPolicy,
     pub(crate) route: DeliveryRoute,

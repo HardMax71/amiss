@@ -2,6 +2,7 @@
 
 mod config;
 mod delivery;
+mod endpoint;
 mod error;
 mod evaluation;
 mod frame;
@@ -16,7 +17,6 @@ mod probe;
 mod queued;
 mod receiver;
 mod record;
-mod request_body;
 mod shutdown;
 mod store;
 mod supervision;
@@ -30,11 +30,9 @@ pub use config::{
     load_webhook_keyring, read_regular, read_strict_json,
 };
 pub use delivery::{Delivery, DeliveryHeader, IncomingDelivery, IncomingHeader};
+pub use endpoint::{EndpointConfig, EndpointConfigError};
 pub use error::InboxError;
-pub use evaluation::{
-    EvaluationConfig, EvaluationConfigError, EvaluationRequest, evaluation_router,
-    evaluation_router_with_clock,
-};
+pub use evaluation::{EvaluationRequest, evaluation_router, evaluation_router_with_clock};
 pub use inbox::{
     ClaimOutcome, ClaimedDelivery, CompleteOutcome, DeliveryLease, EnqueueOutcome, Inbox,
     InboxEntry, InboxState, RenewOutcome, RetryOutcome,
@@ -50,8 +48,8 @@ pub use queued::{
     QueuedServiceSettings, run_queued_service, setup_repository_lane,
 };
 pub use receiver::{
-    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, ReceiverConfig,
-    ReceiverConfigError, router, router_with_clock, serve,
+    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, router,
+    router_with_clock, serve,
 };
 pub use shutdown::shutdown_signal;
 pub use supervision::{Supervision, SupervisionError, supervise};

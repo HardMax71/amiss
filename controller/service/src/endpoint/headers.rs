@@ -2,7 +2,7 @@ use axum::http::HeaderMap;
 
 use crate::DeliveryHeader;
 
-pub(crate) fn within_limits(headers: &HeaderMap, max_headers: u64, max_header_bytes: u64) -> bool {
+pub(super) fn within_limits(headers: &HeaderMap, max_headers: u64, max_header_bytes: u64) -> bool {
     u64::try_from(headers.len()).is_ok_and(|count| count <= max_headers)
         && headers
             .iter()
@@ -16,7 +16,7 @@ pub(crate) fn within_limits(headers: &HeaderMap, max_headers: u64, max_header_by
             .is_some_and(|bytes| bytes <= max_header_bytes)
 }
 
-pub(crate) fn materialize(headers: &HeaderMap) -> Vec<DeliveryHeader> {
+pub(super) fn materialize(headers: &HeaderMap) -> Vec<DeliveryHeader> {
     let mut normalized = headers
         .iter()
         .map(|(name, value)| DeliveryHeader {

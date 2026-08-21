@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use amiss_controller_service::{
-    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, Inbox, InboxLimits,
-    Operations, ReceiverConfig, router,
+    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, EndpointConfig,
+    Inbox, InboxLimits, Operations, router,
 };
 use axum::Router;
 use axum::body::Body;
@@ -76,7 +76,7 @@ pub(crate) struct Fixture {
 
 impl Fixture {
     pub(crate) fn new(
-        receiver_config: &ReceiverConfig,
+        receiver_config: &EndpointConfig,
         inbox_limits: InboxLimits,
         admission: TestAdmission,
     ) -> Self {
@@ -107,13 +107,13 @@ impl Fixture {
     }
 }
 
-pub(crate) fn receiver_config() -> ReceiverConfig {
-    ReceiverConfig {
-        delivery_path: DELIVERY_PATH.to_owned(),
+pub(crate) fn receiver_config() -> EndpointConfig {
+    EndpointConfig {
+        path: DELIVERY_PATH.to_owned(),
         max_body_bytes: 1_024,
         max_headers: 16,
         max_header_bytes: 2_048,
-        max_concurrent_deliveries: 4,
+        max_concurrent_requests: 4,
     }
 }
 
