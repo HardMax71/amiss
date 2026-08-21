@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use amiss_md::{Heading, HeadingSource};
 use unicode_general_category::{GeneralCategory, get_general_category};
@@ -29,7 +29,10 @@ pub fn anchor_set(
 /// publishes nothing for left out.
 #[must_use]
 pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
-    let mut occupied = OccupiedIdentities::default();
+    let mut occupied = OccupiedIdentities {
+        taken: HashSet::with_capacity(headings.len()),
+        ..OccupiedIdentities::default()
+    };
     let mut out = Vec::with_capacity(headings.len());
     for heading in headings {
         if heading.source == HeadingSource::RawHtml && rule.raw_html == RawHtml::Ignored {
@@ -52,9 +55,9 @@ pub fn identities(rule: &AnchorRule, headings: &[Heading]) -> Vec<String> {
 
 #[derive(Default)]
 struct OccupiedIdentities {
-    taken: BTreeSet<String>,
-    numbered: BTreeMap<String, u32>,
-    bumped: BTreeMap<String, String>,
+    taken: HashSet<String>,
+    numbered: HashMap<String, u32>,
+    bumped: HashMap<String, String>,
 }
 
 fn fill(rule: &AnchorRule, base: String, occupied: &mut OccupiedIdentities) -> Option<String> {
@@ -111,18 +114,10 @@ fn bumped_identity(base: String, occupied: &mut OccupiedIdentities) -> String {
 
 /// python-markdown rewrites `x_1` to `x_2` rather than appending again.
 fn bump(candidate: &str) -> String {
-    let digits: String = candidate
-        .chars()
-        .rev()
-        .take_while(char::is_ascii_digit)
-        .collect();
-    let head = candidate.get(..candidate.len().saturating_sub(digits.len()));
-    match (
-        digits.chars().rev().collect::<String>().parse::<u64>(),
-        head,
-    ) {
-        (Ok(count), Some(head)) if head.ends_with('_') && !digits.is_empty() => {
-            let stem = head.get(..head.len().saturating_sub(1)).unwrap_or(head);
+    let head = candidate.trim_end_matches(|ch: char| ch.is_ascii_digit());
+    let digits = candidate.get(head.len()..).unwrap_or_default();
+    match (head.strip_suffix('_'), digits.parse::<u64>()) {
+        (Some(stem), Ok(count)) => {
             format!("{stem}_{}", count.saturating_add(1))
         }
         _ => format!("{candidate}_1"),
