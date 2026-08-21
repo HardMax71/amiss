@@ -132,7 +132,7 @@ fn read_at(tree: &Path, path: &str) -> Result<Vec<u8>, String> {
 }
 
 fn parse_args(argv: &[OsString]) -> Option<Args> {
-    let mut tree: Option<PathBuf> = None;
+    let mut tree: Option<String> = None;
     let mut version: Option<String> = None;
     let mut host: Option<String> = None;
     let mut owner: Option<String> = None;
@@ -144,24 +144,33 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     let mut items = argv.iter();
     while let Some(flag) = items.next() {
         let value = items.next()?.to_str()?.to_owned();
-        match flag.to_str()? {
-            "--tree" => tree = Some(PathBuf::from(value)),
-            "--version" => version = Some(value),
-            "--host" => host = Some(value),
-            "--owner" => owner = Some(value),
-            "--repository" => repository = Some(value),
-            "--commit" => commit = Some(value),
-            "--action" => action = Some(value),
-            "--lock" => locks.push(value),
-            "--artifact" => artifacts.push(value),
+        let slot = match flag.to_str()? {
+            "--tree" => &mut tree,
+            "--version" => &mut version,
+            "--host" => &mut host,
+            "--owner" => &mut owner,
+            "--repository" => &mut repository,
+            "--commit" => &mut commit,
+            "--action" => &mut action,
+            "--lock" => {
+                locks.push(value);
+                continue;
+            }
+            "--artifact" => {
+                artifacts.push(value);
+                continue;
+            }
             _ => return None,
+        };
+        if slot.replace(value).is_some() {
+            return None;
         }
     }
     if locks.is_empty() || artifacts.is_empty() {
         return None;
     }
     Some(Args {
-        tree: tree?,
+        tree: PathBuf::from(tree?),
         version: version?,
         host: host?,
         owner: owner?,
