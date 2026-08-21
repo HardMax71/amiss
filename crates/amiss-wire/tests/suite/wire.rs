@@ -1,7 +1,7 @@
 use amiss_wire::ExitClass;
 use amiss_wire::de::{self, Error as DecodeError, ErrorKind as DecodeErrorKind, Obj};
 use amiss_wire::digest::{hb, hj};
-use amiss_wire::json::{ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
+use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
 
 #[expect(clippy::unwrap_used, reason = "test helper on inputs that must fail")]
 fn kind(input: &[u8]) -> ErrorKind {
@@ -96,10 +96,17 @@ fn rejects_past_the_depth_limit() {
 
 #[test]
 fn error_offsets_point_at_the_defect() {
-    assert_eq!(parse(b"1 2").unwrap_err().offset, 2);
-    assert_eq!(parse(br#"{"a":1,"a":2}"#).unwrap_err().offset, 7);
-    assert_eq!(parse(br#""\u00g0""#).unwrap_err().offset, 5);
-    assert_eq!(parse(b"\"\\u00").unwrap_err().offset, 5);
+    let cases: &[(&[u8], ErrorKind, usize)] = &[
+        (b"1 2", ErrorKind::TrailingContent, 2),
+        (br#"{"a":1,"a":2}"#, ErrorKind::DuplicateKey, 7),
+        (br#""\u00g0""#, ErrorKind::InvalidEscape, 5),
+        (b"\"\\u0g", ErrorKind::InvalidEscape, 4),
+        (b"\"\\u00g", ErrorKind::InvalidEscape, 5),
+        (b"\"\\u00", ErrorKind::UnexpectedEnd, 5),
+    ];
+    for &(input, kind, offset) in cases {
+        assert_eq!(parse(input).unwrap_err(), Error { kind, offset });
+    }
 }
 
 #[test]

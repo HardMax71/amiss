@@ -614,7 +614,7 @@ impl Parser<'_> {
 
     fn hex4(&mut self) -> Result<u32, Error> {
         let start = self.pos;
-        let end = start.saturating_add(4);
+        let end = start.saturating_add(4).min(self.bytes.len());
         let digits = self.bytes.get(start..end).ok_or(Error {
             kind: ErrorKind::UnexpectedEnd,
             offset: self.bytes.len(),
@@ -632,6 +632,12 @@ impl Parser<'_> {
                         offset: start.saturating_add(offset),
                     })
             })?;
+        if digits.len() < 4 {
+            return Err(Error {
+                kind: ErrorKind::UnexpectedEnd,
+                offset: self.bytes.len(),
+            });
+        }
         self.pos = end;
         Ok(code)
     }
