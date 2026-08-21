@@ -5,39 +5,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
+use amiss_fixtures::{external_facts, external_plan};
 use amiss_wire::digest::hj;
 use amiss_wire::external::assess;
-use amiss_wire::json::{Value, parse};
+use amiss_wire::json::Value;
 
 use super::super::rest::{GitHubVerification, OperationDeadline, Presence, RefFamily, Visibility};
 use super::{PRODUCER_NAME, verify_external};
-
-const PAYLOAD_SCHEMA: &str = "amiss/scanner-report-payload";
-
-/// A plan derived through the real engine derivation over a minimal report,
-/// so the verifier is tested against exactly what it will be handed.
-fn plan_over(destinations: &[&str]) -> Value {
-    let rows: Vec<String> = destinations
-        .iter()
-        .map(|destination| {
-            format!(
-                r#"{{"base":null,"candidate":{{"document":"docs/a.md","external_destination":"{destination}","intent":{{"external_scheme":"https"}},"resolution":{{"kind":"external","reason":"url"}}}}}}"#
-            )
-        })
-        .collect();
-    let payload = format!(
-        r#"{{"evaluation":{{"base":{{"commit_oid":"a"}},"candidate":{{"commit_oid":"b"}},"mode":"commit-pair"}},"observations":[{}],"result":{{"complete":true}},"schema":"{PAYLOAD_SCHEMA}"}}"#,
-        rows.join(",")
-    );
-    let parsed = parse(payload.as_bytes()).expect("the report payload is strict JSON");
-    let digest = hj(PAYLOAD_SCHEMA, &parsed);
-    let envelope = format!(
-        r#"{{"payload":{payload},"payload_digest":"{digest}","schema":"amiss/scanner-report-envelope"}}"#
-    );
-    let envelope = parse(envelope.as_bytes()).expect("the report envelope is strict JSON");
-    amiss_wire::external::plan(&envelope, "0.0.0", &digest.to_string())
-        .expect("the report yields a plan")
-}
 
 #[derive(Default)]
 struct ScriptedRest {
@@ -131,24 +105,6 @@ impl GitHubVerification for ScriptedRest {
     }
 }
 
-/// One line per row: destination, the repository fact, then the tail
-/// resolution when one was established.
-fn facts(evidence: &Value) -> Vec<String> {
-    let Some(Value::Array(rows)) = evidence.member("rows") else {
-        panic!("the evidence holds rows");
-    };
-    rows.iter()
-        .map(|row| {
-            let destination = row.text("destination").expect("a destination");
-            let repository = row.text("repository").expect("a repository fact");
-            match row.text("tail") {
-                Some(tail) => format!("{destination} {repository} {tail}"),
-                None => format!("{destination} {repository}"),
-            }
-        })
-        .collect()
-}
-
 const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 
 fn matrix_rest() -> ScriptedRest {
@@ -208,7 +164,7 @@ fn matrix_rest() -> ScriptedRest {
 
 #[test]
 fn every_visibility_and_resolution_becomes_its_fact() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://github.com/acme/agreed/blob/v1.0/a.md",
         "https://github.com/acme/bare",
         "https://github.com/acme/bound/blob/feature/x/a.md",
@@ -227,12 +183,13 @@ fn every_visibility_and_resolution_becomes_its_fact() {
         "https://github.com/acme/widgets/blob/feature/x/docs/a.md",
         "https://github.com/acme/widgets/tree/feature/x/docs/",
         "https://gitlab.com/acme/elsewhere",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = matrix_rest();
     let evidence =
         verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("evidence is produced");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec![
             "https://github.com/acme/agreed/blob/v1.0/a.md readable resolved".to_owned(),
             "https://github.com/acme/bare readable".to_owned(),
@@ -281,14 +238,15 @@ fn every_visibility_and_resolution_becomes_its_fact() {
 /// coupled a false path-missing against a live page.
 #[test]
 fn escaped_spellings_resolve_and_never_refute() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://github.com/acme/coupled/blob/main/x%2Fy.md",
         "https://github.com/acme/doubled/blob/main/My%2520File.md",
         "https://github.com/acme/nested/blob/main/docs/api.md",
         "https://github.com/acme/slashed/blob/release%2Fx/a.md",
         "https://github.com/acme/spaced/blob/main/My%20File.md",
         "https://github.com/acme/veiled/blob/release%2Fx/a.md",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("coupled", Visibility::Readable),
@@ -321,7 +279,7 @@ fn escaped_spellings_resolve_and_never_refute() {
     let evidence =
         verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("evidence is produced");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec![
             "https://github.com/acme/coupled/blob/main/x%2Fy.md readable".to_owned(),
             "https://github.com/acme/doubled/blob/main/My%2520File.md readable resolved".to_owned(),
@@ -337,10 +295,11 @@ fn escaped_spellings_resolve_and_never_refute() {
 /// partial evidence beats none, and the skipped rest stays unproven.
 #[test]
 fn a_rate_limit_keeps_the_partial_evidence() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://github.com/acme/first",
         "https://github.com/acme/second",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("first", Visibility::Readable),
@@ -352,7 +311,7 @@ fn a_rate_limit_keeps_the_partial_evidence() {
     let evidence =
         verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("partial evidence");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec!["https://github.com/acme/first readable".to_owned()],
     );
 }
@@ -360,10 +319,11 @@ fn a_rate_limit_keeps_the_partial_evidence() {
 /// The whole chain: scripted facts become evidence the engine judges.
 #[test]
 fn the_evidence_reaches_verdicts_through_the_engine() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://github.com/acme/gone/blob/main/missing.md",
         "https://github.com/acme/private",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("gone", Visibility::Readable),

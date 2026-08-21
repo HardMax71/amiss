@@ -4,26 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
+use amiss_fixtures::{external_facts, external_plan};
 use amiss_wire::external::assess;
-use amiss_wire::json::{Value, parse};
+use amiss_wire::json::Value;
 
 use super::super::rest::{GiteaVerification, OperationDeadline, Presence, RefFamily, Visibility};
 use super::{PRODUCER_NAME, verify_external};
-
-fn plan_over(destinations: &[&str]) -> Value {
-    let report = amiss_fixtures::external_report(destinations);
-    let parsed = parse(&report).expect("the report is strict JSON");
-    let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"))
-        .expect("the report names its engine");
-    amiss_wire::external::plan(
-        &parsed,
-        engine.text("engine_version").expect("a version"),
-        engine.text("engine_digest").expect("a digest"),
-    )
-    .expect("the report yields a plan")
-}
 
 #[derive(Default)]
 struct ScriptedRest {
@@ -103,22 +89,6 @@ impl GiteaVerification for ScriptedRest {
     }
 }
 
-fn facts(evidence: &Value) -> Vec<String> {
-    let Some(Value::Array(rows)) = evidence.member("rows") else {
-        panic!("the evidence holds rows");
-    };
-    rows.iter()
-        .map(|row| {
-            let destination = row.text("destination").expect("a destination");
-            let repository = row.text("repository").expect("a repository fact");
-            match row.text("tail") {
-                Some(tail) => format!("{destination} {repository} {tail}"),
-                None => format!("{destination} {repository}"),
-            }
-        })
-        .collect()
-}
-
 const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 
 fn matrix_rest() -> ScriptedRest {
@@ -158,7 +128,7 @@ fn matrix_rest() -> ScriptedRest {
 
 #[test]
 fn every_selector_and_visibility_becomes_its_fact() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://codeberg.org/acme/bare",
         "https://codeberg.org/acme/deleted/src/branch/old-branch/a.md",
         "https://codeberg.org/acme/denied/src/branch/main/a.md",
@@ -172,11 +142,12 @@ fn every_selector_and_visibility_becomes_its_fact() {
         "https://codeberg.org/acme/walled/src/branch/main/a.md",
         "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/a.md",
         "https://github.com/acme/elsewhere",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let evidence = verify_external(&matrix_rest(), &plan, "codeberg.org", "0.0.0", "t0")
         .expect("evidence is produced");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec![
             "https://codeberg.org/acme/bare readable".to_owned(),
             "https://codeberg.org/acme/deleted/src/branch/old-branch/a.md readable \
@@ -221,13 +192,14 @@ fn every_selector_and_visibility_becomes_its_fact() {
 /// revision-missing and coupled a false path-missing against a live page.
 #[test]
 fn escaped_spellings_resolve_and_never_refute() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://codeberg.org/acme/coupled/src/branch/main/x%2Fy.md",
         "https://codeberg.org/acme/doubled/src/branch/main/My%2520File.md",
         "https://codeberg.org/acme/slashed/src/branch/release%2Fx/a.md",
         "https://codeberg.org/acme/spaced/src/branch/main/My%20File.md",
         "https://codeberg.org/acme/veiled/src/branch/release%2Fx/a.md",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let rest = ScriptedRest {
         visibility: BTreeMap::from([
             ("coupled", Visibility::Readable),
@@ -252,7 +224,7 @@ fn escaped_spellings_resolve_and_never_refute() {
     let evidence =
         verify_external(&rest, &plan, "codeberg.org", "0.0.0", "t0").expect("evidence is produced");
     assert_eq!(
-        facts(&evidence),
+        external_facts(&evidence).expect("the evidence fixture has complete facts"),
         vec![
             "https://codeberg.org/acme/coupled/src/branch/main/x%2Fy.md readable".to_owned(),
             "https://codeberg.org/acme/doubled/src/branch/main/My%2520File.md readable resolved"
@@ -269,10 +241,11 @@ fn escaped_spellings_resolve_and_never_refute() {
 /// The whole chain: selector facts become verdicts through the engine.
 #[test]
 fn the_evidence_reaches_verdicts_through_the_engine() {
-    let plan = plan_over(&[
+    let plan = external_plan(&[
         "https://codeberg.org/acme/gone/src/branch/main/missing.md",
         "https://codeberg.org/acme/private",
-    ]);
+    ])
+    .expect("the report fixture yields a plan");
     let evidence = verify_external(&matrix_rest(), &plan, "codeberg.org", "0.0.0", "t0")
         .expect("evidence is produced");
     let assessment = assess(

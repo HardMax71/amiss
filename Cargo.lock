@@ -253,6 +253,7 @@ dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
  "amiss-controller-git",
+ "amiss-fixtures",
  "amiss-wire",
  "hex",
  "hmac",
