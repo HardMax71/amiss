@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -105,5 +106,63 @@ fn a_half_empty_staging_list_is_refused() {
             .output()
             .unwrap();
         assert_eq!(output.status.code(), Some(2), "{extra:?}: {output:?}");
+    }
+}
+
+#[test]
+fn every_singleton_flag_refuses_repetition() {
+    let tree = TempDir::new().unwrap();
+    std::fs::write(tree.path().join("Cargo.lock"), b"version = 4\n").unwrap();
+    std::fs::write(tree.path().join("action.yml"), b"action").unwrap();
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_BIN_EXE_amiss-bootstrap")),
+        tree.path().join("engine"),
+    )
+    .unwrap();
+    let common = [
+        "--version",
+        "0.9.0",
+        "--host",
+        "git.example",
+        "--owner",
+        "platform",
+        "--repository",
+        "amiss",
+        "--commit",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "--action",
+        "action.yml",
+        "--lock",
+        "Cargo.lock",
+        "--artifact",
+        "engine",
+    ];
+    let repeated = [
+        ("--tree", tree.path().as_os_str()),
+        ("--version", OsStr::new("0.9.0")),
+        ("--host", OsStr::new("git.example")),
+        ("--owner", OsStr::new("platform")),
+        ("--repository", OsStr::new("amiss")),
+        (
+            "--commit",
+            OsStr::new("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        ),
+        ("--action", OsStr::new("action.yml")),
+    ];
+    for (flag, value) in repeated {
+        let output = Command::new(env!("CARGO_BIN_EXE_amiss-manifest"))
+            .arg("--tree")
+            .arg(tree.path())
+            .args(common)
+            .arg(flag)
+            .arg(value)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{flag}: {output:?}");
+        assert!(output.stdout.is_empty(), "{flag}: {output:?}");
+        assert_eq!(
+            output.stderr, b"amiss-manifest: invalid-invocation\n",
+            "{flag}: {output:?}"
+        );
     }
 }
