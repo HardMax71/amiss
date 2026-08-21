@@ -441,16 +441,18 @@ impl Parser<'_> {
     }
 
     fn value(&mut self, depth: usize) -> Result<Value, Error> {
-        match self.peek() {
-            None => Err(self.error(ErrorKind::UnexpectedEnd)),
-            Some(b'n') => self.literal(b"null").map(|()| Value::Null),
-            Some(b't') => self.literal(b"true").map(|()| Value::Bool(true)),
-            Some(b'f') => self.literal(b"false").map(|()| Value::Bool(false)),
-            Some(b'"') => self.string().map(Value::String),
-            Some(b'{') => self.object(depth),
-            Some(b'[') => self.array(depth),
-            Some(b'-' | b'0'..=b'9') => self.number(),
-            Some(_) => Err(self.error(ErrorKind::UnexpectedByte)),
+        let byte = self
+            .peek()
+            .ok_or_else(|| self.error(ErrorKind::UnexpectedEnd))?;
+        match byte {
+            b'n' => self.literal(b"null").map(|()| Value::Null),
+            b't' => self.literal(b"true").map(|()| Value::Bool(true)),
+            b'f' => self.literal(b"false").map(|()| Value::Bool(false)),
+            b'"' => self.string().map(Value::String),
+            b'{' => self.object(depth),
+            b'[' => self.array(depth),
+            b'-' | b'0'..=b'9' => self.number(),
+            _ => Err(self.error(ErrorKind::UnexpectedByte)),
         }
     }
 
@@ -611,20 +613,26 @@ impl Parser<'_> {
     }
 
     fn hex4(&mut self) -> Result<u32, Error> {
-        let mut code = 0_u32;
-        for _ in 0_u8..4 {
-            let byte = self
-                .peek()
-                .ok_or_else(|| self.error(ErrorKind::UnexpectedEnd))?;
-            let digit = match byte {
-                b'0'..=b'9' => u32::from(byte.wrapping_sub(b'0')),
-                b'a'..=b'f' => u32::from(byte.wrapping_sub(b'a')).wrapping_add(10),
-                b'A'..=b'F' => u32::from(byte.wrapping_sub(b'A')).wrapping_add(10),
-                _ => return Err(self.error(ErrorKind::InvalidEscape)),
-            };
-            code = code.wrapping_shl(4) | digit;
-            self.advance();
-        }
+        let start = self.pos;
+        let end = start.saturating_add(4);
+        let digits = self.bytes.get(start..end).ok_or(Error {
+            kind: ErrorKind::UnexpectedEnd,
+            offset: self.bytes.len(),
+        })?;
+        let code = digits
+            .iter()
+            .copied()
+            .enumerate()
+            .try_fold(0_u32, |code, (offset, byte)| {
+                char::from(byte)
+                    .to_digit(16)
+                    .map(|digit| code.wrapping_shl(4) | digit)
+                    .ok_or(Error {
+                        kind: ErrorKind::InvalidEscape,
+                        offset: start.saturating_add(offset),
+                    })
+            })?;
+        self.pos = end;
         Ok(code)
     }
 

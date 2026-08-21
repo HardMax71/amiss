@@ -98,6 +98,8 @@ fn rejects_past_the_depth_limit() {
 fn error_offsets_point_at_the_defect() {
     assert_eq!(parse(b"1 2").unwrap_err().offset, 2);
     assert_eq!(parse(br#"{"a":1,"a":2}"#).unwrap_err().offset, 7);
+    assert_eq!(parse(br#""\u00g0""#).unwrap_err().offset, 5);
+    assert_eq!(parse(b"\"\\u00").unwrap_err().offset, 5);
 }
 
 #[test]
