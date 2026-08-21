@@ -103,6 +103,9 @@ The rest of this book walks those promises in the order a run does: what counts 
 what gets scanned, how references resolve, what the report says, and where the boundaries
 sit. Just want to run it? Start with [Invocation](invocation.md).
 
+For squeezing the last milliseconds out of large repositories, see the
+[performance tuning guide](tuning.md).
+
 ## Licensing
 
 Amiss source code and documentation ship under the
