@@ -167,3 +167,36 @@ t.test('crafted', function () {
         "the config template survives whole: {config:?}"
     );
 }
+
+#[test]
+fn the_fixture_reader_decodes_only_complete_unicode_values() {
+    let suite = r"
+t.test('unicode', function () {
+  assert.equal(micromark('\u0041'), '')
+  assert.equal(micromark('\u{0}'), '')
+  assert.equal(micromark('\u{10FFFF}'), '')
+  assert.equal(micromark('\u{1F600}'), '')
+  assert.equal(micromark('\uD83D\uDE00'), '')
+  assert.equal(micromark('\u{D83D}\u{DE00}'), '')
+  assert.equal(micromark('\u12345'), '')
+  assert.equal(micromark('\u'), '')
+  assert.equal(micromark('\u123'), '')
+  assert.equal(micromark('\u12xz'), '')
+  assert.equal(micromark('\u{}'), '')
+  assert.equal(micromark('\u{123'), '')
+  assert.equal(micromark('\u{110000}'), '')
+  assert.equal(micromark('\uD83D'), '')
+  assert.equal(micromark('\uDE00'), '')
+})
+";
+    let fixtures = corpus::micromark_fixtures("unicode", suite);
+    assert_eq!(
+        fixtures
+            .cases
+            .iter()
+            .map(|case| case.source.as_str())
+            .collect::<Vec<_>>(),
+        ["A", "\0", "\u{10FFFF}", "😀", "😀", "😀", "\u{1234}5"]
+    );
+    assert_eq!(fixtures.skipped, 8);
+}
