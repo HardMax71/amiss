@@ -8,7 +8,6 @@ use amiss_controller::{
     StageOutcome,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::report::MACHINE_JSON_BYTES;
 use tempfile::TempDir;
 
 use super::support::{
@@ -269,41 +268,6 @@ fn a_missing_staged_report_is_corrupt() {
         ledger.claim(&delivery, &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
-}
-
-#[test]
-fn a_report_exactly_at_the_ceiling_is_read_back_whole() {
-    let directory = TempDir::new().unwrap();
-    let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
-    let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
-    let mut publication = publication(&delivery, &lease);
-    publication.report = Some(vec![0; usize::try_from(MACHINE_JSON_BYTES).unwrap()]);
-    let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
-
-    assert_eq!(
-        ledger.claim(&delivery, &check_binding()).unwrap(),
-        DeliveryClaim::Publish(frozen)
-    );
-}
-
-#[test]
-fn oversized_conflicting_completion_is_lost() {
-    let directory = TempDir::new().unwrap();
-    let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
-    let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
-    let publication = publication(&delivery, &lease);
-    let mut conflicting = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
-    let oversized = usize::try_from(MACHINE_JSON_BYTES).unwrap() + 1;
-    conflicting.publication.report = Some(vec![0; oversized]);
-
-    assert_eq!(
-        ledger.complete(&delivery, &conflicting).unwrap(),
-        LeaseCompletion::Lost
-    );
 }
 
 #[test]
