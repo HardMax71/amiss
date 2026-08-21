@@ -58,17 +58,13 @@ impl Obj {
     ///
     /// Fails with `WrongType` when the value is not a JSON object.
     pub fn new(path: &str, value: Value) -> Result<Self, Error> {
-        match value {
-            Value::Object(members) => Ok(Self {
-                path: path.to_owned(),
-                members: members.into_vec(),
-            }),
-            Value::Null
-            | Value::Bool(_)
-            | Value::Integer(_)
-            | Value::String(_)
-            | Value::Array(_) => fail(path, ErrorKind::WrongType),
-        }
+        let Value::Object(members) = value else {
+            return fail(path, ErrorKind::WrongType);
+        };
+        Ok(Self {
+            path: path.to_owned(),
+            members: members.into_vec(),
+        })
     }
 
     #[must_use]
@@ -88,10 +84,12 @@ impl Obj {
     ///
     /// Fails with `MissingField` when the member is absent.
     pub fn take(&mut self, name: &str) -> Result<Value, Error> {
-        match self.members.iter().position(|(key, _)| key == name) {
-            Some(index) => Ok(self.members.remove(index).1),
-            None => fail(&self.field(name), ErrorKind::MissingField),
-        }
+        let index = self
+            .members
+            .iter()
+            .position(|(key, _)| key == name)
+            .ok_or_else(|| Error::new(&self.field(name), ErrorKind::MissingField))?;
+        Ok(self.members.remove(index).1)
     }
 
     /// Removes and decodes one required member.
@@ -113,13 +111,13 @@ impl Obj {
     ///
     /// Fails with `UnknownField` at the first leftover member.
     pub fn finish(self) -> Result<(), Error> {
-        match self.members.into_iter().next() {
-            None => Ok(()),
-            Some((name, _)) => Err(Error {
-                kind: ErrorKind::UnknownField,
-                path: format!("{}.{name}", self.path),
-            }),
-        }
+        let Some((name, _)) = self.members.into_iter().next() else {
+            return Ok(());
+        };
+        Err(Error {
+            kind: ErrorKind::UnknownField,
+            path: format!("{}.{name}", self.path),
+        })
     }
 
     fn decode_member<T>(
@@ -141,12 +139,10 @@ impl Obj {
 ///
 /// Fails with `WrongType` when the value is not a string.
 pub fn string(path: &str, value: Value) -> Result<String, Error> {
-    match value {
-        Value::String(s) => Ok(s.into_string()),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_) => {
-            fail(path, ErrorKind::WrongType)
-        }
-    }
+    let Value::String(string) = value else {
+        return fail(path, ErrorKind::WrongType);
+    };
+    Ok(string.into_string())
 }
 
 /// # Errors
@@ -157,24 +153,20 @@ pub fn string(path: &str, value: Value) -> Result<String, Error> {
     reason = "uniform consuming decoder signature"
 )]
 pub fn integer(path: &str, value: Value) -> Result<i64, Error> {
-    match value {
-        Value::Integer(n) => Ok(n),
-        Value::Null | Value::Bool(_) | Value::String(_) | Value::Array(_) | Value::Object(_) => {
-            fail(path, ErrorKind::WrongType)
-        }
-    }
+    let Value::Integer(integer) = value else {
+        return fail(path, ErrorKind::WrongType);
+    };
+    Ok(integer)
 }
 
 /// # Errors
 ///
 /// Fails with `WrongType` when the value is not an array.
 pub fn array(path: &str, value: Value) -> Result<Vec<Value>, Error> {
-    match value {
-        Value::Array(items) => Ok(items.into_vec()),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Object(_) => {
-            fail(path, ErrorKind::WrongType)
-        }
-    }
+    let Value::Array(items) = value else {
+        return fail(path, ErrorKind::WrongType);
+    };
+    Ok(items.into_vec())
 }
 
 /// # Errors
@@ -190,12 +182,5 @@ pub fn const_str(path: &str, value: Value, expected: &str) -> Result<(), Error> 
 
 #[must_use]
 pub fn nullable(value: Value) -> Option<Value> {
-    match value {
-        Value::Null => None,
-        other @ (Value::Bool(_)
-        | Value::Integer(_)
-        | Value::String(_)
-        | Value::Array(_)
-        | Value::Object(_)) => Some(other),
-    }
+    (!matches!(&value, Value::Null)).then_some(value)
 }
