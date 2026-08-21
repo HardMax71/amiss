@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fmt;
 use std::sync::Arc;
 
 use amiss_wire::model::RepositoryIdentity;
@@ -21,24 +20,15 @@ pub struct ResolvedPlan {
     pub check: crate::CheckBinding,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum PlanError {
+    #[error("the check plan scope is already registered")]
     Duplicate,
+    #[error("no check plan matches the authenticated delivery")]
     Missing,
+    #[error("the check plan changed after validation")]
     Invalid,
 }
-
-impl fmt::Display for PlanError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Duplicate => "the check plan scope is already registered",
-            Self::Missing => "no check plan matches the authenticated delivery",
-            Self::Invalid => "the check plan changed after validation",
-        })
-    }
-}
-
-impl std::error::Error for PlanError {}
 
 /// Adds one checked plan without replacing live controller configuration.
 ///

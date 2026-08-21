@@ -51,20 +51,9 @@ impl Default for GitLabTimeouts {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("the GitLab client configuration is invalid: {0}")]
 pub struct GitLabClientError(&'static str);
-
-impl fmt::Display for GitLabClientError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "the GitLab client configuration is invalid: {}",
-            self.0
-        )
-    }
-}
-
-impl std::error::Error for GitLabClientError {}
 
 #[derive(Clone)]
 pub(super) struct Transport {

@@ -6,7 +6,6 @@ mod refresh;
 mod rest;
 mod verify;
 
-use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -46,27 +45,13 @@ impl GitHubTimeouts {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GitHubClientError {
+    #[error("the GitHub App configuration is invalid: {0}")]
     Configuration(&'static str),
+    #[error("the GitHub App client could not be created")]
     Client,
 }
-
-impl fmt::Display for GitHubClientError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Configuration(reason) => {
-                write!(
-                    formatter,
-                    "the GitHub App configuration is invalid: {reason}"
-                )
-            }
-            Self::Client => formatter.write_str("the GitHub App client could not be created"),
-        }
-    }
-}
-
-impl std::error::Error for GitHubClientError {}
 
 #[derive(Clone)]
 pub struct GitHubApp {

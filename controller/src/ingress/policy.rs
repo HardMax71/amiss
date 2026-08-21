@@ -1,4 +1,3 @@
-use std::fmt;
 use std::time::Duration;
 
 use amiss_wire::digest::hb;
@@ -203,32 +202,23 @@ impl<'a> IngressCheck<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum IngressError {
+    #[error("controller time cannot be trusted")]
     Clock,
+    #[error("provider delivery exceeds an ingress ceiling")]
     Limits,
+    #[error("provider ingress policy is invalid")]
     Policy,
+    #[error("provider proof does not bind this request")]
     Request,
+    #[error("authenticated delivery does not match its route")]
     Route,
+    #[error("provider delivery is outside its freshness window")]
     Freshness,
+    #[error("provider replay identity is invalid")]
     Replay,
 }
-
-impl fmt::Display for IngressError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Clock => "controller time cannot be trusted",
-            Self::Limits => "provider delivery exceeds an ingress ceiling",
-            Self::Policy => "provider ingress policy is invalid",
-            Self::Request => "provider proof does not bind this request",
-            Self::Route => "authenticated delivery does not match its route",
-            Self::Freshness => "provider delivery is outside its freshness window",
-            Self::Replay => "provider replay identity is invalid",
-        })
-    }
-}
-
-impl std::error::Error for IngressError {}
 
 fn normalize_delivery(
     verified: VerifiedDelivery,

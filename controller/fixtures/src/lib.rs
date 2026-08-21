@@ -2,8 +2,6 @@ pub mod clock;
 pub mod config;
 pub mod lane;
 
-use std::fmt;
-
 use aws_lc_rs::encoding::{AsDer, Pkcs8V1Der, PublicKeyX509Der};
 use aws_lc_rs::rsa::{KeyPair, KeySize};
 use aws_lc_rs::signature::KeyPair as _;
@@ -14,16 +12,9 @@ pub struct RsaKeys {
     pub public_pem: Vec<u8>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("the RSA fixture could not be generated")]
 pub struct FixtureError;
-
-impl fmt::Display for FixtureError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("the RSA fixture could not be generated")
-    }
-}
-
-impl std::error::Error for FixtureError {}
 
 /// Generates one 2048-bit RSA pair for a provider test process.
 ///

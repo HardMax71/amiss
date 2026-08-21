@@ -1,6 +1,5 @@
 mod tests;
 
-use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
@@ -36,16 +35,9 @@ impl PackLimits {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
 pub(super) struct PackError(&'static str);
-
-impl fmt::Display for PackError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
-}
-
-impl std::error::Error for PackError {}
 
 pub(super) struct InstalledPack {
     pub(super) keep_path: Option<PathBuf>,

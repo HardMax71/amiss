@@ -5,7 +5,6 @@ mod tests;
 mod pack;
 mod protocol;
 
-use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -83,16 +82,9 @@ pub struct GitAcquisition<F> {
     pub plan: F,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
 pub struct GitFetchError(&'static str);
-
-impl fmt::Display for GitFetchError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
-    }
-}
-
-impl std::error::Error for GitFetchError {}
 
 /// Fetches only the named SHA-1 objects over strict HTTPS and installs fixed local refs.
 ///

@@ -95,6 +95,7 @@ dependencies = [
  "amiss-git",
  "amiss-wire",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -166,6 +167,7 @@ dependencies = [
  "pem 4.0.0",
  "serde_json",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -198,6 +200,7 @@ dependencies = [
  "reqwest",
  "secrecy",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -216,6 +219,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "thiserror",
  "url",
 ]
 
@@ -261,6 +265,7 @@ dependencies = [
  "serde_urlencoded",
  "sha2",
  "tempfile",
+ "thiserror",
  "url",
 ]
 
@@ -297,6 +302,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "thiserror",
  "url",
 ]
 

@@ -1,7 +1,5 @@
 mod controls;
 
-use std::fmt;
-
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
 };
@@ -19,38 +17,27 @@ pub use controls::{AcquiredControl, PolicyControls};
 
 const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v1";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum BootstrapJobError {
+    #[error("the authenticated run identity is inconsistent")]
     RunIdentity,
+    #[error("the check plan changed after validation")]
     CheckPlan,
+    #[error("the organization floor is invalid")]
     OrganizationFloor,
+    #[error("the debt snapshot is invalid")]
     DebtSnapshot,
+    #[error("the waiver bundle is invalid")]
     WaiverBundle,
+    #[error("an external control names another run")]
     ControlBinding,
+    #[error("the execution constraint is invalid")]
     ExecutionConstraint,
+    #[error("the trusted time is invalid")]
     TrustedTime,
+    #[error("the sealed requests cannot be encoded within the stream ceiling")]
     RequestEncoding,
 }
-
-impl fmt::Display for BootstrapJobError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::RunIdentity => "the authenticated run identity is inconsistent",
-            Self::CheckPlan => "the check plan changed after validation",
-            Self::OrganizationFloor => "the organization floor is invalid",
-            Self::DebtSnapshot => "the debt snapshot is invalid",
-            Self::WaiverBundle => "the waiver bundle is invalid",
-            Self::ControlBinding => "an external control names another run",
-            Self::ExecutionConstraint => "the execution constraint is invalid",
-            Self::TrustedTime => "the trusted time is invalid",
-            Self::RequestEncoding => {
-                "the sealed requests cannot be encoded within the stream ceiling"
-            }
-        })
-    }
-}
-
-impl std::error::Error for BootstrapJobError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckPlan {

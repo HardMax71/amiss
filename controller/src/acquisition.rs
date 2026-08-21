@@ -1,4 +1,3 @@
-use std::fmt;
 use std::path::Path;
 
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
@@ -6,28 +5,19 @@ use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::{RunRequest, check_binding};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AcquireError {
+    #[error("the check plan changed after authentication")]
     PlanBinding,
+    #[error("the acquired repository objects cannot be trusted")]
     RepositoryObjects,
+    #[error("an acquired repository commit names another tree")]
     RepositoryTree,
+    #[error("the acquired action objects cannot be trusted")]
     ActionObjects,
+    #[error("the acquired action commit names another tree")]
     ActionTree,
 }
-
-impl fmt::Display for AcquireError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::PlanBinding => "the check plan changed after authentication",
-            Self::RepositoryObjects => "the acquired repository objects cannot be trusted",
-            Self::RepositoryTree => "an acquired repository commit names another tree",
-            Self::ActionObjects => "the acquired action objects cannot be trusted",
-            Self::ActionTree => "the acquired action commit names another tree",
-        })
-    }
-}
-
-impl std::error::Error for AcquireError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AcquiredRoots<'a> {

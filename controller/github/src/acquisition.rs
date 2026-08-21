@@ -1,6 +1,5 @@
 mod tests;
 
-use std::fmt;
 use std::sync::atomic::Ordering;
 
 use amiss_controller::{Acquisition, AcquisitionTarget, ProviderError, RunRequest};
@@ -35,28 +34,19 @@ impl<T> GitHubAcquisition<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GitHubAcquireError {
+    #[error("the GitHub acquisition request is inconsistent")]
     InvalidRequest,
+    #[error("the GitHub installation credential is unavailable")]
     Credentials,
+    #[error("the GitHub pull request objects could not be acquired")]
     Repository,
+    #[error("the pinned action objects could not be acquired")]
     Action,
+    #[error("GitHub acquisition was cancelled")]
     Cancelled,
 }
-
-impl fmt::Display for GitHubAcquireError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::InvalidRequest => "the GitHub acquisition request is inconsistent",
-            Self::Credentials => "the GitHub installation credential is unavailable",
-            Self::Repository => "the GitHub pull request objects could not be acquired",
-            Self::Action => "the pinned action objects could not be acquired",
-            Self::Cancelled => "GitHub acquisition was cancelled",
-        })
-    }
-}
-
-impl std::error::Error for GitHubAcquireError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitHubFetchPlan {

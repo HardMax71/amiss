@@ -1,5 +1,3 @@
-use std::fmt;
-
 use amiss_controller::{RunIdentity, RunRequest};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 
@@ -8,16 +6,9 @@ use crate::identity::{
     repository_url,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("the GitLab acquisition request is inconsistent")]
 pub struct GitLabPlanError;
-
-impl fmt::Display for GitLabPlanError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("the GitLab acquisition request is inconsistent")
-    }
-}
-
-impl std::error::Error for GitLabPlanError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitLabFetchPlan {

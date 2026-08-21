@@ -19,6 +19,7 @@ gix = { version = "0.86", default-features = false, features = [
 gix-pack = { version = "0.73", features = ["sha1"] }
 secrecy.workspace = true
 tempfile.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
