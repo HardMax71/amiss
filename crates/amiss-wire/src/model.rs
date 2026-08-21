@@ -10,11 +10,7 @@ pub struct RepoPathText(String);
 impl RepoPathText {
     #[must_use]
     pub fn new(raw: String) -> Option<Self> {
-        if path_bytes_valid(raw.as_bytes()) {
-            Some(Self(raw))
-        } else {
-            None
-        }
+        path_bytes_valid(raw.as_bytes()).then_some(Self(raw))
     }
 
     #[must_use]
@@ -145,16 +141,7 @@ pub struct ArtifactId(String);
 impl ArtifactId {
     #[must_use]
     pub fn new(raw: String) -> Option<Self> {
-        let mut bytes = raw.bytes();
-        let first = bytes.next()?;
-        if raw.len() > 128 || !first.is_ascii_lowercase() && !first.is_ascii_digit() {
-            return None;
-        }
-        if bytes.all(id_tail_byte) {
-            Some(Self(raw))
-        } else {
-            None
-        }
+        (raw.len() <= 128 && id_body_valid(raw.as_bytes())).then_some(Self(raw))
     }
 
     #[must_use]
@@ -175,16 +162,7 @@ impl OwnerId {
         let suffix = ["team:", "service:", "user:"]
             .iter()
             .find_map(|prefix| raw.strip_prefix(prefix))?;
-        let mut bytes = suffix.bytes();
-        let first = bytes.next()?;
-        if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
-            return None;
-        }
-        if bytes.all(id_tail_byte) {
-            Some(Self(raw))
-        } else {
-            None
-        }
+        id_body_valid(suffix.as_bytes()).then_some(Self(raw))
     }
 
     #[must_use]
@@ -193,8 +171,16 @@ impl OwnerId {
     }
 }
 
-fn id_tail_byte(byte: u8) -> bool {
-    byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'/' | b'-')
+fn id_body_valid(raw: &[u8]) -> bool {
+    let Some((&first, tail)) = raw.split_first() else {
+        return false;
+    };
+    (first.is_ascii_lowercase() || first.is_ascii_digit())
+        && tail.iter().copied().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(byte, b'.' | b'_' | b'/' | b'-')
+        })
 }
 
 /// Whole-second UTC instant; the fixed-width form makes lexicographic order
@@ -380,26 +366,18 @@ impl RepositoryIdentity {
                 .as_bytes()
                 .split(|&byte| byte == b'/')
                 .all(identity_segment);
-        if host_valid(&host) && owner_ok && name_valid(&name) {
-            Some(Self { host, owner, name })
-        } else {
-            None
-        }
+        (host_valid(&host) && owner_ok && name_valid(&name)).then_some(Self { host, owner, name })
     }
 
     /// Convenience constructor for GitHub's fixed host and single-segment
     /// owner form.
     #[must_use]
     pub fn github(owner: String, name: String) -> Option<Self> {
-        if identity_segment(owner.as_bytes()) && name_valid(&name) {
-            Some(Self {
-                host: "github.com".to_owned(),
-                owner,
-                name,
-            })
-        } else {
-            None
-        }
+        (identity_segment(owner.as_bytes()) && name_valid(&name)).then_some(Self {
+            host: "github.com".to_owned(),
+            owner,
+            name,
+        })
     }
 
     #[must_use]
@@ -512,11 +490,7 @@ pub struct Oid {
 impl Oid {
     #[must_use]
     pub fn new(object_format: ObjectFormat, raw: String) -> Option<Self> {
-        if oid_hex(object_format, &raw) {
-            Some(Self { object_format, raw })
-        } else {
-            None
-        }
+        oid_hex(object_format, &raw).then_some(Self { object_format, raw })
     }
 
     #[must_use]
