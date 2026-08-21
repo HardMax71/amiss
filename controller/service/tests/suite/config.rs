@@ -94,7 +94,7 @@ fn execution_clock_policy_is_returned_with_ingress()
 
     assert_eq!(loaded.signed_age, Duration::from_mins(5));
     assert_eq!(loaded.future_skew, Duration::from_secs(5));
-    assert_eq!(loaded.evaluation.max_concurrent_evaluations, 4);
+    assert_eq!(loaded.evaluation.max_concurrent_requests, 4);
     Ok(())
 }
 
@@ -146,7 +146,7 @@ fn queued_concurrency_has_a_hard_ceiling() -> Result<(), Box<dyn std::error::Err
             "queue": { "max_concurrent_deliveries": value }
         }))?;
         let loaded = load_limits(&raw, "/provider/delivery".to_owned())?;
-        assert_eq!(loaded.receiver.max_concurrent_deliveries, value);
+        assert_eq!(loaded.receiver.max_concurrent_requests, value);
     }
     for value in [0, 65] {
         let raw: ServiceLimits = serde_json::from_value(json!({
@@ -398,18 +398,14 @@ fn a_queued_service_error_displays_its_reason() {
     );
 }
 
-/// The three service-side errors name themselves distinctly.
+/// The service-side errors name themselves distinctly.
 #[test]
 fn service_errors_name_themselves() {
-    use amiss_controller_service::{EvaluationConfigError, ReceiverConfigError, SupervisionError};
-    let receiver = [ReceiverConfigError::Path, ReceiverConfigError::Limits];
-    let messages: Vec<String> = receiver.iter().map(ToString::to_string).collect();
+    use amiss_controller_service::{EndpointConfigError, SupervisionError};
+    let endpoint = [EndpointConfigError::Path, EndpointConfigError::Limits];
+    let messages: Vec<String> = endpoint.iter().map(ToString::to_string).collect();
     assert!(messages.iter().all(|message| !message.is_empty()));
     assert_ne!(messages[0], messages[1]);
-    assert_eq!(
-        EvaluationConfigError.to_string(),
-        "evaluation endpoint configuration is invalid"
-    );
     assert_eq!(
         SupervisionError::Worker(amiss_controller_service::DeliveryWorkerError::Clock).to_string(),
         "delivery worker stopped"
