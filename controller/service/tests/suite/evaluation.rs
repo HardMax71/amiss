@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex};
 
-use amiss_controller_service::{EvaluationConfig, Operations, evaluation_router};
+use amiss_controller_service::{EndpointConfig, Operations, evaluation_router};
 use axum::body::{Body, Bytes};
 use axum::http::{Method, Request, StatusCode};
 use tokio_stream::StreamExt as _;
@@ -102,7 +102,7 @@ async fn full_evaluation_capacity_rejects_without_starting_more_work()
     let observed_release = Arc::clone(&release);
     let observed_started = Arc::clone(&started);
     let mut limited = config();
-    limited.max_concurrent_evaluations = 1;
+    limited.max_concurrent_requests = 1;
     let (app, _drain) = evaluation_router(
         &limited,
         Arc::new(AtomicBool::new(true)),
@@ -159,7 +159,7 @@ async fn drain_waits_for_detached_evaluation() -> Result<(), Box<dyn std::error:
     let observed_release = Arc::clone(&release);
     let observed_started = Arc::clone(&started);
     let mut limited = config();
-    limited.max_concurrent_evaluations = 1;
+    limited.max_concurrent_requests = 1;
     let (app, drain) = evaluation_router(
         &limited,
         Arc::new(AtomicBool::new(true)),
@@ -269,7 +269,7 @@ async fn pending_body_times_out_and_releases_evaluation_capacity()
     let calls = Arc::new(AtomicUsize::new(0));
     let observed_calls = Arc::clone(&calls);
     let mut limited = config();
-    limited.max_concurrent_evaluations = 1;
+    limited.max_concurrent_requests = 1;
     let (app, _drain) = evaluation_router(
         &limited,
         Arc::new(AtomicBool::new(true)),
@@ -351,7 +351,7 @@ fn invalid_endpoint_configuration_is_rejected() {
         .is_err()
     );
     let mut invalid = config();
-    invalid.max_concurrent_evaluations = 0;
+    invalid.max_concurrent_requests = 0;
     assert!(
         evaluation_router(
             &invalid,
@@ -361,7 +361,7 @@ fn invalid_endpoint_configuration_is_rejected() {
         )
         .is_err()
     );
-    invalid.max_concurrent_evaluations = 65;
+    invalid.max_concurrent_requests = 65;
     assert!(
         evaluation_router(
             &invalid,
@@ -392,12 +392,12 @@ fn invalid_endpoint_configuration_is_rejected() {
     }
 }
 
-fn config() -> EvaluationConfig {
-    EvaluationConfig {
+fn config() -> EndpointConfig {
+    EndpointConfig {
         path: PATH.to_owned(),
         max_body_bytes: 16,
         max_headers: 8,
         max_header_bytes: 256,
-        max_concurrent_evaluations: 2,
+        max_concurrent_requests: 2,
     }
 }

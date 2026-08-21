@@ -8,11 +8,7 @@ use std::time::Duration;
 
 use amiss_controller::{IngressLimits, IngressPolicy, ReplayWindow};
 
-use crate::evaluation::{
-    MAX_BODY_BYTES, MAX_CONCURRENT_EVALUATIONS, MAX_HEADER_BYTES, MAX_HEADERS,
-};
-use crate::receiver::MAX_CONCURRENT_DELIVERIES;
-use crate::{EvaluationConfig, ReceiverConfig};
+use crate::endpoint::{self, EndpointConfig, MAX_BODY_BYTES, MAX_HEADER_BYTES, MAX_HEADERS};
 
 use self::http::checked_http;
 use self::model::{CommonLimits, EndpointLimits};
@@ -38,17 +34,14 @@ pub fn load_limits(raw: &ServiceLimits, webhook_path: String) -> Result<LoadedLi
     let common = checked_common(&raw.execution)?;
     let inbox = checked_inbox(raw)?;
     let worker = checked_queue(raw)?;
-    if !(1..=MAX_CONCURRENT_DELIVERIES).contains(&raw.queue.max_concurrent_deliveries) {
-        return Err(ConfigError::invalid("delivery concurrency is invalid"));
-    }
-    let receiver = ReceiverConfig {
-        delivery_path: webhook_path,
+    let receiver = EndpointConfig {
+        path: webhook_path,
         max_body_bytes: common.endpoint.body_bytes,
         max_headers: common.endpoint.headers,
         max_header_bytes: common.endpoint.header_bytes,
-        max_concurrent_deliveries: raw.queue.max_concurrent_deliveries,
+        max_concurrent_requests: raw.queue.max_concurrent_deliveries,
     };
-    crate::receiver::validate(&receiver)
+    endpoint::validate(&receiver)
         .map_err(|defect| ConfigError::caused_by("webhook endpoint is invalid", defect))?;
     Ok(LoadedLimits {
         receiver,
@@ -76,18 +69,15 @@ pub fn load_execution_limits(
     evaluation_path: String,
     max_concurrent_evaluations: usize,
 ) -> Result<LoadedExecutionLimits, ConfigError> {
-    if !(1..=MAX_CONCURRENT_EVALUATIONS).contains(&max_concurrent_evaluations) {
-        return Err(ConfigError::invalid("evaluation concurrency is invalid"));
-    }
     let common = checked_common(raw)?;
-    let evaluation = EvaluationConfig {
+    let evaluation = EndpointConfig {
         path: evaluation_path,
         max_body_bytes: common.endpoint.body_bytes,
         max_headers: common.endpoint.headers,
         max_header_bytes: common.endpoint.header_bytes,
-        max_concurrent_evaluations,
+        max_concurrent_requests: max_concurrent_evaluations,
     };
-    crate::evaluation::validate(&evaluation)
+    endpoint::validate(&evaluation)
         .map_err(|defect| ConfigError::caused_by("evaluation endpoint is invalid", defect))?;
     Ok(LoadedExecutionLimits {
         evaluation,

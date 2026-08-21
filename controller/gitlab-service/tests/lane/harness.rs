@@ -12,7 +12,7 @@ use amiss_controller::{
 };
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
-    AdmissionRejection, EvaluationConfig, Operations, check_lane, evaluation_router_with_clock,
+    AdmissionRejection, EndpointConfig, Operations, check_lane, evaluation_router_with_clock,
 };
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
@@ -145,12 +145,12 @@ impl Harness {
             wall_timeout: case.wall_timeout(),
         });
         let (router, _drain) = evaluation_router_with_clock(
-            &EvaluationConfig {
+            &EndpointConfig {
                 path: ENDPOINT.to_owned(),
                 max_body_bytes: 1_024,
                 max_headers: 32,
                 max_header_bytes: 32 * 1_024,
-                max_concurrent_evaluations: 2,
+                max_concurrent_requests: 2,
             },
             Arc::new(AtomicBool::new(true)),
             Operations::default(),

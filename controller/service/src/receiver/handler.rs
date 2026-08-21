@@ -1,55 +1,40 @@
 use std::sync::{Arc, Mutex};
 
-use amiss_controller::ControllerClock;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
-use tokio::sync::Semaphore;
 
 use super::admission::{AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission};
-use super::headers;
-use crate::request_body::{self, ReadError};
+use crate::endpoint::{self, EndpointState};
 use crate::{DeliveryHeader, EnqueueOutcome, Inbox, InboxError, IncomingDelivery, IncomingHeader};
 
 #[derive(Clone)]
 pub(super) struct ReceiverState {
     pub(super) admission: Arc<dyn DeliveryAdmission>,
     pub(super) inbox: Arc<Mutex<Inbox>>,
-    pub(super) max_body_bytes: usize,
-    pub(super) max_headers: u64,
-    pub(super) max_header_bytes: u64,
-    pub(super) permits: Arc<Semaphore>,
-    pub(super) clock: Arc<dyn ControllerClock>,
+    pub(super) endpoint: EndpointState,
 }
 
 pub(super) async fn receive(State(state): State<ReceiverState>, request: Request) -> StatusCode {
-    let Some(received_at_unix_millis) = state.clock.now_unix_millis() else {
-        return StatusCode::SERVICE_UNAVAILABLE;
-    };
-    let (parts, body) = request.into_parts();
-    if parts.uri.query().is_some() {
-        return StatusCode::BAD_REQUEST;
-    }
-    if !headers::within_limits(&parts.headers, state.max_headers, state.max_header_bytes) {
-        return StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE;
-    }
-    let Ok(permit) = Arc::clone(&state.permits).try_acquire_owned() else {
-        return StatusCode::SERVICE_UNAVAILABLE;
-    };
-    let body = match request_body::read(body, state.max_body_bytes).await {
-        Ok(body) => body,
-        Err(ReadError::Invalid) => return StatusCode::PAYLOAD_TOO_LARGE,
-        Err(ReadError::TimedOut) => return StatusCode::REQUEST_TIMEOUT,
-    };
-    let headers = headers::materialize(&parts.headers);
-    let outcome = tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        dispatch(&state, received_at_unix_millis, &headers, body.as_ref())
-    })
-    .await;
-    match outcome {
-        Ok(outcome) => status(&outcome),
-        Err(_panic) => StatusCode::SERVICE_UNAVAILABLE,
-    }
+    let ReceiverState {
+        admission,
+        inbox,
+        endpoint,
+    } = state;
+    endpoint::bounded_request(
+        &endpoint,
+        request,
+        move |received_at_unix_millis, headers, body| {
+            dispatch(
+                admission.as_ref(),
+                inbox.as_ref(),
+                received_at_unix_millis,
+                headers,
+                body,
+            )
+        },
+    )
+    .await
+    .map_or_else(std::convert::identity, |outcome| status(&outcome))
 }
 
 enum DispatchOutcome {
@@ -81,12 +66,13 @@ fn status(outcome: &DispatchOutcome) -> StatusCode {
 }
 
 fn dispatch(
-    state: &ReceiverState,
+    admission: &dyn DeliveryAdmission,
+    inbox: &Mutex<Inbox>,
     received_at_unix_millis: i64,
     headers: &[DeliveryHeader],
     body: &[u8],
 ) -> DispatchOutcome {
-    let admitted = match state.admission.admit(AdmissionRequest {
+    let admitted = match admission.admit(AdmissionRequest {
         received_at_unix_millis,
         headers,
         body,
@@ -94,13 +80,7 @@ fn dispatch(
         Ok(admitted) => admitted,
         Err(rejection) => return DispatchOutcome::Rejected(rejection),
     };
-    enqueue(
-        &state.inbox,
-        &admitted,
-        received_at_unix_millis,
-        headers,
-        body,
-    )
+    enqueue(inbox, &admitted, received_at_unix_millis, headers, body)
 }
 
 fn enqueue(

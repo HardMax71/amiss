@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use amiss_controller_service::{
-    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, InboxError,
-    IncomingDelivery, Operations, ReceiverConfig, ReceiverConfigError, router,
+    AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, EndpointConfig,
+    EndpointConfigError, InboxError, IncomingDelivery, Operations, router,
 };
 use axum::body::{Body, Bytes};
 use axum::http::{Method, Request, StatusCode};
@@ -46,7 +46,7 @@ async fn full_delivery_capacity_rejects_before_reading_another_body()
         started: Mutex::new(Some(started)),
     });
     let mut config = receiver_config();
-    config.max_concurrent_deliveries = 1;
+    config.max_concurrent_requests = 1;
     let (app, _drain) = router(
         &config,
         inbox,
@@ -100,7 +100,7 @@ async fn full_delivery_capacity_rejects_before_reading_another_body()
 async fn pending_body_times_out_and_releases_delivery_capacity()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut config = receiver_config();
-    config.max_concurrent_deliveries = 1;
+    config.max_concurrent_requests = 1;
     let fixture = Fixture::new(&config, inbox_limits(), TestAdmission::accepting());
     let (body_read, observed) = tokio::sync::oneshot::channel();
     let mut body_read = Some(body_read);
@@ -151,7 +151,7 @@ async fn pending_body_times_out_and_releases_delivery_capacity()
     Ok(())
 }
 
-async fn assert_rejected_before_admission(config: ReceiverConfig, expected: StatusCode) {
+async fn assert_rejected_before_admission(config: EndpointConfig, expected: StatusCode) {
     let fixture = Fixture::new(&config, inbox_limits(), TestAdmission::accepting());
     let response = fixture
         .app
@@ -222,7 +222,7 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
         "/provider//delivery",
     ] {
         let mut config = receiver_config();
-        config.delivery_path = path.to_owned();
+        config.path = path.to_owned();
         assert!(matches!(
             router(
                 &config,
@@ -231,7 +231,7 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
                 Arc::new(AtomicBool::new(true)),
                 Operations::default(),
             ),
-            Err(ReceiverConfigError::Path)
+            Err(EndpointConfigError::Path)
         ));
     }
     let mut config = receiver_config();
@@ -244,10 +244,10 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
             Arc::new(AtomicBool::new(true)),
             Operations::default(),
         ),
-        Err(ReceiverConfigError::Limits)
+        Err(EndpointConfigError::Limits)
     ));
     config.max_body_bytes = 1;
-    config.max_concurrent_deliveries = 65;
+    config.max_concurrent_requests = 65;
     assert!(matches!(
         router(
             &config,
@@ -256,7 +256,7 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
             Arc::new(AtomicBool::new(true)),
             Operations::default(),
         ),
-        Err(ReceiverConfigError::Limits)
+        Err(EndpointConfigError::Limits)
     ));
     for (body, headers, header_bytes) in [
         (8 * 1_024 * 1_024 + 1, 8, 256),
@@ -275,7 +275,7 @@ fn invalid_paths_and_limits_are_data_errors_not_panics() {
                 Arc::new(AtomicBool::new(true)),
                 Operations::default(),
             ),
-            Err(ReceiverConfigError::Limits)
+            Err(EndpointConfigError::Limits)
         ));
     }
 }
@@ -319,8 +319,8 @@ impl DeliveryAdmission for BlockingAdmission {
 #[test]
 fn public_error_text_contains_no_request_material() {
     for text in [
-        ReceiverConfigError::Path.to_string(),
-        ReceiverConfigError::Limits.to_string(),
+        EndpointConfigError::Path.to_string(),
+        EndpointConfigError::Limits.to_string(),
         InboxError::Conflict.to_string(),
     ] {
         assert!(!text.contains(super::support::SECRET));

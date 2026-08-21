@@ -131,14 +131,14 @@ fn load_token(path: &std::path::Path) -> Result<SecretString, ConfigError> {
 }
 
 fn policy_job_endpoint(
-    loaded: amiss_controller_service::EvaluationConfig,
-) -> amiss_controller_service::EvaluationConfig {
-    amiss_controller_service::EvaluationConfig {
+    loaded: amiss_controller_service::EndpointConfig,
+) -> amiss_controller_service::EndpointConfig {
+    amiss_controller_service::EndpointConfig {
         path: loaded.path,
         max_body_bytes: loaded.max_body_bytes.min(HINT_BODY_BYTES),
         max_headers: loaded.max_headers.min(POLICY_JOB_HEADERS),
         max_header_bytes: loaded.max_header_bytes.min(POLICY_JOB_HEADER_BYTES),
-        max_concurrent_evaluations: loaded.max_concurrent_evaluations,
+        max_concurrent_requests: loaded.max_concurrent_requests,
     }
 }
 
