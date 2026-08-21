@@ -1,5 +1,3 @@
-use std::fmt;
-
 use amiss_git::{GitResources, Repository};
 use amiss_wire::action::executable_platform;
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, GitMode};
@@ -12,19 +10,12 @@ use crate::{
 };
 
 /// A provisioning failure with no runtime trust classification.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("{reason}")]
 pub struct ConstraintError {
     /// Stable diagnostic for the failed derivation step.
     pub reason: &'static str,
 }
-
-impl fmt::Display for ConstraintError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.reason)
-    }
-}
-
-impl std::error::Error for ConstraintError {}
 
 /// Derives the existing execution-constraint contract from one exact action
 /// commit and one bootstrap executable, then validates every dependency lock

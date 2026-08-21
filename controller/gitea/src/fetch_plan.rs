@@ -1,22 +1,13 @@
-use std::fmt;
-
 use amiss_controller::{RunIdentity, RunRequest};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::identity::{canonical_host, parse_change_id, positive, provider_run};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GiteaPlanError {
+    #[error("the Gitea-family acquisition request is inconsistent")]
     InvalidRequest,
 }
-
-impl fmt::Display for GiteaPlanError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("the Gitea-family acquisition request is inconsistent")
-    }
-}
-
-impl std::error::Error for GiteaPlanError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GiteaFetchPlan {

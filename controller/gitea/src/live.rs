@@ -6,7 +6,6 @@ mod refresh;
 mod rest;
 mod verify;
 
-use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -56,29 +55,13 @@ impl GiteaTimeouts {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GiteaClientError {
+    #[error("the Gitea-family configuration is invalid: {0}")]
     Configuration(&'static str),
+    #[error("the Gitea-family HTTPS client could not be created")]
     Client,
 }
-
-impl fmt::Display for GiteaClientError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Configuration(reason) => {
-                write!(
-                    formatter,
-                    "the Gitea-family configuration is invalid: {reason}"
-                )
-            }
-            Self::Client => {
-                formatter.write_str("the Gitea-family HTTPS client could not be created")
-            }
-        }
-    }
-}
-
-impl std::error::Error for GiteaClientError {}
 
 #[derive(Clone)]
 pub struct GiteaClient {

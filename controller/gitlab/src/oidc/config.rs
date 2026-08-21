@@ -1,10 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
-
 use amiss_controller::{IntegrationId, ProviderIdentity, TrustAnchorId};
 use amiss_wire::model::Oid;
 use jsonwebtoken::jwk::JwkSet;
 use jsonwebtoken::{AlgorithmFamily, DecodingKey};
+use std::collections::{BTreeMap, BTreeSet};
 use url::Url;
 
 use crate::identity::{canonical_project_path, exact_sha1};
@@ -94,7 +92,8 @@ pub fn public_keys_from_jwks(
         .ok_or_else(GitLabConfigError::invalid)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("the GitLab OIDC configuration is invalid")]
 pub struct GitLabConfigError;
 
 impl GitLabConfigError {
@@ -102,14 +101,6 @@ impl GitLabConfigError {
         Self
     }
 }
-
-impl fmt::Display for GitLabConfigError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("the GitLab OIDC configuration is invalid")
-    }
-}
-
-impl std::error::Error for GitLabConfigError {}
 
 pub(crate) fn validate_config(
     provider: &ProviderIdentity,
