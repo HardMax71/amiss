@@ -396,29 +396,53 @@ fn js_literal(bytes: &[u8], at: usize) -> Option<(String, usize)> {
     None
 }
 
-/// Reads the body of a `\u` escape, in either the four-digit or the braced form.
+/// Decodes one representable code point from one or two adjacent `\u` escapes.
 fn js_code_point(bytes: &[u8], at: usize) -> Option<(char, usize)> {
-    let braced = bytes.get(at) == Some(&b'{');
-    let start = if braced { at.saturating_add(1) } else { at };
-    let mut value = 0_u32;
-    let mut cursor = start;
-    while let Some(&byte) = bytes.get(cursor) {
-        let Some(digit) = char::from(byte).to_digit(16) else {
-            break;
+    let read = |start: usize| -> Option<(u32, usize)> {
+        let braced = bytes.get(start) == Some(&b'{');
+        let first = if braced { start.checked_add(1)? } else { start };
+        let last = if braced {
+            bytes
+                .get(first..)?
+                .iter()
+                .position(|byte| *byte == b'}')?
+                .checked_add(first)?
+        } else {
+            first.checked_add(4)?
         };
-        value = value.checked_mul(16)?.checked_add(digit)?;
-        cursor = cursor.saturating_add(1);
-        if !braced && cursor.saturating_sub(start) == 4 {
-            break;
-        }
-    }
-    if braced {
-        if bytes.get(cursor) != Some(&b'}') {
+        if first == last {
             return None;
         }
-        cursor = cursor.saturating_add(1);
+        let value = bytes
+            .get(first..last)?
+            .iter()
+            .try_fold(0_u32, |value, byte| {
+                value
+                    .checked_mul(16)?
+                    .checked_add(char::from(*byte).to_digit(16)?)
+            })?;
+        let next = if braced { last.checked_add(1)? } else { last };
+        Some((value, next))
+    };
+
+    let (leading, next) = read(at)?;
+    if let Some(point) = char::from_u32(leading) {
+        return Some((point, next));
     }
-    Some((char::from_u32(value)?, cursor))
+    if !(0xD800..=0xDBFF).contains(&leading) {
+        return None;
+    }
+    let marker = next.checked_add(1)?;
+    if bytes.get(next) != Some(&b'\\') || bytes.get(marker) != Some(&b'u') {
+        return None;
+    }
+    let (trailing, end) = read(marker.checked_add(1)?)?;
+    if !(0xDC00..=0xDFFF).contains(&trailing) {
+        return None;
+    }
+    let mut decoded =
+        char::decode_utf16([u16::try_from(leading).ok()?, u16::try_from(trailing).ok()?]);
+    Some((decoded.next()?.ok()?, end))
 }
 
 fn skip_space(bytes: &[u8], at: usize) -> usize {
