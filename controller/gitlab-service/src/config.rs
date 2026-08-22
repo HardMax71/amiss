@@ -11,7 +11,7 @@ use amiss_controller::{CheckPlan, DeliveryRoute, FileLedgerConfig, IngressPolicy
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabClient, GitLabOidc};
 pub use amiss_controller_service::ConfigError;
-use amiss_controller_service::EndpointConfig;
+use amiss_controller_service::{ArtifactServiceConfig, EndpointConfig};
 use secrecy::SecretString;
 
 pub struct ServiceConfig {
@@ -33,6 +33,7 @@ pub struct ServiceConfig {
     pub(crate) ledger_root: PathBuf,
     pub(crate) bootstrap_timeout: Duration,
     pub(crate) statement_validity: Duration,
+    pub(crate) artifacts: ArtifactServiceConfig,
 }
 
 impl ServiceConfig {

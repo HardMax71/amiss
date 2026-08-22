@@ -29,7 +29,10 @@ fn successful_flow_binds_run_rechecks_and_publishes() {
 
     assert_eq!(
         controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Published(CheckConclusion::Pass)
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: None,
+        }
     );
     assert_eq!(adapter.authentication_count.load(Ordering::Relaxed), 1);
     assert_eq!(adapter.refresh_count.load(Ordering::Relaxed), 2);
@@ -77,11 +80,14 @@ fn completed_delivery_is_a_duplicate_without_another_run() {
 
     assert!(matches!(
         controller.handle(adapter.input()),
-        Ok(HandleOutcome::Published(CheckConclusion::Pass))
+        Ok(HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: None,
+        })
     ));
     assert!(matches!(
         controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Duplicate { evaluation_id }
+        HandleOutcome::Duplicate { evaluation_id, .. }
             if evaluation_id.as_str() == "evaluation-01"
     ));
     assert_eq!(controller.runner.requests.len(), 1);
@@ -114,7 +120,10 @@ fn a_staged_publication_retries_without_another_run() {
 
     assert_eq!(
         controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Published(CheckConclusion::Pass)
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: None,
+        }
     );
     let retried = adapter.publications();
     assert_eq!(retried.len(), 2);
@@ -150,7 +159,10 @@ fn incomplete_claim_resumes_after_a_transient_refresh_failure() {
     ));
     assert!(matches!(
         controller.handle(adapter.input()),
-        Ok(HandleOutcome::Published(CheckConclusion::Pass))
+        Ok(HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: None,
+        })
     ));
     assert_eq!(
         controller.runner.requests[0].evaluation_id.as_str(),

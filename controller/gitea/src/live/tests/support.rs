@@ -256,6 +256,7 @@ impl Fixture {
             gate_commit: snapshot.gate_commit,
             conclusion,
             report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+            artifact: None,
         }
     }
 }

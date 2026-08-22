@@ -211,7 +211,7 @@ cargo build --release --locked \
   -p amiss-controller-gitlab-service --bin amiss-controller-gitlab
 ```
 
-Pre-create the private scratch and ledger directories, then run the shared
+Pre-create the private scratch, ledger, and artifact directories, then run the shared
 [offline configuration check](provider-controls.md#offline-configuration-check):
 
 ```sh
@@ -224,20 +224,22 @@ Start the service with the same absolute config path:
 target/release/amiss-controller-gitlab /etc/amiss/gitlab.json
 ```
 
-Before binding the listener, the service opens, validates, migrates, and cleans the ledger root.
-Each admitted policy job then gets a fresh fenced owner session from that prepared root. A normal
-request does not repeat full-root maintenance, so separate evaluations can remain concurrent.
-After startup, the service runs the same cleanup once per minute outside request handling. Scans
-use a blocking worker, skip missed intervals, and never overlap. If a scan or worker fails, the
-service stops instead of continuing with unvalidated ledger state. Stop every v0.9 controller
+Before binding the listener, the service opens and validates both state roots, migrates and cleans
+the ledger, and removes expired artifacts. Each admitted policy job then gets a fresh fenced owner
+session from the prepared ledger root. A normal request does not repeat full-ledger maintenance,
+so separate evaluations can remain concurrent. After startup, the service runs ledger cleanup
+once per minute outside request handling; artifact operations enforce expiry themselves. Ledger
+scans use a blocking worker, skip missed intervals, and never overlap. If a scan or worker fails,
+the service stops instead of continuing with unvalidated ledger state. Stop every v0.9 controller
 process before the first upgraded open; the
 [ledger metadata upgrade](file-ledger.md#frames-and-replacement) is one-way.
 
 The service listens on plain HTTP. Bind it to loopback or a private network and put an
 operator-controlled TLS terminator in front. The proxy must preserve the `Authorization` header
 and exact body and must cap connections plus total, header, body, idle, and slow-body time. Set
-the policy job timeout above the service's API, Git, and bootstrap deadlines. Keep the probes and
-metrics private, and use the shared
+the policy job timeout above the service's API, Git, and bootstrap deadlines. Forward the
+configured artifact prefix with its separate bearer token. Keep the probes and metrics private,
+and use the shared
 [service operation](provider-controls.md#service-operation) contract for readiness, redacted
 lifecycle events, counters, and graceful drain.
 
@@ -248,9 +250,9 @@ evaluation. Capacity exhaustion returns `503`; the proxy's connection cap is sti
 ## Configuration
 
 Configuration is strict JSON. Unknown and duplicate fields are errors. All file and directory
-paths are absolute. The scratch and ledger roots must already exist as separate real directories
-outside the repository and action trees, and the bootstrap must match the loaded execution
-constraint.
+paths are absolute. The scratch, ledger, and artifact roots must already exist as separate real
+directories outside the repository and action trees, and the bootstrap must match the loaded
+execution constraint.
 
 ```json
 {
@@ -299,7 +301,12 @@ constraint.
   "paths": {
     "bootstrap": "/opt/amiss/amiss-bootstrap",
     "scratch": "/var/lib/amiss/scratch",
-    "ledger": "/var/lib/amiss/ledger"
+    "ledger": "/var/lib/amiss/ledger",
+    "artifacts": "/var/lib/amiss/artifacts"
+  },
+  "artifacts": {
+    "base_url": "https://amiss.example/amiss/artifacts",
+    "bearer_token_file": "/etc/amiss/artifact.token"
   }
 }
 ```
@@ -327,6 +334,8 @@ The optional `limits` object overrides execution defaults:
 | `api_connect_millis`, `api_read_millis`, `api_write_millis` | 5,000, 15,000, 15,000 |
 | `api_request_millis`, `git_request_seconds` | 20,000, 120 |
 | `bootstrap_seconds`, `statement_validity_seconds` | 120, 300 |
+| `artifact_retention_seconds`, `artifact_records` | 604,800, 1,000 |
+| `artifact_bytes`, `artifact_record_bytes` | 1 GiB, 64 MiB |
 
 `queue_age_seconds` remains part of the authenticated replay window; it does not create a raw
 request queue for this synchronous lane.
@@ -340,9 +349,12 @@ Protected-branch lookup stops at ten pages of 100 rows; an unfinished or oversiz
 closed.
 
 The underlying shared ceilings are 8 MiB per request body, 128 headers, 32 KiB of aggregate
-header bytes, 100,000 ledger rows, and 64 concurrent evaluations; GitLab's smaller endpoint clamps
-win where they overlap. HTTP phase and operation timeouts cannot exceed 30 seconds, and Git
-acquisition cannot exceed 120 seconds.
+header bytes, 100,000 ledger rows, 100,000 artifact records, 64 GiB of artifacts, 1 GiB per
+artifact record, 365 days of retention, and 64 concurrent evaluations; GitLab's smaller endpoint
+clamps win where they overlap. HTTP phase and operation timeouts cannot exceed 30 seconds, and Git
+acquisition cannot exceed 120 seconds. See
+[Retained provider artifacts](provider-artifacts.md) for the exact retrieval and lifecycle
+contract.
 
 ## HTTP result and replay
 
@@ -359,6 +371,12 @@ The endpoint returns:
 | `413` | The body limit was crossed. |
 | `431` | The header count or byte limit was crossed. |
 | `503` | The service is unready, or capacity, trusted time, storage, provider access, acquisition, or evaluation was unavailable. |
+
+A completed result with a still-live artifact also returns `Link: <...>; rel="amiss-report"`,
+`X-Amiss-Artifact-Auth: bearer`, and `X-Amiss-Artifact-Expires-Unix-Millis: <instant>`. These
+headers appear with `X-Amiss-Report-Digest` and an optional `X-Amiss-Assessment-Digest` on both
+`204` and completed `412` responses; only the status decides the policy job. Retrieve the Link
+target with the separately configured artifact bearer token and recompute its SHA-256 digest.
 
 The service checks bounds, OIDC, and the configured plan before creating an owner session, touching
 a delivery row, or starting API, Git, or runner work. The policy job must treat only `204` as
@@ -378,10 +396,11 @@ maintenance remove bounded rows after their replay lifetime ends, freeing their 
 service restart.
 
 The final “publication” step makes no GitLab API write. It refreshes the same job and gate one last
-time, stages that exact result in the ledger, and lets the endpoint status decide the already
-running policy job. The local record and HTTP response are not one transaction. If the service
-completed but the `204` reply was lost, replaying the same token and request does not invent a
-second success; it fails closed as a duplicate.
+time, retains the exact report and external chain, stages that result and locator in the ledger,
+and lets the endpoint status decide the already running policy job. The local record and HTTP
+response are not one transaction. If the service completed but the `204` reply was lost,
+replaying the same token and request does not invent a second success; it fails closed as a
+duplicate and returns the same still-live artifact locator.
 
 For a policy, plan, bootstrap, control, project, target, job, runner, or action change, update the
 independently owned policy configuration, pin its new `config_commit`, choose a new `integration`
@@ -395,7 +414,7 @@ signed its exact job and train claims, the live project still enforced the requi
 and the service accepted an Amiss pass for that exact train-result tree. The API token, Git
 credential, OIDC keys, policy project, runner set, protected-branch administrators, GitLab
 instance, service host, TLS boundary, bootstrap, controls, scratch root, and ledger root remain
-inside the trust boundary.
+inside the trust boundary. The artifact token and root are trust inputs too.
 
 The engine report remains unchanged and self-asserted. It has no provider signature or
 `provider_verified` field. GitLab origin lives in the protected policy job and enforced merge

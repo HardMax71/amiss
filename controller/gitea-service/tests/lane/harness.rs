@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
-    AcquiringRunner, CheckConclusion, CheckPlan, ControllerClock, DeliveryRoute, FileLedger,
-    FileLedgerConfig, GiteaWebhook, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
-    PlanScope, PolicyControls, ProviderAdapter, ProviderError, ReplayWindow, SignedTimePolicy,
-    WebhookKey, WebhookKeyring, check_plan, register_plan,
+    AcquiringRunner, ArtifactStoreConfig, CheckConclusion, CheckPlan, ControllerClock,
+    DeliveryRoute, FileArtifactStore, FileLedger, FileLedgerConfig, GiteaWebhook, IngressLimits,
+    IngressPolicy, OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter,
+    ProviderError, ReplayWindow, SignedTimePolicy, WebhookKey, WebhookKeyring, check_plan,
+    register_plan,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_gitea::{GiteaPullRequestAdapter, GiteaPullRequestSource};
@@ -84,6 +85,7 @@ impl Harness {
         let scratch = directory(&state, "scratch");
         let inbox_root = directory(&state, "inbox");
         let ledger_root = directory(&state, "ledger");
+        let artifact_root = directory(&state, "artifacts");
         let repositories = Repositories::new().unwrap();
         let executable = PathBuf::from(env!("CARGO_BIN_EXE_amiss-gitea-service-bootstrap-fixture"));
         let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
@@ -124,6 +126,20 @@ impl Harness {
             Arc::clone(&clock),
         )
         .unwrap();
+        let artifacts = Arc::new(
+            FileArtifactStore::open_with_clock(
+                &artifact_root,
+                ArtifactStoreConfig {
+                    base_url: "https://amiss.example/artifacts".to_owned(),
+                    retention: Duration::from_hours(1),
+                    max_records: 32,
+                    max_bytes: 16 * 1_024 * 1_024,
+                    max_record_bytes: 16 * 1_024 * 1_024,
+                },
+                Arc::clone(&clock),
+            )
+            .unwrap(),
+        );
         let inbox = Arc::new(Mutex::new(
             Inbox::open(&inbox_root, inbox_limits()).unwrap(),
         ));
@@ -145,6 +161,7 @@ impl Harness {
                 ledger,
                 admission: Arc::clone(&admission),
                 clock,
+                artifacts,
             },
             Arc::clone(&inbox),
             Operations::default(),

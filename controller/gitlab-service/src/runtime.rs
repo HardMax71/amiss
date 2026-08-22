@@ -7,19 +7,21 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use amiss_controller::{
-    AcquiringRunner, AdapterRegistry, Controller, ControllerClock, ControllerError, DeliveryHeader,
-    DeliveryRoute, FileLedgerError, FileLedgerRoot, IngressPolicy, PlanError, PlanRegistry,
-    ProviderAdapter, RegistryError, SystemClock, UntrustedDelivery, register_plan,
+    AcquiringRunner, AdapterRegistry, ArtifactReference, Controller, ControllerClock,
+    ControllerError, DeliveryHeader, DeliveryRoute, FileLedgerError, FileLedgerRoot, IngressPolicy,
+    PlanError, PlanRegistry, ProviderAdapter, RegistryError, SystemClock, UntrustedDelivery,
+    register_plan,
 };
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
     AdmissionRejection, EndpointConfigError, EndpointDrain, EvaluationRequest, Operations,
-    ServiceComponent, Supervision, SupervisionError, check_lane, evaluation_router_with_clock,
-    shutdown_signal, supervise,
+    ServiceComponent, Supervision, SupervisionError, artifact_routes, check_lane,
+    evaluation_router_with_clock, open_artifact_service, shutdown_signal, supervise,
 };
 use axum::Router;
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
+use axum::response::{IntoResponse as _, Response};
 use secrecy::{ExposeSecret as _, SecretString};
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
@@ -40,6 +42,8 @@ pub enum ServiceError {
     Supervision(#[from] SupervisionError),
     #[error("delivery record cannot be opened")]
     LedgerOpen(#[source] FileLedgerError),
+    #[error("artifact store cannot be opened")]
+    ArtifactOpen(#[source] amiss_controller::ArtifactError),
     #[error("check plan cannot be registered")]
     Plan(#[source] PlanError),
     #[error("HTTP evaluation configuration is invalid")]
@@ -85,6 +89,7 @@ struct Lane {
     bootstrap_timeout: Duration,
     statement_validity: Duration,
     operations: Operations,
+    artifacts: Arc<amiss_controller::FileArtifactStore>,
 }
 
 /// Runs one synchronous GitLab policy-job lane until shutdown.
@@ -135,6 +140,8 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         FileLedgerRoot::open_with_clock(&config.ledger_root, config.ledger, Arc::clone(&clock))
             .map_err(ServiceError::LedgerOpen)?,
     );
+    let artifacts = open_artifact_service(config.artifacts, Arc::clone(&clock))
+        .map_err(ServiceError::ArtifactOpen)?;
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, config.scope, Arc::clone(&config.plan))
         .map_err(ServiceError::Plan)?;
@@ -157,6 +164,7 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         bootstrap_timeout: config.bootstrap_timeout,
         statement_validity: config.statement_validity,
         operations: operations.clone(),
+        artifacts: Arc::clone(&artifacts.store),
     });
     let evaluation = config.evaluation;
     let ready = Arc::new(AtomicBool::new(false));
@@ -168,6 +176,7 @@ fn prepare(config: ServiceConfig) -> Result<Prepared, ServiceError> {
         move |request| evaluate(&lane, request),
     )
     .map_err(ServiceError::EvaluationConfiguration)?;
+    let router = artifact_routes(router, &artifacts);
     Ok(Prepared {
         listen: config.listen,
         router,
@@ -230,7 +239,7 @@ async fn cleanup_ledger(
     Ok(())
 }
 
-fn evaluate(lane: &Lane, request: EvaluationRequest<'_>) -> StatusCode {
+fn evaluate(lane: &Lane, request: EvaluationRequest<'_>) -> Response {
     let headers = request
         .headers
         .iter()
@@ -256,8 +265,8 @@ fn evaluate(lane: &Lane, request: EvaluationRequest<'_>) -> StatusCode {
                 .map_err(|_defect| AdmissionRejection::Unauthorized)
         },
     ) {
-        Ok(_accepted) => result_status(handle(lane, untrusted)),
-        Err(rejection) => rejection_status(rejection),
+        Ok(_accepted) => result_response(handle(lane, untrusted)),
+        Err(rejection) => rejection_status(rejection).into_response(),
     }
 }
 
@@ -297,7 +306,8 @@ fn handle(
         lane.ingress,
         clock,
     )
-    .with_external_sink(Arc::new(lane.operations.clone()));
+    .with_external_sink(Arc::new(lane.operations.clone()))
+    .with_artifact_store(Arc::clone(&lane.artifacts));
     controller
         .handle(untrusted)
         .map_err(ServiceError::EvaluationController)
@@ -309,6 +319,50 @@ fn result_status<E>(result: Result<amiss_controller::HandleOutcome, E>) -> Statu
         Ok(_) => StatusCode::PRECONDITION_FAILED,
         Err(_defect) => StatusCode::SERVICE_UNAVAILABLE,
     }
+}
+
+fn result_response<E>(result: Result<amiss_controller::HandleOutcome, E>) -> Response {
+    let artifact = result
+        .as_ref()
+        .ok()
+        .and_then(|outcome| match outcome {
+            amiss_controller::HandleOutcome::Published { artifact, .. }
+            | amiss_controller::HandleOutcome::Duplicate { artifact, .. } => artifact.as_ref(),
+            amiss_controller::HandleOutcome::InProgress { .. } => None,
+        })
+        .cloned();
+    let status = result_status(result);
+    let Some(artifact) = artifact else {
+        return status.into_response();
+    };
+    artifact_headers(status, &artifact)
+        .unwrap_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())
+}
+
+fn artifact_headers(status: StatusCode, artifact: &ArtifactReference) -> Option<Response> {
+    let mut response = status.into_response();
+    response.headers_mut().insert(
+        header::LINK,
+        HeaderValue::from_str(&format!("<{}>; rel=\"amiss-report\"", artifact.locator)).ok()?,
+    );
+    response
+        .headers_mut()
+        .insert("x-amiss-artifact-auth", HeaderValue::from_static("bearer"));
+    response.headers_mut().insert(
+        "x-amiss-artifact-expires-unix-millis",
+        HeaderValue::from_str(&artifact.expires_at_unix_millis.to_string()).ok()?,
+    );
+    response.headers_mut().insert(
+        "x-amiss-report-digest",
+        HeaderValue::from_str(&artifact.report_digest.to_string()).ok()?,
+    );
+    if let Some(digest) = artifact.assessment_digest {
+        response.headers_mut().insert(
+            "x-amiss-assessment-digest",
+            HeaderValue::from_str(&digest.to_string()).ok()?,
+        );
+    }
+    Some(response)
 }
 
 const fn rejection_status(rejection: AdmissionRejection) -> StatusCode {

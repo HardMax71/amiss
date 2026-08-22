@@ -3,16 +3,16 @@ mod helpers;
 use std::sync::Arc;
 
 use crate::{
-    AdapterRegistry, ControllerClock, ControllerEvaluationId, IngressError, IngressPolicy,
-    PlanError, PlanRegistry, ProviderError, ResolvedPlan, SystemClock, UntrustedDelivery,
-    resolve_plan,
+    AdapterRegistry, ArtifactError, ArtifactReference, ControllerClock, ControllerEvaluationId,
+    FileArtifactStore, IngressError, IngressPolicy, PlanError, PlanRegistry, ProviderError,
+    ResolvedPlan, SystemClock, UntrustedDelivery, resolve_plan,
 };
 
 use self::helpers::{
-    LedgerHeartbeat, observe_external, publish_staged, renew_lease, stage_publication,
-    validate_change, validate_staged,
+    ClaimResolution, LedgerHeartbeat, publish_staged, renew_lease, resolve_claim, retain_artifact,
+    stage_publication, validate_change,
 };
-use super::ledger::{CheckConclusion, DeliveryClaim, DeliveryLedger};
+use super::ledger::{CheckConclusion, DeliveryLedger};
 use super::model::{ChangeState, RunRequest, Runner};
 use super::publication::publication;
 
@@ -40,6 +40,8 @@ pub enum ControllerError<E> {
     Ledger(#[source] E),
     #[error("published result could not be completed: {0}")]
     Completion(#[source] E),
+    #[error("provider artifact could not be retained: {0}")]
+    Artifact(#[source] ArtifactError),
     #[error("provider publication failed: {0}")]
     Publish(#[source] ProviderError),
 }
@@ -52,22 +54,26 @@ pub enum HandleOutcome {
     },
     Duplicate {
         evaluation_id: ControllerEvaluationId,
+        artifact: Option<ArtifactReference>,
     },
-    Published(CheckConclusion),
+    Published {
+        conclusion: CheckConclusion,
+        artifact: Option<ArtifactReference>,
+    },
 }
 
 /// The advisory verdict counts of one published delivery's external
 /// assessment; the verdict the provider shows is already sealed when these
 /// are tallied.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExternalTally {
     pub refuted: u64,
     pub unproven: u64,
     pub reachable: u64,
 }
 
-/// Receives the advisory external outcome after a delivery published. No
-/// sink means no verification is attempted at all.
+/// Receives the advisory external outcome frozen into a retained publication.
 pub trait ExternalSink: Send + Sync {
     fn assessed(&self, tally: &ExternalTally);
 
@@ -83,6 +89,7 @@ pub struct Controller<L, R> {
     ingress: IngressPolicy,
     clock: Arc<dyn ControllerClock>,
     external: Option<Arc<dyn ExternalSink>>,
+    artifacts: Option<Arc<FileArtifactStore>>,
 }
 
 impl<L, R> Controller<L, R>
@@ -117,6 +124,7 @@ where
             ingress,
             clock,
             external: None,
+            artifacts: None,
         }
     }
 
@@ -125,6 +133,13 @@ where
     #[must_use]
     pub fn with_external_sink(mut self, sink: Arc<dyn ExternalSink>) -> Self {
         self.external = Some(sink);
+        self
+    }
+
+    /// Retains exact provider-bound reports before publication.
+    #[must_use]
+    pub fn with_artifact_store(mut self, store: Arc<FileArtifactStore>) -> Self {
+        self.artifacts = Some(store);
         self
     }
 
@@ -157,40 +172,25 @@ where
         let delivery = accepted.delivery();
         let ResolvedPlan { plan, check } =
             resolve_plan(&self.plans, delivery).map_err(ControllerError::Plan)?;
-        let mut lease = match self
+        let claim = self
             .ledger
             .claim(&accepted, &check)
-            .map_err(ControllerError::Ledger)?
-        {
-            DeliveryClaim::Execute(lease) if lease.check == check => lease,
-            DeliveryClaim::Execute(_) => return Err(ControllerError::LeaseLost),
-            DeliveryClaim::Publish(staged) => {
-                validate_staged(delivery, &check, &staged)?;
-                let outcome = publish_staged(adapter, &mut self.ledger, &accepted, &staged)?;
-                observe_external(
-                    adapter,
-                    self.external.as_deref(),
-                    self.clock.as_ref(),
-                    &staged.publication,
-                );
-                return Ok(outcome);
-            }
-            DeliveryClaim::Busy {
-                evaluation_id,
-                retry_at_unix_millis,
-            } => {
-                return Ok(HandleOutcome::InProgress {
-                    evaluation_id,
-                    retry_at_unix_millis,
-                });
-            }
-            DeliveryClaim::Duplicate { evaluation_id } => {
-                return Ok(HandleOutcome::Duplicate { evaluation_id });
-            }
-            DeliveryClaim::BindingConflict => {
-                return Err(ControllerError::DeliveryBindingConflict);
-            }
-        };
+            .map_err(ControllerError::Ledger)?;
+        let mut lease =
+            match resolve_claim::<L::Error>(self.artifacts.as_deref(), &accepted, &check, claim)? {
+                ClaimResolution::Execute(lease) => lease,
+                ClaimResolution::Publish(staged) => {
+                    return publish_staged(
+                        adapter,
+                        self.artifacts.as_deref(),
+                        self.external.as_deref(),
+                        &mut self.ledger,
+                        &accepted,
+                        &staged,
+                    );
+                }
+                ClaimResolution::Return(outcome) => return Ok(outcome),
+            };
         let initial = adapter
             .refresh(delivery)
             .map_err(ControllerError::Provider)?;
@@ -226,15 +226,32 @@ where
             .map_err(ControllerError::Provider)?;
         validate_change(delivery, &fresh)?;
         lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
-        let publication = publication(&request, &initial, &fresh, runner_outcome);
+        let mut publication = publication(&request, &initial, &fresh, runner_outcome);
+        if publication.report.is_some()
+            && let Some(store) = self.artifacts.as_deref()
+        {
+            lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
+            publication.artifact = Some(
+                retain_artifact(
+                    adapter,
+                    store,
+                    self.external.is_some(),
+                    self.clock.as_ref(),
+                    &publication,
+                )
+                .map_err(ControllerError::Artifact)?,
+            );
+            lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
+        }
         let staged = stage_publication(&mut self.ledger, &accepted, &lease, &publication)?;
-        let outcome = publish_staged(adapter, &mut self.ledger, &accepted, &staged)?;
-        observe_external(
+        let outcome = publish_staged(
             adapter,
+            self.artifacts.as_deref(),
             self.external.as_deref(),
-            self.clock.as_ref(),
-            &staged.publication,
-        );
+            &mut self.ledger,
+            &accepted,
+            &staged,
+        )?;
         Ok(outcome)
     }
 }

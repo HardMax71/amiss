@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::process::Command;
 use std::sync::LazyLock;
 
-use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
+use amiss_controller_fixtures::config::{TrustFiles, artifact_service, paths, plan};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_github_service::ServiceConfig;
 use amiss_wire::action::host_platform;
@@ -40,6 +40,10 @@ impl Fixture {
         let scratch = trust.directory("scratch").unwrap();
         let inbox = trust.directory("inbox").unwrap();
         let ledger = trust.directory("ledger").unwrap();
+        let artifacts = trust.directory("artifacts").unwrap();
+        let artifact_token = trust
+            .write("artifact.token", b"github-artifact-bearer-token-fixture")
+            .unwrap();
         let private_key = trust.write("app.pem", &RSA_KEYS.private_pem).unwrap();
         let webhook_secret = trust
             .write("webhook.secret", b"github-webhook-fixture-secret")
@@ -68,7 +72,8 @@ impl Fixture {
                 "target_branch": "main"
             },
             "plan": plan(&trust.constraint),
-            "paths": paths(&trust.bootstrap, &scratch, &ledger, Some(&inbox))
+            "paths": paths(&trust.bootstrap, &scratch, &ledger, &artifacts, Some(&inbox)),
+            "artifacts": artifact_service("amiss.example", &artifact_token)
         });
         Self {
             bootstrap: trust.bootstrap.clone(),
@@ -316,7 +321,7 @@ fn writable_roots_must_not_overlap() {
     let error = ServiceConfig::load(&fixture.config).err().unwrap();
     assert_eq!(
         error.to_string(),
-        "scratch, inbox, and ledger roots must be separate"
+        "scratch, inbox, ledger, and artifact roots must be separate"
     );
 }
 

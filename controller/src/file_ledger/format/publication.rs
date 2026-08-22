@@ -5,7 +5,10 @@ use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::{Deserialize, Serialize};
 
-use crate::{AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, Publication};
+use crate::{
+    ArtifactReference, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, ExternalTally,
+    Publication,
+};
 
 use super::model::{
     StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check, store_check,
@@ -25,10 +28,13 @@ pub(in crate::file_ledger) struct StoredPublication {
     gate_commit: Option<String>,
     conclusion: StoredConclusion,
     report: StoredReport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    artifact: Option<StoredArtifact>,
 }
 
 impl StoredPublication {
     pub(in crate::file_ledger) fn new(publication: &Publication) -> Result<Self, FileLedgerError> {
+        validate_artifact_report(publication.artifact.as_ref(), publication.report.as_deref())?;
         let report = StoredReport::new(publication.report.as_deref())?;
         Ok(Self {
             provider_run: StoredProviderRun::new(&publication.provider_run),
@@ -38,6 +44,7 @@ impl StoredPublication {
             gate_commit: Some(publication.gate_commit.as_str().to_owned()),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
+            artifact: publication.artifact.as_ref().map(StoredArtifact::new),
         })
     }
 
@@ -56,13 +63,36 @@ impl StoredPublication {
         &self,
         report: Option<Vec<u8>>,
     ) -> Result<Publication, FileLedgerError> {
-        self.report.attach(self.materialize_metadata()?, report)
+        let publication = self.report.attach(self.materialize_metadata()?, report)?;
+        validate_artifact_report(publication.artifact.as_ref(), publication.report.as_deref())?;
+        Ok(publication)
     }
 
     pub(super) fn materialize_metadata(&self) -> Result<Publication, FileLedgerError> {
         if let Some(reference) = self.report() {
             reference.validate()?;
         }
+        let artifact = match &self.artifact {
+            Some(stored) => {
+                let assessment_digest = match stored.assessment_digest.as_deref() {
+                    Some(raw) => Some(Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt)?),
+                    None => None,
+                };
+                Some(
+                    crate::artifacts::checked_reference(
+                        stored.id.clone(),
+                        stored.locator.clone(),
+                        stored.expires_at_unix_millis,
+                        Digest::from_wire(&stored.report_digest).ok_or(FileLedgerError::Corrupt)?,
+                        assessment_digest,
+                        stored.external_tally,
+                        stored.external_incomplete,
+                    )
+                    .ok_or(FileLedgerError::Corrupt)?,
+                )
+            }
+            None => None,
+        };
         let run = self.run.materialize()?;
         let gate_commit = self
             .gate_commit
@@ -78,6 +108,7 @@ impl StoredPublication {
             gate_commit,
             conclusion: self.conclusion.materialize(),
             report: None,
+            artifact,
         })
     }
 
@@ -87,8 +118,18 @@ impl StoredPublication {
         delivery: &AuthenticatedDelivery,
         expected_check: &CheckBinding,
     ) -> Result<(), FileLedgerError> {
-        if let Some(reference) = self.report() {
-            reference.validate()?;
+        if self.artifact.is_some() && self.report().is_none() {
+            return Err(FileLedgerError::Corrupt);
+        }
+        if self.has_gate_commit() {
+            self.materialize_metadata()?;
+        } else {
+            if self.artifact.is_some() {
+                return Err(FileLedgerError::Corrupt);
+            }
+            if let Some(reference) = self.report() {
+                reference.validate()?;
+            }
         }
         let provider_run = self.provider_run.materialize()?;
         let evaluation_id = ControllerEvaluationId::new(self.evaluation_id.clone())
@@ -109,6 +150,47 @@ impl StoredPublication {
             return Err(FileLedgerError::Corrupt);
         }
         Ok(())
+    }
+}
+
+fn validate_artifact_report(
+    artifact: Option<&ArtifactReference>,
+    report: Option<&[u8]>,
+) -> Result<(), FileLedgerError> {
+    match artifact {
+        Some(reference) if !crate::artifacts::reference_matches_report(reference, report) => {
+            Err(FileLedgerError::Corrupt)
+        }
+        None | Some(_) => Ok(()),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredArtifact {
+    id: String,
+    locator: String,
+    expires_at_unix_millis: i64,
+    report_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    assessment_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    external_tally: Option<ExternalTally>,
+    #[serde(default)]
+    external_incomplete: bool,
+}
+
+impl StoredArtifact {
+    fn new(reference: &ArtifactReference) -> Self {
+        Self {
+            id: reference.id.clone(),
+            locator: reference.locator.clone(),
+            expires_at_unix_millis: reference.expires_at_unix_millis,
+            report_digest: reference.report_digest.to_string(),
+            assessment_digest: reference.assessment_digest.map(|digest| digest.to_string()),
+            external_tally: reference.external_tally,
+            external_incomplete: reference.external_incomplete,
+        }
     }
 }
 

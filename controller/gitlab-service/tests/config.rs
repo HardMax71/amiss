@@ -6,7 +6,7 @@
 use std::process::Command;
 use std::sync::LazyLock;
 
-use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
+use amiss_controller_fixtures::config::{TrustFiles, artifact_service, paths, plan};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab_service::ServiceConfig;
 use serde_json::{Value, json};
@@ -34,6 +34,10 @@ impl Fixture {
         let trust = TrustFiles::new("gitlab.example", "security", "amiss-action").unwrap();
         let scratch = trust.directory("scratch").unwrap();
         let ledger = trust.directory("ledger").unwrap();
+        let artifacts = trust.directory("artifacts").unwrap();
+        let artifact_token = trust
+            .write("artifact.token", b"gitlab-artifact-bearer-token-fixture")
+            .unwrap();
         let api_token = trust
             .write("api.token", b"gitlab-api-token-fixture-2026")
             .unwrap();
@@ -79,7 +83,8 @@ impl Fixture {
                 "self_hosted_runner_ids": [77]
             },
             "plan": plan(&trust.constraint),
-            "paths": paths(&trust.bootstrap, &scratch, &ledger, None)
+            "paths": paths(&trust.bootstrap, &scratch, &ledger, &artifacts, None),
+            "artifacts": artifact_service("amiss.example", &artifact_token)
         });
         Self {
             constraint: trust.constraint.clone(),

@@ -123,5 +123,6 @@ pub fn publication(
         gate_commit: snapshot.gate_commit.clone(),
         conclusion,
         report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        artifact: None,
     }
 }

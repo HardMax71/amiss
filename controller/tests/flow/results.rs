@@ -25,7 +25,10 @@ fn provider_supersession_is_published_for_the_original_candidate() {
 
     assert_eq!(
         controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Published(CheckConclusion::Superseded)
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Superseded,
+            artifact: None,
+        }
     );
 }
 
@@ -45,9 +48,10 @@ fn revoked_authorization_overrides_a_successful_runner() {
 
     assert_eq!(
         controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Published(CheckConclusion::Unavailable(
-            RunFailure::AuthorizationRevoked
-        ))
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Unavailable(RunFailure::AuthorizationRevoked),
+            artifact: None,
+        }
     );
 }
 
@@ -74,7 +78,10 @@ fn missing_timeout_and_tampered_results_all_fail_closed() {
 
         assert_eq!(
             controller.handle(adapter.input()).unwrap(),
-            HandleOutcome::Published(CheckConclusion::Unavailable(failure))
+            HandleOutcome::Published {
+                conclusion: CheckConclusion::Unavailable(failure),
+                artifact: None,
+            }
         );
     }
 }
@@ -101,6 +108,9 @@ fn oversized_report_is_not_accepted_for_publication() {
 
     assert_eq!(
         controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Published(CheckConclusion::Unavailable(RunFailure::OversizedOutput))
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Unavailable(RunFailure::OversizedOutput),
+            artifact: None,
+        }
     );
 }

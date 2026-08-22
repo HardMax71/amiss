@@ -18,6 +18,7 @@ pub struct ServicePaths {
     scratch: PathBuf,
     inbox: PathBuf,
     ledger: PathBuf,
+    artifacts: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -26,6 +27,7 @@ pub struct ExecutionPaths {
     bootstrap: PathBuf,
     scratch: PathBuf,
     ledger: PathBuf,
+    artifacts: PathBuf,
 }
 
 pub struct LoadedPaths {
@@ -33,12 +35,14 @@ pub struct LoadedPaths {
     pub scratch: PathBuf,
     pub inbox: PathBuf,
     pub ledger: PathBuf,
+    pub artifacts: PathBuf,
 }
 
 pub struct LoadedExecutionPaths {
     pub bootstrap: PathBuf,
     pub scratch: PathBuf,
     pub ledger: PathBuf,
+    pub artifacts: PathBuf,
 }
 
 /// Resolves separate private state roots and binds the bootstrap executable.
@@ -48,11 +52,12 @@ pub struct LoadedExecutionPaths {
 /// A path is relative, symlinked, inaccessible, of the wrong kind, overlaps a
 /// state root, or names bootstrap bytes outside the plan.
 pub fn load_paths(paths: &ServicePaths, plan: &CheckPlan) -> Result<LoadedPaths, ConfigError> {
-    let overlap_context = "scratch, inbox, and ledger roots must be separate";
+    let overlap_context = "scratch, inbox, ledger, and artifact roots must be separate";
     let execution = load_execution_roots(
         &paths.bootstrap,
         &paths.scratch,
         &paths.ledger,
+        &paths.artifacts,
         plan,
         overlap_context,
     )?;
@@ -63,7 +68,12 @@ pub fn load_paths(paths: &ServicePaths, plan: &CheckPlan) -> Result<LoadedPaths,
     };
     let inbox = canonical_path(&paths.inbox, directory)?;
     separate_roots(
-        [&execution.scratch, &inbox, &execution.ledger],
+        [
+            &execution.scratch,
+            &inbox,
+            &execution.ledger,
+            &execution.artifacts,
+        ],
         overlap_context,
     )?;
     Ok(LoadedPaths {
@@ -71,6 +81,7 @@ pub fn load_paths(paths: &ServicePaths, plan: &CheckPlan) -> Result<LoadedPaths,
         scratch: execution.scratch,
         inbox,
         ledger: execution.ledger,
+        artifacts: execution.artifacts,
     })
 }
 
@@ -88,8 +99,9 @@ pub fn load_execution_paths(
         &paths.bootstrap,
         &paths.scratch,
         &paths.ledger,
+        &paths.artifacts,
         plan,
-        "scratch and ledger roots must be separate",
+        "scratch, ledger, and artifact roots must be separate",
     )
 }
 
@@ -97,11 +109,15 @@ fn load_execution_roots(
     bootstrap: &Path,
     scratch: &Path,
     ledger: &Path,
+    artifacts: &Path,
     plan: &CheckPlan,
     overlap_context: &'static str,
 ) -> Result<LoadedExecutionPaths, ConfigError> {
-    let execution = resolve_execution_paths(bootstrap, scratch, ledger, plan)?;
-    separate_roots([&execution.scratch, &execution.ledger], overlap_context)?;
+    let execution = resolve_execution_paths(bootstrap, scratch, ledger, artifacts, plan)?;
+    separate_roots(
+        [&execution.scratch, &execution.ledger, &execution.artifacts],
+        overlap_context,
+    )?;
     Ok(execution)
 }
 
@@ -109,6 +125,7 @@ fn resolve_execution_paths(
     bootstrap: &Path,
     scratch: &Path,
     ledger: &Path,
+    artifacts: &Path,
     plan: &CheckPlan,
 ) -> Result<LoadedExecutionPaths, ConfigError> {
     let directory = PathRequirements {
@@ -118,6 +135,7 @@ fn resolve_execution_paths(
     };
     let scratch = canonical_path(scratch, directory)?;
     let ledger = canonical_path(ledger, directory)?;
+    let artifacts = canonical_path(artifacts, directory)?;
     let bootstrap = canonical_path(
         bootstrap,
         PathRequirements {
@@ -137,6 +155,7 @@ fn resolve_execution_paths(
             bootstrap,
             scratch,
             ledger,
+            artifacts,
         })
         .ok_or(ConfigError::invalid(
             "execution constraint does not target this host",

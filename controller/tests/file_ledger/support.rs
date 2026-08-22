@@ -218,6 +218,7 @@ pub(super) fn publication(delivery: &AcceptedDelivery, lease: &DeliveryLease) ->
         run,
         conclusion: CheckConclusion::Pass,
         report: Some(vec![0, 1, 2, 0xfe, 0xff]),
+        artifact: None,
     }
 }
 

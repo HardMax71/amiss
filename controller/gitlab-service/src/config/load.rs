@@ -7,7 +7,8 @@ use amiss_controller::{DeliveryRoute, FileLedgerConfig, SignedTimePolicy, TrustS
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_gitlab::{GitLabClient, GitLabOidc, GitLabTimeouts};
 use amiss_controller_service::{
-    ConfigError, load_execution_limits, load_execution_paths, load_plan, read_regular,
+    ConfigError, load_artifact_service, load_execution_limits, load_execution_paths, load_plan,
+    read_regular,
 };
 use amiss_wire::model::ObjectFormat;
 use secrecy::SecretString;
@@ -41,6 +42,12 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
     )?;
     let evaluation = policy_job_endpoint(limits.evaluation);
     let paths = load_execution_paths(&raw.paths, &plan)?;
+    let artifacts = load_artifact_service(
+        &raw.artifacts,
+        paths.artifacts.clone(),
+        limits.artifacts,
+        &evaluation,
+    )?;
     let api_token = load_token(&raw.gitlab.api_token_file)?;
     let git_token = load_token(&raw.gitlab.git.token_file)?;
     let repository_url = format!(
@@ -116,6 +123,7 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
         ledger_root: paths.ledger,
         bootstrap_timeout: limits.runner.bootstrap,
         statement_validity: limits.runner.statement_validity,
+        artifacts,
     })
 }
 

@@ -303,15 +303,26 @@ fn publication_performs_a_final_authoritative_refresh() {
 #[test]
 fn only_a_published_pass_can_succeed_the_policy_job() {
     let evaluation_id = OpaqueId::new("evaluation/1".to_owned()).unwrap();
-    assert!(policy_job_accepted(&HandleOutcome::Published(
-        CheckConclusion::Pass
-    )));
+    assert!(policy_job_accepted(&HandleOutcome::Published {
+        conclusion: CheckConclusion::Pass,
+        artifact: None,
+    }));
     for outcome in [
-        HandleOutcome::Published(CheckConclusion::Block),
-        HandleOutcome::Published(CheckConclusion::Superseded),
-        HandleOutcome::Published(CheckConclusion::Unavailable(RunFailure::Unavailable)),
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Block,
+            artifact: None,
+        },
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Superseded,
+            artifact: None,
+        },
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Unavailable(RunFailure::Unavailable),
+            artifact: None,
+        },
         HandleOutcome::Duplicate {
             evaluation_id: evaluation_id.clone(),
+            artifact: None,
         },
         HandleOutcome::InProgress {
             evaluation_id,

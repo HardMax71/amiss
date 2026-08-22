@@ -165,6 +165,10 @@ fn configured_limits_have_hard_ceilings() {
             ("header_count", 128),
             ("header_bytes", 32 * 1_024),
             ("ledger_records", 100_000),
+            ("artifact_retention_seconds", 365 * 24 * 60 * 60),
+            ("artifact_records", 100_000),
+            ("artifact_bytes", 64_u64 * 1_024 * 1_024 * 1_024),
+            ("artifact_record_bytes", 1_024_u64 * 1_024 * 1_024),
         ],
         |field, value| json!({ (field): value }),
         |raw| load_execution_limits(raw, "/provider/evaluate".to_owned(), 4).is_ok(),
@@ -182,11 +186,22 @@ fn configured_limits_have_hard_ceilings() {
 }
 
 #[test]
+fn one_artifact_must_fit_inside_the_total_budget() {
+    let raw: ExecutionLimits = serde_json::from_value(json!({
+        "artifact_bytes": 1_024,
+        "artifact_record_bytes": 1_025
+    }))
+    .unwrap();
+    assert!(load_execution_limits(&raw, "/provider/evaluate".to_owned(), 4).is_err());
+}
+
+#[test]
 fn queued_paths_add_only_the_inbox_field() {
     let execution = json!({
         "bootstrap": "/controller/amiss-bootstrap",
         "scratch": "/controller/scratch",
-        "ledger": "/controller/ledger"
+        "ledger": "/controller/ledger",
+        "artifacts": "/controller/artifacts"
     });
     assert!(serde_json::from_value::<ExecutionPaths>(execution.clone()).is_ok());
     assert!(
@@ -194,6 +209,7 @@ fn queued_paths_add_only_the_inbox_field() {
             "bootstrap": "/controller/amiss-bootstrap",
             "scratch": "/controller/scratch",
             "ledger": "/controller/ledger",
+            "artifacts": "/controller/artifacts",
             "inbox": "/controller/inbox"
         }))
         .is_err()
@@ -203,6 +219,7 @@ fn queued_paths_add_only_the_inbox_field() {
             "bootstrap": "/controller/amiss-bootstrap",
             "scratch": "/controller/scratch",
             "ledger": "/controller/ledger",
+            "artifacts": "/controller/artifacts",
             "inbox": "/controller/inbox"
         }))
         .is_ok()
@@ -212,6 +229,7 @@ fn queued_paths_add_only_the_inbox_field() {
             "bootstrap": "/controller/amiss-bootstrap",
             "scratch": "/controller/scratch",
             "ledger": "/controller/ledger",
+            "artifacts": "/controller/artifacts",
             "inbox": "/controller/inbox",
             "unexpected": true
         }))
@@ -224,6 +242,7 @@ fn queued_paths_add_only_the_inbox_field() {
                 "bootstrap":"/controller/two",
                 "scratch":"/controller/scratch",
                 "ledger":"/controller/ledger",
+                "artifacts":"/controller/artifacts",
                 "inbox":"/controller/inbox"
             }"#
         )

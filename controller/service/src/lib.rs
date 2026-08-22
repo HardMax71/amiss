@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod artifact;
 mod config;
 mod delivery;
 mod endpoint;
@@ -22,12 +23,16 @@ mod store;
 mod supervision;
 mod worker;
 
+pub use artifact::{
+    ArtifactFiles, ArtifactService, ArtifactServiceConfig, artifact_routes, load_artifact_service,
+    open_artifact_service,
+};
 pub use config::{
-    CheckPlanFiles, ConfigError, ExecutionLimits, ExecutionPaths, GitLimits, HttpLimits,
-    LedgerLimits, LoadedExecutionLimits, LoadedExecutionPaths, LoadedLimits, LoadedPaths,
-    RunnerLimits, ServiceLimits, ServicePaths, WebhookKeyFile, WorkerLimits, framed_route_id,
-    load_execution_limits, load_execution_paths, load_limits, load_paths, load_plan,
-    load_webhook_keyring, read_regular, read_strict_json,
+    ArtifactLimits, CheckPlanFiles, ConfigError, ExecutionLimits, ExecutionPaths, GitLimits,
+    HttpLimits, LedgerLimits, LoadedExecutionLimits, LoadedExecutionPaths, LoadedLimits,
+    LoadedPaths, RunnerLimits, ServiceLimits, ServicePaths, WebhookKeyFile, WorkerLimits,
+    framed_route_id, load_execution_limits, load_execution_paths, load_limits, load_paths,
+    load_plan, load_webhook_keyring, read_regular, read_strict_json,
 };
 pub use delivery::{Delivery, DeliveryHeader, IncomingDelivery, IncomingHeader};
 pub use endpoint::{EndpointConfig, EndpointConfigError};

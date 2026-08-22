@@ -94,6 +94,7 @@ pub struct AcquiringWorkerContext<L> {
     pub ledger: L,
     pub admission: Arc<dyn DeliveryAdmission>,
     pub clock: Arc<dyn ControllerClock>,
+    pub artifacts: Arc<amiss_controller::FileArtifactStore>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -142,7 +143,8 @@ where
         settings.ingress,
         Arc::clone(&context.clock),
     )
-    .with_external_sink(Arc::new(operations.clone()));
+    .with_external_sink(Arc::new(operations.clone()))
+    .with_artifact_store(context.artifacts);
     Ok(DeliveryWorker::new(DeliveryWorkerInput {
         inbox,
         controller,
@@ -459,9 +461,14 @@ fn disposition<E>(result: Result<HandleOutcome, ControllerError<E>>) -> Disposit
             ControllerError::Provider(_)
             | ControllerError::Publish(_)
             | ControllerError::LeaseLost
-            | ControllerError::CompletionLost,
+            | ControllerError::CompletionLost
+            | ControllerError::Artifact(
+                amiss_controller::ArtifactError::Full
+                | amiss_controller::ArtifactError::Clock
+                | amiss_controller::ArtifactError::Io(_),
+            ),
         ) => Disposition::Backoff,
-        Ok(HandleOutcome::Published(_) | HandleOutcome::Duplicate { .. })
+        Ok(HandleOutcome::Published { .. } | HandleOutcome::Duplicate { .. })
         | Err(
             ControllerError::Ingress(_)
             | ControllerError::WrongChangeIdentity
@@ -472,7 +479,15 @@ fn disposition<E>(result: Result<HandleOutcome, ControllerError<E>>) -> Disposit
             error @ (ControllerError::UnknownProvider
             | ControllerError::Plan(_)
             | ControllerError::Ledger(_)
-            | ControllerError::Completion(_)),
+            | ControllerError::Completion(_)
+            | ControllerError::Artifact(
+                amiss_controller::ArtifactError::AlreadyOpen
+                | amiss_controller::ArtifactError::Configuration
+                | amiss_controller::ArtifactError::Corrupt
+                | amiss_controller::ArtifactError::Conflict
+                | amiss_controller::ArtifactError::NotFound
+                | amiss_controller::ArtifactError::TooLarge,
+            )),
         ) => Disposition::Fatal(error),
     }
 }

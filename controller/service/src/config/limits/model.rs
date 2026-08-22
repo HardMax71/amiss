@@ -15,6 +15,7 @@ pub struct LoadedLimits {
     pub http: HttpLimits,
     pub git: GitLimits,
     pub runner: RunnerLimits,
+    pub artifacts: ArtifactLimits,
     pub worker: WorkerLimits,
 }
 
@@ -28,6 +29,7 @@ pub struct LoadedExecutionLimits {
     pub http: HttpLimits,
     pub git: GitLimits,
     pub runner: RunnerLimits,
+    pub artifacts: ArtifactLimits,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +58,14 @@ pub struct RunnerLimits {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArtifactLimits {
+    pub retention: Duration,
+    pub records: u64,
+    pub bytes: u64,
+    pub record_bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkerLimits {
     pub retry_min: Duration,
     pub retry_max: Duration,
@@ -73,6 +83,7 @@ pub(super) struct CommonLimits {
     pub(super) http: HttpLimits,
     pub(super) git: GitLimits,
     pub(super) runner: RunnerLimits,
+    pub(super) artifacts: ArtifactLimits,
 }
 
 #[derive(Clone, Copy)]

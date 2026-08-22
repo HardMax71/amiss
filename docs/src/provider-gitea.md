@@ -74,11 +74,11 @@ bootstrap, refreshes everything again, saves the result, and posts or reuses one
 | Stale or closed before publication | No new review |
 
 The review body binds the evaluation, conclusion, provider, repository, pull request, provider
-run, refs, commits, trees, plan, execution constraint, and report digest, and below those
-bindings lists the report's grouped feedback the way the GitHub summary does: counts, then up to
-ten items with atom-rendered targets. The `required_status_name` from the execution constraint is
-a readable review label and retry binding; the provider gate itself is the dedicated reviewer
-identity.
+run, refs, commits, trees, plan, execution constraint, report digest, authenticated artifact
+locator, and exclusive expiry. Below those bindings it lists the report's grouped feedback the
+way the GitHub summary does: counts, then up to ten items with atom-rendered targets; the locator
+provides every row. The `required_status_name` from the execution constraint is a readable review
+label and retry binding; the provider gate itself is the dedicated reviewer identity.
 
 ## Dedicated reviewer
 
@@ -184,7 +184,7 @@ cargo build --release --locked \
   -p amiss-controller-gitea-service --bin amiss-controller-gitea
 ```
 
-Pre-create the private scratch, inbox, and ledger directories, then run the shared
+Pre-create the private scratch, inbox, ledger, and artifact directories, then run the shared
 [offline configuration check](provider-controls.md#offline-configuration-check):
 
 ```sh
@@ -198,8 +198,9 @@ target/release/amiss-controller-gitea /etc/amiss/gitea.json
 ```
 
 Bind the plain HTTP listener to loopback or a private network and put the bounded TLS edge
-described in [Provider-verified controls](provider-controls.md) in front. Keep the probes and
-metrics private, and use the shared
+described in [Provider-verified controls](provider-controls.md) in front. Forward the configured
+artifact prefix only with its bearer authentication. Keep the probes and metrics private, and use
+the shared
 [service operation](provider-controls.md#service-operation) contract for readiness, redacted
 lifecycle events, counters, and graceful drain.
 
@@ -262,7 +263,12 @@ repository and action trees.
     "bootstrap": "/opt/amiss/amiss-bootstrap",
     "scratch": "/var/lib/amiss/scratch",
     "inbox": "/var/lib/amiss/inbox",
-    "ledger": "/var/lib/amiss/ledger"
+    "ledger": "/var/lib/amiss/ledger",
+    "artifacts": "/var/lib/amiss/artifacts"
+  },
+  "artifacts": {
+    "base_url": "https://amiss.example/amiss/artifacts",
+    "bearer_token_file": "/etc/amiss/artifact.token"
   }
 }
 ```
@@ -294,10 +300,14 @@ The optional `limits` object has two strict sections:
 Omitted values use the defaults listed in the
 [GitHub lane's limit table](provider-github.md#configuration). `execution` covers ingress,
 ledger, provider HTTP, Git, and bootstrap bounds. `queue` covers webhook concurrency, the raw
-inbox, retry, and polling. `max_concurrent_deliveries` must be between 1 and 64.
+inbox, retry, and polling. Execution limits also configure the artifact retention, record count,
+total bytes, and per-record bytes listed in the
+[GitHub lane's table](provider-github.md#configuration). `max_concurrent_deliveries` must be
+between 1 and 64.
 The shared 8 MiB body, 128-header, 32 KiB aggregate-header, 100,000-ledger-row,
-1,024-inbox-row, 128 MiB inbox, 16 MiB inbox-row, and 64-concurrent-delivery ceilings apply here
-too.
+1,024-inbox-row, 128 MiB inbox, 16 MiB inbox-row, 100,000-artifact-record, 64 GiB artifact,
+1 GiB artifact-record, 365-day retention, and 64-concurrent-delivery ceilings apply here too.
+See [Retained provider artifacts](provider-artifacts.md) for retrieval and lifecycle rules.
 
 The action repository in the execution constraint must use the same provider host and SHA-1
 object format. The reviewer's token must be able to read it. The service requires Git protocol v2
@@ -305,9 +315,11 @@ and uses the fixed pack limits described in the [GitHub lane](provider-github.md
 
 ## State, replay, and rotation
 
-The inbox and ledger use bounded checksummed files, not SQL or an embedded database. One process
-owns an inbox. The worker removes raw bytes only after controller completion; the ledger retains
-the exact result and permanent body-replay marker.
+The inbox, ledger, and artifact store use bounded checksummed files, not SQL or an embedded
+database. One process owns each inbox and artifact root. The worker removes raw bytes only after
+controller completion; the ledger retains the exact result and permanent body-replay marker, and
+the artifact store retains the exact report and optional external chain until the published
+expiry.
 
 The hard 100,000-row ceiling gives one webhook-secret trust period a finite delivery lifetime.
 Before it fills, stop the old route, replace the provider webhook secret, remove the old secret

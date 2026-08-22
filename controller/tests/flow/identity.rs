@@ -53,7 +53,10 @@ fn runner_commit_and_tree_mismatches_fail_closed() {
 
         assert_eq!(
             controller.handle(adapter.input()).unwrap(),
-            HandleOutcome::Published(CheckConclusion::Unavailable(failure))
+            HandleOutcome::Published {
+                conclusion: CheckConclusion::Unavailable(failure),
+                artifact: None,
+            }
         );
         assert_eq!(adapter.publications()[0].report, None);
     }
@@ -81,7 +84,10 @@ fn runner_wrong_resolution_identity_fails_closed() {
 
         assert_eq!(
             controller.handle(adapter.input()).unwrap(),
-            HandleOutcome::Published(CheckConclusion::Unavailable(RunFailure::WrongIdentity))
+            HandleOutcome::Published {
+                conclusion: CheckConclusion::Unavailable(RunFailure::WrongIdentity),
+                artifact: None,
+            }
         );
     }
 }

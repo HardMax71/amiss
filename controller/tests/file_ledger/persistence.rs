@@ -4,10 +4,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion,
-    StageOutcome,
+    ArtifactReference, ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError,
+    LeaseCompletion, StageOutcome,
 };
-use amiss_wire::digest::hb;
+use amiss_wire::digest::{hb, sha256};
 use tempfile::TempDir;
 
 use super::support::{
@@ -53,7 +53,30 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
     let delivery = delivery("42");
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
-    let publication = publication(&delivery, &lease);
+    let mut publication = publication(&delivery, &lease);
+    let mut mismatched = publication.clone();
+    mismatched.artifact = Some(ArtifactReference {
+        id: "f".repeat(64),
+        locator: format!("https://amiss.example/artifacts/{}/report", "f".repeat(64)),
+        expires_at_unix_millis: 2_000,
+        report_digest: sha256(b"another report"),
+        assessment_digest: None,
+        external_tally: None,
+        external_incomplete: false,
+    });
+    assert!(matches!(
+        ledger.stage(&delivery, &lease, &mismatched),
+        Err(FileLedgerError::Corrupt)
+    ));
+    publication.artifact = Some(ArtifactReference {
+        id: "a".repeat(64),
+        locator: format!("https://amiss.example/artifacts/{}/report", "a".repeat(64)),
+        expires_at_unix_millis: 2_000,
+        report_digest: sha256(publication.report.as_deref().unwrap()),
+        assessment_digest: None,
+        external_tally: None,
+        external_incomplete: false,
+    });
     let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
 
     assert_eq!(

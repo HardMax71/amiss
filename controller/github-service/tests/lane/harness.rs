@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
-    AcquiringRunner, ChangeState, CheckConclusion, CheckPlan, ControllerClock, DeliveryRoute,
-    FileLedger, FileLedgerConfig, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry, PlanScope,
-    PolicyControls, ProviderAdapter, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ReplayWindow, SignedTimePolicy, WebhookKey, WebhookKeyring, check_plan, register_plan,
+    AcquiringRunner, ArtifactStoreConfig, ChangeState, CheckConclusion, CheckPlan, ControllerClock,
+    DeliveryRoute, FileArtifactStore, FileLedger, FileLedgerConfig, IngressLimits, IngressPolicy,
+    OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter, ProviderIdentity,
+    ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy, WebhookKey,
+    WebhookKeyring, check_plan, register_plan,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::{GitHubPullRequestAdapter, GitHubPullRequestSource};
@@ -65,6 +66,7 @@ impl Harness {
         let scratch = directory(&state, "scratch");
         let inbox_root = directory(&state, "inbox");
         let ledger_root = directory(&state, "ledger");
+        let artifact_root = directory(&state, "artifacts");
         let repositories = Repositories::new().unwrap();
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-github-service-bootstrap-fixture"));
@@ -101,6 +103,20 @@ impl Harness {
             Arc::clone(&clock),
         )
         .unwrap();
+        let artifacts = Arc::new(
+            FileArtifactStore::open_with_clock(
+                &artifact_root,
+                ArtifactStoreConfig {
+                    base_url: "https://amiss.example/artifacts".to_owned(),
+                    retention: Duration::from_hours(1),
+                    max_records: 32,
+                    max_bytes: 16 * 1_024 * 1_024,
+                    max_record_bytes: 16 * 1_024 * 1_024,
+                },
+                Arc::clone(&clock),
+            )
+            .unwrap(),
+        );
         let inbox = Arc::new(Mutex::new(
             Inbox::open(&inbox_root, inbox_limits()).unwrap(),
         ));
@@ -122,6 +138,7 @@ impl Harness {
                 ledger,
                 admission: Arc::clone(&admission),
                 clock,
+                artifacts,
             },
             Arc::clone(&inbox),
             Operations::default(),

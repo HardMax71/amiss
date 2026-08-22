@@ -13,9 +13,10 @@ use amiss_controller_gitea::{
 };
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
-    AcquiringWorkerSettings, CheckPlanFiles, HttpLimits, QueuedLaneSetupInput,
+    AcquiringWorkerSettings, ArtifactFiles, CheckPlanFiles, HttpLimits, QueuedLaneSetupInput,
     QueuedServiceSettings, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
-    load_limits, load_paths, load_plan, load_webhook_keyring, read_regular, read_strict_json,
+    load_artifact_service, load_limits, load_paths, load_plan, load_webhook_keyring, read_regular,
+    read_strict_json,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use secrecy::{ExposeSecret as _, SecretString};
@@ -63,6 +64,7 @@ struct RawConfig {
     repository: RawRepository,
     plan: CheckPlanFiles,
     paths: ServicePaths,
+    artifacts: ArtifactFiles,
     #[serde(default)]
     limits: ServiceLimits,
 }
@@ -107,6 +109,12 @@ impl RawConfig {
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let token = load_token(&self.provider.reviewer.token_file)?;
         let paths = load_paths(&self.paths, &plan)?;
+        let artifacts = load_artifact_service(
+            &self.artifacts,
+            paths.artifacts.clone(),
+            limits.artifacts,
+            &limits.receiver,
+        )?;
         let objects: Arc<dyn GiteaObjectResolver> = Arc::new(
             GiteaGitObjects::new(
                 paths.scratch.clone(),
@@ -130,13 +138,7 @@ impl RawConfig {
             Arc::clone(&objects),
         )?;
 
-        let trust_set = TrustSetId::new("gitea-family-webhook-keys".to_owned())
-            .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
-        let route = DeliveryRoute {
-            provider: provider.clone(),
-            trust_set: trust_set.clone(),
-            signed_time: SignedTimePolicy::ReplayOnly,
-        };
+        let (route, webhook) = webhook_binding(&provider, self.provider.webhook_keys)?;
         let route_id = gitea_route_id(
             &provider,
             &reviewer,
@@ -145,8 +147,6 @@ impl RawConfig {
             &target,
             &plan,
         )?;
-        let webhook =
-            GiteaWebhook::new(load_webhook_keyring(trust_set, self.provider.webhook_keys)?);
         let scope = PlanScope {
             provider: provider.clone(),
             integration: reviewer_integration(reviewer.id)?,
@@ -178,6 +178,7 @@ impl RawConfig {
             ledger_lease: limits.ledger.lease,
             ledger_records: limits.ledger.records,
             replay: limits.replay,
+            artifacts,
         };
 
         Ok(ServiceConfig {
@@ -196,6 +197,21 @@ impl RawConfig {
             review_name,
         })
     }
+}
+
+fn webhook_binding(
+    provider: &ProviderIdentity,
+    keys: Vec<WebhookKeyFile>,
+) -> Result<(DeliveryRoute, GiteaWebhook), ConfigError> {
+    let trust_set = TrustSetId::new("gitea-family-webhook-keys".to_owned())
+        .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
+    let route = DeliveryRoute {
+        provider: provider.clone(),
+        trust_set: trust_set.clone(),
+        signed_time: SignedTimePolicy::ReplayOnly,
+    };
+    let webhook = GiteaWebhook::new(load_webhook_keyring(trust_set, keys)?);
+    Ok((route, webhook))
 }
 
 fn gitea_route_id(

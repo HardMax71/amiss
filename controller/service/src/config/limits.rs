@@ -11,11 +11,11 @@ use amiss_controller::{IngressLimits, IngressPolicy, ReplayWindow};
 use crate::endpoint::{self, EndpointConfig, MAX_BODY_BYTES, MAX_HEADER_BYTES, MAX_HEADERS};
 
 use self::http::checked_http;
-use self::model::{CommonLimits, EndpointLimits};
 pub use self::model::{
-    GitLimits, HttpLimits, LedgerLimits, LoadedExecutionLimits, LoadedLimits, RunnerLimits,
-    WorkerLimits,
+    ArtifactLimits, GitLimits, HttpLimits, LedgerLimits, LoadedExecutionLimits, LoadedLimits,
+    RunnerLimits, WorkerLimits,
 };
+use self::model::{CommonLimits, EndpointLimits};
 pub use self::raw::{ExecutionLimits, ServiceLimits};
 use self::storage::checked_inbox;
 use self::worker::{checked_execution, checked_queue};
@@ -54,6 +54,7 @@ pub fn load_limits(raw: &ServiceLimits, webhook_path: String) -> Result<LoadedLi
         http: common.http,
         git: common.git,
         runner: common.runner,
+        artifacts: common.artifacts,
         worker,
     })
 }
@@ -89,6 +90,7 @@ pub fn load_execution_limits(
         http: common.http,
         git: common.git,
         runner: common.runner,
+        artifacts: common.artifacts,
     })
 }
 
@@ -106,6 +108,7 @@ fn checked_common(raw: &ExecutionLimits) -> Result<CommonLimits, ConfigError> {
     let (replay, ingress, future_skew) = checked_ingress(raw)?;
     let http = checked_http(raw)?;
     let (ledger, git, runner) = checked_execution(raw, replay, http)?;
+    let artifacts = checked_artifacts(raw)?;
     let endpoint = EndpointLimits {
         body_bytes: raw.body_bytes,
         headers,
@@ -121,7 +124,26 @@ fn checked_common(raw: &ExecutionLimits) -> Result<CommonLimits, ConfigError> {
         http,
         git,
         runner,
+        artifacts,
     })
+}
+
+fn checked_artifacts(raw: &ExecutionLimits) -> Result<ArtifactLimits, ConfigError> {
+    let retention = Duration::from_secs(raw.artifact_retention_seconds);
+    let valid = !retention.is_zero()
+        && retention <= amiss_controller::MAX_ARTIFACT_RETENTION
+        && (1..=amiss_controller::MAX_ARTIFACT_RECORDS).contains(&raw.artifact_records)
+        && (1..=amiss_controller::MAX_ARTIFACT_BYTES).contains(&raw.artifact_bytes)
+        && (1..=amiss_controller::MAX_ARTIFACT_RECORD_BYTES).contains(&raw.artifact_record_bytes)
+        && raw.artifact_record_bytes <= raw.artifact_bytes;
+    valid
+        .then_some(ArtifactLimits {
+            retention,
+            records: raw.artifact_records,
+            bytes: raw.artifact_bytes,
+            record_bytes: raw.artifact_record_bytes,
+        })
+        .ok_or(ConfigError::invalid("artifact limits are invalid"))
 }
 
 fn checked_ingress(

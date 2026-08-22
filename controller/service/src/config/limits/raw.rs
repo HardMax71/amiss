@@ -17,6 +17,10 @@ pub struct ExecutionLimits {
     pub(super) git_request_seconds: u64,
     pub(super) bootstrap_seconds: u64,
     pub(super) statement_validity_seconds: u64,
+    pub(super) artifact_retention_seconds: u64,
+    pub(super) artifact_records: u64,
+    pub(super) artifact_bytes: u64,
+    pub(super) artifact_record_bytes: u64,
 }
 
 const DEFAULT_EXECUTION_LIMITS: ExecutionLimits = ExecutionLimits {
@@ -34,6 +38,10 @@ const DEFAULT_EXECUTION_LIMITS: ExecutionLimits = ExecutionLimits {
     git_request_seconds: 120,
     bootstrap_seconds: 120,
     statement_validity_seconds: 300,
+    artifact_retention_seconds: 604_800,
+    artifact_records: 1_000,
+    artifact_bytes: 1_073_741_824,
+    artifact_record_bytes: 67_108_864,
 };
 
 impl Default for ExecutionLimits {

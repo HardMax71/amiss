@@ -82,10 +82,11 @@ services acquire their inputs and invoke the sealed path. The distinction is vis
 The unpublished crates under
 [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) define the
 provider-neutral identities, bounded ingress, rotating verifier keys, durable raw inbox,
-delivery record, worker, orchestration, acquisition, and supervised runner contracts. Its state
-uses checksummed ordinary files with fixed capacity and atomic replacement, not SQL or a
-database. [Controller delivery](controller.md) records the cross-process ownership, heartbeat,
-replay, and exact-publication retry rules.
+delivery record, retained artifact store, worker, orchestration, acquisition, and supervised
+runner contracts. Its state uses checksummed ordinary files with fixed capacity and atomic
+replacement, not SQL or a database. [Controller delivery](controller.md) records the cross-process
+ownership, heartbeat, replay, and exact-publication retry rules; authenticated report and
+assessment retrieval is defined by [Retained provider artifacts](provider-artifacts.md).
 
 The provider crates add signed-input decoders, controller-owned credentials and API clients,
 strict merge-rule authorization, fixed-budget protocol-v2 Git acquisition, and provider evidence.

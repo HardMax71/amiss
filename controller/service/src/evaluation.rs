@@ -5,8 +5,8 @@ use std::sync::atomic::AtomicBool;
 use amiss_controller::{ControllerClock, SystemClock};
 use axum::Router;
 use axum::extract::{Request, State};
-use axum::http::StatusCode;
 use axum::middleware;
+use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use tower_http::limit::RequestBodyLimitLayer;
 
@@ -22,7 +22,7 @@ pub struct EvaluationRequest<'a> {
     pub body: &'a [u8],
 }
 
-type Evaluate = dyn for<'a> Fn(EvaluationRequest<'a>) -> StatusCode + Send + Sync + 'static;
+type Evaluate = dyn for<'a> Fn(EvaluationRequest<'a>) -> Response + Send + Sync + 'static;
 
 #[derive(Clone)]
 struct EvaluationState {
@@ -36,14 +36,15 @@ struct EvaluationState {
 /// # Errors
 ///
 /// The path is not one exact static path or a limit is outside its hard bounds.
-pub fn evaluation_router<F>(
+pub fn evaluation_router<F, O>(
     config: &EndpointConfig,
     ready: Arc<AtomicBool>,
     operations: Operations,
     evaluate: F,
 ) -> Result<(Router, EndpointDrain), EndpointConfigError>
 where
-    F: for<'a> Fn(EvaluationRequest<'a>) -> StatusCode + Send + Sync + 'static,
+    F: for<'a> Fn(EvaluationRequest<'a>) -> O + Send + Sync + 'static,
+    O: IntoResponse + 'static,
 {
     evaluation_router_with_clock(config, ready, operations, Arc::new(SystemClock), evaluate)
 }
@@ -54,7 +55,7 @@ where
 /// # Errors
 ///
 /// The path is not one exact static path or a limit is outside its hard bounds.
-pub fn evaluation_router_with_clock<F>(
+pub fn evaluation_router_with_clock<F, O>(
     config: &EndpointConfig,
     ready: Arc<AtomicBool>,
     operations: Operations,
@@ -62,11 +63,12 @@ pub fn evaluation_router_with_clock<F>(
     evaluate: F,
 ) -> Result<(Router, EndpointDrain), EndpointConfigError>
 where
-    F: for<'a> Fn(EvaluationRequest<'a>) -> StatusCode + Send + Sync + 'static,
+    F: for<'a> Fn(EvaluationRequest<'a>) -> O + Send + Sync + 'static,
+    O: IntoResponse + 'static,
 {
     let (endpoint, drain) = endpoint::prepare(config, clock)?;
     let state = EvaluationState {
-        evaluate: Arc::new(evaluate),
+        evaluate: Arc::new(move |request| evaluate(request).into_response()),
         endpoint,
     };
     let evaluation = post(run)
@@ -86,7 +88,7 @@ where
     ))
 }
 
-async fn run(State(state): State<EvaluationState>, request: Request) -> StatusCode {
+async fn run(State(state): State<EvaluationState>, request: Request) -> Response {
     let evaluate = Arc::clone(&state.evaluate);
     endpoint::bounded_request(
         &state.endpoint,
@@ -100,5 +102,5 @@ async fn run(State(state): State<EvaluationState>, request: Request) -> StatusCo
         },
     )
     .await
-    .unwrap_or_else(std::convert::identity)
+    .unwrap_or_else(IntoResponse::into_response)
 }

@@ -3,21 +3,41 @@ mod tests;
 use amiss_wire::human::{atom, atom_bytes, decode_hex};
 use amiss_wire::json::{self, Value};
 
+use crate::ArtifactReference;
+
 const DISPLAYED_ITEMS: usize = 10;
 
 /// Every repository-derived value passes the human-atom law before it
 /// reaches provider markdown.
 #[must_use]
-pub fn with_feedback(text: String, report: Option<&[u8]>) -> String {
-    let lines = feedback_lines(report);
-    if lines.is_empty() {
-        text
-    } else {
-        format!("{text}\n{}", lines.join("\n"))
+pub fn with_feedback(
+    text: &str,
+    report: Option<&[u8]>,
+    artifact: Option<&ArtifactReference>,
+) -> Option<String> {
+    let report_digest = amiss_wire::digest::sha256(report.unwrap_or_default());
+    let mut lines = vec![format!("report: {report_digest}")];
+    if let Some(artifact) = artifact {
+        if report.is_none() || artifact.report_digest != report_digest {
+            return None;
+        }
+        lines.extend([
+            format!("artifact: {}", artifact.locator),
+            "artifact-auth: bearer".to_owned(),
+            format!(
+                "artifact-expires-unix-millis: {}",
+                artifact.expires_at_unix_millis
+            ),
+        ]);
+        if let Some(digest) = artifact.assessment_digest {
+            lines.push(format!("assessment: {digest}"));
+        }
     }
+    lines.extend(feedback_lines(report, artifact.is_some()));
+    Some(format!("{text}\n{}", lines.join("\n")))
 }
 
-fn feedback_lines(report: Option<&[u8]>) -> Vec<String> {
+fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     let Some(bytes) = report else {
         return Vec::new();
     };
@@ -50,9 +70,17 @@ fn feedback_lines(report: Option<&[u8]>) -> Vec<String> {
     lines.extend(items.iter().take(DISPLAYED_ITEMS).map(item_line));
     let overflow = items.len().saturating_sub(DISPLAYED_ITEMS);
     if overflow == 1 {
-        lines.push("- 1 more item in the report".to_owned());
+        lines.push(if retained {
+            "- 1 more item in the retained report".to_owned()
+        } else {
+            "- 1 more item not displayed".to_owned()
+        });
     } else if overflow > 1 {
-        lines.push(format!("- {overflow} more items in the report"));
+        lines.push(if retained {
+            format!("- {overflow} more items in the retained report")
+        } else {
+            format!("- {overflow} more items not displayed")
+        });
     }
     lines
 }

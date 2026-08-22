@@ -141,7 +141,7 @@ prescription for how bytes are stored.
 | Replay lifetime | Permanent, or an inclusive replay end based on authenticated time | Decided by trusted ingress and stored with the fixed binding. Only an ended bounded lifetime can permit deletion. |
 | Evaluation ID | Opaque controller-created ID with fresh random bytes | Created on the first claim and kept through retries and reclaims. A later row cannot reuse it. |
 | Temporary ownership | Evaluation ID, lease deadline, fence | Grants permission to evaluate; the record, not a worker's clock, decides whether it is still live. |
-| Saved result | Evaluation ID, check-plan binding, fence, provider run, full run identity, provider gate commit, conclusion, optional report | Frozen as one exact value before provider I/O. |
+| Saved result | Evaluation ID, check-plan binding, fence, provider run, full run identity, provider gate commit, conclusion, optional report and retained-artifact reference | Frozen as one exact value before provider I/O. |
 | State | New, running, result saved, done | Each change happens atomically: fully or not at all. |
 
 Here, “delivery ID” means the replay identity accepted by ingress. It is the signed message ID for
@@ -150,7 +150,9 @@ OIDC job, or the controller's digest of the exact signed body for GitHub and Git
 requests. It is never an unsigned convenience header.
 
 How `FileLedger` lays this record onto disk, its fixed lock set, checksummed frames, and
-cleanup rules, is on [The file ledger](file-ledger.md).
+cleanup rules, is on [The file ledger](file-ledger.md). The separate bounded store behind a saved
+artifact reference is described in [Retained provider artifacts](provider-artifacts.md); it keeps
+evidence bytes but never decides this record's state.
 
 The public Rust boundary has four operations. This abridged excerpt omits documentation and type
 bounds; the [ledger module](https://github.com/HardMax71/amiss/blob/main/controller/src/orchestration/ledger.rs)
@@ -325,11 +327,11 @@ runner only after its adapter has refreshed provider state and acquired the exac
 ## What exists now
 
 The controller crates contain the provider-neutral identities, bounded ingress gate, rotating
-key ring, signature verifiers, durable raw inbox, `DeliveryLedger`, `FileLedger`, worker,
-orchestrator, acquisition boundary, and supervised bootstrap runner. Focused tests cover ingress
-limits and tampering, replay, rotation and revocation, file corruption, cross-process ownership,
-reclaim, exact publication retry, full roots, clock rollback, runner timeout, process descendants,
-and output replacement.
+key ring, signature verifiers, durable raw inbox, `DeliveryLedger`, `FileLedger`, bounded artifact
+store and retrieval route, worker, orchestrator, acquisition boundary, and supervised bootstrap
+runner. Focused tests cover ingress limits and tampering, replay, rotation and revocation, file
+corruption, cross-process ownership, reclaim, exact publication retry across restart, full roots,
+artifact expiry, clock rollback, runner timeout, process descendants, and output replacement.
 
 Three merge-gate shapes join those pieces. GitHub uses a signed pull-request event, App refresh,
 strict App-bound ruleset, authoritative test merge, and App-owned Check Run. GitLab uses policy

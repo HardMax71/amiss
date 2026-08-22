@@ -8,9 +8,10 @@ use amiss_controller::{
 use amiss_controller_github::{GitHubApp, GitHubTimeouts};
 pub use amiss_controller_service::ConfigError;
 use amiss_controller_service::{
-    AcquiringWorkerSettings, CheckPlanFiles, QueuedLaneSetupInput, QueuedServiceSettings,
-    ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id, load_limits, load_paths,
-    load_plan, load_webhook_keyring, read_regular, read_strict_json,
+    AcquiringWorkerSettings, ArtifactFiles, CheckPlanFiles, QueuedLaneSetupInput,
+    QueuedServiceSettings, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
+    load_artifact_service, load_limits, load_paths, load_plan, load_webhook_keyring, read_regular,
+    read_strict_json,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use serde::Deserialize;
@@ -50,6 +51,7 @@ struct RawConfig {
     repository: RawRepository,
     plan: CheckPlanFiles,
     paths: ServicePaths,
+    artifacts: ArtifactFiles,
     #[serde(default)]
     limits: ServiceLimits,
 }
@@ -130,6 +132,12 @@ impl RawConfig {
             repository: scope.repository,
         };
         let paths = load_paths(&self.paths, &plan)?;
+        let artifacts = load_artifact_service(
+            &self.artifacts,
+            paths.artifacts.clone(),
+            limits.artifacts,
+            &limits.receiver,
+        )?;
         let worker = AcquiringWorkerSettings {
             bootstrap: paths.bootstrap,
             scratch: paths.scratch,
@@ -155,6 +163,7 @@ impl RawConfig {
             ledger_lease: limits.ledger.lease,
             ledger_records: limits.ledger.records,
             replay: limits.replay,
+            artifacts,
         };
         Ok(ServiceConfig {
             lane,

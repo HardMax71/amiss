@@ -94,7 +94,13 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
 }
 
 pub fn policy_job_accepted(outcome: &HandleOutcome) -> bool {
-    matches!(outcome, HandleOutcome::Published(CheckConclusion::Pass))
+    matches!(
+        outcome,
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            ..
+        }
+    )
 }
 
 fn refresh_query(
