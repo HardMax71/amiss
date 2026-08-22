@@ -45,14 +45,18 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
           "kind": "missing",
           "reason": "path-not-found",
           "path": "docs/missing.md",
-          "near": null
+          "near": null,
+          "same_object_at": "docs/moved.md"
         }"#,
     )
     .unwrap();
     assert!(matches!(
         path_missing.items()[0].accepted_fact.resolution(),
-        Resolution::Missing(Missing::PathNotFound { path, .. })
-            if path.as_str() == "docs/missing.md"
+        Resolution::Missing(Missing::PathNotFound {
+            path,
+            same_object_at: Some(moved),
+            ..
+        }) if path.as_str() == "docs/missing.md" && moved.as_str() == "docs/moved.md"
     ));
 
     let line_missing = parse_debt_fact_case(

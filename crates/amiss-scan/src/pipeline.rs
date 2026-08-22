@@ -1,9 +1,10 @@
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
+use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::Error;
-use crate::correlate::{Observation, Side, correlate};
+use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{ObservationIdentity, observation_digest};
 use crate::report::{
@@ -134,11 +135,8 @@ pub(crate) fn side_observations(
                         node_path: occurrence.occurrence.node_path.clone(),
                         adapter,
                         construct: occurrence.occurrence.construct,
-                        external_destination: matches!(
-                            resolution,
-                            amiss_wire::resolution::Resolution::External(_)
-                        )
-                        .then(|| occurrence.occurrence.semantic_destination.clone()),
+                        external_destination: matches!(resolution, Resolution::External(_))
+                            .then(|| occurrence.occurrence.semantic_destination.clone()),
                         intent,
                         raw_destination: occurrence.occurrence.raw_destination.clone(),
                         raw_destination_digest: occurrence.raw_destination_digest,
@@ -308,7 +306,30 @@ fn conclude(
     if !failures.is_empty() {
         return construct_incomplete(setup, failures);
     }
-    match correlate(base.1, candidate.1) {
+    let mut candidate_side = candidate.1;
+    let relocations = candidate_side
+        .observations
+        .iter()
+        .find(|observation| {
+            matches!(
+                &observation.resolution,
+                Resolution::Missing(Missing::PathNotFound { .. })
+            )
+        })
+        .map_or_else(Default::default, |_| {
+            unique_path_pairs(&base.0.entries, &candidate.0.entries)
+        });
+    for observation in &mut candidate_side.observations {
+        if let Resolution::Missing(Missing::PathNotFound {
+            path,
+            same_object_at,
+            ..
+        }) = &mut observation.resolution
+        {
+            *same_object_at = relocations.get(path).cloned();
+        }
+    }
+    match correlate(base.1, candidate_side) {
         Ok(comparisons) => construct(setup, base.0, candidate.0, comparisons, claims),
         Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
     }

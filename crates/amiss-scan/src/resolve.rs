@@ -383,6 +383,7 @@ fn declared_untracked(resolver: &mut Resolver<'_>, path: &RepoPath) -> Result<Re
     Ok(Resolution::Missing(Missing::PathNotFound {
         path: path.clone(),
         near: case_neighbor(resolver.snapshot, path),
+        same_object_at: None,
     }))
 }
 

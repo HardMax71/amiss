@@ -125,6 +125,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
         Resolution::<RepoPathText>::Missing(Missing::PathNotFound {
             path: repo_path_text(target_text.clone()),
             near: None,
+            same_object_at: None,
         }),
     )
     .unwrap_or_else(|| panic!("benchmark structural fact"));
@@ -158,6 +159,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
         resolution: Resolution::<RepoPath>::Missing(Missing::PathNotFound {
             path: target,
             near: None,
+            same_object_at: None,
         }),
         fragment_span: None,
         path_span: None,

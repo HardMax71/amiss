@@ -61,6 +61,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
         resolution: Resolution::Missing(Missing::PathNotFound {
             path: target,
             near: None,
+            same_object_at: None,
         }),
         fragment_span: None,
         path_span: None,

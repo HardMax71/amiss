@@ -66,6 +66,111 @@ fn oid(hex: &str) -> Oid {
     Oid::new(ObjectFormat::Sha1, hex.to_owned()).unwrap()
 }
 
+#[test]
+fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(
+        root.join("README.md"),
+        "[unique](unique-old.bin)\n\n\
+         [base-a](base-a.bin)\n\n\
+         [base-b](base-b.bin)\n\n\
+         [candidate](candidate-old.bin)\n\n\
+         [edited](edited-old.bin)\n\n\
+         [mode](mode-old.bin)\n\n\
+         [retained](retained.bin)\n",
+    )
+    .unwrap();
+    for (path, body) in [
+        ("unique-old.bin", "unique"),
+        ("base-a.bin", "same-base-identity"),
+        ("base-b.bin", "same-base-identity"),
+        ("candidate-old.bin", "same-candidate-identity"),
+        ("edited-old.bin", "before-edit"),
+        ("mode-old.bin", "mode-change"),
+        ("retained.bin", "retained-copy"),
+    ] {
+        fs::write(root.join(path), body).unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::rename(root.join("unique-old.bin"), root.join("unique-new.bin")).unwrap();
+    fs::remove_file(root.join("base-a.bin")).unwrap();
+    fs::remove_file(root.join("base-b.bin")).unwrap();
+    fs::write(root.join("base-new.bin"), "same-base-identity").unwrap();
+    fs::remove_file(root.join("candidate-old.bin")).unwrap();
+    fs::write(root.join("candidate-new-a.bin"), "same-candidate-identity").unwrap();
+    fs::write(root.join("candidate-new-b.bin"), "same-candidate-identity").unwrap();
+    fs::remove_file(root.join("edited-old.bin")).unwrap();
+    fs::write(root.join("edited-new.bin"), "after-edit").unwrap();
+    fs::remove_file(root.join("mode-old.bin")).unwrap();
+    fs::write(root.join("mode-new.bin"), "mode-change").unwrap();
+    fs::write(root.join("retained-copy.bin"), "retained-copy").unwrap();
+    git(root, &["add", "-A"]);
+    git(root, &["update-index", "--chmod=+x", "mode-new.bin"]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)));
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let committed = payload(&commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    ));
+
+    for report in [&staged, &committed] {
+        let resolution = |path: &str| {
+            report["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|finding| {
+                    finding["kind"] == "explicit-target-missing"
+                        && finding["key_input"]["scope"]["normalized_target_intent"]["path"] == path
+                })
+                .map(|finding| {
+                    (
+                        &finding["candidate_fact"]["evidence"]["resolution"],
+                        &finding["fix"],
+                    )
+                })
+                .unwrap()
+        };
+        let (unique, fix) = resolution("unique-old.bin");
+        assert_eq!(unique["same_object_at"], "unique-new.bin", "{unique}");
+        assert!(fix.is_null(), "equal bytes do not prove a repair: {fix}");
+        for path in [
+            "base-a.bin",
+            "base-b.bin",
+            "candidate-old.bin",
+            "edited-old.bin",
+            "mode-old.bin",
+        ] {
+            let (ambiguous, fix) = resolution(path);
+            assert!(ambiguous["same_object_at"].is_null(), "{path}: {ambiguous}");
+            assert!(fix.is_null(), "{path}: {fix}");
+        }
+        assert!(
+            report["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|finding| {
+                    finding["key_input"]["scope"]["normalized_target_intent"]["path"]
+                        != "retained.bin"
+                }),
+            "a copy does not make the retained target missing: {report}"
+        );
+    }
+}
+
 /// A tree path the report cannot spell is disclosed by its raw bytes, which
 /// are the only name that entry has.
 #[test]
