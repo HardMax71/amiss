@@ -4,8 +4,9 @@ use crate::json::Value;
 mod assessment;
 mod plan;
 
+pub use crate::report::ReportDefect as PlanDefect;
 pub use assessment::{AssessDefect, assess};
-pub use plan::{PlanDefect, plan};
+pub use plan::plan;
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/external-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/external-plan-payload";

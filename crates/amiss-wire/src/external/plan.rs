@@ -3,19 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::digest::hj;
 use crate::json::Value;
 use crate::model::ForgeDialect;
-use crate::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
+use crate::report::validate_envelope;
 
-use super::{PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, object, string};
-
-/// Why a report yields no plan: the first defect found, in reading order.
-/// Classification only; the command projecting a defect owns its wording.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlanDefect {
-    NotAReport,
-    DigestMismatch,
-    Incomplete,
-    MalformedExternal,
-}
+use super::{PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, object, string};
 
 /// One side's view of a destination: its scheme and every document naming it.
 struct Entry {
@@ -39,21 +29,7 @@ pub fn plan(
     engine_version: &str,
     engine_digest: &str,
 ) -> Result<Value, PlanDefect> {
-    if envelope.text("schema") != Some(ENVELOPE_SCHEMA) {
-        return Err(PlanDefect::NotAReport);
-    }
-    let Some(payload) = envelope.member("payload") else {
-        return Err(PlanDefect::NotAReport);
-    };
-    if payload.text("schema") != Some(PAYLOAD_SCHEMA) {
-        return Err(PlanDefect::NotAReport);
-    }
-    let Some(recorded) = envelope.text("payload_digest") else {
-        return Err(PlanDefect::NotAReport);
-    };
-    if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
-        return Err(PlanDefect::DigestMismatch);
-    }
+    let (payload, recorded, _verdict) = validate_envelope(envelope)?;
     let complete = payload
         .member("result")
         .and_then(|result| result.member("complete"));

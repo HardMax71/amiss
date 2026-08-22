@@ -187,7 +187,8 @@ Both pins name the release you reviewed and move together. The
 runs on merge-request pipelines, refuses to run until `AMISS_VERSION` is set, verifies
 the downloaded binary against the release's `SHA256SUMS` before executing it, scans the
 merge request's diff base against its head under `AMISS_PROFILE` (`observe` until the
-first report is triaged, the same ramp as everywhere else), and uploads two artifacts:
+first report is triaged, the same ramp as everywhere else), renders Code Quality from that
+same validated report without a second scan, and uploads two artifacts:
 the exact JSON report, and a
 [Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/) rendered in the
 merge-request widget and inline on the diff. The fingerprint is the finding key, so the

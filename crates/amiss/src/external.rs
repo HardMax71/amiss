@@ -1,12 +1,8 @@
-use std::fs;
-use std::io::Read as _;
-use std::path::Path;
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
-use amiss_wire::external::{AssessDefect, PlanDefect};
-use amiss_wire::json::{self, Value};
-use amiss_wire::report::{FatalSerializer, MACHINE_JSON_BYTES};
+use amiss_wire::json::Value;
+use amiss_wire::report::FatalSerializer;
 
 use crate::invocation::{AssessInvocation, OutputFormat, PlanInvocation};
 
@@ -15,10 +11,8 @@ pub(crate) fn run_plan(invocation: &PlanInvocation, reserve: &mut FatalSerialize
         "external-plan",
         invocation.format,
         reserve,
-        || strict_value(&invocation.report),
-        |report, version, digest| {
-            amiss_wire::external::plan(&report, version, digest).map_err(describe_plan)
-        },
+        || crate::input::strict_value(&invocation.report),
+        |report, version, digest| amiss_wire::external::plan(&report, version, digest),
         crate::human::plan,
     )
 }
@@ -30,24 +24,24 @@ pub(crate) fn run_assess(invocation: &AssessInvocation, reserve: &mut FatalSeria
         reserve,
         || {
             Ok((
-                strict_value(&invocation.plan)?,
-                strict_value(&invocation.evidence)?,
+                crate::input::strict_value(&invocation.plan)?,
+                crate::input::strict_value(&invocation.evidence)?,
             ))
         },
         |(plan, evidence), version, digest| {
-            amiss_wire::external::assess(&plan, &evidence, version, digest).map_err(describe_assess)
+            amiss_wire::external::assess(&plan, &evidence, version, digest)
         },
         crate::human::assessment,
     )
 }
 
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
-fn run_pure<T>(
+fn run_pure<T, E: std::fmt::Display>(
     command: &str,
     format: OutputFormat,
     reserve: &mut FatalSerializer,
     load: impl FnOnce() -> Result<T, String>,
-    derive: impl FnOnce(T, &str, &str) -> Result<Value, &'static str>,
+    derive: impl FnOnce(T, &str, &str) -> Result<Value, E>,
     human: fn(&Value),
 ) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
@@ -68,21 +62,6 @@ fn run_pure<T>(
             failure
         }
     }
-}
-
-/// The writer caps an envelope at `MACHINE_JSON_BYTES`, so a larger input
-/// is provably not the scanner's artifact.
-fn strict_value(path: &Path) -> Result<Value, String> {
-    let shown = path.display();
-    let file = fs::File::open(path).map_err(|_error| format!("{shown} is unreadable"))?;
-    let mut bytes = Vec::new();
-    file.take(MACHINE_JSON_BYTES.saturating_add(1))
-        .read_to_end(&mut bytes)
-        .map_err(|_error| format!("{shown} is unreadable"))?;
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES {
-        return Err(format!("{shown} is larger than a scanner report can be"));
-    }
-    json::parse(&bytes).map_err(|_error| format!("{shown} is not the scanner's strict JSON"))
 }
 
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
@@ -118,29 +97,4 @@ fn project(
         }
     }
     ExitCode::from(ExitClass::Success.code())
-}
-
-/// The command's own wording for each refusal; the wire enums stay data.
-const fn describe_plan(defect: PlanDefect) -> &'static str {
-    match defect {
-        PlanDefect::NotAReport => "the input is not a scanner report envelope",
-        PlanDefect::DigestMismatch => "the report payload does not match its recorded digest",
-        PlanDefect::Incomplete => "the report is incomplete, so its sides cannot be compared",
-        PlanDefect::MalformedExternal => {
-            "an external occurrence is missing its destination, document, or scheme"
-        }
-    }
-}
-
-const fn describe_assess(defect: AssessDefect) -> &'static str {
-    match defect {
-        AssessDefect::NotAPlan => "the input is not an external plan envelope",
-        AssessDefect::PlanDigestMismatch => "the plan payload does not match its recorded digest",
-        AssessDefect::NotEvidence => "the input is not an external evidence file",
-        AssessDefect::UnboundEvidence => {
-            "the evidence binds another plan, repeats a destination, names one the plan did not \
-             introduce, or resolves a tail the plan's shape does not carry"
-        }
-        AssessDefect::MalformedEvidence => "an evidence row breaks its own kind's grammar",
-    }
 }

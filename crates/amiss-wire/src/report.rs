@@ -72,6 +72,7 @@ mod fatal;
 mod finding;
 mod sandbox;
 
+use crate::digest::hj;
 use crate::json::Value;
 
 pub use error::{AnalysisErrorCode, ErrorDetail, error_row_value};
@@ -111,6 +112,75 @@ pub const COMPATIBILITY: &str = "1";
 pub const ADAPTER_CONTRACT_SCHEMA: &str = "amiss/scanner-adapter-contract";
 pub const BUILT_IN_POLICY: &str = "scanner-policy-defaults";
 pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile";
+
+/// Why a report-bound operation cannot consume a scanner report.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ReportDefect {
+    #[error("the input is not a scanner report envelope")]
+    NotAReport,
+    #[error("the report uses an unsupported wire compatibility")]
+    UnsupportedCompatibility,
+    #[error("the report payload does not match its recorded digest")]
+    DigestMismatch,
+    #[error("the report carries an invalid result tuple")]
+    InvalidResult,
+    #[error("the report is incomplete, so its sides cannot be compared")]
+    Incomplete,
+    #[error("an external occurrence is missing its destination, document, or scheme")]
+    MalformedExternal,
+}
+
+/// Accepts the active report envelope and returns its payload and recorded
+/// verdict. Additive fields remain valid within the supported compatibility.
+///
+/// # Errors
+///
+/// Returns the first [`ReportDefect`] when the envelope identities, wire
+/// compatibility, payload digest, or result tuple do not hold.
+pub fn validate_envelope(
+    envelope: &Value,
+) -> Result<(&Value, &str, crate::ExitClass), ReportDefect> {
+    if envelope.text("schema") != Some(ENVELOPE_SCHEMA) {
+        return Err(ReportDefect::NotAReport);
+    }
+    let Some(payload) = envelope.member("payload") else {
+        return Err(ReportDefect::NotAReport);
+    };
+    if payload.text("schema") != Some(PAYLOAD_SCHEMA) {
+        return Err(ReportDefect::NotAReport);
+    }
+    match payload.text("compatibility") {
+        Some(COMPATIBILITY) => {}
+        Some(_unsupported) => return Err(ReportDefect::UnsupportedCompatibility),
+        None => return Err(ReportDefect::NotAReport),
+    }
+    let Some(recorded) = envelope.text("payload_digest") else {
+        return Err(ReportDefect::NotAReport);
+    };
+    if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
+        return Err(ReportDefect::DigestMismatch);
+    }
+    let Some(result) = payload.member("result") else {
+        return Err(ReportDefect::InvalidResult);
+    };
+    let verdict = match (
+        result.member("complete"),
+        result.text("status"),
+        result.member("exit_code"),
+    ) {
+        (Some(Value::Bool(true)), Some("pass"), Some(Value::Integer(0))) => {
+            crate::ExitClass::Success
+        }
+        (Some(Value::Bool(true)), Some("fail"), Some(Value::Integer(1))) => {
+            crate::ExitClass::BlockingFindings
+        }
+        (Some(Value::Bool(false)), Some("incomplete"), Some(Value::Integer(2))) => {
+            crate::ExitClass::Failure
+        }
+        (_, _, _) => return Err(ReportDefect::InvalidResult),
+    };
+    Ok((payload, recorded, verdict))
+}
 
 fn object(members: Vec<(&str, Value)>) -> Value {
     Value::Object(

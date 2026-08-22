@@ -3,7 +3,9 @@ mod author;
 mod codequality;
 mod external;
 mod human;
+mod input;
 mod payload;
+mod render;
 mod repair;
 mod sarif;
 mod view;
@@ -114,20 +116,22 @@ fn main() -> ExitCode {
             invocation::Command::Author(author) => author::run(&author),
             invocation::Command::Plan(plan) => external::run_plan(&plan, &mut reserve),
             invocation::Command::Assess(assess) => external::run_assess(&assess, &mut reserve),
+            invocation::Command::Render(render) => render::run(&render, &mut reserve),
         },
     }
 }
 
-fn render(
-    built: &amiss_scan::report::Built,
-    invocation: &Invocation,
+fn project(
+    envelope: &amiss_wire::json::Value,
+    format: OutputFormat,
+    explain_scope: bool,
     reserve: &mut FatalSerializer,
 ) {
-    match invocation.format {
-        OutputFormat::Json => emit(reserve, &built.envelope),
-        OutputFormat::Sarif => emit(reserve, &sarif::log(&built.envelope)),
-        OutputFormat::CodeQuality => emit(reserve, &codequality::issues(&built.envelope)),
-        OutputFormat::Human => human::report(built, invocation.explain_scope),
+    match format {
+        OutputFormat::Json => emit(reserve, envelope),
+        OutputFormat::Sarif => emit(reserve, &sarif::log(envelope)),
+        OutputFormat::CodeQuality => emit(reserve, &codequality::issues(envelope)),
+        OutputFormat::Human => human::report(envelope, explain_scope),
     }
 }
 
@@ -292,7 +296,8 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         }
     };
 
-    let forge = match (&invocation.identity, invocation.forge) {
+    let identity = invocation.identity.as_ref();
+    let forge = match (identity, invocation.forge) {
         (Some(identity), Some(dialect)) => Some(ForgeContext {
             host: identity.repository.host().to_owned(),
             dialect,
@@ -311,19 +316,11 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     let shell = SetupShell {
         engine,
         profile: invocation.profile,
-        repository: invocation
-            .identity
-            .as_ref()
-            .map(|identity| identity.repository.clone()),
+        repository: identity.map(|identity| identity.repository.clone()),
         forge: invocation.forge,
-        candidate_ref: invocation
-            .identity
-            .as_ref()
-            .map(|identity| identity.ref_name.as_str().to_owned()),
+        candidate_ref: identity.map(|identity| identity.ref_name.as_str().to_owned()),
         target_ref: None,
-        default_branch_ref: invocation
-            .identity
-            .as_ref()
+        default_branch_ref: identity
             .map(|identity| identity.default_branch_ref.as_str().to_owned()),
         // The frozen invocation grammar has no control-supply surface; the
         // required wrapper feeds these when its interop RFC lands.
@@ -365,7 +362,12 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     if let (Verb::Adopt, Some(adoption)) = (invocation.verb, &invocation.adoption) {
         return adopt::run(invocation, adoption, &built);
     }
-    render(&built, invocation, reserve);
+    project(
+        &built.envelope,
+        invocation.format,
+        invocation.explain_scope,
+        reserve,
+    );
     exit_class(built.exit_code)
 }
 
@@ -414,7 +416,12 @@ fn fatal(
         requests: amiss_scan::report::RequestDigests::default(),
     };
     let built = construct_incomplete(&setup, details);
-    render(&built, invocation, reserve);
+    project(
+        &built.envelope,
+        invocation.format,
+        invocation.explain_scope,
+        reserve,
+    );
     ExitCode::from(ExitClass::Failure.code())
 }
 

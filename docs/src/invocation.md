@@ -49,6 +49,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
+amiss render --report <path> --format <human|sarif|codequality>
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -79,7 +80,7 @@ trust them when the short form reads ambiguous.
 | `--created-at` | UTC instant | the snapshot's and items' creation instant |
 | `--expires-at` | UTC instant | when the items expire; must be after `--created-at` |
 | `--debt-output` | path | where the minted snapshot is written; must not exist |
-| `--report` | path | the report file the plan form reads; foreign to every other form |
+| `--report` | path | the report file the plan or render form reads; foreign to every other form |
 | `--plan` | path | the plan file the assessment form judges; foreign to every other form |
 | `--evidence` | path | the producer observations the assessment form judges; foreign to every other form |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
@@ -131,6 +132,13 @@ pre-existing backlog at warn or fail, and the backlog keeps its own window, so i
 volume cannot push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
 fixed and one naming this run's counts, and changes nothing in JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
+
+`amiss render --report <path> --format <human|sarif|codequality>` reopens one JSON report
+and emits an alternate projection without reading the repository or evaluating it again. It
+accepts only the active report envelope, supported wire compatibility, matching payload digest,
+and a consistent recorded result. A successful projection exits with that recorded 0, 1, or 2;
+a closed stdout does not change it. Invalid, unreadable, or oversized input exits 2 without output.
+JSON is deliberately absent because the report file is already the canonical JSON projection.
 
 Exit codes are three classes, not detail. 0 means the run completed and nothing blocks. 1
 means a finding blocks. 2 means nothing trustworthy could be produced. A consumer that
@@ -191,7 +199,7 @@ the report carried no candidate tree, or the minted bytes failed the engine's ow
 `check --format json` run already wrote. It opens no repository and touches no network:
 it verifies the report's own payload digest, refuses an incomplete report, and projects
 the external delta the report already carries. `--format` takes `human` or `json` here;
-the two scan-only projections are refused. Exit 0 wrote the plan. Exit 2 means the input
+SARIF and Code Quality remain report projections and are refused here. Exit 0 wrote the plan. Exit 2 means the input
 could not be trusted: unreadable, larger than a scanner report can be, not the scanner's
 strict JSON, not a report envelope, digest mismatch, incomplete, or carrying a malformed
 external occurrence.
@@ -204,7 +212,7 @@ plan did not introduce, repeating one, or binding another plan refuses the whole
 `--format` takes `human` or `json`. Exit 0 wrote the assessment, refuted rows included,
 since the artifact is advisory data. Exit 2 means an input could not be trusted.
 
-`amiss --version` is the grammar's seventh form and stands alone: any second token makes it
+`amiss --version` is the grammar's eighth form and stands alone: any second token makes it
 an ordinary, refused invocation. It opens no repository. It prints two lines and exits 0:
 
 ```text

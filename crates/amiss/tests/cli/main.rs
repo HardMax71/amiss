@@ -11,6 +11,7 @@ mod grammar;
 mod human;
 mod policy;
 mod profiles;
+mod render;
 mod rst;
 mod sarif;
 mod support;

@@ -152,6 +152,13 @@ shape for analysis errors or a refusal: a rejected invocation answers with a val
 artifact, the exit class still carries the truth, and error detail stays on the JSON and
 human lanes. The same projection bounds apply.
 
+A JSON report can be projected later without repeating repository evaluation:
+`amiss render --report amiss-report.json --format sarif` or `--format codequality` emits
+the same bytes that the originating `check` would have emitted in that format. Human is
+available too. The renderer verifies the active envelope and compatibility, the payload
+digest, and the recorded result tuple, then exits with that report's original verdict.
+JSON is not a render target because the input file is already that canonical projection.
+
 The report is evidence of engine evaluation, not a self-authenticating provider attestation. A
 control row with `status: "verified"` means that the engine accepted the supplied digest and
 repository, target-ref, tree, time, or run relationships required for that control. A caller that

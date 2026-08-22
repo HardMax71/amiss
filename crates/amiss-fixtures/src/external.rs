@@ -14,7 +14,7 @@ pub fn external_report(destinations: &[&str]) -> Vec<u8> {
         })
         .collect();
     let payload = format!(
-        r#"{{"engine":{{"engine_digest":"{digest}","engine_version":"0.0.0"}},"evaluation":{{"base":{{"commit_oid":"a"}},"candidate":{{"commit_oid":"b"}},"mode":"commit-pair"}},"observations":[{rows}],"result":{{"complete":true}},"schema":"amiss/scanner-report-payload"}}"#,
+        r#"{{"compatibility":"1","engine":{{"engine_digest":"{digest}","engine_version":"0.0.0"}},"evaluation":{{"base":{{"commit_oid":"a"}},"candidate":{{"commit_oid":"b"}},"mode":"commit-pair"}},"observations":[{rows}],"result":{{"complete":true,"exit_code":0,"status":"pass"}},"schema":"amiss/scanner-report-payload"}}"#,
         digest = amiss_wire::digest::hb("amiss/fixture-engine", b"fixture"),
         rows = rows.join(","),
     );
