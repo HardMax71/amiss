@@ -45,6 +45,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
+amiss render --report <path> --format <human|sarif|codequality>
 amiss --version";
 
 const VERSION_FLAG: &str = "--version";
@@ -58,6 +59,7 @@ pub enum Verb {
     Claim,
     ExternalPlan,
     ExternalAssess,
+    Render,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
@@ -107,6 +109,13 @@ pub struct AssessInvocation {
     pub format: OutputFormat,
 }
 
+/// The report and alternate projection selected by the rendering form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RenderInvocation {
+    pub report: PathBuf,
+    pub format: OutputFormat,
+}
+
 /// One accepted command line: a scan-shaped verb, the authoring form, or a
 /// report-bound pure form.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -115,6 +124,7 @@ pub enum Command {
     Author(AuthorInvocation),
     Plan(PlanInvocation),
     Assess(AssessInvocation),
+    Render(RenderInvocation),
 }
 
 /// The adoption metadata the engine cannot know: who owns the recorded

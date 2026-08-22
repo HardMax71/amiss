@@ -204,8 +204,13 @@ fn the_gitlab_template_keeps_the_release_choices() {
         template
             .matches(r#"--profile "${AMISS_PROFILE:-observe}""#)
             .count(),
-        2,
-        "both emissions default observe-first"
+        1,
+        "the one evaluation defaults observe-first"
+    );
+    assert!(
+        template.contains("render --report amiss-report.json")
+            && template.contains("--format codequality > gl-code-quality-report.json"),
+        "Code Quality must be projected from the exact report, not a second evaluation"
     );
     assert!(
         template.contains("codequality: gl-code-quality-report.json"),

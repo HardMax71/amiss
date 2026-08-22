@@ -25,9 +25,8 @@ amiss:
         --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
       status=$?
       set -e
-      ./amiss-linux-x86_64 check --repo . --object-format "${AMISS_OBJECT_FORMAT:-sha1}" \
-        --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --candidate "$CI_COMMIT_SHA" \
-        --profile "${AMISS_PROFILE:-observe}" --format codequality > gl-code-quality-report.json || true
+      ./amiss-linux-x86_64 render --report amiss-report.json \
+        --format codequality > gl-code-quality-report.json || true
       exit "$status"
   artifacts:
     when: always

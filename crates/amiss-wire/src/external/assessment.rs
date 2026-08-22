@@ -9,13 +9,19 @@ use super::{
 };
 
 /// Why a plan and evidence yield no assessment: the first defect found.
-/// Classification only; the command projecting a defect owns its wording.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AssessDefect {
+    #[error("the input is not an external plan envelope")]
     NotAPlan,
+    #[error("the plan payload does not match its recorded digest")]
     PlanDigestMismatch,
+    #[error("the input is not an external evidence file")]
     NotEvidence,
+    #[error(
+        "the evidence binds another plan, repeats a destination, names one the plan did not introduce, or resolves a tail the plan's shape does not carry"
+    )]
     UnboundEvidence,
+    #[error("an evidence row breaks its own kind's grammar")]
     MalformedEvidence,
 }
 

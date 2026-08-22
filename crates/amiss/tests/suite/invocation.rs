@@ -341,6 +341,57 @@ fn output_selection_follows_the_format_law() {
     }
 }
 
+#[test]
+fn the_render_form_requires_one_non_json_projection() {
+    for (value, expected) in [
+        ("human", OutputFormat::Human),
+        ("sarif", OutputFormat::Sarif),
+        ("codequality", OutputFormat::CodeQuality),
+    ] {
+        let Outcome::Accepted(command) = parse(&argv(&[
+            "render",
+            "--report",
+            "report.json",
+            "--format",
+            value,
+        ])) else {
+            panic!("expected render {value} acceptance");
+        };
+        let amiss::invocation::Command::Render(render) = *command else {
+            panic!("expected a render command");
+        };
+        assert_eq!(render.report, std::path::Path::new("report.json"));
+        assert_eq!(render.format, expected);
+    }
+
+    for tokens in [
+        argv(&["render", "--report", "report.json"]),
+        argv(&["render", "--report", "report.json", "--format", "json"]),
+        argv(&[
+            "render",
+            "--report",
+            "report.json",
+            "--format",
+            "human",
+            "--repo",
+            ".",
+        ]),
+        argv(&[
+            "external-plan",
+            "--report",
+            "report.json",
+            "--format",
+            "codequality",
+        ]),
+    ] {
+        assert_eq!(
+            rejected_codes(parse(&tokens)),
+            vec![Code::InvalidInvocation],
+            "tokens {tokens:?}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn rejects_non_unicode_argv_before_lossy_conversion() {

@@ -38,9 +38,9 @@ macro_rules! say {
 /// windows, fix and check items then the existing backlog, each with its own
 /// overflow line, plus retained analysis errors, their meanings, and the
 /// exact raw totals.
-pub(crate) fn report(built: &amiss_scan::report::Built, explain_scope: bool) {
+pub(crate) fn report(envelope: &Value, explain_scope: bool) {
     let mut out = Channel::new();
-    let envelope = View::of(&built.envelope);
+    let envelope = View::of(envelope);
     let payload = envelope.view("payload");
     let result = payload.view("result");
     let feedback = payload.view("feedback");
@@ -58,19 +58,19 @@ pub(crate) fn report(built: &amiss_scan::report::Built, explain_scope: bool) {
         say!(
             out,
             "amiss: {} (fix {}, check {}, existing {}, errors {}, exit {})",
-            built.status,
+            result.text("status"),
             fixes,
             checks,
             feedback.number("existing_count"),
             result.number("error_count"),
-            built.exit_code
+            result.number("exit_code")
         );
     } else {
         say!(
             out,
             "amiss: scan failed (errors {}, exit {})",
             result.number("error_count"),
-            built.exit_code
+            result.number("exit_code")
         );
     }
     if explain_scope {

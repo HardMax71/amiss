@@ -7,7 +7,7 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryId
 use super::arguments::{Gathered, Slot, duplicated};
 use super::{
     Adoption, AssessInvocation, AuthorInvocation, CandidateSelector, Code, Command, Invocation,
-    OutputFormat, PlanInvocation, ProviderIdentity, Verb,
+    OutputFormat, PlanInvocation, ProviderIdentity, RenderInvocation, Verb,
 };
 
 pub(super) fn command(
@@ -18,32 +18,12 @@ pub(super) fn command(
     if gathered.lexical_defect || duplicated(gathered) {
         codes.insert(Code::InvalidInvocation);
     }
-    if gathered.verb == Some(Verb::Claim) {
-        return classify_claim(codes, gathered).map(Command::Author);
-    }
-    if gathered.verb == Some(Verb::ExternalPlan) {
-        let [report] = classify_pure(
-            codes,
-            gathered,
-            format,
-            [&gathered.report],
-            &[&gathered.plan, &gathered.evidence],
-        )?;
-        return Ok(Command::Plan(PlanInvocation { report, format }));
-    }
-    if gathered.verb == Some(Verb::ExternalAssess) {
-        let [plan, evidence] = classify_pure(
-            codes,
-            gathered,
-            format,
-            [&gathered.plan, &gathered.evidence],
-            &[&gathered.report],
-        )?;
-        return Ok(Command::Assess(AssessInvocation {
-            plan,
-            evidence,
-            format,
-        }));
+    match gathered.verb {
+        Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
+        Some(Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render) => {
+            return classify_report_command(codes, gathered, format);
+        }
+        Some(Verb::Check | Verb::Fix | Verb::Adopt) | None => {}
     }
     for required in [&gathered.repo, &gathered.object_format, &gathered.base] {
         if required.occurrences == 0 {
@@ -109,6 +89,63 @@ pub(super) fn command(
         explain_scope: gathered.explain_scope == 1,
         format,
     })))
+}
+
+fn classify_report_command(
+    mut codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<Command, BTreeSet<Code>> {
+    match gathered.verb {
+        Some(Verb::ExternalPlan) => {
+            let [report] = classify_pure(
+                codes,
+                gathered,
+                format,
+                &[OutputFormat::Human, OutputFormat::Json],
+                [&gathered.report],
+                &[&gathered.plan, &gathered.evidence],
+            )?;
+            Ok(Command::Plan(PlanInvocation { report, format }))
+        }
+        Some(Verb::ExternalAssess) => {
+            let [plan, evidence] = classify_pure(
+                codes,
+                gathered,
+                format,
+                &[OutputFormat::Human, OutputFormat::Json],
+                [&gathered.plan, &gathered.evidence],
+                &[&gathered.report],
+            )?;
+            Ok(Command::Assess(AssessInvocation {
+                plan,
+                evidence,
+                format,
+            }))
+        }
+        Some(Verb::Render) => {
+            if gathered.format.occurrences == 0 {
+                codes.insert(Code::InvalidInvocation);
+            }
+            let [report] = classify_pure(
+                codes,
+                gathered,
+                format,
+                &[
+                    OutputFormat::Human,
+                    OutputFormat::Sarif,
+                    OutputFormat::CodeQuality,
+                ],
+                [&gathered.report],
+                &[&gathered.plan, &gathered.evidence],
+            )?;
+            Ok(Command::Render(RenderInvocation { report, format }))
+        }
+        Some(Verb::Check | Verb::Fix | Verb::Adopt | Verb::Claim) | None => {
+            codes.insert(Code::InvalidInvocation);
+            Err(codes)
+        }
+    }
 }
 
 /// The path refuses the bytes the claim url and the extractor cannot carry.
@@ -191,13 +228,14 @@ fn classify_claim(
 }
 
 /// The pure-form gate: a report-bound verb reads its own path flags and
-/// projects as human or JSON; every scan, claim, and adoption option is
-/// foreign, as are the other pure forms' paths. Accepts with exactly one
-/// path per required slot, in the order given, or carries every code out.
+/// projects only through one of its admitted formats; every scan, claim, and
+/// adoption option is foreign, as are the other pure forms' paths. Accepts
+/// with exactly one path per required slot, in order, or carries every code.
 fn classify_pure<const N: usize>(
     mut codes: BTreeSet<Code>,
     gathered: &Gathered,
     format: OutputFormat,
+    formats: &[OutputFormat],
     required: [&Slot; N],
     foreign_pure: &[&Slot],
 ) -> Result<[PathBuf; N], BTreeSet<Code>> {
@@ -227,7 +265,7 @@ fn classify_pure<const N: usize>(
         .any(|slot| slot.occurrences > 0)
         || gathered.index > 0
         || gathered.explain_scope > 0
-        || matches!(format, OutputFormat::Sarif | OutputFormat::CodeQuality)
+        || !formats.contains(&format)
     {
         codes.insert(Code::InvalidInvocation);
     }

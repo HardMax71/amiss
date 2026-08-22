@@ -82,7 +82,15 @@ fn row(base: Value, candidate: Value) -> Value {
 fn report(observations: Vec<Value>) -> Value {
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
-        ("result", object(vec![("complete", Value::Bool(true))])),
+        ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
+        (
+            "result",
+            object(vec![
+                ("complete", Value::Bool(true)),
+                ("status", string("pass")),
+                ("exit_code", Value::Integer(0)),
+            ]),
+        ),
         (
             "evaluation",
             object(vec![
@@ -234,7 +242,15 @@ fn a_tampered_payload_is_refused() {
 fn an_incomplete_report_is_refused() {
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
-        ("result", object(vec![("complete", Value::Bool(false))])),
+        ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
+        (
+            "result",
+            object(vec![
+                ("complete", Value::Bool(false)),
+                ("status", string("incomplete")),
+                ("exit_code", Value::Integer(2)),
+            ]),
+        ),
         ("observations", Value::array(Vec::new())),
     ]);
     let digest = hj(PAYLOAD_SCHEMA, &payload);
@@ -365,7 +381,15 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
     let destination = "https://ghes.corp.example/other/repo/blob/main/x.md";
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
-        ("result", object(vec![("complete", Value::Bool(true))])),
+        ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
+        (
+            "result",
+            object(vec![
+                ("complete", Value::Bool(true)),
+                ("status", string("pass")),
+                ("exit_code", Value::Integer(0)),
+            ]),
+        ),
         (
             "evaluation",
             object(vec![
