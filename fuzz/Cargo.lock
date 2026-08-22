@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-adoc"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "amiss-wire",
 ]
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-git"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "amiss-wire",
  "crc32fast",
@@ -50,7 +50,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-md"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "amiss-wire",
  "markdown",
@@ -58,14 +58,14 @@ dependencies = [
 
 [[package]]
 name = "amiss-rst"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "amiss-wire",
 ]
 
 [[package]]
 name = "amiss-scan"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "amiss-adoc",
  "amiss-git",
@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-wire"
-version = "0.25.0"
+version = "0.26.0"
 dependencies = [
  "sha2",
  "strum",
