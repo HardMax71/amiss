@@ -1,18 +1,56 @@
-use crate::de::{self, Error, Obj};
+use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::{self, Value};
 use crate::model::{Adapter, RepoPathText};
 
 use super::{
     Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA,
-    decode_disposition_rule, decode_include, decode_items, decode_path_set, root, sorted_set,
+    decode_disposition_rule, decode_enum, decode_items, decode_path_set, decode_repo_path, root,
+    sorted_set,
 };
+
+/// Maximum UTF-8 byte length of one exact document suffix selector.
+pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentInclude {
     pub path: RepoPathText,
     pub kind: IncludeKind,
+    pub suffix: Option<String>,
     pub adapter: Option<Adapter>,
+}
+
+fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
+    Obj::new(path, value).and_then(|mut obj| {
+        let mut include = DocumentInclude {
+            path: obj.required("path", decode_repo_path)?,
+            kind: obj.required("kind", decode_enum)?,
+            suffix: None,
+            adapter: None,
+        };
+        let suffix_path = obj.field("suffix");
+        if let Some(value) = obj.take_optional("suffix") {
+            let suffix = de::string(&suffix_path, value)?;
+            if include.kind != IncludeKind::Tree {
+                return fail(&suffix_path, ErrorKind::Inconsistent);
+            }
+            let Some(tail) = suffix.strip_prefix('.') else {
+                return fail(&suffix_path, ErrorKind::InvalidValue);
+            };
+            if tail.is_empty()
+                || suffix.len() > DOCUMENT_SUFFIX_BYTES
+                || tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
+            {
+                return fail(&suffix_path, ErrorKind::InvalidValue);
+            }
+            include.suffix = Some(suffix);
+        }
+        include.adapter = obj
+            .take_optional("adapter")
+            .map(|value| decode_enum(&obj.field("adapter"), value))
+            .transpose()?;
+        obj.finish().map(|()| include)
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,6 +93,9 @@ impl ScannerPolicy {
                     ("path".into(), Value::String(include.path.as_str().into())),
                     ("kind".into(), Value::String(include.kind.as_ref().into())),
                 ];
+                if let Some(suffix) = include.suffix {
+                    rows.push(("suffix".into(), Value::String(suffix.into())));
+                }
                 if let Some(adapter) = include.adapter {
                     rows.push(("adapter".into(), Value::String(adapter.as_ref().into())));
                 }

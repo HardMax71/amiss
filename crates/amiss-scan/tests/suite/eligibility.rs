@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -44,32 +44,40 @@ fn the_maximal_policy_union_matches_under_the_eligibility_ceiling() {
     let per_policy =
         usize::try_from(ScanLimits::CONTRACT.repository_policy_entries).unwrap_or(usize::MAX / 2);
     let root_count = per_policy.saturating_mul(2);
-    let trees = (0..root_count)
-        .map(|index| {
-            RepoPath::new(format!("roots/{index:06}")).expect("valid eligibility include path")
-        })
-        .collect::<BTreeSet<_>>();
-    assert_eq!(trees.len(), root_count, "the union reaches both ceilings");
-    let query = RepoPath::new(format!(
-        "roots/{:06}/nested/page.md",
-        root_count.saturating_sub(1)
-    ))
-    .expect("valid eligibility query path");
-    let includes = Includes {
-        documents: BTreeSet::new(),
-        trees,
-        ..Includes::default()
-    };
+    for (label, suffix) in [("tree", None), ("suffix", Some(".txt"))] {
+        let roots = (0..root_count)
+            .map(|index| {
+                RepoPath::new(format!("roots/{index:06}")).expect("valid eligibility include path")
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(roots.len(), root_count, "the union reaches both ceilings");
+        let includes = match suffix {
+            Some(suffix) => Includes {
+                suffix_roots: BTreeMap::from([(suffix.to_owned(), roots)]),
+                ..Includes::default()
+            },
+            None => Includes {
+                trees: roots,
+                ..Includes::default()
+            },
+        };
+        let query = RepoPath::new(format!(
+            "roots/{:06}/nested/page{}",
+            root_count.saturating_sub(1),
+            suffix.unwrap_or(".md")
+        ))
+        .expect("valid eligibility query path");
 
-    let start = Instant::now();
-    let matched = (0..1_000).all(|_| black_box(&includes).matches(black_box(&query)));
-    let elapsed = start.elapsed();
-    assert!(matched, "the last root covers its descendant");
-    eprintln!("eligibility policy include union: {elapsed:?}");
-    if !cfg!(debug_assertions) {
-        assert!(
-            elapsed < Duration::from_secs(2),
-            "a maximal policy union serves 1,000 late-root matches below two seconds: {elapsed:?}"
-        );
+        let start = Instant::now();
+        let matched = (0..1_000).all(|_| black_box(&includes).matches(black_box(&query)));
+        let elapsed = start.elapsed();
+        assert!(matched, "the last root covers its selected descendant");
+        eprintln!("eligibility policy {label} union: {elapsed:?}");
+        if !cfg!(debug_assertions) {
+            assert!(
+                elapsed < Duration::from_secs(2),
+                "a maximal {label} union serves 1,000 late-root matches below two seconds: {elapsed:?}"
+            );
+        }
     }
 }

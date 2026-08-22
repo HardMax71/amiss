@@ -6,9 +6,10 @@ the exact lowercase suffix `.md` or `.markdown` are `structured-markdown`; `.mdx
 `SECURITY`, `SUPPORT`, and `CODE_OF_CONDUCT`, are `extensionless-markdown` and use the
 Markdown adapter. `.cursorrules` and `llms.txt` are `plain-advisory`: they are scanned by an
 adapter that extracts no references. `.adoc` and `.asciidoc` are `structured-asciidoc`, and `.rst` is
-`structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside,
-and Django's reStructuredText documentation uses it, so a policy include is the way to name
-those, and an include that also binds the `rst` adapter reads them as reStructuredText. `.ipynb` and `.org` are `unparsed-markup`: this engine has no parser for a notebook or
+`structured-rst`. `.txt` stays off both lists: the suffix says nothing about what is inside.
+Django can state its convention without admitting every file under `docs` by using one exact
+tree-and-suffix selector bound to `rst`; unrelated suffixes remain outside. `.ipynb` and `.org`
+are `unparsed-markup`: this engine has no parser for a notebook or
 for Org markup, so those files are discovered and counted as `unsupported-document-format`
 and their content is never read, the same honest count an unbound policy include reaches.
 An include may instead bind one of the five built-in adapters, which reads the named path or
@@ -27,8 +28,9 @@ node_modules  vendor  third_party  dist  build  .next  target  test  tests
 
 The names are fixed: no configuration adds one or takes one away. A repository policy can
 still readmit coverage underneath a skipped name, because policy adds coverage and never
-removes it: a document include admits its one exact path, and a tree include admits the
-whole subtree. That is the monorepo lever. A package legitimately named `build`, `dist`,
+removes it: a document include admits its one exact path, a plain tree include admits the
+whole subtree, and a suffixed tree include admits only its exact tail. That is the monorepo
+lever. A package legitimately named `build`, `dist`,
 `test`, or `tests` keeps its prose scanned through one tree include in
 [the repository policy](controls.md), and there is no mechanism in the other direction:
 Amiss always reads the whole repository, so a monorepo cannot scope a run down to one
