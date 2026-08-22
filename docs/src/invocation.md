@@ -137,8 +137,9 @@ fixed and one naming this run's counts, and changes nothing in JSON, behavior pi
 and emits an alternate projection without reading the repository or evaluating it again. It
 accepts only the active report envelope, supported wire compatibility, matching payload digest,
 and a consistent recorded result. A successful projection exits with that recorded 0, 1, or 2;
-a closed stdout does not change it. Invalid, unreadable, or oversized input exits 2 without output.
-JSON is deliberately absent because the report file is already the canonical JSON projection.
+a closed stdout does not change it. Invalid, unreadable, or oversized report input exits 2 without
+output. JSON is not an admitted projection because the report file is already canonical JSON;
+requesting it is a grammar refusal and may emit the standard incomplete JSON refusal envelope.
 
 Exit codes are three classes, not detail. 0 means the run completed and nothing blocks. 1
 means a finding blocks. 2 means nothing trustworthy could be produced. A consumer that
