@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap, parse_tree};
 use amiss_wire::controls::{
-    GitMode, IncludeKind, ResourceName, SCANNER_POLICY_PATH, ScannerPolicy,
+    DOCUMENT_SUFFIX_BYTES, GitMode, IncludeKind, ResourceName, SCANNER_POLICY_PATH, ScannerPolicy,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
@@ -20,16 +20,19 @@ pub struct PolicySide {
     pub policy: Option<ScannerPolicy>,
 }
 
-/// The union of both sides' includes, which fixes classification row five and
-/// overrides built-in exclusion. Bindings are not a union: one grammar per
-/// path per evaluation, taken from the candidate policy so both sides extract
-/// comparably, or from the base policy when the candidate carries none.
+/// The union of both sides' exact, tree, and suffix includes, which fixes
+/// classification row five and overrides built-in exclusion. Bindings are not
+/// a union: one grammar per path per evaluation, taken from the candidate
+/// policy so both sides extract comparably, or from the base policy when the
+/// candidate carries none.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Includes {
     pub documents: BTreeSet<RepoPath>,
     pub trees: BTreeSet<RepoPath>,
+    pub suffix_roots: BTreeMap<String, BTreeSet<RepoPath>>,
     pub document_bindings: BTreeMap<RepoPath, Adapter>,
     pub tree_bindings: BTreeMap<RepoPath, Adapter>,
+    pub suffix_bindings: BTreeMap<RepoPath, (String, Adapter)>,
 }
 
 impl Includes {
@@ -42,6 +45,14 @@ impl Includes {
             };
             for include in policy.document_includes() {
                 let path = RepoPath::from(&include.path);
+                if let Some(suffix) = &include.suffix {
+                    merged
+                        .suffix_roots
+                        .entry(suffix.clone())
+                        .or_default()
+                        .insert(path);
+                    continue;
+                }
                 match include.kind {
                     IncludeKind::Document => {
                         merged.documents.insert(path);
@@ -58,6 +69,12 @@ impl Includes {
                     continue;
                 };
                 let path = RepoPath::from(&include.path);
+                if let Some(suffix) = &include.suffix {
+                    merged
+                        .suffix_bindings
+                        .insert(path, (suffix.clone(), adapter));
+                    continue;
+                }
                 match include.kind {
                     IncludeKind::Document => {
                         merged.document_bindings.insert(path, adapter);
@@ -71,44 +88,65 @@ impl Includes {
         merged
     }
 
-    /// The bound adapter for a policy-included path: an exact document binding
-    /// wins, then the nearest bound ancestor tree.
+    /// The bound adapter for a policy-included path: an exact document wins,
+    /// then the nearest matching suffixed or plain tree.
     #[must_use]
     pub fn binding(&self, path: &RepoPath) -> Option<Adapter> {
         if let Some(adapter) = self.document_bindings.get(path) {
             return Some(*adapter);
         }
         let raw = path.as_bytes();
-        raw.iter()
-            .enumerate()
-            .rev()
-            .filter(|(_, byte)| **byte == b'/')
-            .find_map(|(separator, _)| {
-                raw.get(..separator)
-                    .and_then(|ancestor| self.tree_bindings.get(ancestor))
-            })
-            .copied()
+        for ancestor in ancestors(raw) {
+            if let Some((suffix, adapter)) = self.suffix_bindings.get(ancestor)
+                && raw.ends_with(suffix.as_bytes())
+            {
+                return Some(*adapter);
+            }
+            if let Some(adapter) = self.tree_bindings.get(ancestor) {
+                return Some(*adapter);
+            }
+        }
+        None
     }
 
-    /// A document include matches exactly its path; a tree include matches the
-    /// root itself and paths beginning `root + "/"`, bytewise.
+    /// A document include matches exactly its path; a plain tree matches its
+    /// root and descendants, while a suffixed tree additionally requires the
+    /// exact raw tail.
     #[must_use]
     pub fn matches(&self, path: &RepoPath) -> bool {
         if self.documents.contains(path) {
             return true;
         }
         let raw = path.as_bytes();
-        self.trees.contains(raw)
-            || raw
+        let basename = raw.rsplit(|byte| *byte == b'/').next().unwrap_or(raw);
+        covered(&self.trees, raw)
+            || basename
                 .iter()
                 .enumerate()
-                .rev()
-                .filter(|(_, byte)| **byte == b'/')
-                .any(|(separator, _)| {
-                    raw.get(..separator)
-                        .is_some_and(|ancestor| self.trees.contains(ancestor))
+                .filter(|(_, byte)| **byte == b'.')
+                .filter_map(|(start, _)| basename.get(start..))
+                .filter(|suffix| suffix.len() <= DOCUMENT_SUFFIX_BYTES)
+                .filter_map(|suffix| std::str::from_utf8(suffix).ok())
+                .any(|suffix| {
+                    self.suffix_roots
+                        .get(suffix)
+                        .is_some_and(|roots| covered(roots, raw))
                 })
     }
+}
+
+fn ancestors(path: &[u8]) -> impl Iterator<Item = &[u8]> {
+    std::iter::once(path).chain(
+        path.iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, byte)| **byte == b'/')
+            .filter_map(|(separator, _)| path.get(..separator)),
+    )
+}
+
+fn covered(roots: &BTreeSet<RepoPath>, path: &[u8]) -> bool {
+    ancestors(path).any(|ancestor| roots.contains(ancestor))
 }
 
 fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {

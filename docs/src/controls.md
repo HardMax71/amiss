@@ -18,6 +18,7 @@ The complete grammar in one example, every field required and the file valid onl
   "schema": "amiss/scanner-policy",
   "document_includes": [
     { "path": "build/docs", "kind": "tree" },
+    { "path": "docs", "kind": "tree", "suffix": ".txt", "adapter": "rst" },
     { "path": "notes/ARCHITECTURE", "kind": "document", "adapter": "markdown" }
   ],
   "protected_inventory": ["docs/install.md"],
@@ -27,10 +28,11 @@ The complete grammar in one example, every field required and the file valid onl
 }
 ```
 
-The tree include readmits a subtree the built-in skip list would drop, which is
-[Discovery](discovery.md)'s monorepo lever. The document include reads an extensionless
-file under the markdown grammar. The protected path makes its removal a finding, and the
-disposition row promotes one kind to `fail`. The
+The first tree include readmits a subtree the built-in skip list would drop, which is
+[Discovery](discovery.md)'s monorepo lever. The second admits only `.txt` descendants of
+`docs` and reads them as reStructuredText. The document include reads one extensionless file
+under the markdown grammar. The protected path makes its removal a finding, and the disposition
+row promotes one kind to `fail`. The
 [scanner-policy schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-policy.schema.json)
 closes the grammar, and each array keeps the sort order the schema states. The strictness
 also sets the upgrade order: an engine that predates a policy field refuses the whole file
@@ -39,15 +41,24 @@ reading it has learned the field.
 
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching
-is bytewise, including for paths JSON cannot represent as text. Each snapshot policy can carry
-the [published repository-policy entry ceiling](limits.md), so the base/candidate
-classification union can contain twice that many distinct roots. The
+is bytewise, including for paths JSON cannot represent as text. A tree may carry one `suffix`:
+2–64 UTF-8 bytes beginning with `.`, with no slash, backslash, or NUL. It selects only non-tree
+entries at or below that root whose raw path ends in those exact bytes. There are no globs,
+wildcards, regexes, excludes, normalization, or case folding, and built-in classifications still
+win. The stable selector identity remains `(path, kind)`, so changing or removing the suffix—or
+replacing it with a broader tree—reports policy weakening instead of disguising the old selector
+as a new one.
+
+Each snapshot policy can carry the [published repository-policy entry ceiling](limits.md), so
+the base/candidate classification union can contain twice that many distinct roots. Tree roots
+and suffix roots are indexed separately; lookup probes path ancestors and suffix components,
+never every policy row. The
 [`policy` tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/policy.rs)
 pin the semantic boundaries, and the release
 [`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/eligibility.rs)
 checks the maximum union without scanning every policy row for every discovered path. The
-`amiss-scan` `controls` benchmark tracks both tree matching and policy-set comparison as the
-entry count grows.
+`amiss-scan` `controls` benchmark tracks tree matching, suffix matching, and policy-set comparison
+as the entry count grows.
 
 External controls come from outside the repository, because anything stored inside it could
 be rewritten by the very pull request under review. The contract defines five: an

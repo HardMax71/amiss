@@ -36,7 +36,7 @@ pub use floor::{
     FloorDefect, FloorDisposition, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
     ResourceLimit,
 };
-pub use policy::{DocumentInclude, FindingDisposition, ScannerPolicy};
+pub use policy::{DOCUMENT_SUFFIX_BYTES, DocumentInclude, FindingDisposition, ScannerPolicy};
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
     ContentAvailability, Disposition, EligibleFindingKind, EntryKind, GitMode, IncludeKind,
@@ -102,22 +102,6 @@ fn sorted_set<T>(
         }
     }
     Ok(())
-}
-
-fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let include_path = obj.required("path", decode_repo_path)?;
-    let kind = obj.required("kind", decode_enum)?;
-    let adapter = obj
-        .take_optional("adapter")
-        .map(|value| decode_enum(&obj.field("adapter"), value))
-        .transpose()?;
-    obj.finish()?;
-    Ok(DocumentInclude {
-        path: include_path,
-        kind,
-        adapter,
-    })
 }
 
 fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {
