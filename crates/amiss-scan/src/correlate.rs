@@ -7,7 +7,8 @@ use amiss_wire::digest::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::resolution::Resolution as WireResolution;
 
-use components::{ObservationPool, correlation_components, rename_pairs};
+pub(crate) use components::unique_path_pairs;
+use components::{ObservationPool, correlation_components};
 pub use model::{
     Comparison, Impact, Observation, Outcome, Reason, Side, SourceChange, TargetChange,
 };
@@ -72,7 +73,7 @@ fn correlate_unaligned(base: Side, candidate: Side) -> Result<Vec<Comparison>, E
     } = candidate;
     let base = ObservationPool::new(base_observations)?;
     let candidate = ObservationPool::new(candidate_observations)?;
-    let renames = rename_pairs(&base_documents, &candidate_documents);
+    let renames = unique_path_pairs(&base_documents, &candidate_documents);
     let exact_ids: Vec<Digest> = base
         .positions
         .keys()

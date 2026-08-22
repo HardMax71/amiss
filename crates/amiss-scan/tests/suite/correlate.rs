@@ -52,6 +52,7 @@ fn missing(path: &str) -> Resolution {
     Resolution::Missing(Missing::PathNotFound {
         path: rp(path),
         near: None,
+        same_object_at: None,
     })
 }
 
@@ -535,6 +536,14 @@ fn an_exact_rename_pairs_only_unique_content() {
         .insert(rp("another/copy.md"), (GitMode::RegularFile, digest));
     let got = run(&base_side, &duplicated);
     assert_eq!(got.len(), 2, "duplicate content forms no rename edge");
+    assert!(got.iter().all(|row| row.outcome == Outcome::None));
+
+    let mut duplicated = base_side.clone();
+    duplicated
+        .documents
+        .insert(rp("another/old.md"), (GitMode::RegularFile, digest));
+    let got = run(&duplicated, &candidate_side);
+    assert_eq!(got.len(), 2, "duplicate removals form no rename edge");
     assert!(got.iter().all(|row| row.outcome == Outcome::None));
 }
 

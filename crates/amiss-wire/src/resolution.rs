@@ -88,9 +88,18 @@ impl<P> Target<P> {
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum Missing<P> {
-    PathNotFound { path: P, near: Option<P> },
-    LineFragmentOutOfRange { path: P },
-    HeadingAnchorNotFound { path: P, near: Option<String> },
+    PathNotFound {
+        path: P,
+        near: Option<P>,
+        same_object_at: Option<P>,
+    },
+    LineFragmentOutOfRange {
+        path: P,
+    },
+    HeadingAnchorNotFound {
+        path: P,
+        near: Option<String>,
+    },
     LabelNotDeclared,
 }
 

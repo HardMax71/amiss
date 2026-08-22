@@ -52,7 +52,11 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
                 missing.discriminant().as_ref(),
                 vec![("path", path.to_value())],
             ),
-            Missing::PathNotFound { path, near } => reasoned_resolution(
+            Missing::PathNotFound {
+                path,
+                near,
+                same_object_at,
+            } => reasoned_resolution(
                 resolution.discriminant().as_ref(),
                 missing.discriminant().as_ref(),
                 vec![
@@ -60,6 +64,12 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
                     (
                         "near",
                         near.as_ref().map_or(Value::Null, RepoPath::to_value),
+                    ),
+                    (
+                        "same_object_at",
+                        same_object_at
+                            .as_ref()
+                            .map_or(Value::Null, RepoPath::to_value),
                     ),
                 ],
             ),

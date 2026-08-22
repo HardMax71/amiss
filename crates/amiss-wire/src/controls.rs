@@ -327,14 +327,23 @@ fn decode_resolution(path: &str, value: Value) -> Result<Resolution<RepoPathText
             }
             let resolved_path = obj.required("path", decode_repo_path)?;
             let missing = match reason {
-                MissingTag::PathNotFound => Missing::PathNotFound {
-                    path: resolved_path,
-                    near: obj.required("near", |path, value| {
+                MissingTag::PathNotFound => {
+                    let near = obj.required("near", |path, value| {
                         de::nullable(value)
                             .map(|value| decode_repo_path(path, value))
                             .transpose()
-                    })?,
-                },
+                    })?;
+                    let same_object_at = obj
+                        .take_optional("same_object_at")
+                        .filter(|value| !matches!(value, Value::Null))
+                        .map(|value| decode_repo_path(&obj.field("same_object_at"), value))
+                        .transpose()?;
+                    Missing::PathNotFound {
+                        path: resolved_path,
+                        near,
+                        same_object_at,
+                    }
+                }
                 MissingTag::LineFragmentOutOfRange => Missing::LineFragmentOutOfRange {
                     path: resolved_path,
                 },

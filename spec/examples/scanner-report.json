@@ -270,7 +270,8 @@
               "kind": "missing",
               "reason": "path-not-found",
               "path": "docs/missing.md",
-              "near": null
+              "near": null,
+              "same_object_at": null
             }
           },
           "finding_kind": "explicit-target-missing",
@@ -296,7 +297,7 @@
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:8964bd6fdd03d135e3f22a0d7f143e25a5ebb81129f6019dbc48749f1e7728e2",
+        "candidate_fact_digest": "sha256:9a825b87f2a94b43910d112d2c7111a8aacec8b73b6737ae2bf27da16f31375c",
         "configured_disposition": "warn",
         "coverage_requirement": "none",
         "debt": null,
@@ -785,7 +786,8 @@
             "kind": "missing",
             "reason": "path-not-found",
             "path": "docs/missing.md",
-            "near": null
+            "near": null,
+            "same_object_at": null
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -1001,6 +1003,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:0d0bd6728afb22b27c8a39b9ff96ea6b0e3a133cd9d12952c279a83cf9518b9e",
+  "payload_digest": "sha256:42e7249db9a850b4228e115e06cb8602abc1bb87bc17e4e3449fa2f2dd3284f0",
   "schema": "amiss/scanner-report-envelope"
 }

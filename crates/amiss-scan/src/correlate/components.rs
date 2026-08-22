@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
+use amiss_wire::controls::{SourceConstruct, TargetKind};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;
@@ -112,13 +112,11 @@ fn observation_groups<'a>(
     Ok(groups)
 }
 
-/// Exact Git renames among unmatched document paths: a removed base blob and
-/// an added candidate blob pair only when their mode and raw-evidence digest
-/// agree and that pair occurs exactly once on each side. Duplicate content
-/// creates no edge and is never tie-broken.
-pub(super) fn rename_pairs(
-    base: &BTreeMap<RepoPath, (GitMode, Digest)>,
-    candidate: &BTreeMap<RepoPath, (GitMode, Digest)>,
+/// Unique equal identities among removed and added paths. Duplicate identity
+/// on either side creates no edge and is never tie-broken.
+pub(crate) fn unique_path_pairs<I: Ord>(
+    base: &BTreeMap<RepoPath, I>,
+    candidate: &BTreeMap<RepoPath, I>,
 ) -> BTreeMap<RepoPath, RepoPath> {
     let removed = base
         .iter()
@@ -126,22 +124,26 @@ pub(super) fn rename_pairs(
     let added = candidate
         .iter()
         .filter(|(path, _)| !base.contains_key(*path));
-    let mut removed_by_identity: BTreeMap<(GitMode, Digest), Vec<&RepoPath>> = BTreeMap::new();
+    let mut removed_by_identity: BTreeMap<&I, Option<&RepoPath>> = BTreeMap::new();
     for (path, identity) in removed {
-        removed_by_identity.entry(*identity).or_default().push(path);
+        removed_by_identity
+            .entry(identity)
+            .and_modify(|unique| *unique = None)
+            .or_insert(Some(path));
     }
-    let mut added_by_identity: BTreeMap<(GitMode, Digest), Vec<&RepoPath>> = BTreeMap::new();
+    let mut added_by_identity: BTreeMap<&I, Option<&RepoPath>> = BTreeMap::new();
     for (path, identity) in added {
-        added_by_identity.entry(*identity).or_default().push(path);
+        added_by_identity
+            .entry(identity)
+            .and_modify(|unique| *unique = None)
+            .or_insert(Some(path));
     }
     let mut pairs = BTreeMap::new();
-    for (identity, removed_paths) in &removed_by_identity {
-        let Some(added_paths) = added_by_identity.get(identity) else {
+    for (identity, from) in &removed_by_identity {
+        let (Some(from), Some(Some(to))) = (from, added_by_identity.get(identity)) else {
             continue;
         };
-        if let ([from], [to]) = (removed_paths.as_slice(), added_paths.as_slice()) {
-            pairs.insert((*from).clone(), (*to).clone());
-        }
+        pairs.insert((*from).clone(), (*to).clone());
     }
     pairs
 }

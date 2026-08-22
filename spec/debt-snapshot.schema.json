@@ -477,9 +477,19 @@
               "$ref": "#/$defs/RepoPath"
             }
           ]
+        },
+        "same_object_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/RepoPath"
+            }
+          ]
         }
       },
-      "description": "A path the tree does not hold, carrying the one tracked path equal to it apart from case when exactly one exists and null otherwise."
+      "description": "A path the candidate tree does not hold. Near carries its unique case-only neighbor. Same-object-at optionally carries the candidate-added path in a unique removed/added pair with identical Git mode and object ID; it is evidence of equal bytes, not intent or a repair."
     },
     "HeadingMissingResolution": {
       "type": "object",
