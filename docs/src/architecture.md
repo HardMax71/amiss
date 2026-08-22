@@ -62,10 +62,10 @@ that graph. They are unpublished, nothing above depends on them, and they keep p
 storage, credential, Git acquisition, and runtime dependencies out of the scanner.
 `amiss-controller` owns the provider-neutral orchestration and supervised bootstrap contracts;
 `amiss-controller-git` owns bounded protocol-v2 acquisition; and `amiss-controller-service` owns
-the bounded webhook and synchronous evaluation endpoints, durable raw inbox, and worker. Small
-provider crates and service binaries add the GitHub App Check Run, GitLab merge-train policy job,
-and Gitea or Forgejo dedicated-reviewer gates. All durable state uses ordinary files rather than
-SQL or a database.
+the bounded webhook, synchronous evaluation, and authenticated artifact endpoints, durable raw
+inbox, and worker. Small provider crates and service binaries add the GitHub App Check Run, GitLab
+merge-train policy job, and Gitea or Forgejo dedicated-reviewer gates. All durable state uses
+ordinary files rather than SQL or a database.
 
 [Controller delivery](controller.md) defines the neutral record and retry rules.
 [Provider-verified controls](provider-controls.md) compares the concrete flows and links each

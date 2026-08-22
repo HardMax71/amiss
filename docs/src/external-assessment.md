@@ -43,3 +43,10 @@ assessment, digest included, and a lane can replay the whole chain from artifact
 Exit 0 wrote the assessment, refuted rows included; the artifact is advisory data, and
 whether a refuted introduced destination blocks anything is a policy its consumers own.
 Exit 2 means an input could not be trusted.
+
+Provider lanes retain the canonical plan, provider evidence, and assessment beside the exact
+provider-bound report before staging publication. The published assessment digest and artifact
+locator therefore name one frozen chain. A lost provider reply or service restart verifies and
+reuses those bytes without another API probe; incomplete verification is retained as incomplete
+rather than reconstructed later. Authorization, expiry, and capacity are defined in
+[Retained provider artifacts](provider-artifacts.md).

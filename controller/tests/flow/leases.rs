@@ -148,6 +148,7 @@ fn a_lost_completion_record_is_distinct_after_publication() {
             gate_commit: run.commits.candidate.clone(),
             conclusion: CheckConclusion::Pass,
             report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+            artifact: None,
         }),
     };
     let ledger = ScriptedLedger {
@@ -187,6 +188,7 @@ fn a_staged_gate_must_use_the_publication_runs_object_format() {
             gate_commit: Oid::new(ObjectFormat::Sha256, "e".repeat(64)).unwrap(),
             conclusion: CheckConclusion::Pass,
             report: None,
+            artifact: None,
         }),
     };
     let adapter = Arc::new(FakeAdapter::new(authenticated, []));
@@ -264,6 +266,7 @@ fn submitted_publication(run: &RunIdentity, delivery: &AuthenticatedDelivery) ->
         gate_commit: run.commits.candidate.clone(),
         conclusion: CheckConclusion::Pass,
         report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        artifact: None,
     }
 }
 

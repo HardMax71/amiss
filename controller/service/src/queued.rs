@@ -13,10 +13,10 @@ use amiss_controller::{
 use tokio::net::TcpListener;
 
 use crate::{
-    AcquiringWorkerContext, AcquiringWorkerSettings, DeliveryAdmission, DeliveryWorker,
-    EndpointConfig, EndpointConfigError, Inbox, InboxError, InboxLimits, Operations,
-    ServiceComponent, Supervision, SupervisionError, repository_admission, router_with_clock,
-    supervise,
+    AcquiringWorkerContext, AcquiringWorkerSettings, ArtifactService, ArtifactServiceConfig,
+    DeliveryAdmission, DeliveryWorker, EndpointConfig, EndpointConfigError, Inbox, InboxError,
+    InboxLimits, Operations, ServiceComponent, Supervision, SupervisionError, artifact_routes,
+    open_artifact_service, repository_admission, router_with_clock, supervise,
 };
 
 pub struct QueuedServiceSettings {
@@ -31,6 +31,7 @@ pub struct QueuedService<W> {
     pub clock: Arc<dyn ControllerClock>,
     pub admission: Arc<dyn DeliveryAdmission>,
     pub worker: W,
+    pub artifacts: ArtifactService,
 }
 
 pub struct QueuedLaneSetupInput {
@@ -41,6 +42,7 @@ pub struct QueuedLaneSetupInput {
     pub ledger_lease: Duration,
     pub ledger_records: u64,
     pub replay: ReplayWindow,
+    pub artifacts: ArtifactServiceConfig,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -51,6 +53,8 @@ pub enum QueuedLaneSetupError {
     InvalidLedgerLimits,
     #[error("delivery record cannot be opened")]
     Ledger(#[source] FileLedgerError),
+    #[error("artifact store cannot be opened")]
+    Artifact(#[source] amiss_controller::ArtifactError),
 }
 
 /// Opens one queued repository lane and binds its admission and worker state to one clock.
@@ -79,6 +83,7 @@ where
         ledger_lease,
         ledger_records,
         replay,
+        artifacts,
     } = input;
     let mut plans = PlanRegistry::new();
     register_plan(&mut plans, scope, plan).map_err(QueuedLaneSetupError::Plan)?;
@@ -86,6 +91,8 @@ where
         .ok_or(QueuedLaneSetupError::InvalidLedgerLimits)?;
     let ledger = FileLedger::open_with_clock(&ledger_root, ledger_config, Arc::clone(&clock))
         .map_err(QueuedLaneSetupError::Ledger)?;
+    let artifacts = open_artifact_service(artifacts, Arc::clone(&clock))
+        .map_err(QueuedLaneSetupError::Artifact)?;
     let admission = repository_admission(
         settings.route_id.clone(),
         settings.route.clone(),
@@ -101,12 +108,14 @@ where
         ledger,
         admission: Arc::clone(&admission),
         clock: Arc::clone(&clock),
+        artifacts: Arc::clone(&artifacts.store),
     };
     Ok(QueuedService {
         settings: service,
         clock,
         admission,
         worker,
+        artifacts,
     })
 }
 
@@ -167,6 +176,7 @@ where
         clock,
         admission,
         worker,
+        artifacts,
     } = service;
     let inbox = Arc::new(Mutex::new(
         Inbox::open(settings.inbox_root, settings.inbox_limits)
@@ -182,6 +192,7 @@ where
         Arc::clone(&clock),
     )
     .map_err(QueuedServiceError::Receiver)?;
+    let receiver = artifact_routes(receiver, &artifacts);
     let listener = TcpListener::bind(settings.listen)
         .await
         .map_err(QueuedServiceError::Listener)?;

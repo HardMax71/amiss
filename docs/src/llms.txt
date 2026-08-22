@@ -37,6 +37,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Controls and policy](https://hardmax71.github.io/amiss/controls.html): repository policy, organization floors, debt, waivers, and trusted time
 - [Provider-verified controls](https://hardmax71.github.io/amiss/provider-controls.html): the supported GitHub, GitLab, Gitea, and Forgejo lanes and their independent provider evidence
 - [Prepare the execution constraint](https://hardmax71.github.io/amiss/execution-constraint.html): derive and validate the pinned action, manifest, platform, and bootstrap binding from local bytes
+- [Retained provider artifacts](https://hardmax71.github.io/amiss/provider-artifacts.html): authenticated exact report and assessment retrieval, expiry, retry, and capacity rules
 - [GitHub provider lane](https://hardmax71.github.io/amiss/provider-github.html): GitHub App setup, strict ruleset, service configuration, and Check Run evidence
 - [GitLab provider lane](https://hardmax71.github.io/amiss/provider-gitlab.html): merge-train policy job, OIDC binding, service configuration, and job evidence
 - [Gitea and Forgejo provider lane](https://hardmax71.github.io/amiss/provider-gitea.html): dedicated reviewer, strict branch rule, service configuration, and review evidence

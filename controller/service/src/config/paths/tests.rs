@@ -91,18 +91,19 @@ fn execution_paths_bind_the_bootstrap_and_the_host() {
             .expect("trust files");
     let scratch = trust.directory("scratch").expect("scratch");
     let ledger = trust.directory("ledger").expect("ledger");
+    let artifacts = trust.directory("artifacts").expect("artifacts");
     let bytes = std::fs::read(&trust.constraint).expect("constraint bytes");
     let plan = plan_over(&bytes);
 
     assert!(
-        resolve_execution_paths(&trust.bootstrap, &scratch, &ledger, &plan).is_ok(),
+        resolve_execution_paths(&trust.bootstrap, &scratch, &ledger, &artifacts, &plan).is_ok(),
         "the bootstrap the constraint names, on the host it targets"
     );
 
     let other = trust.path("other-bootstrap");
     std::fs::write(&other, b"another bootstrap entirely").expect("write");
     assert_eq!(
-        resolve_execution_paths(&other, &scratch, &ledger, &plan)
+        resolve_execution_paths(&other, &scratch, &ledger, &artifacts, &plan)
             .err()
             .expect("another bootstrap under the same constraint")
             .to_string(),
@@ -122,6 +123,7 @@ fn execution_paths_bind_the_bootstrap_and_the_host() {
             &trust.bootstrap,
             &scratch,
             &ledger,
+            &artifacts,
             &plan_over(elsewhere.as_bytes())
         )
         .err()

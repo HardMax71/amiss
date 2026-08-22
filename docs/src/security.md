@@ -123,14 +123,14 @@ output is accepted. Lease loss cancels the same tree. These rules cover ordinary
 ownership races; they do not promise that a host kernel operation can be interrupted if that
 operation itself never returns.
 
-The provider API credential, webhook key ring or OIDC keys, execution constraint, optional
-controls, bootstrap, TLS terminator, scratch directory, raw inbox where used, and delivery ledger
-are trust roots. Provider and repository administrators who can change the protected merge rule,
-integration or policy owners, reviewer-account owners, key issuers, and configured bypass actors
-are also inside the boundary. Repository bytes are not. A deployment is only as independent as
-its host and those operator-controlled inputs. Self-hosted instances must expose the exact APIs
-required by their lane and a certificate chain accepted by the Rust TLS clients; there is no
-insecure-TLS mode.
+The provider API credential, webhook key ring or OIDC keys, artifact bearer token, execution
+constraint, optional controls, bootstrap, TLS terminator, scratch directory, raw inbox where
+used, delivery ledger, and artifact root are trust roots. Provider and repository administrators
+who can change the protected merge rule, integration or policy owners, reviewer-account owners,
+key issuers, and configured bypass actors are also inside the boundary. Repository bytes are not.
+A deployment is only as independent as its host and those operator-controlled inputs. Self-hosted
+instances must expose the exact APIs required by their lane and a certificate chain accepted by
+the Rust TLS clients; there is no insecure-TLS mode.
 
 The inbox and ledger use checksummed ordinary files, not SQL or a database. Their roots must be
 pre-created private local directories outside the repository and action tree; shared and network
@@ -139,6 +139,12 @@ inbox removes raw bytes after controller completion. The ledger retains running 
 and keeps GitHub and Gitea-family exact-body completion markers permanently, because those
 signatures contain no trusted delivery time. A full store rejects new identities instead of
 evicting accepted work.
+
+The separate [artifact store](provider-artifacts.md) retains exact report and external-assessment
+bytes only for its configured lifetime. It is bearer-authenticated and bounded by records, total
+bytes, bytes per evaluation, and expiry. It does not decide replay, freshness, debt, waivers, or
+acceptance. Corrupt, absent, expired, or full artifact state fails a new publication closed rather
+than publishing a locator the service cannot honor.
 
 The resulting Check Run, policy-job result, or dedicated review is provider evidence, but the
 engine report remains an unchanged, self-asserted envelope. The controller neither signs it nor

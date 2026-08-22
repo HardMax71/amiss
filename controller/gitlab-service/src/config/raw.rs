@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use amiss_controller_service::{CheckPlanFiles, ExecutionLimits, ExecutionPaths};
+use amiss_controller_service::{ArtifactFiles, CheckPlanFiles, ExecutionLimits, ExecutionPaths};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -13,6 +13,7 @@ pub(super) struct RawConfig {
     pub(super) policy: RawPolicy,
     pub(super) plan: CheckPlanFiles,
     pub(super) paths: ExecutionPaths,
+    pub(super) artifacts: ArtifactFiles,
     #[serde(default)]
     pub(super) limits: ExecutionLimits,
 }

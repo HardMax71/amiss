@@ -89,10 +89,10 @@ used at startup. The check uses the service's strict loader, so it reads and val
 the named credentials and trust files, the bound plan, the execution constraint, the bootstrap,
 the limits, and the path layout.
 
-It then exits before entering the service runtime, binding the listener, opening mutable inbox or
-ledger state, running the bootstrap, or contacting the provider. Success prints the service name
-followed by `configuration valid`; failure prints the same configuration error that startup would
-report.
+It then exits before entering the service runtime, binding the listener, opening mutable inbox,
+ledger, or artifact state, running the bootstrap, or contacting the provider. Success prints the
+service name followed by `configuration valid`; failure prints the same configuration error that
+startup would report.
 
 Every service also answers `--version` on its own, with no config path, printing its name and
 version and exiting 0. Use it to confirm which build a host is running before reading anything
@@ -105,7 +105,7 @@ checks still require startup and retained runs against the provider.
 
 ## Service operation
 
-Every provider service uses the same three private `GET` endpoints:
+Every provider service uses the same three private operator `GET` endpoints:
 
 | Path | Contract |
 | --- | --- |
@@ -143,6 +143,11 @@ and all values reset on restart. Counters that do not apply to a lane remain zer
 endpoint remains scrapeable during drain until the listener closes; it does not make the
 listener safe to expose.
 
+Each lane also serves the separately configured, bearer-authenticated artifact `GET` route.
+[Retained provider artifacts](provider-artifacts.md) defines its URL, response, exact-byte,
+expiry, retry, and storage contract. Artifact retrieval does not increment the fixed provider
+request counters.
+
 Runtime lifecycle events are one compact JSON object per stderr line. The schema is
 `amiss/controller-event/v1`, and the only keys are `schema`, `level`, `event`, and `component`.
 Normal transitions are `ready`, `draining`, and `stopped`, with level `info` and component
@@ -167,16 +172,17 @@ signal aborts a stuck drain. Do not depend on a final metrics scrape after drain
 listener may close before the other components finish.
 
 Bind this listener only to loopback or a private operator network. If a TLS proxy accepts provider
-traffic, publish only the configured provider `POST` path through it; keep `/healthz`, `/readyz`,
-and `/metrics` private. None of the three operator endpoints is authenticated.
+traffic, publish only the configured provider `POST` path and artifact `GET` prefix through it;
+keep `/healthz`, `/readyz`, and `/metrics` private. None of the three operator endpoints is
+authenticated; the artifact prefix has its own bearer authentication.
 
 ## Shared trust boundary
 
 Run a provider service on a host controlled independently of the checked repository. Keep its API
 credential, webhook secret or OIDC keys, bootstrap, execution constraint, optional controls,
-scratch directory, and file-ledger root outside the repository and action trees. Webhook lanes
-also have a separate raw-inbox root. All roots must be pre-created private local directories;
-shared and network filesystems are unsupported.
+artifact bearer token, scratch directory, file-ledger root, and artifact root outside the
+repository and action trees. Webhook lanes also have a separate raw-inbox root. All roots must be
+pre-created private local directories; shared and network filesystems are unsupported.
 
 Build the constraint from the exact local action and bootstrap bytes with
 [Prepare the execution constraint](execution-constraint.md). The generator checks every
@@ -200,6 +206,10 @@ The hard ceilings are shared by every lane:
 | Header count | 128 |
 | Aggregate header bytes | 32 KiB |
 | Ledger rows | 100,000 |
+| Artifact records | 100,000 |
+| Artifact total | 64 GiB |
+| One artifact record | 1 GiB |
+| Artifact retention | 365 days |
 | In-process endpoint concurrency | 64 |
 | Webhook inbox rows | 1,024 |
 | Webhook inbox total | 128 MiB |
@@ -210,11 +220,11 @@ most a 1 KiB body and 32 headers. GitHub and Gitea-family completion rows cannot
 their signatures contain no trusted time. Their provider pages describe the required
 secret-and-ledger cutover before that finite record cap fills.
 
-The service and the provider evidence cannot update in one transaction. A result is saved locally
-before an external provider update or GitLab's synchronous success response. An ambiguous reply
-may therefore require reconciliation, and each provider page states what can and cannot be
-repeated safely. The file ledger uses bounded, checksummed ordinary files and atomic replacement;
-it has no SQL or embedded database.
+The service and the provider evidence cannot update in one transaction. Exact artifacts and then
+the result are saved locally before an external provider update or GitLab's synchronous success
+response. An ambiguous reply may therefore require reconciliation, and each provider page states
+what can and cannot be repeated safely. The file ledger and artifact store use bounded,
+checksummed ordinary files and atomic replacement; neither uses SQL or an embedded database.
 
 Provider administrators, repository administrators who can change the protected merge rule,
 integration owners, policy-project owners, credential issuers, configured bypass actors, and

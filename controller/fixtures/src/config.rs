@@ -95,10 +95,29 @@ pub fn plan(constraint: &Path) -> Value {
 
 /// The `paths` object, with the inbox present only for the webhook lanes.
 #[must_use]
-pub fn paths(bootstrap: &Path, scratch: &Path, ledger: &Path, inbox: Option<&Path>) -> Value {
-    let mut value = json!({ "bootstrap": bootstrap, "scratch": scratch, "ledger": ledger });
+pub fn paths(
+    bootstrap: &Path,
+    scratch: &Path,
+    ledger: &Path,
+    artifacts: &Path,
+    inbox: Option<&Path>,
+) -> Value {
+    let mut value = json!({
+        "bootstrap": bootstrap,
+        "scratch": scratch,
+        "ledger": ledger,
+        "artifacts": artifacts
+    });
     if let (Some(inbox), Some(object)) = (inbox, value.as_object_mut()) {
         object.insert("inbox".to_owned(), json!(inbox));
     }
     value
+}
+
+#[must_use]
+pub fn artifact_service(host: &str, bearer_token_file: &Path) -> Value {
+    json!({
+        "base_url": format!("https://{host}/amiss/artifacts"),
+        "bearer_token_file": bearer_token_file
+    })
 }

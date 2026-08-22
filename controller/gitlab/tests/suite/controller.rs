@@ -57,7 +57,10 @@ fn signed_policy_request_runs_once_and_replay_cannot_pass_again() {
     let mut lane = lane(now, |identity| identity);
     assert_eq!(
         handle(&mut lane.controller, &lane.source, now),
-        HandleOutcome::Published(amiss_controller::CheckConclusion::Pass)
+        HandleOutcome::Published {
+            conclusion: amiss_controller::CheckConclusion::Pass,
+            artifact: None,
+        }
     );
     assert!(matches!(
         handle(&mut lane.controller, &lane.source, now),
@@ -74,9 +77,12 @@ fn controller_classifies_wrong_identity_and_wrong_tree_without_passing() {
     });
     assert_eq!(
         wrong_identity,
-        HandleOutcome::Published(amiss_controller::CheckConclusion::Unavailable(
-            amiss_controller::RunFailure::WrongIdentity,
-        ))
+        HandleOutcome::Published {
+            conclusion: amiss_controller::CheckConclusion::Unavailable(
+                amiss_controller::RunFailure::WrongIdentity,
+            ),
+            artifact: None,
+        }
     );
 
     let wrong_tree = run_once(now, |mut identity| {
@@ -85,9 +91,12 @@ fn controller_classifies_wrong_identity_and_wrong_tree_without_passing() {
     });
     assert_eq!(
         wrong_tree,
-        HandleOutcome::Published(amiss_controller::CheckConclusion::Unavailable(
-            amiss_controller::RunFailure::WrongTree,
-        ))
+        HandleOutcome::Published {
+            conclusion: amiss_controller::CheckConclusion::Unavailable(
+                amiss_controller::RunFailure::WrongTree,
+            ),
+            artifact: None,
+        }
     );
 }
 

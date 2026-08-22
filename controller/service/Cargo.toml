@@ -21,6 +21,7 @@ base64.workspace = true
 ctrlc = { version = "3.5.2", features = ["termination"] }
 getrandom.workspace = true
 hex.workspace = true
+hmac.workspace = true
 prometheus-client = "0.25"
 secrecy.workspace = true
 serde.workspace = true

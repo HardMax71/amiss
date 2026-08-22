@@ -1,5 +1,4 @@
 use amiss_controller::{CheckConclusion, IntegrationId, ProviderError, Publication};
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
 use super::Config;
@@ -97,11 +96,10 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
     let failure = provider_failure(publication.conclusion)?
         .map(|failure| format!("\nfailure: {failure}"))
         .unwrap_or_default();
-    let report_digest = sha256(publication.report.as_deref().unwrap_or_default());
     let run = &publication.run;
     let repository = &run.change.repository;
     let summary = format!(
-        "evaluation: {}\nconclusion: {label}{failure}\nprovider: {}/{}\nrepository: {}/{}/{}\nchange: {}\nprovider-run: {}#{}\ngate-commit: {}\ncandidate-ref: {}\ntarget-ref: {}\ndefault-ref: {}\nbase-commit: {}\nbase-tree: {}\ncandidate-commit: {}\ncandidate-tree: {}\nplan: {}\nconstraint: {}\nreport: {report_digest}",
+        "evaluation: {}\nconclusion: {label}{failure}\nprovider: {}/{}\nrepository: {}/{}/{}\nchange: {}\nprovider-run: {}#{}\ngate-commit: {}\ncandidate-ref: {}\ntarget-ref: {}\ndefault-ref: {}\nbase-commit: {}\nbase-tree: {}\ncandidate-commit: {}\ncandidate-tree: {}\nplan: {}\nconstraint: {}",
         publication.evaluation_id,
         run.change.provider.namespace,
         run.change.provider.instance,
@@ -122,7 +120,12 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
         publication.check.plan_digest,
         publication.check.execution_constraint_digest,
     );
-    let summary = amiss_controller::feedback::with_feedback(summary, publication.report.as_deref());
+    let summary = amiss_controller::feedback::with_feedback(
+        &summary,
+        publication.report.as_deref(),
+        publication.artifact.as_ref(),
+    )
+    .ok_or(ProviderError::InvalidResponse)?;
     Ok(CreateCheckRun {
         name: config.required_status_name.clone(),
         head_sha: publication.gate_commit.as_str().to_owned(),

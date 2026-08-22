@@ -2,6 +2,7 @@
 
 mod acquiring_runner;
 mod acquisition;
+mod artifacts;
 #[doc(hidden)]
 pub mod atomic_write_recovery;
 mod bootstrap_job;
@@ -23,6 +24,11 @@ mod webhook;
 pub use acquiring_runner::{AcquiringRunner, Acquisition, AcquisitionTarget};
 pub use acquisition::{AcquireError, AcquiredRoots, verify_acquired};
 pub use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
+pub use artifacts::{
+    ArtifactBundle, ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference,
+    ArtifactStoreConfig, FileArtifactStore, MAX_ARTIFACT_BYTES, MAX_ARTIFACT_RECORD_BYTES,
+    MAX_ARTIFACT_RECORDS, MAX_ARTIFACT_RETENTION, artifact_route,
+};
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,
     PolicyControls, bootstrap_job, check_binding, check_plan,

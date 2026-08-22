@@ -1,6 +1,8 @@
 use std::num::NonZeroU64;
 
-use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId, ProviderRunIdentity};
+use crate::{
+    AcceptedDelivery, ArtifactReference, CheckBinding, ControllerEvaluationId, ProviderRunIdentity,
+};
 
 use super::model::{RunFailure, RunIdentity};
 
@@ -144,6 +146,7 @@ pub struct Publication {
     pub gate_commit: amiss_wire::model::Oid,
     pub conclusion: CheckConclusion,
     pub report: Option<Vec<u8>>,
+    pub artifact: Option<ArtifactReference>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -5,7 +5,7 @@
 
 use std::process::Command;
 
-use amiss_controller_fixtures::config::{TrustFiles, paths, plan};
+use amiss_controller_fixtures::config::{TrustFiles, artifact_service, paths, plan};
 use amiss_controller_gitea_service::ServiceConfig;
 use serde_json::{Value, json};
 
@@ -26,6 +26,10 @@ impl Fixture {
         let scratch = trust.directory("scratch").unwrap();
         let inbox = trust.directory("inbox").unwrap();
         let ledger = trust.directory("ledger").unwrap();
+        let artifacts = trust.directory("artifacts").unwrap();
+        let artifact_token = trust
+            .write("artifact.token", b"gitea-artifact-bearer-token-fixture")
+            .unwrap();
         let token = trust
             .write("reviewer.token", b"dedicated-reviewer-token-2026")
             .unwrap();
@@ -59,7 +63,8 @@ impl Fixture {
                 "target_branch": "main"
             },
             "plan": plan(&trust.constraint),
-            "paths": paths(&trust.bootstrap, &scratch, &ledger, Some(&inbox))
+            "paths": paths(&trust.bootstrap, &scratch, &ledger, &artifacts, Some(&inbox)),
+            "artifacts": artifact_service("amiss.example", &artifact_token)
         });
         Self {
             bootstrap: trust.bootstrap.clone(),
@@ -241,7 +246,7 @@ fn bootstrap_and_storage_roots_remain_bound() {
             .err()
             .unwrap()
             .to_string(),
-        "scratch, inbox, and ledger roots must be separate"
+        "scratch, inbox, ledger, and artifact roots must be separate"
     );
 }
 

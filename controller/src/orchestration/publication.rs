@@ -39,6 +39,7 @@ pub(super) fn publication(
         gate_commit: initial.gate_commit.clone(),
         conclusion,
         report,
+        artifact: None,
     }
 }
 

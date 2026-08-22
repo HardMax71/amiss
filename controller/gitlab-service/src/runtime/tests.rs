@@ -8,28 +8,31 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, CheckConclusion, ControllerClock, DeliveryRoute,
-    FileLedgerConfig, FileLedgerRoot, HandleOutcome, IngressLimits, IngressPolicy, OpaqueId,
-    PlanRegistry, ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, Publication, ReplayWindow, RunFailure, SignedTimePolicy, SystemClock,
-    VerifiedDelivery,
+    ArtifactReference, ArtifactStoreConfig, AuthenticatedDelivery, ChangeSnapshot, CheckConclusion,
+    ControllerClock, DeliveryRoute, FileArtifactStore, FileLedgerConfig, FileLedgerRoot,
+    HandleOutcome, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry, ProviderAdapter,
+    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
+    ReplayWindow, RunFailure, SignedTimePolicy, SystemClock, VerifiedDelivery,
 };
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest, Operations};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use secrecy::SecretString;
 use tokio::sync::Notify;
 
 use super::{
     LEDGER_MAINTENANCE_INTERVAL, Lane, ServiceError, cleanup_ledger, clone_secret, evaluate,
-    maintain_ledger, maintenance_loop, rejection_status, result_status,
+    maintain_ledger, maintenance_loop, rejection_status, result_response, result_status,
 };
 use secrecy::ExposeSecret as _;
 
 #[test]
 fn only_a_published_pass_is_an_http_success() {
     assert_eq!(
-        result_status::<ServiceError>(Ok(HandleOutcome::Published(CheckConclusion::Pass))),
+        result_status::<ServiceError>(Ok(HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: None,
+        })),
         StatusCode::NO_CONTENT
     );
     for conclusion in [
@@ -38,13 +41,50 @@ fn only_a_published_pass_is_an_http_success() {
         CheckConclusion::Unavailable(RunFailure::Unavailable),
     ] {
         assert_eq!(
-            result_status::<ServiceError>(Ok(HandleOutcome::Published(conclusion))),
+            result_status::<ServiceError>(Ok(HandleOutcome::Published {
+                conclusion,
+                artifact: None,
+            })),
             StatusCode::PRECONDITION_FAILED
         );
     }
     assert_eq!(
         result_status::<ServiceError>(Err(ServiceError::EvaluationRunner)),
         StatusCode::SERVICE_UNAVAILABLE
+    );
+}
+
+#[test]
+fn a_completed_result_exposes_the_authenticated_artifact_locator() {
+    let id = "c".repeat(64);
+    let locator = format!("https://amiss.example/artifacts/{id}/report");
+    let report_digest = amiss_wire::digest::sha256(b"report");
+    let response = result_response::<ServiceError>(Ok(HandleOutcome::Published {
+        conclusion: CheckConclusion::Pass,
+        artifact: Some(ArtifactReference {
+            id,
+            locator: locator.clone(),
+            expires_at_unix_millis: 1_800_000_000_000,
+            report_digest,
+            assessment_digest: None,
+            external_tally: None,
+            external_incomplete: false,
+        }),
+    }));
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        response.headers()[header::LINK],
+        format!("<{locator}>; rel=\"amiss-report\"")
+    );
+    assert_eq!(response.headers()["x-amiss-artifact-auth"], "bearer");
+    assert_eq!(
+        response.headers()["x-amiss-artifact-expires-unix-millis"],
+        "1800000000000"
+    );
+    assert_eq!(
+        response.headers()["x-amiss-report-digest"],
+        report_digest.to_string()
     );
 }
 
@@ -79,6 +119,22 @@ fn failed_authentication_never_touches_the_delivery_record() {
         Arc::clone(&clock),
     )
     .unwrap();
+    let artifact_root = state.path().join("artifacts");
+    std::fs::create_dir(&artifact_root).unwrap();
+    let artifacts = Arc::new(
+        FileArtifactStore::open_with_clock(
+            &artifact_root,
+            ArtifactStoreConfig {
+                base_url: "https://amiss.example/artifacts".to_owned(),
+                retention: Duration::from_hours(1),
+                max_records: 32,
+                max_bytes: 16 * 1_024 * 1_024,
+                max_record_bytes: 16 * 1_024 * 1_024,
+            },
+            Arc::clone(&clock),
+        )
+        .unwrap(),
+    );
     let entries_before = entries(&ledger_root);
     let lane = Lane {
         route,
@@ -96,6 +152,7 @@ fn failed_authentication_never_touches_the_delivery_record() {
         bootstrap_timeout: Duration::from_secs(1),
         statement_validity: Duration::from_mins(5),
         operations: Operations::default(),
+        artifacts,
     };
     let headers = [DeliveryHeader {
         name: "authorization".to_owned(),
@@ -110,7 +167,8 @@ fn failed_authentication_never_touches_the_delivery_record() {
                 headers: &headers,
                 body: br#"{"merge_request_iid":42}"#,
             },
-        ),
+        )
+        .status(),
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(entries(&ledger_root), entries_before);

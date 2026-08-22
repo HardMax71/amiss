@@ -3,13 +3,14 @@ use std::time::Duration;
 use amiss_wire::model::Oid;
 
 use crate::{
-    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerClock, ProviderAdapter,
+    AcceptedDelivery, ArtifactBundle, ArtifactError, ArtifactReference, AuthenticatedDelivery,
+    CheckBinding, ControllerClock, FileArtifactStore, ProviderAdapter,
 };
 
 use super::{ControllerError, HandleOutcome};
 use crate::orchestration::ledger::{
-    DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseRenewal, Publication, StageOutcome,
-    StagedPublication,
+    DeliveryClaim, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseRenewal, Publication,
+    StageOutcome, StagedPublication,
 };
 use crate::orchestration::model::{ChangeSnapshot, HeartbeatOutcome, RunHeartbeat, RunIdentity};
 
@@ -128,20 +129,87 @@ fn validate_staged_lease<E>(
 
 pub(super) fn publish_staged<L: DeliveryLedger>(
     adapter: &dyn ProviderAdapter,
+    artifacts: Option<&FileArtifactStore>,
+    sink: Option<&dyn super::ExternalSink>,
     ledger: &mut L,
     delivery: &AcceptedDelivery,
     staged: &StagedPublication,
 ) -> Result<HandleOutcome, ControllerError<L::Error>> {
+    if let Some(reference) = &staged.publication.artifact {
+        if !crate::artifacts::reference_matches_report(
+            reference,
+            staged.publication.report.as_deref(),
+        ) {
+            return Err(ControllerError::Artifact(ArtifactError::Conflict));
+        }
+        artifacts
+            .ok_or(ControllerError::Artifact(ArtifactError::NotFound))?
+            .verify(reference)
+            .map_err(ControllerError::Artifact)?;
+    } else if artifacts.is_some() && staged.publication.report.is_some() {
+        return Err(ControllerError::Artifact(ArtifactError::NotFound));
+    }
     adapter
         .publish(delivery.delivery(), &staged.publication)
         .map_err(ControllerError::Publish)?;
-    match ledger
+    let outcome = match ledger
         .complete(delivery, staged)
         .map_err(ControllerError::Completion)?
     {
-        LeaseCompletion::Completed => Ok(HandleOutcome::Published(staged.publication.conclusion)),
-        LeaseCompletion::Lost => Err(ControllerError::CompletionLost),
-    }
+        LeaseCompletion::Completed => HandleOutcome::Published {
+            conclusion: staged.publication.conclusion,
+            artifact: staged.publication.artifact.clone(),
+        },
+        LeaseCompletion::Lost => return Err(ControllerError::CompletionLost),
+    };
+    observe_external(sink, &staged.publication);
+    Ok(outcome)
+}
+
+pub(super) enum ClaimResolution {
+    Execute(DeliveryLease),
+    Publish(StagedPublication),
+    Return(HandleOutcome),
+}
+
+pub(super) fn resolve_claim<E>(
+    artifacts: Option<&FileArtifactStore>,
+    delivery: &AcceptedDelivery,
+    check: &CheckBinding,
+    claim: DeliveryClaim,
+) -> Result<ClaimResolution, ControllerError<E>> {
+    let outcome = match claim {
+        DeliveryClaim::Execute(lease) if lease.check == *check => {
+            return Ok(ClaimResolution::Execute(lease));
+        }
+        DeliveryClaim::Execute(_) => return Err(ControllerError::LeaseLost),
+        DeliveryClaim::Publish(staged) => {
+            validate_staged(delivery.delivery(), check, &staged)?;
+            return Ok(ClaimResolution::Publish(staged));
+        }
+        DeliveryClaim::Busy {
+            evaluation_id,
+            retry_at_unix_millis,
+        } => ClaimResolution::Return(HandleOutcome::InProgress {
+            evaluation_id,
+            retry_at_unix_millis,
+        }),
+        DeliveryClaim::Duplicate { evaluation_id } => {
+            let artifact = artifacts
+                .map(|store| store.find(&evaluation_id))
+                .transpose()
+                .map_err(ControllerError::Artifact)?
+                .flatten();
+            ClaimResolution::Return(HandleOutcome::Duplicate {
+                evaluation_id,
+                artifact,
+            })
+        }
+        DeliveryClaim::BindingConflict => {
+            return Err(ControllerError::DeliveryBindingConflict);
+        }
+    };
+    Ok(outcome)
 }
 
 pub(super) fn validate_staged<E>(
@@ -191,21 +259,61 @@ fn validate_run<E>(
     Ok(())
 }
 
-/// The advisory external step, after the verdict is sealed: derive the plan
-/// from the published report, ask the provider for evidence, judge, tally.
-/// Every failure collapses into one incomplete tick; nothing here can touch
-/// the delivery's outcome, and without a sink nothing runs at all.
-pub(super) fn observe_external(
+pub(super) fn retain_artifact(
     adapter: &dyn ProviderAdapter,
-    sink: Option<&dyn super::ExternalSink>,
+    store: &FileArtifactStore,
+    verify_external: bool,
     clock: &dyn ControllerClock,
     publication: &Publication,
-) {
-    let (Some(sink), Some(report)) = (sink, publication.report.as_deref()) else {
-        return;
+) -> Result<ArtifactReference, ArtifactError> {
+    let report = publication
+        .report
+        .as_deref()
+        .ok_or(ArtifactError::Corrupt)?;
+    if let Some(reference) = store.find(&publication.evaluation_id)? {
+        if reference.report_digest != amiss_wire::digest::sha256(report) {
+            return Err(ArtifactError::Conflict);
+        }
+        store.verify(&reference)?;
+        return Ok(reference);
+    }
+    let external = if verify_external {
+        prepare_external(adapter, clock, report)
+    } else {
+        PreparedExternal::default()
     };
+    store.retain(
+        &publication.evaluation_id,
+        ArtifactBundle {
+            report,
+            plan: external.plan.as_deref(),
+            evidence: external.evidence.as_deref(),
+            assessment: external.assessment.as_deref(),
+            external_tally: external.tally,
+            external_incomplete: external.incomplete,
+        },
+    )
+}
+
+#[derive(Default)]
+struct PreparedExternal {
+    plan: Option<Vec<u8>>,
+    evidence: Option<Vec<u8>>,
+    assessment: Option<Vec<u8>>,
+    tally: Option<super::ExternalTally>,
+    incomplete: bool,
+}
+
+fn prepare_external(
+    adapter: &dyn ProviderAdapter,
+    clock: &dyn ControllerClock,
+    report: &[u8],
+) -> PreparedExternal {
     let Ok(parsed) = amiss_wire::json::parse(report) else {
-        return sink.incomplete();
+        return PreparedExternal {
+            incomplete: true,
+            ..PreparedExternal::default()
+        };
     };
     let engine = parsed
         .member("payload")
@@ -214,24 +322,63 @@ pub(super) fn observe_external(
         engine.and_then(|engine| engine.text("engine_version")),
         engine.and_then(|engine| engine.text("engine_digest")),
     ) else {
-        return sink.incomplete();
+        return PreparedExternal {
+            incomplete: true,
+            ..PreparedExternal::default()
+        };
     };
     let Ok(plan) = amiss_wire::external::plan(&parsed, version, digest) else {
-        return sink.incomplete();
+        return PreparedExternal {
+            incomplete: true,
+            ..PreparedExternal::default()
+        };
     };
+    let plan_bytes = amiss_wire::json::canonical(&plan);
     let Some(now) = clock.now_unix_millis() else {
-        return sink.incomplete();
+        return PreparedExternal {
+            plan: Some(plan_bytes),
+            incomplete: true,
+            ..PreparedExternal::default()
+        };
     };
     match adapter.verify_external(&plan, &now.to_string()) {
         Ok(Some(evidence)) => {
             match amiss_wire::external::assess(&plan, &evidence, version, digest) {
-                Ok(assessment) => sink.assessed(&tally(&assessment)),
-                Err(_defect) => sink.incomplete(),
+                Ok(assessment) => PreparedExternal {
+                    plan: Some(plan_bytes),
+                    evidence: Some(amiss_wire::json::canonical(&evidence)),
+                    assessment: Some(amiss_wire::json::canonical(&assessment)),
+                    tally: Some(tally(&assessment)),
+                    incomplete: false,
+                },
+                Err(_defect) => PreparedExternal {
+                    plan: Some(plan_bytes),
+                    evidence: Some(amiss_wire::json::canonical(&evidence)),
+                    incomplete: true,
+                    ..PreparedExternal::default()
+                },
             }
         }
-        // No verifier for this provider: nothing was owed.
-        Ok(None) => {}
-        Err(_defect) => sink.incomplete(),
+        Ok(None) => PreparedExternal {
+            plan: Some(plan_bytes),
+            ..PreparedExternal::default()
+        },
+        Err(_defect) => PreparedExternal {
+            plan: Some(plan_bytes),
+            incomplete: true,
+            ..PreparedExternal::default()
+        },
+    }
+}
+
+pub(super) fn observe_external(sink: Option<&dyn super::ExternalSink>, publication: &Publication) {
+    let (Some(sink), Some(reference)) = (sink, publication.artifact.as_ref()) else {
+        return;
+    };
+    if reference.external_incomplete {
+        sink.incomplete();
+    } else if let Some(tally) = &reference.external_tally {
+        sink.assessed(tally);
     }
 }
 

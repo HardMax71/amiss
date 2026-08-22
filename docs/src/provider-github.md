@@ -118,7 +118,7 @@ cargo build --release --locked \
   -p amiss-controller-github-service --bin amiss-controller-github
 ```
 
-Pre-create the private state and scratch directories, then run the shared
+Pre-create the private scratch, inbox, ledger, and artifact directories, then run the shared
 [offline configuration check](provider-controls.md#offline-configuration-check):
 
 ```sh
@@ -136,7 +136,8 @@ in front of it. The proxy must preserve the exact body and required GitHub heade
 decode, decompress, or rewrite the signed body. The service takes a configured delivery permit
 before reading a body and holds it through durable inbox admission, but it does not own the public
 connection budget. The proxy must still cap concurrent connections and apply total, header, body,
-idle, and slow-body deadlines. Keep the probes and metrics private, and use the shared
+idle, and slow-body deadlines. Forward the configured artifact prefix only to consumers who can
+present its bearer token. Keep the probes and metrics private, and use the shared
 [service operation](provider-controls.md#service-operation) contract for readiness, redacted
 lifecycle events, counters, and graceful drain.
 
@@ -157,7 +158,7 @@ The delivery endpoint returns:
 ## Configuration
 
 Configuration is strict JSON: unknown and duplicate fields are errors. All file and directory
-paths are absolute. The three writable roots must already exist as separate real directories;
+paths are absolute. The four writable roots must already exist as separate real directories;
 none may contain another. The bootstrap must be a real file whose digest matches the loaded
 execution constraint.
 
@@ -197,7 +198,12 @@ execution constraint.
     "bootstrap": "/opt/amiss/amiss-bootstrap",
     "scratch": "/var/lib/amiss/scratch",
     "inbox": "/var/lib/amiss/inbox",
-    "ledger": "/var/lib/amiss/ledger"
+    "ledger": "/var/lib/amiss/ledger",
+    "artifacts": "/var/lib/amiss/artifacts"
+  },
+  "artifacts": {
+    "base_url": "https://amiss.example/amiss/artifacts",
+    "bearer_token_file": "/etc/amiss/artifact.token"
   }
 }
 ```
@@ -229,7 +235,9 @@ The optional `limits` object has separate execution and queue sections:
     "execution": {
       "api_request_millis": 20000,
       "git_request_seconds": 120,
-      "bootstrap_seconds": 120
+      "bootstrap_seconds": 120,
+      "artifact_retention_seconds": 604800,
+      "artifact_records": 1000
     },
     "queue": {
       "max_concurrent_deliveries": 16,
@@ -250,6 +258,8 @@ Each omitted field uses its default:
 | `execution` | `api_connect_millis`, `api_read_millis`, `api_write_millis` | 5,000, 15,000, 15,000 |
 | `execution` | `api_request_millis`, `git_request_seconds` | 20,000, 120 |
 | `execution` | `bootstrap_seconds`, `statement_validity_seconds` | 120, 300 |
+| `execution` | `artifact_retention_seconds`, `artifact_records` | 604,800, 1,000 |
+| `execution` | `artifact_bytes`, `artifact_record_bytes` | 1 GiB, 64 MiB |
 | `queue` | `max_concurrent_deliveries` | 16 |
 | `queue` | `inbox_lease_seconds`, `inbox_records` | 600, 64 |
 | `queue` | `inbox_bytes`, `inbox_record_bytes` | 128 MiB, 3 MiB |
@@ -259,14 +269,16 @@ Limits are checked together at startup. In particular, one inbox record must hol
 request, the API operation deadline must fit inside the ledger lease, the bootstrap wall limit
 cannot exceed 120 seconds, future skew cannot exceed 300 seconds, and the idle poll cannot exceed
 five seconds. Concurrent deliveries must be between 1 and 64. Execution fields govern
-authentication, provider calls, Git acquisition, the delivery ledger, and bootstrap. Queue fields
-govern only webhook admission, the durable raw inbox, and its worker.
+authentication, provider calls, Git acquisition, the delivery ledger, retained artifacts, and
+bootstrap. Queue fields govern only webhook admission, the durable raw inbox, and its worker.
 
 Configuration cannot raise the shared hard ceilings: 8 MiB per request body, 128 headers, 32 KiB
 of aggregate header bytes, 100,000 ledger rows, 1,024 inbox rows, 128 MiB for the whole inbox,
-16 MiB for one inbox row, and 64 concurrent admissions. HTTP phase and operation timeouts cannot
-exceed 30 seconds, Git acquisition cannot exceed 120 seconds, and the queue poll cannot exceed
-five seconds. Smaller values remain available for a tighter deployment.
+16 MiB for one inbox row, 100,000 artifact records, 64 GiB of artifacts, 1 GiB per artifact
+record, 365 days of retention, and 64 concurrent admissions. HTTP phase and operation timeouts
+cannot exceed 30 seconds, Git acquisition cannot exceed 120 seconds, and the queue poll cannot
+exceed five seconds. Smaller values remain available for a tighter deployment. The full artifact
+contract and retrieval command are in [Retained provider artifacts](provider-artifacts.md).
 
 Provider API responses are capped at 8 MiB. Effective-rule and Check Run lists stop at ten pages
 of 100 rows, or 1,000 rows total. Oversized responses, inconsistent counts, malformed pages, and
@@ -295,13 +307,13 @@ silently retried with a weaker Git path.
 
 ## State and replay
 
-Both state stores use checksummed ordinary files with bounded rows and atomic replacement.
+All state stores use checksummed ordinary files with bounded rows or bytes and atomic replacement.
 There is no SQL server, embedded database, or schema migration service. Use private local
 filesystems; network and shared filesystems are unsupported. Anyone who can read or alter the
-App key, webhook secret, control files, bootstrap, scratch root, inbox, ledger, or TLS proxy is
-inside this lane's trust boundary. GitHub, repository and organization administrators, App
-owners and key issuers, and configured ruleset bypass actors are also trusted. None of these
-actors is made atomic with the local file records.
+App key, webhook secret, artifact token, control files, bootstrap, scratch root, inbox, ledger,
+artifact root, or TLS proxy is inside this lane's trust boundary. GitHub, repository and
+organization administrators, App owners and key issuers, and configured ruleset bypass actors
+are also trusted. None of these actors is made atomic with the local file records.
 
 Only one live process may own an inbox. It has fixed row, byte, and per-row caps. A full inbox
 returns `503` instead of dropping an accepted request. A crash leaves a claimed row available
@@ -350,12 +362,13 @@ duplicate or conflicting current rows.
 | Superseded while its staged gate is still current | `cancelled` |
 
 The Check Run summary names the provider, repository, change, provider run, gate commit, refs,
-commits, trees, plan, execution constraint, and report digest. An unavailable result also carries
-one stable `failure` label such as `timeout` or `tampered-runtime`. Below those bindings the
-summary lists the report's own grouped feedback: the fix, check, and existing counts, then up to
-ten items naming a target and an affected-place count, every repository-derived value rendered
-under the human-atom law so hostile path bytes never become markdown or workflow syntax. The
-digest stays the evidence; the listed lines are a courtesy projection of the same report.
+commits, trees, plan, execution constraint, report digest, authenticated artifact locator, and
+exclusive expiry. An unavailable result also carries one stable `failure` label such as `timeout`
+or `tampered-runtime`. Below those bindings the summary lists the report's own grouped feedback:
+the fix, check, and existing counts, then up to ten items naming a target and an affected-place
+count, every repository-derived value rendered under the human-atom law so hostile path bytes
+never become markdown or workflow syntax. The digest stays the evidence; the listed lines are a
+courtesy projection of the same report, and the retained locator provides every row.
 Together with a strict active ruleset bound to this App, that Check Run is provider evidence for
 the configured branch.
 

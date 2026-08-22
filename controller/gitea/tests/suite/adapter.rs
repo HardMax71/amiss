@@ -436,6 +436,7 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
         run,
         conclusion: CheckConclusion::Pass,
         report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        artifact: None,
     }
 }
 

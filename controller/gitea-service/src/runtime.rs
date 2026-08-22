@@ -99,6 +99,7 @@ fn prepare(config: ServiceConfig) -> Result<QueuedService<WorkerContext>, Servic
         settings: queued.settings,
         clock: queued.clock,
         admission: queued.admission,
+        artifacts: queued.artifacts,
         worker: WorkerContext {
             settings: WorkerSettings {
                 provider: config.provider,

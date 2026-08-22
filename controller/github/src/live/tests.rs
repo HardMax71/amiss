@@ -8,9 +8,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
-    ChangeId, ChangeLocator, ChangeState, CheckBinding, CheckConclusion, ControllerEvaluationId,
-    IntegrationId, OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    Publication, RunFailure,
+    ArtifactReference, ChangeId, ChangeLocator, ChangeState, CheckBinding, CheckConclusion,
+    ControllerEvaluationId, IntegrationId, OpaqueId, ProviderError, ProviderIdentity,
+    ProviderInstance, ProviderNamespace, Publication, RunFailure,
 };
 use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
@@ -420,6 +420,16 @@ fn publication_summary_carries_the_report_feedback_lines() {
         }))
         .unwrap(),
     );
+    let artifact_id = "a".repeat(64);
+    publication.artifact = Some(ArtifactReference {
+        id: artifact_id.clone(),
+        locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
+        expires_at_unix_millis: 1_800_000_000_000,
+        report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
+        assessment_digest: None,
+        external_tally: None,
+        external_incomplete: false,
+    });
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let summary = &expected.output.summary;
@@ -438,6 +448,15 @@ fn publication_summary_carries_the_report_feedback_lines() {
     assert!(
         summary.contains(&digest_line),
         "the digest evidence stays: {summary}"
+    );
+    assert!(summary.contains("artifact-auth: bearer"), "{summary}");
+    assert!(
+        summary.contains("artifact-expires-unix-millis: 1800000000000"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains(publication.artifact.as_ref().unwrap().locator.as_str()),
+        "{summary}"
     );
 }
 
@@ -688,6 +707,7 @@ impl Fixture {
             gate_commit,
             conclusion,
             report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+            artifact: None,
         }
     }
 
