@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_scan::policy::{
     DebtInput, InventoryState, WaiverInput, effects, verify_debt, verify_waiver,
@@ -38,6 +38,37 @@ fn includes_match_exact_documents_and_tree_ancestors_at_slash_boundaries() {
     assert!(!includes.matches(&path("docs/specs-old/page.md")));
     assert!(includes.matches(&byte_root));
     assert!(includes.matches(&byte_child));
+}
+
+#[test]
+fn suffix_selectors_match_one_exact_tail_below_one_exact_root() {
+    let byte_path = RepoPath::from_bytes(b"manual/\xff/raw.txt".to_vec())
+        .expect("valid non-UTF-8 fixture path");
+    let includes = Includes {
+        suffix_roots: BTreeMap::from([
+            (".spec.txt".to_owned(), BTreeSet::from([path("specs")])),
+            (".txt".to_owned(), BTreeSet::from([path("manual")])),
+        ]),
+        ..Includes::default()
+    };
+
+    for selected in [
+        path("manual/guide.txt"),
+        path("manual/deep/archive.spec.txt"),
+        path("specs/archive.spec.txt"),
+        byte_path,
+    ] {
+        assert!(includes.matches(&selected), "selected {selected:?}");
+    }
+    for outside in [
+        path("manual/guide.TXT"),
+        path("manual/guide.txt.bak"),
+        path("manual-old/guide.txt"),
+        path("other/guide.txt"),
+        path("specs/archive.txt"),
+    ] {
+        assert!(!includes.matches(&outside), "outside {outside:?}");
+    }
 }
 
 #[test]
@@ -82,6 +113,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         .map(|(raw, kind)| DocumentInclude {
             path: RepoPathText::new((*raw).to_owned()).expect("valid include path"),
             kind: *kind,
+            suffix: None,
             adapter: None,
         })
         .collect();
@@ -110,6 +142,38 @@ fn the_union_carries_both_sides_includes() {
     let union = Includes::union(&base, &candidate);
     assert_eq!(union.documents.len(), 2);
     assert_eq!(union.trees.len(), 1);
+}
+
+#[test]
+fn the_union_carries_both_suffixes_but_the_candidate_binding() {
+    let side = |suffix: &str, adapter| {
+        let policy = ScannerPolicy::new(
+            vec![DocumentInclude {
+                path: RepoPathText::new("manual".to_owned()).expect("valid include path"),
+                kind: IncludeKind::Tree,
+                suffix: Some(suffix.to_owned()),
+                adapter: Some(adapter),
+            }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("valid suffix selector");
+        PolicySide {
+            digest: Some(policy.digest()),
+            policy: Some(policy),
+        }
+    };
+    let base = side(".txt", amiss_wire::model::Adapter::Rst);
+    let candidate = side(".guide", amiss_wire::model::Adapter::Markdown);
+    let union = Includes::union(&base, &candidate);
+
+    assert!(union.matches(&path("manual/old.txt")));
+    assert!(union.matches(&path("manual/current.guide")));
+    assert_eq!(union.binding(&path("manual/old.txt")), None);
+    assert_eq!(
+        union.binding(&path("manual/current.guide")),
+        Some(amiss_wire::model::Adapter::Markdown)
+    );
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
@@ -308,6 +372,10 @@ fn a_binding_answers_documents_then_the_nearest_tree() {
     includes
         .document_bindings
         .insert(path("man/deep/y.txt"), amiss_wire::model::Adapter::Markdown);
+    includes.suffix_bindings.insert(
+        path("manual"),
+        (".txt".to_owned(), amiss_wire::model::Adapter::Rst),
+    );
     assert_eq!(
         includes.binding(&path("docs/a.q")),
         Some(amiss_wire::model::Adapter::Markdown)
@@ -315,6 +383,11 @@ fn a_binding_answers_documents_then_the_nearest_tree() {
     assert_eq!(
         includes.binding(&path("man/x.txt")),
         Some(amiss_wire::model::Adapter::Rst)
+    );
+    assert_eq!(
+        includes.binding(&path("man")),
+        Some(amiss_wire::model::Adapter::Rst),
+        "a tree binding covers its exact root as its include does"
     );
     assert_eq!(
         includes.binding(&path("man/deep/y.txt")),
@@ -327,6 +400,11 @@ fn a_binding_answers_documents_then_the_nearest_tree() {
         "the nearest bound ancestor answers the rest of the tree"
     );
     assert_eq!(includes.binding(&path("other/z.txt")), None);
+    assert_eq!(
+        includes.binding(&path("manual/guide.txt")),
+        Some(amiss_wire::model::Adapter::Rst)
+    );
+    assert_eq!(includes.binding(&path("manual/guide.rst")), None);
 }
 
 /// Only a policy-included row under its own path answers the bound-adapter
@@ -364,8 +442,8 @@ fn bound_adapter_answers_only_policy_included_rows() {
         outside_document_set: 0,
         tree_entries: 2,
         path_defects: Vec::new(),
-        entries: std::collections::BTreeMap::new(),
-        labels: std::collections::BTreeMap::new(),
+        entries: BTreeMap::new(),
+        labels: BTreeMap::new(),
     };
     assert_eq!(
         snapshot.bound_adapter(&path("man/g.txt")),
@@ -389,6 +467,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
             vec![DocumentInclude {
                 path: RepoPathText::new("man".to_owned()).expect("valid include path"),
                 kind: IncludeKind::Tree,
+                suffix: None,
                 adapter,
             }],
             Vec::new(),
@@ -424,4 +503,54 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
     assert_eq!(removed(&kept), 0, "an unchanged binding is not weakening");
     let added = effects(&side(None), &side(Some(Adapter::Rst)), &scanned);
     assert_eq!(removed(&added), 0, "adding a binding is a plain tighten");
+}
+
+#[test]
+fn suffix_selector_changes_keep_their_stable_root_identity() {
+    use amiss_wire::model::Adapter;
+    let side = |suffix: Option<&str>, adapter: Option<Adapter>| {
+        let policy = ScannerPolicy::new(
+            vec![DocumentInclude {
+                path: RepoPathText::new("manual".to_owned()).expect("valid include path"),
+                kind: IncludeKind::Tree,
+                suffix: suffix.map(str::to_owned),
+                adapter,
+            }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("valid selector fixture");
+        PolicySide {
+            digest: Some(policy.digest()),
+            policy: Some(policy),
+        }
+    };
+    let absent = PolicySide::default();
+    let selected = side(Some(".txt"), Some(Adapter::Rst));
+    let scanned: fn(&str) -> InventoryState = |_| InventoryState::Scanned;
+    let rules = |candidate: &PolicySide| {
+        effects(&selected, candidate, &scanned)
+            .controls
+            .into_iter()
+            .map(|row| row.rule_id)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(rules(&absent), ["policy/include-suffix-selector-removed"]);
+    assert_eq!(
+        rules(&side(None, Some(Adapter::Rst))),
+        ["policy/include-suffix-removed"]
+    );
+    assert_eq!(
+        rules(&side(Some(".rst"), Some(Adapter::Rst))),
+        ["policy/include-suffix-removed"]
+    );
+    assert_eq!(
+        rules(&side(Some(".txt"), None)),
+        ["policy/include-binding-removed"]
+    );
+    assert!(rules(&selected).is_empty());
+
+    let narrowed = effects(&side(None, Some(Adapter::Rst)), &selected, &scanned);
+    assert_eq!(narrowed.controls[0].rule_id, "policy/include-tree-narrowed");
 }

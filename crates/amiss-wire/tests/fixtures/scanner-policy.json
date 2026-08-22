@@ -1,7 +1,7 @@
 {
   "schema": "amiss/scanner-policy",
   "document_includes": [
-    { "path": "docs/adr", "kind": "tree" },
+    { "path": "docs/adr", "kind": "tree", "suffix": ".txt", "adapter": "rst" },
     { "path": "docs/spec.rst", "kind": "document" }
   ],
   "protected_inventory": [

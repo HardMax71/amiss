@@ -171,10 +171,13 @@ The binding shipped and Django stopped being the counterexample. These counts we
 fixes below, engine
 `sha256:3a7263e876ec5ccd55f3b4899f8189af4567b8b21051bec255d93ffba0257a34`. The method
 bends one convention and states it: Django's tree carries no Amiss policy, so the
-candidate is a local commit whose only change is `.amiss/scanner-policy.json`, holding
+candidate is a local commit whose only change is `.amiss/scanner-policy.json`, then holding
 674 document includes that bind the `rst` adapter to every `.txt` under `docs/`, and the
 base is the unmodified upstream head. The whole tree read in 1.1 seconds on an ordinary
-development machine.
+development machine. The exact commit tree was checked again on 2026-08-22: it still holds
+674 regular `.txt` blobs and 66 differently suffixed blobs under `docs`. The current policy
+grammar names the same measured set with one `{"path": "docs", "kind": "tree",
+"suffix": ".txt", "adapter": "rst"}` selector without admitting those 66 other files.
 
 | Repository | Head | Documents | References | Labels | Resolved | Duplicate | Inventory | Missing |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

@@ -409,6 +409,95 @@ fn a_bound_include_parses_under_the_named_grammar() {
     );
 }
 
+#[test]
+fn a_suffix_binding_selects_only_the_exact_tail_and_keeps_native_precedence() {
+    let fx = fixture();
+    let root = fx.root();
+    let selected = r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual","suffix":".txt"}],"protected_inventory":[],"finding_dispositions":[]}"#;
+    for directory in [".amiss", "manual/nested", "manual-old"] {
+        fs::create_dir_all(root.join(directory)).unwrap_or_default();
+    }
+    for (path, body) in [
+        (".amiss/scanner-policy.json", selected),
+        ("manual/guide.txt", "Guide\n=====\n\nsteady\n"),
+        ("manual/nested/detail.txt", "Detail\n======\n"),
+        ("manual/guide.TXT", "not selected\n"),
+        ("manual/guide.txt.bak", "not selected\n"),
+        ("manual-old/outside.txt", "not selected\n"),
+        ("manual/llms.txt", "plain advisory\n"),
+        ("manual/README.md", "# Native Markdown\n"),
+        ("manual/tool.py", "print('not selected')\n"),
+    ] {
+        fs::write(root.join(path), body).unwrap_or_default();
+    }
+    fs::write(root.join("manual/image.bin"), [0, 0xff, 0x80]).unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "suffix base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(root.join("manual/guide.txt"), "see :doc:`gone`\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "suffix candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "enforce",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(
+        code, 1,
+        "the selected RST document carries its missing target"
+    );
+    let payload = payload(&stdout);
+    assert!(payload["findings"].as_array().is_some_and(|rows| {
+        rows.iter().any(|row| {
+            row["kind"] == "explicit-target-missing"
+                && row["key_input"]["scope"]["document"] == "manual/guide.txt"
+        })
+    }));
+    let documents = payload["documents"].as_array().cloned().unwrap_or_default();
+    let row = |path: &str| documents.iter().find(|row| row["path"] == path);
+    assert_eq!(
+        row("manual/guide.txt").and_then(|row| row["candidate"]["adapter_id"].as_str()),
+        Some("rst")
+    );
+    assert_eq!(
+        row("manual/nested/detail.txt").and_then(|row| row["candidate"]["adapter_id"].as_str()),
+        Some("rst")
+    );
+    assert_eq!(
+        row("manual/llms.txt").and_then(|row| row["classification"].as_str()),
+        Some("plain-advisory"),
+        "a built-in classification wins even when its path matches the selector"
+    );
+    assert_eq!(
+        row("manual/README.md").and_then(|row| row["classification"].as_str()),
+        Some("structured-markdown")
+    );
+    for outside in [
+        "manual/guide.TXT",
+        "manual/guide.txt.bak",
+        "manual-old/outside.txt",
+        "manual/image.bin",
+        "manual/tool.py",
+    ] {
+        assert!(
+            row(outside).is_none(),
+            "{outside} must remain outside the document set"
+        );
+    }
+}
+
 /// Keeping the include while dropping its binding stops reading the tree, so
 /// it is policy weakening under its own rule.
 #[test]
@@ -462,6 +551,59 @@ fn dropping_a_binding_is_policy_weakening() {
         "{}",
         payload["findings"]
     );
+}
+
+#[test]
+fn a_broader_replacement_does_not_erase_the_suffix_selector_identity() {
+    let fx = fixture();
+    let root = fx.root();
+    fs::create_dir_all(root.join(".amiss")).unwrap_or_default();
+    fs::create_dir_all(root.join("manual")).unwrap_or_default();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual","suffix":".txt"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    fs::write(root.join("manual/guide.txt"), "steady\n").unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "selected"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap_or_default();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "broader"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--candidate",
+        &candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(
+        code, 1,
+        "selector replacement is an unsuppressible weakening"
+    );
+    let payload = payload(&stdout);
+    assert!(payload["findings"].as_array().is_some_and(|rows| {
+        rows.iter().any(|row| {
+            row["kind"] == "policy-weakened"
+                && row["key_input"]["scope"]["rule_id"] == "policy/include-suffix-removed"
+                && row["key_input"]["scope"]["control_path"] == "manual"
+        })
+    }));
 }
 
 /// A fragment into a bound target answers under the bound grammar: the rst

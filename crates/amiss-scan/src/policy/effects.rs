@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::controls::{
-    Disposition as PolicyDisposition, FindingDisposition, IncludeKind, SCANNER_POLICY_PATH,
-    ScannerPolicy,
+    Disposition as PolicyDisposition, DocumentInclude, FindingDisposition, IncludeKind,
+    SCANNER_POLICY_PATH, ScannerPolicy,
 };
 use amiss_wire::digest::Digest;
-use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
+use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::requests::RequestTrust;
 
@@ -47,6 +47,32 @@ fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
     policy.map_or_else(Vec::new, |policy| {
         disposition_rows(policy.finding_dispositions())
     })
+}
+
+fn include_weakening(
+    base: &DocumentInclude,
+    candidate: Option<&DocumentInclude>,
+) -> Option<&'static str> {
+    let Some(candidate) = candidate else {
+        return Some(if base.suffix.is_some() {
+            "policy/include-suffix-selector-removed"
+        } else {
+            match base.kind {
+                IncludeKind::Document => "policy/include-document-removed",
+                IncludeKind::Tree => "policy/include-tree-removed",
+            }
+        });
+    };
+    if base.suffix != candidate.suffix {
+        return Some(if base.suffix.is_some() {
+            "policy/include-suffix-removed"
+        } else {
+            "policy/include-tree-narrowed"
+        });
+    }
+    base.adapter
+        .filter(|adapter| candidate.adapter != Some(*adapter))
+        .map(|_removed| "policy/include-binding-removed")
 }
 
 /// The verified debt snapshot as evaluation context: provenance plus the
@@ -143,12 +169,12 @@ pub fn effects(
         .policy
         .as_ref()
         .map_or(&[][..], ScannerPolicy::protected_inventory);
-    let candidate_includes: BTreeMap<(&str, IncludeKind), Option<Adapter>> = candidate
+    let candidate_includes: BTreeMap<(&str, IncludeKind), &DocumentInclude> = candidate
         .policy
         .as_ref()
         .map_or(&[][..], ScannerPolicy::document_includes)
         .iter()
-        .map(|row| ((row.path.as_str(), row.kind), row.adapter))
+        .map(|row| ((row.path.as_str(), row.kind), row))
         .collect();
     let candidate_inventory: BTreeSet<&str> = candidate
         .policy
@@ -159,15 +185,10 @@ pub fn effects(
         .collect();
 
     for include in base_includes {
-        let rule = match candidate_includes.get(&(include.path.as_str(), include.kind)) {
-            Some(now) if *now == include.adapter => None,
-            Some(_) if include.adapter.is_none() => None,
-            Some(_) => Some("policy/include-binding-removed"),
-            None => Some(match include.kind {
-                IncludeKind::Document => "policy/include-document-removed",
-                IncludeKind::Tree => "policy/include-tree-removed",
-            }),
-        };
+        let candidate = candidate_includes
+            .get(&(include.path.as_str(), include.kind))
+            .copied();
+        let rule = include_weakening(include, candidate);
         if let Some(rule) = rule {
             controls.push(ControlSeed {
                 kind: FindingKind::PolicyWeakened,

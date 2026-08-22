@@ -3,7 +3,7 @@
     reason = "benchmark fixture paths are fixed and valid"
 )]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_scan::claim::{ClaimCarrier, ClaimMissingReason, ClaimOutcome, ClaimVerdict};
 use amiss_scan::evaluate::claim_groups;
@@ -19,22 +19,49 @@ fn main() {
     divan::main();
 }
 
-/// A descendant of the lexicographically last tree root. A scan of all roots
-/// grows with `count`; ancestor probes do not.
-#[divan::bench(args = [100_usize, 10_000, 100_000])]
-fn late_tree_include(bencher: Bencher<'_, '_>, count: usize) {
-    let trees = (0..count)
+#[derive(Clone, Copy, Debug)]
+enum IncludeShape {
+    Tree,
+    Suffix,
+}
+
+/// A descendant of the lexicographically last root. A scan of all roots grows
+/// with `count`; indexed ancestor and suffix probes do not.
+#[divan::bench(
+    args = [
+        (IncludeShape::Tree, 100_usize),
+        (IncludeShape::Tree, 10_000),
+        (IncludeShape::Tree, 100_000),
+        (IncludeShape::Suffix, 100),
+        (IncludeShape::Suffix, 10_000),
+        (IncludeShape::Suffix, 100_000),
+    ]
+)]
+fn late_include(bencher: Bencher<'_, '_>, case: (IncludeShape, usize)) {
+    let (shape, count) = case;
+    let roots = (0..count)
         .map(|index| path(format!("roots/{index:06}")))
         .collect::<BTreeSet<_>>();
+    let (tail, includes) = match shape {
+        IncludeShape::Tree => (
+            "page.md",
+            Includes {
+                trees: roots,
+                ..Includes::default()
+            },
+        ),
+        IncludeShape::Suffix => (
+            "page.txt",
+            Includes {
+                suffix_roots: BTreeMap::from([(".txt".to_owned(), roots)]),
+                ..Includes::default()
+            },
+        ),
+    };
     let query = path(format!(
-        "roots/{:06}/nested/page.md",
+        "roots/{:06}/nested/{tail}",
         count.saturating_sub(1)
     ));
-    let includes = Includes {
-        documents: BTreeSet::new(),
-        trees,
-        ..Includes::default()
-    };
     bencher.bench_local(|| black_box(&includes).matches(black_box(&query)));
 }
 
@@ -71,6 +98,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
             path: RepoPathText::new(format!("roots/{index:06}"))
                 .expect("valid benchmark include path"),
             kind: IncludeKind::Tree,
+            suffix: None,
             adapter: None,
         })
         .collect();
