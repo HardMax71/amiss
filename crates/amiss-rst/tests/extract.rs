@@ -17,8 +17,8 @@ fn every_specified_reference_form_is_read_with_its_exact_target() {
         "Title\n=====\n\n",
         "See `the guide <guide.rst>`_ and `home <../README>`_.\n\n",
         ".. _named: other.rst\n\n",
-        ".. image:: img/logo.png\n\n",
-        ".. include:: shared.rst\n\n",
+        ".. image:: img/logo mark.png\n\n",
+        ".. include:: shared part.rst\n\n",
         ".. csv-table::\n   :file: data/rows.csv\n",
     );
     assert_eq!(
@@ -27,8 +27,8 @@ fn every_specified_reference_form_is_read_with_its_exact_target() {
             (ReferenceKind::InlineHyperlink, "guide.rst".to_owned()),
             (ReferenceKind::InlineHyperlink, "../README".to_owned()),
             (ReferenceKind::NamedTarget, "other.rst".to_owned()),
-            (ReferenceKind::Image, "img/logo.png".to_owned()),
-            (ReferenceKind::Include, "shared.rst".to_owned()),
+            (ReferenceKind::Image, "img/logo mark.png".to_owned()),
+            (ReferenceKind::Include, "shared part.rst".to_owned()),
             (ReferenceKind::FileOption, "data/rows.csv".to_owned()),
         ],
     );
@@ -229,16 +229,11 @@ fn the_simple_name_folds_case_and_collapses_whitespace() {
     assert_eq!(normalized_label("UPPER"), "upper");
 }
 
-/// Every target is one word: empty targets and targets carrying whitespace
-/// are not references at all.
+/// Empty targets and forms whose grammar requires one token are not guessed.
 #[test]
-fn a_target_is_one_word_or_nothing() {
+fn empty_and_ambiguous_targets_are_not_guessed() {
     for (reason, source) in [
         ("a directive with no argument", ".. image::\n"),
-        (
-            "a directive argument with a space",
-            ".. image:: img/a b.png\n",
-        ),
         ("an include with no argument", ".. include::\n"),
         ("a named target with no value", ".. _named:\n"),
         ("a named target with a space", ".. _named: other file.rst\n"),

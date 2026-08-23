@@ -28,14 +28,14 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
         let after = lead.saturating_add(3);
         if let Some((name, kind, transclusion)) = PATH_DIRECTIVES
             .iter()
-            .find(|(name, _, _)| rest.starts_with(name))
+            .find(|(name, _, _)| {
+                rest.get(..name.len())
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case(name))
+            })
             .copied()
         {
             let argument = rest.get(name.len()..).unwrap_or_default().trim();
-            if !argument.is_empty()
-                && !argument.contains(char::is_whitespace)
-                && !argument.ends_with(".*")
-            {
+            if !argument.is_empty() && !argument.ends_with(".*") {
                 let mut reference = build(kind, argument, at, after, line.len());
                 reference.transclusion = transclusion.map(Ok);
                 found.push(reference);
