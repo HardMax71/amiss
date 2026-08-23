@@ -143,7 +143,11 @@ fn transclusion_fixture() -> CommitChain {
             "docs/host.rst",
             Staged::File(b"Present\n=======\n\n.. include:: part.rst\n"),
         ),
-        ("docs/part.rst", Staged::File(b"Spliced\n=======\n")),
+        (
+            "docs/part.rst",
+            Staged::File(b"Spliced\n=======\n\n.. INCLUDE:: sub part.rst\n"),
+        ),
+        ("docs/sub part.rst", Staged::File(b"Hidden\n======\n")),
         (
             "docs/host.adoc",
             Staged::File(b"= Repeat\n\ninclude::parts/first.adoc[]\n\n== Repeat 2\n"),
@@ -201,6 +205,11 @@ fn assert_transclusion_matrix(resolver: &mut Resolver<'_>) {
 
     let spliced = transcluded(resolver, "docs/host.rst#spliced");
     assert!(matches!(spliced, Resolution::Resolved(_)), "{spliced:?}");
+    let whitespace = transcluded(resolver, "docs/host.rst#hidden");
+    assert!(
+        matches!(whitespace, Resolution::Resolved(_)),
+        "directive names ignore case and their final path accepts whitespace: {whitespace:?}"
+    );
 
     let nested = transcluded(resolver, "docs/host.adoc#_deep");
     assert!(
