@@ -46,5 +46,6 @@
     "provider_run_id": "pipeline/987654321:job-42",
     "provider_run_attempt": 2
   },
-  "execution_constraint": null
+  "execution_constraint": null,
+  "semantic_evidence": []
 }

@@ -55,6 +55,7 @@ fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
         waiver: None,
         time: None,
         constraint: None,
+        semantic: amiss_scan::semantic::Inputs::default(),
         requests: RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,

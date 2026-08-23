@@ -172,6 +172,24 @@ pub(super) fn uri_bytes_valid(text: &str) -> bool {
     true
 }
 
+pub(super) fn absolute_uri_valid(path: &str, scheme: &str, query: Option<&str>) -> bool {
+    if !uri_bytes_valid(path) || query.is_some_and(|value| !uri_bytes_valid(value)) {
+        return false;
+    }
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return true;
+    }
+    let after_scheme = path
+        .get(scheme.len().saturating_add(1)..)
+        .unwrap_or_default();
+    let Some(rest) = after_scheme.strip_prefix("//") else {
+        return false;
+    };
+    let authority_end = rest.find('/').unwrap_or(rest.len());
+    let authority = rest.get(..authority_end).unwrap_or_default();
+    !authority.is_empty() && authority_valid(authority)
+}
+
 pub(super) fn authority_valid(authority: &str) -> bool {
     if !authority.is_ascii() {
         return false;

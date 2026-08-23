@@ -9,11 +9,12 @@ use std::path::Path;
 use amiss_wire::controls::{OrganizationFloor, Profile, TrustedTimeStatement};
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
+use amiss_wire::json::Value;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL,
-    REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust, SnapshotRequest,
-    commit_candidate_identity_digest,
+    REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust,
+    SEMANTIC_EVIDENCE_REQUEST_LIMIT, SnapshotRequest, commit_candidate_identity_digest,
 };
 
 fn request_example(name: &str) -> Vec<u8> {
@@ -95,7 +96,8 @@ fn the_request_examples_parse_to_what_they_say() {
     assert!(
         controls.debt_snapshot.is_none()
             && controls.waiver_bundle.is_none()
-            && controls.execution_constraint.is_none(),
+            && controls.execution_constraint.is_none()
+            && controls.semantic_evidence.is_empty(),
         "an absent control is absent, never a default"
     );
 }
@@ -342,13 +344,34 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
   "debt_snapshot": null,
   "waiver_bundle": null,
   "trusted_time": null,
-  "execution_constraint": null
+  "execution_constraint": null,
+  "semantic_evidence": []
 }"#;
     assert_eq!(
         ControlsRequest::parse(empty).unwrap(),
         ControlsRequest::default(),
         "supplying no controls is lawful"
     );
+}
+
+#[test]
+fn semantic_evidence_is_a_bounded_set_of_envelopes() {
+    let mut wrong_shape = ControlsRequest::default();
+    wrong_shape.semantic_evidence.push(Value::Null);
+    let error = wrong_shape.canonical_bytes().unwrap_err();
+    assert_eq!(error.path, "$.semantic_evidence[0]");
+    assert_eq!(error.kind, ErrorKind::WrongType);
+
+    let oversized = ControlsRequest {
+        semantic_evidence: vec![
+            Value::object(Vec::new());
+            SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)
+        ],
+        ..ControlsRequest::default()
+    };
+    let error = oversized.canonical_bytes().unwrap_err();
+    assert_eq!(error.path, "$.semantic_evidence");
+    assert_eq!(error.kind, ErrorKind::LimitExceeded);
 }
 
 /// Both words of the mode vocabulary and both of the object-format vocabulary

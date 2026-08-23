@@ -140,6 +140,7 @@ pub(super) fn validate_request_size(
             expected_digest: execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         }),
+        semantic_evidence: Vec::new(),
     };
     canonical_request(&request).map(|_bytes| ())
 }
@@ -294,6 +295,7 @@ pub(super) fn request(
         waiver_bundle,
         trusted_time: Some(trusted_time),
         execution_constraint: Some(execution_constraint),
+        semantic_evidence: Vec::new(),
     })
 }
 

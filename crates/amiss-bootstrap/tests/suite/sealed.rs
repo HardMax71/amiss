@@ -284,6 +284,7 @@ fn seal_controls(
     statement_digest: &str,
 ) {
     let controls = entry(payload, "controls");
+    set(controls, "semantic_evidence", Value::array(Vec::new()));
     set(
         controls,
         "organization_floor",
@@ -337,6 +338,7 @@ fn sealed_expectations(
             trust_source: TRUST_SOURCE.to_owned(),
         },
         trusted_time_digest: statement_digest,
+        semantic_evidence: Vec::new(),
     }
 }
 

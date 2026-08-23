@@ -125,6 +125,7 @@ pub struct Effects {
         amiss_wire::controls::ExecutionConstraintDescriptor,
         RequestTrust,
     )>,
+    pub semantic_evidence: Vec<crate::semantic::Provenance>,
     /// The effective typed-analysis-errors-retained ceiling `E`:
     /// `min(64, verified floor limit)`, the built-in 64 without a floor.
     pub errors_retained: u64,
@@ -146,6 +147,7 @@ impl Default for Effects {
             waiver: None,
             time: None,
             constraint: None,
+            semantic_evidence: Vec::new(),
             errors_retained: 64,
             complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
         }
@@ -250,6 +252,7 @@ pub fn effects(
         waiver: None,
         time: None,
         constraint: None,
+        semantic_evidence: Vec::new(),
         errors_retained: 64,
         complete_findings: crate::resources::ScanLimits::CONTRACT.complete_findings,
     }

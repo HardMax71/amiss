@@ -52,6 +52,13 @@ pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct ObservationContext<'a> {
+    pub(crate) engine: &'a EngineProvenance,
+    pub(crate) forge: Option<&'a ForgeContext>,
+    pub(crate) semantic: &'a crate::semantic::Context,
+}
+
 /// Builds one side's observations from its discovery: every scanned
 /// occurrence resolved against this same snapshot, and every failed document
 /// or path defect carried as a typed error detail.
@@ -59,8 +66,7 @@ pub(crate) fn side_observations(
     repo: &Repository,
     git_resources: &mut GitResources,
     scan_resources: &mut ScanResources,
-    engine: &EngineProvenance,
-    forge: Option<&ForgeContext>,
+    context: ObservationContext<'_>,
     discovery: &SnapshotDiscovery,
     mut claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,
 ) -> Result<(Side, Vec<ErrorDetail>), ErrorDetail> {
@@ -77,11 +83,11 @@ pub(crate) fn side_observations(
     let observation_count = discovery
         .documents
         .iter()
-        .filter_map(|record| {
-            let DocumentStatus::Scanned(scanned) = &record.status else {
-                return None;
-            };
-            Some(scanned.occurrences.len())
+        .filter_map(|record| match &record.status {
+            DocumentStatus::Scanned(scanned) => Some(scanned.occurrences.len()),
+            DocumentStatus::Failed(_)
+            | DocumentStatus::ExcludedBuiltIn
+            | DocumentStatus::Unsupported(_) => None,
         })
         .fold(0_usize, usize::saturating_add);
     let mut observations: Vec<Observation> = Vec::with_capacity(observation_count);
@@ -99,22 +105,18 @@ pub(crate) fn side_observations(
                 let Some(adapter) = record.adapter else {
                     continue;
                 };
-                let (_descriptor, adapter_contract_digest) = adapter_contract(engine, adapter);
+                let (_descriptor, adapter_contract_digest) =
+                    adapter_contract(context.engine, adapter);
                 for occurrence in &scanned.occurrences {
-                    let (intent, resolution) = if occurrence.occurrence.construct
-                        == amiss_wire::controls::SourceConstruct::RstRefRole
-                    {
-                        resolver.resolve_label(&occurrence.occurrence.semantic_destination)
-                    } else {
-                        resolver.resolve(
-                            forge,
+                    let (intent, resolution, external_destination) = resolver
+                        .resolve_scanned(
+                            context.forge,
+                            context.semantic,
                             adapter,
                             &record.path,
-                            occurrence.occurrence.construct.is_image(),
-                            &occurrence.occurrence.semantic_destination,
+                            occurrence,
                         )
-                    }
-                    .map_err(|defect| detail(&defect, Some(&record.path)))?;
+                        .map_err(|defect| detail(&defect, Some(&record.path)))?;
                     let id = observation_digest(&ObservationIdentity {
                         adapter,
                         contract_digest: adapter_contract_digest,
@@ -135,8 +137,7 @@ pub(crate) fn side_observations(
                         node_path: occurrence.occurrence.node_path.clone(),
                         adapter,
                         construct: occurrence.occurrence.construct,
-                        external_destination: matches!(resolution, Resolution::External(_))
-                            .then(|| occurrence.occurrence.semantic_destination.clone()),
+                        external_destination,
                         intent,
                         raw_destination: occurrence.occurrence.raw_destination.clone(),
                         raw_destination_digest: occurrence.raw_destination_digest,
@@ -519,6 +520,7 @@ fn evaluate_tree(
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
     forge: Option<&ForgeContext>,
+    semantic: &crate::semantic::Context,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
     claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,
@@ -530,8 +532,11 @@ fn evaluate_tree(
         repo,
         git_resources,
         scan_resources,
-        engine,
-        forge,
+        ObservationContext {
+            engine,
+            forge,
+            semantic,
+        },
         &discovery,
         claims,
     )?;
@@ -562,6 +567,7 @@ pub struct SetupShell {
     pub waiver: Option<crate::policy::WaiverInput>,
     pub time: Option<crate::policy::TimeInput>,
     pub constraint: Option<crate::policy::ConstraintInput>,
+    pub semantic: crate::semantic::Inputs,
     /// The wrapper lane's diagnostic request digests; none for the CLI.
     pub requests: crate::report::RequestDigests,
     /// A wrapper-established external-control defect, settled against the

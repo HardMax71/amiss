@@ -61,12 +61,14 @@ checks the maximum union without scanning every policy row for every discovered 
 as the entry count grows.
 
 External controls come from outside the repository, because anything stored inside it could
-be rewritten by the very pull request under review. The contract defines five: an
+be rewritten by the very pull request under review. The contract defines five nullable controls: an
 organization floor (tightens ceilings and dispositions across many repositories), an
 adoption debt snapshot (a recorded list of known failures being worked off, mintable
 from a real evaluation by [`amiss adopt`](invocation.md)), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
-execution constraint.
+execution constraint. The same request also carries a bounded set of
+[semantic-evidence envelopes](semantic-evidence.md), independently candidate-bound and interpreted
+only by a compiled consumer.
 
 Every control identity, and the release manifest's, uses one open repository grammar: a
 caller-canonical host, a slash-joined owner when the forge supports nested groups, and a
@@ -142,20 +144,24 @@ The machine-facing evaluation and controls requests are closed by the
 intentional: before 1.0 the shipped schema, parser, examples, and report form one rolling
 contract and move together.
 
-In the public command and GitHub composite Action, all five external controls are absent and no
-protected target ref is authenticated. The report records `status: "none"` separately for
+In the public command and GitHub composite Action, all five external controls are absent, semantic
+evidence is empty, and no protected target ref is authenticated. The report records
+`status: "none"` separately for
 organization floor, debt snapshot, waiver bundle, execution constraint, and trusted time; its
 sandbox assurance is `self-asserted`. There is no aggregate `provider_verified` field. The
 exact projection is built in the
 [report writer](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/report.rs).
 
-The sealed bootstrap path can now carry all five controls to the engine. Its report acceptance
+The sealed bootstrap path can carry all five controls and the bounded semantic-evidence set to the
+engine. Its report acceptance
 binds the requested profile; exact organization-floor, debt-snapshot, and waiver-bundle
 presence, digest, and trust source; the execution-constraint digest, trust source, and
 recomputed descriptor semantics; the trusted-time digest, provider run, instant, and recomputed
-statement semantics; and the candidate identity and honest sandbox projection. The public
+statement semantics; every semantic envelope's payload and producer/input identities; and the
+candidate identity and honest sandbox projection. The public
 [CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) still supplies
-each value as `None`. A report control row with `status: "verified"` means the engine verified
+each nullable value as `None` and the evidence set as empty. A report control row with
+`status: "verified"` means the engine verified
 the supplied value's digest and identity relationships. It does not prove that a provider
 authenticated or supplied the value: neither the report nor its enum authenticates its own
 source. The honest reading of a local or convenience-Action report remains: these findings, under

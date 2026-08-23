@@ -164,11 +164,12 @@ twice is undecided rather than guessed between. Labels follow the Docutils simpl
 rule, case-folded with whitespace runs collapsed, a phrase declaration may arrive
 backtick-quoted or sit inside a list item or grid-table cell, and an undeclared name
 carrying a colon is treated as another project's inventory, declared unsupported rather
-than reported missing. One boundary stays open by nature: a prefixless `:ref:` that a
-Sphinx build would satisfy through an intersphinx inventory is indistinguishable in the
-tree from a dead label, so it reports missing, and under observe that is a signal for a
-person rather than a verdict. Every other role stays an open extension point, declared rather than
-read into.
+than reported missing. A prefixless name absent from the local table can resolve only through one
+unique label in complete, candidate-bound [Intersphinx evidence](semantic-evidence.md) supplied
+through the sealed trust boundary. Local declarations retain precedence; duplicate external labels
+stay unsupported, while absent, partial, stale, malformed, or mismatched evidence leaves the name
+missing. The engine never fetches an inventory. Every other role stays an open extension point,
+declared rather than read into.
 
 Heading evaluation expands the closed local include subset in source order. An AsciiDoc
 `include::path[]` or option-free, document-level reStructuredText `include` participates when its

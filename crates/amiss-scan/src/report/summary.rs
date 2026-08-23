@@ -145,7 +145,10 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             IntentKind::Label => {}
         }
         match &observation.resolution {
-            Resolution::Resolved(_) => {
+            Resolution::Resolved(_)
+            | Resolution::External(
+                amiss_wire::resolution::ExternalReference::IntersphinxInventory,
+            ) => {
                 counts.resolved = counts.resolved.saturating_add(1);
             }
             Resolution::Missing(_) => {
@@ -157,7 +160,10 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             | Resolution::UnsupportedSemantics(_)
             | Resolution::UnsupportedVersion(_)
             | Resolution::Invalid(_)
-            | Resolution::External(_) => {}
+            | Resolution::External(
+                amiss_wire::resolution::ExternalReference::Url
+                | amiss_wire::resolution::ExternalReference::ForeignRepository,
+            ) => {}
         }
     }
     object(vec![

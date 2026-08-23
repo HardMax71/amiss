@@ -5,9 +5,11 @@
 
 use amiss_scan::request::controls;
 use amiss_wire::digest::hb;
-use amiss_wire::json::parse;
+use amiss_wire::json::{Value, parse};
+use amiss_wire::model::ArtifactId;
 use amiss_wire::report::AnalysisErrorCode;
 use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl, SuppliedTime};
+use amiss_wire::semantic::SemanticEvidence;
 
 const FLOOR: &str = r#"{
   "schema": "amiss/organization-floor",
@@ -58,6 +60,7 @@ const fn empty() -> ControlsRequest {
         waiver_bundle: None,
         trusted_time: None,
         execution_constraint: None,
+        semantic_evidence: Vec::new(),
     }
 }
 
@@ -66,6 +69,29 @@ fn supplied(doc: &str, expected: amiss_wire::digest::Digest) -> SuppliedControl 
         value: parse(doc.as_bytes()).expect("the fixture is JSON"),
         expected_digest: expected,
         trust_source: RequestTrust::OrganizationPolicy,
+    }
+}
+
+fn inventory_evidence() -> SemanticEvidence {
+    SemanticEvidence {
+        candidate_identity_digest: hb("test/candidate", b"candidate"),
+        source_report_payload_digest: None,
+        producer_kind: ArtifactId::new("sphinx-inventory-set".to_owned())
+            .expect("the producer kind is valid"),
+        producer_identity: ArtifactId::new("amiss-test".to_owned())
+            .expect("the producer identity is valid"),
+        producer_version: "1".to_owned(),
+        input_digest: hb("test/inventory", b"inventory"),
+        complete: true,
+        observations: vec![Value::object(vec![
+            ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
+            ("inventory".to_owned(), Value::string("python".to_owned())),
+            ("name".to_owned(), Value::string("except_star".to_owned())),
+            (
+                "destination".to_owned(),
+                Value::string("https://docs.python.org/3/reference/".to_owned()),
+            ),
+        ])],
     }
 }
 
@@ -141,4 +167,32 @@ fn a_wrong_constraint_digest_is_refused() {
     request.execution_constraint = Some(supplied(CONSTRAINT, hb("test/other", b"not the plan")));
     let error = controls(&request).expect_err("a foreign digest never passes");
     assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
+}
+
+#[test]
+fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
+    let mut incomplete = inventory_evidence();
+    incomplete.complete = false;
+    let mut unsupported = inventory_evidence();
+    unsupported.producer_version = "2".to_owned();
+    let mut malformed = inventory_evidence();
+    malformed.observations[0] = Value::object(vec![
+        ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
+        ("inventory".to_owned(), Value::string("python".to_owned())),
+        ("name".to_owned(), Value::string("except_star".to_owned())),
+        (
+            "destination".to_owned(),
+            Value::string("https:///missing-authority".to_owned()),
+        ),
+    ]);
+
+    for evidence in [incomplete, unsupported, malformed] {
+        let mut request = empty();
+        request.semantic_evidence = vec![
+            amiss_wire::semantic::envelope(evidence)
+                .expect("the generic envelope admits producer-defined semantics"),
+        ];
+        let error = controls(&request).expect_err("the inventory consumer fails closed");
+        assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+    }
 }

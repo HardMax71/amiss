@@ -8,12 +8,16 @@ use std::io::Write as _;
 use std::process::{Command, Stdio};
 
 use amiss_wire::controls::{OrganizationFloor, Profile};
-use amiss_wire::json::parse;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::digest::hb;
+use amiss_wire::json::{Value, parse};
+use amiss_wire::model::{
+    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
+};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
-    SnapshotRequest, SuppliedControl,
+    SnapshotRequest, SuppliedControl, commit_candidate_identity_digest,
 };
+use amiss_wire::semantic::SemanticEvidence;
 
 fn run(repo: Option<&str>, input: &[u8]) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_amiss"));
@@ -224,4 +228,151 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
         "verified"
     );
     assert_eq!(payload["controls"]["sandbox"]["assurance"], "self-asserted");
+}
+
+fn id(value: &str) -> ArtifactId {
+    ArtifactId::new(value.to_owned()).unwrap()
+}
+
+fn sphinx_label(inventory: &str, name: &str, destination: &str) -> Value {
+    Value::object(vec![
+        ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
+        ("inventory".to_owned(), Value::string(inventory.to_owned())),
+        ("name".to_owned(), Value::string(name.to_owned())),
+        (
+            "destination".to_owned(),
+            Value::string(destination.to_owned()),
+        ),
+    ])
+}
+
+fn intersphinx_case() -> (
+    amiss_fixtures::CommitPair,
+    EvaluationRequest,
+    SemanticEvidence,
+) {
+    let fixture = amiss_fixtures::commit_pair(
+        &[("docs/guide.rst", "Guide\n=====\n")],
+        &[(
+            "docs/guide.rst",
+            "Guide\n=====\n\nSee :ref:`except_star`, :ref:`package_env`, :ref:`python:assert`, and :ref:`shared`.\n",
+        )],
+    )
+    .unwrap();
+    let format = ObjectFormat::Sha1;
+    let evaluation = EvaluationRequest::commit_pair(
+        Profile::Observe,
+        format,
+        Oid::new(format, fixture.base.clone()).unwrap(),
+        Oid::new(format, fixture.candidate.clone()).unwrap(),
+    );
+    let identity = commit_candidate_identity_digest(
+        &evaluation,
+        &Oid::new(format, fixture.base_tree.clone()).unwrap(),
+        &Oid::new(format, fixture.candidate_tree.clone()).unwrap(),
+    )
+    .unwrap();
+    let semantic = SemanticEvidence {
+        candidate_identity_digest: identity,
+        source_report_payload_digest: None,
+        producer_kind: id("sphinx-inventory-set"),
+        producer_identity: id("amiss-test"),
+        producer_version: "1".to_owned(),
+        input_digest: hb("amiss-test/inventory", b"python and another"),
+        complete: true,
+        observations: vec![
+            sphinx_label(
+                "python",
+                "except_star",
+                "https://docs.python.org/3/reference/compound_stmts.html#except-star",
+            ),
+            sphinx_label("python", "shared", "https://docs.python.org/3/shared"),
+            sphinx_label("another", "shared", "https://example.invalid/shared"),
+        ],
+    };
+    (fixture, evaluation, semantic)
+}
+
+#[test]
+fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
+    let (fixture, evaluation, semantic) = intersphinx_case();
+    let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
+    let controls = ControlsRequest {
+        semantic_evidence: vec![evidence],
+        ..ControlsRequest::default()
+    };
+    let streams = RequestStreams {
+        evaluation: evaluation.canonical_bytes().unwrap(),
+        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
+        controls: controls.canonical_bytes().unwrap(),
+    };
+    let output = run(Some(&fixture.repo), &framed(&streams));
+    assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let labels: Vec<&serde_json::Value> = envelope["payload"]["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|row| row.get("candidate"))
+        .filter(|row| row.pointer("/intent/kind") == Some(&serde_json::json!("label")))
+        .collect();
+    assert_eq!(labels.len(), 4);
+    assert!(labels.iter().any(|row| {
+        row.pointer("/resolution/reason") == Some(&serde_json::json!("intersphinx-inventory"))
+            && row.get("external_destination")
+                == Some(&serde_json::json!(
+                    "https://docs.python.org/3/reference/compound_stmts.html#except-star"
+                ))
+    }));
+    assert!(labels.iter().any(|row| {
+        row.pointer("/resolution/reason") == Some(&serde_json::json!("label-not-declared"))
+    }));
+    assert_eq!(
+        labels
+            .iter()
+            .filter(|row| {
+                row.pointer("/resolution/reason") == Some(&serde_json::json!("external-inventory"))
+            })
+            .count(),
+        2,
+        "a named inventory and ambiguous prefixless evidence remain unsupported"
+    );
+    assert_eq!(
+        envelope["payload"]["controls"]["semantic_evidence"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 1);
+}
+
+#[test]
+fn stale_intersphinx_evidence_refuses_the_run() {
+    let (fixture, evaluation, semantic) = intersphinx_case();
+    let stale = amiss_wire::semantic::envelope(SemanticEvidence {
+        candidate_identity_digest: hb("amiss-test/stale", b"another candidate"),
+        ..semantic
+    })
+    .unwrap();
+    let streams = RequestStreams {
+        evaluation: evaluation.canonical_bytes().unwrap(),
+        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
+        controls: ControlsRequest {
+            semantic_evidence: vec![stale],
+            ..ControlsRequest::default()
+        }
+        .canonical_bytes()
+        .unwrap(),
+    };
+    let output = run(Some(&fixture.repo), &framed(&streams));
+    assert_eq!(output.status.code(), Some(2), "{:?}", output.stderr);
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let errors = envelope["payload"]["errors"].as_array().unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|row| row["code"] == "CONTROL_BINDING_MISMATCH"),
+        "stale evidence errors: {errors:?}"
+    );
 }
