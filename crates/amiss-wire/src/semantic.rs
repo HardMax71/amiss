@@ -184,8 +184,12 @@ fn ordered_observations(observations: Vec<Value>) -> Result<Vec<Value>, Error> {
     }
     let mut keyed = Vec::with_capacity(observations.len());
     for (index, observation) in observations.into_iter().enumerate() {
-        validate_observation(&format!("$.payload.observations[{index}]"), &observation)?;
-        keyed.push((canonical(&observation), observation));
+        let path = format!("$.payload.observations[{index}]");
+        let encoded = canonical(&observation);
+        let observation =
+            json::parse(&encoded).map_err(|error| Error::new(&path, ErrorKind::Json(error)))?;
+        validate_observation(&path, &observation)?;
+        keyed.push((encoded, observation));
     }
     keyed.sort_by(|left, right| left.0.cmp(&right.0));
     if keyed

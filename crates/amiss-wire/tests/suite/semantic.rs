@@ -7,7 +7,7 @@
 
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hj};
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::json::{ErrorKind as JsonErrorKind, Value, canonical};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence, envelope, parse,
@@ -109,6 +109,33 @@ fn duplicate_observations_are_refused() {
     let row = observation(vec![("kind", Value::string("site-route"))]);
     let error = envelope(evidence(vec![row.clone(), row])).unwrap_err();
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
+}
+
+#[test]
+fn construction_refuses_observation_values_outside_strict_json() {
+    let duplicate_member = Value::object(vec![
+        ("kind".to_owned(), Value::string("site-route")),
+        ("kind".to_owned(), Value::string("site-route")),
+    ]);
+    let unsafe_integer = observation(vec![
+        ("kind", Value::string("site-route")),
+        ("count", Value::Integer(9_007_199_254_740_992)),
+    ]);
+    let mut deep = Value::Null;
+    for _ in 0..513 {
+        deep = Value::array(vec![deep]);
+    }
+    let excessive_depth = observation(vec![("kind", Value::string("site-route")), ("value", deep)]);
+
+    for (invalid, defect) in [
+        (duplicate_member, JsonErrorKind::DuplicateKey),
+        (unsafe_integer, JsonErrorKind::IntegerOutOfRange),
+        (excessive_depth, JsonErrorKind::DepthLimit),
+    ] {
+        let error = envelope(evidence(vec![invalid])).unwrap_err();
+        assert_eq!(error.path, "$.payload.observations[0]");
+        assert!(matches!(error.kind, ErrorKind::Json(error) if error.kind == defect));
+    }
 }
 
 #[test]
