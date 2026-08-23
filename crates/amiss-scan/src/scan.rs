@@ -63,19 +63,7 @@ pub struct Scanned {
 pub struct AnchorSource {
     pub headings: Vec<amiss_wire::extraction::Heading>,
     pub html_anchors: Vec<String>,
-    pub transcluding: bool,
-}
-
-/// Whether one construct transcludes other sources, which makes any published
-/// anchor set partial rather than complete.
-pub(crate) const fn transcluding_construct(
-    construct: amiss_wire::controls::SourceConstruct,
-) -> bool {
-    matches!(
-        construct,
-        amiss_wire::controls::SourceConstruct::AsciidocInclude
-            | amiss_wire::controls::SourceConstruct::RstIncludeDirective
-    )
+    pub transclusions: Vec<amiss_wire::extraction::Transclusion>,
 }
 
 /// Scans one selected document body under the snapshot's budgets: admission
@@ -208,9 +196,6 @@ pub fn scan_bytes(
         });
     }
 
-    let transcluding = occurrences
-        .iter()
-        .any(|scanned| transcluding_construct(scanned.occurrence.construct));
     Ok(Scanned {
         adapter,
         work: analysis.work,
@@ -222,7 +207,7 @@ pub fn scan_bytes(
         anchor_source: Some(AnchorSource {
             headings: extraction.headings,
             html_anchors: extraction.html_anchors,
-            transcluding,
+            transclusions: extraction.transclusions,
         }),
     })
 }

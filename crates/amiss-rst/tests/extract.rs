@@ -1,4 +1,5 @@
 use amiss_rst::{Kind, ReferenceKind, Refusal, blocks, extract, normalized_label, title_underline};
+use amiss_wire::extraction::{TransclusionKind, TransclusionRefusal};
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn kinds(source: &str) -> Vec<(ReferenceKind, String)> {
@@ -30,6 +31,31 @@ fn every_specified_reference_form_is_read_with_its_exact_target() {
             (ReferenceKind::Include, "shared.rst".to_owned()),
             (ReferenceKind::FileOption, "data/rows.csv".to_owned()),
         ],
+    );
+}
+
+#[test]
+fn parsed_literal_and_refused_includes_stay_distinct() {
+    let source = concat!(
+        ".. include:: part.rst\n\n",
+        ".. literalinclude:: example.py\n\n",
+        ".. include:: selected.rst\n   :start-line: 1\n\n",
+        "reset\n\n  .. include:: nested.rst\n",
+    );
+    let analysis = amiss_rst::analyze(source.as_bytes()).expect("utf-8 source");
+    let edges = analysis
+        .extraction
+        .expect("rst always extracts")
+        .transclusions;
+    let kinds: Vec<_> = edges.iter().map(|edge| edge.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            Ok(TransclusionKind::Parsed),
+            Ok(TransclusionKind::Literal),
+            Err(TransclusionRefusal::Options),
+            Err(TransclusionRefusal::Context),
+        ]
     );
 }
 

@@ -22,6 +22,7 @@ mod content;
 mod forge;
 mod line;
 mod syntax;
+mod transclusion;
 
 pub(crate) use line::safe_line_number;
 

@@ -122,6 +122,10 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             reference.block = index;
             reference.block_span = block.span;
             reference.list_item = block.list_item;
+            if reference.transclusion.is_some() && (block.depth != 0 || block.list_item) {
+                reference.transclusion =
+                    Some(Err(amiss_wire::extraction::TransclusionRefusal::Context));
+            }
             extraction.references.push(reference);
         }
     }

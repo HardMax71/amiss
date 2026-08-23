@@ -1,4 +1,5 @@
 use crate::Title;
+use amiss_wire::extraction::{TransclusionKind, TransclusionRefusal};
 
 /// The reference forms this adapter reads, every one of them core `AsciiDoc`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +42,7 @@ pub struct Reference {
     pub block: usize,
     pub block_span: (usize, usize),
     pub list_item: bool,
+    pub transclusion: Option<Result<TransclusionKind, TransclusionRefusal>>,
 }
 
 impl Reference {
@@ -65,15 +67,23 @@ const MACROS: [(&str, ReferenceKind); 4] = [
 pub fn references(line: &str, at: usize) -> Vec<Reference> {
     let mut found = Vec::new();
     if let Some(rest) = line.strip_prefix("include::")
-        && let Some((target, end)) = target_of(rest)
+        && let Some((target, options, end)) = target_of(rest)
     {
-        found.push(build(
+        let mut reference = build(
             ReferenceKind::Include,
             target,
             at,
             0,
             end.saturating_add("include::".len()),
-        ));
+        );
+        reference.transclusion = Some(if target.contains('{') && target.contains('}') {
+            Err(TransclusionRefusal::DynamicTarget)
+        } else if options.is_empty() {
+            Ok(TransclusionKind::Parsed)
+        } else {
+            Err(TransclusionRefusal::Options)
+        });
+        found.push(reference);
         return found;
     }
     let skips = verbatim_spans(line);
@@ -116,7 +126,7 @@ fn macro_at(line: &str, tail: &str, at: usize, index: usize) -> Option<Reference
         .find(|(name, _)| tail.starts_with(name))
         .copied()?;
     let rest = tail.get(name.len()..)?;
-    let (target, end) = target_of(rest)?;
+    let (target, _options, end) = target_of(rest)?;
     Some(build(
         kind,
         target,
@@ -157,20 +167,26 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
         block: 0,
         block_span: (0, 0),
         list_item: false,
+        transclusion: None,
     }
 }
 
 /// A macro target runs to the opening bracket of its attribute list. Whitespace
 /// before that bracket means this was prose that happened to start with the
 /// macro name.
-fn target_of(rest: &str) -> Option<(&str, usize)> {
+fn target_of(rest: &str) -> Option<(&str, &str, usize)> {
     let open = rest.find('[')?;
     let target = rest.get(..open)?;
     if target.is_empty() || target.chars().any(char::is_whitespace) {
         return None;
     }
     let close = rest.get(open..)?.find(']')?;
-    Some((target, open.saturating_add(close).saturating_add(1)))
+    let options = rest.get(open.saturating_add(1)..open.saturating_add(close))?;
+    Some((
+        target,
+        options,
+        open.saturating_add(close).saturating_add(1),
+    ))
 }
 
 /// The byte intervals a macro name cannot start in: monospace spans and inline

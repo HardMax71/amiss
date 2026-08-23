@@ -111,6 +111,11 @@ publishes a partial anchor set, because `include::` splices before Asciidoctor p
 does not splice. Quarkus produced 127 of those, and an anchor absent from a transcluding document is
 now undecided rather than absent.
 
+The later bounded local graph narrows that boundary for option-free relative includes whose
+targets are scanned under the same grammar. Attribute-dependent and selected includes remain
+partial, and expanded AsciiDoc still proves presence rather than absence because the build owns its
+attribute and conditional state.
+
 Both are described in [Resolution](../resolution.md). AsciiDoc landed over five changes from
 [#177](https://github.com/hardmax71/amiss/pull/177), which first counted the markup the engine could
 not read, to [#181](https://github.com/hardmax71/amiss/pull/181), which published the identity

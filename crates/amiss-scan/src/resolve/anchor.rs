@@ -9,10 +9,11 @@ use crate::Error;
 use crate::anchor::anchor_set;
 use crate::discovery::SnapshotDiscovery;
 use crate::document::classify;
-use crate::resources::Aggregate;
+use crate::resources::{Aggregate, ScanResources};
 
 use super::content::Content;
 use super::line::{line_fragment, line_resolution};
+use super::transclusion::{Source, expand};
 use super::{Intent, Resolution, Resolver, lookup};
 
 /// A target's heading identities, built once and then answered from memory.
@@ -136,30 +137,30 @@ fn anchor_resolution(
         );
         let allowance = resolver.scan.heading_anchor_allowance();
         *slot = match charged {
-            Ok(()) => match retained_identities(resolver.snapshot, path, adapter) {
-                Some((identities, transcluding)) => {
-                    if transcluding {
-                        Anchors::Partial(identities)
-                    } else {
-                        Anchors::Published(identities)
-                    }
-                }
-                None => crate::scan::parse(adapter, body, allowance)
-                    .ok()
-                    .and_then(|analysis| analysis.extraction)
-                    .map_or(Anchors::Unevaluable, |extraction| {
-                        let identities = AnchorIndex::new(anchor_set(
-                            &extraction.headings,
-                            &extraction.html_anchors,
-                            &extraction.declared_anchors,
-                        ));
-                        if transcludes(&extraction.occurrences) {
-                            Anchors::Partial(identities)
-                        } else {
-                            Anchors::Published(identities)
-                        }
-                    }),
-            },
+            Ok(()) => retained_source(resolver.snapshot, path, adapter)
+                .map(|source| {
+                    expanded_anchors(resolver.snapshot, resolver.scan, path, adapter, source)
+                })
+                .or_else(|| {
+                    crate::scan::parse(adapter, body, allowance)
+                        .ok()
+                        .and_then(|analysis| analysis.extraction)
+                        .map(|extraction| {
+                            expanded_anchors(
+                                resolver.snapshot,
+                                resolver.scan,
+                                path,
+                                adapter,
+                                Source {
+                                    headings: &extraction.headings,
+                                    html_anchors: &extraction.html_anchors,
+                                    declared_anchors: &extraction.declared_anchors,
+                                    transclusions: &extraction.transclusions,
+                                },
+                            )
+                        })
+                })
+                .unwrap_or(Anchors::Unevaluable),
             Err(_crossing) => Anchors::Unevaluable,
         };
     }
@@ -183,6 +184,26 @@ fn anchor_resolution(
         path: path.clone(),
         near,
     }))
+}
+
+fn expanded_anchors(
+    snapshot: &SnapshotDiscovery,
+    scan: &mut ScanResources,
+    path: &RepoPath,
+    adapter: Adapter,
+    source: Source<'_>,
+) -> Anchors {
+    let expanded = expand(snapshot, scan, path, adapter, source);
+    let identities = AnchorIndex::new(anchor_set(
+        expanded.headings.as_ref(),
+        expanded.html_anchors.as_ref(),
+        expanded.declared_anchors.as_ref(),
+    ));
+    if expanded.complete {
+        Anchors::Published(identities)
+    } else {
+        Anchors::Partial(identities)
+    }
 }
 
 /// The comparison key for a heading identity: the two spellings the pinned
@@ -225,16 +246,13 @@ impl Resolver<'_> {
     }
 }
 
-/// A document that splices another file publishes identities this engine never
-/// read, so an anchor it does not hold is undecided rather than absent.
 /// The anchor inputs discovery already parsed for an in-set scanned target
-/// under the same adapter; slugging runs here, once per asked target, and
-/// any mismatch falls back to the parse.
-fn retained_identities(
-    snapshot: &SnapshotDiscovery,
+/// under the same adapter; a mismatch falls back to the target-body parse.
+fn retained_source<'a>(
+    snapshot: &'a SnapshotDiscovery,
     path: &RepoPath,
     adapter: Adapter,
-) -> Option<(AnchorIndex, bool)> {
+) -> Option<Source<'a>> {
     let record = snapshot.document(path.as_bytes())?;
     if record.adapter != Some(adapter) {
         return None;
@@ -243,16 +261,10 @@ fn retained_identities(
         return None;
     };
     let source = scanned.anchor_source.as_ref()?;
-    let identities = AnchorIndex::new(anchor_set(
-        &source.headings,
-        &source.html_anchors,
-        &scanned.declared_anchors,
-    ));
-    Some((identities, source.transcluding))
-}
-
-fn transcludes(occurrences: &[amiss_md::Occurrence]) -> bool {
-    occurrences
-        .iter()
-        .any(|occurrence| crate::scan::transcluding_construct(occurrence.construct))
+    Some(Source {
+        headings: &source.headings,
+        html_anchors: &source.html_anchors,
+        declared_anchors: &scanned.declared_anchors,
+        transclusions: &source.transclusions,
+    })
 }
