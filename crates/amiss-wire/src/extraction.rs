@@ -65,6 +65,29 @@ pub enum BlockKind {
     DocumentRoot,
 }
 
+/// What an include contributes to the document stream when its syntax is
+/// closed enough for the scanner to reproduce it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransclusionKind {
+    Parsed,
+    Literal,
+}
+
+/// Why an include cannot participate in the local expansion graph.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransclusionRefusal {
+    Context,
+    DynamicTarget,
+    Options,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Transclusion {
+    pub target: String,
+    pub span: (usize, usize),
+    pub kind: Result<TransclusionKind, TransclusionRefusal>,
+}
+
 /// One extracted reference. `raw_destination` is the exact source-token byte
 /// slice (without syntactic angle brackets, and from the first winning
 /// definition for reference forms); `semantic_destination` is the token after
@@ -136,6 +159,7 @@ pub struct Heading {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Extraction {
     pub occurrences: Vec<Occurrence>,
+    pub transclusions: Vec<Transclusion>,
     pub opaque: Opaque,
     pub governed: Vec<GovernedDefinition>,
     pub headings: Vec<Heading>,

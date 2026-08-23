@@ -128,28 +128,139 @@ fn distinct_anchors_into_one_target_are_charged_once() {
     );
 }
 
-/// A reStructuredText document that includes another file publishes
-/// identities this engine never read, so an anchor it does not hold is
-/// undecided rather than absent, the boundary the `AsciiDoc` include already
-/// declared.
+/// One frozen tree covering exact, recursive, literal, refused, cyclic, and
+/// unavailable include edges.
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn transclusion_fixture() -> CommitChain {
     staged_repository(&[
         (
             "README.md",
-            Staged::File(b"[a](docs/host.rst#present)\n[b](docs/host.rst#spliced)\n"),
+            Staged::File(
+                b"[a](docs/host.rst#present)\n[b](docs/host.rst#spliced)\n[c](docs/host.rst#absent)\n",
+            ),
         ),
         (
             "docs/host.rst",
             Staged::File(b"Present\n=======\n\n.. include:: part.rst\n"),
         ),
         ("docs/part.rst", Staged::File(b"Spliced\n=======\n")),
+        (
+            "docs/host.adoc",
+            Staged::File(b"= Repeat\n\ninclude::parts/first.adoc[]\n\n== Repeat 2\n"),
+        ),
+        (
+            "docs/parts/first.adoc",
+            Staged::File(b"== Repeat\n\ninclude::nested/second.adoc[]\n"),
+        ),
+        (
+            "docs/parts/nested/second.adoc",
+            Staged::File(b"=== Deep\n"),
+        ),
+        (
+            "docs/options.adoc",
+            Staged::File(b"= Known\n\ninclude::parts/first.adoc[tags=first]\n"),
+        ),
+        (
+            "docs/cycle-a.rst",
+            Staged::File(b"A\n===\n\n.. include:: cycle-b.rst\n"),
+        ),
+        (
+            "docs/cycle-b.rst",
+            Staged::File(b"B\n===\n\n.. include:: cycle-a.rst\n"),
+        ),
+        (
+            "docs/literal.rst",
+            Staged::File(b"Literal\n=======\n\n.. literalinclude:: example.py\n"),
+        ),
+        (
+            "docs/literal-missing.rst",
+            Staged::File(b"Literal\n=======\n\n.. literalinclude:: absent.py\n"),
+        ),
+        ("docs/example.py", Staged::File(b"Not\n===\n")),
     ])
     .unwrap()
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn transcluded(resolver: &mut Resolver<'_>, destination: &str) -> Resolution {
+    resolver
+        .resolve(
+            None,
+            Adapter::Markdown,
+            &RepoPath::new("README.md".to_owned()).unwrap(),
+            false,
+            destination,
+        )
+        .unwrap()
+        .1
+}
+
+fn assert_transclusion_matrix(resolver: &mut Resolver<'_>) {
+    let held = transcluded(resolver, "docs/host.rst#present");
+    assert!(matches!(held, Resolution::Resolved(_)), "{held:?}");
+
+    let spliced = transcluded(resolver, "docs/host.rst#spliced");
+    assert!(matches!(spliced, Resolution::Resolved(_)), "{spliced:?}");
+
+    let nested = transcluded(resolver, "docs/host.adoc#_deep");
+    assert!(
+        matches!(nested, Resolution::Resolved(_)),
+        "nested paths are relative to the including file: {nested:?}"
+    );
+    let ordered = transcluded(resolver, "docs/host.adoc#_repeat_2_2");
+    assert!(
+        matches!(ordered, Resolution::Resolved(_)),
+        "included headings occupy identities at the directive position: {ordered:?}"
+    );
+    let asciidoc_absent = transcluded(resolver, "docs/host.adoc#_absent");
+    assert!(
+        matches!(asciidoc_absent, Resolution::UnsupportedSemantics(_)),
+        "unmodelled AsciiDoc attribute state keeps absence undecided: {asciidoc_absent:?}"
+    );
+
+    let absent = transcluded(resolver, "docs/host.rst#absent");
+    assert!(
+        matches!(
+            absent,
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        ),
+        "a complete expanded anchor set can prove absence: {absent:?}"
+    );
+
+    let selected = transcluded(resolver, "docs/options.adoc#_repeat");
+    assert!(
+        matches!(selected, Resolution::UnsupportedSemantics(_)),
+        "an unsupported selector cannot guess which headings were included: {selected:?}"
+    );
+
+    let before_cycle = transcluded(resolver, "docs/cycle-a.rst#b");
+    assert!(
+        matches!(before_cycle, Resolution::Resolved(_)),
+        "known identities before a cycle remain evidence: {before_cycle:?}"
+    );
+    let beyond_cycle = transcluded(resolver, "docs/cycle-a.rst#absent");
+    assert!(
+        matches!(beyond_cycle, Resolution::UnsupportedSemantics(_)),
+        "a cycle leaves absence undecided: {beyond_cycle:?}"
+    );
+
+    let literal_absent = transcluded(resolver, "docs/literal.rst#absent");
+    assert!(
+        matches!(
+            literal_absent,
+            Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+        ),
+        "literal code contributes no parsed headings: {literal_absent:?}"
+    );
+    let unavailable_literal = transcluded(resolver, "docs/literal-missing.rst#absent");
+    assert!(
+        matches!(unavailable_literal, Resolution::UnsupportedSemantics(_)),
+        "an unavailable literal target keeps the document partial: {unavailable_literal:?}"
+    );
+}
+
 #[test]
-fn an_rst_include_leaves_absent_anchors_undecided() {
+fn bounded_local_includes_publish_only_proven_heading_anchors() {
     let dir = transclusion_fixture();
     let tree = Oid::new(
         ObjectFormat::Sha1,
@@ -168,38 +279,39 @@ fn an_rst_include_leaves_absent_anchors_undecided() {
         &tree,
     )
     .unwrap();
-    let mut cache = TargetCache::default();
-    let mut resolver = Resolver::new(
+    {
+        let mut cache = TargetCache::default();
+        let mut resolver = Resolver::new(
+            &repo,
+            &mut git_resources,
+            &mut scan_resources,
+            &mut cache,
+            &discovery,
+        );
+        assert_transclusion_matrix(&mut resolver);
+    }
+
+    let mut limited_scan = ScanResources::new(ScanLimits {
+        references_per_document: 1,
+        ..ScanLimits::CONTRACT
+    });
+    let mut limited_cache = TargetCache::default();
+    let mut limited = Resolver::new(
         &repo,
         &mut git_resources,
-        &mut scan_resources,
-        &mut cache,
+        &mut limited_scan,
+        &mut limited_cache,
         &discovery,
     );
-
-    let (_intent, held) = resolver
-        .resolve(
-            None,
-            Adapter::Markdown,
-            &RepoPath::new("README.md".to_owned()).unwrap(),
-            false,
-            "docs/host.rst#present",
-        )
-        .unwrap();
-    assert!(matches!(held, Resolution::Resolved(_)), "{held:?}");
-
-    let (_intent, spliced) = resolver
-        .resolve(
-            None,
-            Adapter::Markdown,
-            &RepoPath::new("README.md".to_owned()).unwrap(),
-            false,
-            "docs/host.rst#spliced",
-        )
-        .unwrap();
+    let before_ceiling = transcluded(&mut limited, "docs/host.adoc#_repeat_2");
     assert!(
-        matches!(spliced, Resolution::UnsupportedSemantics(_)),
-        "an anchor behind an include is undecided, got {spliced:?}"
+        matches!(before_ceiling, Resolution::Resolved(_)),
+        "known identities before the edge ceiling remain evidence: {before_ceiling:?}"
+    );
+    let beyond_ceiling = transcluded(&mut limited, "docs/host.adoc#_deep");
+    assert!(
+        matches!(beyond_ceiling, Resolution::UnsupportedSemantics(_)),
+        "an unexpanded edge leaves absence undecided: {beyond_ceiling:?}"
     );
 }
 

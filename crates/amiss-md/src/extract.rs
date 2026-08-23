@@ -127,6 +127,7 @@ fn extract_tree(
     let translate =
         |span: (usize, usize)| (span.0.saturating_add(offset), span.1.saturating_add(offset));
     let extraction = Extraction {
+        transclusions: Vec::new(),
         occurrences: sweep
             .occurrences
             .into_iter()

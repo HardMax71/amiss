@@ -1,4 +1,5 @@
 use amiss_adoc::{Delimiter, Reference, ReferenceKind, Refusal, blocks, extract};
+use amiss_wire::extraction::{TransclusionKind, TransclusionRefusal};
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn kinds(source: &str) -> Vec<(ReferenceKind, String)> {
@@ -107,6 +108,31 @@ fn a_target_awaiting_an_attribute_says_so() {
 }
 
 #[test]
+fn includes_publish_only_the_closed_transclusion_subset() {
+    let source = concat!(
+        "include::part.adoc[]\n\n",
+        "include::{parts}/part.adoc[]\n\n",
+        "include::part.adoc[tags=section]\n\n",
+        "====\ninclude::nested.adoc[]\n====\n",
+    );
+    let analysis = amiss_adoc::analyze(source.as_bytes()).expect("utf-8 source");
+    let edges = analysis
+        .extraction
+        .expect("asciidoc always extracts")
+        .transclusions;
+    let kinds: Vec<_> = edges.iter().map(|edge| edge.kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            Ok(TransclusionKind::Parsed),
+            Err(TransclusionRefusal::DynamicTarget),
+            Err(TransclusionRefusal::Options),
+            Err(TransclusionRefusal::Context),
+        ]
+    );
+}
+
+#[test]
 fn titles_and_declared_anchors_carry_their_own_identity() {
     let extraction = extract(b"= Top\n\n[[explicit]]\n== Second Level\n\n[#hashed]\n=== Third\n")
         .expect("utf-8 source");
@@ -151,6 +177,7 @@ fn an_attribute_reference_needs_both_braces() {
         block: 0,
         block_span: (0, 1),
         list_item: false,
+        transclusion: None,
     };
     assert!(reference("{attr}/x").attribute_substituted());
     assert!(!reference("{attr/x").attribute_substituted());
@@ -340,6 +367,20 @@ fn an_adoc_destination_names_its_fragment_bytes() {
             .fragment_span,
         None
     );
+}
+
+#[test]
+fn shorthand_cross_references_keep_an_interdocument_path() {
+    let analysis = amiss_adoc::analyze(b"See <<local,Local>> and <<other.adoc#remote,Remote>>.\n")
+        .expect("utf-8 source");
+    let destinations: Vec<_> = analysis
+        .extraction
+        .expect("asciidoc always extracts")
+        .occurrences
+        .into_iter()
+        .map(|occurrence| occurrence.semantic_destination)
+        .collect();
+    assert_eq!(destinations, ["#local", "other.adoc#remote"]);
 }
 
 /// The reserved carrier is a whole line comment; other comment lines keep

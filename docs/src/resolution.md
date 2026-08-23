@@ -144,8 +144,9 @@ AsciiDoc destinations reach one rule of their own before anything else. A target
 holding `{name}` cannot be a path, because the value arrives when the site is built and this
 engine reads two trees, so it is `unsupported-reference-semantics` rather than a guess at a
 directory called `{name}`. Across Quarkus that is roughly a quarter of every reference, so
-reporting them as missing would have buried the real breaks. A heading anchor on an AsciiDoc target resolves
-through the Asciidoctor rule in
+reporting them as missing would have buried the real breaks. The double-angle shorthand keeps an
+unambiguous `document.adoc#anchor` as an inter-document target rather than turning the entire value
+into a local ID. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
 [What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 
@@ -166,11 +167,20 @@ carrying a colon is treated as another project's inventory, declared unsupported
 than reported missing. One boundary stays open by nature: a prefixless `:ref:` that a
 Sphinx build would satisfy through an intersphinx inventory is indistinguishable in the
 tree from a dead label, so it reports missing, and under observe that is a signal for a
-person rather than a verdict. Every other
-role stays an open extension point, declared rather than read into. A target that includes another file,
-through the AsciiDoc include or the reStructuredText `include` and `literalinclude`
-directives, publishes identities this engine never read, so an anchor it does not hold
-stays undecided rather than reported missing.
+person rather than a verdict. Every other role stays an open extension point, declared rather than
+read into.
+
+Heading evaluation expands the closed local include subset in source order. An AsciiDoc
+`include::path[]` or option-free, document-level reStructuredText `include` participates when its
+literal relative target was already scanned under the same adapter; each nested path is relative to
+the file that includes it. An option-free `literalinclude` contributes no parsed headings. The graph
+is bounded by `references-per-document`, `parser-nesting`, and
+`aggregate-heading-anchor-evaluation-bytes-per-snapshot`. A cycle, an unscanned or non-local target,
+a build-time attribute, include options, or a nested parser context leaves the identities collected
+up to that edge partial: a published identity can still resolve, but absence stays undecided rather
+than becoming a guessed missing anchor. Expanded AsciiDoc remains partial even when every edge is
+available because its document-attribute and conditional state is not reproduced; reStructuredText
+can prove absence inside the closed option-free subset.
 
 Resolution is exact, and the small rules matter. A trailing slash means the author
 promised a directory, so `sub/` must be a tree and `guide.md/` is a type mismatch even

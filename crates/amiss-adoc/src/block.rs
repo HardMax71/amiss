@@ -18,7 +18,7 @@ const FENCES: [(char, Delimiter); 8] = [
 pub fn blocks(text: &str) -> Vec<Block> {
     let mut found: Vec<Block> = Vec::new();
     let mut open: Vec<(String, Delimiter, usize)> = Vec::new();
-    let mut paragraph: Option<(usize, bool)> = None;
+    let mut paragraph: Option<(usize, bool, usize)> = None;
     let mut offset = 0_usize;
 
     for raw in text.split_inclusive('\n') {
@@ -45,19 +45,19 @@ pub fn blocks(text: &str) -> Vec<Block> {
         }
 
         if let Some((fence, delimiter)) = fence_of(line) {
-            flush(&mut found, &mut paragraph, start, open.len());
+            flush(&mut found, &mut paragraph, start);
             open.push((fence, delimiter, offset));
             continue;
         }
         if line.trim().is_empty() {
-            flush(&mut found, &mut paragraph, start, open.len());
+            flush(&mut found, &mut paragraph, start);
             continue;
         }
         if paragraph.is_none() {
-            paragraph = Some((start, is_list_item(line)));
+            paragraph = Some((start, is_list_item(line), open.len()));
         }
     }
-    flush(&mut found, &mut paragraph, offset, open.len());
+    flush(&mut found, &mut paragraph, offset);
     for (_, delimiter, body_start) in open {
         found.push(Block {
             span: (body_start, offset),
@@ -70,8 +70,8 @@ pub fn blocks(text: &str) -> Vec<Block> {
     found
 }
 
-fn flush(found: &mut Vec<Block>, paragraph: &mut Option<(usize, bool)>, end: usize, depth: usize) {
-    if let Some((start, list_item)) = paragraph.take()
+fn flush(found: &mut Vec<Block>, paragraph: &mut Option<(usize, bool, usize)>, end: usize) {
+    if let Some((start, list_item, depth)) = paragraph.take()
         && end > start
     {
         found.push(Block {

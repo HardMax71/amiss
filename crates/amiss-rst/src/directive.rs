@@ -1,10 +1,20 @@
+use amiss_wire::extraction::TransclusionKind;
+
 use crate::{Reference, ReferenceKind};
 
-const PATH_DIRECTIVES: [(&str, ReferenceKind); 4] = [
-    ("image::", ReferenceKind::Image),
-    ("figure::", ReferenceKind::Image),
-    ("include::", ReferenceKind::Include),
-    ("literalinclude::", ReferenceKind::Include),
+const PATH_DIRECTIVES: [(&str, ReferenceKind, Option<TransclusionKind>); 4] = [
+    ("image::", ReferenceKind::Image, None),
+    ("figure::", ReferenceKind::Image, None),
+    (
+        "include::",
+        ReferenceKind::Include,
+        Some(TransclusionKind::Parsed),
+    ),
+    (
+        "literalinclude::",
+        ReferenceKind::Include,
+        Some(TransclusionKind::Literal),
+    ),
 ];
 
 /// Reads one line's references. `at` is the line's byte offset in the document.
@@ -16,9 +26,9 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
 
     if let Some(rest) = trimmed.strip_prefix(".. ") {
         let after = lead.saturating_add(3);
-        if let Some((name, kind)) = PATH_DIRECTIVES
+        if let Some((name, kind, transclusion)) = PATH_DIRECTIVES
             .iter()
-            .find(|(name, _)| rest.starts_with(name))
+            .find(|(name, _, _)| rest.starts_with(name))
             .copied()
         {
             let argument = rest.get(name.len()..).unwrap_or_default().trim();
@@ -26,7 +36,9 @@ pub fn references(line: &str, at: usize) -> Vec<Reference> {
                 && !argument.contains(char::is_whitespace)
                 && !argument.ends_with(".*")
             {
-                found.push(build(kind, argument, at, after, line.len()));
+                let mut reference = build(kind, argument, at, after, line.len());
+                reference.transclusion = transclusion.map(Ok);
+                found.push(reference);
             }
             return found;
         }
@@ -164,6 +176,7 @@ fn build(kind: ReferenceKind, target: &str, at: usize, start: usize, end: usize)
         span: (at.saturating_add(start), at.saturating_add(end)),
         block: 0,
         block_span: (0, 0),
+        transclusion: None,
     }
 }
 

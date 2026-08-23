@@ -19,6 +19,19 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
         .saturating_add(read.references.len())
         .saturating_add(read.titles.len());
     let mut occurrences = Vec::with_capacity(read.references.len());
+    let transclusions = read
+        .references
+        .iter()
+        .filter_map(|reference| {
+            reference
+                .transclusion
+                .map(|kind| amiss_wire::extraction::Transclusion {
+                    target: reference.target.clone(),
+                    span: reference.span,
+                    kind,
+                })
+        })
+        .collect();
     let mut within = (usize::MAX, 0_usize);
     for reference in &read.references {
         within = if within.0 == reference.block {
@@ -41,6 +54,7 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
         embedded_code_bytes: 0,
         extraction: Some(Extraction {
             occurrences,
+            transclusions,
             opaque: Opaque {
                 frontmatter_bytes: 0,
                 mdx: Vec::new(),
@@ -75,6 +89,9 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
 
 fn occurrence(reference: &Reference, within: usize) -> Occurrence {
     let semantic = match reference.kind {
+        ReferenceKind::InternalCrossReference if reference.target.contains('#') => {
+            reference.target.clone()
+        }
         ReferenceKind::InternalCrossReference => format!("#{}", reference.target),
         ReferenceKind::CrossReference
         | ReferenceKind::Link

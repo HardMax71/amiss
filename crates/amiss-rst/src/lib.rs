@@ -94,6 +94,12 @@ pub struct Reference {
     pub span: (usize, usize),
     pub block: usize,
     pub block_span: (usize, usize),
+    pub transclusion: Option<
+        Result<
+            amiss_wire::extraction::TransclusionKind,
+            amiss_wire::extraction::TransclusionRefusal,
+        >,
+    >,
 }
 
 /// One section title. Its level comes from the order its underline character
@@ -193,6 +199,7 @@ fn read_block(
     block: &Block,
     body: &str,
 ) {
+    let has_directive_body = body.lines().skip(1).any(|line| !line.trim().is_empty());
     let mut offset = 0_usize;
     let mut previous: Option<(usize, &str)> = None;
     for raw in body.split_inclusive('\n') {
@@ -234,6 +241,15 @@ fn read_block(
         for mut reference in references(line, at) {
             reference.block = index;
             reference.block_span = block.span;
+            if let Some(mode) = reference.transclusion {
+                reference.transclusion = Some(if block.indent != 0 {
+                    Err(amiss_wire::extraction::TransclusionRefusal::Context)
+                } else if has_directive_body {
+                    Err(amiss_wire::extraction::TransclusionRefusal::Options)
+                } else {
+                    mode
+                });
+            }
             extraction.references.push(reference);
         }
     }

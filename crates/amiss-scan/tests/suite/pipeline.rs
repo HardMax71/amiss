@@ -1127,10 +1127,10 @@ fn retained_and_fallback_anchor_routes_agree() {
     );
 }
 
-/// A transcluding in-set rst target keeps answering Partial through the
-/// retained identities: an absent fragment stays unsupported, never missing.
+/// A supported in-set include becomes one complete anchor source, while an
+/// excluded target whose relative include cannot be scanned stays partial.
 #[test]
-fn a_transcluding_in_set_target_stays_partial_through_retention() {
+fn a_supported_include_expands_without_guessing_an_unscanned_one() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     fs::write(root.join("part.rst"), "extra\n").unwrap();
@@ -1162,8 +1162,8 @@ fn a_transcluding_in_set_target_stays_partial_through_retention() {
     let payload = payload(&built);
     assert_eq!(
         missing_targets(&payload).len(),
-        1,
-        "only the complete target's absent fragment is missing: {}",
+        2,
+        "the plain and expanded scanned targets both prove absence: {}",
         payload["findings"]
     );
     let unsupported = payload["findings"]
@@ -1173,8 +1173,8 @@ fn a_transcluding_in_set_target_stays_partial_through_retention() {
         .filter(|row| row["kind"] == "unsupported-reference-semantics")
         .count();
     assert_eq!(
-        unsupported, 2,
-        "both routes keep the transcluding boundary, retained and fallback alike: {}",
+        unsupported, 1,
+        "the excluded target keeps the unsupported boundary: {}",
         payload["findings"]
     );
 }
