@@ -1,3 +1,4 @@
+use crate::digest::Digest;
 use crate::json::{self, Value};
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -143,6 +144,14 @@ pub fn string(path: &str, value: Value) -> Result<String, Error> {
         return fail(path, ErrorKind::WrongType);
     };
     Ok(string.into())
+}
+
+/// # Errors
+///
+/// Fails with `InvalidValue` when the value is not the canonical SHA-256 wire form.
+pub fn digest(path: &str, value: Value) -> Result<Digest, Error> {
+    Digest::from_wire(&string(path, value)?)
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 /// # Errors

@@ -1,0 +1,26 @@
+{
+  "schema": "amiss/semantic-evidence-envelope",
+  "payload": {
+    "schema": "amiss/semantic-evidence-payload",
+    "subject": {
+      "candidate_identity_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_report_payload_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "producer": {
+      "kind": "site-build",
+      "identity": "amiss-site-output",
+      "version": "0.1.0",
+      "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "complete": true,
+    "observations": [
+      {
+        "kind": "site-route",
+        "route": "/external-assessment.html",
+        "source": "docs/src/external-assessment.md",
+        "anchors": ["the-external-assessment"]
+      }
+    ]
+  },
+  "payload_digest": "sha256:d49168158f3b210be973179880fd19073195dcc780979164e19508e0185f736e"
+}

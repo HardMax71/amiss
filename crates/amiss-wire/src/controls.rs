@@ -180,15 +180,8 @@ fn decode_instant(path: &str, value: Value) -> Result<UtcInstant, Error> {
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
-fn decode_digest(path: &str, value: Value) -> Result<Digest, Error> {
-    let raw = de::string(path, value)?;
-    Digest::from_wire(&raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
 fn decode_nullable_digest(path: &str, value: Value) -> Result<Option<Digest>, Error> {
-    de::nullable(value)
-        .map(|v| decode_digest(path, v))
-        .transpose()
+    de::nullable(value).map(|v| de::digest(path, v)).transpose()
 }
 
 pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
@@ -277,8 +270,7 @@ fn decode_scope(path: &str, value: Value) -> Result<FindingScope, Error> {
     occurrence.required("kind", |path, value| {
         de::const_str(path, value, "source-projection")
     })?;
-    let source_projection_digest =
-        occurrence.required("source_projection_digest", decode_digest)?;
+    let source_projection_digest = occurrence.required("source_projection_digest", de::digest)?;
     occurrence.finish()?;
     obj.finish()?;
     Ok(FindingScope {
@@ -414,10 +406,10 @@ fn decode_resolution_content(path: &str, value: Value) -> Result<BlobContent, Er
     let Ok(kind) = kind_text.parse::<BlobContentTag>() else {
         return fail(&kind_path, ErrorKind::InvalidValue);
     };
-    let raw_digest = obj.required("raw_digest", decode_digest)?;
+    let raw_digest = obj.required("raw_digest", de::digest)?;
     match kind {
         BlobContentTag::Available => {
-            let projection_digest = obj.required("projection_digest", decode_digest)?;
+            let projection_digest = obj.required("projection_digest", de::digest)?;
             obj.finish()?;
             Ok(BlobContent::Available {
                 raw_digest,
@@ -488,7 +480,7 @@ struct ItemCore {
 
 fn decode_item_core(obj: &mut Obj, fact_field: &str) -> Result<ItemCore, Error> {
     let finding_key_path = obj.field("finding_key");
-    let finding_key = decode_digest(&finding_key_path, obj.take("finding_key")?)?;
+    let finding_key = de::digest(&finding_key_path, obj.take("finding_key")?)?;
     let fact_path = obj.field(fact_field);
     let decoded_fact = decode_fact(&fact_path, obj.take(fact_field)?)?;
     if finding_key != decoded_fact.finding_key {
@@ -496,7 +488,7 @@ fn decode_item_core(obj: &mut Obj, fact_field: &str) -> Result<ItemCore, Error> 
     }
     let fact_digest_field = format!("{fact_field}_digest");
     let fact_digest_path = obj.field(&fact_digest_field);
-    let fact_digest = decode_digest(&fact_digest_path, obj.take(&fact_digest_field)?)?;
+    let fact_digest = de::digest(&fact_digest_path, obj.take(&fact_digest_field)?)?;
     if fact_digest != decoded_fact.fact_digest {
         return fail(&fact_digest_path, ErrorKind::DigestMismatch);
     }
