@@ -7,8 +7,8 @@ use crate::model::{
 };
 
 use super::{
-    Fact, WAIVER_BUNDLE_SCHEMA, decode_branch_ref, decode_digest, decode_instant, decode_items,
-    decode_repository, decode_waiver_item, root, sorted_set,
+    Fact, WAIVER_BUNDLE_SCHEMA, decode_branch_ref, decode_instant, decode_items, decode_repository,
+    decode_waiver_item, root, sorted_set,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,7 +88,7 @@ impl WaiverBundle {
 
         let repository = obj.required("repository", decode_repository)?;
         let ref_name = obj.required("ref", decode_branch_ref)?;
-        let organization_floor_digest = obj.required("organization_floor_digest", decode_digest)?;
+        let organization_floor_digest = obj.required("organization_floor_digest", de::digest)?;
         let created_at = obj.required("created_at", decode_instant)?;
 
         let items_path = obj.field("items");

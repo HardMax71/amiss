@@ -11,6 +11,7 @@ pub mod model;
 pub mod report;
 pub mod requests;
 pub mod resolution;
+pub mod semantic;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitClass {

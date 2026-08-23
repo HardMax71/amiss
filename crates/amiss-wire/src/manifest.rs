@@ -102,7 +102,7 @@ impl ReleaseManifest {
         let lock_value = obj.take("dependency_lock")?;
         let computed_lock = hj(DEPENDENCY_LOCK_DOMAIN, &lock_value);
         let dependency_lock = decode_lock(&lock_path, lock_value)?;
-        let dependency_lock_digest = decode_digest(
+        let dependency_lock_digest = de::digest(
             &obj.field("dependency_lock_digest"),
             obj.take("dependency_lock_digest")?,
         )?;
@@ -228,7 +228,7 @@ fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
         let row_path = format!("{files_path}[{index}]");
         let mut file = Obj::new(&row_path, row)?;
         let member = file.required("path", decode_repo_path)?;
-        let raw_digest = file.required("raw_digest", decode_digest)?;
+        let raw_digest = file.required("raw_digest", de::digest)?;
         file.finish()?;
         files.push((member, raw_digest));
     }
@@ -241,8 +241,8 @@ fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
     let platform = obj.required("platform", decode_enum)?;
     let artifact_name = obj.required("artifact_name", decode_artifact_id)?;
     let tree_path = obj.required("tree_path", decode_repo_path)?;
-    let binary_sha256 = obj.required("binary_sha256", decode_digest)?;
-    let engine_digest = obj.required("engine_digest", decode_digest)?;
+    let binary_sha256 = obj.required("binary_sha256", de::digest)?;
+    let engine_digest = obj.required("engine_digest", de::digest)?;
     obj.required("runtime_contract", |path, value| {
         de::const_str(path, value, RUNTIME_CONTRACT)
     })?;
@@ -282,7 +282,7 @@ fn decode_runtime_file(path: &str, value: Value) -> Result<RuntimeFile, Error> {
         "100755" => GitMode::ExecutableFile,
         _ => return fail(&mode_path, ErrorKind::InvalidValue),
     };
-    let file_sha256 = file.required("file_sha256", decode_digest)?;
+    let file_sha256 = file.required("file_sha256", de::digest)?;
     file.finish()?;
     Ok(RuntimeFile {
         path: member,
@@ -325,11 +325,6 @@ fn sorted_unique<T>(
         }
     }
     Ok(())
-}
-
-fn decode_digest(path: &str, value: Value) -> Result<Digest, Error> {
-    let raw = de::string(path, value)?;
-    Digest::from_wire(&raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {

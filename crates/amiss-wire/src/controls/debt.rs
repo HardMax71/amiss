@@ -5,8 +5,8 @@ use crate::digest::{Digest, hj};
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
 use super::{
-    DEBT_SNAPSHOT_SCHEMA, Fact, decode_branch_ref, decode_debt_item, decode_digest, decode_instant,
-    decode_items, decode_repository, decode_tree, root, sorted_set,
+    DEBT_SNAPSHOT_SCHEMA, Fact, decode_branch_ref, decode_debt_item, decode_instant, decode_items,
+    decode_repository, decode_tree, root, sorted_set,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,10 +94,10 @@ impl DebtSnapshot {
 
         let repository = obj.required("repository", decode_repository)?;
         let ref_name = obj.required("ref", decode_branch_ref)?;
-        let organization_floor_digest = obj.required("organization_floor_digest", decode_digest)?;
+        let organization_floor_digest = obj.required("organization_floor_digest", de::digest)?;
         let adoption_tree = obj.required("adoption_tree", decode_tree)?;
         let adoption_report_payload_digest =
-            obj.required("adoption_report_payload_digest", decode_digest)?;
+            obj.required("adoption_report_payload_digest", de::digest)?;
         let created_at = obj.required("created_at", decode_instant)?;
 
         let items_path = obj.field("items");

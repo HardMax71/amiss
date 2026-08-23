@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-semantic-evidence",
+  "title": "Amiss semantic evidence",
+  "description": "One trusted producer's bounded observations over an exact candidate. The envelope authenticates no source by itself: authority belongs to the external lane that supplies it, and only compiled consumers assign semantics to observation kinds.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/semantic-evidence-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/Payload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload under its schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "Payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "observations", "producer", "schema", "subject"],
+      "properties": {
+        "schema": {
+          "const": "amiss/semantic-evidence-payload"
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        },
+        "producer": {
+          "$ref": "#/$defs/Producer"
+        },
+        "complete": {
+          "description": "Whether the producer completed the exact input its input digest names. A consumer may use absence only when its own kind contract requires a complete set and this value is true.",
+          "type": "boolean"
+        },
+        "observations": {
+          "description": "Canonical-JSON-sorted unique facts. Each compiled consumer owns the closed grammar and judgment of the kinds it recognizes; unknown kinds remain inert data.",
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Observation"
+          }
+        }
+      }
+    },
+    "Subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_identity_digest", "source_report_payload_digest"],
+      "properties": {
+        "candidate_identity_digest": {
+          "description": "The scanner candidate-identity digest, which already binds repository identity, refs, base and candidate materialization, and forge semantics.",
+          "$ref": "#/$defs/Digest"
+        },
+        "source_report_payload_digest": {
+          "description": "The verified report payload this evidence derives from, or null when a producer ran before report construction.",
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "Producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "input_digest", "kind", "version"],
+      "properties": {
+        "kind": {
+          "description": "The bounded producer class selected by a compiled consumer.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "identity": {
+          "description": "The stable producer implementation identity within that class.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "version": {
+          "description": "The producer implementation version.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+        },
+        "input_digest": {
+          "description": "The producer-kind-defined digest of every configuration, inventory, or completed build input needed to interpret completeness and observations.",
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Observation": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    }
+  }
+}

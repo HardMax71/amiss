@@ -69,6 +69,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         | "scanner-external-evidence"
         | "scanner-external-plan"
         | "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
+        "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
@@ -235,6 +236,38 @@ fn the_policy_suffix_schema_tracks_the_reader_bound() {
             .and_then(serde_json::Value::as_u64),
         u64::try_from(DOCUMENT_SUFFIX_BYTES).ok(),
         "the schema and strict reader must publish one suffix ceiling"
+    );
+}
+
+#[test]
+fn the_semantic_evidence_schema_tracks_the_reader_contract() {
+    let path = repository_root().join("spec/scanner-semantic-evidence.schema.json");
+    let schema: serde_json::Value =
+        serde_json::from_slice(&fs::read(path).expect("semantic evidence schema is readable"))
+            .expect("semantic evidence schema is JSON");
+    assert_eq!(
+        schema
+            .pointer("/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(amiss_wire::semantic::ENVELOPE_SCHEMA)
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/Payload/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(amiss_wire::semantic::PAYLOAD_SCHEMA)
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/Payload/properties/observations/maxItems")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT).ok()
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/Producer/properties/version/maxLength")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(amiss_wire::semantic::PRODUCER_VERSION_BYTES).ok()
     );
 }
 
@@ -430,6 +463,24 @@ fn the_assessment_example_derives_from_the_plan_and_evidence_examples() {
     assert_eq!(
         derived, assessment,
         "the assessment example drifted from its own derivation"
+    );
+}
+
+#[test]
+fn the_semantic_evidence_example_matches_its_checked_writer() {
+    let root = repository_root();
+    let bytes = fs::read(root.join("spec/examples/scanner-semantic-evidence.json"))
+        .expect("the semantic evidence example is readable");
+    let parsed = amiss_wire::semantic::parse(&bytes)
+        .expect("the semantic evidence example clears the strict reader");
+    let written = amiss_wire::semantic::envelope(parsed.payload)
+        .expect("the semantic evidence example clears the checked writer");
+    let example =
+        amiss_wire::json::parse(&bytes).expect("the semantic evidence example is strict JSON");
+    assert_eq!(
+        amiss_wire::json::canonical(&written),
+        amiss_wire::json::canonical(&example),
+        "the semantic evidence example drifted from its writer"
     );
 }
 

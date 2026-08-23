@@ -353,9 +353,7 @@ fn decode_supplied(path: &str, value: Value) -> Result<Option<SuppliedControl>, 
     let mut obj = Obj::new(path, value)?;
     let embedded = obj.required("value", embedded_value)?;
     let digest_path = obj.field("expected_digest");
-    let expected_digest =
-        Digest::from_wire(&de::string(&digest_path, obj.take("expected_digest")?)?)
-            .ok_or_else(|| Error::new(&digest_path, ErrorKind::InvalidValue))?;
+    let expected_digest = de::digest(&digest_path, obj.take("expected_digest")?)?;
     let trust_source = obj.required("trust_source", decode_enum)?;
     obj.finish()?;
     Ok(Some(SuppliedControl {
@@ -372,9 +370,7 @@ fn decode_time(path: &str, value: Value) -> Result<Option<SuppliedTime>, Error> 
     let mut obj = Obj::new(path, value)?;
     let embedded = obj.required("value", embedded_value)?;
     let digest_path = obj.field("expected_digest");
-    let expected_digest =
-        Digest::from_wire(&de::string(&digest_path, obj.take("expected_digest")?)?)
-            .ok_or_else(|| Error::new(&digest_path, ErrorKind::InvalidValue))?;
+    let expected_digest = de::digest(&digest_path, obj.take("expected_digest")?)?;
     let provider = obj.required("provider", decode_provider_id)?;
     let run_id_path = obj.field("provider_run_id");
     let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;

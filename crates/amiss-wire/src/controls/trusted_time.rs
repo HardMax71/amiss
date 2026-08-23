@@ -5,7 +5,7 @@ use crate::model::{BranchRef, RepositoryIdentity, UtcInstant};
 
 use super::value::{object, positive_safe_integer, repository, text};
 use super::{
-    decode_branch_ref, decode_digest, decode_instant, decode_provider_id, decode_provider_run_id,
+    decode_branch_ref, decode_instant, decode_provider_id, decode_provider_run_id,
     decode_repository, root,
 };
 
@@ -133,7 +133,7 @@ impl TrustedTimeStatement {
         })?;
         let repository = obj.required("repository", decode_repository)?;
         let ref_name = obj.required("ref", decode_branch_ref)?;
-        let candidate_identity_digest = obj.required("candidate_identity_digest", decode_digest)?;
+        let candidate_identity_digest = obj.required("candidate_identity_digest", de::digest)?;
         let provider = obj.required("provider", decode_provider_id)?;
         let run_id_path = obj.field("provider_run_id");
         let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;

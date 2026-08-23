@@ -4,7 +4,7 @@ use crate::json::{Value, canonical};
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 use super::value::{object, repository, text};
-use super::{decode_digest, decode_enum, decode_repo_path, decode_repository, root};
+use super::{decode_enum, decode_repo_path, decode_repository, root};
 
 const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
@@ -176,13 +176,13 @@ impl ExecutionConstraintDescriptor {
         )
         .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
         let manifest_path = obj.required("manifest_path", decode_repo_path)?;
-        let release_manifest_digest = obj.required("release_manifest_digest", decode_digest)?;
+        let release_manifest_digest = obj.required("release_manifest_digest", de::digest)?;
         let selected_platform = obj.required("selected_platform", decode_enum)?;
         let required_status_name = obj.required("required_status_name", decode_status_name)?;
         obj.required("bootstrap_contract", |path, value| {
             de::const_str(path, value, ACTION_BOOTSTRAP_CONTRACT)
         })?;
-        let bootstrap_digest = obj.required("bootstrap_digest", decode_digest)?;
+        let bootstrap_digest = obj.required("bootstrap_digest", de::digest)?;
         obj.finish()?;
         Ok(Self {
             digest,

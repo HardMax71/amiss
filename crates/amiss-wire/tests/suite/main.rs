@@ -10,4 +10,5 @@ mod paths;
 mod report;
 mod requests;
 mod resolution;
+mod semantic;
 mod wire;
