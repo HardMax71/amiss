@@ -49,6 +49,15 @@ successful report projects the accepted envelopes' payload and producer/input id
 inventory-backed external destination is already resolved evidence, so the external-probe plan does
 not schedule it for a second network judgment.
 
+Provider services can produce that set from controller-configured local `objects.inv` files. The
+producer bounds both compressed and decoded bytes before the pinned `sphinx_inv` parser sees the
+body, selects only `std:label` records, resolves their locations against an operator-owned HTTP(S)
+base, and binds the exact inventory bytes, identity, and base into its input digest. The resulting
+template is held once in the controller plan and receives the exact candidate identity only while
+the sealed job is built. Fetching and caching remain deployment concerns outside both the engine
+and the repository being checked; [provider configuration](provider-controls.md) accepts only the
+bounded local result.
+
 The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
