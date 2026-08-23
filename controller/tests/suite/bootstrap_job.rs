@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AcquiredControl, BootstrapJobError, BootstrapJobInput, ChangeId, ChangeLocator, CheckPlan,
-    ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId, OidPair, PolicyControls,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
-    ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, bootstrap_job, check_binding,
-    check_plan,
+    ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy, IntegrationId, OidPair,
+    PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
+    ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, bootstrap_job,
+    check_binding, check_plan,
 };
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
@@ -153,6 +153,7 @@ fn policy() -> PolicyControls {
         trust_source: RequestTrust::OrganizationPolicy,
     };
     PolicyControls {
+        external_policy: ExternalPolicy::Advisory,
         organization_floor: Some(acquired("organization-floor.json")),
         debt_snapshot: Some(acquired("debt-snapshot.json")),
         waiver_bundle: Some(acquired("waiver-bundle.json")),
@@ -228,6 +229,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         .replace(r#""name": "docs""#, r#""name": "other""#)
         .into_bytes();
     let wrong_policy = PolicyControls {
+        external_policy: ExternalPolicy::Advisory,
         organization_floor: Some(AcquiredControl {
             bytes: wrong_floor,
             trust_source: RequestTrust::OrganizationPolicy,
@@ -262,6 +264,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
 fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
     let floor = near_ceiling_floor();
     let policy = PolicyControls {
+        external_policy: ExternalPolicy::Advisory,
         organization_floor: Some(AcquiredControl {
             bytes: floor,
             trust_source: RequestTrust::OrganizationPolicy,
@@ -270,7 +273,7 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
         waiver_bundle: None,
     };
     assert_eq!(
-        check_plan(Profile::Enforce, policy, execution()).unwrap_err(),
+        check_plan(Profile::Enforce, policy, execution(),).unwrap_err(),
         BootstrapJobError::RequestEncoding
     );
 }
@@ -282,7 +285,7 @@ fn a_changed_constraint_gets_a_new_semantic_digest() {
     input.required_status_name = "amiss / another check".to_owned();
     let changed = ExecutionConstraintDescriptor::new(input).unwrap();
     assert_ne!(changed.digest(), original.digest());
-    assert!(check_plan(Profile::Enforce, PolicyControls::default(), changed).is_ok());
+    assert!(check_plan(Profile::Enforce, PolicyControls::default(), changed,).is_ok());
 }
 
 #[test]

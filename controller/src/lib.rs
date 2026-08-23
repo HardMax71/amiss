@@ -31,7 +31,7 @@ pub use artifacts::{
 };
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,
-    PolicyControls, bootstrap_job, check_binding, check_plan,
+    ExternalPolicy, PolicyControls, bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BootstrapRun, run_bootstrap};

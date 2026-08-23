@@ -30,17 +30,18 @@ digraph gitea_provider {
   first  [label = "refresh PR,\nreviewer + rule"];
   fetch  [label = "acquire exact\nrepo + action"];
   boot   [label = "sealed\nbootstrap"];
+  assess [label = "retain external\nchain"];
   final  [label = "refresh gate\nagain"];
   save   [label = "save exact\nresult"];
   review [label = "dedicated reviewer\napproval or rejection"];
   { rank = same; forge; tls; inbox; }
   { rank = same; first; fetch; boot; }
-  { rank = same; final; save; review; }
+  { rank = same; assess; final; save; review; }
   forge -> tls -> inbox;
   first -> fetch -> boot;
-  final -> save -> review;
+  assess -> final -> save -> review;
   inbox -> first [constraint = false];
-  boot -> final [constraint = false];
+  boot -> assess [constraint = false];
   forge -> first -> final [style = invis];
 
 }
@@ -64,7 +65,8 @@ state rather than a verdict, because Gitea reports `mergeable: false` for the se
 spends recomputing a merge after a push and offers no separate "computing" signal. The lane
 retries such a refresh instead of publishing on it, so a pull request that stays unmergeable
 receives no review at all and cannot merge. It then acquires exact SHA-1 objects, runs the sealed
-bootstrap, refreshes everything again, saves the result, and posts or reuses one exact review.
+bootstrap, retains the external chain when enabled, refreshes everything again, saves the result,
+and posts or reuses one exact review.
 
 | Controller result | Review |
 | --- | --- |
@@ -254,6 +256,7 @@ repository and action trees.
   },
   "plan": {
     "profile": "enforce",
+    "external_policy": "advisory",
     "execution_constraint_file": "/etc/amiss/execution-constraint.json",
     "organization_floor_file": "/etc/amiss/organization-floor.json",
     "debt_snapshot_file": null,

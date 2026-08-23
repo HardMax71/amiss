@@ -101,15 +101,16 @@ digraph controller_delivery {
   claim    [label = "claim"];
   first    [label = "first refresh\n+ renew"];
   run      [label = "run if active\n+ heartbeat\n+ renew"];
+  external [label = "retain external\nchain + renew"];
   second   [label = "final refresh\n+ renew"];
   stage    [label = "save exact result"];
   publish  [label = "publish"];
   complete [label = "mark done"];
   { rank = same; raw; gate; auth; claim; }
-  { rank = same; first; run; second; }
+  { rank = same; first; run; external; second; }
   { rank = same; stage; publish; complete; }
   raw -> gate -> auth -> claim;
-  first -> run -> second;
+  first -> run -> external -> second;
   stage -> publish -> complete;
   claim -> first [constraint = false];
   second -> stage [constraint = false];
@@ -122,8 +123,10 @@ The first refresh resolves the event-bound provider run, not the change's latest
 the exact repository, URL dialect, refs, commits, and trees given to the runner, plus the
 provider gate revision to which publication is bound. GitHub and GitLab enforce their result on
 that commit. A Gitea-family lane publishes an exact-commit review, while the provider owns how
-that review affects merging. The second refresh checks the same identity, gate revision, and
-current authorization before the result is saved. If the change was closed, revoked, or
+that review affects merging. When the plan enables external verification, the controller retains
+its exact plan, provider evidence, and assessment after the run. The second refresh then checks
+the same identity, gate revision, and current authorization before the result is staged. If the
+change was closed, revoked, or
 superseded, the controller may publish that fail-closed status; it never publishes an old pass or
 block as if it were still current. A provider adapter may complete a stale publication without an
 external write only after independently proving that its staged provider gate is no longer

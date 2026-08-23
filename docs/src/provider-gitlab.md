@@ -42,17 +42,18 @@ digraph gitlab_provider {
   first  [label = "refresh job, train,\nchange + rule"];
   fetch  [label = "acquire exact\nrepo + action"];
   boot   [label = "sealed\nbootstrap"];
+  assess [label = "retain external\nchain"];
   final  [label = "refresh gate\nagain"];
   save   [label = "save exact\nresult"];
   result [label = "204 only for pass;\npolicy job succeeds"];
   { rank = same; policy; train; tls; oidc; }
   { rank = same; first; fetch; boot; }
-  { rank = same; final; save; result; }
+  { rank = same; assess; final; save; result; }
   policy -> train -> tls -> oidc;
   first -> fetch -> boot;
-  final -> save -> result;
+  assess -> final -> save -> result;
   oidc -> first [constraint = false];
-  boot -> final [constraint = false];
+  boot -> assess [constraint = false];
   policy -> first -> final [style = invis];
 
 }
@@ -61,8 +62,8 @@ digraph gitlab_provider {
 The first provider refresh reads the exact job, pipeline, merge-train car, merge request, project,
 target branch, protected-branch rules, and Git objects. The service requires the job, pipeline,
 and train to be running and to name the same train commit. It runs the sealed bootstrap only after
-that state and both acquired trees agree. A second refresh performs the same checks before the
-saved result is accepted.
+that state and both acquired trees agree. External verification, when enabled, is retained before
+a second refresh performs the same checks and accepts the staged result.
 
 ## GitLab project
 
@@ -293,6 +294,7 @@ execution constraint.
   },
   "plan": {
     "profile": "enforce",
+    "external_policy": "advisory",
     "execution_constraint_file": "/etc/amiss/execution-constraint.json",
     "organization_floor_file": "/etc/amiss/organization-floor.json",
     "debt_snapshot_file": null,
@@ -395,8 +397,8 @@ request handling never turns that rejection into a full-root scan. Startup and p
 maintenance remove bounded rows after their replay lifetime ends, freeing their slots without a
 service restart.
 
-The final “publication” step makes no GitLab API write. It refreshes the same job and gate one last
-time, retains the exact report and external chain, stages that result and locator in the ledger,
+The final “publication” step makes no GitLab API write. It retains the exact report and external
+chain, refreshes the same job and gate one last time, stages that result and locator in the ledger,
 and lets the endpoint status decide the already running policy job. The local record and HTTP
 response are not one transaction. If the service completed but the `204` reply was lost,
 replaying the same token and request does not invent a second success; it fails closed as a

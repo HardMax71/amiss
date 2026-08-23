@@ -15,7 +15,27 @@ use crate::RunRequest;
 
 pub use controls::{AcquiredControl, PolicyControls};
 
-const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v1";
+const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v2";
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Deserialize,
+    serde::Serialize,
+    strum::AsRefStr,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum ExternalPolicy {
+    Off,
+    #[default]
+    Advisory,
+    BlockConfirmedRefutations,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum BootstrapJobError {
@@ -72,7 +92,12 @@ pub fn check_plan(
     controls::validate_request_size(&policy, &policy_identity, &execution, &constraint)?;
     let digest = hj(
         CHECK_PLAN_DOMAIN,
-        &plan_value(profile, &policy_identity, &execution),
+        &plan_value(
+            profile,
+            policy.external_policy,
+            &policy_identity,
+            &execution,
+        ),
     );
     Ok(CheckPlan {
         digest,
@@ -203,6 +228,7 @@ fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJobError> {
 
 fn plan_value(
     profile: Profile,
+    external_policy: ExternalPolicy,
     policy: &controls::PolicyIdentity,
     execution: &ExecutionConstraintDescriptor,
 ) -> Value {
@@ -221,6 +247,10 @@ fn plan_value(
                 }
                 .to_owned(),
             ),
+        ),
+        (
+            "external_policy".to_owned(),
+            Value::string(external_policy.as_ref().to_owned()),
         ),
         (
             "organization_floor".to_owned(),

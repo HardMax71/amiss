@@ -40,13 +40,23 @@ says: something answered, not that the content is still right.
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.
-Exit 0 wrote the assessment, refuted rows included; the artifact is advisory data, and
-whether a refuted introduced destination blocks anything is a policy its consumers own.
-Exit 2 means an input could not be trusted.
+Exit 0 wrote the assessment, refuted rows included. The command itself remains advisory; a
+consumer decides what those rows do. Exit 2 means an input could not be trusted.
+
+Provider plans expose that decision as `external_policy`. `off` makes no external API calls;
+`advisory`, the default, retains and counts the assessment without changing the engine result;
+and `block-confirmed-refutations` changes a passing provider result to block only when the
+retained assessment contains at least one `refuted` row. An incomplete assessment, `unproven`
+row, authentication or rate-limit wall, private-repository 404, transport failure, missing
+evidence, or reachable row never changes the engine result. The blocking mode is an opt-in pilot:
+review a lane's retained advisory evidence over time before enabling it. Arbitrary HTTPS remains
+the separate advisory experiment described in [Continuous integration](ci.md).
 
 Provider lanes retain the canonical plan, provider evidence, and assessment beside the exact
-provider-bound report before staging publication. The published assessment digest and artifact
-locator therefore name one frozen chain. A lost provider reply or service restart verifies and
-reuses those bytes without another API probe; incomplete verification is retained as incomplete
-rather than reconstructed later. Authorization, expiry, and capacity are defined in
-[Retained provider artifacts](provider-artifacts.md).
+provider-bound report before the final provider refresh and publication stage. The policy is part
+of the controller plan digest. The published assessment digest and artifact locator therefore
+name one frozen chain and one frozen decision. A lost provider reply or service restart verifies
+and reuses those bytes without another API probe; incomplete verification is retained as
+incomplete rather than reconstructed later. If the final refresh finds a changed head or gate,
+the staged result is superseded even when the retained assessment had refuted a destination.
+Authorization, expiry, and capacity are defined in [Retained provider artifacts](provider-artifacts.md).

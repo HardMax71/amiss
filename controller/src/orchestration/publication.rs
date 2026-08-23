@@ -10,27 +10,9 @@ use super::model::{
 pub(super) fn publication(
     request: &RunRequest,
     initial: &ChangeSnapshot,
-    fresh: &ChangeSnapshot,
     outcome: Option<RunnerOutcome>,
 ) -> Publication {
-    let (conclusion, report) = if fresh.state == ChangeState::AuthorizationRevoked
-        || initial.state == ChangeState::AuthorizationRevoked
-    {
-        (
-            CheckConclusion::Unavailable(RunFailure::AuthorizationRevoked),
-            None,
-        )
-    } else if fresh.state == ChangeState::Closed || initial.state == ChangeState::Closed {
-        (CheckConclusion::Unavailable(RunFailure::Closed), None)
-    } else if fresh.state == ChangeState::Superseded
-        || initial.state == ChangeState::Superseded
-        || initial.run != fresh.run
-        || initial.gate_commit != fresh.gate_commit
-    {
-        (CheckConclusion::Superseded, None)
-    } else {
-        runner_conclusion(&initial.run, outcome)
-    };
+    let (conclusion, report) = runner_conclusion(&initial.run, outcome);
     Publication {
         provider_run: request.provider_run.clone(),
         evaluation_id: request.evaluation_id.clone(),
@@ -41,6 +23,34 @@ pub(super) fn publication(
         report,
         artifact: None,
     }
+}
+
+pub(super) fn finalize_publication(
+    initial: &ChangeSnapshot,
+    fresh: &ChangeSnapshot,
+    mut publication: Publication,
+) -> Publication {
+    let invalidated = if fresh.state == ChangeState::AuthorizationRevoked
+        || initial.state == ChangeState::AuthorizationRevoked
+    {
+        Some(CheckConclusion::Unavailable(
+            RunFailure::AuthorizationRevoked,
+        ))
+    } else if fresh.state == ChangeState::Closed || initial.state == ChangeState::Closed {
+        Some(CheckConclusion::Unavailable(RunFailure::Closed))
+    } else if fresh.state == ChangeState::Superseded
+        || initial.state == ChangeState::Superseded
+        || initial.run != fresh.run
+        || initial.gate_commit != fresh.gate_commit
+    {
+        Some(CheckConclusion::Superseded)
+    } else {
+        None
+    };
+    if let Some(conclusion) = invalidated {
+        publication.conclusion = conclusion;
+    }
+    publication
 }
 
 fn runner_conclusion(

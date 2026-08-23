@@ -28,11 +28,12 @@ digest as `X-Amiss-Report-Digest` and, when present, the assessment digest as
 `X-Amiss-Assessment-Digest`. The report URL always ends in `/<artifact-id>/report`. When present,
 the exact external inputs are sibling URLs ending in `/plan`, `/evidence`, and `/assessment`.
 
-The controller writes the exact report and optional external chain before saving the publication.
-The artifact identity binds the evaluation ID, every component digest, and the external outcome.
-A retry first verifies the saved reference and every retained component, then republishes the
-already staged value. It never reruns the scanner or external verifier. Rebinding one evaluation
-ID to different bytes is an error.
+The controller writes the exact report and optional external chain before its final provider
+refresh and publication stage. The artifact identity binds the evaluation ID, every component
+digest, and the external outcome. A retry first verifies the saved reference and every retained
+component, then republishes the already staged value. It never reruns the scanner or external
+verifier. A changed head or gate after verification stages a superseded result with the retained
+chain, not the old pass or block. Rebinding one evaluation ID to different bytes is an error.
 
 If retention, validation, or retrieval cannot be trusted, a new publication fails closed. A
 summary without a retained locator says extra findings are “not displayed”; it never claims that

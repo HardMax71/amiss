@@ -31,18 +31,19 @@ digraph provider_controls {
   api1   [label = "GitHub App refresh\n+ strict effective rules\n+ test merge"];
   fetch  [label = "acquire exact\nrepository + action"];
   boot   [label = "supervised bootstrap\n+ sealed engine"];
+  assess [label = "retain external\nchain"];
   api2   [label = "final refresh"];
   save   [label = "save exact result"];
   check  [label = "App-owned\nCheck Run"];
   done   [label = "mark delivery done"];
   { rank = same; github; tls; gate; inbox; }
   { rank = same; claim; api1; fetch; boot; }
-  { rank = same; api2; save; check; done; }
+  { rank = same; assess; api2; save; check; done; }
   github -> tls -> gate -> inbox;
   claim -> api1 -> fetch -> boot;
-  api2 -> save -> check -> done;
+  assess -> api2 -> save -> check -> done;
   inbox -> claim [constraint = false];
-  boot -> api2 [constraint = false];
+  boot -> assess [constraint = false];
   github -> claim -> api2 [style = invis];
 
 }
@@ -59,8 +60,9 @@ base and candidate commits and trees, default branch, GitHub test merge, and eff
 the configured protected branch. The test merge must be ready and mergeable, with the exact base
 and candidate parents and evaluated tree. The adapter acquires the repository and pinned action
 revision into private directories. The provider-neutral controller then runs the sealed
-bootstrap, refreshes GitHub again, saves the exact result, and publishes it on that authoritative
-test-merge commit. A changed head or gate, closed pull request, removed authorization, timeout,
+bootstrap, retains the external chain when enabled, refreshes GitHub again, saves the exact
+result, and publishes it on that authoritative test-merge commit. A changed head or gate, closed
+pull request, removed authorization, timeout,
 missing output, or tampered runtime cannot turn the new evaluation into a pass.
 
 The raw inbox is not the replay authority. It removes a row after the controller finishes.
@@ -189,6 +191,7 @@ execution constraint.
   },
   "plan": {
     "profile": "enforce",
+    "external_policy": "advisory",
     "execution_constraint_file": "/etc/amiss/execution-constraint.json",
     "organization_floor_file": "/etc/amiss/organization-floor.json",
     "debt_snapshot_file": null,

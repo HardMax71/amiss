@@ -44,12 +44,17 @@ digraph provider_controls {
   first  [label = "refresh exact\nchange + gate"];
   fetch  [label = "acquire exact\nrepo + action"];
   boot   [label = "sealed\nbootstrap"];
+  assess [label = "retain external\nevidence"];
   final  [label = "refresh gate\nagain"];
-  save   [label = "save exact\nresult"];
+  save   [label = "stage exact\nresult"];
   proof  [label = "provider merge\nevidence"];
-  source -> auth -> first -> fetch -> boot -> final -> save -> proof;
+  source -> auth -> first -> fetch -> boot -> assess -> final -> save -> proof;
 }
 ```
+
+The controller-owned plan binds `external_policy` into its digest. `advisory` is the default;
+`off` and the opt-in `block-confirmed-refutations` pilot are defined by
+[The external assessment](external-assessment.md).
 
 GitHub, Gitea, and Forgejo arrive as signed webhooks. A bounded receiver authenticates the exact
 body and stores it before returning `202`; a worker authenticates the stored bytes again. GitLab
@@ -133,10 +138,10 @@ provider `POST` returns `503` while readiness is false;
 | `amiss_controller_delivery_discards_total` | Durable deliveries removed after failed reauthentication. |
 | `amiss_controller_maintenance_runs_total` | Ledger maintenance scans completed. |
 | `amiss_controller_maintenance_removals_total` | Durable records, reports, and temporary entries removed by maintenance. |
-| `amiss_controller_external_refuted_total` | External destinations an advisory assessment refuted. |
-| `amiss_controller_external_unproven_total` | External destinations an advisory assessment left unproven. |
-| `amiss_controller_external_reachable_total` | External destinations an advisory assessment found reachable. |
-| `amiss_controller_external_incomplete_total` | Advisory external verifications that could not finish. |
+| `amiss_controller_external_refuted_total` | External destinations a retained assessment refuted. |
+| `amiss_controller_external_unproven_total` | External destinations a retained assessment left unproven. |
+| `amiss_controller_external_reachable_total` | External destinations a retained assessment found reachable. |
+| `amiss_controller_external_incomplete_total` | External verifications that could not finish. |
 
 The set cannot grow from a repository, request, provider identity, or result. It has no labels,
 and all values reset on restart. Counters that do not apply to a lane remain zero. The metrics

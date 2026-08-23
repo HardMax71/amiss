@@ -9,8 +9,8 @@ use crate::{
 
 use super::{ControllerError, HandleOutcome};
 use crate::orchestration::ledger::{
-    DeliveryClaim, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseRenewal, Publication,
-    StageOutcome, StagedPublication,
+    CheckConclusion, DeliveryClaim, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseRenewal,
+    Publication, StageOutcome, StagedPublication,
 };
 use crate::orchestration::model::{ChangeSnapshot, HeartbeatOutcome, RunHeartbeat, RunIdentity};
 
@@ -259,40 +259,60 @@ fn validate_run<E>(
     Ok(())
 }
 
-pub(super) fn retain_artifact(
+pub(super) fn retain_publication(
     adapter: &dyn ProviderAdapter,
     store: &FileArtifactStore,
-    verify_external: bool,
+    policy: crate::ExternalPolicy,
     clock: &dyn ControllerClock,
-    publication: &Publication,
-) -> Result<ArtifactReference, ArtifactError> {
+    mut publication: Publication,
+) -> Result<Publication, ArtifactError> {
     let report = publication
         .report
         .as_deref()
         .ok_or(ArtifactError::Corrupt)?;
-    if let Some(reference) = store.find(&publication.evaluation_id)? {
+    let artifact = if let Some(reference) = store.find(&publication.evaluation_id)? {
         if reference.report_digest != amiss_wire::digest::sha256(report) {
             return Err(ArtifactError::Conflict);
         }
         store.verify(&reference)?;
-        return Ok(reference);
-    }
-    let external = if verify_external {
-        prepare_external(adapter, clock, report)
+        reference
     } else {
-        PreparedExternal::default()
+        let external = if policy == crate::ExternalPolicy::Off {
+            PreparedExternal::default()
+        } else {
+            prepare_external(adapter, clock, report)
+        };
+        store.retain(
+            &publication.evaluation_id,
+            ArtifactBundle {
+                report,
+                plan: external.plan.as_deref(),
+                evidence: external.evidence.as_deref(),
+                assessment: external.assessment.as_deref(),
+                external_tally: external.tally,
+                external_incomplete: external.incomplete,
+            },
+        )?
     };
-    store.retain(
-        &publication.evaluation_id,
-        ArtifactBundle {
-            report,
-            plan: external.plan.as_deref(),
-            evidence: external.evidence.as_deref(),
-            assessment: external.assessment.as_deref(),
-            external_tally: external.tally,
-            external_incomplete: external.incomplete,
-        },
-    )
+    publication.conclusion = external_conclusion(policy, &artifact, publication.conclusion);
+    publication.artifact = Some(artifact);
+    Ok(publication)
+}
+
+fn external_conclusion(
+    policy: crate::ExternalPolicy,
+    artifact: &ArtifactReference,
+    engine: CheckConclusion,
+) -> CheckConclusion {
+    if policy == crate::ExternalPolicy::BlockConfirmedRefutations
+        && artifact
+            .external_tally
+            .is_some_and(|tally| tally.refuted > 0)
+    {
+        CheckConclusion::Block
+    } else {
+        engine
+    }
 }
 
 #[derive(Default)]
