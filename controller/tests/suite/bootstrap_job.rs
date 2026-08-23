@@ -157,6 +157,7 @@ fn policy() -> PolicyControls {
         organization_floor: Some(acquired("organization-floor.json")),
         debt_snapshot: Some(acquired("debt-snapshot.json")),
         waiver_bundle: Some(acquired("waiver-bundle.json")),
+        semantic_evidence: super::intersphinx::evidence(),
     }
 }
 
@@ -207,6 +208,14 @@ fn job_construction_binds_the_complete_authenticated_run() {
     assert!(controls.organization_floor.is_some());
     assert!(controls.debt_snapshot.is_some());
     assert!(controls.waiver_bundle.is_some());
+    let semantic = amiss_wire::semantic::parse(&json::canonical(
+        controls.semantic_evidence.first().unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(
+        semantic.payload.candidate_identity_digest,
+        statement.candidate_identity_digest()
+    );
     assert_eq!(job.constraint, execution().canonical_bytes().unwrap());
 }
 
@@ -236,6 +245,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         }),
         debt_snapshot: None,
         waiver_bundle: None,
+        semantic_evidence: Vec::new(),
     };
     let run = run_request(wrong_policy);
     assert_eq!(
@@ -271,6 +281,7 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
         }),
         debt_snapshot: None,
         waiver_bundle: None,
+        semantic_evidence: Vec::new(),
     };
     assert_eq!(
         check_plan(Profile::Enforce, policy, execution(),).unwrap_err(),

@@ -37,6 +37,7 @@ amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 cap-fs-ext.workspace = true
 cap-std.workspace = true
+flate2.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 tempfile.workspace = true

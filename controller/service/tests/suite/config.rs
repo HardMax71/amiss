@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write as _;
 use std::time::Duration;
 
 use amiss_controller::ExternalPolicy;
@@ -9,9 +10,41 @@ use amiss_controller_service::{
 use amiss_wire::controls::Profile;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tempfile::TempDir;
+
+fn sphinx_inventory(body: &[u8]) -> std::io::Result<Vec<u8>> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(body)?;
+    let compressed = encoder.finish()?;
+    let mut inventory = b"# Sphinx inventory version 2\n# Project: Test\n# Version: 1\n# The remainder of this file is compressed using zlib.\n".to_vec();
+    inventory.extend_from_slice(&compressed);
+    Ok(inventory)
+}
+
+fn load_intersphinx_plan(
+    directory: &TempDir,
+    constraint: &std::path::Path,
+) -> Result<amiss_controller::CheckPlan, Box<dyn std::error::Error>> {
+    let inventory_path = directory.path().join("objects.inv");
+    fs::write(
+        &inventory_path,
+        sphinx_inventory(b"except-star std:label -1 reference/compound_stmts.html -\n")?,
+    )?;
+    let files: amiss_controller_service::CheckPlanFiles = serde_json::from_value(json!({
+        "profile": "enforce",
+        "execution_constraint_file": constraint,
+        "intersphinx_inventories": [{
+            "identity": "python",
+            "base_url": "https://docs.python.org/3/",
+            "file": inventory_path,
+        }],
+    }))?;
+    load_plan(&files).map_err(Into::into)
+}
 
 #[test]
 fn limit_shapes_accept_only_owned_fields() {
@@ -413,6 +446,9 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
     let advisory = load_plan(&files("enforce", false, None)).unwrap();
     assert_eq!(advisory.profile, Profile::Enforce);
     assert_eq!(advisory.policy.external_policy, ExternalPolicy::Advisory);
+    let with_inventory = load_intersphinx_plan(&dir, &constraint_path).unwrap();
+    assert_eq!(with_inventory.policy.semantic_evidence.len(), 1);
+    assert_ne!(with_inventory.digest, advisory.digest);
     let off = load_plan(&files("enforce", false, Some("off"))).unwrap();
     assert_eq!(off.policy.external_policy, ExternalPolicy::Off);
     assert_ne!(off.digest, advisory.digest);

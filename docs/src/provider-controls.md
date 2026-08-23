@@ -56,6 +56,34 @@ The controller-owned plan binds `external_policy` into its digest. `advisory` is
 `off` and the opt-in `block-confirmed-refutations` pilot are defined by
 [The external assessment](external-assessment.md).
 
+The same plan may name controller-local Intersphinx inventories:
+
+```json
+"intersphinx_inventories": [
+  {
+    "identity": "python",
+    "base_url": "https://docs.python.org/3/",
+    "file": "/var/cache/amiss/python.objects.inv"
+  }
+]
+```
+
+The list is optional and holds at most 64 unique identities. Each base is an absolute HTTP(S)
+directory URL (a missing final `/` is normalized); each file is an absolute, regular, non-symlink
+Sphinx v2 zlib inventory. The complete set may occupy at most 16 MiB compressed and 16 MiB decoded,
+charged while each file is read rather than after the set is resident. The service parses the files
+at startup with the pinned
+`sphinx_inv` grammar, retains only `std:label` rows, and binds the identities, bases, exact source
+digests, and resulting complete observation set into the controller plan. A malformed, partial,
+oversized, duplicate, or unresolvable inventory rejects configuration rather than weakening the
+check.
+
+The service does not download inventory files. Fetch or refresh them in operator-owned deployment
+automation and point the plan at the resulting local file; a CI or host cache is safe because its
+exact bytes are re-read, parsed, and digest-bound before use. The repository being checked cannot
+name or replace this file, and cached download state is never an authority or a repository artifact.
+See [Trusted semantic evidence](semantic-evidence.md) for the sealed engine boundary.
+
 GitHub, Gitea, and Forgejo arrive as signed webhooks. A bounded receiver authenticates the exact
 body and stores it before returning `202`; a worker authenticates the stored bytes again. GitLab
 uses a short-lived OIDC token from the policy job and waits synchronously for the result, because

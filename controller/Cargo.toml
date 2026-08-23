@@ -17,9 +17,11 @@ bench = false
 [dependencies]
 amiss-bootstrap = { path = "../crates/amiss-bootstrap" }
 amiss-git = { path = "../crates/amiss-git" }
+amiss-rst = { path = "../crates/amiss-rst" }
 amiss-wire = { path = "../crates/amiss-wire" }
 atomicwrites.workspace = true
 base64.workspace = true
+flate2.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 hmac.workspace = true
@@ -30,6 +32,7 @@ secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sphinx_inv.workspace = true
 strum.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true

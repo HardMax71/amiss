@@ -15,6 +15,7 @@ pub mod feedback;
 mod file_ledger;
 mod identity;
 mod ingress;
+mod intersphinx;
 mod orchestration;
 mod plans;
 mod provider;
@@ -31,7 +32,8 @@ pub use artifacts::{
 };
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,
-    ExternalPolicy, PolicyControls, bootstrap_job, check_binding, check_plan,
+    ExternalPolicy, PolicyControls, SemanticEvidenceTemplate, bind_semantic_evidence,
+    bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
@@ -53,6 +55,9 @@ pub use ingress::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,
     IngressPolicy, ReplayIdentity, ReplayWindow, SignedTimePolicy, TrustAnchorId, TrustSetId,
     UntrustedDelivery, VerifiedDelivery,
+};
+pub use intersphinx::{
+    INTERSPHINX_INVENTORY_BYTES, IntersphinxError, IntersphinxInventory, intersphinx_evidence,
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,

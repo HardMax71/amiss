@@ -1,5 +1,7 @@
 mod controls;
 
+use std::sync::Arc;
+
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
 };
@@ -15,7 +17,7 @@ use crate::RunRequest;
 
 pub use controls::{AcquiredControl, PolicyControls};
 
-const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v2";
+const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v3";
 
 #[derive(
     Clone,
@@ -55,8 +57,20 @@ pub enum BootstrapJobError {
     ExecutionConstraint,
     #[error("the trusted time is invalid")]
     TrustedTime,
+    #[error("semantic evidence is invalid")]
+    SemanticEvidence,
     #[error("the sealed requests cannot be encoded within the stream ceiling")]
     RequestEncoding,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticEvidenceTemplate {
+    pub(crate) producer_kind: amiss_wire::model::ArtifactId,
+    pub(crate) producer_identity: amiss_wire::model::ArtifactId,
+    pub(crate) producer_version: String,
+    pub(crate) input_digest: Digest,
+    pub(crate) complete: bool,
+    pub(crate) observations: Arc<[Value]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +110,7 @@ pub fn check_plan(
             profile,
             policy.external_policy,
             &policy_identity,
+            &policy.semantic_evidence,
             &execution,
         ),
     );
@@ -195,6 +210,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             expected_digest: checked_plan.execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
+        bind_semantic_evidence(&checked_plan.policy.semantic_evidence, candidate_identity)?,
     )?;
     let streams = RequestStreams {
         evaluation: evaluation
@@ -209,6 +225,53 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         streams,
         constraint,
     })
+}
+
+/// Binds controller-produced evidence to one exact candidate and orders the
+/// resulting envelope set by payload identity.
+///
+/// # Errors
+///
+/// A template cannot form a valid bounded envelope or two envelopes collide.
+pub fn bind_semantic_evidence(
+    templates: &[SemanticEvidenceTemplate],
+    candidate_identity_digest: Digest,
+) -> Result<Vec<Value>, BootstrapJobError> {
+    if templates.len() > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    let mut envelopes = templates
+        .iter()
+        .map(|template| {
+            let value = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+                candidate_identity_digest,
+                source_report_payload_digest: None,
+                producer_kind: template.producer_kind.clone(),
+                producer_identity: template.producer_identity.clone(),
+                producer_version: template.producer_version.clone(),
+                input_digest: template.input_digest,
+                complete: template.complete,
+                observations: template.observations.as_ref().to_vec(),
+            })
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+            let payload_digest = value
+                .text("payload_digest")
+                .and_then(Digest::from_wire)
+                .ok_or(BootstrapJobError::SemanticEvidence)?;
+            Ok((payload_digest, value))
+        })
+        .collect::<Result<Vec<_>, BootstrapJobError>>()?;
+    envelopes.sort_by_key(|(digest, _value)| *digest);
+    if envelopes
+        .windows(2)
+        .any(|pair| matches!(pair, [left, right] if left.0 == right.0))
+    {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    Ok(envelopes
+        .into_iter()
+        .map(|(_digest, value)| value)
+        .collect())
 }
 
 fn binding(plan: &CheckPlan) -> CheckBinding {
@@ -230,6 +293,7 @@ fn plan_value(
     profile: Profile,
     external_policy: ExternalPolicy,
     policy: &controls::PolicyIdentity,
+    semantic_evidence: &[SemanticEvidenceTemplate],
     execution: &ExecutionConstraintDescriptor,
 ) -> Value {
     Value::object(vec![
@@ -271,6 +335,35 @@ fn plan_value(
         (
             "required_status_name".to_owned(),
             Value::string(execution.required_status_name().to_owned()),
+        ),
+        (
+            "semantic_evidence".to_owned(),
+            Value::array(
+                semantic_evidence
+                    .iter()
+                    .map(|template| {
+                        Value::object(vec![
+                            (
+                                "producer_kind".to_owned(),
+                                Value::string(template.producer_kind.as_str().to_owned()),
+                            ),
+                            (
+                                "producer_identity".to_owned(),
+                                Value::string(template.producer_identity.as_str().to_owned()),
+                            ),
+                            (
+                                "producer_version".to_owned(),
+                                Value::string(template.producer_version.clone()),
+                            ),
+                            (
+                                "input_digest".to_owned(),
+                                Value::string(template.input_digest.to_string()),
+                            ),
+                            ("complete".to_owned(), Value::Bool(template.complete)),
+                        ])
+                    })
+                    .collect(),
+            ),
         ),
     ])
 }

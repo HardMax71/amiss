@@ -106,9 +106,11 @@ dependencies = [
  "amiss-controller-fixtures",
  "amiss-fixtures",
  "amiss-git",
+ "amiss-rst",
  "amiss-wire",
  "atomicwrites",
  "base64 0.23.1",
+ "flate2",
  "getrandom 0.4.3",
  "hex",
  "hmac",
@@ -119,6 +121,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sphinx_inv",
  "strum",
  "tempfile",
  "thiserror",
@@ -351,6 +354,7 @@ dependencies = [
  "cap-fs-ext",
  "cap-std",
  "ctrlc",
+ "flate2",
  "getrandom 0.4.3",
  "hex",
  "hmac",
@@ -3798,6 +3802,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sphinx_inv"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c69c15b448fb04cdb587bdc3b6fac1aa6db41a4b9bd9e19c0e9e3f5d59824cf"
+dependencies = [
+ "flate2",
+ "thiserror",
+ "winnow",
+]
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4482,6 +4497,9 @@ name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "winx"
