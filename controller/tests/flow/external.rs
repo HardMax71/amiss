@@ -3,16 +3,16 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactStoreConfig, ChangeState, CheckConclusion, Evaluation, ExternalTally,
-    FileArtifactStore, FileLedger, FileLedgerConfig, HandleOutcome, ProviderError, ReplayWindow,
-    RunnerOutcome, SystemClock,
+    ArtifactStoreConfig, ChangeState, CheckConclusion, Controller, Evaluation, ExternalPolicy,
+    ExternalTally, FileArtifactStore, FileLedger, FileLedgerConfig, HandleOutcome, ProviderError,
+    ReplayWindow, RunnerOutcome, SystemClock, check_plan,
 };
 use amiss_wire::external::{evidence_file, forge_evidence_row};
 use amiss_wire::json::Value;
 
 use crate::support::{
-    FakeAdapter, RecordingSink, controller, controller_with_ledger, delivery, locator, provider,
-    repository, run, snapshot,
+    FakeAdapter, RecordingSink, controller, controller_with_ledger, delivery, locator, oid,
+    provider, repository, run, snapshot,
 };
 
 const DESTINATION: &str = "https://github.com/acme/widgets/blob/main/a.md";
@@ -35,9 +35,7 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
     }
 }
 
-/// The evidence a scripted provider answers with: bound to the exact plan
-/// the controller will derive from the same report bytes.
-fn scripted_evidence() -> Value {
+fn scripted_evidence(visibility: &str, resolution: Option<&str>) -> Value {
     let report = amiss_fixtures::external_report(&[DESTINATION]);
     let parsed = amiss_wire::json::parse(&report).unwrap();
     let engine = parsed
@@ -50,14 +48,22 @@ fn scripted_evidence() -> Value {
         engine.text("engine_digest").unwrap(),
     )
     .unwrap();
-    let row = forge_evidence_row(DESTINATION, "readable", Some("path-missing"), "t0");
+    let row = forge_evidence_row(DESTINATION, visibility, resolution, "t0");
     evidence_file(&plan, "scripted", "0", vec![row]).unwrap()
 }
 
+fn set_external_policy<L, R>(controller: &mut Controller<L, R>, external_policy: ExternalPolicy) {
+    let mut current = controller.plans.values().next().unwrap().as_ref().clone();
+    current.policy.external_policy = external_policy;
+    let changed = check_plan(current.profile, current.policy, current.execution).unwrap();
+    *controller.plans.values_mut().next().unwrap() = Arc::new(changed);
+}
+
 fn published_with(
+    external_policy: ExternalPolicy,
     verify: impl IntoIterator<Item = Result<Option<Value>, ProviderError>>,
     sink: Option<&Arc<RecordingSink>>,
-) -> Arc<FakeAdapter> {
+) -> (Arc<FakeAdapter>, HandleOutcome) {
     let provider = provider();
     let change = locator(&provider, repository("amiss"));
     let run = run(change.clone(), 'b', 'd');
@@ -73,6 +79,7 @@ fn published_with(
         .with_verify_results(verify),
     );
     let mut controller = controller(Arc::clone(&adapter), external_outcome(&run));
+    set_external_policy(&mut controller, external_policy);
     let root = tempfile::tempdir().unwrap();
     let artifacts = Arc::new(
         FileArtifactStore::open_with_clock(root.path(), artifact_config(), Arc::new(SystemClock))
@@ -83,20 +90,28 @@ fn published_with(
         let sink = Arc::clone(sink);
         controller = controller.with_external_sink(sink);
     }
-    assert!(matches!(
-        controller.handle(adapter.input()).unwrap(),
-        HandleOutcome::Published {
-            conclusion: CheckConclusion::Pass,
-            artifact: Some(_),
-        }
-    ));
-    adapter
+    let outcome = controller.handle(adapter.input()).unwrap();
+    (adapter, outcome)
 }
 
 #[test]
 fn a_published_delivery_is_advisorily_assessed() {
     let sink = Arc::new(RecordingSink::default());
-    let adapter = published_with([Ok(Some(scripted_evidence()))], Some(&sink));
+    let (adapter, outcome) = published_with(
+        ExternalPolicy::Advisory,
+        [Ok(Some(scripted_evidence(
+            "readable",
+            Some("path-missing"),
+        )))],
+        Some(&sink),
+    );
+    assert!(matches!(
+        outcome,
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: Some(_),
+        }
+    ));
     assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 1);
     assert_eq!(
         sink.tallies.lock().unwrap().clone(),
@@ -109,12 +124,21 @@ fn a_published_delivery_is_advisorily_assessed() {
     assert_eq!(sink.incomplete.load(Ordering::Relaxed), 0);
 }
 
-/// The verdict is sealed before verification starts; a failing verifier is
-/// one incomplete tick and nothing else.
 #[test]
-fn a_failing_verifier_never_touches_the_verdict() {
+fn an_incomplete_verification_never_blocks() {
     let sink = Arc::new(RecordingSink::default());
-    let adapter = published_with([Err(ProviderError::Unavailable)], Some(&sink));
+    let (adapter, outcome) = published_with(
+        ExternalPolicy::BlockConfirmedRefutations,
+        [Err(ProviderError::Unavailable)],
+        Some(&sink),
+    );
+    assert!(matches!(
+        outcome,
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: Some(_),
+        }
+    ));
     assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 1);
     assert!(sink.tallies.lock().unwrap().is_empty());
     assert_eq!(sink.incomplete.load(Ordering::Relaxed), 1);
@@ -122,9 +146,92 @@ fn a_failing_verifier_never_touches_the_verdict() {
 }
 
 #[test]
-fn without_a_sink_no_verification_runs() {
-    let adapter = published_with([Ok(Some(scripted_evidence()))], None);
+fn an_off_policy_skips_verification() {
+    let sink = Arc::new(RecordingSink::default());
+    let (adapter, outcome) = published_with(
+        ExternalPolicy::Off,
+        [Ok(Some(scripted_evidence(
+            "readable",
+            Some("path-missing"),
+        )))],
+        Some(&sink),
+    );
+    assert!(matches!(
+        outcome,
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: Some(_),
+        }
+    ));
     assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 0);
+    assert!(sink.tallies.lock().unwrap().is_empty());
+    assert_eq!(sink.incomplete.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn only_a_confirmed_refutation_blocks() {
+    let (refuted, refuted_outcome) = published_with(
+        ExternalPolicy::BlockConfirmedRefutations,
+        [Ok(Some(scripted_evidence(
+            "readable",
+            Some("path-missing"),
+        )))],
+        None,
+    );
+    assert!(matches!(
+        refuted_outcome,
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Block,
+            artifact: Some(_),
+        }
+    ));
+    assert_eq!(refuted.verify_count.load(Ordering::Relaxed), 1);
+
+    let (unproven, unproven_outcome) = published_with(
+        ExternalPolicy::BlockConfirmedRefutations,
+        [Ok(Some(scripted_evidence("missing", None)))],
+        None,
+    );
+    assert!(matches!(
+        unproven_outcome,
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Pass,
+            artifact: Some(_),
+        }
+    ));
+    assert_eq!(unproven.verify_count.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn the_final_refresh_supersedes_a_retained_external_decision() {
+    let provider = provider();
+    let change = locator(&provider, repository("amiss"));
+    let run = run(change.clone(), 'b', 'd');
+    let authenticated = delivery(&provider, change, 'b');
+    let initial = snapshot(ChangeState::Active, run.clone());
+    let mut moved_gate = initial.clone();
+    moved_gate.gate_commit = oid('e');
+    let adapter = Arc::new(
+        FakeAdapter::new(authenticated, [Ok(initial), Ok(moved_gate)]).with_verify_results([Ok(
+            Some(scripted_evidence("readable", Some("path-missing"))),
+        )]),
+    );
+    let mut controller = controller(Arc::clone(&adapter), external_outcome(&run));
+    set_external_policy(&mut controller, ExternalPolicy::BlockConfirmedRefutations);
+    let root = tempfile::tempdir().unwrap();
+    controller = controller.with_artifact_store(Arc::new(
+        FileArtifactStore::open_with_clock(root.path(), artifact_config(), Arc::new(SystemClock))
+            .unwrap(),
+    ));
+
+    assert!(matches!(
+        controller.handle(adapter.input()).unwrap(),
+        HandleOutcome::Published {
+            conclusion: CheckConclusion::Superseded,
+            artifact: Some(_),
+        }
+    ));
+    assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 1);
 }
 
 #[test]
@@ -141,7 +248,10 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
                 Ok(snapshot(ChangeState::Active, run.clone())),
             ],
         )
-        .with_verify_results([Ok(Some(scripted_evidence()))])
+        .with_verify_results([Ok(Some(scripted_evidence(
+            "readable",
+            Some("path-missing"),
+        )))])
         .with_publish_results([Err(ProviderError::Unavailable)]),
     );
     let ledger_root = tempfile::tempdir().unwrap();
@@ -160,11 +270,10 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
         )
         .unwrap(),
     );
-    let sink = Arc::new(RecordingSink::default());
     let mut controller =
         controller_with_ledger(Arc::clone(&adapter), ledger, external_outcome(&run))
-            .with_external_sink(sink)
             .with_artifact_store(Arc::clone(&artifacts));
+    set_external_policy(&mut controller, ExternalPolicy::BlockConfirmedRefutations);
 
     assert!(matches!(
         controller.handle(adapter.input()),
@@ -195,19 +304,18 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
         )
         .unwrap(),
     );
-    let retry_sink = Arc::new(RecordingSink::default());
     let mut restarted = controller_with_ledger(
         Arc::clone(&retry_adapter),
         reopened_ledger,
         external_outcome(&run),
     )
-    .with_external_sink(retry_sink)
     .with_artifact_store(Arc::clone(&reopened_artifacts));
+    set_external_policy(&mut restarted, ExternalPolicy::BlockConfirmedRefutations);
 
     assert!(matches!(
         restarted.handle(retry_adapter.input()).unwrap(),
         HandleOutcome::Published {
-            conclusion: CheckConclusion::Pass,
+            conclusion: CheckConclusion::Block,
             artifact: Some(reference),
         } if reference == retained
     ));

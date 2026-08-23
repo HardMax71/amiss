@@ -96,10 +96,9 @@ pub trait ProviderAdapter: Send + Sync {
         publication: &Publication,
     ) -> Result<(), ProviderError>;
 
-    /// Advisory verification of an external plan's introduced destinations:
-    /// the facts this provider can state, as an evidence file, or `None`
-    /// from the default when it has no verifier. Runs only after the
-    /// delivery's verdict is sealed and must never influence one.
+    /// Verifies an external plan's introduced destinations before the final
+    /// provider refresh, returning this provider's evidence file or `None`
+    /// when it has no verifier.
     ///
     /// # Errors
     ///

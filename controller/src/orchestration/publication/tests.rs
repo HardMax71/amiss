@@ -13,7 +13,7 @@ use crate::{
     RunnerOutcome, check_binding, check_plan,
 };
 
-use super::{publication, runner_conclusion};
+use super::{finalize_publication, publication, runner_conclusion};
 
 fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).expect("a sha1 oid")
@@ -112,7 +112,7 @@ fn either_snapshot_alone_settles_the_conclusion() {
     let request = request();
     let active = snapshot(ChangeState::Active);
     let conclude = |initial: &ChangeSnapshot, fresh: &ChangeSnapshot| {
-        let built = publication(&request, initial, fresh, None);
+        let built = finalize_publication(initial, fresh, publication(&request, initial, None));
         assert!(built.report.is_none());
         built.conclusion
     };

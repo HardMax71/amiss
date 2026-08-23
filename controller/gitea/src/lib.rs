@@ -82,7 +82,7 @@ pub trait GiteaApi: Send + Sync {
         publication: &Publication,
     ) -> Result<(), ProviderError>;
 
-    /// Advisory external verification, `None` from the default for an API
+    /// External verification, `None` from the default for an API
     /// without a verifier.
     ///
     /// # Errors

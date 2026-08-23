@@ -22,7 +22,7 @@ pub trait GitLabApi: Send + Sync {
     /// cannot be obtained.
     fn refresh(&self, query: &GitLabRefreshQuery) -> Result<GitLabRefresh, ProviderError>;
 
-    /// Advisory external verification, `None` from the default for an API
+    /// External verification, `None` from the default for an API
     /// without a verifier.
     ///
     /// # Errors

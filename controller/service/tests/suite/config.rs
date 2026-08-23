@@ -1,6 +1,7 @@
 use std::fs;
 use std::time::Duration;
 
+use amiss_controller::ExternalPolicy;
 use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
     load_execution_limits, load_limits, load_plan, read_regular,
@@ -383,27 +384,58 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
     let floor_path = dir.path().join("floor.json");
     fs::write(&floor_path, floor_bytes).unwrap();
 
-    let files = |profile: &str, floor: bool| -> amiss_controller_service::CheckPlanFiles {
-        serde_json::from_value(json!({
+    let files = |profile: &str,
+                 floor: bool,
+                 external_policy: Option<&str>|
+     -> amiss_controller_service::CheckPlanFiles {
+        let mut value = json!({
             "profile": profile,
             "execution_constraint_file": constraint_path,
             "organization_floor_file": floor.then(|| floor_path.clone()),
-        }))
-        .unwrap()
+        });
+        if let Some(external_policy) = external_policy {
+            value
+                .as_object_mut()
+                .unwrap()
+                .insert("external_policy".to_owned(), json!(external_policy));
+        }
+        serde_json::from_value(value).unwrap()
     };
-    let observed = load_plan(&files("observe", true)).unwrap();
+    let observed = load_plan(&files("observe", true, None)).unwrap();
     assert_eq!(observed.profile, Profile::Observe);
+    assert_eq!(observed.policy.external_policy, ExternalPolicy::Advisory);
     let floor = observed
         .policy
         .organization_floor
         .as_ref()
         .expect("the named floor file lands in the plan");
     assert_eq!(floor.bytes, floor_bytes);
+    let advisory = load_plan(&files("enforce", false, None)).unwrap();
+    assert_eq!(advisory.profile, Profile::Enforce);
+    assert_eq!(advisory.policy.external_policy, ExternalPolicy::Advisory);
+    let off = load_plan(&files("enforce", false, Some("off"))).unwrap();
+    assert_eq!(off.policy.external_policy, ExternalPolicy::Off);
+    assert_ne!(off.digest, advisory.digest);
+    let blocking = load_plan(&files(
+        "enforce",
+        false,
+        Some("block-confirmed-refutations"),
+    ))
+    .unwrap();
     assert_eq!(
-        load_plan(&files("enforce", false)).unwrap().profile,
-        Profile::Enforce
+        blocking.policy.external_policy,
+        ExternalPolicy::BlockConfirmedRefutations
     );
-    assert!(load_plan(&files("Observe", false)).is_err());
+    assert_ne!(blocking.digest, advisory.digest);
+    assert!(load_plan(&files("Observe", false, None)).is_err());
+    assert!(
+        serde_json::from_value::<amiss_controller_service::CheckPlanFiles>(json!({
+            "profile": "enforce",
+            "external_policy": "block-everything",
+            "execution_constraint_file": constraint_path,
+        }))
+        .is_err()
+    );
 }
 
 #[test]

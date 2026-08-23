@@ -11,7 +11,7 @@ use amiss_wire::requests::{
 
 use crate::RunIdentity;
 
-use super::BootstrapJobError;
+use super::{BootstrapJobError, ExternalPolicy};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AcquiredControl {
@@ -21,6 +21,7 @@ pub struct AcquiredControl {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PolicyControls {
+    pub external_policy: ExternalPolicy,
     pub organization_floor: Option<AcquiredControl>,
     pub debt_snapshot: Option<AcquiredControl>,
     pub waiver_bundle: Option<AcquiredControl>,

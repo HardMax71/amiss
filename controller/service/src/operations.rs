@@ -106,22 +106,22 @@ impl Operations {
         let external_refuted = counter(
             &mut registry,
             "external_refuted",
-            "External destinations an advisory assessment refuted.",
+            "External destinations a retained assessment refuted.",
         );
         let external_unproven = counter(
             &mut registry,
             "external_unproven",
-            "External destinations an advisory assessment left unproven.",
+            "External destinations a retained assessment left unproven.",
         );
         let external_reachable = counter(
             &mut registry,
             "external_reachable",
-            "External destinations an advisory assessment found reachable.",
+            "External destinations a retained assessment found reachable.",
         );
         let external_incomplete = counter(
             &mut registry,
             "external_incomplete",
-            "Advisory external verifications that could not finish.",
+            "External verifications that could not finish.",
         );
         Self {
             registry: Arc::new(registry),
@@ -231,8 +231,7 @@ fn counter(registry: &mut Registry, name: &str, help: &str) -> Counter {
     counter
 }
 
-/// The counter sink the queued lanes hand the controller: one advisory
-/// external outcome becomes counter movement and nothing else.
+/// The counter sink the queued lanes hand the controller.
 impl amiss_controller::ExternalSink for Operations {
     fn assessed(&self, tally: &amiss_controller::ExternalTally) {
         self.external_refuted.inc_by(tally.refuted);

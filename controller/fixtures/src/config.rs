@@ -86,6 +86,7 @@ impl TrustFiles {
 pub fn plan(constraint: &Path) -> Value {
     json!({
         "profile": "enforce",
+        "external_policy": "advisory",
         "execution_constraint_file": constraint,
         "organization_floor_file": null,
         "debt_snapshot_file": null,

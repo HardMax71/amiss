@@ -9,12 +9,12 @@ use crate::{
 };
 
 use self::helpers::{
-    ClaimResolution, LedgerHeartbeat, publish_staged, renew_lease, resolve_claim, retain_artifact,
-    stage_publication, validate_change,
+    ClaimResolution, LedgerHeartbeat, publish_staged, renew_lease, resolve_claim,
+    retain_publication, stage_publication, validate_change,
 };
 use super::ledger::{CheckConclusion, DeliveryLedger};
 use super::model::{ChangeState, RunRequest, Runner};
-use super::publication::publication;
+use super::publication::{finalize_publication, publication};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ControllerError<E> {
@@ -62,9 +62,7 @@ pub enum HandleOutcome {
     },
 }
 
-/// The advisory verdict counts of one published delivery's external
-/// assessment; the verdict the provider shows is already sealed when these
-/// are tallied.
+/// The verdict counts of one published delivery's retained external assessment.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExternalTally {
@@ -73,7 +71,7 @@ pub struct ExternalTally {
     pub reachable: u64,
 }
 
-/// Receives the advisory external outcome frozen into a retained publication.
+/// Receives the external outcome frozen into a retained publication.
 pub trait ExternalSink: Send + Sync {
     fn assessed(&self, tally: &ExternalTally);
 
@@ -128,8 +126,7 @@ where
         }
     }
 
-    /// Turns on advisory external verification after publications, with the
-    /// sink receiving each delivery's tally.
+    /// Reports retained external outcomes to the sink after publication.
     #[must_use]
     pub fn with_external_sink(mut self, sink: Arc<dyn ExternalSink>) -> Self {
         self.external = Some(sink);
@@ -221,28 +218,27 @@ where
             }
         };
         lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
+        let mut publication = publication(&request, &initial, runner_outcome);
+        if publication.report.is_some()
+            && let Some(store) = self.artifacts.as_deref()
+        {
+            lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
+            publication = retain_publication(
+                adapter,
+                store,
+                request.plan.policy.external_policy,
+                self.clock.as_ref(),
+                publication,
+            )
+            .map_err(ControllerError::Artifact)?;
+            lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
+        }
         let fresh = adapter
             .refresh(delivery)
             .map_err(ControllerError::Provider)?;
         validate_change(delivery, &fresh)?;
         lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
-        let mut publication = publication(&request, &initial, &fresh, runner_outcome);
-        if publication.report.is_some()
-            && let Some(store) = self.artifacts.as_deref()
-        {
-            lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
-            publication.artifact = Some(
-                retain_artifact(
-                    adapter,
-                    store,
-                    self.external.is_some(),
-                    self.clock.as_ref(),
-                    &publication,
-                )
-                .map_err(ControllerError::Artifact)?,
-            );
-            lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
-        }
+        publication = finalize_publication(&initial, &fresh, publication);
         let staged = stage_publication(&mut self.ledger, &accepted, &lease, &publication)?;
         let outcome = publish_staged(
             adapter,

@@ -10,9 +10,9 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, CheckPlan, DeliveryId, DeliveryIdentity,
-    IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
-    check_binding, check_plan, register_plan, resolve_plan,
+    ExternalPolicy, IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
+    ProviderRunIdentity, check_binding, check_plan, register_plan, resolve_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
@@ -108,6 +108,14 @@ fn a_mutated_plan_never_leaves_the_registry() {
     let mut changed = plan();
     changed.profile = Profile::Observe;
     let mut registry: PlanRegistry = BTreeMap::new();
+    assert_eq!(
+        register_plan(&mut registry, scope(), Arc::new(changed)).unwrap_err(),
+        PlanError::Invalid
+    );
+    assert!(registry.is_empty());
+
+    let mut changed = plan();
+    changed.policy.external_policy = ExternalPolicy::Off;
     assert_eq!(
         register_plan(&mut registry, scope(), Arc::new(changed)).unwrap_err(),
         PlanError::Invalid
