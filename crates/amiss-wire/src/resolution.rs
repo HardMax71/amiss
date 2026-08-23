@@ -188,6 +188,7 @@ pub enum InvalidReference {
 pub enum ExternalReference {
     Url,
     ForeignRepository,
+    IntersphinxInventory,
 }
 
 /// The total outcome of resolving one authored reference. The outer variants

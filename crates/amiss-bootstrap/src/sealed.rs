@@ -2,7 +2,9 @@ use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
 
-use amiss_bootstrap::supervise::{SealedControlExpectation, SealedExpectations};
+use amiss_bootstrap::supervise::{
+    SealedControlExpectation, SealedExpectations, SealedSemanticExpectation,
+};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 use amiss_wire::json::canonical;
@@ -112,6 +114,7 @@ pub(super) fn capture_requests(
             trust_source: supplied_constraint.trust_source.as_ref().to_owned(),
         },
         trusted_time_digest: statement.digest().to_string(),
+        semantic_evidence: semantic_expectations(&controls.semantic_evidence)?,
     };
     let mut evaluation = evaluation;
     evaluation.candidate_commit = Some(candidate);
@@ -120,6 +123,26 @@ pub(super) fn capture_requests(
         evaluation,
         expected,
     })
+}
+
+fn semantic_expectations(
+    values: &[amiss_wire::json::Value],
+) -> Execution<Vec<SealedSemanticExpectation>> {
+    values
+        .iter()
+        .map(|value| {
+            let bytes = canonical(value);
+            let envelope = amiss_wire::semantic::parse(&bytes)
+                .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
+            Ok(SealedSemanticExpectation {
+                payload_digest: envelope.payload_digest.to_string(),
+                producer_kind: envelope.payload.producer_kind.as_str().to_owned(),
+                producer_identity: envelope.payload.producer_identity.as_str().to_owned(),
+                producer_version: envelope.payload.producer_version,
+                input_digest: envelope.payload.input_digest.to_string(),
+            })
+        })
+        .collect()
 }
 
 fn request_streams(args: &Args) -> Execution<RequestStreams> {

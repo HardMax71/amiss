@@ -47,6 +47,7 @@
         "enforcement_source": "local-process",
         "verification": null
       },
+      "semantic_evidence": [],
       "trusted_time_source": {
         "status": "none"
       },
@@ -1003,6 +1004,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:42e7249db9a850b4228e115e06cb8602abc1bb87bc17e4e3449fa2f2dd3284f0",
+  "payload_digest": "sha256:e38a74cd9e85814b21f774b4d40154c9e0a3dd377e92c030fb8cff2a38d4e942",
   "schema": "amiss/scanner-report-envelope"
 }

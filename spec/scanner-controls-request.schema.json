@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:scanner-controls-request",
   "title": "Amiss scanner controls request",
-  "description": "The rolling external-control request of the wrapper-to-engine wire. It names provider-neutral authority roles and binds trusted time to an explicit provider plus an opaque provider run identity.",
+  "description": "The rolling external-input request of the wrapper-to-engine wire. It names provider-neutral authority roles, binds trusted time to an explicit provider plus an opaque provider run identity, and carries only controller-acquired semantic evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,8 @@
     "debt_snapshot",
     "waiver_bundle",
     "trusted_time",
-    "execution_constraint"
+    "execution_constraint",
+    "semantic_evidence"
   ],
   "properties": {
     "schema": {
@@ -31,6 +32,14 @@
     },
     "execution_constraint": {
       "oneOf": [{ "$ref": "#/$defs/SuppliedControl" }, { "type": "null" }]
+    },
+    "semantic_evidence": {
+      "description": "Canonical semantic-evidence envelopes acquired outside the repository and sealed by the trusted caller.",
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object"
+      }
     }
   },
   "$defs": {

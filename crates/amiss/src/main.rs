@@ -18,10 +18,11 @@ use std::process::ExitCode;
 use amiss::invocation::{self, CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
+use amiss_wire::model::Oid;
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
-    RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA, SnapshotRequest,
+    RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA, SnapshotRequest,
 };
 
 /// Self-restriction, in safe Rust only: no child processes (the contract's
@@ -148,7 +149,7 @@ fn machine_refusal(codes: &BTreeSet<Code>) -> Result<amiss_wire::json::Value, An
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
-    use amiss_scan::pipeline::{SetupShell, commit_pair};
+    use amiss_scan::pipeline::SetupShell;
 
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
@@ -219,28 +220,18 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         waiver: inputs.waiver,
         time: inputs.time,
         constraint: inputs.constraint,
+        semantic: inputs.semantic,
         requests,
         external_defect: external_defect.map(|detail| ("invalid-external-control", detail)),
         errors_retained: 64,
     };
-    let built = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
-        (RequestMode::CommitPair, Some(candidate)) => commit_pair(
-            &repo,
-            &shell.engine,
-            forge.as_ref(),
-            &shell,
-            &evaluation.base_commit,
-            candidate,
-        ),
-        (RequestMode::Index, None) => amiss_scan::pipeline::staged_index(
-            &repo,
-            &shell.engine,
-            forge.as_ref(),
-            &shell,
-            &evaluation.base_commit,
-        ),
-        (RequestMode::CommitPair, None) | (RequestMode::Index, Some(_)) => return failure,
-    };
+    let built = evaluate_snapshots(
+        &repo,
+        forge.as_ref(),
+        &shell,
+        &evaluation.base_commit,
+        evaluation.candidate_commit.as_ref(),
+    );
     emit(reserve, &built.envelope);
     exit_class(built.exit_code)
 }
@@ -269,9 +260,24 @@ fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::F
     })
 }
 
+fn evaluate_snapshots(
+    repo: &amiss_git::Repository,
+    forge: Option<&amiss_scan::resolve::ForgeContext>,
+    shell: &amiss_scan::pipeline::SetupShell,
+    base: &Oid,
+    candidate: Option<&Oid>,
+) -> amiss_scan::report::Built {
+    match candidate {
+        Some(candidate) => {
+            amiss_scan::pipeline::commit_pair(repo, &shell.engine, forge, shell, base, candidate)
+        }
+        None => amiss_scan::pipeline::staged_index(repo, &shell.engine, forge, shell, base),
+    }
+}
+
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
-    use amiss_scan::pipeline::{SetupShell, commit_pair};
+    use amiss_scan::pipeline::SetupShell;
     use amiss_scan::resolve::ForgeContext;
 
     let failure = ExitCode::from(ExitClass::Failure.code());
@@ -322,34 +328,22 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         target_ref: None,
         default_branch_ref: identity
             .map(|identity| identity.default_branch_ref.as_str().to_owned()),
-        // The frozen invocation grammar has no control-supply surface; the
-        // required wrapper feeds these when its interop RFC lands.
+        // The public invocation grammar has no external-input surface.
         floor: None,
         debt: None,
         waiver: None,
         time: None,
         constraint: None,
+        semantic: amiss_scan::semantic::Inputs::default(),
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,
     };
-    let built = match &invocation.candidate {
-        CandidateSelector::Commit(candidate_oid) => commit_pair(
-            &repo,
-            &shell.engine,
-            forge.as_ref(),
-            &shell,
-            &invocation.base,
-            candidate_oid,
-        ),
-        CandidateSelector::Index => amiss_scan::pipeline::staged_index(
-            &repo,
-            &shell.engine,
-            forge.as_ref(),
-            &shell,
-            &invocation.base,
-        ),
+    let candidate = match &invocation.candidate {
+        CandidateSelector::Commit(candidate) => Some(candidate),
+        CandidateSelector::Index => None,
     };
+    let built = evaluate_snapshots(&repo, forge.as_ref(), &shell, &invocation.base, candidate);
     if invocation.verb == Verb::Fix {
         return repair::run(
             &invocation.repo,
@@ -390,7 +384,7 @@ fn fatal(
 ) -> ExitCode {
     use amiss_scan::report::{Setup, SnapshotIdentity, construct_incomplete};
 
-    let identity = |oid: &amiss_wire::model::Oid| SnapshotIdentity {
+    let identity = |oid: &Oid| SnapshotIdentity {
         object_format: invocation.object_format.into(),
         commit_oid: oid.as_str().to_owned(),
         tree_oid: oid.as_str().to_owned(),

@@ -29,8 +29,8 @@ pub(crate) use line::safe_line_number;
 use anchor::fragment_resolution;
 use content::{CachedContent, read_target};
 use syntax::{
-    authority_valid, decode_fragment, normalized_native_path, same_repo_suffix, scheme_of,
-    split_components, unsupported_intent, uri_bytes_valid,
+    absolute_uri_valid, decode_fragment, normalized_native_path, same_repo_suffix, scheme_of,
+    split_components, unsupported_intent,
 };
 
 pub use amiss_wire::digest::RAW_EVIDENCE_DOMAIN;
@@ -188,6 +188,31 @@ impl<'a> Resolver<'a> {
             context.map(|identity| identity.dialect),
         )
     }
+
+    pub(crate) fn resolve_scanned(
+        &mut self,
+        context: Option<&ForgeContext>,
+        semantic: &crate::semantic::Context,
+        adapter: Adapter,
+        document_path: &RepoPath,
+        occurrence: &crate::scan::ScannedOccurrence,
+    ) -> Result<(Intent, Resolution, Option<String>), Error> {
+        if occurrence.occurrence.construct == amiss_wire::controls::SourceConstruct::RstRefRole {
+            return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);
+        }
+        self.resolve(
+            context,
+            adapter,
+            document_path,
+            occurrence.occurrence.construct.is_image(),
+            &occurrence.occurrence.semantic_destination,
+        )
+        .map(|(intent, resolution)| {
+            let destination = matches!(resolution, Resolution::External(_))
+                .then(|| occurrence.occurrence.semantic_destination.clone());
+            (intent, resolution, destination)
+        })
+    }
 }
 
 /// Absolute URIs under `uri-reference`: ASCII generic syntax, no
@@ -210,21 +235,8 @@ fn absolute(
             Resolution::Invalid(InvalidReference::Uri),
         )
     };
-    if !uri_bytes_valid(path_part) || query.as_deref().is_some_and(|text| !uri_bytes_valid(text)) {
+    if !absolute_uri_valid(path_part, scheme, query.as_deref()) {
         return Ok(invalid(query, fragment));
-    }
-    let after_scheme = path_part
-        .get(scheme.len().saturating_add(1)..)
-        .unwrap_or_default();
-    if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
-        let Some(rest) = after_scheme.strip_prefix("//") else {
-            return Ok(invalid(query, fragment));
-        };
-        let authority_end = rest.find('/').unwrap_or(rest.len());
-        let authority = rest.get(..authority_end).unwrap_or_default();
-        if authority.is_empty() || !authority_valid(authority) {
-            return Ok(invalid(query, fragment));
-        }
     }
     if let Some(identity) = context
         && let Some(suffix) = same_repo_suffix(path_part, &identity.host)
@@ -242,6 +254,18 @@ fn absolute(
         },
         Resolution::External(ExternalReference::Url),
     ))
+}
+
+pub(crate) fn http_destination_valid(destination: &str) -> bool {
+    let (path, query, fragment) = split_components(destination);
+    let Some(scheme) = scheme_of(path) else {
+        return false;
+    };
+    (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+        && absolute_uri_valid(path, scheme, query.as_deref())
+        && fragment
+            .as_deref()
+            .is_none_or(|value| decode_fragment(value).is_some())
 }
 
 /// Native destinations: empty targets the source document itself; one

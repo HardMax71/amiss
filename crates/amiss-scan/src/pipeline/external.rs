@@ -16,6 +16,7 @@ pub(super) struct ExternalVerified {
         amiss_wire::controls::ExecutionConstraintDescriptor,
         amiss_wire::requests::RequestTrust,
     )>,
+    pub(super) semantic: crate::semantic::Context,
 }
 
 impl ExternalVerified {
@@ -24,6 +25,7 @@ impl ExternalVerified {
         effects.waiver = self.waiver;
         effects.time = self.time;
         effects.constraint = self.constraint;
+        effects.semantic_evidence = self.semantic.provenance;
     }
 
     pub(super) const fn debt(&self) -> Option<&crate::policy::DebtContext> {
@@ -53,10 +55,10 @@ pub(super) fn external_gate(
 ) -> Result<ExternalVerified, (&'static str, ErrorDetail)> {
     let repository = setup_shell.repository.as_ref();
     let target_ref = setup_shell.target_ref.as_deref();
+    let identity = crate::report::candidate_identity_digest(provisional);
     let time = match &setup_shell.time {
         None => None,
         Some(input) => {
-            let identity = crate::report::candidate_identity_digest(provisional);
             crate::policy::verify_time(input, repository, target_ref, &identity)
                 .map_err(|row| ("invalid-external-control", row))?;
             Some(crate::policy::TimeContext {
@@ -69,6 +71,8 @@ pub(super) fn external_gate(
         .constraint
         .as_ref()
         .map(|input| (input.descriptor.clone(), input.trust_source));
+    let semantic = crate::semantic::bind(&setup_shell.semantic, identity)
+        .map_err(|row| ("control-binding-mismatch", row))?;
     let Some(tree) = candidate_tree else {
         // Debt and waiver values are tree-bound and legal only for a
         // complete Git candidate snapshot; the staged mode rejects them.
@@ -88,6 +92,7 @@ pub(super) fn external_gate(
             waiver: None,
             time,
             constraint,
+            semantic,
         });
     };
     if (setup_shell.debt.is_some() || setup_shell.waiver.is_some()) && time.is_none() {
@@ -147,6 +152,7 @@ pub(super) fn external_gate(
         waiver,
         time,
         constraint,
+        semantic,
     })
 }
 

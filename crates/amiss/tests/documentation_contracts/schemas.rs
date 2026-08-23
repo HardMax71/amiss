@@ -269,6 +269,25 @@ fn the_semantic_evidence_schema_tracks_the_reader_contract() {
             .and_then(serde_json::Value::as_u64),
         u64::try_from(amiss_wire::semantic::PRODUCER_VERSION_BYTES).ok()
     );
+
+    let request_path = repository_root().join("spec/scanner-controls-request.schema.json");
+    let request: serde_json::Value = serde_json::from_slice(
+        &fs::read(request_path).expect("controls request schema is readable"),
+    )
+    .expect("controls request schema is JSON");
+    let limit = u64::try_from(amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT).ok();
+    assert_eq!(
+        request
+            .pointer("/properties/semantic_evidence/maxItems")
+            .and_then(serde_json::Value::as_u64),
+        limit
+    );
+    assert_eq!(
+        report_schema()
+            .pointer("/$defs/ResolvedControls/properties/semantic_evidence/maxItems")
+            .and_then(serde_json::Value::as_u64),
+        limit
+    );
 }
 
 #[test]

@@ -450,6 +450,7 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
             trust_source: "external-required-check".to_owned(),
         },
         trusted_time_digest: time_digest,
+        semantic_evidence: Vec::new(),
     });
     (wire, expectations)
 }
@@ -530,6 +531,7 @@ fn seal_controls(
     statement: Value,
     time_digest: &str,
 ) {
+    set_member(controls, "semantic_evidence", Value::array(Vec::new()));
     set_member(
         controls,
         "organization_floor",

@@ -1848,6 +1848,49 @@
         }
       ]
     },
+    "SemanticEvidenceProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "identity",
+        "version",
+        "input_digest"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "SemanticEvidenceProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "payload_digest",
+        "producer"
+      ],
+      "properties": {
+        "payload_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "producer": {
+          "$ref": "#/$defs/SemanticEvidenceProducer"
+        }
+      }
+    },
     "ResolvedControls": {
       "type": "object",
       "additionalProperties": false,
@@ -1887,6 +1930,13 @@
         },
         "execution_constraint": {
           "$ref": "#/$defs/ExecutionConstraintProvenance"
+        },
+        "semantic_evidence": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/SemanticEvidenceProvenance"
+          }
         },
         "sandbox": {
           "$ref": "#/$defs/SandboxProvenance"
@@ -2839,7 +2889,8 @@
         "reason": {
           "enum": [
             "url",
-            "foreign-repository"
+            "foreign-repository",
+            "intersphinx-inventory"
           ]
         }
       }

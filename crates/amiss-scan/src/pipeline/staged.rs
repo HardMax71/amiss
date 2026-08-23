@@ -32,6 +32,7 @@ fn staged_candidate(
     candidate_scan: &mut ScanResources,
     engine: &EngineProvenance,
     forge: Option<&ForgeContext>,
+    semantic: &crate::semantic::Context,
     setup_shell: &SetupShell,
     base_identity: &SnapshotIdentity,
     includes: &crate::policy::Includes,
@@ -42,52 +43,26 @@ fn staged_candidate(
     let discovery =
         crate::discovery::discover_index(repo, git_resources, candidate_scan, includes, index)
             .map_err(|defect| candidate_unavailable(setup_shell, base_identity.clone(), &defect))?;
-    let (side, failures) = staged_sides(
-        repo,
-        git_resources,
-        candidate_scan,
-        engine,
-        forge,
-        &discovery,
-        base_failures,
-        claims,
-    );
-    Ok((discovery, side, failures))
-}
-
-/// The staged candidate's observations plus every accumulated failure row;
-/// a side that cannot be built at all is `None` with its defect appended.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the staged pipeline context is the contract's"
-)]
-fn staged_sides(
-    repo: &Repository,
-    git_resources: &mut GitResources,
-    scan_resources: &mut ScanResources,
-    engine: &EngineProvenance,
-    forge: Option<&ForgeContext>,
-    candidate_discovery: &SnapshotDiscovery,
-    base_failures: Vec<ErrorDetail>,
-    claims: &mut Vec<crate::claim::ClaimOutcome>,
-) -> (Option<Side>, Vec<ErrorDetail>) {
     let mut failures = base_failures;
     match side_observations(
         repo,
         git_resources,
-        scan_resources,
-        engine,
-        forge,
-        candidate_discovery,
+        candidate_scan,
+        super::ObservationContext {
+            engine,
+            forge,
+            semantic,
+        },
+        &discovery,
         Some(claims),
     ) {
         Ok((side, candidate_failures)) => {
             failures.extend(candidate_failures);
-            (Some(side), failures)
+            Ok((discovery, Some(side), failures))
         }
         Err(defect_detail) => {
             failures.push(defect_detail);
-            (None, failures)
+            Ok((discovery, None, failures))
         }
     }
 }
@@ -444,6 +419,7 @@ fn staged_index_result(
         &mut base_scan,
         engine,
         forge,
+        &external.semantic,
         &includes,
         base_tree,
         None,
@@ -458,6 +434,7 @@ fn staged_index_result(
         &mut candidate_scan,
         engine,
         forge,
+        &external.semantic,
         setup_shell,
         &base_evaluated.identity,
         &includes,

@@ -63,6 +63,7 @@ pub struct SealedExpectations {
     pub waiver_bundle: Option<SealedControlExpectation>,
     pub execution_constraint: SealedControlExpectation,
     pub trusted_time_digest: String,
+    pub semantic_evidence: Vec<SealedSemanticExpectation>,
 }
 
 /// One exact externally authenticated control projection expected in the
@@ -71,6 +72,15 @@ pub struct SealedExpectations {
 pub struct SealedControlExpectation {
     pub digest: String,
     pub trust_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SealedSemanticExpectation {
+    pub payload_digest: String,
+    pub producer_kind: String,
+    pub producer_identity: String,
+    pub producer_version: String,
+    pub input_digest: String,
 }
 
 fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
@@ -210,6 +220,7 @@ fn accept_sealed(
     )?;
     accept_optional_control(controls, "debt_snapshot", expected.debt_snapshot.as_ref())?;
     accept_optional_control(controls, "waiver_bundle", expected.waiver_bundle.as_ref())?;
+    accept_semantic_evidence(controls, &expected.semantic_evidence)?;
     let constraint =
         member(controls, "execution_constraint").ok_or(AcceptanceDefect::SealedControls)?;
     let descriptor = member(constraint, "descriptor").ok_or(AcceptanceDefect::SealedControls)?;
@@ -249,6 +260,30 @@ fn accept_sealed(
         || member(sandbox, "verification") != Some(&Value::Null)
     {
         return Err(AcceptanceDefect::SealedControls);
+    }
+    Ok(())
+}
+
+fn accept_semantic_evidence(
+    controls: &Value,
+    expected: &[SealedSemanticExpectation],
+) -> Result<(), AcceptanceDefect> {
+    let Some(Value::Array(actual)) = member(controls, "semantic_evidence") else {
+        return Err(AcceptanceDefect::SealedControls);
+    };
+    if actual.len() != expected.len() {
+        return Err(AcceptanceDefect::SealedControls);
+    }
+    for (actual, expected) in actual.iter().zip(expected) {
+        let producer = member(actual, "producer").ok_or(AcceptanceDefect::SealedControls)?;
+        if text(actual, "payload_digest") != Some(expected.payload_digest.as_str())
+            || text(producer, "kind") != Some(expected.producer_kind.as_str())
+            || text(producer, "identity") != Some(expected.producer_identity.as_str())
+            || text(producer, "version") != Some(expected.producer_version.as_str())
+            || text(producer, "input_digest") != Some(expected.input_digest.as_str())
+        {
+            return Err(AcceptanceDefect::SealedControls);
+        }
     }
     Ok(())
 }

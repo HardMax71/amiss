@@ -232,6 +232,17 @@ pub(super) fn controls_value(setup: &Setup) -> Value {
             ),
         ),
         (
+            "semantic_evidence",
+            Value::array(
+                setup
+                    .policy
+                    .semantic_evidence
+                    .iter()
+                    .map(semantic_evidence_value)
+                    .collect(),
+            ),
+        ),
+        (
             "sandbox",
             object(vec![
                 ("assurance", string("self-asserted")),
@@ -254,6 +265,21 @@ pub(super) fn controls_value(setup: &Setup) -> Value {
                     ])
                 },
             ),
+        ),
+    ])
+}
+
+fn semantic_evidence_value(evidence: &crate::semantic::Provenance) -> Value {
+    object(vec![
+        ("payload_digest", digest_value(evidence.payload_digest)),
+        (
+            "producer",
+            object(vec![
+                ("kind", string(evidence.producer_kind.as_str())),
+                ("identity", string(evidence.producer_identity.as_str())),
+                ("version", string(&evidence.producer_version)),
+                ("input_digest", digest_value(evidence.input_digest)),
+            ]),
         ),
     ])
 }

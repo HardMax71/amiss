@@ -10,9 +10,9 @@
     },
     "schema": "amiss/external-assessment-payload",
     "subject": {
-      "evidence_digest": "sha256:bc2be1dce1f6e6e3603b806e2c4a994b51ece193b1072bf1b3a725e019322337",
-      "plan_payload_digest": "sha256:46b2ddc1a5e32144decac4ef7cc578134bb0cae704f9758550d30c9498c7afea",
-      "report_payload_digest": "sha256:42e7249db9a850b4228e115e06cb8602abc1bb87bc17e4e3449fa2f2dd3284f0"
+      "evidence_digest": "sha256:6bb18ab115dd02850f8928fc06c65ed40ae390c13af7fa99bb41a2a9889162b1",
+      "plan_payload_digest": "sha256:f8a49df0a73e4c8a46525690b93e14bffd26603b24075a160c6b102d9b3d9557",
+      "report_payload_digest": "sha256:e38a74cd9e85814b21f774b4d40154c9e0a3dd377e92c030fb8cff2a38d4e942"
     },
     "verdicts": [
       {
@@ -25,6 +25,6 @@
       }
     ]
   },
-  "payload_digest": "sha256:7be707258cb8e8ea513931e20e7fbf7696dded6583c5a63727cf9da77686d2b8",
+  "payload_digest": "sha256:a95d9af53f688712ed1c76cd0a25b737baf206b1a44da500633e85d7200a4f5c",
   "schema": "amiss/external-assessment-envelope"
 }

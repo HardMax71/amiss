@@ -37,8 +37,10 @@ text, so every derived digest stays whole.
 An external destination is recorded where it is seen and nowhere else. The occurrence keeps
 the URL in `external_destination`, after the format's own decoding so that
 `https://example.com/x?a=1&amp;b=2` is recorded as the address a fetcher would request rather
-than as the bytes the source spells. No finding is raised, and the summary counts it
-under `external_out_of_scope`, because the engine never fetched it and so decided nothing.
+than as the bytes the source spells. An ordinary external URL raises no finding and the summary
+counts it under `external_out_of_scope`, because the engine never fetched it and so decided
+nothing. A Sphinx label resolved through candidate-bound inventory evidence instead carries
+`reason: "intersphinx-inventory"` and counts as resolved.
 [The external plan](external-plan.md) derives the introduced and removed destinations from
 a written report, and [Amiss and link checkers](comparison.md) shows the pipe that hands
 them to the tool that does fetch.
@@ -164,7 +166,10 @@ control row with `status: "verified"` means that the engine accepted the supplie
 repository, target-ref, tree, time, or run relationships required for that control. A caller that
 can supply the request can still make those assertions; the enum does not identify or
 authenticate the caller. The sealed bootstrap additionally checks the requested identities and
-digests against the returned envelope, but republishes the accepted bytes unchanged.
+digests against the returned envelope, but republishes the accepted bytes unchanged. The
+`controls.semantic_evidence` array similarly records each accepted envelope's payload digest and
+producer/input identity; it proves engine binding and interpretation, not who acquired the
+inventory.
 
 The [provider lanes](provider-controls.md) leave separate provider evidence: an App-owned Check
 Run on GitHub's test merge, a protected GitLab policy-job result on a merge-train commit, or a

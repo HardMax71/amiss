@@ -4,7 +4,7 @@ use amiss_git::{GitResources, Repository};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
-use crate::pipeline::{detail, side_observations};
+use crate::pipeline::{ObservationContext, detail, side_observations};
 use crate::policy::DebtContext;
 use crate::resolve::ForgeContext;
 use crate::resources::{ScanLimits, ScanResources};
@@ -53,8 +53,18 @@ pub fn reproduce(
     let discovery =
         crate::discovery::discover_scoped(repo, git, &mut scan, &includes, &tree, &documents)
             .map_err(|defect| detail(&defect, None))?;
-    let (side, failures) =
-        side_observations(repo, git, &mut scan, engine, forge, &discovery, None)?;
+    let (side, failures) = side_observations(
+        repo,
+        git,
+        &mut scan,
+        ObservationContext {
+            engine,
+            forge,
+            semantic: &crate::semantic::Context::default(),
+        },
+        &discovery,
+        None,
+    )?;
     if let Some(first) = failures.into_iter().next() {
         return Err(first);
     }

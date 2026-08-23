@@ -34,10 +34,24 @@ entry, or self-asserted local producer cannot promote its own observations to au
 evidence may prove a fact positively only where a later kind contract permits it; absence can carry
 meaning only for a declared complete set over the exact input digest.
 
+The first compiled consumer accepts one complete `sphinx-inventory-set` producer at version `1`,
+with no source-report binding. A `sphinx-label` observation carries an inventory identity, a
+Docutils-normalized label, and one syntactically valid absolute HTTP(S) destination. The engine uses
+that table only after every envelope in the controls request matches the exact candidate identity.
+One unique prefixless `:ref:` label resolves through the inventory; repeated labels across
+inventories remain ambiguous, colon-prefixed names remain unsupported, and local declarations keep
+precedence. Missing evidence, an incomplete producer, another producer version, a stale candidate
+binding, or an invalid observation can never clear a missing label.
+
+Only the sealed controls request has this intake. The public command supplies an empty set. A
+successful report projects the accepted envelopes' payload and producer/input identities under
+`controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
+inventory-backed external destination is already resolved evidence, so the external-probe plan does
+not schedule it for a second network judgment.
+
 The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-This first contract is intentionally not an engine input, command, or provider verdict yet. The
-Intersphinx and site-build consumers will add their own observation grammars and trusted intake;
-until then the envelope is a replay-safe foundation, not claimed coverage.
+The site-build consumers remain future observation grammars over this same boundary; the engine
+still executes no producer and treats no repository-controlled evidence as authority.

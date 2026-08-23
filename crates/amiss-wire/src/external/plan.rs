@@ -105,7 +105,9 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
             continue;
         };
         let resolution = occurrence.member("resolution");
-        if resolution.and_then(|value| value.text("kind")) != Some("external") {
+        if resolution.and_then(|value| value.text("kind")) != Some("external")
+            || resolution.and_then(|value| value.text("reason")) == Some("intersphinx-inventory")
+        {
             continue;
         }
         let destination = occurrence

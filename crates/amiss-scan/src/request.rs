@@ -19,6 +19,7 @@ pub struct ControlInputs {
     pub waiver: Option<WaiverInput>,
     pub time: Option<TimeInput>,
     pub constraint: Option<ConstraintInput>,
+    pub semantic: crate::semantic::Inputs,
 }
 
 /// Parses every supplied value under its own schema and requires its semantic
@@ -100,12 +101,15 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
             })
         })
         .transpose()?;
+    let semantic =
+        crate::semantic::parse(&request.semantic_evidence).map_err(|error| detail(&error))?;
     Ok(ControlInputs {
         floor,
         debt,
         waiver,
         time,
         constraint,
+        semantic,
     })
 }
 

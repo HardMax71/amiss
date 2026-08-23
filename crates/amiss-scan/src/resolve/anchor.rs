@@ -216,7 +216,11 @@ fn fold_typography(text: &str) -> String {
 impl Resolver<'_> {
     /// Answers a Sphinx `:ref:` against the labels the snapshot's documents
     /// declare, delegating a unique declaration to ordinary target lookup.
-    pub(crate) fn resolve_label(&mut self, label: &str) -> Result<(Intent, Resolution), Error> {
+    pub(crate) fn resolve_label(
+        &mut self,
+        label: &str,
+        semantic: &crate::semantic::Context,
+    ) -> Result<(Intent, Resolution, Option<String>), Error> {
         let intent = Intent {
             kind: IntentKind::Label,
             repository_path: None,
@@ -225,15 +229,24 @@ impl Resolver<'_> {
             query: None,
             fragment: Some(label.to_owned()),
         };
-        let resolution = match self
-            .snapshot
-            .labels
-            .get(&amiss_rst::normalized_label(label))
-        {
+        let normalized = amiss_rst::normalized_label(label);
+        let mut external_destination = None;
+        let resolution = match self.snapshot.labels.get(&normalized) {
             None if label.contains(':') => {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
             }
-            None => Resolution::Missing(Missing::LabelNotDeclared),
+            None => match semantic.labels.get(&normalized) {
+                Some(crate::semantic::InventoryLabel::Unique(destination)) => {
+                    external_destination = Some(destination.clone());
+                    Resolution::External(
+                        amiss_wire::resolution::ExternalReference::IntersphinxInventory,
+                    )
+                }
+                Some(crate::semantic::InventoryLabel::Ambiguous) => {
+                    Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)
+                }
+                None => Resolution::Missing(Missing::LabelNotDeclared),
+            },
             Some(crate::discovery::LabelState::Duplicated) => {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::DuplicateLabel)
             }
@@ -242,7 +255,7 @@ impl Resolver<'_> {
                 lookup(self, &owner, TargetKind::Blob, None, None, None)?
             }
         };
-        Ok((intent, resolution))
+        Ok((intent, resolution, external_destination))
     }
 }
 

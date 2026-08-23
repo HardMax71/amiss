@@ -105,6 +105,7 @@ pub(crate) fn shell(profile: Profile) -> SetupShell {
         waiver: None,
         time: None,
         constraint: None,
+        semantic: amiss_scan::semantic::Inputs::default(),
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,

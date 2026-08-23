@@ -25,6 +25,7 @@ const SEALED_FRAME_MAGIC: &[u8; 8] = b"AMISSRQ1";
 /// through EOF; its diagnostic digest exists exactly when EOF was obtained
 /// within this cap.
 pub const REQUEST_STREAM_BYTES: u64 = 16_777_216;
+pub const SEMANTIC_EVIDENCE_REQUEST_LIMIT: usize = 64;
 
 /// The published handle table's repository ordinal, constant across the
 /// in-process and future subprocess lanes.
@@ -131,7 +132,8 @@ pub struct SuppliedTime {
     pub provider_run_attempt: u64,
 }
 
-/// The external-control request: five nullable supplied controls.
+/// The external-input request: five nullable supplied controls and the
+/// bounded semantic-evidence set the trusted caller acquired.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ControlsRequest {
     pub organization_floor: Option<SuppliedControl>,
@@ -139,6 +141,7 @@ pub struct ControlsRequest {
     pub waiver_bundle: Option<SuppliedControl>,
     pub trusted_time: Option<SuppliedTime>,
     pub execution_constraint: Option<SuppliedControl>,
+    pub semantic_evidence: Vec<Value>,
 }
 
 impl ControlsRequest {
@@ -158,6 +161,7 @@ impl ControlsRequest {
         let waiver_bundle = obj.required("waiver_bundle", decode_supplied)?;
         let trusted_time = obj.required("trusted_time", decode_time)?;
         let execution_constraint = obj.required("execution_constraint", decode_supplied)?;
+        let semantic_evidence = obj.required("semantic_evidence", decode_semantic_evidence)?;
         obj.finish()?;
         Ok(Self {
             organization_floor,
@@ -165,6 +169,7 @@ impl ControlsRequest {
             waiver_bundle,
             trusted_time,
             execution_constraint,
+            semantic_evidence,
         })
     }
 
@@ -310,7 +315,7 @@ fn supplied_rows(value: &Value, expected_digest: Digest) -> Vec<(&'static str, V
 }
 
 fn controls_value(request: &ControlsRequest) -> Result<Value, Error> {
-    let mut rows = Vec::with_capacity(6);
+    let mut rows = Vec::with_capacity(7);
     for (name, control) in [
         ("organization_floor", request.organization_floor.as_ref()),
         ("debt_snapshot", request.debt_snapshot.as_ref()),
@@ -329,8 +334,24 @@ fn controls_value(request: &ControlsRequest) -> Result<Value, Error> {
         "execution_constraint",
         optional_supplied(request.execution_constraint.as_ref()),
     ));
+    rows.push((
+        "semantic_evidence",
+        Value::Array(request.semantic_evidence.clone().into_boxed_slice()),
+    ));
     rows.push(("schema", text(CONTROLS_REQUEST_SCHEMA)));
     Ok(object(rows))
+}
+
+fn decode_semantic_evidence(path: &str, value: Value) -> Result<Vec<Value>, Error> {
+    let values = de::array(path, value)?;
+    if values.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
+        return fail(path, ErrorKind::LimitExceeded);
+    }
+    values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| embedded_value(&format!("{path}[{index}]"), value))
+        .collect()
 }
 
 fn optional_supplied(control: Option<&SuppliedControl>) -> Value {

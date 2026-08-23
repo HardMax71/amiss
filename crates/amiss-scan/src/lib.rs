@@ -17,6 +17,7 @@ pub mod resolve;
 pub mod resources;
 pub mod route;
 pub mod scan;
+pub mod semantic;
 
 use amiss_md::Fault;
 use amiss_wire::controls::ResourceName;
