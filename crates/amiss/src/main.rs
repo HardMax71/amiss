@@ -245,6 +245,7 @@ fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::F
     Some(amiss_scan::resolve::ForgeContext {
         host: identity.host().to_owned(),
         dialect,
+        object_format: evaluation.object_format,
         owner: identity.owner().to_owned(),
         repository: identity.name().to_owned(),
         candidate_ref: evaluation
@@ -255,10 +256,7 @@ fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::F
             .default_branch_ref
             .as_ref()
             .map_or_else(String::new, |reference| reference.as_str().to_owned()),
-        candidate_oid: evaluation
-            .candidate_commit
-            .as_ref()
-            .map(|oid| oid.as_str().to_owned()),
+        candidate_oid: evaluation.candidate_commit.clone(),
     })
 }
 
@@ -309,12 +307,13 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         (Some(identity), Some(dialect)) => Some(ForgeContext {
             host: identity.repository.host().to_owned(),
             dialect,
+            object_format: invocation.object_format,
             owner: identity.repository.owner().to_owned(),
             repository: identity.repository.name().to_owned(),
             candidate_ref: identity.ref_name.as_str().to_owned(),
             default_ref: identity.default_branch_ref.as_str().to_owned(),
             candidate_oid: match &invocation.candidate {
-                CandidateSelector::Commit(oid) => Some(oid.as_str().to_owned()),
+                CandidateSelector::Commit(oid) => Some(oid.clone()),
                 CandidateSelector::Index => None,
             },
         }),

@@ -110,8 +110,11 @@ rather than degrading silently.
 no `--target-ref`, and the report's target stays null. No spelling of these flags turns a
 CLI run into a provider-authenticated one. A URL naming the declared default branch while
 another candidate is under test is recognized and reported as `unsupported-version-scope`,
-not resolved. Without the identity group, forge links stay external URLs and the report
-says so.
+not resolved. Full lowercase commit IDs must match `--object-format`; the candidate commit resolves,
+while another immutable commit retains its exact ID and contained path as unsupported version
+evidence. The engine does not read the historical tree yet, and a branch whose spelling is also a
+full ID is refused as ambiguous. Without the identity group, forge links stay external URLs and the
+report says so.
 
 `--forge` names the URL dialect the resolver applies and accepts exactly three values.
 `github` covers GitHub and GitHub Enterprise, `gitlab` the `/-/blob/` separator form,

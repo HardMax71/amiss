@@ -1,7 +1,7 @@
 use amiss_scan::Resolution;
 use amiss_scan::resolve::ForgeContext;
 use amiss_wire::controls::TargetKind;
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{ExternalReference, Target, VersionScope};
 
@@ -40,6 +40,92 @@ fn same_repository_intents_retain_query_and_fragment() {
         assert_eq!(intent.query.as_deref(), Some("plain=1"), "{destination}");
         assert_eq!(intent.fragment.as_deref(), Some("intro"), "{destination}");
     }
+}
+
+#[test]
+fn a_full_candidate_oid_resolves_only_in_the_declared_object_format() {
+    let raw = "0123456789012345678901234567890123456789";
+    let candidate = Oid::new(ObjectFormat::Sha1, raw.to_owned()).unwrap_or_else(|| panic!());
+    let cases = [
+        (
+            github_context(),
+            format!("https://github.com/acme/widgets/blob/{raw}/docs/guide.md"),
+        ),
+        (
+            gitlab_context(),
+            format!("https://gitlab.com/acme/widgets/-/blob/{raw}/docs/guide.md"),
+        ),
+    ];
+    for (mut context, destination) in cases {
+        context.candidate_oid = Some(candidate.clone());
+        let (_intent, resolution) = bed()
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                &destination,
+            )
+            .unwrap_or_else(|_defect| panic!());
+        assert!(
+            matches!(resolution, Resolution::Resolved(_)),
+            "{destination}"
+        );
+    }
+
+    let mut sha256 = github_context();
+    sha256.object_format = ObjectFormat::Sha256;
+    let (_intent, resolution) = bed()
+        .run_as(
+            Adapter::Markdown,
+            Some(&sha256),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{raw}/docs/guide.md"),
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(
+        resolution,
+        Resolution::UnsupportedVersion(VersionScope::UnknownPath)
+    );
+
+    let full_sha256 = "a".repeat(64);
+    let (_intent, resolution) = bed()
+        .run_as(
+            Adapter::Markdown,
+            Some(&sha256),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{full_sha256}/docs/guide.md"),
+        )
+        .unwrap_or_else(|_defect| panic!());
+    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = resolution
+    else {
+        panic!("unexpected resolution: {resolution:?}");
+    };
+    assert_eq!(commit_oid.as_str(), full_sha256);
+    assert_eq!(path.as_str(), Some("docs/guide.md"));
+}
+
+#[test]
+fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
+    let raw = "0123456789012345678901234567890123456789";
+    let mut context = github_context();
+    context.candidate_ref = format!("refs/heads/{raw}");
+    let (intent, resolution) = bed()
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{raw}/docs/guide.md"),
+        )
+        .unwrap_or_else(|_defect| panic!());
+    assert_eq!(intent.kind, IntentKind::Unsupported);
+    assert_eq!(
+        resolution,
+        Resolution::UnsupportedVersion(VersionScope::UnknownPath)
+    );
 }
 
 /// The gitea family against a real tree: the typed branch form resolves
@@ -119,9 +205,14 @@ fn gitea_recognition_resolves_against_the_tree() {
             "https://codeberg.org/acme/widgets/src/commit/6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22/docs/guide.md",
         )
         .unwrap_or_else(|_defect| panic!());
-    let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = index_mode else {
+    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = index_mode
+    else {
         panic!("unexpected resolution: {index_mode:?}");
     };
+    assert_eq!(
+        commit_oid.as_str(),
+        "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22"
+    );
     assert_eq!(
         path.as_str(),
         Some("docs/guide.md"),

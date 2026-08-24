@@ -2528,6 +2528,27 @@
         }
       }
     },
+    "KnownCommitVersionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A same-repository forge URL named one full immutable object ID in the run's declared object format and one contained path. This preserves identity but does not claim that the historical commit was read.",
+      "required": [
+        "kind",
+        "commit_oid",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "known-commit"
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/GitOid"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
     "UnknownVersionScope": {
       "type": "object",
       "additionalProperties": false,
@@ -2544,6 +2565,9 @@
       "oneOf": [
         {
           "$ref": "#/$defs/KnownVersionScope"
+        },
+        {
+          "$ref": "#/$defs/KnownCommitVersionScope"
         },
         {
           "$ref": "#/$defs/UnknownVersionScope"

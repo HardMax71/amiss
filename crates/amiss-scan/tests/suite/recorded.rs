@@ -40,6 +40,7 @@ fn spec_to_rest() -> ForgeContext {
     ForgeContext {
         host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
+        object_format: ObjectFormat::Sha1,
         owner: "hardmax71".to_owned(),
         repository: "spec_to_rest".to_owned(),
         candidate_ref: "refs/heads/main".to_owned(),

@@ -72,11 +72,12 @@ fn run(
     let context = ForgeContext {
         host: host.to_owned(),
         dialect,
+        object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/main".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: Some(candidate.as_str().to_owned()),
+        candidate_oid: Some(candidate.clone()),
     };
     let shell = SetupShell {
         engine: engine(),

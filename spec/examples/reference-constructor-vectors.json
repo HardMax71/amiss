@@ -553,6 +553,7 @@
       "encoded_suffix": "docs/a.md",
       "expected": {
         "status": "unsupported-version-scope",
+        "commit_oid": "fac650e0f7e2f43acecdfd6c37fc975aeb0b9e88",
         "path": "docs/a.md"
       }
     },

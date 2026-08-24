@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
-use amiss_wire::model::{Adapter, ForgeDialect, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference, Missing,
@@ -53,18 +53,19 @@ pub struct Intent {
 pub type Resolution = WireResolution<RepoPath>;
 
 /// The trusted run context for same-repository recognition: the declared
-/// host and dialect, lowercase owner and repository, the two exact full
-/// branch refs, and the candidate commit for OID-pinned dialect forms.
+/// host, dialect and object format, lowercase owner and repository, the two
+/// exact full branch refs, and the candidate commit for OID-pinned forms.
 /// Without it every absolute forge URL remains an external URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForgeContext {
     pub host: String,
     pub dialect: ForgeDialect,
+    pub object_format: ObjectFormat,
     pub owner: String,
     pub repository: String,
     pub candidate_ref: String,
     pub default_ref: String,
-    pub candidate_oid: Option<String>,
+    pub candidate_oid: Option<Oid>,
 }
 
 /// Referenced targets are read once per path and Git object within one scan

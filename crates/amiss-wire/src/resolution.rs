@@ -1,4 +1,5 @@
 use crate::digest::Digest;
+use crate::model::Oid;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString};
 
 /// The two ordinary Git blob modes. Trees, symlinks, and gitlinks are
@@ -155,14 +156,15 @@ impl<P> UnsupportedSemantics<P> {
     }
 }
 
-/// Version-scoped forge references either identify a contained path outside
-/// the candidate scope or fail before a path can be identified.
+/// Version-scoped forge references identify a contained path under a named
+/// ref, a full immutable commit and path, or no trustworthy path at all.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
 #[strum_discriminants(name(VersionScopeTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum VersionScope<P> {
     KnownPath { path: P },
+    KnownCommit { commit_oid: Oid, path: P },
     UnknownPath,
 }
 

@@ -14,6 +14,7 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
         &[(
             "docs/guide.md",
             "# Guide\n\n[self](https://ghes.example/acme/widget/blob/main/docs/guide.md) \
+             [history](https://ghes.example/acme/widget/blob/0123456789012345678901234567890123456789/docs/guide.md) \
              and [dotcom](https://github.com/acme/widget/blob/main/docs/guide.md)\n",
         )],
     )
@@ -65,14 +66,28 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
     assert_eq!(payload["evaluation"]["repository"]["host"], "ghes.example");
     let references = &payload["summary"]["references"];
     assert_eq!(
-        references["same_repository"], 1,
-        "the declared host's URL is this repository"
+        references["same_repository"], 2,
+        "the declared host's current and historical URLs are this repository"
     );
     assert_eq!(
         references["external_out_of_scope"], 1,
         "github.com is a foreign site when the identity lives elsewhere"
     );
     assert_eq!(references["resolved"], 1);
+    let history = payload["observations"]
+        .as_array()
+        .and_then(|observations| {
+            observations.iter().find_map(|observation| {
+                let scope = &observation["candidate"]["resolution"]["scope"];
+                (scope["kind"] == "known-commit").then_some(scope)
+            })
+        })
+        .unwrap_or_else(|| panic!("the immutable scope is reported"));
+    assert_eq!(
+        history["commit_oid"],
+        "0123456789012345678901234567890123456789"
+    );
+    assert_eq!(history["path"], "docs/guide.md");
 }
 
 /// A self-hosted GitLab with nested groups, end to end: the explicit dialect

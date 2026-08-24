@@ -34,10 +34,14 @@ source document, either directly or through a proved fragment-aware terminal red
 complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
-dialect's spelling is converted to a path only when it names the candidate branch or, for
-Gitea, the exact candidate commit. A same-repository URL for any other version is
-`unsupported-version-scope`; a URL outside that identity is external, and the engine never
-fetches one. It records the occurrence with the destination the format decodes to, the address a fetcher
+dialect's spelling is converted to a path only when it names the candidate branch or exact
+candidate commit. A full lowercase object ID in the run's declared SHA-1 or SHA-256 format is
+recognized on all three dialects. When it is not the candidate commit, the
+`unsupported-version-scope` evidence retains that exact commit and contained path instead of
+collapsing them into an unknown ref. The engine does not read that historical tree yet. A named
+branch or tag outside the candidate remains version-scoped without guessed commit identity; a URL
+outside the declared repository is external, and the engine never fetches one. It records an
+external occurrence with the destination the format decodes to, the address a fetcher
 would request, so the layer that does fetch can read the list without walking the tree again, and it raises no finding,
 because there is nothing it decided.
 
@@ -47,13 +51,14 @@ GitHub Enterprise host the identity declares. The gitlab dialect reads the canon
 separator form `group[/subgroup...]/name/-/blob-or-tree/ref/path`, nested groups compared
 whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selectors:
 `src/branch/` splits like the others, `src/commit/` resolves exactly when its full
-lowercase object id is the candidate commit and is out of version scope otherwise, and
+lowercase object ID is the candidate commit and retains a known immutable scope otherwise, and
 `src/tag/` is always out of version scope because no tag is a trusted ref. Line anchors
 follow the forge: `#L10-L20` is a line reference on github and gitea, `#L10-20` on
 gitlab, and each range spelling is nothing on the other's forge. `#L10` is common to all
 three. Relative references use the run's declared dialect when one is present. A recognized reference's
 intent kind names the dialect that read it, not the host, so an Enterprise repository's
-links carry the same kind GitHub's do.
+links carry the same kind GitHub's do. A branch spelled exactly like a full object ID is refused as
+ambiguous rather than assigned whichever interpretation happens to win on a forge.
 
 One document, every destination shape:
 
