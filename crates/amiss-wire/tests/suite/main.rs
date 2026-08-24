@@ -11,4 +11,5 @@ mod report;
 mod requests;
 mod resolution;
 mod semantic;
+mod uri;
 mod wire;

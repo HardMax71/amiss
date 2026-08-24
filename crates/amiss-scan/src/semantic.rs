@@ -139,7 +139,7 @@ fn insert_label(
             path,
             value,
             DESTINATION_BYTES,
-            crate::resolve::http_destination_valid,
+            amiss_wire::uri::http_destination_valid,
         )
     })?;
     row.finish()?;

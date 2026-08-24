@@ -2,10 +2,11 @@ use amiss_wire::controls::TargetKind;
 use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
+use amiss_wire::uri::decode_component;
 
 use crate::Error;
 
-use super::syntax::{decode_bytes, invalid_path_byte, unsupported_intent};
+use super::syntax::{invalid_path_byte, unsupported_intent};
 use super::{ForgeContext, Intent, Resolution, Resolver, lookup};
 
 pub(super) fn resolve(
@@ -310,7 +311,7 @@ fn decoded_tail(
             return Err(Resolution::Invalid(InvalidReference::Syntax));
         }
         let mut bytes = Vec::with_capacity(segment.len());
-        decode_bytes(segment, &mut bytes, invalid_path_byte)?;
+        decode_component(segment, &mut bytes, invalid_path_byte).map_err(Resolution::Invalid)?;
         decoded.push(bytes);
     }
     Ok(decoded)

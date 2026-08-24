@@ -4,11 +4,12 @@ use std::collections::BTreeSet;
 use amiss_wire::controls::{GitMode, TargetKind};
 use amiss_wire::extraction::{Heading, Transclusion, TransclusionKind};
 use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::uri::scheme;
 
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
 
-use super::syntax::{normalized_native_path, scheme_of};
+use super::syntax::normalized_native_path;
 
 #[derive(Clone, Copy)]
 pub(super) struct Source<'a> {
@@ -167,7 +168,7 @@ impl Expansion<'_, '_> {
 }
 
 fn local_target(document: &RepoPath, target: &str) -> Option<RepoPath> {
-    if target.starts_with('/') || target.contains(['%', '?', '#']) || scheme_of(target).is_some() {
+    if target.starts_with('/') || target.contains(['%', '?', '#']) || scheme(target).is_some() {
         return None;
     }
     normalized_native_path(document, false, target)

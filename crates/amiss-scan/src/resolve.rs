@@ -9,6 +9,7 @@ use amiss_wire::resolution::{
     BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference, Missing,
     Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget,
 };
+use amiss_wire::uri::{absolute_valid, decode_fragment, scheme};
 
 use crate::Error;
 use crate::declared::Declarations;
@@ -28,10 +29,7 @@ pub(crate) use line::safe_line_number;
 
 use anchor::fragment_resolution;
 use content::{CachedContent, read_target};
-use syntax::{
-    absolute_uri_valid, decode_fragment, normalized_native_path, same_repo_suffix, scheme_of,
-    split_components, unsupported_intent,
-};
+use syntax::{normalized_native_path, same_repo_suffix, split_components, unsupported_intent};
 
 pub use amiss_wire::digest::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
@@ -156,7 +154,7 @@ impl<'a> Resolver<'a> {
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
             ));
         }
-        if let Some(scheme) = scheme_of(path_part) {
+        if let Some(scheme) = scheme(path_part) {
             return absolute(self, context, path_part, scheme, query, fragment);
         }
         if path_part.starts_with('/') {
@@ -235,7 +233,7 @@ fn absolute(
             Resolution::Invalid(InvalidReference::Uri),
         )
     };
-    if !absolute_uri_valid(path_part, scheme, query.as_deref()) {
+    if !absolute_valid(path_part, scheme, query.as_deref()) {
         return Ok(invalid(query, fragment));
     }
     if let Some(identity) = context
@@ -254,18 +252,6 @@ fn absolute(
         },
         Resolution::External(ExternalReference::Url),
     ))
-}
-
-pub(crate) fn http_destination_valid(destination: &str) -> bool {
-    let (path, query, fragment) = split_components(destination);
-    let Some(scheme) = scheme_of(path) else {
-        return false;
-    };
-    (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
-        && absolute_uri_valid(path, scheme, query.as_deref())
-        && fragment
-            .as_deref()
-            .is_none_or(|value| decode_fragment(value).is_some())
 }
 
 /// Native destinations: empty targets the source document itself; one
