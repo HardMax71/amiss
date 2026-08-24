@@ -12,7 +12,7 @@ use crate::{Error, lfs};
 
 use super::anchor::Anchors;
 use super::line::LineRange;
-use super::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN};
+use super::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
 
 #[derive(Debug)]
 pub(super) struct CachedContent {
@@ -69,6 +69,16 @@ pub(super) fn target_projection(domain: &str, mode: GitMode, raw_digest: Digest)
     )
 }
 
+pub(super) fn content_cache<'a>(
+    cache: &'a mut TargetCache,
+    commit_oid: Option<&Oid>,
+) -> &'a mut BTreeMap<RepoPath, CachedContent> {
+    match commit_oid {
+        Some(oid) => cache.historical_read.entry(oid.clone()).or_default(),
+        None => &mut cache.read,
+    }
+}
+
 /// Reads one referenced regular blob once per exact path, mode, and object
 /// identity in the bound scan scope. Pointer content keeps its raw digest and
 /// no projection; ordinary content carries both.
@@ -78,7 +88,7 @@ pub(super) fn read_target(
     mode: GitMode,
     oid: &Oid,
 ) -> Result<BlobContent, Error> {
-    if let Some(cached) = resolver.cache.read.get(path)
+    if let Some(cached) = content_cache(resolver.cache, resolver.commit_oid.as_ref()).get(path)
         && cached.mode == mode
         && &cached.oid == oid
     {
@@ -109,13 +119,11 @@ pub(super) fn read_target(
         }
     };
     let evidence = content.evidence();
-    resolver.cache.read.insert(
-        path.clone(),
-        CachedContent {
-            mode,
-            oid: oid.clone(),
-            content,
-        },
-    );
+    let cached = CachedContent {
+        mode,
+        oid: oid.clone(),
+        content,
+    };
+    content_cache(resolver.cache, resolver.commit_oid.as_ref()).insert(path.clone(), cached);
     Ok(evidence)
 }

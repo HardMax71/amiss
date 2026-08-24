@@ -7,7 +7,7 @@ use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, Unsupport
 use crate::Error;
 use crate::resources::Aggregate;
 
-use super::content::{Content, read_target, target_projection};
+use super::content::{Content, content_cache, read_target, target_projection};
 use super::{RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
@@ -43,7 +43,8 @@ impl Resolver<'_> {
         if matches!(evidence, BlobContent::LfsPointer { .. }) {
             return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::LfsPointer));
         }
-        let Some(cached) = self.cache.read.get_mut(&claim.path) else {
+        let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&claim.path)
+        else {
             return Err(Error::Internal);
         };
         if cached.mode != mode || cached.content.evidence() != evidence {
@@ -115,7 +116,8 @@ pub(super) fn line_resolution(
     mut blob: BlobTarget<RepoPath>,
     range: LineRange,
 ) -> Result<Resolution, Error> {
-    let Some(cached) = resolver.cache.read.get_mut(path) else {
+    let Some(cached) = content_cache(resolver.cache, resolver.commit_oid.as_ref()).get_mut(path)
+    else {
         return Err(Error::Internal);
     };
     if cached.mode != mode || cached.content.evidence() != blob.content {

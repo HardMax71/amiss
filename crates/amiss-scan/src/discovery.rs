@@ -176,7 +176,7 @@ struct DocumentContext<'a> {
     scope: Option<&'a BTreeSet<RepoPath>>,
 }
 
-fn empty_discovery() -> SnapshotDiscovery {
+pub(crate) fn empty_discovery() -> SnapshotDiscovery {
     SnapshotDiscovery {
         documents: Vec::new(),
         labels: BTreeMap::new(),

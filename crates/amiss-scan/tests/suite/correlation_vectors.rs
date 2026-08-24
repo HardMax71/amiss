@@ -176,6 +176,7 @@ impl FixtureIntent {
         };
         Intent {
             kind: self.kind,
+            commit_oid: None,
             repository_path: self.repository_path.clone(),
             target_kind: self.target_kind,
             external_scheme: self.external_scheme.clone(),

@@ -56,6 +56,7 @@ pub fn fragment_digest(intent: &Intent) -> Option<Digest> {
 
 #[derive(Clone, Copy)]
 enum IdentityValue<'a> {
+    Omitted,
     Null,
     Integer(i64),
     String(&'a str),
@@ -67,6 +68,7 @@ enum IdentityValue<'a> {
 
 fn write_identity_value(sink: &mut dyn Sink, value: &IdentityValue<'_>) {
     match value {
+        IdentityValue::Omitted => {}
         IdentityValue::Null => sink.write("null"),
         IdentityValue::Integer(integer) => {
             let _infallible = fmt::write(&mut SinkFormatter(sink), format_args!("{integer}"));
@@ -91,10 +93,15 @@ fn write_identity_value(sink: &mut dyn Sink, value: &IdentityValue<'_>) {
         }
         IdentityValue::Object(members) => {
             sink.write("{");
-            for (position, (key, value)) in members.iter().enumerate() {
-                if position != 0 {
+            let mut populated = false;
+            for (key, value) in *members {
+                if matches!(value, IdentityValue::Omitted) {
+                    continue;
+                }
+                if populated {
                     sink.write(",");
                 }
+                populated = true;
                 write_string(sink, key);
                 sink.write(":");
                 write_identity_value(sink, value);
@@ -141,6 +148,16 @@ fn with_observation_value<R>(
     consume: impl FnOnce(IdentityValue<'_>) -> R,
 ) -> R {
     let intent = [
+        (
+            "commit_oid",
+            input
+                .intent
+                .commit_oid
+                .as_ref()
+                .map_or(IdentityValue::Omitted, |oid| {
+                    IdentityValue::String(oid.as_str())
+                }),
+        ),
         (
             "external_scheme",
             external_scheme(input.intent).map_or(IdentityValue::Null, IdentityValue::String),
@@ -211,41 +228,56 @@ fn with_observation_value<R>(
 /// kind, embedding the raw-destination digest and both component digests.
 #[must_use]
 pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
-    Value::object(vec![
-        (
-            "kind".to_owned(),
-            Value::string(intent.kind.as_ref().to_owned()),
-        ),
-        (
-            "raw_destination_digest".to_owned(),
-            Value::string(raw_destination_digest.to_string()),
-        ),
-        (
-            "repository_path".to_owned(),
-            intent
-                .repository_path
-                .as_ref()
-                .map_or(Value::Null, RepoPath::to_value),
-        ),
-        (
-            "target_kind".to_owned(),
-            intent.target_kind.map_or(Value::Null, |kind| {
-                Value::string(Into::<&'static str>::into(kind).to_owned())
-            }),
-        ),
-        (
-            "query_digest".to_owned(),
-            query_digest(intent).map_or(Value::Null, |digest| Value::string(digest.to_string())),
-        ),
-        (
-            "fragment_digest".to_owned(),
-            fragment_digest(intent).map_or(Value::Null, |digest| Value::string(digest.to_string())),
-        ),
-        (
-            "external_scheme".to_owned(),
-            external_scheme(intent).map_or(Value::Null, |scheme| Value::string(scheme.to_owned())),
-        ),
-    ])
+    Value::object(
+        intent
+            .commit_oid
+            .iter()
+            .map(|oid| {
+                (
+                    "commit_oid".to_owned(),
+                    Value::string(oid.as_str().to_owned()),
+                )
+            })
+            .chain([
+                (
+                    "kind".to_owned(),
+                    Value::string(intent.kind.as_ref().to_owned()),
+                ),
+                (
+                    "raw_destination_digest".to_owned(),
+                    Value::string(raw_destination_digest.to_string()),
+                ),
+                (
+                    "repository_path".to_owned(),
+                    intent
+                        .repository_path
+                        .as_ref()
+                        .map_or(Value::Null, RepoPath::to_value),
+                ),
+                (
+                    "target_kind".to_owned(),
+                    intent.target_kind.map_or(Value::Null, |kind| {
+                        Value::string(Into::<&'static str>::into(kind).to_owned())
+                    }),
+                ),
+                (
+                    "query_digest".to_owned(),
+                    query_digest(intent)
+                        .map_or(Value::Null, |digest| Value::string(digest.to_string())),
+                ),
+                (
+                    "fragment_digest".to_owned(),
+                    fragment_digest(intent)
+                        .map_or(Value::Null, |digest| Value::string(digest.to_string())),
+                ),
+                (
+                    "external_scheme".to_owned(),
+                    external_scheme(intent)
+                        .map_or(Value::Null, |scheme| Value::string(scheme.to_owned())),
+                ),
+            ])
+            .collect(),
+    )
 }
 
 /// The structural address: the child-index path to the syntax node itself,

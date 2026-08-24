@@ -2201,6 +2201,11 @@
             ]
           },
           "then": {
+            "not": {
+              "required": [
+                "commit_oid"
+              ]
+            },
             "properties": {
               "target_kind": {
                 "enum": [
@@ -2318,6 +2323,9 @@
         },
         "external_scheme": {
           "type": "null"
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/GitOid"
         }
       }
     },
@@ -3037,6 +3045,9 @@
         },
         "fragment_digest": {
           "$ref": "#/$defs/NullableDigest"
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/GitOid"
         }
       }
     },

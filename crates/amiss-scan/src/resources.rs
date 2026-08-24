@@ -106,6 +106,7 @@ pub struct ScanResources {
     line_fragment_bytes: u64,
     heading_anchor_bytes: u64,
     control_bytes: u64,
+    historical_tree_entries: u64,
 }
 
 impl Clone for ScanResources {
@@ -125,6 +126,7 @@ impl Clone for ScanResources {
             line_fragment_bytes: self.line_fragment_bytes,
             heading_anchor_bytes: self.heading_anchor_bytes,
             control_bytes: self.control_bytes,
+            historical_tree_entries: self.historical_tree_entries,
         }
     }
 }
@@ -174,6 +176,7 @@ impl ScanResources {
             line_fragment_bytes: 0,
             heading_anchor_bytes: 0,
             control_bytes: 0,
+            historical_tree_entries: 0,
         }
     }
 
@@ -208,6 +211,19 @@ impl ScanResources {
 
     pub(crate) const fn cache_scope(&self) -> &Arc<()> {
         &self.cache_scope
+    }
+
+    pub(crate) fn charge_historical_tree_entries(
+        &mut self,
+        entries: u64,
+        limit: u64,
+    ) -> Result<(), Error> {
+        Self::charge_count(
+            &mut self.historical_tree_entries,
+            entries,
+            limit,
+            ResourceName::GitTreeEntriesPerSnapshot,
+        )
     }
 
     #[must_use]

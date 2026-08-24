@@ -34,13 +34,14 @@ source document, either directly or through a proved fragment-aware terminal red
 complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
-dialect's spelling is converted to a path only when it names the candidate branch or exact
-candidate commit. A full lowercase object ID in the run's declared SHA-1 or SHA-256 format is
-recognized on all three dialects. When it is not the candidate commit, the
-`unsupported-version-scope` evidence retains that exact commit and contained path instead of
-collapsing them into an unknown ref. The engine does not read that historical tree yet. A named
-branch or tag outside the candidate remains version-scoped without guessed commit identity; a URL
-outside the declared repository is external, and the engine never fetches one. It records an
+dialect's spelling is converted to a path when it names the candidate branch or one full lowercase
+object ID in the run's declared SHA-1 or SHA-256 format. Exact IDs on all three dialects resolve
+only through that commit and its objects already present under the declared Git roots. A completely
+walked local tree can prove a missing path; an unavailable commit, tree, or target object instead
+retains `unsupported-version-scope` with the exact commit and contained path. A named branch or tag
+outside the candidate remains version-scoped without guessed commit identity. Historical queries
+and transclusion-dependent absence remain unsupported because an object walk is not a historical
+site build. A URL outside the declared repository is external, and the engine never fetches one. It records an
 external occurrence with the destination the format decodes to, the address a fetcher
 would request, so the layer that does fetch can read the list without walking the tree again, and it raises no finding,
 because there is nothing it decided.
@@ -50,8 +51,8 @@ The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub an
 GitHub Enterprise host the identity declares. The gitlab dialect reads the canonical
 separator form `group[/subgroup...]/name/-/blob-or-tree/ref/path`, nested groups compared
 whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selectors:
-`src/branch/` splits like the others, `src/commit/` resolves exactly when its full
-lowercase object ID is the candidate commit and retains a known immutable scope otherwise, and
+`src/branch/` splits like the others, `src/commit/` resolves its full lowercase object ID from the
+local object database and retains a known immutable scope when those objects are unavailable, and
 `src/tag/` is always out of version scope because no tag is a trusted ref. Line anchors
 follow the forge: `#L10-L20` is a line reference on github and gitea, `#L10-20` on
 gitlab, and each range spelling is nothing on the other's forge. `#L10` is common to all
@@ -88,7 +89,7 @@ site route"];
   forge [label = "forge URL,
 same repository"];
   scope [label = "candidate ref
-(or Gitea candidate OID)"];
+or exact commit ID"];
   other [label = "any other URL"];
   tree  [label = "resolve against
 the tree"];
@@ -101,8 +102,8 @@ and mode read"];
   miss  [label = "explicit-target-missing"];
   decl  [label = "target-declared-untracked"];
   dest -> rel; dest -> forge [label = "with identity + dialect"]; dest -> route; dest -> other;
-  rel -> tree; forge -> scope; scope -> tree [label = "matches"];
-  scope -> vers [label = "other version"]; route -> unsup; other -> ext;
+  rel -> tree; forge -> scope; scope -> tree [label = "candidate ref or local objects"];
+  scope -> vers [label = "other named ref or unavailable object"]; route -> unsup; other -> ext;
   tree -> hit [label = "found"]; tree -> decl [label = "absent, declared"];
   tree -> miss [label = "absent"];
 }

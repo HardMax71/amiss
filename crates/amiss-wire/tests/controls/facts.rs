@@ -8,17 +8,25 @@ use crate::support::{
     PROJECTION_DIGEST, RAW_DIGEST, debt_item_json, debt_snapshot, fact_json_for, key_input_json,
 };
 
-#[expect(
-    clippy::unwrap_used,
-    reason = "test helper on syntactically valid JSON templates"
-)]
 fn parse_debt_fact_case(
     fact_finding_kind: &str,
     key_finding_kind: &str,
     resolution: &str,
 ) -> Result<DebtSnapshot, Error> {
     let key_input = key_input_json(key_finding_kind);
-    let fact = fact_json_for(fact_finding_kind, &key_input, resolution);
+    parse_debt_fact(fact_finding_kind, &key_input, resolution)
+}
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "test helper on syntactically valid JSON templates"
+)]
+fn parse_debt_fact(
+    fact_finding_kind: &str,
+    key_input: &str,
+    resolution: &str,
+) -> Result<DebtSnapshot, Error> {
+    let fact = fact_json_for(fact_finding_kind, key_input, resolution);
     let finding_key = hj(
         FINDING_KEY_DOMAIN,
         &json::parse(key_input.as_bytes()).unwrap(),
@@ -34,6 +42,50 @@ fn parse_debt_fact_case(
     );
     let document = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
     DebtSnapshot::parse(document.as_bytes())
+}
+
+#[test]
+fn structural_facts_accept_an_optional_full_commit_identity() {
+    let key_input = |commit_oid: &str| {
+        key_input_json("explicit-target-missing").replace(
+            "\"kind\": \"repository-path\",",
+            &format!("\"kind\": \"repository-path\",\n      \"commit_oid\": \"{commit_oid}\","),
+        )
+    };
+    for commit_oid in ["a".repeat(40), "b".repeat(64)] {
+        let key_input = key_input(&commit_oid);
+        let parsed = parse_debt_fact(
+            "explicit-target-missing",
+            &key_input,
+            r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            parsed.items()[0]
+                .accepted_fact
+                .key_input()
+                .scope
+                .normalized_target_intent
+                .commit_oid
+                .as_ref()
+                .map(amiss_wire::model::Oid::as_str),
+            Some(commit_oid.as_str())
+        );
+    }
+
+    let invalid = key_input("deadbeef");
+    let defect = parse_debt_fact(
+        "explicit-target-missing",
+        &invalid,
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
+    )
+    .unwrap_err();
+    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(
+        defect
+            .path
+            .ends_with(".normalized_target_intent.commit_oid")
+    );
 }
 
 #[test]

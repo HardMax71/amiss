@@ -33,28 +33,45 @@ pub(super) fn resolve(
                 version,
                 path,
             } = matched;
-            let resolution = match version {
-                ForgeVersion::Candidate => lookup(
-                    resolver,
-                    &path,
-                    target_kind,
-                    query.as_deref(),
-                    fragment.as_deref(),
-                    Some(context.dialect),
-                )?,
-                ForgeVersion::OtherNamedRef => {
-                    Resolution::UnsupportedVersion(VersionScope::KnownPath { path: path.clone() })
-                }
-                ForgeVersion::Commit(commit_oid) => {
-                    Resolution::UnsupportedVersion(VersionScope::KnownCommit {
-                        commit_oid,
-                        path: path.clone(),
-                    })
+            let (commit_oid, resolution) = match version {
+                ForgeVersion::Candidate => (
+                    None,
+                    lookup(
+                        resolver,
+                        &path,
+                        target_kind,
+                        query.as_deref(),
+                        fragment.as_deref(),
+                        Some(context.dialect),
+                    )?,
+                ),
+                ForgeVersion::OtherNamedRef => (
+                    None,
+                    Resolution::UnsupportedVersion(VersionScope::KnownPath { path: path.clone() }),
+                ),
+                ForgeVersion::Commit(oid) => {
+                    let resolution = super::history::lookup(
+                        resolver,
+                        &oid,
+                        &path,
+                        target_kind,
+                        query.as_deref(),
+                        fragment.as_deref(),
+                        context.dialect,
+                    )?
+                    .unwrap_or_else(|| {
+                        Resolution::UnsupportedVersion(VersionScope::KnownCommit {
+                            commit_oid: oid.clone(),
+                            path: path.clone(),
+                        })
+                    });
+                    (Some(oid), resolution)
                 }
             };
             Ok((
                 Intent {
                     kind: intent_kind,
+                    commit_oid,
                     repository_path: Some(path),
                     target_kind: Some(target_kind),
                     external_scheme: None,
@@ -98,6 +115,7 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
     (
         Intent {
             kind: IntentKind::ExternalUrl,
+            commit_oid: None,
             repository_path: None,
             target_kind: None,
             external_scheme: Some("https".to_owned()),
@@ -259,14 +277,9 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
                 ));
             }
             match decoded_tail(directory_hint, raw_tail) {
-                Ok(decoded) => contained_path(&decoded).map(|path| {
-                    let version = if identity.candidate_oid.as_ref() == Some(&commit_oid) {
-                        ForgeVersion::Candidate
-                    } else {
-                        ForgeVersion::Commit(commit_oid)
-                    };
-                    (version, path)
-                }),
+                Ok(decoded) => {
+                    contained_path(&decoded).map(|path| (ForgeVersion::Commit(commit_oid), path))
+                }
                 Err(resolution) => Err(resolution),
             }
         }
@@ -323,12 +336,7 @@ fn versioned_split(
         .is_some_and(|(raw, value)| raw.as_bytes() == value.as_slice());
     if let Some(commit_oid) = decoded_oid.filter(|_oid| literal_oid) {
         let path = contained_path(decoded.get(1..).unwrap_or_default())?;
-        let version = if identity.candidate_oid.as_ref() == Some(&commit_oid) {
-            ForgeVersion::Candidate
-        } else {
-            ForgeVersion::Commit(commit_oid)
-        };
-        return Ok((version, path));
+        return Ok((ForgeVersion::Commit(commit_oid), path));
     }
     match (candidate_split, default_split) {
         (Some(after_candidate), Some(_after_default)) if candidate == default => {

@@ -1,11 +1,44 @@
-use amiss_scan::Resolution;
-use amiss_scan::resolve::ForgeContext;
-use amiss_wire::controls::TargetKind;
+use amiss_fixtures::commit_chain;
+use amiss_git::GitLimits;
+use amiss_scan::resolve::{ForgeContext, RAW_EVIDENCE_DOMAIN};
+use amiss_scan::{Error, Resolution, ScanLimits};
+use amiss_wire::controls::{ResourceName, TargetKind};
+use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
-use amiss_wire::resolution::{ExternalReference, Target, VersionScope};
+use amiss_wire::resolution::{
+    BlobContent, ExternalReference, Missing, Target, UnsupportedSemantics, VersionScope,
+};
 
-use crate::support::{bed, gitea_context, github_context, gitlab_context};
+use crate::support::{Bed, bed, bed_at, gitea_context, github_context, gitlab_context};
+
+const HISTORICAL_BODY: &str = "# Historical heading\n\nhistorical body\n";
+
+#[expect(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "test fixture helper"
+)]
+fn history_bed(git_limits: GitLimits) -> (Bed, String) {
+    let chain = commit_chain(&[
+        ("historical", &[("docs/guide.md", HISTORICAL_BODY)]),
+        (
+            "candidate",
+            &[("docs/guide.md", "# Candidate heading\n\ncandidate body\n")],
+        ),
+    ])
+    .unwrap();
+    let historical = chain
+        .commits
+        .first()
+        .expect("the history fixture has a commit")
+        .id
+        .clone();
+    (
+        bed_at(chain, 1, ScanLimits::CONTRACT, git_limits),
+        historical,
+    )
+}
 
 #[test]
 fn same_repository_intents_retain_query_and_fragment() {
@@ -43,9 +76,15 @@ fn same_repository_intents_retain_query_and_fragment() {
 }
 
 #[test]
-fn a_full_candidate_oid_resolves_only_in_the_declared_object_format() {
-    let raw = "0123456789012345678901234567890123456789";
-    let candidate = Oid::new(ObjectFormat::Sha1, raw.to_owned()).unwrap_or_else(|| panic!());
+fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
+    let mut bed = bed();
+    let raw = bed
+        .dir
+        .commits
+        .first()
+        .expect("the resolver fixture has a commit")
+        .id
+        .clone();
     let cases = [
         (
             github_context(),
@@ -55,10 +94,13 @@ fn a_full_candidate_oid_resolves_only_in_the_declared_object_format() {
             gitlab_context(),
             format!("https://gitlab.com/acme/widgets/-/blob/{raw}/docs/guide.md"),
         ),
+        (
+            gitea_context(),
+            format!("https://codeberg.org/acme/widgets/src/commit/{raw}/docs/guide.md"),
+        ),
     ];
-    for (mut context, destination) in cases {
-        context.candidate_oid = Some(candidate.clone());
-        let (_intent, resolution) = bed()
+    for (context, destination) in cases {
+        let (intent, resolution) = bed
             .run_as(
                 Adapter::Markdown,
                 Some(&context),
@@ -71,11 +113,15 @@ fn a_full_candidate_oid_resolves_only_in_the_declared_object_format() {
             matches!(resolution, Resolution::Resolved(_)),
             "{destination}"
         );
+        assert_eq!(
+            intent.commit_oid.as_ref().map(Oid::as_str),
+            Some(raw.as_str())
+        );
     }
 
     let mut sha256 = github_context();
     sha256.object_format = ObjectFormat::Sha256;
-    let (_intent, resolution) = bed()
+    let (_intent, resolution) = bed
         .run_as(
             Adapter::Markdown,
             Some(&sha256),
@@ -90,7 +136,7 @@ fn a_full_candidate_oid_resolves_only_in_the_declared_object_format() {
     );
 
     let full_sha256 = "a".repeat(64);
-    let (_intent, resolution) = bed()
+    let (_intent, resolution) = bed
         .run_as(
             Adapter::Markdown,
             Some(&sha256),
@@ -105,6 +151,153 @@ fn a_full_candidate_oid_resolves_only_in_the_declared_object_format() {
     };
     assert_eq!(commit_oid.as_str(), full_sha256);
     assert_eq!(path.as_str(), Some("docs/guide.md"));
+}
+
+#[test]
+fn an_exact_historical_url_reads_only_its_own_tree_and_content() {
+    let (mut bed, historical) = history_bed(GitLimits::CONTRACT);
+    let context = github_context();
+    let destination = format!("https://github.com/acme/widgets/blob/{historical}/docs/guide.md");
+    let (intent, resolution) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &destination,
+        )
+        .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert_eq!(
+        intent.commit_oid.as_ref().map(Oid::as_str),
+        Some(historical.as_str())
+    );
+    let Resolution::Resolved(Target::Blob(blob)) = resolution else {
+        panic!("unexpected resolution: {resolution:?}");
+    };
+    let BlobContent::Available { raw_digest, .. } = blob.content else {
+        panic!("historical content was unavailable");
+    };
+    assert_eq!(
+        raw_digest,
+        hb(RAW_EVIDENCE_DOMAIN, HISTORICAL_BODY.as_bytes())
+    );
+
+    let (_intent, old_anchor) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!("{destination}#historical-heading"),
+        )
+        .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert!(matches!(old_anchor, Resolution::Resolved(_)));
+
+    let (_intent, candidate_anchor) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!("{destination}#candidate-heading"),
+        )
+        .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert!(matches!(
+        candidate_anchor,
+        Resolution::Missing(Missing::HeadingAnchorNotFound { .. })
+    ));
+}
+
+#[test]
+fn historical_absence_requires_a_complete_local_walk() {
+    let (mut bed, historical) = history_bed(GitLimits::CONTRACT);
+    let context = github_context();
+    let (intent, missing_path) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{historical}/docs/absent.md"),
+        )
+        .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert_eq!(
+        intent.commit_oid.as_ref().map(Oid::as_str),
+        Some(historical.as_str())
+    );
+    assert!(matches!(
+        missing_path,
+        Resolution::Missing(Missing::PathNotFound { .. })
+    ));
+
+    let unavailable = "f".repeat(40);
+    let (intent, missing_commit) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{unavailable}/docs/absent.md"),
+        )
+        .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert_eq!(
+        intent.commit_oid.as_ref().map(Oid::as_str),
+        Some(unavailable.as_str())
+    );
+    assert!(matches!(
+        missing_commit,
+        Resolution::UnsupportedVersion(VersionScope::KnownCommit { .. })
+    ));
+}
+
+#[test]
+fn historical_queries_stay_outside_unscanned_build_semantics() {
+    let (mut bed, historical) = history_bed(GitLimits::CONTRACT);
+    let (_intent, resolution) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&github_context()),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{historical}/docs/guide.md?plain=1"),
+        )
+        .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert!(matches!(
+        resolution,
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::Query(_))
+    ));
+}
+
+#[test]
+fn repeated_historical_walks_share_the_tree_entry_budget() {
+    let limits = GitLimits {
+        tree_entries_per_snapshot: 3,
+        ..GitLimits::CONTRACT
+    };
+    let (mut bed, historical) = history_bed(limits);
+    let destination = format!("https://github.com/acme/widgets/blob/{historical}/docs/guide.md");
+    bed.run_as(
+        Adapter::Markdown,
+        Some(&github_context()),
+        "docs/guide.md",
+        false,
+        &destination,
+    )
+    .unwrap_or_else(|defect| panic!("{defect:?}"));
+    assert_eq!(
+        bed.run_as(
+            Adapter::Markdown,
+            Some(&github_context()),
+            "docs/guide.md",
+            false,
+            &destination,
+        ),
+        Err(Error::ResourceLimit {
+            resource: ResourceName::GitTreeEntriesPerSnapshot,
+            configured_limit: 3,
+            observed_lower_bound: 4,
+        })
+    );
 }
 
 #[test]
@@ -152,17 +345,25 @@ fn gitea_recognition_resolves_against_the_tree() {
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
 
+    let local_commit = bed
+        .dir
+        .commits
+        .first()
+        .expect("the resolver fixture has a commit")
+        .id
+        .clone();
     let (_intent, pinned) = bed
-        .run_as(Adapter::Markdown,
+        .run_as(
+            Adapter::Markdown,
             Some(&context),
             "docs/guide.md",
             false,
-            "https://codeberg.org/acme/widgets/src/commit/6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22/docs/guide.md",
+            &format!("https://codeberg.org/acme/widgets/src/commit/{local_commit}/docs/guide.md"),
         )
         .unwrap_or_else(|_defect| panic!());
     assert!(
         matches!(pinned, Resolution::Resolved(_)),
-        "the candidate commit's own OID resolves in the candidate"
+        "an available exact commit resolves from its own tree"
     );
 
     let (_intent, tag) = bed
@@ -192,31 +393,6 @@ fn gitea_recognition_resolves_against_the_tree() {
     assert_eq!(
         untyped,
         Resolution::External(ExternalReference::ForeignRepository)
-    );
-
-    let (_intent, index_mode) = bed
-        .run_as(Adapter::Markdown,
-            Some(&ForgeContext {
-                candidate_oid: None,
-                ..gitea_context()
-            }),
-            "docs/guide.md",
-            false,
-            "https://codeberg.org/acme/widgets/src/commit/6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22/docs/guide.md",
-        )
-        .unwrap_or_else(|_defect| panic!());
-    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = index_mode
-    else {
-        panic!("unexpected resolution: {index_mode:?}");
-    };
-    assert_eq!(
-        commit_oid.as_str(),
-        "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22"
-    );
-    assert_eq!(
-        path.as_str(),
-        Some("docs/guide.md"),
-        "with no candidate commit no OID can match, path disclosed"
     );
 }
 
@@ -298,7 +474,6 @@ fn a_commit_selector_is_an_exact_oid() {
     ] {
         let context = ForgeContext {
             object_format,
-            candidate_oid: None,
             ..gitea_context()
         };
         let (intent, row) = bed

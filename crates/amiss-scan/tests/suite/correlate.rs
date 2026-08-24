@@ -7,7 +7,7 @@ use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
-use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing, Target,
@@ -28,6 +28,7 @@ fn engine() -> EngineProvenance {
 fn repo_intent(path: &str) -> Intent {
     Intent {
         kind: IntentKind::RepositoryPath,
+        commit_oid: None,
         repository_path: RepoPath::new(path.to_owned()),
         target_kind: Some(TargetKind::Either),
         external_scheme: None,
@@ -226,6 +227,30 @@ fn native_and_same_repository_forge_intents_share_a_candidate_class() {
 }
 
 #[test]
+fn different_immutable_commits_are_different_correlation_targets() {
+    let mut base = basic("docs/a.md", "docs/b.md", "see [x](x)");
+    base.intent.kind = IntentKind::SameRepositoryGithub;
+    base.intent.commit_oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40));
+    let mut candidate = base.clone();
+    candidate.intent.commit_oid = Oid::new(ObjectFormat::Sha1, "b".repeat(40));
+
+    let got = run(
+        &side(vec![observation(&base)]),
+        &side(vec![observation(&candidate)]),
+    );
+    assert_eq!(got.len(), 2);
+    assert!(got.iter().all(|row| row.outcome == Outcome::None));
+    assert!(
+        got.iter()
+            .any(|row| row.source_change == SourceChange::Removed)
+    );
+    assert!(
+        got.iter()
+            .any(|row| row.source_change == SourceChange::Added)
+    );
+}
+
+#[test]
 fn the_derivation_table_is_total() {
     let source_changed = |from: &Spec| {
         let mut changed = from.clone();
@@ -302,6 +327,7 @@ fn the_derivation_table_is_total() {
     let mut external = basic("d.md", "t.md", "same [x](x)");
     external.intent = Intent {
         kind: IntentKind::ExternalUrl,
+        commit_oid: None,
         repository_path: None,
         target_kind: None,
         external_scheme: Some("https".to_owned()),
