@@ -247,9 +247,17 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
         }
         "commit" => {
             let pinned = segments.get(4).copied().unwrap_or_default();
-            let Some(commit_oid) = Oid::new(identity.object_format, pinned.to_owned()) else {
+            let Some(commit_oid) = [ObjectFormat::Sha1, ObjectFormat::Sha256]
+                .into_iter()
+                .find_map(|format| Oid::new(format, pinned.to_owned()))
+            else {
                 return ForgeRoute::Foreign;
             };
+            if commit_oid.object_format() != identity.object_format {
+                return ForgeRoute::Unsupported(Resolution::UnsupportedVersion(
+                    VersionScope::UnknownPath,
+                ));
+            }
             match decoded_tail(directory_hint, raw_tail) {
                 Ok(decoded) => contained_path(&decoded).map(|path| {
                     let version = if identity.candidate_oid.as_ref() == Some(&commit_oid) {
