@@ -133,7 +133,6 @@ fn context(
         repository: name.to_owned(),
         candidate_ref: candidate_ref.to_owned(),
         default_ref: default_ref.to_owned(),
-        candidate_oid: None,
     }
 }
 
@@ -150,7 +149,7 @@ fn dialect_of(case: &Value) -> ForgeDialect {
     }
 }
 
-fn split_case(bed: &mut Bed, case: &Value, id: &str) {
+fn split_input(case: &Value) -> (ForgeContext, String) {
     let operation = text(case, "operation");
     let form_key = if operation == "gitlab-ref-split" {
         "gitlab_form"
@@ -184,7 +183,7 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
             format!("https://github.com/acme/widgets/{form}/{suffix}"),
         ),
     };
-    let mut run_context = context(
+    let run_context = context(
         dialect,
         host,
         "acme",
@@ -196,12 +195,10 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
             .and_then(Value::as_str)
             .unwrap_or("refs/heads/main"),
     );
-    run_context.candidate_oid = case
-        .get("candidate_oid")
-        .and_then(Value::as_str)
-        .and_then(|raw| Oid::new(ObjectFormat::Sha1, raw.to_owned()));
-    let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
-    let expected = case.get("expected").unwrap();
+    (run_context, url)
+}
+
+fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id: &str) {
     let expected_path = expected.get("path").and_then(Value::as_str);
     let expected_commit = expected.get("commit_oid").and_then(Value::as_str);
     match text(expected, "status") {
@@ -379,17 +376,13 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
         ForgeDialect::Gitlab => "gitlab.com",
         ForgeDialect::Gitea => "codeberg.org",
     };
-    let mut run_context = context(
+    let run_context = context(
         dialect,
         host,
         "acme",
         "widgets",
         "refs/heads/main",
         "refs/heads/main",
-    );
-    run_context.candidate_oid = Oid::new(
-        ObjectFormat::Sha1,
-        "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned(),
     );
     let url = format!("https://{host}/{}", text(case, "suffix"));
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
@@ -568,7 +561,9 @@ fn dispatch(bed: &mut Bed, case: &Value) {
             line_fragment_case(bed, case, id);
         }
         "github-ref-split" | "gitlab-ref-split" | "gitea-branch-split" | "gitea-commit-split" => {
-            split_case(bed, case, id);
+            let (run_context, url) = split_input(case);
+            let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
+            assert_split_outcome(&intent, &row, case.get("expected").unwrap(), id);
         }
         "github-identity" | "forge-identity" => identity_case(bed, case, id),
         "forge-form" => forge_form_case(bed, case, id),

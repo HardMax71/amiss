@@ -256,7 +256,6 @@ fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::F
             .default_branch_ref
             .as_ref()
             .map_or_else(String::new, |reference| reference.as_str().to_owned()),
-        candidate_oid: evaluation.candidate_commit.clone(),
     })
 }
 
@@ -312,10 +311,6 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             repository: identity.repository.name().to_owned(),
             candidate_ref: identity.ref_name.as_str().to_owned(),
             default_ref: identity.default_branch_ref.as_str().to_owned(),
-            candidate_oid: match &invocation.candidate {
-                CandidateSelector::Commit(oid) => Some(oid.clone()),
-                CandidateSelector::Index => None,
-            },
         }),
         (None | Some(_), None) | (None, Some(_)) => None,
     };

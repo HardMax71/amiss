@@ -50,6 +50,10 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
+    "GitOid": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
     "ArtifactId": {
       "type": "string",
       "minLength": 1,
@@ -222,6 +226,9 @@
               "type": "null"
             }
           ]
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/GitOid"
         }
       }
     },

@@ -77,7 +77,6 @@ fn run(
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/main".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: Some(candidate.clone()),
     };
     let shell = SetupShell {
         engine: engine(),

@@ -52,6 +52,7 @@ pub(super) fn reference_scope(observation: &Observation) -> FindingKeyScope {
     FindingKeyScope::Reference {
         document: observation.document.clone(),
         source_construct: observation.construct,
+        commit_oid: intent.commit_oid.clone(),
         repository_path: intent.repository_path.clone(),
         target_kind: intent.target_kind,
         query_digest: observe::query_digest(intent),
@@ -73,6 +74,7 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
         FindingKeyScope::Reference {
             document,
             source_construct,
+            commit_oid,
             repository_path,
             target_kind,
             query_digest,
@@ -87,32 +89,46 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
             ),
             (
                 "normalized_target_intent".to_owned(),
-                Value::object(vec![
-                    (
-                        "kind".to_owned(),
-                        Value::string("repository-path".to_owned()),
-                    ),
-                    (
-                        "path".to_owned(),
-                        repository_path
-                            .as_ref()
-                            .map_or_else(|| Value::string(String::new()), RepoPath::to_value),
-                    ),
-                    (
-                        "target_kind".to_owned(),
-                        Value::string(target_kind.map_or("either", Into::into).to_owned()),
-                    ),
-                    (
-                        "query_digest".to_owned(),
-                        query_digest
-                            .map_or(Value::Null, |digest| Value::string(digest.to_string())),
-                    ),
-                    (
-                        "fragment_digest".to_owned(),
-                        fragment_digest
-                            .map_or(Value::Null, |digest| Value::string(digest.to_string())),
-                    ),
-                ]),
+                Value::object(
+                    commit_oid
+                        .iter()
+                        .map(|oid| {
+                            (
+                                "commit_oid".to_owned(),
+                                Value::string(oid.as_str().to_owned()),
+                            )
+                        })
+                        .chain([
+                            (
+                                "kind".to_owned(),
+                                Value::string("repository-path".to_owned()),
+                            ),
+                            (
+                                "path".to_owned(),
+                                repository_path.as_ref().map_or_else(
+                                    || Value::string(String::new()),
+                                    RepoPath::to_value,
+                                ),
+                            ),
+                            (
+                                "target_kind".to_owned(),
+                                Value::string(target_kind.map_or("either", Into::into).to_owned()),
+                            ),
+                            (
+                                "query_digest".to_owned(),
+                                query_digest.map_or(Value::Null, |digest| {
+                                    Value::string(digest.to_string())
+                                }),
+                            ),
+                            (
+                                "fragment_digest".to_owned(),
+                                fragment_digest.map_or(Value::Null, |digest| {
+                                    Value::string(digest.to_string())
+                                }),
+                            ),
+                        ])
+                        .collect(),
+                ),
             ),
             (
                 "occurrence".to_owned(),

@@ -153,7 +153,6 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: None,
     };
     let (target, mode, forge, document, semantic) = match shape {
         ResolutionShape::Native => (

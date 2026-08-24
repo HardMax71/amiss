@@ -120,7 +120,9 @@ carries its accepted fact, and that fact is the sole source of the finding kind 
 key-input preimage; `finding_key` is recomputed from the nested key. The fact can name
 only `explicit-target-missing` or `explicit-target-type-mismatch`. Selection needs an
 exact current finding key with a candidate fact; a resolved projection or an absent key
-is not an exception target. Matching also requires the exact fact digest. When
+is not an exception target. An exact forge commit is part of the normalized target intent, so an
+exception for the same path at another immutable commit does not match. Matching also requires the
+exact fact digest. When
 everything lines up, active unchanged debt records tolerance at `warn`, and an applied
 waiver changes only `fail` to `warn`. Invalid, expired, worsened, or overlapping items
 suppress nothing, and an overlap makes evaluation incomplete. Both controls travel only

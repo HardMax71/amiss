@@ -1,11 +1,12 @@
 use crate::digest::Digest;
-use crate::model::RepoPathText;
+use crate::model::{Oid, RepoPathText};
 use crate::resolution::Resolution;
 
 use super::{EligibleFindingKind, SourceConstruct, TargetKind};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TargetIntent {
+    pub commit_oid: Option<Oid>,
     pub path: RepoPathText,
     pub target_kind: TargetKind,
     pub query_digest: Option<Digest>,

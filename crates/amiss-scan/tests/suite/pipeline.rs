@@ -4,9 +4,10 @@ use std::path::Path;
 use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::{Built, RequestDigests};
+use amiss_scan::resolve::ForgeContext;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::{EngineProvenance, FixKind};
 use tempfile::TempDir;
 
@@ -170,6 +171,81 @@ fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
             "a copy does not make the retained target missing: {report}"
         );
     }
+}
+
+#[test]
+fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "history"]);
+    let historical = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("old.bin"), "relocated identity").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::rename(root.join("old.bin"), root.join("new.bin")).unwrap();
+    fs::write(
+        root.join("reader.md"),
+        format!("[old](https://github.com/acme/widgets/blob/{historical}/old.bin)\n"),
+    )
+    .unwrap();
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let context = ForgeContext {
+        host: "github.com".to_owned(),
+        dialect: ForgeDialect::Github,
+        object_format: ObjectFormat::Sha1,
+        owner: "acme".to_owned(),
+        repository: "widgets".to_owned(),
+        candidate_ref: "refs/heads/main".to_owned(),
+        default_ref: "refs/heads/main".to_owned(),
+    };
+    let mut setup = shell();
+    setup.repository = RepositoryIdentity::github("acme".to_owned(), "widgets".to_owned());
+    setup.forge = Some(ForgeDialect::Github);
+    setup.candidate_ref = Some("refs/heads/main".to_owned());
+    setup.default_branch_ref = Some("refs/heads/main".to_owned());
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        Some(&context),
+        &setup,
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    crate::support::assert_report(&envelope, "historical missing path");
+    let report = &envelope["payload"];
+    let observation = report["observations"]
+        .as_array()
+        .and_then(|rows| rows.first())
+        .and_then(|row| row.get("candidate"))
+        .unwrap();
+    assert_eq!(observation["intent"]["commit_oid"], historical);
+    assert_eq!(
+        observation["observation_id_input"]["extracted_intent"]["commit_oid"],
+        historical
+    );
+    let finding = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["kind"] == "explicit-target-missing")
+        .unwrap();
+    assert_eq!(
+        finding["key_input"]["scope"]["normalized_target_intent"]["commit_oid"],
+        historical
+    );
+    assert!(finding["candidate_fact"]["evidence"]["resolution"]["same_object_at"].is_null());
+    assert!(finding["fix"].is_null());
 }
 
 /// A tree path the report cannot spell is disclosed by its raw bytes, which

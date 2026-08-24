@@ -5,7 +5,8 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::json::{self, Value};
 use crate::model::{
-    ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity, UtcInstant,
+    ArtifactId, BranchRef, ObjectFormat, Oid, OwnerId, RepoPathText, RepositoryIdentity,
+    TreeIdentity, UtcInstant,
 };
 use crate::resolution::{
     BlobContent, BlobContentTag, BlobMode, BlobTarget, Missing, MissingTag, Resolution,
@@ -239,6 +240,16 @@ fn decode_reason(path: &str, value: Value) -> Result<String, Error> {
     }
 }
 
+fn decode_oid(path: &str, value: Value) -> Result<Oid, Error> {
+    let raw = de::string(path, value)?;
+    let object_format = match raw.len() {
+        40 => ObjectFormat::Sha1,
+        64 => ObjectFormat::Sha256,
+        _ => return fail(path, ErrorKind::InvalidValue),
+    };
+    Oid::new(object_format, raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+}
+
 fn decode_intent(path: &str, value: Value) -> Result<TargetIntent, Error> {
     let mut obj = Obj::new(path, value)?;
     obj.required("kind", |path, value| {
@@ -248,8 +259,14 @@ fn decode_intent(path: &str, value: Value) -> Result<TargetIntent, Error> {
     let target_kind = obj.required("target_kind", decode_enum)?;
     let query_digest = obj.required("query_digest", decode_nullable_digest)?;
     let fragment_digest = obj.required("fragment_digest", decode_nullable_digest)?;
+    let commit_path = obj.field("commit_oid");
+    let commit_oid = obj
+        .take_optional("commit_oid")
+        .map(|value| decode_oid(&commit_path, value))
+        .transpose()?;
     obj.finish()?;
     Ok(TargetIntent {
+        commit_oid,
         path: target_path,
         target_kind,
         query_digest,

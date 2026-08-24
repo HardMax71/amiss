@@ -12,7 +12,7 @@ use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
-use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
 };
@@ -31,6 +31,7 @@ fn engine() -> EngineProvenance {
 fn repo_intent(path: &str) -> Intent {
     Intent {
         kind: IntentKind::RepositoryPath,
+        commit_oid: None,
         repository_path: RepoPath::new(path.to_owned()),
         target_kind: Some(TargetKind::Either),
         external_scheme: None,
@@ -379,6 +380,31 @@ fn every_missing_reason_emits_the_structural_finding() {
 }
 
 #[test]
+fn immutable_commits_keep_separate_structural_finding_keys() {
+    let mut first = missing_spec("d.md", "absent.md");
+    first.block = "two immutable references".to_owned();
+    first.intent.kind = IntentKind::SameRepositoryGithub;
+    first.intent.commit_oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40));
+    let mut second = missing_spec("d.md", "absent.md");
+    second.block = first.block.clone();
+    second.intent.kind = IntentKind::SameRepositoryGithub;
+    second.intent.commit_oid = Oid::new(ObjectFormat::Sha1, "b".repeat(40));
+
+    let findings = evaluate(
+        &[],
+        &comparisons(Vec::new(), vec![observation(&first), observation(&second)]),
+        Profile::Observe,
+    );
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|finding| finding.kind() == FindingKind::ExplicitTargetMissing)
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn unknown_attribution_needs_unequal_facts_on_one_key() {
     let base = missing_spec("d.md", "absent.md");
     let mut doubled = missing_spec("d.md", "absent.md");
@@ -604,7 +630,7 @@ fn owner(raw: &str) -> amiss_wire::model::OwnerId {
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn tree() -> amiss_wire::model::TreeIdentity {
-    amiss_wire::model::TreeIdentity::new(amiss_wire::model::ObjectFormat::Sha1, "a".repeat(40))
+    amiss_wire::model::TreeIdentity::new(ObjectFormat::Sha1, "a".repeat(40))
         .expect("a tree identity")
 }
 
@@ -619,6 +645,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
         document: amiss_wire::model::RepoPathText::new("d.md".to_owned()).expect("path"),
         source_construct: SourceConstruct::InlineLink,
         normalized_target_intent: amiss_wire::controls::TargetIntent {
+            commit_oid: None,
             path: amiss_wire::model::RepoPathText::new("absent.md".to_owned()).expect("path"),
             target_kind: TargetKind::Either,
             query_digest: None,

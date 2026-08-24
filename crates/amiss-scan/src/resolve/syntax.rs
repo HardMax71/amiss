@@ -18,6 +18,7 @@ pub(super) fn same_repo_suffix<'a>(path_part: &'a str, host: &str) -> Option<&'a
 pub(super) fn unsupported_intent(query: Option<String>, fragment: Option<String>) -> Intent {
     Intent {
         kind: IntentKind::Unsupported,
+        commit_oid: None,
         repository_path: None,
         target_kind: None,
         external_scheme: None,

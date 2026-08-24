@@ -112,6 +112,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
             document: repo_path_text(document_text),
             source_construct: SourceConstruct::InlineLink,
             normalized_target_intent: TargetIntent {
+                commit_oid: None,
                 path: repo_path_text(target_text.clone()),
                 target_kind: TargetKind::Either,
                 query_digest: None,
@@ -147,6 +148,7 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
         external_destination: None,
         intent: Intent {
             kind: IntentKind::RepositoryPath,
+            commit_oid: None,
             repository_path: Some(target.clone()),
             target_kind: Some(TargetKind::Either),
             external_scheme: None,

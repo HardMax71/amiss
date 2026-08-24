@@ -21,6 +21,7 @@ use crate::route::candidates;
 mod anchor;
 mod content;
 mod forge;
+mod history;
 mod line;
 mod site;
 mod syntax;
@@ -42,6 +43,7 @@ pub const TARGET_LINE_PROJECTION_DOMAIN: &str = "amiss/scanner-target-line-proje
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Intent {
     pub kind: IntentKind,
+    pub commit_oid: Option<Oid>,
     pub repository_path: Option<RepoPath>,
     pub target_kind: Option<TargetKind>,
     pub external_scheme: Option<String>,
@@ -54,7 +56,7 @@ pub type Resolution = WireResolution<RepoPath>;
 
 /// The trusted run context for same-repository recognition: the declared
 /// host, dialect and object format, lowercase owner and repository, the two
-/// exact full branch refs, and the candidate commit for OID-pinned forms.
+/// exact full branch refs.
 /// Without it every absolute forge URL remains an external URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ForgeContext {
@@ -65,7 +67,6 @@ pub struct ForgeContext {
     pub repository: String,
     pub candidate_ref: String,
     pub default_ref: String,
-    pub candidate_oid: Option<Oid>,
 }
 
 /// Referenced targets are read once per path and Git object within one scan
@@ -74,7 +75,9 @@ pub struct ForgeContext {
 pub struct TargetCache {
     scope: Option<Arc<()>>,
     read: BTreeMap<RepoPath, CachedContent>,
+    historical_read: BTreeMap<Oid, BTreeMap<RepoPath, CachedContent>>,
     declarations: BTreeMap<RepoPath, Declarations>,
+    historical_commits: BTreeMap<Oid, Option<Oid>>,
 }
 
 impl TargetCache {
@@ -87,7 +90,9 @@ impl TargetCache {
             return;
         }
         self.read.clear();
+        self.historical_read.clear();
         self.declarations.clear();
+        self.historical_commits.clear();
         self.scope = Some(Arc::clone(scope));
     }
 }
@@ -99,6 +104,7 @@ pub struct Resolver<'a> {
     scan: &'a mut ScanResources,
     cache: &'a mut TargetCache,
     snapshot: &'a SnapshotDiscovery,
+    commit_oid: Option<Oid>,
 }
 
 impl<'a> Resolver<'a> {
@@ -116,6 +122,7 @@ impl<'a> Resolver<'a> {
             scan,
             cache,
             snapshot,
+            commit_oid: None,
         }
     }
 
@@ -163,6 +170,7 @@ impl<'a> Resolver<'a> {
             return Ok((
                 Intent {
                     kind: IntentKind::SiteRoute,
+                    commit_oid: None,
                     repository_path: None,
                     target_kind: None,
                     external_scheme: None,
@@ -256,6 +264,7 @@ fn absolute(
     Ok((
         Intent {
             kind: IntentKind::ExternalUrl,
+            commit_oid: None,
             repository_path: None,
             target_kind: None,
             external_scheme: Some(scheme.to_ascii_lowercase()),
@@ -300,6 +309,7 @@ fn native(
 
     let intent = Intent {
         kind: IntentKind::RepositoryPath,
+        commit_oid: None,
         repository_path: Some(joined.clone()),
         target_kind: Some(target_kind),
         external_scheme: None,
@@ -475,6 +485,7 @@ fn self_target(
     };
     let intent = Intent {
         kind: IntentKind::RepositoryPath,
+        commit_oid: None,
         repository_path: Some(document_path.clone()),
         target_kind: Some(self_kind),
         external_scheme: None,

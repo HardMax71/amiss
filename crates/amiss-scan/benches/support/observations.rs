@@ -49,6 +49,7 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
         external_destination: None,
         intent: Intent {
             kind: IntentKind::RepositoryPath,
+            commit_oid: None,
             repository_path: Some(target.clone()),
             target_kind: Some(TargetKind::Either),
             external_scheme: None,

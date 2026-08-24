@@ -321,11 +321,12 @@ fn conclude(
             unique_path_pairs(&base.0.entries, &candidate.0.entries)
         });
     for observation in &mut candidate_side.observations {
-        if let Resolution::Missing(Missing::PathNotFound {
-            path,
-            same_object_at,
-            ..
-        }) = &mut observation.resolution
+        if observation.intent.commit_oid.is_none()
+            && let Resolution::Missing(Missing::PathNotFound {
+                path,
+                same_object_at,
+                ..
+            }) = &mut observation.resolution
         {
             *same_object_at = relocations.get(path).cloned();
         }

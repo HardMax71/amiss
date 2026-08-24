@@ -45,7 +45,6 @@ fn spec_to_rest() -> ForgeContext {
         repository: "spec_to_rest".to_owned(),
         candidate_ref: "refs/heads/main".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: None,
     }
 }
 

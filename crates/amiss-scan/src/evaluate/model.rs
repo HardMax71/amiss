@@ -1,6 +1,6 @@
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 
 use super::finding::{key_digest, key_value};
@@ -73,6 +73,7 @@ pub(super) enum FindingKeyScope {
     Reference {
         document: RepoPath,
         source_construct: amiss_wire::controls::SourceConstruct,
+        commit_oid: Option<Oid>,
         repository_path: Option<RepoPath>,
         target_kind: Option<amiss_wire::controls::TargetKind>,
         query_digest: Option<Digest>,

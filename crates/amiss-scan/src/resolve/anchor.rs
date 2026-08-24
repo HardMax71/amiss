@@ -11,7 +11,7 @@ use crate::discovery::SnapshotDiscovery;
 use crate::document::classify;
 use crate::resources::{Aggregate, ScanResources};
 
-use super::content::Content;
+use super::content::{Content, content_cache};
 use super::line::{line_fragment, line_resolution};
 use super::transclusion::{Source, expand};
 use super::{Intent, Resolution, Resolver, lookup};
@@ -115,7 +115,8 @@ fn anchor_resolution(
 ) -> Result<Resolution, Error> {
     let unsupported =
         Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(blob.clone()));
-    let Some(cached) = resolver.cache.read.get_mut(path) else {
+    let Some(cached) = content_cache(resolver.cache, resolver.commit_oid.as_ref()).get_mut(path)
+    else {
         return Err(Error::Internal);
     };
     if cached.mode != mode || cached.content.evidence() != blob.content {
@@ -223,6 +224,7 @@ impl Resolver<'_> {
     ) -> Result<(Intent, Resolution, Option<String>), Error> {
         let intent = Intent {
             kind: IntentKind::Label,
+            commit_oid: None,
             repository_path: None,
             target_kind: None,
             external_scheme: None,

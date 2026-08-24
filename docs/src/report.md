@@ -26,11 +26,12 @@ and the direct CLI currently leaves the target null. Both values enter the candi
 preimage. They describe the exact inputs the engine evaluated; their presence does not prove who
 selected or authenticated them.
 
-An `unsupported-version` resolution carries `known-commit` only when the authored forge URL names
-one full lowercase object ID in that run's declared object format and a contained repository path.
-The row preserves immutable identity; it does not claim that the historical object was available or
-read. Named refs and ambiguous ref/path splits retain the narrower `known-path` or `unknown-path`
-forms instead of being guessed into a commit.
+An exact same-repository forge URL carries an optional `commit_oid` in its target intent and
+finding-key projection. The engine resolves it only from that commit's objects already available in
+the declared Git roots. If the commit or any required object is unavailable, an
+`unsupported-version` resolution retains `known-commit` with the exact ID and contained path; it
+does not turn unavailable evidence into a missing target. Named refs and ambiguous ref/path splits
+retain the narrower `known-path` or `unknown-path` forms instead of being guessed into a commit.
 
 The sealed commit-pair path, including every provider lane, still reports
 `explicit-commit-pair` and `explicit-replay`. Provider event and publication facts remain outside
@@ -109,6 +110,8 @@ And one finding row from a real failing run, abridged to its skeleton:
 ```
 
 Findings are sorted by finding key, a domain-separated hash of kind plus scope. Every
+immutable commit identity is part of that scope, so equal paths in two commits remain different
+targets for correlation, findings, debt, and waivers. Every
 finding and error row carries a `description`: the fixed engine-owned sentence for its
 kind or code, stating what the row means and what to do about it, so no consumer needs a
 second source to act on a report. Beside it sits `fix`, a machine-applicable rewrite or

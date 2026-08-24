@@ -73,16 +73,24 @@ pub(crate) struct Bed {
     pub(crate) snapshot: SnapshotDiscovery,
 }
 
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 pub(crate) fn bed_with(limits: ScanLimits) -> Bed {
-    let dir = fixture();
+    bed_at(fixture(), 0, limits, GitLimits::CONTRACT)
+}
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+pub(crate) fn bed_at(
+    dir: CommitChain,
+    commit: usize,
+    scan_limits: ScanLimits,
+    git_limits: GitLimits,
+) -> Bed {
     let tree = Oid::new(
         ObjectFormat::Sha1,
-        dir.commits.first().unwrap().tree.clone(),
+        dir.commits.get(commit).unwrap().tree.clone(),
     )
     .unwrap();
     let repo = Repository::open(dir.root(), ObjectFormat::Sha1).unwrap();
-    let mut git_resources = GitResources::new(GitLimits::CONTRACT);
+    let mut git_resources = GitResources::new(git_limits);
     let mut scan_resources = ScanResources::new(ScanLimits::CONTRACT);
     let snapshot = discover(
         &repo,
@@ -96,7 +104,7 @@ pub(crate) fn bed_with(limits: ScanLimits) -> Bed {
         dir,
         repo,
         git_resources,
-        scan_resources: ScanResources::new(limits),
+        scan_resources: ScanResources::new(scan_limits),
         cache: TargetCache::default(),
         snapshot,
     }
@@ -115,7 +123,6 @@ pub(crate) fn github_context() -> ForgeContext {
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: None,
     }
 }
 
@@ -340,7 +347,6 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/a".to_owned(),
         default_ref: "refs/heads/a/b".to_owned(),
-        candidate_oid: None,
     };
     let (intent, row) = bed
         .run_as(
@@ -406,7 +412,6 @@ pub(crate) fn gitlab_context() -> ForgeContext {
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: None,
     }
 }
 
@@ -474,9 +479,5 @@ pub(crate) fn gitea_context() -> ForgeContext {
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: Oid::new(
-            ObjectFormat::Sha1,
-            "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned(),
-        ),
     }
 }
