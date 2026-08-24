@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
 use strum::EnumString;
 
 /// The canonical analysis-error taxonomy used by invocation refusals.
@@ -46,6 +46,9 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss render --report <path> --format <human|sarif|codequality>
+amiss refs --report <path>
+           (--target <repo-path> | --target-bytes-hex <lower-hex>)
+           [--format <human|json>]
 amiss --version";
 
 const VERSION_FLAG: &str = "--version";
@@ -60,6 +63,7 @@ pub enum Verb {
     ExternalPlan,
     ExternalAssess,
     Render,
+    Refs,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
@@ -116,6 +120,13 @@ pub struct RenderInvocation {
     pub format: OutputFormat,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RefsInvocation {
+    pub report: PathBuf,
+    pub target: RepoPath,
+    pub format: OutputFormat,
+}
+
 /// One accepted command line: a scan-shaped verb, the authoring form, or a
 /// report-bound pure form.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -125,6 +136,7 @@ pub enum Command {
     Plan(PlanInvocation),
     Assess(AssessInvocation),
     Render(RenderInvocation),
+    Refs(RefsInvocation),
 }
 
 /// The adoption metadata the engine cannot know: who owns the recorded

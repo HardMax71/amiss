@@ -50,6 +50,9 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss render --report <path> --format <human|sarif|codequality>
+amiss refs --report <path>
+           (--target <repo-path> | --target-bytes-hex <lower-hex>)
+           [--format <human|json>]
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -80,9 +83,11 @@ trust them when the short form reads ambiguous.
 | `--created-at` | UTC instant | the snapshot's and items' creation instant |
 | `--expires-at` | UTC instant | when the items expire; must be after `--created-at` |
 | `--debt-output` | path | where the minted snapshot is written; must not exist |
-| `--report` | path | the report file the plan or render form reads; foreign to every other form |
+| `--report` | path | the report file the plan, render, or refs form reads; foreign to every other form |
 | `--plan` | path | the plan file the assessment form judges; foreign to every other form |
 | `--evidence` | path | the producer observations the assessment form judges; foreign to every other form |
+| `--target` | repo-relative path | the text path whose candidate references `refs` returns |
+| `--target-bytes-hex` | lowercase even-length hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
 `--base` and `--candidate` take full commit IDs: lowercase hex, forty characters for
@@ -213,7 +218,19 @@ plan did not introduce, repeating one, or binding another plan refuses the whole
 `--format` takes `human` or `json`. Exit 0 wrote the assessment, refuted rows included,
 since the artifact is advisory data. Exit 2 means an input could not be trusted.
 
-`amiss --version` is the grammar's eighth form and stands alone: any second token makes it
+`amiss refs` asks a complete validated report which candidate occurrences refer to one
+repository path. It opens no repository and does not reinterpret prose: an occurrence matches
+when its normalized repository intent, resolved or unresolved path, resolved target, or known
+version-scoped path is the exact target. Correlation alternatives are included, so ambiguous
+pairing cannot hide a candidate occurrence. Human output names every document, source position,
+construct, resolution, and observation ID. JSON output is an array of the unchanged candidate
+`Occurrence` objects already defined by the report schema, not a new report or wire envelope.
+`--target-bytes-hex` makes raw non-UTF-8 Git paths queryable on every platform. A valid empty
+answer exits 0 even when the source report recorded blocking findings; incomplete, malformed,
+unreadable, oversized, or digest-mismatched reports exit 2. Querying writes no state and changes
+no recorded verdict.
+
+`amiss --version` is the grammar's ninth form and stands alone: any second token makes it
 an ordinary, refused invocation. It opens no repository. It prints two lines and exits 0:
 
 ```text

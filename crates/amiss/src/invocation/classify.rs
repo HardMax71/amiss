@@ -2,12 +2,12 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
 
 use super::arguments::{Gathered, Slot, duplicated};
 use super::{
     Adoption, AssessInvocation, AuthorInvocation, CandidateSelector, Code, Command, Invocation,
-    OutputFormat, PlanInvocation, ProviderIdentity, RenderInvocation, Verb,
+    OutputFormat, PlanInvocation, ProviderIdentity, RefsInvocation, RenderInvocation, Verb,
 };
 
 pub(super) fn command(
@@ -20,7 +20,7 @@ pub(super) fn command(
     }
     match gathered.verb {
         Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
-        Some(Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render) => {
+        Some(Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render | Verb::Refs) => {
             return classify_report_command(codes, gathered, format);
         }
         Some(Verb::Check | Verb::Fix | Verb::Adopt) | None => {}
@@ -104,7 +104,12 @@ fn classify_report_command(
                 format,
                 &[OutputFormat::Human, OutputFormat::Json],
                 [&gathered.report],
-                &[&gathered.plan, &gathered.evidence],
+                &[
+                    &gathered.plan,
+                    &gathered.evidence,
+                    &gathered.target,
+                    &gathered.target_bytes_hex,
+                ],
             )?;
             Ok(Command::Plan(PlanInvocation { report, format }))
         }
@@ -115,7 +120,11 @@ fn classify_report_command(
                 format,
                 &[OutputFormat::Human, OutputFormat::Json],
                 [&gathered.plan, &gathered.evidence],
-                &[&gathered.report],
+                &[
+                    &gathered.report,
+                    &gathered.target,
+                    &gathered.target_bytes_hex,
+                ],
             )?;
             Ok(Command::Assess(AssessInvocation {
                 plan,
@@ -137,9 +146,42 @@ fn classify_report_command(
                     OutputFormat::CodeQuality,
                 ],
                 [&gathered.report],
-                &[&gathered.plan, &gathered.evidence],
+                &[
+                    &gathered.plan,
+                    &gathered.evidence,
+                    &gathered.target,
+                    &gathered.target_bytes_hex,
+                ],
             )?;
             Ok(Command::Render(RenderInvocation { report, format }))
+        }
+        Some(Verb::Refs) => {
+            let [report] = classify_pure(
+                codes,
+                gathered,
+                format,
+                &[OutputFormat::Human, OutputFormat::Json],
+                [&gathered.report],
+                &[&gathered.plan, &gathered.evidence],
+            )?;
+            let target = match (
+                gathered.target.unique_value(),
+                gathered.target_bytes_hex.unique_value(),
+            ) {
+                (Some(target), None) => RepoPath::new(target.to_owned()),
+                (None, Some(hex)) if hex.len() <= 8192 && hex.len() % 2 == 0 => hex
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                    .then(|| amiss_wire::human::decode_hex(hex))
+                    .and_then(RepoPath::from_bytes),
+                (Some(_) | None, Some(_)) | (None, None) => None,
+            }
+            .ok_or_else(|| BTreeSet::from([Code::InvalidInvocation]))?;
+            Ok(Command::Refs(RefsInvocation {
+                report,
+                target,
+                format,
+            }))
         }
         Some(Verb::Check | Verb::Fix | Verb::Adopt | Verb::Claim) | None => {
             codes.insert(Code::InvalidInvocation);
@@ -172,6 +214,8 @@ fn classify_claim(
         &gathered.report,
         &gathered.plan,
         &gathered.evidence,
+        &gathered.target,
+        &gathered.target_bytes_hex,
     ];
     if foreign.iter().any(|slot| slot.occurrences > 0)
         || gathered.index > 0
@@ -207,8 +251,7 @@ fn classify_claim(
         }
     });
     let path = gathered.claim_path.unique_value().filter(|value| {
-        amiss_wire::model::RepoPath::new((*value).to_owned())
-            .is_some_and(|path| path.as_str().is_some())
+        RepoPath::new((*value).to_owned()).is_some_and(|path| path.as_str().is_some())
             && !value.contains(['&', '<', '>', '"', ' ', '%', '?', '#', '\\'])
     });
     match (repo, name, line, path) {
@@ -319,9 +362,15 @@ fn classify_profile(gathered: &Gathered) -> Validation<Profile> {
 /// and refused elsewhere, the repair form is staged-only without report
 /// flags, and the adoption form is commit-pair only without them.
 fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
-    if [&gathered.report, &gathered.plan, &gathered.evidence]
-        .iter()
-        .any(|slot| slot.occurrences > 0)
+    if [
+        &gathered.report,
+        &gathered.plan,
+        &gathered.evidence,
+        &gathered.target,
+        &gathered.target_bytes_hex,
+    ]
+    .iter()
+    .any(|slot| slot.occurrences > 0)
     {
         codes.insert(Code::InvalidInvocation);
     }

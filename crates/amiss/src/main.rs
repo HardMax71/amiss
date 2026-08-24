@@ -5,6 +5,7 @@ mod external;
 mod human;
 mod input;
 mod payload;
+mod references;
 mod render;
 mod repair;
 mod sarif;
@@ -118,6 +119,7 @@ fn main() -> ExitCode {
             invocation::Command::Plan(plan) => external::run_plan(&plan, &mut reserve),
             invocation::Command::Assess(assess) => external::run_assess(&assess, &mut reserve),
             invocation::Command::Render(render) => render::run(&render, &mut reserve),
+            invocation::Command::Refs(refs) => references::run(&refs),
         },
     }
 }
