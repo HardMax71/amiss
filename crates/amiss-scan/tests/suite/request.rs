@@ -3,6 +3,7 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
+use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, parse};
@@ -217,10 +218,9 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         "0.1.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
-        vec![amiss_fixtures::site_route(
+        vec![site_observation(
             "/guide/",
-            "docs/guide.md",
-            &["details", "intro"],
+            SiteObservation::Page("docs/guide.md", &["details", "intro"]),
         )],
     );
     let mut incomplete = valid.clone();
@@ -228,28 +228,44 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let mut unsupported = valid.clone();
     unsupported.producer_version = "1".to_owned();
     let mut invalid_route = valid.clone();
-    invalid_route.observations = vec![amiss_fixtures::site_route(
+    invalid_route.observations = vec![site_observation(
         "//other.example/guide",
-        "docs/guide.md",
-        &["intro"],
+        SiteObservation::Page("docs/guide.md", &["intro"]),
     )];
     let mut invalid_source = valid.clone();
-    invalid_source.observations = vec![amiss_fixtures::site_route(
+    invalid_source.observations = vec![site_observation(
         "/guide/",
-        "../guide.md",
-        &["intro"],
+        SiteObservation::Page("../guide.md", &["intro"]),
     )];
     let mut unsorted_anchors = valid.clone();
-    unsorted_anchors.observations = vec![amiss_fixtures::site_route(
+    unsorted_anchors.observations = vec![site_observation(
         "/guide/",
-        "docs/guide.md",
-        &["intro", "details"],
+        SiteObservation::Page("docs/guide.md", &["intro", "details"]),
     )];
     let mut duplicate_anchors = valid;
-    duplicate_anchors.observations = vec![amiss_fixtures::site_route(
+    duplicate_anchors.observations = vec![site_observation(
         "/guide/",
-        "docs/guide.md",
-        &["intro", "intro"],
+        SiteObservation::Page("docs/guide.md", &["intro", "intro"]),
+    )];
+    let fragment_redirect = semantic_evidence(
+        "site-build",
+        "0.1.0",
+        hb("test/site-output", b"site output"),
+        Some(hb("test/report", b"source report")),
+        vec![site_observation(
+            "/legacy/",
+            SiteObservation::Redirect("/guide/#intro"),
+        )],
+    );
+    let mut foreign_redirect = fragment_redirect.clone();
+    let mut self_redirect = fragment_redirect.clone();
+    foreign_redirect.observations = vec![site_observation(
+        "/legacy/",
+        SiteObservation::Redirect("//other.example/guide/"),
+    )];
+    self_redirect.observations = vec![site_observation(
+        "/legacy/",
+        SiteObservation::Redirect("/legacy/"),
     )];
 
     for (evidence, expected) in [
@@ -259,6 +275,9 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         (invalid_source, AnalysisErrorCode::ConfigurationInvalid),
         (unsorted_anchors, AnalysisErrorCode::NoncanonicalArray),
         (duplicate_anchors, AnalysisErrorCode::NoncanonicalArray),
+        (fragment_redirect, AnalysisErrorCode::ConfigurationInvalid),
+        (foreign_redirect, AnalysisErrorCode::ConfigurationInvalid),
+        (self_redirect, AnalysisErrorCode::ConfigurationInvalid),
     ] {
         let mut request = empty();
         request.semantic_evidence = vec![

@@ -30,7 +30,8 @@ A relative path resolves from the document's own directory and must stay inside 
 repository; `../../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
 with `/` is a site route, not a repository-root shorthand. It stays unsupported unless sealed,
 candidate-bound site-build evidence maps that exact route and optional decoded anchor to a scanned
-source document. Forge URLs need the complete identity group, not only the repository name. When
+source document, either directly or through a proved terminal redirect. Forge URLs need the
+complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
 dialect's spelling is converted to a path only when it names the candidate branch or, for
@@ -229,9 +230,9 @@ Version scope is equally narrow. Only the candidate version is read.
 `--default-branch-ref` supplies a second trusted spelling so the resolver can split a ref
 from its path without guessing, and a URL naming the default branch while the candidate
 ref differs is still `unsupported-version-scope`. Site generators and language-aware tools still
-own route and symbol semantics. A complete site-build producer can contribute exact positive route
-and anchor facts for the candidate; absent, ambiguous, or stale mappings remain unsupported.
-Guessing beyond that evidence would turn honest ignorance into a false pass. The
+own route and symbol semantics. A complete site-build producer can contribute exact positive route,
+anchor, and terminal-redirect facts for the candidate; absent, ambiguous, or stale mappings remain
+unsupported. Guessing beyond that evidence would turn honest ignorance into a false pass. The
 [resolver tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-scan/tests/resolve)
 pin these distinctions.
 

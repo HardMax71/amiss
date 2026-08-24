@@ -17,7 +17,12 @@ pub(super) fn resolve(
         return Ok(None);
     };
     let (route, _query, fragment) = split_components(destination);
-    let Some(SiteRoute::Unique { source, anchors }) = routes.get(route) else {
+    let page = match routes.get(route) {
+        Some(page @ SiteRoute::Page { .. }) => Some(page),
+        Some(SiteRoute::Redirect { destination }) => routes.get(destination),
+        Some(SiteRoute::Ambiguous) | None => None,
+    };
+    let Some(SiteRoute::Page { source, anchors }) = page else {
         return Ok(None);
     };
     if is_image || !resolver.snapshot.is_scanned_structured(source) {
