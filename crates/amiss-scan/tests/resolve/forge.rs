@@ -265,7 +265,8 @@ fn one_wrong_fact_makes_a_foreign_url() {
     }
 }
 
-/// A commit selector is a full lowercase object id and nothing looser.
+/// A commit selector is a full lowercase object ID. A full ID in the other
+/// format remains this repository but cannot enter the declared run.
 #[test]
 fn a_commit_selector_is_an_exact_oid() {
     let mut bed = bed();
@@ -288,6 +289,32 @@ fn a_commit_selector_is_an_exact_oid() {
             intent.kind,
             IntentKind::ExternalUrl,
             "{selector} is not a commit spelling the forge emits"
+        );
+    }
+
+    for (object_format, selector) in [
+        (ObjectFormat::Sha1, "a".repeat(64)),
+        (ObjectFormat::Sha256, "a".repeat(40)),
+    ] {
+        let context = ForgeContext {
+            object_format,
+            candidate_oid: None,
+            ..gitea_context()
+        };
+        let (intent, row) = bed
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                &format!("https://codeberg.org/acme/widgets/src/commit/{selector}/docs/guide.md"),
+            )
+            .unwrap();
+        assert_eq!(intent.kind, IntentKind::Unsupported, "{selector}");
+        assert_eq!(
+            row,
+            Resolution::UnsupportedVersion(VersionScope::UnknownPath),
+            "{selector} belongs to the other object format"
         );
     }
 }
