@@ -134,7 +134,8 @@ fn base_url(raw: &str) -> Result<Url, IntersphinxError> {
         && base.username().is_empty()
         && base.password().is_none()
         && base.query().is_none()
-        && base.fragment().is_none();
+        && base.fragment().is_none()
+        && amiss_wire::uri::http_destination_valid(base.as_str());
     if !valid {
         return Err(IntersphinxError::BaseUrl);
     }
@@ -183,12 +184,13 @@ fn label(
     let destination = base_url
         .join(&location)
         .map_err(|_defect| IntersphinxError::Destination)?;
-    if destination.as_str().len() > DESTINATION_BYTES
-        || !matches!(destination.scheme(), "http" | "https")
+    let destination = destination.as_str();
+    if destination.len() > DESTINATION_BYTES
+        || !destination.starts_with(base_url.as_str())
+        || !amiss_wire::uri::http_destination_valid(destination)
     {
         return Err(IntersphinxError::Destination);
     }
-    let destination = destination.as_str();
     Ok(Value::object(vec![
         ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
         (

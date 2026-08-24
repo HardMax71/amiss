@@ -119,3 +119,31 @@ fn invalid_or_partial_inventory_input_never_produces_evidence() {
         Err(IntersphinxError::InventoryBytes)
     ));
 }
+
+#[test]
+fn destinations_share_the_consumer_grammar_and_stay_beneath_the_base() {
+    for location in [
+        "page.html#100%",
+        "//evil.example/page.html",
+        "https://evil.example/page.html",
+        "../page.html",
+    ] {
+        let body = format!("bad-label std:label -1 {location} -\n");
+        assert!(matches!(
+            intersphinx_evidence(vec![input(
+                "python",
+                "https://docs.python.org/3/",
+                body.as_bytes(),
+            )]),
+            Err(IntersphinxError::Destination)
+        ));
+    }
+    assert!(matches!(
+        intersphinx_evidence(vec![input(
+            "python",
+            "https://docs.python.org/100%",
+            b"label std:label -1 page.html -\n",
+        )]),
+        Err(IntersphinxError::BaseUrl)
+    ));
+}
