@@ -103,6 +103,14 @@ fn invalid_or_partial_inventory_input_never_produces_evidence() {
     trailing.bytes.extend_from_slice(b"unbound trailing bytes");
     assert!(intersphinx_evidence(vec![trailing]).is_err());
 
+    let mut truncated = input(
+        "python",
+        "https://docs.python.org/3/",
+        b"alpha std:label -1 a.html -\nbeta std:label -1 b.html -\ngamma std:label -1 c.html -\n",
+    );
+    truncated.bytes.pop();
+    assert!(intersphinx_evidence(vec![truncated]).is_err());
+
     let bomb = vec![b'a'; 16_777_217];
     assert!(
         intersphinx_evidence(vec![input("python", "https://docs.python.org/3/", &bomb,)]).is_err()

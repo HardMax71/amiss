@@ -1,10 +1,10 @@
-use std::io::{Cursor, Read as _};
+use std::io::Cursor;
 use std::sync::Arc;
 
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::ArtifactId;
-use flate2::read::ZlibDecoder;
+use flate2::{Decompress, FlushDecompress, Status};
 use sphinx_inv::{SphinxInventoryReader, SphinxType, StdRole};
 use url::Url;
 
@@ -226,18 +226,48 @@ fn bounded_plain_inventory(
     let body = bytes
         .get(header_bytes..)
         .ok_or(IntersphinxError::InventoryBytes)?;
-    let mut inflater = ZlibDecoder::new(body);
+    let mut inflater = Decompress::new(true);
     let mut body_bytes = Vec::new();
-    (&mut inflater)
-        .take(decoded_limit.saturating_add(1))
-        .read_to_end(&mut body_bytes)
-        .map_err(IntersphinxError::Decode)?;
-    let decoded_length = u64::try_from(body_bytes.len()).unwrap_or(u64::MAX);
-    if decoded_length > decoded_limit
-        || inflater.total_in() != u64::try_from(body.len()).unwrap_or(u64::MAX)
-    {
-        return Err(IntersphinxError::InventoryBytes);
+    let mut output = [0_u8; 8_192];
+    loop {
+        let consumed = usize::try_from(inflater.total_in()).unwrap_or(usize::MAX);
+        let remaining = body
+            .get(consumed..)
+            .ok_or(IntersphinxError::InventoryBytes)?;
+        let before_in = inflater.total_in();
+        let before_out = inflater.total_out();
+        let status = inflater
+            .decompress(
+                remaining,
+                &mut output,
+                if remaining.is_empty() {
+                    FlushDecompress::Finish
+                } else {
+                    FlushDecompress::None
+                },
+            )
+            .map_err(|defect| IntersphinxError::Decode(defect.into()))?;
+        let produced = inflater
+            .total_out()
+            .checked_sub(before_out)
+            .and_then(|length| usize::try_from(length).ok())
+            .and_then(|length| output.get(..length))
+            .ok_or(IntersphinxError::InventoryBytes)?;
+        if inflater.total_out() > decoded_limit {
+            return Err(IntersphinxError::InventoryBytes);
+        }
+        body_bytes.extend_from_slice(produced);
+        if status == Status::StreamEnd {
+            if inflater.total_in() != u64::try_from(body.len()).unwrap_or(u64::MAX) {
+                return Err(IntersphinxError::InventoryBytes);
+            }
+            break;
+        }
+        if inflater.total_in() == before_in && inflater.total_out() == before_out {
+            return Err(IntersphinxError::InventoryBytes);
+        }
     }
+    let decoded_length = inflater.total_out();
     let body_text = String::from_utf8(body_bytes).map_err(|defect| {
         IntersphinxError::Decode(std::io::Error::new(std::io::ErrorKind::InvalidData, defect))
     })?;
