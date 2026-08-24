@@ -25,6 +25,13 @@ to which branch-scoped controls were matched. Either may be null on a local, sel
 and the direct CLI currently leaves the target null. Both values enter the candidate-identity
 preimage. They describe the exact inputs the engine evaluated; their presence does not prove who
 selected or authenticated them.
+
+An `unsupported-version` resolution carries `known-commit` only when the authored forge URL names
+one full lowercase object ID in that run's declared object format and a contained repository path.
+The row preserves immutable identity; it does not claim that the historical object was available or
+read. Named refs and ambiguous ref/path splits retain the narrower `known-path` or `unknown-path`
+forms instead of being guessed into a commit.
+
 The sealed commit-pair path, including every provider lane, still reports
 `explicit-commit-pair` and `explicit-replay`. Provider event and publication facts remain outside
 the engine report.

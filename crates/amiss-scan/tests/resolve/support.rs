@@ -110,6 +110,7 @@ pub(crate) fn github_context() -> ForgeContext {
     ForgeContext {
         host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
+        object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
@@ -184,6 +185,22 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
     let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = row else {
         panic!("unexpected resolution: {row:?}");
     };
+    assert_eq!(path.as_str(), Some("docs/guide.md"));
+
+    let commit = "0123456789012345678901234567890123456789";
+    let (_intent, row) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!("https://github.com/acme/widgets/blob/{commit}/docs/guide.md"),
+        )
+        .unwrap_or_else(|_d| panic!());
+    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = row else {
+        panic!("unexpected resolution: {row:?}");
+    };
+    assert_eq!(commit_oid.as_str(), commit);
     assert_eq!(path.as_str(), Some("docs/guide.md"));
 }
 
@@ -318,6 +335,7 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
     let context = ForgeContext {
         host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
+        object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/a".to_owned(),
@@ -383,6 +401,7 @@ pub(crate) fn gitlab_context() -> ForgeContext {
     ForgeContext {
         host: "gitlab.com".to_owned(),
         dialect: ForgeDialect::Gitlab,
+        object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
@@ -435,21 +454,29 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
             "https://gitlab.com/acme/widgets/-/blob/0123456789012345678901234567890123456789/docs/guide.md",
         )
         .unwrap_or_else(|_defect| panic!());
+    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = pinned
+    else {
+        panic!("unexpected resolution: {pinned:?}");
+    };
     assert_eq!(
-        pinned,
-        Resolution::UnsupportedVersion(VersionScope::UnknownPath),
-        "a commit-pinned link matches neither trusted ref, exactly as on github"
+        commit_oid.as_str(),
+        "0123456789012345678901234567890123456789"
     );
+    assert_eq!(path.as_str(), Some("docs/guide.md"));
 }
 
 pub(crate) fn gitea_context() -> ForgeContext {
     ForgeContext {
         host: "codeberg.org".to_owned(),
         dialect: ForgeDialect::Gitea,
+        object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),
         default_ref: "refs/heads/main".to_owned(),
-        candidate_oid: Some("6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned()),
+        candidate_oid: Oid::new(
+            ObjectFormat::Sha1,
+            "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned(),
+        ),
     }
 }

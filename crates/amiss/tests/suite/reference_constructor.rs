@@ -128,6 +128,7 @@ fn context(
     ForgeContext {
         host: host.to_owned(),
         dialect,
+        object_format: ObjectFormat::Sha1,
         owner: owner.to_owned(),
         repository: name.to_owned(),
         candidate_ref: candidate_ref.to_owned(),
@@ -198,10 +199,11 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
     run_context.candidate_oid = case
         .get("candidate_oid")
         .and_then(Value::as_str)
-        .map(str::to_owned);
+        .and_then(|raw| Oid::new(ObjectFormat::Sha1, raw.to_owned()));
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     let expected = case.get("expected").unwrap();
     let expected_path = expected.get("path").and_then(Value::as_str);
+    let expected_commit = expected.get("commit_oid").and_then(Value::as_str);
     match text(expected, "status") {
         "candidate" => {
             let Resolution::Resolved(target) = &row else {
@@ -221,14 +223,25 @@ fn split_case(bed: &mut Bed, case: &Value, id: &str) {
                 "{id}"
             );
         }
-        "unsupported-version-scope" => match (&row, expected_path) {
-            (
-                Resolution::UnsupportedVersion(VersionScope::KnownPath { path }),
-                Some(expected_path),
-            ) => assert_eq!(path.as_str(), Some(expected_path), "{id}"),
-            (Resolution::UnsupportedVersion(VersionScope::UnknownPath), None) => {}
-            _ => panic!("{id}: unexpected version-scoped outcome: {row:?}"),
-        },
+        "unsupported-version-scope" => {
+            let Resolution::UnsupportedVersion(scope) = &row else {
+                panic!("{id}: unexpected version-scoped outcome: {row:?}");
+            };
+            match scope {
+                VersionScope::KnownPath { path } => {
+                    assert_eq!(path.as_str(), expected_path, "{id}");
+                    assert_eq!(expected_commit, None, "{id}");
+                }
+                VersionScope::KnownCommit { commit_oid, path } => {
+                    assert_eq!(Some(commit_oid.as_str()), expected_commit, "{id}");
+                    assert_eq!(path.as_str(), expected_path, "{id}");
+                }
+                VersionScope::UnknownPath => {
+                    assert_eq!(expected_path, None, "{id}");
+                    assert_eq!(expected_commit, None, "{id}");
+                }
+            }
+        }
         "invalid" => {
             assert!(
                 matches!(&row, Resolution::Invalid(_)),
@@ -374,7 +387,10 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
         "refs/heads/main",
         "refs/heads/main",
     );
-    run_context.candidate_oid = Some("6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned());
+    run_context.candidate_oid = Oid::new(
+        ObjectFormat::Sha1,
+        "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22".to_owned(),
+    );
     let url = format!("https://{host}/{}", text(case, "suffix"));
     let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     match text(case, "expected") {

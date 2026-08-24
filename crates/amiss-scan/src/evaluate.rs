@@ -104,10 +104,29 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
         Resolution::UnsupportedSemantics(semantics) => {
             unsupported_semantics_value(resolution.discriminant().as_ref(), semantics)
         }
-        Resolution::UnsupportedVersion(scope) => resolution_object(
-            resolution.discriminant().as_ref(),
-            vec![("scope", version_scope_value(scope))],
-        ),
+        Resolution::UnsupportedVersion(scope) => {
+            let mut fields = vec![(
+                "kind".to_owned(),
+                Value::string(scope.discriminant().as_ref().to_owned()),
+            )];
+            match scope {
+                VersionScope::KnownPath { path } => {
+                    fields.push(("path".to_owned(), path.to_value()));
+                }
+                VersionScope::KnownCommit { commit_oid, path } => {
+                    fields.push((
+                        "commit_oid".to_owned(),
+                        Value::string(commit_oid.as_str().to_owned()),
+                    ));
+                    fields.push(("path".to_owned(), path.to_value()));
+                }
+                VersionScope::UnknownPath => {}
+            }
+            resolution_object(
+                resolution.discriminant().as_ref(),
+                vec![("scope", Value::object(fields))],
+            )
+        }
         Resolution::Invalid(reason) => reasoned_resolution(
             resolution.discriminant().as_ref(),
             reason.as_ref(),
@@ -230,22 +249,6 @@ fn blob_content_value(content: BlobContent) -> Value {
                 Value::string(raw_digest.to_string()),
             ),
         ]),
-    }
-}
-
-fn version_scope_value(scope: &VersionScope<RepoPath>) -> Value {
-    match scope {
-        VersionScope::KnownPath { path } => Value::object(vec![
-            (
-                "kind".to_owned(),
-                Value::string(scope.discriminant().as_ref().to_owned()),
-            ),
-            ("path".to_owned(), path.to_value()),
-        ]),
-        VersionScope::UnknownPath => Value::object(vec![(
-            "kind".to_owned(),
-            Value::string(scope.discriminant().as_ref().to_owned()),
-        )]),
     }
 }
 

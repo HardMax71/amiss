@@ -1,5 +1,5 @@
 use amiss_wire::controls::TargetKind;
-use amiss_wire::model::{ForgeDialect, RepoPath};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{ExternalReference, InvalidReference, VersionScope};
 use amiss_wire::uri::decode_component;
@@ -27,29 +27,36 @@ pub(super) fn resolve(
             Ok((unsupported_intent(query, fragment), resolution))
         }
         ForgeRoute::Same(matched) => {
-            let resolution = matched
-                .candidate
-                .then(|| {
-                    lookup(
-                        resolver,
-                        &matched.path,
-                        matched.target_kind,
-                        query.as_deref(),
-                        fragment.as_deref(),
-                        Some(context.dialect),
-                    )
-                })
-                .transpose()?
-                .unwrap_or_else(|| {
-                    Resolution::UnsupportedVersion(VersionScope::KnownPath {
-                        path: matched.path.clone(),
+            let ForgeMatch {
+                intent_kind,
+                target_kind,
+                version,
+                path,
+            } = matched;
+            let resolution = match version {
+                ForgeVersion::Candidate => lookup(
+                    resolver,
+                    &path,
+                    target_kind,
+                    query.as_deref(),
+                    fragment.as_deref(),
+                    Some(context.dialect),
+                )?,
+                ForgeVersion::OtherNamedRef => {
+                    Resolution::UnsupportedVersion(VersionScope::KnownPath { path: path.clone() })
+                }
+                ForgeVersion::Commit(commit_oid) => {
+                    Resolution::UnsupportedVersion(VersionScope::KnownCommit {
+                        commit_oid,
+                        path: path.clone(),
                     })
-                });
+                }
+            };
             Ok((
                 Intent {
-                    kind: matched.intent_kind,
-                    repository_path: Some(matched.path),
-                    target_kind: Some(matched.target_kind),
+                    kind: intent_kind,
+                    repository_path: Some(path),
+                    target_kind: Some(target_kind),
                     external_scheme: None,
                     query,
                     fragment,
@@ -69,8 +76,20 @@ enum ForgeRoute {
 struct ForgeMatch {
     intent_kind: IntentKind,
     target_kind: TargetKind,
-    candidate: bool,
+    version: ForgeVersion,
     path: RepoPath,
+}
+
+enum ForgeVersion {
+    Candidate,
+    OtherNamedRef,
+    Commit(Oid),
+}
+
+#[derive(Clone, Copy)]
+enum TailVersions {
+    Named,
+    NamedOrCommit,
 }
 
 /// A recognized URL that is not this repository: a valid external HTTPS
@@ -115,15 +134,16 @@ fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     };
 
     let tolerate_terminal_slash = target_kind == TargetKind::Tree;
-    match trusted_split(
+    match versioned_split(
         identity,
         tolerate_terminal_slash,
         segments.get(3..).unwrap_or_default(),
+        TailVersions::NamedOrCommit,
     ) {
-        Ok((candidate, path)) => ForgeRoute::Same(ForgeMatch {
+        Ok((version, path)) => ForgeRoute::Same(ForgeMatch {
             intent_kind: IntentKind::SameRepositoryGithub,
             target_kind,
-            candidate,
+            version,
             path,
         }),
         Err(resolution) => ForgeRoute::Unsupported(resolution),
@@ -170,11 +190,16 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let tail = segments
         .get(separator.saturating_add(2)..)
         .unwrap_or_default();
-    match trusted_split(identity, target_kind == TargetKind::Tree, tail) {
-        Ok((candidate, path)) => ForgeRoute::Same(ForgeMatch {
+    match versioned_split(
+        identity,
+        target_kind == TargetKind::Tree,
+        tail,
+        TailVersions::NamedOrCommit,
+    ) {
+        Ok((version, path)) => ForgeRoute::Same(ForgeMatch {
             intent_kind: IntentKind::SameRepositoryGitlab,
             target_kind,
-            candidate,
+            version,
             path,
         }),
         Err(resolution) => ForgeRoute::Unsupported(resolution),
@@ -218,16 +243,22 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let split = match *selector {
         "branch" => {
             let branch_tail = segments.get(4..).unwrap_or_default();
-            trusted_split(identity, directory_hint, branch_tail)
+            versioned_split(identity, directory_hint, branch_tail, TailVersions::Named)
         }
         "commit" => {
             let pinned = segments.get(4).copied().unwrap_or_default();
-            if !oid_shaped(pinned) {
+            let Some(commit_oid) = Oid::new(identity.object_format, pinned.to_owned()) else {
                 return ForgeRoute::Foreign;
-            }
+            };
             match decoded_tail(directory_hint, raw_tail) {
-                Ok(decoded) => contained_path(&decoded)
-                    .map(|path| (identity.candidate_oid.as_deref() == Some(pinned), path)),
+                Ok(decoded) => contained_path(&decoded).map(|path| {
+                    let version = if identity.candidate_oid.as_ref() == Some(&commit_oid) {
+                        ForgeVersion::Candidate
+                    } else {
+                        ForgeVersion::Commit(commit_oid)
+                    };
+                    (version, path)
+                }),
                 Err(resolution) => Err(resolution),
             }
         }
@@ -235,36 +266,25 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
         _ => return ForgeRoute::Foreign,
     };
     match split {
-        Ok((candidate, path)) => ForgeRoute::Same(ForgeMatch {
+        Ok((version, path)) => ForgeRoute::Same(ForgeMatch {
             intent_kind: IntentKind::SameRepositoryGitea,
             target_kind,
-            candidate,
+            version,
             path,
         }),
         Err(resolution) => ForgeRoute::Unsupported(resolution),
     }
 }
 
-/// A full lowercase object id in either frozen format; anything else after
-/// `src/commit/` is not a spelling the forge emits.
-fn oid_shaped(segment: &str) -> bool {
-    matches!(segment.len(), 40 | 64)
-        && segment
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-/// Decodes the suffix after the form segment, removes a lone terminal empty
-/// segment where the dialect's form tolerates one, matches the two trusted
-/// refs by whole segments, and validates the remaining path before deciding
-/// candidate or default.
-fn trusted_split(
+/// Splits a decoded tail through the two trusted refs and, where the forge
+/// form permits it, one literal full object ID. Ref/ID ambiguity is refused.
+fn versioned_split(
     identity: &ForgeContext,
     tolerate_terminal_slash: bool,
     raw_tail: &[&str],
-) -> Result<(bool, RepoPath), Resolution> {
+    versions: TailVersions,
+) -> Result<(ForgeVersion, RepoPath), Resolution> {
     let decoded = decoded_tail(tolerate_terminal_slash, raw_tail)?;
-
     let candidate = identity
         .candidate_ref
         .strip_prefix("refs/heads/")
@@ -275,21 +295,43 @@ fn trusted_split(
         .unwrap_or(identity.default_ref.as_str());
     let candidate_split = split_after(&decoded, candidate);
     let default_split = split_after(&decoded, default);
-    let (matched_candidate, remaining) = match (candidate_split, default_split) {
-        (Some(after_candidate), Some(_after_default)) => {
-            if candidate == default {
-                (true, after_candidate)
-            } else {
-                return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
-            }
-        }
-        (Some(after), None) => (true, after),
-        (None, Some(after)) => (false, after),
-        (None, None) => {
-            return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
-        }
+    let oid_length = match identity.object_format {
+        ObjectFormat::Sha1 => 40,
+        ObjectFormat::Sha256 => 64,
     };
-    Ok((matched_candidate, contained_path(remaining)?))
+    let decoded_oid = decoded
+        .first()
+        .filter(|_segment| matches!(versions, TailVersions::NamedOrCommit))
+        .filter(|segment| segment.len() == oid_length)
+        .and_then(|segment| std::str::from_utf8(segment).ok())
+        .and_then(|segment| Oid::new(identity.object_format, segment.to_owned()));
+
+    if decoded_oid.is_some() && (candidate_split.is_some() || default_split.is_some()) {
+        return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
+    }
+    let literal_oid = raw_tail
+        .first()
+        .zip(decoded.first())
+        .is_some_and(|(raw, value)| raw.as_bytes() == value.as_slice());
+    if let Some(commit_oid) = decoded_oid.filter(|_oid| literal_oid) {
+        let path = contained_path(decoded.get(1..).unwrap_or_default())?;
+        let version = if identity.candidate_oid.as_ref() == Some(&commit_oid) {
+            ForgeVersion::Candidate
+        } else {
+            ForgeVersion::Commit(commit_oid)
+        };
+        return Ok((version, path));
+    }
+    match (candidate_split, default_split) {
+        (Some(after_candidate), Some(_after_default)) if candidate == default => {
+            Ok((ForgeVersion::Candidate, contained_path(after_candidate)?))
+        }
+        (Some(after), None) => Ok((ForgeVersion::Candidate, contained_path(after)?)),
+        (None, Some(after)) => Ok((ForgeVersion::OtherNamedRef, contained_path(after)?)),
+        (Some(_), Some(_)) | (None, None) => {
+            Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath))
+        }
+    }
 }
 
 /// One decode per segment, empties refused, a lone terminal empty segment

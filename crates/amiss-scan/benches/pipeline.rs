@@ -148,6 +148,7 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
     let context = ForgeContext {
         host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
+        object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
         candidate_ref: "refs/heads/feature/x".to_owned(),

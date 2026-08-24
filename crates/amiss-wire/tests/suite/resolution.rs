@@ -1,4 +1,5 @@
 use amiss_wire::digest::hb;
+use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::resolution::{
     BlobContent, BlobContentTag, BlobMode, BlobTarget, ExternalReference, InvalidReference,
     Missing, MissingTag, Resolution, ResolutionTag, Target, TargetTag, UnsupportedSemantics,
@@ -12,6 +13,10 @@ fn payload_variant_names_are_generated_in_kebab_case() {
     let target = UnsupportedTarget::Gitlink { path: () };
     let semantics = UnsupportedSemantics::<()>::CodeFragment(Target::Tree { path: () });
     let scope = VersionScope::KnownPath { path: () };
+    let commit_scope = VersionScope::KnownCommit {
+        commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap_or_else(|| panic!()),
+        path: (),
+    };
     let resolution = Resolution::TypeMismatch(Target::Tree { path: () });
 
     assert_eq!(
@@ -21,6 +26,7 @@ fn payload_variant_names_are_generated_in_kebab_case() {
     assert_eq!(target.discriminant().as_ref(), "gitlink");
     assert_eq!(semantics.discriminant().as_ref(), "code-fragment");
     assert_eq!(scope.discriminant().as_ref(), "known-path");
+    assert_eq!(commit_scope.discriminant().as_ref(), "known-commit");
     assert_eq!(resolution.discriminant().as_ref(), "type-mismatch");
 }
 
