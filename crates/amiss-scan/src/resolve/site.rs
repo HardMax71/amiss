@@ -17,10 +17,16 @@ pub(super) fn resolve(
         return Ok(None);
     };
     let (route, _query, fragment) = split_components(destination);
-    let page = match routes.get(route) {
-        Some(page @ SiteRoute::Page { .. }) => Some(page),
-        Some(SiteRoute::Redirect { destination }) => routes.get(destination),
-        Some(SiteRoute::Ambiguous) | None => None,
+    let (page, fragment) = match routes.get(route) {
+        Some(page @ SiteRoute::Page { .. }) => (Some(page), fragment.as_deref()),
+        Some(SiteRoute::Redirect {
+            destination,
+            fragment: redirected_fragment,
+        }) => (
+            routes.get(destination),
+            redirected_fragment.as_deref().or(fragment.as_deref()),
+        ),
+        Some(SiteRoute::Ambiguous) | None => (None, None),
     };
     let Some(SiteRoute::Page { source, anchors }) = page else {
         return Ok(None);
@@ -29,7 +35,7 @@ pub(super) fn resolve(
         return Ok(None);
     }
     if let Some(fragment) = fragment.filter(|fragment| !fragment.is_empty()) {
-        let Some(decoded) = decode_fragment(&fragment) else {
+        let Some(decoded) = decode_fragment(fragment) else {
             return Ok(None);
         };
         if anchors

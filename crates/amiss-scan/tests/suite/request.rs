@@ -247,25 +247,30 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         "/guide/",
         SiteObservation::Page("docs/guide.md", &["intro", "intro"]),
     )];
-    let fragment_redirect = semantic_evidence(
+    let malformed_fragment_redirect = semantic_evidence(
         "site-build",
         "0.1.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![site_observation(
             "/legacy/",
-            SiteObservation::Redirect("/guide/#intro"),
+            SiteObservation::Redirect("/guide/#bad%fragment"),
         )],
     );
-    let mut foreign_redirect = fragment_redirect.clone();
-    let mut self_redirect = fragment_redirect.clone();
+    let mut query_redirect = malformed_fragment_redirect.clone();
+    let mut foreign_redirect = malformed_fragment_redirect.clone();
+    let mut self_redirect = malformed_fragment_redirect.clone();
+    query_redirect.observations = vec![site_observation(
+        "/legacy/",
+        SiteObservation::Redirect("/guide/?language=en"),
+    )];
     foreign_redirect.observations = vec![site_observation(
         "/legacy/",
         SiteObservation::Redirect("//other.example/guide/"),
     )];
     self_redirect.observations = vec![site_observation(
         "/legacy/",
-        SiteObservation::Redirect("/legacy/"),
+        SiteObservation::Redirect("/legacy/#intro"),
     )];
 
     for (evidence, expected) in [
@@ -275,7 +280,11 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         (invalid_source, AnalysisErrorCode::ConfigurationInvalid),
         (unsorted_anchors, AnalysisErrorCode::NoncanonicalArray),
         (duplicate_anchors, AnalysisErrorCode::NoncanonicalArray),
-        (fragment_redirect, AnalysisErrorCode::ConfigurationInvalid),
+        (
+            malformed_fragment_redirect,
+            AnalysisErrorCode::ConfigurationInvalid,
+        ),
+        (query_redirect, AnalysisErrorCode::ConfigurationInvalid),
         (foreign_redirect, AnalysisErrorCode::ConfigurationInvalid),
         (self_redirect, AnalysisErrorCode::ConfigurationInvalid),
     ] {
