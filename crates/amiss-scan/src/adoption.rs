@@ -53,6 +53,7 @@ pub fn reproduce(
     let discovery =
         crate::discovery::discover_scoped(repo, git, &mut scan, &includes, &tree, &documents)
             .map_err(|defect| detail(&defect, None))?;
+    let semantic = crate::semantic::Context::default();
     let (side, failures) = side_observations(
         repo,
         git,
@@ -60,7 +61,10 @@ pub fn reproduce(
         ObservationContext {
             engine,
             forge,
-            semantic: &crate::semantic::Context::default(),
+            semantic: crate::semantic::View {
+                labels: semantic.labels.as_ref(),
+                routes: None,
+            },
         },
         &discovery,
         None,

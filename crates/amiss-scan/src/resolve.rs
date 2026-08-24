@@ -22,6 +22,7 @@ mod anchor;
 mod content;
 mod forge;
 mod line;
+mod site;
 mod syntax;
 mod transclusion;
 
@@ -190,7 +191,7 @@ impl<'a> Resolver<'a> {
     pub(crate) fn resolve_scanned(
         &mut self,
         context: Option<&ForgeContext>,
-        semantic: &crate::semantic::Context,
+        semantic: crate::semantic::View<'_>,
         adapter: Adapter,
         document_path: &RepoPath,
         occurrence: &crate::scan::ScannedOccurrence,
@@ -198,18 +199,28 @@ impl<'a> Resolver<'a> {
         if occurrence.occurrence.construct == amiss_wire::controls::SourceConstruct::RstRefRole {
             return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);
         }
-        self.resolve(
+        let is_image = occurrence.occurrence.construct.is_image();
+        let (intent, mut resolution) = self.resolve(
             context,
             adapter,
             document_path,
-            occurrence.occurrence.construct.is_image(),
+            is_image,
             &occurrence.occurrence.semantic_destination,
-        )
-        .map(|(intent, resolution)| {
-            let destination = matches!(resolution, Resolution::External(_))
-                .then(|| occurrence.occurrence.semantic_destination.clone());
-            (intent, resolution, destination)
-        })
+        )?;
+        if matches!(
+            resolution,
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
+        ) && let Some(evidence) = site::resolve(
+            self,
+            semantic,
+            &occurrence.occurrence.semantic_destination,
+            is_image,
+        )? {
+            resolution = evidence;
+        }
+        let destination = matches!(resolution, Resolution::External(_))
+            .then(|| occurrence.occurrence.semantic_destination.clone());
+        Ok((intent, resolution, destination))
     }
 }
 

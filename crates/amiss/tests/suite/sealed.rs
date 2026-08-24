@@ -348,6 +348,97 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
 }
 
 #[test]
+fn sealed_site_build_evidence_resolves_candidate_routes_and_anchors() {
+    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) ![image](/guide/)\n";
+    let fixture = amiss_fixtures::commit_pair(
+        &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
+        &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
+    )
+    .unwrap();
+    let format = ObjectFormat::Sha1;
+    let evaluation = EvaluationRequest::commit_pair(
+        Profile::Observe,
+        format,
+        Oid::new(format, fixture.base.clone()).unwrap(),
+        Oid::new(format, fixture.candidate.clone()).unwrap(),
+    );
+    let identity = commit_candidate_identity_digest(
+        &evaluation,
+        &Oid::new(format, fixture.base_tree.clone()).unwrap(),
+        &Oid::new(format, fixture.candidate_tree.clone()).unwrap(),
+    )
+    .unwrap();
+    let evidence = amiss_wire::semantic::envelope(SemanticEvidence {
+        candidate_identity_digest: identity,
+        source_report_payload_digest: Some(hb("amiss-test/report", b"source report")),
+        producer_kind: id("site-build"),
+        producer_identity: id("amiss-test"),
+        producer_version: "0.1.0".to_owned(),
+        input_digest: hb("amiss-test/site-output", b"site output"),
+        complete: true,
+        observations: vec![
+            amiss_fixtures::site_route("/guide/", "docs/guide.md", &["intro"]),
+            amiss_fixtures::site_route("/stale/", "docs/removed.md", &[]),
+            amiss_fixtures::site_route("/duplicate/", "docs/guide.md", &[]),
+            amiss_fixtures::site_route("/duplicate/", "docs/index.md", &[]),
+        ],
+    })
+    .unwrap();
+    let streams = RequestStreams {
+        evaluation: evaluation.canonical_bytes().unwrap(),
+        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
+        controls: ControlsRequest {
+            semantic_evidence: vec![evidence],
+            ..ControlsRequest::default()
+        }
+        .canonical_bytes()
+        .unwrap(),
+    };
+    let output = run(Some(&fixture.repo), &framed(&streams));
+    assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let routes: Vec<&serde_json::Value> = envelope["payload"]["observations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| {
+            row.pointer("/candidate/intent/kind") == Some(&serde_json::json!("site-route"))
+        })
+        .collect();
+    assert_eq!(routes.len(), 7);
+    assert!(routes.iter().all(|row| {
+        row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
+    }));
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|row| {
+                row.pointer("/candidate/resolution/target/path")
+                    == Some(&serde_json::json!("docs/guide.md"))
+            })
+            .count(),
+        2,
+        "only the exact route and its published anchor resolve: {routes:?}"
+    );
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|row| {
+                row.pointer("/candidate/resolution/reason")
+                    == Some(&serde_json::json!("site-route"))
+            })
+            .count(),
+        5,
+        "unproved route uses remain explicitly unsupported: {routes:?}"
+    );
+    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 2);
+    assert_eq!(
+        envelope["payload"]["summary"]["references"]["unsupported"],
+        5
+    );
+}
+
+#[test]
 fn stale_intersphinx_evidence_refuses_the_run() {
     let (fixture, evaluation, semantic) = intersphinx_case();
     let stale = amiss_wire::semantic::envelope(SemanticEvidence {

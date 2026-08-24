@@ -4,7 +4,7 @@
 )]
 
 use amiss_scan::request::controls;
-use amiss_wire::digest::hb;
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::AnalysisErrorCode;
@@ -64,7 +64,7 @@ const fn empty() -> ControlsRequest {
     }
 }
 
-fn supplied(doc: &str, expected: amiss_wire::digest::Digest) -> SuppliedControl {
+fn supplied(doc: &str, expected: Digest) -> SuppliedControl {
     SuppliedControl {
         value: parse(doc.as_bytes()).expect("the fixture is JSON"),
         expected_digest: expected,
@@ -72,26 +72,24 @@ fn supplied(doc: &str, expected: amiss_wire::digest::Digest) -> SuppliedControl 
     }
 }
 
-fn inventory_evidence() -> SemanticEvidence {
+fn semantic_evidence(
+    producer_kind: &str,
+    producer_version: &str,
+    input_digest: Digest,
+    source_report_payload_digest: Option<Digest>,
+    observations: Vec<Value>,
+) -> SemanticEvidence {
     SemanticEvidence {
         candidate_identity_digest: hb("test/candidate", b"candidate"),
-        source_report_payload_digest: None,
-        producer_kind: ArtifactId::new("sphinx-inventory-set".to_owned())
+        source_report_payload_digest,
+        producer_kind: ArtifactId::new(producer_kind.to_owned())
             .expect("the producer kind is valid"),
         producer_identity: ArtifactId::new("amiss-test".to_owned())
             .expect("the producer identity is valid"),
-        producer_version: "1".to_owned(),
-        input_digest: hb("test/inventory", b"inventory"),
+        producer_version: producer_version.to_owned(),
+        input_digest,
         complete: true,
-        observations: vec![Value::object(vec![
-            ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
-            ("inventory".to_owned(), Value::string("python".to_owned())),
-            ("name".to_owned(), Value::string("except_star".to_owned())),
-            (
-                "destination".to_owned(),
-                Value::string("https://docs.python.org/3/reference/".to_owned()),
-            ),
-        ])],
+        observations,
     }
 }
 
@@ -171,11 +169,26 @@ fn a_wrong_constraint_digest_is_refused() {
 
 #[test]
 fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
-    let mut incomplete = inventory_evidence();
+    let valid = semantic_evidence(
+        "sphinx-inventory-set",
+        "1",
+        hb("test/inventory", b"inventory"),
+        None,
+        vec![Value::object(vec![
+            ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
+            ("inventory".to_owned(), Value::string("python".to_owned())),
+            ("name".to_owned(), Value::string("except_star".to_owned())),
+            (
+                "destination".to_owned(),
+                Value::string("https://docs.python.org/3/reference/".to_owned()),
+            ),
+        ])],
+    );
+    let mut incomplete = valid.clone();
     incomplete.complete = false;
-    let mut unsupported = inventory_evidence();
+    let mut unsupported = valid.clone();
     unsupported.producer_version = "2".to_owned();
-    let mut malformed = inventory_evidence();
+    let mut malformed = valid;
     malformed.observations[0] = Value::object(vec![
         ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
         ("inventory".to_owned(), Value::string("python".to_owned())),
@@ -194,5 +207,65 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
         ];
         let error = controls(&request).expect_err("the inventory consumer fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+    }
+}
+
+#[test]
+fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
+    let valid = semantic_evidence(
+        "site-build",
+        "0.1.0",
+        hb("test/site-output", b"site output"),
+        Some(hb("test/report", b"source report")),
+        vec![amiss_fixtures::site_route(
+            "/guide/",
+            "docs/guide.md",
+            &["details", "intro"],
+        )],
+    );
+    let mut incomplete = valid.clone();
+    incomplete.complete = false;
+    let mut unsupported = valid.clone();
+    unsupported.producer_version = "1".to_owned();
+    let mut invalid_route = valid.clone();
+    invalid_route.observations = vec![amiss_fixtures::site_route(
+        "//other.example/guide",
+        "docs/guide.md",
+        &["intro"],
+    )];
+    let mut invalid_source = valid.clone();
+    invalid_source.observations = vec![amiss_fixtures::site_route(
+        "/guide/",
+        "../guide.md",
+        &["intro"],
+    )];
+    let mut unsorted_anchors = valid.clone();
+    unsorted_anchors.observations = vec![amiss_fixtures::site_route(
+        "/guide/",
+        "docs/guide.md",
+        &["intro", "details"],
+    )];
+    let mut duplicate_anchors = valid;
+    duplicate_anchors.observations = vec![amiss_fixtures::site_route(
+        "/guide/",
+        "docs/guide.md",
+        &["intro", "intro"],
+    )];
+
+    for (evidence, expected) in [
+        (incomplete, AnalysisErrorCode::ConfigurationInvalid),
+        (unsupported, AnalysisErrorCode::ConfigurationInvalid),
+        (invalid_route, AnalysisErrorCode::ConfigurationInvalid),
+        (invalid_source, AnalysisErrorCode::ConfigurationInvalid),
+        (unsorted_anchors, AnalysisErrorCode::NoncanonicalArray),
+        (duplicate_anchors, AnalysisErrorCode::NoncanonicalArray),
+    ] {
+        let mut request = empty();
+        request.semantic_evidence = vec![
+            amiss_wire::semantic::envelope(evidence)
+                .expect("the generic envelope admits producer-defined semantics"),
+        ];
+        let error = controls(&request).expect_err("the site-build consumer fails closed");
+        assert_eq!(error.code, expected);
     }
 }

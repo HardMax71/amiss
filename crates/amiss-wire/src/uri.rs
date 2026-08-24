@@ -105,6 +105,15 @@ pub fn http_destination_valid(destination: &str) -> bool {
         && fragment.is_none_or(|value| decode_fragment(value).is_some())
 }
 
+/// Accepts one exact absolute-path URI without a query or fragment.
+#[must_use]
+pub fn site_route_valid(route: &str) -> bool {
+    route.starts_with('/')
+        && !route.starts_with("//")
+        && !route.contains(['?', '#'])
+        && bytes_valid(route)
+}
+
 const fn hex_value(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte.wrapping_sub(b'0')),

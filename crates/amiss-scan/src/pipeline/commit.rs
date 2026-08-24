@@ -288,7 +288,10 @@ fn evaluated_pair(
         base_scan,
         engine,
         forge,
-        semantic,
+        crate::semantic::View {
+            labels: semantic.labels.as_ref(),
+            routes: None,
+        },
         includes,
         base_tree,
         None,
@@ -301,7 +304,10 @@ fn evaluated_pair(
         candidate_scan,
         engine,
         forge,
-        semantic,
+        crate::semantic::View {
+            labels: semantic.labels.as_ref(),
+            routes: Some(semantic.routes.as_ref()),
+        },
         includes,
         candidate_tree,
         Some(&mut claims),

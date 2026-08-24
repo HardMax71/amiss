@@ -219,7 +219,7 @@ impl Resolver<'_> {
     pub(crate) fn resolve_label(
         &mut self,
         label: &str,
-        semantic: &crate::semantic::Context,
+        semantic: crate::semantic::View<'_>,
     ) -> Result<(Intent, Resolution, Option<String>), Error> {
         let intent = Intent {
             kind: IntentKind::Label,
