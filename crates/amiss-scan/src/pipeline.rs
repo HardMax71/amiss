@@ -56,7 +56,7 @@ pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
 pub(crate) struct ObservationContext<'a> {
     pub(crate) engine: &'a EngineProvenance,
     pub(crate) forge: Option<&'a ForgeContext>,
-    pub(crate) semantic: &'a crate::semantic::Context,
+    pub(crate) semantic: crate::semantic::View<'a>,
 }
 
 /// Builds one side's observations from its discovery: every scanned
@@ -520,7 +520,7 @@ fn evaluate_tree(
     scan_resources: &mut ScanResources,
     engine: &EngineProvenance,
     forge: Option<&ForgeContext>,
-    semantic: &crate::semantic::Context,
+    semantic: crate::semantic::View<'_>,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
     claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,

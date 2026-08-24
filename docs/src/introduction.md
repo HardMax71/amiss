@@ -39,12 +39,13 @@ reference target, not a document. [Discovery](discovery.md) has the exact rows, 
 repository policy can bind one of the five built-in adapters to any path it names.
 
 "Supported explicit reference" is the second line, and it's hard. Bare path-like prose is
-never inferred. Raw HTML and MDX code regions are opaque. Site routes, code symbols, live
-URLs, and other repositories need information this engine does not have, so they stay
-visible as declared boundaries instead of being guessed at. Three exceptions earn their
-place: a line fragment selects bytes, a heading anchor is answered against pinned renderer
-rules, and a destination the tree does not hold is asked again under the spellings a
-pinned router serves. That retry can only reach a file the tree already holds.
+never inferred. Raw HTML and MDX code regions are opaque. Site routes, code symbols, live URLs,
+and other repositories need information this engine does not have, so they stay visible as
+declared boundaries instead of being guessed at. A line fragment selects bytes, a heading anchor
+is answered against pinned renderer rules, and a destination the tree does not hold is asked again
+under the spellings a pinned router serves. Trusted semantic evidence can additionally map an
+exact candidate site route and anchor to the scanned source that produced it. Every such answer
+still reaches a file the tree already holds.
 [Resolution](resolution.md) describes the boundary rows, and [Project status](status.md)
 links the classifier and resolver that draw them.
 

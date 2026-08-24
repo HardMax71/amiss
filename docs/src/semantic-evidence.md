@@ -43,6 +43,16 @@ inventories remain ambiguous, colon-prefixed names remain unsupported, and local
 precedence. Missing evidence, an incomplete producer, another producer version, a stale candidate
 binding, or an invalid observation can never clear a missing label.
 
+The second compiled consumer accepts at most one complete `site-build` producer at version
+`0.1.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
+document, and a byte-sorted unique set of decoded anchor identities. Routes exclude authority,
+query, and fragment components; sources obey the repository-path grammar; anchors and their
+aggregate count are bounded. On the candidate side only, an exact route resolves to its scanned
+structured source, and a nonempty fragment additionally requires an exact member of the published
+anchor set. Query text remains identity data. A route absent from the evidence, an absent anchor,
+duplicate ownership, a missing or unscanned source, and image use remain unsupported rather than
+being guessed into either a pass or a failure. The base side never consumes candidate build output.
+
 Only the sealed controls request has this intake. The public command supplies an empty set. A
 successful report projects the accepted envelopes' payload and producer/input identities under
 `controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
@@ -62,5 +72,6 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-The site-build consumers remain future observation grammars over this same boundary; the engine
-still executes no producer and treats no repository-controlled evidence as authority.
+Generated pages without source attribution, redirects, locales, versions, and navigation remain
+future observation grammars over this same boundary. The engine still executes no producer and
+treats no repository-controlled evidence as authority.

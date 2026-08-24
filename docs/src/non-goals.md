@@ -30,10 +30,11 @@ numeric line fragment is narrower still: Amiss can select and compare those exac
 cannot tell whether they still express the idea the prose intended. A relative destination
 the tree does not hold is asked again under
 [the spellings a documentation router serves](route-spellings.md), which reaches a file the
-tree already holds or nothing at all. That is the whole of what it knows about routes: a
-leading slash still names a site route it does not answer, and it validates no code symbol,
-live URL, or other repository. Those checks belong to a layer holding the right information:
-the site generator owns its permalink scheme and the language server knows its symbols.
+tree already holds or nothing at all. A leading slash can additionally resolve from sealed
+candidate build evidence only when an exact route and optional anchor map to a scanned source;
+everything else stays outside the answer. It validates no code symbol, live URL, or other
+repository. Those checks belong to a layer holding the right information: the site generator owns
+its permalink scheme and the language server knows its symbols.
 Where a supported construct reaches one of these boundaries, Amiss records the unsupported
 or out-of-scope semantics instead of guessing, because a guessed pass looks exactly like a
 real one until it burns you.

@@ -11,6 +11,9 @@ use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 const INTERSPHINX_PRODUCER: &str = "sphinx-inventory-set";
 const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
+const SITE_BUILD_PRODUCER: &str = "site-build";
+const SITE_BUILD_VERSION: &str = "0.1.0";
+const SITE_ROUTE: &str = "site-route";
 const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
@@ -18,12 +21,22 @@ const DESTINATION_BYTES: usize = 16_384;
 pub struct Inputs {
     pub(crate) candidate_bindings: Vec<Digest>,
     pub(crate) labels: Arc<BTreeMap<String, InventoryLabel>>,
+    pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
     pub(crate) provenance: Vec<Provenance>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum InventoryLabel {
     Unique(String),
+    Ambiguous,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SiteRoute {
+    Unique {
+        source: amiss_wire::model::RepoPath,
+        anchors: Vec<String>,
+    },
     Ambiguous,
 }
 
@@ -39,13 +52,22 @@ pub struct Provenance {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Context {
     pub(crate) labels: Arc<BTreeMap<String, InventoryLabel>>,
+    pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
     pub(crate) provenance: Vec<Provenance>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct View<'a> {
+    pub(crate) labels: &'a BTreeMap<String, InventoryLabel>,
+    pub(crate) routes: Option<&'a BTreeMap<String, SiteRoute>>,
 }
 
 pub(crate) fn parse(values: &[Value]) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
     let mut previous = None;
     let mut intersphinx = false;
+    let mut site_build = false;
+    let mut site_anchors = 0_usize;
     for (index, value) in values.iter().enumerate() {
         let path = format!("$.semantic_evidence[{index}]");
         let bytes = canonical(value);
@@ -59,43 +81,74 @@ pub(crate) fn parse(values: &[Value]) -> Result<Inputs, Error> {
             }
             None | Some(Ordering::Less) => previous = Some(envelope.payload_digest),
         }
-        let evidence = envelope.payload;
-        let known = evidence.producer_kind.as_str() == INTERSPHINX_PRODUCER;
-        if known && evidence.producer_version != INTERSPHINX_VERSION {
-            return fail(
-                &format!("{path}.payload.producer.version"),
-                ErrorKind::InvalidValue,
-            );
-        }
-        if known {
-            if intersphinx || !evidence.complete || evidence.source_report_payload_digest.is_some()
-            {
-                return fail(&path, ErrorKind::Inconsistent);
-            }
-            intersphinx = true;
-        }
-        inputs
-            .candidate_bindings
-            .push(evidence.candidate_identity_digest);
-        inputs.provenance.push(Provenance {
-            payload_digest: envelope.payload_digest,
-            producer_kind: evidence.producer_kind,
-            producer_identity: evidence.producer_identity,
-            producer_version: evidence.producer_version,
-            input_digest: evidence.input_digest,
-        });
-        if known {
-            for (observation_index, observation) in evidence.observations.into_iter().enumerate() {
-                let observation_path = format!("{path}.payload.observations[{observation_index}]");
-                if observation.text("kind") == Some(SPHINX_LABEL) {
-                    insert_label(
-                        Arc::make_mut(&mut inputs.labels),
-                        &observation_path,
-                        observation,
-                    )?;
+        let amiss_wire::semantic::SemanticEvidence {
+            candidate_identity_digest,
+            source_report_payload_digest,
+            producer_kind,
+            producer_identity,
+            producer_version,
+            input_digest,
+            complete,
+            observations,
+        } = envelope.payload;
+        match producer_kind.as_str() {
+            INTERSPHINX_PRODUCER => {
+                if producer_version != INTERSPHINX_VERSION {
+                    return fail(
+                        &format!("{path}.payload.producer.version"),
+                        ErrorKind::InvalidValue,
+                    );
+                }
+                if intersphinx || !complete || source_report_payload_digest.is_some() {
+                    return fail(&path, ErrorKind::Inconsistent);
+                }
+                intersphinx = true;
+                for (observation_index, observation) in observations.into_iter().enumerate() {
+                    let observation_path =
+                        format!("{path}.payload.observations[{observation_index}]");
+                    if observation.text("kind") == Some(SPHINX_LABEL) {
+                        insert_label(
+                            Arc::make_mut(&mut inputs.labels),
+                            &observation_path,
+                            observation,
+                        )?;
+                    }
                 }
             }
+            SITE_BUILD_PRODUCER => {
+                if producer_version != SITE_BUILD_VERSION {
+                    return fail(
+                        &format!("{path}.payload.producer.version"),
+                        ErrorKind::InvalidValue,
+                    );
+                }
+                if site_build || !complete {
+                    return fail(&path, ErrorKind::Inconsistent);
+                }
+                site_build = true;
+                for (observation_index, observation) in observations.into_iter().enumerate() {
+                    let observation_path =
+                        format!("{path}.payload.observations[{observation_index}]");
+                    if observation.text("kind") == Some(SITE_ROUTE) {
+                        insert_route(
+                            Arc::make_mut(&mut inputs.routes),
+                            &observation_path,
+                            observation,
+                            &mut site_anchors,
+                        )?;
+                    }
+                }
+            }
+            _ => {}
         }
+        inputs.candidate_bindings.push(candidate_identity_digest);
+        inputs.provenance.push(Provenance {
+            payload_digest: envelope.payload_digest,
+            producer_kind,
+            producer_identity,
+            producer_version,
+            input_digest,
+        });
     }
     Ok(inputs)
 }
@@ -115,8 +168,59 @@ pub(crate) fn bind(inputs: &Inputs, candidate: Digest) -> Result<Context, ErrorD
     }
     Ok(Context {
         labels: inputs.labels.clone(),
+        routes: inputs.routes.clone(),
         provenance: inputs.provenance.clone(),
     })
+}
+
+fn insert_route(
+    routes: &mut BTreeMap<String, SiteRoute>,
+    path: &str,
+    observation: Value,
+    anchor_count: &mut usize,
+) -> Result<(), Error> {
+    let mut row = Obj::new(path, observation)?;
+    row.required("kind", |path, value| de::const_str(path, value, SITE_ROUTE))?;
+    let route = row.required("route", |path, value| {
+        bounded_text(
+            path,
+            value,
+            DESTINATION_BYTES,
+            amiss_wire::uri::site_route_valid,
+        )
+    })?;
+    let source = row.required("source", |path, value| {
+        amiss_wire::model::RepoPath::new(de::string(path, value)?)
+            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+    })?;
+    let anchors_path = row.field("anchors");
+    let raw_anchors = de::array(&anchors_path, row.take("anchors")?)?;
+    *anchor_count = anchor_count
+        .checked_add(raw_anchors.len())
+        .filter(|count| *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
+        .ok_or_else(|| Error::new(&anchors_path, ErrorKind::LimitExceeded))?;
+    let mut anchors = Vec::with_capacity(raw_anchors.len());
+    for (index, value) in raw_anchors.into_iter().enumerate() {
+        let item_path = format!("{anchors_path}[{index}]");
+        let anchor = bounded_text(&item_path, value, LABEL_BYTES, |value| {
+            !value.is_empty() && value.chars().all(|character| !character.is_control())
+        })?;
+        match anchors.last().map(String::as_str) {
+            Some(previous) if previous == anchor => {
+                return fail(&anchors_path, ErrorKind::DuplicateMember);
+            }
+            Some(previous) if previous > anchor.as_str() => {
+                return fail(&anchors_path, ErrorKind::UnsortedSet);
+            }
+            None | Some(_) => anchors.push(anchor),
+        }
+    }
+    row.finish()?;
+    routes
+        .entry(route)
+        .and_modify(|target| *target = SiteRoute::Ambiguous)
+        .or_insert(SiteRoute::Unique { source, anchors });
+    Ok(())
 }
 
 fn insert_label(
