@@ -44,7 +44,7 @@ and other repositories need information this engine does not have, so they stay 
 declared boundaries instead of being guessed at. A line fragment selects bytes, a heading anchor
 is answered against pinned renderer rules, and a destination the tree does not hold is asked again
 under the spellings a pinned router serves. Trusted semantic evidence can additionally map an
-exact candidate site route, anchor, or terminal redirect to the scanned source that produced the
+exact candidate site route, anchor, or fragment-aware terminal redirect to the scanned source that produced the
 published page. Every such answer still reaches a file the tree already holds.
 [Resolution](resolution.md) describes the boundary rows, and [Project status](status.md)
 links the classifier and resolver that draw them.

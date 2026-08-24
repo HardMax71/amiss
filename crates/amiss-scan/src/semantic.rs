@@ -40,6 +40,7 @@ pub(crate) enum SiteRoute {
     },
     Redirect {
         destination: String,
+        fragment: Option<String>,
     },
     Ambiguous,
 }
@@ -225,18 +226,32 @@ fn insert_site(
         }
         SiteRoute::Page { source, anchors }
     } else {
-        let destination = row.required("destination", |path, value| {
-            bounded_text(
-                path,
-                value,
-                DESTINATION_BYTES,
-                amiss_wire::uri::site_route_valid,
-            )
+        let (destination, fragment) = row.required("destination", |path, value| {
+            let mut destination = de::string(path, value)?;
+            if destination.len() > DESTINATION_BYTES {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+            let fragment = destination.find('#').and_then(|separator| {
+                let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
+                destination.truncate(separator);
+                Some(fragment)
+            });
+            if !amiss_wire::uri::site_route_valid(&destination)
+                || fragment
+                    .as_deref()
+                    .is_some_and(|value| amiss_wire::uri::decode_fragment(value).is_none())
+            {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+            Ok((destination, fragment))
         })?;
         if route == destination {
             return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
         }
-        SiteRoute::Redirect { destination }
+        SiteRoute::Redirect {
+            destination,
+            fragment,
+        }
     };
     row.finish()?;
     routes

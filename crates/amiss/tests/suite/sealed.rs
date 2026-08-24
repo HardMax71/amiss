@@ -350,7 +350,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
 
 #[test]
 fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() {
-    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/)\n";
+    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [changed redirect anchor](/changed/#absent) [cleared redirect anchor](/cleared/#absent) [broken redirect anchor](/broken-fragment/) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/)\n";
     let fixture = amiss_fixtures::commit_pair(
         &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
         &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
@@ -386,6 +386,12 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
             site_observation("/duplicate/", SiteObservation::Page("docs/index.md", &[])),
             site_observation("/legacy/", SiteObservation::Redirect("/guide/")),
+            site_observation("/changed/", SiteObservation::Redirect("/guide/#intr%6F")),
+            site_observation("/cleared/", SiteObservation::Redirect("/guide/#")),
+            site_observation(
+                "/broken-fragment/",
+                SiteObservation::Redirect("/guide/#absent"),
+            ),
             site_observation("/broken/", SiteObservation::Redirect("/missing/")),
             site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
             site_observation("/collision/", SiteObservation::Redirect("/guide/")),
@@ -413,7 +419,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             row.pointer("/candidate/intent/kind") == Some(&serde_json::json!("site-route"))
         })
         .collect();
-    assert_eq!(routes.len(), 11);
+    assert_eq!(routes.len(), 14);
     assert!(routes.iter().all(|row| {
         row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
     }));
@@ -425,8 +431,8 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
                     == Some(&serde_json::json!("docs/guide.md"))
             })
             .count(),
-        4,
-        "only proved routes, anchors, and terminal redirects resolve: {routes:?}"
+        6,
+        "only proved routes, anchors, and fragment-aware terminal redirects resolve: {routes:?}"
     );
     assert_eq!(
         routes
@@ -436,13 +442,13 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
                     == Some(&serde_json::json!("site-route"))
             })
             .count(),
-        7,
+        8,
         "unproved route uses remain explicitly unsupported: {routes:?}"
     );
-    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 4);
+    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 6);
     assert_eq!(
         envelope["payload"]["summary"]["references"]["unsupported"],
-        7
+        8
     );
 }
 
