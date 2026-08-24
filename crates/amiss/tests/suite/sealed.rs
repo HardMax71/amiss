@@ -7,6 +7,7 @@
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
+use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::controls::{OrganizationFloor, Profile};
 use amiss_wire::digest::hb;
 use amiss_wire::json::{Value, parse};
@@ -348,8 +349,8 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
 }
 
 #[test]
-fn sealed_site_build_evidence_resolves_candidate_routes_and_anchors() {
-    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) ![image](/guide/)\n";
+fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() {
+    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/)\n";
     let fixture = amiss_fixtures::commit_pair(
         &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
         &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
@@ -377,10 +378,17 @@ fn sealed_site_build_evidence_resolves_candidate_routes_and_anchors() {
         input_digest: hb("amiss-test/site-output", b"site output"),
         complete: true,
         observations: vec![
-            amiss_fixtures::site_route("/guide/", "docs/guide.md", &["intro"]),
-            amiss_fixtures::site_route("/stale/", "docs/removed.md", &[]),
-            amiss_fixtures::site_route("/duplicate/", "docs/guide.md", &[]),
-            amiss_fixtures::site_route("/duplicate/", "docs/index.md", &[]),
+            site_observation(
+                "/guide/",
+                SiteObservation::Page("docs/guide.md", &["intro"]),
+            ),
+            site_observation("/stale/", SiteObservation::Page("docs/removed.md", &[])),
+            site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
+            site_observation("/duplicate/", SiteObservation::Page("docs/index.md", &[])),
+            site_observation("/legacy/", SiteObservation::Redirect("/guide/")),
+            site_observation("/broken/", SiteObservation::Redirect("/missing/")),
+            site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
+            site_observation("/collision/", SiteObservation::Redirect("/guide/")),
         ],
     })
     .unwrap();
@@ -405,7 +413,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_and_anchors() {
             row.pointer("/candidate/intent/kind") == Some(&serde_json::json!("site-route"))
         })
         .collect();
-    assert_eq!(routes.len(), 7);
+    assert_eq!(routes.len(), 11);
     assert!(routes.iter().all(|row| {
         row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
     }));
@@ -417,8 +425,8 @@ fn sealed_site_build_evidence_resolves_candidate_routes_and_anchors() {
                     == Some(&serde_json::json!("docs/guide.md"))
             })
             .count(),
-        2,
-        "only the exact route and its published anchor resolve: {routes:?}"
+        4,
+        "only proved routes, anchors, and terminal redirects resolve: {routes:?}"
     );
     assert_eq!(
         routes
@@ -428,13 +436,13 @@ fn sealed_site_build_evidence_resolves_candidate_routes_and_anchors() {
                     == Some(&serde_json::json!("site-route"))
             })
             .count(),
-        5,
+        7,
         "unproved route uses remain explicitly unsupported: {routes:?}"
     );
-    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 2);
+    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 4);
     assert_eq!(
         envelope["payload"]["summary"]["references"]["unsupported"],
-        5
+        7
     );
 }
 

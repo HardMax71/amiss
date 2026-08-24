@@ -51,7 +51,12 @@ aggregate count are bounded. On the candidate side only, an exact route resolves
 structured source, and a nonempty fragment additionally requires an exact member of the published
 anchor set. Query text remains identity data. A route absent from the evidence, an absent anchor,
 duplicate ownership, a missing or unscanned source, and image use remain unsupported rather than
-being guessed into either a pass or a failure. The base side never consumes candidate build output.
+being guessed into either a pass or a failure. A `site-redirect` observation maps one exact redirect
+route to its exact terminal route, not an intermediate hop. It resolves only when that destination
+has one source-backed `site-route`; an authored fragment must still be in the terminal route's
+anchor set. Self-redirects and redirect destinations containing a query or fragment are invalid
+evidence, while a missing or ambiguous terminal route remains unsupported. The base side never
+consumes candidate build output.
 
 Only the sealed controls request has this intake. The public command supplies an empty set. A
 successful report projects the accepted envelopes' payload and producer/input identities under
@@ -72,6 +77,6 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-Generated pages without source attribution, redirects, locales, versions, and navigation remain
-future observation grammars over this same boundary. The engine still executes no producer and
-treats no repository-controlled evidence as authority.
+Generated pages without source attribution, redirect defects and fragment-changing redirects,
+locales, versions, and navigation remain future observation grammars over this same boundary. The
+engine still executes no producer and treats no repository-controlled evidence as authority.

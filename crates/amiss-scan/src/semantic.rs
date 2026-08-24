@@ -14,6 +14,7 @@ const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
 const SITE_BUILD_VERSION: &str = "0.1.0";
 const SITE_ROUTE: &str = "site-route";
+const SITE_REDIRECT: &str = "site-redirect";
 const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
@@ -33,9 +34,12 @@ pub(crate) enum InventoryLabel {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SiteRoute {
-    Unique {
+    Page {
         source: amiss_wire::model::RepoPath,
         anchors: Vec<String>,
+    },
+    Redirect {
+        destination: String,
     },
     Ambiguous,
 }
@@ -129,14 +133,12 @@ pub(crate) fn parse(values: &[Value]) -> Result<Inputs, Error> {
                 for (observation_index, observation) in observations.into_iter().enumerate() {
                     let observation_path =
                         format!("{path}.payload.observations[{observation_index}]");
-                    if observation.text("kind") == Some(SITE_ROUTE) {
-                        insert_route(
-                            Arc::make_mut(&mut inputs.routes),
-                            &observation_path,
-                            observation,
-                            &mut site_anchors,
-                        )?;
-                    }
+                    insert_site(
+                        Arc::make_mut(&mut inputs.routes),
+                        &observation_path,
+                        observation,
+                        &mut site_anchors,
+                    )?;
                 }
             }
             _ => {}
@@ -173,14 +175,19 @@ pub(crate) fn bind(inputs: &Inputs, candidate: Digest) -> Result<Context, ErrorD
     })
 }
 
-fn insert_route(
+fn insert_site(
     routes: &mut BTreeMap<String, SiteRoute>,
     path: &str,
     observation: Value,
     anchor_count: &mut usize,
 ) -> Result<(), Error> {
+    let kind = match observation.text("kind") {
+        Some(SITE_ROUTE) => SITE_ROUTE,
+        Some(SITE_REDIRECT) => SITE_REDIRECT,
+        Some(_) | None => return Ok(()),
+    };
     let mut row = Obj::new(path, observation)?;
-    row.required("kind", |path, value| de::const_str(path, value, SITE_ROUTE))?;
+    row.required("kind", |path, value| de::const_str(path, value, kind))?;
     let route = row.required("route", |path, value| {
         bounded_text(
             path,
@@ -189,37 +196,53 @@ fn insert_route(
             amiss_wire::uri::site_route_valid,
         )
     })?;
-    let source = row.required("source", |path, value| {
-        amiss_wire::model::RepoPath::new(de::string(path, value)?)
-            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-    })?;
-    let anchors_path = row.field("anchors");
-    let raw_anchors = de::array(&anchors_path, row.take("anchors")?)?;
-    *anchor_count = anchor_count
-        .checked_add(raw_anchors.len())
-        .filter(|count| *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
-        .ok_or_else(|| Error::new(&anchors_path, ErrorKind::LimitExceeded))?;
-    let mut anchors = Vec::with_capacity(raw_anchors.len());
-    for (index, value) in raw_anchors.into_iter().enumerate() {
-        let item_path = format!("{anchors_path}[{index}]");
-        let anchor = bounded_text(&item_path, value, LABEL_BYTES, |value| {
-            !value.is_empty() && value.chars().all(|character| !character.is_control())
+    let target = if kind == SITE_ROUTE {
+        let source = row.required("source", |path, value| {
+            amiss_wire::model::RepoPath::new(de::string(path, value)?)
+                .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
         })?;
-        match anchors.last().map(String::as_str) {
-            Some(previous) if previous == anchor => {
-                return fail(&anchors_path, ErrorKind::DuplicateMember);
+        let anchors_path = row.field("anchors");
+        let raw_anchors = de::array(&anchors_path, row.take("anchors")?)?;
+        *anchor_count = anchor_count
+            .checked_add(raw_anchors.len())
+            .filter(|count| *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
+            .ok_or_else(|| Error::new(&anchors_path, ErrorKind::LimitExceeded))?;
+        let mut anchors = Vec::with_capacity(raw_anchors.len());
+        for (index, value) in raw_anchors.into_iter().enumerate() {
+            let item_path = format!("{anchors_path}[{index}]");
+            let anchor = bounded_text(&item_path, value, LABEL_BYTES, |value| {
+                !value.is_empty() && value.chars().all(|character| !character.is_control())
+            })?;
+            match anchors.last().map(String::as_str) {
+                Some(previous) if previous == anchor => {
+                    return fail(&anchors_path, ErrorKind::DuplicateMember);
+                }
+                Some(previous) if previous > anchor.as_str() => {
+                    return fail(&anchors_path, ErrorKind::UnsortedSet);
+                }
+                None | Some(_) => anchors.push(anchor),
             }
-            Some(previous) if previous > anchor.as_str() => {
-                return fail(&anchors_path, ErrorKind::UnsortedSet);
-            }
-            None | Some(_) => anchors.push(anchor),
         }
-    }
+        SiteRoute::Page { source, anchors }
+    } else {
+        let destination = row.required("destination", |path, value| {
+            bounded_text(
+                path,
+                value,
+                DESTINATION_BYTES,
+                amiss_wire::uri::site_route_valid,
+            )
+        })?;
+        if route == destination {
+            return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
+        }
+        SiteRoute::Redirect { destination }
+    };
     row.finish()?;
     routes
         .entry(route)
         .and_modify(|target| *target = SiteRoute::Ambiguous)
-        .or_insert(SiteRoute::Unique { source, anchors });
+        .or_insert(target);
     Ok(())
 }
 
