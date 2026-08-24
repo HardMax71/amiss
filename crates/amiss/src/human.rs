@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use amiss_wire::json::Value;
+use amiss_wire::model::RepoPath;
 
 use crate::view::View;
 
@@ -113,6 +114,33 @@ pub(crate) fn report(envelope: &Value, explain_scope: bool) {
     );
     notes(&mut out, payload);
     totals(&mut out, payload);
+}
+
+pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
+    let mut out = Channel::new();
+    let shown_target = target.as_str().map_or_else(
+        || amiss_wire::human::atom_bytes(target.as_bytes()),
+        amiss_wire::human::atom,
+    );
+    say!(
+        out,
+        "amiss refs: target {shown_target} candidate occurrences {}",
+        occurrences.len()
+    );
+    for occurrence in occurrences {
+        let row = View::of(occurrence);
+        let span = row.view("source_span");
+        say!(
+            out,
+            "reference {}:{}:{} {} {} {}",
+            row.atom_or_dash("document"),
+            span.number("start_line"),
+            span.number("start_column"),
+            amiss_wire::human::atom(row.text("source_construct")),
+            amiss_wire::human::atom(row.view("resolution").text("kind")),
+            amiss_wire::human::atom(row.text("observation_id")),
+        );
+    }
 }
 
 /// Ten rows and an overflow line, the wire's own action word as the label.

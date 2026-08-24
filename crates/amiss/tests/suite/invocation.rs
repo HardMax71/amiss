@@ -392,6 +392,36 @@ fn the_render_form_requires_one_non_json_projection() {
     }
 }
 
+#[test]
+fn the_refs_form_accepts_text_or_canonical_path_bytes() {
+    for (flag, value, expected) in [
+        ("--target", "docs/a.md", b"docs/a.md".as_slice()),
+        (
+            "--target-bytes-hex",
+            "646f63732fff2e6d64",
+            b"docs/\xff.md".as_slice(),
+        ),
+    ] {
+        let Outcome::Accepted(command) = parse(&argv(&[
+            "refs",
+            "--report",
+            "report.json",
+            flag,
+            value,
+            "--format",
+            "json",
+        ])) else {
+            panic!("expected refs acceptance");
+        };
+        let amiss::invocation::Command::Refs(refs) = *command else {
+            panic!("expected a refs command");
+        };
+        assert_eq!(refs.report, std::path::Path::new("report.json"));
+        assert_eq!(refs.target.as_bytes(), expected);
+        assert_eq!(refs.format, OutputFormat::Json);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn rejects_non_unicode_argv_before_lossy_conversion() {

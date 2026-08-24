@@ -302,6 +302,29 @@ fn a_percent_escaped_byte_reference_resolves_against_the_byte_named_target() {
         "json",
     ]);
     assert_eq!(code, 0);
+    let report_path = root.join("report.json");
+    fs::write(&report_path, &stdout).unwrap();
+    let report = amiss_fixtures::path_arg(&report_path);
+    for (target, resolution) in [
+        ("646f63732f6261642dff2d6e616d652e6d64", "resolved"),
+        ("646f63732f6261642dfe2d6e616d652e6d64", "missing"),
+    ] {
+        let (query_code, query) = amiss(&[
+            "refs",
+            "--report",
+            &report,
+            "--target-bytes-hex",
+            target,
+            "--format",
+            "json",
+        ]);
+        assert_eq!(query_code, 0);
+        let rows: serde_json::Value = serde_json::from_slice(&query).unwrap();
+        let rows = rows.as_array().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["document"], "README.md");
+        assert_eq!(rows[0]["resolution"]["kind"], resolution);
+    }
     let payload = payload(&stdout);
     assert_eq!(payload["summary"]["references"]["extracted"], 2);
     assert_eq!(
