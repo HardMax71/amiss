@@ -83,7 +83,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `opaque-mdx-region`: an MDX expression region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
 - `opaque-html-region`: a raw HTML region the parser cannot see into; a reference inside it is a stated blind spot, reported with size and place
 - `observation-correlation-ambiguous`: an occurrence has more than one plausible counterpart across the comparison; Amiss never chooses by input order, so the match is recorded as undecided
-- `unlinked-document`: a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages
+- `unlinked-document`: a scanned structured document inside a complete site build's source root is unreachable from every rendered navigation entrypoint; link the page from rendered navigation or keep non-page material outside that root
 - `policy-weakened`: the candidate loosens its own repository policy, dropping an include, a protected path, or a raised disposition; loosening the rules is reported under the rules being loosened
 - `coverage-reduced`: a protected path is gone or not a scannable document while its protection stands; restore it or amend the protection in a reviewed change
 - `control-plane-changed`: a floor-protected control path is not the identical present blob on both sides, in mode and content; the floor exists so control edits are always visible
@@ -119,7 +119,7 @@ API described in [Controls and policy](controls.md).
 | `opaque-mdx-region` | `page.mdx`: `[Parser](src/parser.rs)`. | Append `<Note>{"hidden"}</Note>`. |
 | `opaque-html-region` | `page.md`: `[Parser](src/parser.rs)`. | Append a separate `<div class="card">hidden</div>` block. |
 | `observation-correlation-ambiguous` | `docs/guide.md`: `Old [parser](../src/parser.rs).` | Replace it with two paragraphs: `First [parser](../src/parser.rs).` and `Second [parser](../src/parser.rs).` |
-| `unlinked-document` | `README.md` is absent. | Add `README.md` containing only `# Title` and prose with no references. |
+| `unlinked-document` | Complete site-build evidence proves every scanned source beneath `docs/` reachable from its rendered homepage. | Add `docs/orphan.md` without adding a rendered navigation path to it. |
 | `policy-weakened` | Repository policy sets `explicit-target-missing` to `fail`. | Remove that `finding_dispositions` entry. |
 | `coverage-reduced` | Repository policy protects `docs/required.md`, which contains `# Required`. | Keep the inventory obligation and delete `docs/required.md`. |
 | `control-plane-changed` | A verified floor protects `.github/workflows/scan.yml`, whose content is `on: push`. | Keep the floor and change the protected file to `on: pull_request`. |

@@ -366,107 +366,6 @@
         "base_fact_digest": null,
         "candidate_fact": {
           "evidence": {
-            "document_result": {
-              "base": {
-                "adapter_id": "markdown",
-                "byte_count": 9,
-                "content_availability": "available",
-                "entry_kind": "blob",
-                "entry_oid": "dd159bb469b4a6327d0af92b107a5c6e9c06b9ab",
-                "extracted_references": 0,
-                "frontmatter_bytes": 0,
-                "frontmatter_regions": 0,
-                "git_mode": "100644",
-                "opaque_html_bytes": 0,
-                "opaque_html_regions": 0,
-                "opaque_mdx_bytes": 0,
-                "opaque_mdx_regions": 0,
-                "raw_digest": "sha256:abfe85f9824d70a9377a2e2df5c2fa088524ea6aabe6c243fcf1615fe2591be1",
-                "status": "scanned",
-                "unsupported_reason": null
-              },
-              "candidate": {
-                "adapter_id": "markdown",
-                "byte_count": 9,
-                "content_availability": "available",
-                "entry_kind": "blob",
-                "entry_oid": "dd159bb469b4a6327d0af92b107a5c6e9c06b9ab",
-                "extracted_references": 0,
-                "frontmatter_bytes": 0,
-                "frontmatter_regions": 0,
-                "git_mode": "100644",
-                "opaque_html_bytes": 0,
-                "opaque_html_regions": 0,
-                "opaque_mdx_bytes": 0,
-                "opaque_mdx_regions": 0,
-                "raw_digest": "sha256:abfe85f9824d70a9377a2e2df5c2fa088524ea6aabe6c243fcf1615fe2591be1",
-                "status": "scanned",
-                "unsupported_reason": null
-              },
-              "change": "unchanged",
-              "classification": "structured-markdown",
-              "path": "README.md"
-            },
-            "kind": "document"
-          },
-          "finding_kind": "unlinked-document",
-          "key_input": {
-            "finding_kind": "unlinked-document",
-            "schema": "amiss/scanner-finding-key-input",
-            "scope": {
-              "document": "README.md",
-              "kind": "document"
-            }
-          },
-          "schema": "amiss/scanner-fact"
-        },
-        "candidate_fact_digest": "sha256:03435dba460b53ae52d67ce064ebefac80ea9951b230c78155fbeffbad644ef0",
-        "configured_disposition": "record",
-        "coverage_requirement": "none",
-        "debt": null,
-        "effective_disposition": "record",
-        "evidence_class": "coverage-boundary",
-        "finding_key": "sha256:313ef1f52df3990af3444d3ccd2885c5f082cdaea38bda3f98266e5394ae42d3",
-        "fix": null,
-        "invariant_class": "advisory",
-        "key_input": {
-          "finding_kind": "unlinked-document",
-          "schema": "amiss/scanner-finding-key-input",
-          "scope": {
-            "document": "README.md",
-            "kind": "document"
-          }
-        },
-        "kind": "unlinked-document",
-        "description": "a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages",
-        "location": {
-          "path": "README.md",
-          "side": "candidate",
-          "span": null
-        },
-        "observation_ids": [],
-        "policy_trace": [
-          {
-            "after": "record",
-            "before": "record",
-            "rule_id": "scanner-policy-defaults/unlinked-document/observe",
-            "source": "built-in"
-          }
-        ],
-        "waiver": null
-      },
-      {
-        "aggregation": {
-          "locations_omitted": 0,
-          "member_count": 1,
-          "representative_rule": "lowest-location-then-observation-id",
-          "strategy": "one-per-finding-key"
-        },
-        "attribution": "not-applicable",
-        "base_fact": null,
-        "base_fact_digest": null,
-        "candidate_fact": {
-          "evidence": {
             "comparison": {
               "alternatives": {
                 "base": [],
@@ -953,7 +852,7 @@
       "complete": true,
       "error_count": 0,
       "exit_code": 0,
-      "finding_count": 3,
+      "finding_count": 2,
       "status": "pass"
     },
     "schema": "amiss/scanner-report-payload",
@@ -973,7 +872,7 @@
         "opaque_mdx_regions": 0,
         "outside_document_set": 0,
         "scanned": 2,
-        "unlinked": 1,
+        "unlinked": 0,
         "unsupported": 0
       },
       "findings": {
@@ -981,11 +880,11 @@
         "debt_tolerated": 0,
         "fail": 0,
         "introduced": 1,
-        "not_applicable": 2,
+        "not_applicable": 1,
         "pre_existing": 0,
-        "record": 2,
+        "record": 1,
         "resolved": 0,
-        "total": 3,
+        "total": 2,
         "unknown": 0,
         "unsupported_capabilities": 0,
         "waived": 0,
@@ -1004,6 +903,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:e38a74cd9e85814b21f774b4d40154c9e0a3dd377e92c030fb8cff2a38d4e942",
+  "payload_digest": "sha256:31b3c038a1b15e8a223f8629f8fbbbc4841a7ebb9aac2273f64d6120f5b9fa00",
   "schema": "amiss/scanner-report-envelope"
 }

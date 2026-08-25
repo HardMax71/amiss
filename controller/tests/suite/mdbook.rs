@@ -60,14 +60,14 @@ fn observation<'a>(observations: &'a [Value], route: &str) -> &'a Value {
         .unwrap()
 }
 
-fn anchor_texts(observation: &Value) -> Vec<&str> {
-    let Some(Value::Array(anchors)) = observation.member("anchors") else {
+fn texts<'a>(observation: &'a Value, name: &str) -> Vec<&'a str> {
+    let Some(Value::Array(values)) = observation.member(name) else {
         return Vec::new();
     };
-    anchors
+    values
         .iter()
-        .filter_map(|anchor| match anchor {
-            Value::String(anchor) => Some(anchor.as_ref()),
+        .filter_map(|value| match value {
+            Value::String(value) => Some(value.as_ref()),
             Value::Null
             | Value::Bool(_)
             | Value::Integer(_)
@@ -88,7 +88,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     .unwrap();
     fs::write(
         root.path().join("index.html"),
-        br#"<!doctype html><h1 id="home"></h1>"#,
+        br#"<!doctype html><h1 id="home"></h1><a href="nested/%C3%BCber%20view.html">next</a>"#,
     )
     .unwrap();
     fs::write(
@@ -122,19 +122,32 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     assert_eq!(parsed.payload.producer_kind.as_str(), "site-build");
     assert_eq!(parsed.payload.producer_version, "0.1.0");
     assert!(parsed.payload.complete);
-    assert_eq!(parsed.payload.observations.len(), 3);
+    assert_eq!(parsed.payload.observations.len(), 4);
     let intro = observation(&parsed.payload.observations, "/manual/intro.html");
     assert_eq!(intro.text("source"), Some("docs/guide/README.md"));
-    assert_eq!(anchor_texts(intro), ["entity&anchor", "intro"]);
+    assert_eq!(texts(intro, "anchors"), ["entity&anchor", "intro"]);
     let index = observation(&parsed.payload.observations, "/manual/index.html");
     assert_eq!(index.text("source"), Some("docs/guide/README.md"));
-    assert_eq!(anchor_texts(index), ["home"]);
+    assert_eq!(texts(index, "anchors"), ["home"]);
     let nested = observation(
         &parsed.payload.observations,
         "/manual/nested/%C3%BCber%20view.html",
     );
     assert_eq!(nested.text("source"), Some("docs/guide/nested/chapter.md"));
-    assert_eq!(anchor_texts(nested), ["über-view"]);
+    assert_eq!(texts(nested, "anchors"), ["über-view"]);
+    let navigation = parsed
+        .payload
+        .observations
+        .iter()
+        .find(|row| row.text("kind") == Some("site-navigation"))
+        .unwrap();
+    assert_eq!(navigation.text("root"), Some("docs/guide"));
+    assert_eq!(navigation.text("manifest"), Some("docs/guide/SUMMARY.md"));
+    assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
+    assert_eq!(
+        texts(navigation, "reachable"),
+        ["docs/guide/README.md", "docs/guide/nested/chapter.md"]
+    );
 
     let repeated = mdbook_site_evidence(
         candidate,
@@ -145,6 +158,57 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     )
     .unwrap();
     assert_eq!(evidence, repeated);
+}
+
+#[test]
+fn completed_links_not_chapter_membership_define_navigation() {
+    let root = tempfile::tempdir().unwrap();
+    fs::create_dir(root.path().join("nested")).unwrap();
+    fs::write(
+        root.path().join("index.html"),
+        r#"<base href="/manual/"><a href="first.html">first</a>"#,
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("first.html"),
+        r#"<a href="nested/second.html">second</a>"#,
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("nested/second.html"),
+        r#"<a href="https://example.com/elsewhere">external</a>"#,
+    )
+    .unwrap();
+    fs::write(root.path().join("orphan.html"), "<p>orphan</p>").unwrap();
+    let nested = chapter(Some("nested/second.md"), Some("nested/second.md"), &[]);
+    let context = context(
+        "0.5.4",
+        true,
+        &[
+            chapter(Some("first.md"), Some("first.md"), &[nested]),
+            chapter(Some("orphan.md"), Some("orphan.md"), &[]),
+        ],
+    );
+
+    let evidence = mdbook_site_evidence(
+        hb("amiss/test", b"candidate"),
+        None,
+        "/manual/",
+        &context,
+        &output(&root),
+    )
+    .unwrap();
+    let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
+    let navigation = parsed
+        .payload
+        .observations
+        .iter()
+        .find(|row| row.text("kind") == Some("site-navigation"))
+        .unwrap();
+    assert_eq!(
+        texts(navigation, "reachable"),
+        ["guide/first.md", "guide/nested/second.md"]
+    );
 }
 
 #[test]

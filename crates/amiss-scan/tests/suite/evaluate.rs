@@ -213,11 +213,11 @@ fn document_findings_follow_step_one() {
     ];
     let findings = evaluate(&documents, &[], Profile::Observe);
     let got = kinds(&findings);
-    assert_eq!(got.len(), 4);
+    assert_eq!(got.len(), 3);
     assert!(got.contains(&FindingKind::DocumentRemoved));
     assert!(got.contains(&FindingKind::UnsupportedDocumentFormat));
     assert!(got.contains(&FindingKind::OpaqueMdxRegion));
-    assert!(got.contains(&FindingKind::UnlinkedDocument));
+    assert!(!got.contains(&FindingKind::UnlinkedDocument));
 
     let removed = only(findings, FindingKind::DocumentRemoved);
     assert_eq!(removed.location.side, LocationSide::Base);

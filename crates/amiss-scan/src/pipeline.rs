@@ -7,9 +7,7 @@ use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
 use crate::observe::{ObservationIdentity, observation_digest};
-use crate::report::{
-    Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
-};
+use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
 
@@ -301,6 +299,7 @@ fn conclude(
     setup: &Setup,
     base: (&SnapshotDiscovery, Side),
     candidate: (&SnapshotDiscovery, Side),
+    navigation: Option<&crate::semantic::SiteNavigation>,
     claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
 ) -> Built {
@@ -332,7 +331,14 @@ fn conclude(
         }
     }
     match correlate(base.1, candidate_side) {
-        Ok(comparisons) => construct(setup, base.0, candidate.0, comparisons, claims),
+        Ok(comparisons) => crate::report::construct_with_navigation(
+            setup,
+            base.0,
+            candidate.0,
+            comparisons,
+            navigation,
+            claims,
+        ),
         Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
     }
 }
@@ -392,13 +398,16 @@ fn pair_effects(
     base: (&SnapshotDiscovery, &mut ScanResources),
     candidate: (&SnapshotDiscovery, &mut ScanResources),
     failures: &mut Vec<ErrorDetail>,
-) -> crate::policy::Effects {
+) -> (
+    crate::policy::Effects,
+    Option<std::sync::Arc<crate::semantic::SiteNavigation>>,
+) {
     let mut effects = crate::policy::effects(
         base_policy,
         candidate_policy,
         &inventory_lookup(candidate.0),
     );
-    external.install(&mut effects);
+    let navigation = external.install(&mut effects);
     if let Err(row) = apply_floor(
         repo,
         git_resources,
@@ -410,7 +419,7 @@ fn pair_effects(
     ) {
         failures.push(row);
     }
-    effects
+    (effects, navigation)
 }
 
 /// Applies a verified floor to the run: the verified provenance and

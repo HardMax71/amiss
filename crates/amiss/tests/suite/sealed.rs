@@ -7,7 +7,7 @@
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
-use amiss_fixtures::{SiteObservation, site_observation};
+use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
 use amiss_wire::controls::{OrganizationFloor, Profile};
 use amiss_wire::digest::hb;
 use amiss_wire::json::{Value, parse};
@@ -352,8 +352,18 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
 fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() {
     let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [changed redirect anchor](/changed/#absent) [cleared redirect anchor](/cleared/#absent) [broken redirect anchor](/broken-fragment/) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/)\n";
     let fixture = amiss_fixtures::commit_pair(
-        &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
-        &[("docs/index.md", index), ("docs/guide.md", "# Intro\n")],
+        &[
+            ("README.md", "# Repository\n"),
+            ("docs/SUMMARY.md", "# Summary\n"),
+            ("docs/index.md", index),
+            ("docs/guide.md", "# Intro\n"),
+        ],
+        &[
+            ("README.md", "# Repository\n"),
+            ("docs/SUMMARY.md", "# Summary\n"),
+            ("docs/index.md", index),
+            ("docs/guide.md", "# Intro\n"),
+        ],
     )
     .unwrap();
     let format = ObjectFormat::Sha1;
@@ -377,25 +387,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         producer_version: "0.1.0".to_owned(),
         input_digest: hb("amiss-test/site-output", b"site output"),
         complete: true,
-        observations: vec![
-            site_observation(
-                "/guide/",
-                SiteObservation::Page("docs/guide.md", &["intro"]),
-            ),
-            site_observation("/stale/", SiteObservation::Page("docs/removed.md", &[])),
-            site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
-            site_observation("/duplicate/", SiteObservation::Page("docs/index.md", &[])),
-            site_observation("/legacy/", SiteObservation::Redirect("/guide/")),
-            site_observation("/changed/", SiteObservation::Redirect("/guide/#intr%6F")),
-            site_observation("/cleared/", SiteObservation::Redirect("/guide/#")),
-            site_observation(
-                "/broken-fragment/",
-                SiteObservation::Redirect("/guide/#absent"),
-            ),
-            site_observation("/broken/", SiteObservation::Redirect("/missing/")),
-            site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
-            site_observation("/collision/", SiteObservation::Redirect("/guide/")),
-        ],
+        observations: site_build_observations(),
     })
     .unwrap();
     let streams = RequestStreams {
@@ -450,6 +442,50 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         envelope["payload"]["summary"]["references"]["unsupported"],
         8
     );
+    assert_unlinked(&envelope, &["docs/index.md"]);
+}
+
+fn site_build_observations() -> Vec<Value> {
+    vec![
+        site_observation(
+            "/guide/",
+            SiteObservation::Page("docs/guide.md", &["intro"]),
+        ),
+        site_observation("/stale/", SiteObservation::Page("docs/removed.md", &[])),
+        site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
+        site_observation("/duplicate/", SiteObservation::Page("docs/index.md", &[])),
+        site_observation("/legacy/", SiteObservation::Redirect("/guide/")),
+        site_observation("/changed/", SiteObservation::Redirect("/guide/#intr%6F")),
+        site_observation("/cleared/", SiteObservation::Redirect("/guide/#")),
+        site_observation(
+            "/broken-fragment/",
+            SiteObservation::Redirect("/guide/#absent"),
+        ),
+        site_observation("/broken/", SiteObservation::Redirect("/missing/")),
+        site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
+        site_observation("/collision/", SiteObservation::Redirect("/guide/")),
+        site_navigation(
+            Some("docs"),
+            "docs/SUMMARY.md",
+            &["/guide/"],
+            &["docs/guide.md"],
+        ),
+    ]
+}
+
+fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {
+    let paths: Vec<&str> = envelope
+        .pointer("/payload/findings")
+        .and_then(serde_json::Value::as_array)
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "unlinked-document")
+        .filter_map(|row| {
+            row.pointer("/location/path")
+                .and_then(serde_json::Value::as_str)
+        })
+        .collect();
+    assert_eq!(paths, expected);
 }
 
 #[test]

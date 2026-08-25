@@ -7,6 +7,7 @@ use super::{Attribution, DocumentInput, DocumentSide, Finding, Location, Locatio
 pub(super) fn document_findings(
     document: &DocumentInput,
     profile: Profile,
+    navigation: Option<&crate::semantic::SiteNavigation>,
     findings: &mut Vec<Finding>,
 ) {
     let path = &document.path;
@@ -47,7 +48,7 @@ pub(super) fn document_findings(
         Some(DocumentSide::Scanned {
             mdx_regions,
             html_regions,
-            extracted_references,
+            ..
         }) => {
             if mdx_regions > 0 {
                 findings.push(simple(
@@ -69,7 +70,11 @@ pub(super) fn document_findings(
                     profile,
                 ));
             }
-            if extracted_references == 0 {
+            if navigation.is_some_and(|navigation| {
+                crate::semantic::navigation_contains(navigation.root.as_ref(), path)
+                    && path != &navigation.manifest
+                    && navigation.reachable.binary_search(path).is_err()
+            }) {
                 findings.push(simple(
                     FindingKind::UnlinkedDocument,
                     document_scope(path),

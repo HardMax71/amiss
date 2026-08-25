@@ -512,32 +512,13 @@ fn the_governed_definition_corpus_reproduces_the_runtime_boundary() {
 
 /// A lawful value claim reaching construct without an outcome is seeded like
 /// an unknown form, so a caller that never ran evaluation keeps the boundary
-/// instead of silently attesting. A second plain document rides along so the
-/// summary counter's kind filter has something to miscount.
+/// instead of silently attesting.
 #[test]
 fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
     let source = "[amiss:v]: <amiss:value?path=README&line=L1> \"alpha\"\n";
     let base_source = "plain words\n";
     let base = discovery(scanned(base_source), base_source, '1');
-    let mut candidate = discovery(scanned(source), source, '2');
-    let extra_path = RepoPath::new("docs/plain.md".to_owned()).expect("the fixture path is valid");
-    let extra_oid =
-        Oid::new(ObjectFormat::Sha1, "3".repeat(40)).expect("the synthetic blob identity is valid");
-    candidate.entries.insert(
-        extra_path.clone(),
-        (GitMode::RegularFile, extra_oid.clone()),
-    );
-    candidate.documents.push(DocumentRecord {
-        path: extra_path,
-        classification: Classification::StructuredMarkdown,
-        adapter: Classification::StructuredMarkdown.adapter(),
-        status: DocumentStatus::Scanned(scanned(base_source).into()),
-        oid: extra_oid,
-        mode: GitMode::RegularFile,
-        byte_count: u64::try_from(base_source.len()).expect("the fixture length fits u64"),
-        raw_digest: Some(hb(RAW_EVIDENCE_DOMAIN, base_source.as_bytes())),
-    });
-    candidate.tree_entries = 2;
+    let candidate = discovery(scanned(source), source, '2');
     let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
     let envelope: Value = serde_json::from_slice(&built.wire()).expect("the report is JSON");
     assert_eq!(built.exit_code, 2, "an unanswered claim is a boundary");
@@ -558,10 +539,6 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
             .and_then(|finding| finding.pointer("/aggregation/member_count"))
             .and_then(Value::as_u64),
         Some(1)
-    );
-    assert!(
-        findings.len() > governed.len().saturating_add(1),
-        "the fixture keeps other kinds in the majority: {envelope}"
     );
     assert_eq!(
         envelope.pointer("/payload/summary/findings/unsupported_capabilities"),

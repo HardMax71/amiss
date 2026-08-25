@@ -87,7 +87,27 @@ pub fn evaluate_with_policy(
     governed: &[GovernedSeed],
     claims: &[ClaimGroup],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
-    let mut findings = ordinary(documents, comparisons, profile);
+    evaluate_with_navigation(
+        documents,
+        comparisons,
+        profile,
+        policy,
+        None,
+        governed,
+        claims,
+    )
+}
+
+pub(crate) fn evaluate_with_navigation(
+    documents: &[DocumentInput],
+    comparisons: &[Comparison],
+    profile: Profile,
+    policy: &crate::policy::Effects,
+    navigation: Option<&crate::semantic::SiteNavigation>,
+    governed: &[GovernedSeed],
+    claims: &[ClaimGroup],
+) -> (Vec<Finding>, Vec<ErrorDetail>) {
+    let mut findings = ordinary(documents, comparisons, profile, navigation);
     for seed in governed {
         findings.push(governed_finding(seed, profile));
     }
@@ -304,11 +324,12 @@ fn ordinary(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     profile: Profile,
+    navigation: Option<&crate::semantic::SiteNavigation>,
 ) -> Vec<Finding> {
     let mut findings: Vec<Finding> = Vec::new();
 
     for document in documents {
-        document_findings(document, profile, &mut findings);
+        document_findings(document, profile, navigation, &mut findings);
     }
 
     let invalid = invalid_attributions(comparisons);
