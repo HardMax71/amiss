@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use amiss_controller_files::read_bounded;
+use amiss_controller_files::{read_bounded, read_bounded_at};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use tempfile::TempDir;
@@ -36,4 +36,19 @@ fn does_not_follow_the_final_file_entry() {
     )
     .unwrap();
     assert!(read_bounded(&linked, 32).is_err());
+}
+
+#[test]
+fn reads_relative_to_an_existing_directory_capability() {
+    let root = TempDir::new().unwrap();
+    std::fs::create_dir(root.path().join("nested")).unwrap();
+    std::fs::write(root.path().join("nested/page.html"), b"page").unwrap();
+    let directory = Dir::open_ambient_dir(root.path(), ambient_authority()).unwrap();
+
+    assert_eq!(
+        read_bounded_at(&directory, Path::new("nested/page.html"), 4).unwrap(),
+        b"page"
+    );
+    assert!(read_bounded_at(&directory, &root.path().join("nested/page.html"), 4).is_err());
+    assert!(read_bounded_at(&directory, Path::new("nested/page.html"), 3).is_err());
 }

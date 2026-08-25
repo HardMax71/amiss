@@ -16,15 +16,18 @@ bench = false
 
 [dependencies]
 amiss-bootstrap = { path = "../crates/amiss-bootstrap" }
+amiss-controller-files = { path = "files" }
 amiss-git = { path = "../crates/amiss-git" }
 amiss-rst = { path = "../crates/amiss-rst" }
 amiss-wire = { path = "../crates/amiss-wire" }
 atomicwrites.workspace = true
 base64.workspace = true
+cap-std.workspace = true
 flate2.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 hmac.workspace = true
+html5gum.workspace = true
 percent-encoding.workspace = true
 processkit = { version = "=3.3.1", features = ["stats"] }
 same-file = "1"

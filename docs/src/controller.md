@@ -334,12 +334,15 @@ runner only after its adapter has refreshed provider state and acquired the exac
 
 The controller crates contain the provider-neutral identities, bounded ingress gate, rotating
 key ring, signature verifiers, durable raw inbox, `DeliveryLedger`, `FileLedger`, bounded artifact
-store and retrieval route, worker, orchestrator, acquisition boundary, and supervised bootstrap
-runner. Focused tests cover ingress limits and tampering, replay, rotation and revocation, file
+store and retrieval route, worker, orchestrator, acquisition boundary, bounded Intersphinx and
+mdBook semantic-evidence producers, and supervised bootstrap runner. Focused tests cover ingress
+limits and tampering, replay, rotation and revocation, file
 corruption, cross-process ownership, reclaim, exact publication retry across restart, full roots,
 artifact expiry, clock rollback, runner timeout, process descendants, and output replacement.
 The acquisition result can also carry candidate-specific pre-scan semantic evidence into the
-sealed controls request; the built-in provider acquisitions currently leave that set empty.
+sealed controls request. A trusted caller can derive source-bound routes and decoded anchors from
+a completed mdBook build without executing mdBook in the controller; the built-in provider
+acquisitions currently leave that set empty.
 
 Three merge-gate shapes join those pieces. GitHub uses a signed pull-request event, App refresh,
 strict App-bound ruleset, authoritative test merge, and App-owned Check Run. GitLab uses policy

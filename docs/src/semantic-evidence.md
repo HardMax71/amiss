@@ -83,10 +83,29 @@ candidate identity only while the sealed job is built. Fetching and caching rema
 concerns outside both the engine and the repository being checked; [provider
 configuration](provider-controls.md) accepts only the bounded local result.
 
-The built-in provider acquisitions currently return no candidate-specific envelopes. The
-acquisition boundary makes a completed-build producer possible without freezing candidate output
-into a startup plan or letting the scanner search the repository for evidence; it does not itself
-run a site generator or make repository-controlled output authoritative.
+The controller's first site-build producer consumes the exact post-preprocessor
+[mdBook renderer context](https://rust-lang.github.io/mdBook/for_developers/backends.html) from
+mdBook `0.5.4` and a caller-opened completed HTML output directory. It uses the renderer's `path`
+and `source_path`, rather than reconstructing routes from `SUMMARY.md`, so the built page and its
+original repository source remain distinct after preprocessing. The first rendered chapter's
+independent `index.html` copy is read separately. Every other route follows the HTML renderer's
+`.html` path rule beneath one trusted publication prefix, with URI path segments encoded from the
+actual output names.
+
+The producer reads only those source-backed pages named by the context, with one 16 MiB context
+ceiling and one 16 MiB aggregate HTML ceiling. A no-follow directory capability bounds every page
+read. A WHATWG tokenizer extracts decoded `id` values from the completed HTML, then the producer
+sorts and deduplicates each page's anchors and binds every exact page digest into the input digest.
+The wrong mdBook version, no HTML renderer, an escaping or non-text path, generated content without
+`source_path`, duplicate route ownership, an unreadable page, or an unrepresentable anchor refuses
+the complete set. Theme, preprocessor, and configuration effects are therefore observed in their
+finished bytes without running any of them inside Amiss.
+
+A trusted candidate acquisition may call this producer after an operator-owned build and return
+the already candidate-bound envelope. The built-in provider acquisitions still return none: the
+controller neither starts mdBook nor treats repository output or cache state as authority. The
+acquisition boundary keeps candidate output out of a startup plan and keeps the scanner from
+searching the repository for evidence.
 
 The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
