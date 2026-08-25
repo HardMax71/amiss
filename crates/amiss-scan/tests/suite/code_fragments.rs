@@ -33,6 +33,7 @@ fn dialect_identity(dialect: ForgeDialect) -> (&'static str, &'static str) {
         ForgeDialect::Gitlab => ("gitlab.com", "L2-3"),
         ForgeDialect::Gitea => ("codeberg.org", "L2-L3"),
         ForgeDialect::BitbucketCloud => ("bitbucket.org", "lib.rs-2"),
+        ForgeDialect::BitbucketDataCenter => ("bitbucket.example", "2-3"),
     }
 }
 
@@ -130,6 +131,7 @@ fn every_forge_dialect_compares_the_selected_lines() {
         ForgeDialect::Gitlab,
         ForgeDialect::Gitea,
         ForgeDialect::BitbucketCloud,
+        ForgeDialect::BitbucketDataCenter,
     ] {
         let (_, fragment) = dialect_identity(dialect);
         let payload = run(dialect, fragment, base, candidate);

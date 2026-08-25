@@ -204,12 +204,14 @@ pub(super) fn line_fragment(
             last: line,
         });
     }
-    let rest = decoded.strip_prefix('L')?;
-    let range = if forge == Some(ForgeDialect::Gitlab) {
-        rest.split_once('-')
-    } else {
-        rest.split_once("-L")
+    let (rest, separator) = match forge {
+        Some(ForgeDialect::BitbucketDataCenter) => (decoded, "-"),
+        Some(ForgeDialect::Gitlab) => (decoded.strip_prefix('L')?, "-"),
+        None | Some(ForgeDialect::Github | ForgeDialect::Gitea | ForgeDialect::BitbucketCloud) => {
+            (decoded.strip_prefix('L')?, "-L")
+        }
     };
+    let range = rest.split_once(separator);
     match range {
         None => number(rest).map(|line| LineRange {
             first: line,

@@ -146,6 +146,7 @@ fn dialect_of(case: &Value) -> ForgeDialect {
         "gitlab" => ForgeDialect::Gitlab,
         "gitea" => ForgeDialect::Gitea,
         "bitbucket-cloud" => ForgeDialect::BitbucketCloud,
+        "bitbucket-data-center" => ForgeDialect::BitbucketDataCenter,
         other => panic!("unknown dialect {other}"),
     }
 }
@@ -183,6 +184,16 @@ fn split_input(case: &Value) -> (ForgeContext, String) {
             "bitbucket.org",
             format!("https://bitbucket.org/acme/widgets/src/{suffix}"),
         ),
+        "bitbucket-data-center-ref-query" => {
+            let mut url = format!(
+                "https://bitbucket.example/bitbucket/projects/ACME/repos/widgets/browse/{suffix}"
+            );
+            if let Some(query) = case.get("query").and_then(Value::as_str) {
+                url.push('?');
+                url.push_str(query);
+            }
+            (ForgeDialect::BitbucketDataCenter, "bitbucket.example", url)
+        }
         _ => (
             ForgeDialect::Github,
             "github.com",
@@ -300,6 +311,20 @@ fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
             ),
             format!("https://bitbucket.org/acme/widgets/src/main/docs/a.md#{value}"),
         )
+    } else if text(case, "operation") == "bitbucket-data-center-line-fragment" {
+        (
+            context(
+                ForgeDialect::BitbucketDataCenter,
+                "bitbucket.example",
+                "acme",
+                "widgets",
+                "refs/heads/main",
+                "refs/heads/main",
+            ),
+            format!(
+                "https://bitbucket.example/projects/ACME/repos/widgets/browse/docs/a.md#{value}"
+            ),
+        )
     } else {
         (
             context(
@@ -372,6 +397,7 @@ fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
                     | IntentKind::SameRepositoryGitlab
                     | IntentKind::SameRepositoryGitea
                     | IntentKind::SameRepositoryBitbucketCloud
+                    | IntentKind::SameRepositoryBitbucketDataCenter
             ),
             "{id}: got {:?}",
             intent.kind
@@ -401,6 +427,7 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
         ForgeDialect::Gitlab => "gitlab.com",
         ForgeDialect::Gitea => "codeberg.org",
         ForgeDialect::BitbucketCloud => "bitbucket.org",
+        ForgeDialect::BitbucketDataCenter => "bitbucket.example",
     };
     let run_context = context(
         dialect,
@@ -586,12 +613,14 @@ fn dispatch(bed: &mut Bed, case: &Value) {
         "github-line-fragment"
         | "gitlab-line-fragment"
         | "gitea-line-fragment"
-        | "bitbucket-cloud-line-fragment" => line_fragment_case(bed, case, id),
+        | "bitbucket-cloud-line-fragment"
+        | "bitbucket-data-center-line-fragment" => line_fragment_case(bed, case, id),
         "github-ref-split"
         | "gitlab-ref-split"
         | "gitea-branch-split"
         | "gitea-commit-split"
-        | "bitbucket-cloud-ref-split" => split_case(bed, case, id),
+        | "bitbucket-cloud-ref-split"
+        | "bitbucket-data-center-ref-query" => split_case(bed, case, id),
         "github-identity" | "forge-identity" => identity_case(bed, case, id),
         "forge-form" => forge_form_case(bed, case, id),
         "forge-dialect-default" => dialect_default_case(case, id),

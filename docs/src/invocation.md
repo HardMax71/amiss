@@ -27,7 +27,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
             [--repository <host>/<owner>/<name>
              --ref refs/heads/<name>
              --default-branch-ref refs/heads/<name>
-             [--forge <github|gitlab|gitea|bitbucket-cloud>]]
+             [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
             [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
@@ -35,7 +35,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
             [--repository <host>/<owner>/<name>
              --ref refs/heads/<name>
              --default-branch-ref refs/heads/<name>
-             [--forge <github|gitlab|gitea|bitbucket-cloud>]]
+             [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss adopt --repo <path> --object-format <sha1|sha256>
@@ -43,7 +43,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --repository <host>/<owner>/<name>
             --ref refs/heads/<name>
             --default-branch-ref refs/heads/<name>
-            [--forge <github|gitlab|gitea|bitbucket-cloud>]
+            [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]
             --floor-digest sha256:<64-hex> --debt-owner <name>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>
@@ -70,7 +70,7 @@ trust them when the short form reads ambiguous.
 | `--repository` | `<host>/<owner>/<name>`; owner and name lowercase | unverified identity claim for same-repository URLs |
 | `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to; in the adopt form, also the ref the minted debt binds to |
 | `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
-| `--forge` | `github`, `gitlab`, `gitea`, or `bitbucket-cloud` | URL dialect; an explicit flag beats the host table |
+| `--forge` | `github`, `gitlab`, `gitea`, `bitbucket-cloud`, or `bitbucket-data-center` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--format` | `human`, `json`, `sarif`, or `codequality` | ten grouped items, the exact report in [The report](report.md), or its SARIF or GitLab Code Quality projection |
@@ -101,7 +101,7 @@ the resolver which same-repository URLs to read as this repository; nothing veri
 own it, so the spelling is strict. The host matches your documents' URLs byte for byte and
 is never case-folded. Owner and name must be lowercase ASCII, so a workflow passing
 `github.repository` lowercases it first. Owner segments may nest, the GitLab group form;
-an effective github, gitea, or bitbucket-cloud dialect refuses a nested owner it could never
+an effective github, gitea, bitbucket-cloud, or bitbucket-data-center dialect refuses a nested owner it could never
 match. A wrong
 spelling is refused, never rewritten. Without the identity group every absolute forge URL
 stays external, and a human run with a nonzero external count says so beside its totals
@@ -117,11 +117,13 @@ commit, tree, or target retains its exact ID and contained path as unsupported v
 branch whose spelling is also a full ID is refused as ambiguous. Without the identity group, forge
 links stay external URLs and the report says so.
 
-`--forge` names the URL dialect the resolver applies and accepts exactly four values.
+`--forge` names the URL dialect the resolver applies and accepts exactly five values.
 `github` covers GitHub and GitHub Enterprise, `gitlab` the `/-/blob/` separator form,
 `gitea` the form Gitea, Forgejo, and Codeberg share, and `bitbucket-cloud` the Cloud
-`/src/<commitish>/<path>` form. Without the flag, github.com, gitlab.com, codeberg.org,
-and bitbucket.org select their own dialects; an identity on any other host is
+`/src/<commitish>/<path>` form. `bitbucket-data-center` covers project and personal
+`browse` routes whose revision is carried by the query; it is always explicit because Data Center
+has no canonical host. Without the flag, github.com, gitlab.com, codeberg.org, and bitbucket.org
+select their own dialects; an identity on any other host is
 refused as `INVALID_EVENT` until the flag names its dialect, since accepting it would
 silently leave every same-repository link external. An explicit flag beats the table;
 that's how a self-hosted instance gets its grammar. Recognizing a dialect authenticates

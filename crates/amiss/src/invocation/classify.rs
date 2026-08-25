@@ -495,7 +495,10 @@ fn classify_forge(
         .ok_or(Code::InvalidEvent)?;
     if matches!(
         dialect,
-        ForgeDialect::Github | ForgeDialect::Gitea | ForgeDialect::BitbucketCloud
+        ForgeDialect::Github
+            | ForgeDialect::Gitea
+            | ForgeDialect::BitbucketCloud
+            | ForgeDialect::BitbucketDataCenter
     ) && identity.repository.owner().contains('/')
     {
         Err(Code::InvalidEvent)

@@ -26,10 +26,12 @@ own decoding, the address an evidence producer would request; its lowercased sch
 documents naming it. Unavailable exact history uses `https`, the only scheme accepted by the
 same-repository forge grammar. A destination on a forge host the run can name, github.com,
 gitlab.com, codeberg.org, bitbucket.org, or the report's own declared host under its declared dialect,
-also carries a `repository` object: host, dialect, owner, name, then verbatim the path
-segment after them as `form` and everything later as one opaque `tail`. The tail stays
-unsplit on purpose. Branch names may contain slashes, so separating revision from path
-needs the other repository's refs, and naming structure is not claiming the repository
+also carries a `repository` object: host, dialect, owner, name, form, and opaque tail. The ordinary
+forge grammars take owner and name from their leading path segments. Bitbucket Data Center instead
+recognizes an optional installation context followed by the first `projects` or `users` repository route;
+its project key or personal slug becomes the owner, and `browse` is the form. The destination still
+retains the revision query verbatim. Tails stay unsplit where branch names may contain slashes, so
+separating revision from path needs the other repository's refs, and naming structure is not claiming the repository
 exists; both belong to the verifying layer. The payload binds the report's own `payload_digest` and echoes its
 evaluation identities, and the plan envelope carries a digest of its own payload under
 the plan schema identity. A producer that probes the introduced list, and any later

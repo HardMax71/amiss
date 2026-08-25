@@ -549,6 +549,28 @@
         "external_scheme": null
       },
       "expected_equal": true
+    },
+    {
+      "id": "CI-025-native-bitbucket-data-center-equivalent",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "same-repository-bitbucket-data-center",
+        "raw_destination_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": true
     }
   ]
 }

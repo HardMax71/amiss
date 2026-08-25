@@ -21,6 +21,9 @@ pub(super) fn resolve(
         ForgeDialect::Gitlab => gitlab(context, suffix),
         ForgeDialect::Gitea => gitea(context, suffix),
         ForgeDialect::BitbucketCloud => bitbucket_cloud(context, suffix),
+        ForgeDialect::BitbucketDataCenter => {
+            bitbucket_data_center(context, suffix, query.as_deref())
+        }
     };
     match route {
         ForgeRoute::Foreign => Ok(foreign_row(query, fragment)),
@@ -34,13 +37,10 @@ pub(super) fn resolve(
                 version,
                 path,
             } = matched;
-            let lookup_query = if context.dialect == ForgeDialect::BitbucketCloud
-                && query.as_deref() == Some("fileviewer=file-view-default")
-            {
-                None
-            } else {
-                query.as_deref()
-            };
+            let query_is_forge_state = context.dialect == ForgeDialect::BitbucketDataCenter
+                || context.dialect == ForgeDialect::BitbucketCloud
+                    && query.as_deref() == Some("fileviewer=file-view-default");
+            let lookup_query = query.as_deref().filter(|_value| !query_is_forge_state);
             let (commit_oid, resolution) = match version {
                 ForgeVersion::Candidate => (
                     None,
@@ -312,14 +312,7 @@ fn bitbucket_cloud_split(
         .as_bytes();
     let candidate_matches = version.as_slice() == candidate;
     let default_matches = version.as_slice() == default;
-    let oid_format = match version.len() {
-        40 => Some(ObjectFormat::Sha1),
-        64 => Some(ObjectFormat::Sha256),
-        _ => None,
-    };
-    let commit_oid = oid_format
-        .zip(std::str::from_utf8(version).ok())
-        .and_then(|(format, value)| Oid::new(format, value.to_owned()));
+    let commit_oid = decoded_oid(version);
     if commit_oid
         .as_ref()
         .is_some_and(|oid| oid.object_format() != identity.object_format)
@@ -339,6 +332,135 @@ fn bitbucket_cloud_split(
         version,
         contained_path(decoded.get(1..).unwrap_or_default())?,
     ))
+}
+
+/// Data Center binds a project or personal repository in the path and the
+/// selected revision in `at`, while the emitted history link uses the exact
+/// `until` and `untilPath` pair. An installation context may precede either
+/// repository route.
+fn bitbucket_data_center(identity: &ForgeContext, suffix: &str, query: Option<&str>) -> ForgeRoute {
+    let segments: Vec<&str> = suffix.split('/').collect();
+    let literal_ascii = |text: &str| {
+        !text.is_empty() && text.is_ascii() && !text.contains('%') && !matches!(text, "." | "..")
+    };
+    let Some(marker) = segments
+        .iter()
+        .position(|segment| matches!(*segment, "projects" | "users"))
+    else {
+        return ForgeRoute::Foreign;
+    };
+    let [scope, owner, "repos", repository, "browse"] = segments
+        .get(marker..marker.saturating_add(5))
+        .unwrap_or_default()
+    else {
+        return ForgeRoute::Foreign;
+    };
+    let route_owner = if *scope == "projects" {
+        owner.strip_prefix('~').unwrap_or(owner)
+    } else {
+        owner
+    };
+    if segments
+        .get(..marker)
+        .is_some_and(|prefix| prefix.iter().any(|segment| !literal_ascii(segment)))
+        || !repository_pair_matches(identity, route_owner, repository)
+    {
+        return ForgeRoute::Foreign;
+    }
+    let raw_tail = segments.get(marker.saturating_add(5)..).unwrap_or_default();
+    let directory_hint = raw_tail.len() > 1 && raw_tail.last() == Some(&"");
+    let target_kind = if directory_hint {
+        TargetKind::Tree
+    } else {
+        TargetKind::Either
+    };
+    let split = decoded_tail(directory_hint, raw_tail)
+        .and_then(|decoded| contained_path(&decoded))
+        .and_then(|path| {
+            bitbucket_data_center_version(identity, query, &path).map(|version| (version, path))
+        });
+    same_route(
+        IntentKind::SameRepositoryBitbucketDataCenter,
+        target_kind,
+        split,
+    )
+}
+
+fn bitbucket_data_center_version(
+    identity: &ForgeContext,
+    query: Option<&str>,
+    path: &RepoPath,
+) -> Result<ForgeVersion, Resolution> {
+    let unsupported =
+        || Resolution::UnsupportedVersion(VersionScope::KnownPath { path: path.clone() });
+    let decode = |value: &str| {
+        let mut decoded = Vec::with_capacity(value.len());
+        decode_component(value, &mut decoded, |byte| match byte {
+            b'\\' => Some(InvalidReference::BackslashSeparator),
+            0..=0x1f | 0x7f => Some(InvalidReference::DecodedPathControl),
+            _ => None,
+        })
+        .map(|()| decoded)
+        .map_err(Resolution::Invalid)
+    };
+    let Some(query) = query else {
+        return Ok(if identity.default_ref == identity.candidate_ref {
+            ForgeVersion::Candidate
+        } else {
+            ForgeVersion::OtherNamedRef
+        });
+    };
+    if let Some(raw_revision) = query.strip_prefix("at=")
+        && !raw_revision.contains('&')
+    {
+        let revision = decode(raw_revision)?;
+        let oid = decoded_oid(&revision);
+        if oid
+            .as_ref()
+            .is_some_and(|value| value.object_format() != identity.object_format)
+        {
+            return Err(unsupported());
+        }
+        if let Some(oid) = oid.filter(|_value| raw_revision.as_bytes() == revision.as_slice()) {
+            return Ok(ForgeVersion::Commit(oid));
+        }
+        if revision == identity.candidate_ref.as_bytes() {
+            return Ok(ForgeVersion::Candidate);
+        }
+        if revision
+            .strip_prefix(b"refs/heads/")
+            .is_some_and(|name| !name.is_empty())
+            || revision
+                .strip_prefix(b"refs/tags/")
+                .is_some_and(|name| !name.is_empty())
+        {
+            return Ok(ForgeVersion::OtherNamedRef);
+        }
+        return Err(unsupported());
+    }
+    if let Some(history) = query.strip_prefix("until=")
+        && let Some((raw_revision, raw_path)) = history.split_once("&untilPath=")
+        && !raw_path.contains('&')
+    {
+        let decoded_path = decode(raw_path)?;
+        let revision = decoded_oid(raw_revision.as_bytes())
+            .filter(|value| value.object_format() == identity.object_format);
+        if decoded_path == path.as_bytes()
+            && let Some(oid) = revision
+        {
+            return Ok(ForgeVersion::Commit(oid));
+        }
+    }
+    Err(unsupported())
+}
+
+fn decoded_oid(value: &[u8]) -> Option<Oid> {
+    let format = match value.len() {
+        40 => ObjectFormat::Sha1,
+        64 => ObjectFormat::Sha256,
+        _ => return None,
+    };
+    Oid::new(format, std::str::from_utf8(value).ok()?.to_owned())
 }
 
 fn repository_pair_matches(identity: &ForgeContext, owner: &str, repository: &str) -> bool {

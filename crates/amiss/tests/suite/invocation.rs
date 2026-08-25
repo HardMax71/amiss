@@ -30,6 +30,20 @@ fn valid_pair() -> Vec<String> {
     .collect()
 }
 
+fn with_identity(host_triple: &str) -> Vec<String> {
+    with(
+        &valid_pair(),
+        &[
+            "--repository",
+            host_triple,
+            "--ref",
+            "refs/heads/main",
+            "--default-branch-ref",
+            "refs/heads/main",
+        ],
+    )
+}
+
 fn parse_tokens(tokens: &[String]) -> Outcome {
     let argv: Vec<OsString> = tokens.iter().map(OsString::from).collect();
     parse(&argv)
@@ -555,67 +569,70 @@ fn refuses_an_unknown_host_without_a_dialect() {
 /// dialect refuses a nested owner it could never match.
 #[test]
 fn classifies_the_forge_dialect_grammar() {
-    let identity = |host_triple: &str| {
-        with(
-            &valid_pair(),
-            &[
-                "--repository",
-                host_triple,
-                "--ref",
-                "refs/heads/main",
-                "--default-branch-ref",
-                "refs/heads/main",
-            ],
-        )
-    };
-
     for (repository, expected) in [
         ("github.com/acme/repo", ForgeDialect::Github),
         ("codeberg.org/acme/repo", ForgeDialect::Gitea),
         ("bitbucket.org/acme/repo", ForgeDialect::BitbucketCloud),
     ] {
         assert_eq!(
-            scan_of(parse_tokens(&identity(repository))).forge,
+            scan_of(parse_tokens(&with_identity(repository))).forge,
             Some(expected),
             "{repository} selects its known-host dialect"
         );
     }
 
-    let explicit = with(
-        &identity("ghes.corp.example/acme/repo"),
-        &["--forge", "github"],
-    );
-    let ghes = scan_of(parse_tokens(&explicit));
-    assert_eq!(ghes.forge, Some(ForgeDialect::Github));
-    assert_eq!(
-        ghes.identity.unwrap().repository.host(),
-        "ghes.corp.example"
-    );
+    for (repository, dialect, expected) in [
+        (
+            "ghes.corp.example/acme/repo",
+            "github",
+            ForgeDialect::Github,
+        ),
+        (
+            "bitbucket.example/acme/repo",
+            "bitbucket-data-center",
+            ForgeDialect::BitbucketDataCenter,
+        ),
+    ] {
+        let scan = scan_of(parse_tokens(&with(
+            &with_identity(repository),
+            &["--forge", dialect],
+        )));
+        assert_eq!(scan.forge, Some(expected), "{dialect}");
+        assert_eq!(
+            scan.identity.unwrap().repository.host(),
+            repository.split('/').next().unwrap_or_default(),
+            "{dialect}"
+        );
+    }
 
     assert_eq!(
-        rejected_codes(parse_tokens(&identity("github.com/group/subgroup/repo"))),
+        rejected_codes(parse_tokens(&with_identity(
+            "github.com/group/subgroup/repo"
+        ))),
         vec![Code::InvalidEvent],
         "the github dialect cannot match a nested owner"
     );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
-            &identity("git.example.internal/group/sub/repo"),
+            &with_identity("git.example.internal/group/sub/repo"),
             &["--forge", "gitea"],
         ))),
         vec![Code::InvalidEvent],
         "the gitea dialect cannot match a nested owner either"
     );
+    for dialect in ["bitbucket-cloud", "bitbucket-data-center"] {
+        assert_eq!(
+            rejected_codes(parse_tokens(&with(
+                &with_identity("bitbucket.example/group/sub/repo"),
+                &["--forge", dialect],
+            ))),
+            vec![Code::InvalidEvent],
+            "the {dialect} dialect cannot match a nested owner"
+        );
+    }
     assert_eq!(
         rejected_codes(parse_tokens(&with(
-            &identity("bitbucket.example/group/sub/repo"),
-            &["--forge", "bitbucket-cloud"],
-        ))),
-        vec![Code::InvalidEvent],
-        "the Bitbucket Cloud dialect cannot match a nested owner"
-    );
-    assert_eq!(
-        rejected_codes(parse_tokens(&with(
-            &identity("ghes.corp.example/group/sub/repo"),
+            &with_identity("ghes.corp.example/group/sub/repo"),
             &["--forge", "github"],
         ))),
         vec![Code::InvalidEvent],
@@ -629,7 +646,7 @@ fn classifies_the_forge_dialect_grammar() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
-            &identity("github.com/acme/repo"),
+            &with_identity("github.com/acme/repo"),
             &["--forge", "sourcehut"],
         ))),
         vec![Code::InvalidInvocation],
@@ -637,14 +654,14 @@ fn classifies_the_forge_dialect_grammar() {
     );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
-            &identity("github.com/acme/repo"),
+            &with_identity("github.com/acme/repo"),
             &["--forge", "github", "--forge", "github"],
         ))),
         vec![Code::InvalidInvocation]
     );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
-            &identity("github.com/acme/repo"),
+            &with_identity("github.com/acme/repo"),
             &["--forge"],
         ))),
         vec![Code::InvalidInvocation]

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::digest::hj;
@@ -212,33 +213,52 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
     if segments.len() < 2 || segments.iter().any(|segment| segment.is_empty()) {
         return None;
     }
-    let (project, form, tail) = if dialect == "gitlab" {
-        // Without the separator a legacy file URL and a nested project page
-        // are indistinguishable, so only the two-segment form is a shape.
-        match segments.iter().position(|segment| *segment == "-") {
-            Some(separator) if separator >= 2 => (
-                segments.get(..separator)?,
-                segments.get(separator.saturating_add(1)).copied(),
-                segments
-                    .get(separator.saturating_add(2)..)
-                    .unwrap_or_default(),
-            ),
-            None if segments.len() == 2 => (segments.as_slice(), None, [].as_slice()),
-            Some(_) | None => return None,
-        }
+    let (owner, name, form, tail) = if dialect == "bitbucket-data-center" {
+        let marker = segments
+            .iter()
+            .position(|segment| matches!(*segment, "projects" | "users"))?;
+        let [route, owner, "repos", name, rest @ ..] = segments.get(marker..)? else {
+            return None;
+        };
+        let owner = if *route == "projects" {
+            owner.strip_prefix('~').unwrap_or(owner)
+        } else {
+            owner
+        };
+        let (form, tail) = rest
+            .split_first()
+            .map_or((None, [].as_slice()), |(form, tail)| (Some(*form), tail));
+        (Cow::Borrowed(owner), *name, form, tail)
     } else {
-        (
-            segments.get(..2)?,
-            segments.get(2).copied(),
-            segments.get(3..).unwrap_or_default(),
-        )
+        let (project, form, tail) = if dialect == "gitlab" {
+            // Without the separator a legacy file URL and a nested project page
+            // are indistinguishable, so only the two-segment form is a shape.
+            match segments.iter().position(|segment| *segment == "-") {
+                Some(separator) if separator >= 2 => (
+                    segments.get(..separator)?,
+                    segments.get(separator.saturating_add(1)).copied(),
+                    segments
+                        .get(separator.saturating_add(2)..)
+                        .unwrap_or_default(),
+                ),
+                None if segments.len() == 2 => (segments.as_slice(), None, [].as_slice()),
+                Some(_) | None => return None,
+            }
+        } else {
+            (
+                segments.get(..2)?,
+                segments.get(2).copied(),
+                segments.get(3..).unwrap_or_default(),
+            )
+        };
+        let (name, owner) = project.split_last()?;
+        (Cow::Owned(owner.join("/")), *name, form, tail)
     };
-    let (name, owner) = project.split_last()?;
     let mut members = vec![
         ("dialect", string(dialect)),
         ("host", string(host)),
         ("name", string(name)),
-        ("owner", string(&owner.join("/"))),
+        ("owner", string(&owner)),
     ];
     if let Some(form) = form {
         members.push(("form", string(form)));

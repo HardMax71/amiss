@@ -269,7 +269,8 @@
         "github",
         "gitlab",
         "gitea",
-        "bitbucket-cloud"
+        "bitbucket-cloud",
+        "bitbucket-data-center"
       ]
     },
     "GitOid": {
@@ -1280,7 +1281,7 @@
           ]
         },
         "forge": {
-          "description": "The same-repository URL dialect this run recognized, or null when none applied: no declared identity, or an unknown host without an explicit dialect. Under null every absolute forge link remains external and the same_repository counter stays zero. github, gitea, and bitbucket-cloud appear only with a single-segment owner.",
+          "description": "The same-repository URL dialect this run recognized, or null when none applied: no declared identity, or an unknown host without an explicit dialect. Under null every absolute forge link remains external and the same_repository counter stays zero. github, gitea, bitbucket-cloud, and bitbucket-data-center appear only with a single-segment owner.",
           "oneOf": [
             {
               "$ref": "#/$defs/ForgeDialect"
@@ -2305,6 +2306,28 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "same-repository-bitbucket-data-center"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "target_kind": {
+                "enum": [
+                  "tree",
+                  "either"
+                ]
+              }
+            }
+          }
         }
       ],
       "required": [
@@ -2323,7 +2346,8 @@
             "same-repository-github",
             "same-repository-gitlab",
             "same-repository-gitea",
-            "same-repository-bitbucket-cloud"
+            "same-repository-bitbucket-cloud",
+            "same-repository-bitbucket-data-center"
           ]
         },
         "raw_destination_digest": {

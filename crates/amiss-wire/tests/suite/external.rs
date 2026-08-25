@@ -438,46 +438,71 @@ fn an_unrecognizable_destination_stays_unshaped() {
 /// the dialect the evaluation already names.
 #[test]
 fn the_declared_host_is_recognized_with_its_declared_dialect() {
-    let destination = "https://ghes.corp.example/other/repo/blob/main/x.md";
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
+    let cases = [
         (
-            "result",
-            object(vec![
-                ("complete", Value::Bool(true)),
-                ("status", string("pass")),
-                ("exit_code", Value::Integer(0)),
-            ]),
+            "ghes.corp.example",
+            "github",
+            "https://ghes.corp.example/other/repo/blob/main/x.md",
+            r#"{"dialect":"github","form":"blob","host":"ghes.corp.example","name":"repo","owner":"other","tail":"main/x.md"}"#,
         ),
         (
-            "evaluation",
-            object(vec![
-                ("base", object(vec![("commit_oid", string("a"))])),
-                ("candidate", object(vec![("commit_oid", string("b"))])),
-                ("mode", string("commit-pair")),
-                ("forge", string("github")),
-                (
-                    "repository",
-                    object(vec![("host", string("ghes.corp.example"))]),
-                ),
-            ]),
+            "bitbucket.corp.example",
+            "bitbucket-data-center",
+            "https://bitbucket.corp.example/bitbucket/projects/ACME/repos/widgets/browse/docs/a.md?at=refs%2Fheads%2Fmain",
+            r#"{"dialect":"bitbucket-data-center","form":"browse","host":"bitbucket.corp.example","name":"widgets","owner":"ACME","tail":"docs/a.md"}"#,
         ),
-        ("observations", Value::array(introduced(destination))),
-    ]);
-    let digest = hj(PAYLOAD_SCHEMA, &payload);
-    let envelope = object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", string(&digest.to_string())),
-    ]);
-    let derived =
-        plan(&envelope, "0.0.0", &sample_digest()).expect("the declared-host report yields a plan");
-    let repository = repository_of(&derived, destination).expect("the declared host is shaped");
-    assert_eq!(
-        String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
-        r#"{"dialect":"github","form":"blob","host":"ghes.corp.example","name":"repo","owner":"other","tail":"main/x.md"}"#,
-    );
+        (
+            "bitbucket.corp.example",
+            "bitbucket-data-center",
+            "https://bitbucket.corp.example/bitbucket/users/alice/repos/widgets/browse/docs/a.md",
+            r#"{"dialect":"bitbucket-data-center","form":"browse","host":"bitbucket.corp.example","name":"widgets","owner":"alice","tail":"docs/a.md"}"#,
+        ),
+        (
+            "bitbucket.corp.example",
+            "bitbucket-data-center",
+            "https://bitbucket.corp.example/projects/OTHER/repos/else/browse/projects/ACME/repos/widgets/browse/docs/a.md",
+            r#"{"dialect":"bitbucket-data-center","form":"browse","host":"bitbucket.corp.example","name":"else","owner":"OTHER","tail":"projects/ACME/repos/widgets/browse/docs/a.md"}"#,
+        ),
+    ];
+    for (host, dialect, destination, expected) in cases {
+        let payload = object(vec![
+            ("schema", string(PAYLOAD_SCHEMA)),
+            ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
+            (
+                "result",
+                object(vec![
+                    ("complete", Value::Bool(true)),
+                    ("status", string("pass")),
+                    ("exit_code", Value::Integer(0)),
+                ]),
+            ),
+            (
+                "evaluation",
+                object(vec![
+                    ("base", object(vec![("commit_oid", string("a"))])),
+                    ("candidate", object(vec![("commit_oid", string("b"))])),
+                    ("mode", string("commit-pair")),
+                    ("forge", string(dialect)),
+                    ("repository", object(vec![("host", string(host))])),
+                ]),
+            ),
+            ("observations", Value::array(introduced(destination))),
+        ]);
+        let digest = hj(PAYLOAD_SCHEMA, &payload);
+        let envelope = object(vec![
+            ("schema", string(ENVELOPE_SCHEMA)),
+            ("payload", payload),
+            ("payload_digest", string(&digest.to_string())),
+        ]);
+        let derived = plan(&envelope, "0.0.0", &sample_digest())
+            .expect("the declared-host report yields a plan");
+        let repository = repository_of(&derived, destination).expect("the declared host is shaped");
+        assert_eq!(
+            String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
+            expected,
+            "{destination}"
+        );
+    }
 }
 
 use amiss_wire::external::{AssessDefect, EVIDENCE_SCHEMA, assess};

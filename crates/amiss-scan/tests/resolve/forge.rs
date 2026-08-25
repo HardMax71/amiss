@@ -47,24 +47,34 @@ fn same_repository_intents_retain_query_and_fragment() {
             forge_context(ForgeDialect::Github),
             IntentKind::SameRepositoryGithub,
             "https://github.com/acme/widgets/blob/feature/x/docs/guide.md?plain=1#intro",
+            "plain=1",
         ),
         (
             forge_context(ForgeDialect::Gitlab),
             IntentKind::SameRepositoryGitlab,
             "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md?plain=1#intro",
+            "plain=1",
         ),
         (
             forge_context(ForgeDialect::Gitea),
             IntentKind::SameRepositoryGitea,
             "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/guide.md?plain=1#intro",
+            "plain=1",
         ),
         (
             forge_context(ForgeDialect::BitbucketCloud),
             IntentKind::SameRepositoryBitbucketCloud,
             "https://bitbucket.org/acme/widgets/src/feature/docs/guide.md?plain=1#intro",
+            "plain=1",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketDataCenter),
+            IntentKind::SameRepositoryBitbucketDataCenter,
+            "https://bitbucket.example/projects/ACME/repos/widgets/browse/docs/guide.md?at=refs%2Fheads%2Ffeature%2Fx#intro",
+            "at=refs%2Fheads%2Ffeature%2Fx",
         ),
     ];
-    for (context, kind, destination) in cases {
+    for (context, kind, destination, query) in cases {
         let (intent, _resolution) = bed()
             .run_as(
                 Adapter::Markdown,
@@ -75,7 +85,7 @@ fn same_repository_intents_retain_query_and_fragment() {
             )
             .unwrap();
         assert_eq!(intent.kind, kind, "{destination}");
-        assert_eq!(intent.query.as_deref(), Some("plain=1"), "{destination}");
+        assert_eq!(intent.query.as_deref(), Some(query), "{destination}");
         assert_eq!(intent.fragment.as_deref(), Some("intro"), "{destination}");
     }
 }
@@ -106,6 +116,12 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
         (
             forge_context(ForgeDialect::BitbucketCloud),
             format!("https://bitbucket.org/acme/widgets/src/{raw}/docs/guide.md"),
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketDataCenter),
+            format!(
+                "https://bitbucket.example/projects/ACME/repos/widgets/browse/docs/guide.md?at={raw}"
+            ),
         ),
     ];
     for (context, destination) in cases {
@@ -460,6 +476,94 @@ fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
     assert_eq!(path.as_str(), Some("x/docs/guide.md"));
 }
 
+#[test]
+fn bitbucket_data_center_recognizes_query_bound_browse_routes() {
+    let mut bed = bed();
+    let context = forge_context(ForgeDialect::BitbucketDataCenter);
+    for destination in [
+        "https://bitbucket.example/projects/ACME/repos/widgets/browse/src/lib.rs?at=refs%2Fheads%2Ffeature%2Fx#1",
+        "https://bitbucket.example/bitbucket/users/acme/repos/widgets/browse/src/lib.rs?at=refs/heads/feature/x#1",
+        "https://bitbucket.example/bitbucket/projects/~acme/repos/widgets/browse/src/lib.rs?at=refs%2Fheads%2Ffeature%2Fx#1",
+    ] {
+        let (intent, resolution) = bed
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                destination,
+            )
+            .unwrap();
+        assert_eq!(
+            intent.kind,
+            IntentKind::SameRepositoryBitbucketDataCenter,
+            "{destination}"
+        );
+        assert!(
+            matches!(resolution, Resolution::Resolved(_)),
+            "{destination}: {resolution:?}"
+        );
+    }
+}
+
+#[test]
+fn bitbucket_data_center_keeps_unknown_revision_queries_scoped_out() {
+    let mut bed = bed();
+    let context = forge_context(ForgeDialect::BitbucketDataCenter);
+    for query in [
+        "at=feature/x",
+        "at=0123456",
+        "at=refs%2Fheads%2Ffeature%2Fx&raw",
+        "until=6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22&untilPath=other.md",
+    ] {
+        let (intent, resolution) = bed
+            .run_as(
+                Adapter::Markdown,
+                Some(&context),
+                "docs/guide.md",
+                false,
+                &format!(
+                    "https://bitbucket.example/projects/ACME/repos/widgets/browse/docs/guide.md?{query}"
+                ),
+            )
+            .unwrap();
+        assert_eq!(intent.kind, IntentKind::Unsupported, "{query}");
+        let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = resolution else {
+            panic!("unexpected resolution for {query}: {resolution:?}");
+        };
+        assert_eq!(path.as_str(), Some("docs/guide.md"), "{query}");
+    }
+}
+
+#[test]
+fn bitbucket_data_center_history_query_binds_the_path() {
+    let mut bed = bed();
+    let raw = bed
+        .dir
+        .commits
+        .first()
+        .expect("the resolver fixture has a commit")
+        .id
+        .clone();
+    let context = forge_context(ForgeDialect::BitbucketDataCenter);
+    let (intent, resolution) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            &format!(
+                "https://bitbucket.example/projects/ACME/repos/widgets/browse/docs/guide.md?until={raw}&untilPath=docs%2Fguide.md"
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        intent.commit_oid.as_ref().map(Oid::as_str),
+        Some(raw.as_str())
+    );
+    assert!(matches!(resolution, Resolution::Resolved(_)));
+}
+
 /// One wrong fact makes a same-repository spelling foreign: the owner, the
 /// project, or the form, each alone, on every dialect.
 #[test]
@@ -497,6 +601,18 @@ fn one_wrong_fact_makes_a_foreign_url() {
         (
             forge_context(ForgeDialect::BitbucketCloud),
             "https://bitbucket.org/acme/widgets/raw/feature/docs/guide.md",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketDataCenter),
+            "https://bitbucket.example/projects/other/repos/widgets/browse/docs/guide.md",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketDataCenter),
+            "https://bitbucket.example/projects/ACME/repos/widgets/raw/docs/guide.md",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketDataCenter),
+            "https://bitbucket.example/projects/OTHER/repos/else/browse/projects/ACME/repos/widgets/browse/docs/guide.md",
         ),
     ];
     for (context, destination) in cases {
