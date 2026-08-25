@@ -141,13 +141,10 @@ fn a_repository_with_no_documents_reports_an_empty_surface() {
     assert_eq!(payload["result"]["status"], "pass");
 }
 
-/// A document that references nothing is scanned, not skipped, and the report
-/// names it. The spec binds three numbers together for exactly this case: the
-/// summary's `documents.unlinked`, the count of matching candidate documents,
-/// and the count of `unlinked-document` findings are one value, so a document
-/// cannot go unreferenced and unmentioned at the same time.
+/// Outbound-reference absence is not navigation evidence. A local run has no
+/// completed site graph, so it cannot claim whether this page is reachable.
 #[test]
-fn a_document_with_no_references_is_unlinked_exactly_once() {
+fn a_document_with_no_references_makes_no_navigation_claim() {
     let (built, payload) = scan(|root| {
         fs::write(root.join("README.md"), "# Title\n\nProse, and no links.\n").unwrap();
         git(root, &["add", "."]);
@@ -159,16 +156,8 @@ fn a_document_with_no_references_is_unlinked_exactly_once() {
     assert_eq!(count(&payload, "references", "extracted"), 0);
     assert_eq!(payload["observations"].as_array().unwrap().len(), 0);
 
-    let emitted = kinds(&payload)
-        .iter()
-        .filter(|kind| kind.as_str() == "unlinked-document")
-        .count();
-    assert_eq!(emitted, 1, "one finding for the one unlinked document");
-    assert_eq!(
-        u64::try_from(emitted).unwrap(),
-        count(&payload, "documents", "unlinked"),
-        "the summary count and the findings are the same number"
-    );
+    assert_eq!(count(&payload, "documents", "unlinked"), 0);
+    assert!(!kinds(&payload).contains(&"unlinked-document".to_owned()));
     assert_eq!(payload["result"]["status"], "pass");
 }
 
@@ -224,13 +213,10 @@ fn documents_it_cannot_read_are_disclosed_and_never_counted_as_covered() {
     );
 }
 
-/// An MDX document whose whole body is opaque: an import and a component, and
-/// no Markdown the parser can see into. It is scanned, so it is unlinked, and
-/// its opacity is a finding rather than an absence. The two claims have to
-/// stand together, because "no references here" and "this region is beyond me"
-/// are the coverage answer only when both are said.
+/// An MDX document whose whole body is opaque reports that parser boundary,
+/// but no absent navigation graph is invented from the empty extraction.
 #[test]
-fn an_opaque_only_mdx_document_reports_both_its_silence_and_its_opacity() {
+fn an_opaque_only_mdx_document_reports_its_parser_boundary() {
     let (built, payload) = scan(|root| {
         fs::write(
             root.join("page.mdx"),
@@ -244,7 +230,7 @@ fn an_opaque_only_mdx_document_reports_both_its_silence_and_its_opacity() {
     assert_eq!(count(&payload, "documents", "discovered"), 1);
     assert_eq!(count(&payload, "documents", "scanned"), 1);
     assert_eq!(count(&payload, "references", "extracted"), 0);
-    assert_eq!(count(&payload, "documents", "unlinked"), 1);
+    assert_eq!(count(&payload, "documents", "unlinked"), 0);
     assert_eq!(count(&payload, "documents", "opaque_mdx_documents"), 1);
     assert!(
         count(&payload, "documents", "opaque_mdx_regions") > 0,
@@ -252,10 +238,7 @@ fn an_opaque_only_mdx_document_reports_both_its_silence_and_its_opacity() {
     );
 
     let emitted = kinds(&payload);
-    assert!(
-        emitted.contains(&"unlinked-document".to_owned()),
-        "it extracted nothing: {emitted:?}"
-    );
+    assert!(!emitted.contains(&"unlinked-document".to_owned()));
     assert!(
         emitted.contains(&"opaque-mdx-region".to_owned()),
         "and it says why it extracted nothing: {emitted:?}"

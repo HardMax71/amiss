@@ -28,6 +28,7 @@ pub use model::{
     FindingKey, Location, LocationSide, PolicyStep, WaiverApplied,
 };
 pub use references::structural_facts;
+pub(crate) use run::evaluate_with_navigation;
 use run::{candidate_digest_of, tree_value};
 pub use run::{evaluate, evaluate_with_policy};
 

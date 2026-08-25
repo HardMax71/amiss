@@ -197,7 +197,7 @@ declare_taxonomy! {
             metadata: &COVERAGE_OBSERVATION,
         },
         UnlinkedDocument => {
-            meaning: "a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages",
+            meaning: "a scanned structured document inside a complete site build's source root is unreachable from every rendered navigation entrypoint; link the page from rendered navigation or keep non-page material outside that root",
             metadata: &COVERAGE_DOCUMENT,
         },
         PolicyWeakened => {

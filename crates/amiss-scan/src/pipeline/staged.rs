@@ -448,7 +448,7 @@ fn staged_index_result(
         base_failures,
         &mut claims,
     )?;
-    let effects = pair_effects(
+    let (effects, navigation) = pair_effects(
         repo,
         &mut git_resources,
         verified_floor,
@@ -472,6 +472,7 @@ fn staged_index_result(
         &setup,
         base_evaluated,
         (candidate_discovery, candidate_side),
+        navigation.as_deref(),
         &claims,
         &failures,
         &initial,
@@ -491,6 +492,7 @@ fn staged_finish(
     setup: &Setup,
     base_evaluated: Evaluated,
     candidate: (SnapshotDiscovery, Option<Side>),
+    navigation: Option<&crate::semantic::SiteNavigation>,
     claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
     initial: &[u8],
@@ -501,6 +503,7 @@ fn staged_finish(
             setup,
             (&base_evaluated.discovery, base_evaluated.side),
             (&candidate.0, side),
+            navigation,
             claims,
             &[],
         ),

@@ -313,10 +313,7 @@ fn a_complete_report_validates_against_the_schema() {
         .map(|finding| finding["kind"].as_str().unwrap())
         .collect();
     assert!(kinds.contains(&"explicit-target-missing"));
-    assert!(
-        kinds.contains(&"unlinked-document"),
-        "notes.mdx has no links"
-    );
+    assert!(!kinds.contains(&"unlinked-document"));
     assert!(
         !kinds.contains(&"external-out-of-scope"),
         "an external URL is an observation, not a finding"
@@ -407,7 +404,7 @@ fn invalid_references_split_new_existing_and_ambiguous_feedback() {
 fn mixed_findings(root: &Path) -> serde_json::Value {
     git(root, &["init", "-q"]);
     fs::write(root.join("hub.md"), "[b](b.md) and [gone](missing.md)\n").unwrap();
-    fs::write(root.join("b.md"), "# B\n").unwrap();
+    fs::write(root.join("b.md"), "# B\n\n<div>opaque</div>\n").unwrap();
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "base"]);
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -416,7 +413,7 @@ fn mixed_findings(root: &Path) -> serde_json::Value {
         "[b](b.md) and [gone](missing.md) and [fresh](fresh.md)\n",
     )
     .unwrap();
-    fs::write(root.join("orphan.md"), "# Orphan\n").unwrap();
+    fs::write(root.join("orphan.md"), "# Orphan\n\n<div>opaque</div>\n").unwrap();
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -445,7 +442,7 @@ fn a_document_fact_carries_its_own_document_row() {
         .collect();
     assert!(
         pairs.len() >= 2,
-        "the fixture leaves more than one document unlinked: {pairs:?}"
+        "the fixture emits more than one document finding: {pairs:?}"
     );
     for (finding_path, fact_path) in pairs {
         assert_eq!(finding_path, fact_path);

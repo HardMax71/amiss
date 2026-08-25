@@ -20,12 +20,16 @@ pub(super) struct ExternalVerified {
 }
 
 impl ExternalVerified {
-    pub(super) fn install(self, effects: &mut crate::policy::Effects) {
+    pub(super) fn install(
+        self,
+        effects: &mut crate::policy::Effects,
+    ) -> Option<std::sync::Arc<crate::semantic::SiteNavigation>> {
         effects.debt = self.debt;
         effects.waiver = self.waiver;
         effects.time = self.time;
         effects.constraint = self.constraint;
         effects.semantic_evidence = self.semantic.provenance;
+        self.semantic.navigation
     }
 
     pub(super) const fn debt(&self) -> Option<&crate::policy::DebtContext> {

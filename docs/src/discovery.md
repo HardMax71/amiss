@@ -84,11 +84,12 @@ drive extraction, source hashing, candidate-only grouping, and report constructi
 [governed test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/governed.rs),
 including one refusal vector per clause of the value grammar.
 
-Every count is reported: discovered, scanned, unsupported, excluded, unlinked. Despite its
-historical name, `unlinked-document` means a scanned document from which Amiss extracted
-zero references. The evaluator does not construct an inbound reachability graph, so the
-finding does not assert that no other page links to the document. The exact predicate is in
-the [document finding evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/evaluate.rs).
+Every count is reported: discovered, scanned, unsupported, excluded, unlinked. The last count is
+zero unless trusted complete site-build evidence supplies a source root, navigation manifest,
+rendered entrypoints, and the source documents reachable through the completed HTML link graph.
+`unlinked-document` then names a scanned structured document inside that root which is neither the
+manifest nor reachable. Outbound-reference counts never stand in for navigation evidence. The exact
+predicate is in the [document finding evaluator](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/evaluate.rs).
 
 Paths are treated as bytes. Amiss does not fold case and does not normalize Unicode,
 because Git addresses files by exact bytes, and a checker that guesses two names are

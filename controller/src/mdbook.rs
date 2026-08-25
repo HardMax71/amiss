@@ -36,18 +36,26 @@ pub enum MdBookEvidenceError {
     Output(#[source] std::io::Error),
     #[error("a published mdBook anchor is invalid or exceeds its ceiling")]
     Anchor,
+    #[error("the completed mdBook navigation graph is invalid or exceeds its ceiling")]
+    Navigation,
     #[error("the mdBook evidence exceeds the semantic wire contract")]
     Evidence,
 }
 
 struct Page {
-    route: String,
     output: PathBuf,
     source: String,
 }
 
-/// Produces one complete candidate-bound route and anchor table from a pinned
-/// mdBook renderer context and its completed HTML output.
+struct BuildPages {
+    rows: BTreeMap<String, Page>,
+    source_root: Option<String>,
+    manifest: String,
+    entrypoint: String,
+}
+
+/// Produces one complete candidate-bound route, anchor, and navigation table
+/// from a pinned mdBook renderer context and its completed HTML output.
 ///
 /// `repository_book_root` locates the mdBook root inside the candidate tree;
 /// `route_prefix` locates the HTML output inside the published site. The open
@@ -57,8 +65,8 @@ struct Page {
 /// # Errors
 ///
 /// The context, renderer version, HTML renderer selection, source mapping,
-/// output path, page bytes, anchor set, or resulting evidence is invalid,
-/// ambiguous, incomplete, or outside a fixed ceiling.
+/// output path, page bytes, anchor set, link graph, or resulting evidence is
+/// invalid, ambiguous, incomplete, or outside a fixed ceiling.
 pub fn mdbook_site_evidence(
     candidate_identity_digest: Digest,
     repository_book_root: Option<&RepoPathText>,
@@ -72,16 +80,18 @@ pub fn mdbook_site_evidence(
     let context = amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
     let (source_directory, items) = render_context(&context)?;
     let base = route_base(route_prefix)?;
-    let pages = pages(items, &source_directory, repository_book_root, &base)?;
-    if pages.is_empty() || pages.len() > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
+    let build = pages(items, &source_directory, repository_book_root, &base)?;
+    if build.rows.len() >= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
 
     let mut remaining = MDBOOK_HTML_BYTES;
     let mut anchor_count = 0_usize;
-    let mut observations = Vec::with_capacity(pages.len());
-    let mut inputs = Vec::with_capacity(pages.len());
-    for page in pages.into_values() {
+    let mut href_count = 0_usize;
+    let mut links = BTreeMap::new();
+    let mut observations = Vec::with_capacity(build.rows.len().saturating_add(1));
+    let mut inputs = Vec::with_capacity(build.rows.len());
+    for (route, page) in &build.rows {
         let html = read_bounded_at(html_output, &page.output, remaining)
             .map_err(MdBookEvidenceError::Output)?;
         remaining = remaining
@@ -89,10 +99,17 @@ pub fn mdbook_site_evidence(
             .ok_or(MdBookEvidenceError::Output(std::io::Error::other(
                 "aggregate HTML byte ceiling exceeded",
             )))?;
-        let anchors = anchors(&html, &mut anchor_count)?;
+        let (anchors, destinations) = page_facts(
+            &html,
+            route,
+            &build.rows,
+            &mut anchor_count,
+            &mut href_count,
+        )?;
+        links.insert(route.clone(), destinations);
         let html_digest = hb(HTML_DOMAIN, &html);
         inputs.push(Value::object(vec![
-            ("route".to_owned(), Value::string(page.route.clone())),
+            ("route".to_owned(), Value::string(route.clone())),
             ("source".to_owned(), Value::string(page.source.clone())),
             (
                 "html_digest".to_owned(),
@@ -101,14 +118,24 @@ pub fn mdbook_site_evidence(
         ]));
         observations.push(Value::object(vec![
             ("kind".to_owned(), Value::string("site-route".to_owned())),
-            ("route".to_owned(), Value::string(page.route)),
-            ("source".to_owned(), Value::string(page.source)),
+            ("route".to_owned(), Value::string(route.clone())),
+            ("source".to_owned(), Value::string(page.source.clone())),
             (
                 "anchors".to_owned(),
                 Value::array(anchors.into_iter().map(Value::string).collect()),
             ),
         ]));
     }
+    let reachable = reachable_sources(&build.entrypoint, &links, &build.rows)?;
+    if anchor_count
+        .checked_add(reachable.len())
+        .and_then(|count| count.checked_add(1))
+        .is_none_or(|count| count > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
+    {
+        return Err(MdBookEvidenceError::Navigation);
+    }
+    let navigation = navigation_observation(&build, reachable);
+    observations.push(navigation.clone());
 
     let input_digest = hj(
         INPUT_DOMAIN,
@@ -121,6 +148,7 @@ pub fn mdbook_site_evidence(
                 "route_prefix".to_owned(),
                 Value::string(route_prefix.to_owned()),
             ),
+            ("navigation".to_owned(), navigation),
             ("pages".to_owned(), Value::array(inputs)),
         ]),
     );
@@ -139,6 +167,31 @@ pub fn mdbook_site_evidence(
         observations,
     })
     .map_err(|_defect| MdBookEvidenceError::Evidence)
+}
+
+fn navigation_observation(build: &BuildPages, reachable: Vec<String>) -> Value {
+    Value::object(vec![
+        (
+            "entrypoints".to_owned(),
+            Value::array(vec![Value::string(build.entrypoint.clone())]),
+        ),
+        (
+            "kind".to_owned(),
+            Value::string("site-navigation".to_owned()),
+        ),
+        ("manifest".to_owned(), Value::string(build.manifest.clone())),
+        (
+            "reachable".to_owned(),
+            Value::array(reachable.into_iter().map(Value::string).collect()),
+        ),
+        (
+            "root".to_owned(),
+            build
+                .source_root
+                .as_ref()
+                .map_or(Value::Null, |root| Value::string(root.clone())),
+        ),
+    ])
 }
 
 fn render_context(context: &Value) -> Result<(PathBuf, &[Value]), MdBookEvidenceError> {
@@ -178,10 +231,16 @@ fn pages(
     source_directory: &Path,
     repository_book_root: Option<&RepoPathText>,
     base: &Url,
-) -> Result<BTreeMap<String, Page>, MdBookEvidenceError> {
+) -> Result<BuildPages, MdBookEvidenceError> {
+    let source_root = repository_path(
+        repository_book_root.map(RepoPathText::as_str),
+        source_directory,
+    )?;
+    let manifest = repository_path(source_root.as_deref(), Path::new("SUMMARY.md"))?
+        .ok_or(MdBookEvidenceError::Path)?;
     let mut pending: Vec<&Value> = items.iter().rev().collect();
     let mut pages = BTreeMap::new();
-    let mut first = true;
+    let mut entrypoint = None;
     while let Some(item) = pending.pop() {
         let chapter = match item {
             Value::String(separator) if separator.as_ref() == "Separator" => continue,
@@ -218,25 +277,27 @@ fn pages(
         };
         let mut output = relative_path(path, false)?;
         output.set_extension("html");
-        let source = repository_source(repository_book_root, source_directory, source_path)?;
+        let source_path = relative_path(source_path, false)?;
+        let source = repository_path(source_root.as_deref(), &source_path)?
+            .ok_or(MdBookEvidenceError::Path)?;
         let route = output_route(base, &output)?;
         insert_page(
             &mut pages,
+            route.clone(),
             Page {
-                route: route.clone(),
                 output: output.clone(),
                 source: source.clone(),
             },
         )?;
-        if first {
-            first = false;
+        if entrypoint.is_none() {
             let index_output = PathBuf::from("index.html");
             let index_route = output_route(base, &index_output)?;
+            entrypoint = Some(index_route.clone());
             if index_route != route {
                 insert_page(
                     &mut pages,
+                    index_route,
                     Page {
-                        route: index_route,
                         output: index_output,
                         source,
                     },
@@ -244,7 +305,12 @@ fn pages(
             }
         }
     }
-    Ok(pages)
+    Ok(BuildPages {
+        rows: pages,
+        source_root,
+        manifest,
+        entrypoint: entrypoint.ok_or(MdBookEvidenceError::UnsupportedBuild)?,
+    })
 }
 
 fn optional_text<'a>(
@@ -260,8 +326,12 @@ fn optional_text<'a>(
     }
 }
 
-fn insert_page(pages: &mut BTreeMap<String, Page>, page: Page) -> Result<(), MdBookEvidenceError> {
-    if pages.insert(page.route.clone(), page).is_some() {
+fn insert_page(
+    pages: &mut BTreeMap<String, Page>,
+    route: String,
+    page: Page,
+) -> Result<(), MdBookEvidenceError> {
+    if pages.insert(route, page).is_some() {
         Err(MdBookEvidenceError::UnsupportedBuild)
     } else {
         Ok(())
@@ -305,28 +375,28 @@ fn relative_path(raw: &str, empty_allowed: bool) -> Result<PathBuf, MdBookEviden
     }
 }
 
-fn repository_source(
-    repository_book_root: Option<&RepoPathText>,
-    source_directory: &Path,
-    source_path: &str,
-) -> Result<String, MdBookEvidenceError> {
-    let source_path = relative_path(source_path, false)?;
-    let mut source = repository_book_root.map_or_else(String::new, |root| root.as_str().to_owned());
-    for path in [source_directory, &source_path] {
-        for component in path.components() {
-            let Component::Normal(segment) = component else {
-                return Err(MdBookEvidenceError::Path);
-            };
-            let segment = segment.to_str().ok_or(MdBookEvidenceError::Path)?;
-            if !source.is_empty() {
-                source.push('/');
-            }
-            source.push_str(segment);
+fn repository_path(
+    prefix: Option<&str>,
+    path: &Path,
+) -> Result<Option<String>, MdBookEvidenceError> {
+    let mut joined = prefix.map_or_else(String::new, str::to_owned);
+    for component in path.components() {
+        let Component::Normal(segment) = component else {
+            return Err(MdBookEvidenceError::Path);
+        };
+        let segment = segment.to_str().ok_or(MdBookEvidenceError::Path)?;
+        if !joined.is_empty() {
+            joined.push('/');
         }
+        joined.push_str(segment);
     }
-    RepoPathText::new(source.clone())
-        .map(|_validated| source)
-        .ok_or(MdBookEvidenceError::Path)
+    if joined.is_empty() {
+        Ok(None)
+    } else if RepoPathText::new(joined.clone()).is_some() {
+        Ok(Some(joined))
+    } else {
+        Err(MdBookEvidenceError::Path)
+    }
 }
 
 fn route_base(prefix: &str) -> Result<Url, MdBookEvidenceError> {
@@ -366,8 +436,16 @@ fn output_route(base: &Url, output: &Path) -> Result<String, MdBookEvidenceError
     }
 }
 
-fn anchors(html: &[u8], total: &mut usize) -> Result<Vec<String>, MdBookEvidenceError> {
+fn page_facts(
+    html: &[u8],
+    route: &str,
+    pages: &BTreeMap<String, Page>,
+    anchor_count: &mut usize,
+    href_count: &mut usize,
+) -> Result<(Vec<String>, Vec<String>), MdBookEvidenceError> {
     let mut anchors = BTreeSet::new();
+    let mut base_href = None;
+    let mut hrefs = BTreeSet::new();
     for token in Tokenizer::new(html) {
         let token = match token {
             Ok(token) => token,
@@ -375,26 +453,43 @@ fn anchors(html: &[u8], total: &mut usize) -> Result<Vec<String>, MdBookEvidence
         };
         match token {
             Token::StartTag(tag) => {
-                let Some((_name, value)) = tag
-                    .attributes
-                    .into_iter()
-                    .find(|(name, _value)| name.as_ref() == b"id".as_slice())
-                else {
-                    continue;
-                };
-                let anchor = String::from_utf8(value.value.0)
-                    .map_err(|_defect| MdBookEvidenceError::Anchor)?;
-                if anchor.is_empty()
-                    || anchor.len() > ANCHOR_BYTES
-                    || anchor.chars().any(char::is_control)
-                {
-                    return Err(MdBookEvidenceError::Anchor);
-                }
-                if anchors.insert(anchor) {
-                    *total = total
-                        .checked_add(1)
-                        .filter(|count| *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
-                        .ok_or(MdBookEvidenceError::Anchor)?;
+                let name = tag.name.as_ref();
+                let is_base = name == b"base".as_slice();
+                let is_link = name == b"a".as_slice() || name == b"area".as_slice();
+                for (name, value) in tag.attributes {
+                    if name.as_ref() == b"id".as_slice() {
+                        let anchor = String::from_utf8(value.value.0)
+                            .map_err(|_defect| MdBookEvidenceError::Anchor)?;
+                        if anchor.is_empty()
+                            || anchor.len() > ANCHOR_BYTES
+                            || anchor.chars().any(char::is_control)
+                        {
+                            return Err(MdBookEvidenceError::Anchor);
+                        }
+                        if anchors.insert(anchor) {
+                            *anchor_count = anchor_count
+                                .checked_add(1)
+                                .filter(|count| {
+                                    *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT
+                                })
+                                .ok_or(MdBookEvidenceError::Anchor)?;
+                        }
+                    } else if name.as_ref() == b"href".as_slice()
+                        && ((is_base && base_href.is_none()) || is_link)
+                    {
+                        let href = String::from_utf8(value.value.0)
+                            .map_err(|_defect| MdBookEvidenceError::Navigation)?;
+                        if is_base && base_href.is_none() {
+                            base_href = Some(href);
+                        } else if is_link && hrefs.insert(href) {
+                            *href_count = href_count
+                                .checked_add(1)
+                                .filter(|count| {
+                                    *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT
+                                })
+                                .ok_or(MdBookEvidenceError::Navigation)?;
+                        }
+                    }
                 }
             }
             Token::EndTag(_)
@@ -404,5 +499,51 @@ fn anchors(html: &[u8], total: &mut usize) -> Result<Vec<String>, MdBookEvidence
             | Token::Error(_) => {}
         }
     }
-    Ok(anchors.into_iter().collect())
+
+    let document = Url::parse(&format!("https://amiss.invalid{route}"))
+        .map_err(|_defect| MdBookEvidenceError::Navigation)?;
+    let base = base_href
+        .and_then(|href| document.join(&href).ok())
+        .unwrap_or(document);
+    let mut destinations = BTreeSet::new();
+    for href in hrefs {
+        let Ok(destination) = base.join(&href) else {
+            continue;
+        };
+        if destination.scheme() == "https"
+            && destination.host_str() == Some("amiss.invalid")
+            && destination.port().is_none()
+            && destination.username().is_empty()
+            && destination.password().is_none()
+            && pages.contains_key(destination.path())
+        {
+            destinations.insert(destination.path().to_owned());
+        }
+    }
+    Ok((
+        anchors.into_iter().collect(),
+        destinations.into_iter().collect(),
+    ))
+}
+
+fn reachable_sources(
+    entrypoint: &str,
+    links: &BTreeMap<String, Vec<String>>,
+    pages: &BTreeMap<String, Page>,
+) -> Result<Vec<String>, MdBookEvidenceError> {
+    let mut pending = vec![entrypoint.to_owned()];
+    let mut reached = BTreeSet::new();
+    while let Some(route) = pending.pop() {
+        if !reached.insert(route.clone()) {
+            continue;
+        }
+        let destinations = links.get(&route).ok_or(MdBookEvidenceError::Navigation)?;
+        pending.extend(destinations.iter().rev().cloned());
+    }
+    let mut sources = BTreeSet::new();
+    for route in reached {
+        let page = pages.get(&route).ok_or(MdBookEvidenceError::Navigation)?;
+        sources.insert(page.source.clone());
+    }
+    Ok(sources.into_iter().collect())
 }

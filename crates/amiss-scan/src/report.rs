@@ -4,6 +4,7 @@ mod documents;
 mod identity;
 mod summary;
 
+pub(crate) use build::construct_with_navigation;
 pub use build::{construct, construct_incomplete};
 pub use identity::candidate_identity_digest;
 

@@ -35,3 +35,42 @@ pub fn site_observation(route: &str, observation: SiteObservation<'_>) -> Value 
     }
     Value::object(members)
 }
+
+/// Builds one canonical site navigation observation.
+#[must_use]
+pub fn site_navigation(
+    root: Option<&str>,
+    manifest: &str,
+    entrypoints: &[&str],
+    reachable: &[&str],
+) -> Value {
+    Value::object(vec![
+        (
+            "entrypoints".to_owned(),
+            Value::array(
+                entrypoints
+                    .iter()
+                    .map(|route| Value::string((*route).to_owned()))
+                    .collect(),
+            ),
+        ),
+        (
+            "kind".to_owned(),
+            Value::string("site-navigation".to_owned()),
+        ),
+        ("manifest".to_owned(), Value::string(manifest.to_owned())),
+        (
+            "reachable".to_owned(),
+            Value::array(
+                reachable
+                    .iter()
+                    .map(|source| Value::string((*source).to_owned()))
+                    .collect(),
+            ),
+        ),
+        (
+            "root".to_owned(),
+            root.map_or(Value::Null, |root| Value::string(root.to_owned())),
+        ),
+    ])
+}

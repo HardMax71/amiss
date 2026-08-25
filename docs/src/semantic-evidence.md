@@ -58,8 +58,13 @@ effective fragment is in its anchor set. Following the
 [HTTP Location rule](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.2), an absent
 destination fragment inherits the authored fragment, a nonempty one replaces it, and an empty `#`
 suppresses inheritance. Self-redirects, malformed fragments, and missing or ambiguous terminal
-routes remain invalid or unsupported rather than becoming guessed passes. The base side never
-consumes candidate build output.
+routes remain invalid or unsupported rather than becoming guessed passes. A `site-navigation`
+observation adds one source root, its navigation manifest, rendered entrypoint routes, and the
+byte-sorted unique source set reachable through the completed link graph. Every entrypoint must be
+a unique source-backed route, every reachable source must own one such route, and all named sources
+must remain beneath the declared root. Only then does `unlinked-document` mean a scanned structured
+source inside that root which is neither the manifest nor reachable. Without this observation the
+engine makes no navigation claim. The base side never consumes candidate build output.
 
 Only the sealed controls request has this intake. The public command supplies an empty set. A
 controller plan may hold candidate-independent templates such as an Intersphinx inventory set. A
@@ -94,12 +99,16 @@ actual output names.
 
 The producer reads only those source-backed pages named by the context, with one 16 MiB context
 ceiling and one 16 MiB aggregate HTML ceiling. A no-follow directory capability bounds every page
-read. A WHATWG tokenizer extracts decoded `id` values from the completed HTML, then the producer
-sorts and deduplicates each page's anchors and binds every exact page digest into the input digest.
-The wrong mdBook version, no HTML renderer, an escaping or non-text path, generated content without
-`source_path`, duplicate route ownership, an unreadable page, or an unrepresentable anchor refuses
-the complete set. Theme, preprocessor, and configuration effects are therefore observed in their
-finished bytes without running any of them inside Amiss.
+read. A WHATWG tokenizer extracts decoded `id` values and hyperlink destinations from the completed
+HTML. The producer honors the document's first `base` URL when usable, retains only links to another
+proved page under the same publication origin, and walks that bounded graph from the independent
+`index.html` entrypoint. It emits the configured source root, its `SUMMARY.md` manifest, the
+entrypoint, and the sorted set of reachable repository sources beside the sorted page anchors, then
+binds every exact page digest and the navigation result into the input digest. The wrong mdBook
+version, no HTML renderer, an escaping or non-text path, generated content without `source_path`,
+duplicate route ownership, an unreadable page, an unrepresentable anchor or link, or an oversized
+graph refuses the complete set. Theme, preprocessor, and configuration effects are therefore
+observed in their finished bytes without running any of them inside Amiss.
 
 A trusted candidate acquisition may call this producer after an operator-owned build and return
 the already candidate-bound envelope. The built-in provider acquisitions still return none: the
@@ -111,6 +120,6 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-Generated pages without source attribution, redirect defects, locales, versions, and navigation
-remain future observation grammars over this same boundary. The engine still executes no producer
-and treats no repository-controlled evidence as authority.
+Generated pages without source attribution, redirect defects, locales, and versions remain future
+observation grammars over this same boundary. The engine still executes no producer and treats no
+repository-controlled evidence as authority.

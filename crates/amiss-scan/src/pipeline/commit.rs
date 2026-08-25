@@ -198,7 +198,7 @@ fn commit_pair_result(
         (Ok((base, base_failures)), Ok((candidate, candidate_failures))) => {
             let mut failures = base_failures;
             failures.extend(candidate_failures);
-            let effects = pair_effects(
+            let (effects, navigation) = pair_effects(
                 repo,
                 &mut git_resources,
                 verified_floor,
@@ -220,6 +220,7 @@ fn commit_pair_result(
                 &setup,
                 (&base.discovery, base.side),
                 (&candidate.discovery, candidate.side),
+                navigation.as_deref(),
                 &claims,
                 &failures,
             )

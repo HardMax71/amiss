@@ -3,7 +3,7 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
-use amiss_fixtures::{SiteObservation, site_observation};
+use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, parse};
@@ -218,10 +218,18 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         "0.1.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
-        vec![site_observation(
-            "/guide/",
-            SiteObservation::Page("docs/guide.md", &["details", "intro"]),
-        )],
+        vec![
+            site_observation(
+                "/guide/",
+                SiteObservation::Page("docs/guide.md", &["details", "intro"]),
+            ),
+            site_navigation(
+                Some("docs"),
+                "docs/SUMMARY.md",
+                &["/guide/"],
+                &["docs/guide.md"],
+            ),
+        ],
     );
     let mut incomplete = valid.clone();
     incomplete.complete = false;
@@ -295,5 +303,49 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         ];
         let error = controls(&request).expect_err("the site-build consumer fails closed");
         assert_eq!(error.code, expected);
+    }
+}
+
+#[test]
+fn inconsistent_site_navigation_never_becomes_input() {
+    let page = site_observation(
+        "/guide/",
+        SiteObservation::Page("docs/guide.md", &["intro"]),
+    );
+    let cases = [
+        site_navigation(
+            Some("docs"),
+            "other/SUMMARY.md",
+            &["/guide/"],
+            &["docs/guide.md"],
+        ),
+        site_navigation(
+            Some("docs"),
+            "docs/SUMMARY.md",
+            &["/missing/"],
+            &["docs/guide.md"],
+        ),
+        site_navigation(
+            Some("docs"),
+            "docs/SUMMARY.md",
+            &["/guide/"],
+            &["docs/missing.md"],
+        ),
+    ];
+    for navigation in cases {
+        let evidence = semantic_evidence(
+            "site-build",
+            "0.1.0",
+            hb("test/site-output", b"site output"),
+            None,
+            vec![page.clone(), navigation],
+        );
+        let mut request = empty();
+        request.semantic_evidence = vec![
+            amiss_wire::semantic::envelope(evidence)
+                .expect("the generic envelope admits producer-defined semantics"),
+        ];
+        let error = controls(&request).expect_err("inconsistent navigation fails closed");
+        assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
 }
