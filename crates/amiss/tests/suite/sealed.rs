@@ -399,7 +399,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         source_report_payload_digest: Some(hb("amiss-test/report", b"source report")),
         producer_kind: id("site-build"),
         producer_identity: id("amiss-test"),
-        producer_version: "0.4.0".to_owned(),
+        producer_version: "0.5.0".to_owned(),
         context_digest,
         input_digest: hb("amiss-test/site-output", b"site output"),
         complete: true,
@@ -491,25 +491,34 @@ fn assert_site_defects(envelope: &serde_json::Value) {
         .collect();
     assert_eq!(
         defects.len(),
-        6,
+        7,
         "complete route-table defects: {defects:?}"
     );
-    for (route, kind, reason, members) in [
-        ("/broken-fragment/", "broken-redirect", "missing-anchor", 1),
-        ("/broken/", "broken-redirect", "missing-route", 1),
-        ("/collision/", "duplicate-route", "", 2),
-        ("/duplicate/", "duplicate-route", "", 2),
+    for (route, kind, reason, members, attributed) in [
+        (
+            "/broken-fragment/",
+            "broken-redirect",
+            "missing-anchor",
+            1,
+            true,
+        ),
+        ("/broken/", "broken-redirect", "missing-route", 1, true),
+        ("/collision/", "duplicate-route", "", 2, true),
+        ("/duplicate/", "duplicate-route", "", 2, true),
+        ("/generated-duplicate/", "duplicate-route", "", 2, false),
         (
             "/redirect-to-duplicate/",
             "broken-redirect",
             "ambiguous-route",
             1,
+            true,
         ),
         (
             "/redirect-to-redirect/",
             "broken-redirect",
             "nonterminal-redirect",
             1,
+            true,
         ),
     ] {
         let row = defects
@@ -534,7 +543,17 @@ fn assert_site_defects(envelope: &serde_json::Value) {
             row.pointer("/aggregation/member_count"),
             Some(&serde_json::json!(members))
         );
-        assert!(row.pointer("/location/path").is_some());
+        assert_eq!(
+            row.pointer("/location/path")
+                .is_some_and(|path| !path.is_null()),
+            attributed
+        );
+        if !attributed {
+            assert_eq!(
+                row.pointer("/candidate_fact/evidence/sources"),
+                Some(&serde_json::json!([]))
+            );
+        }
     }
 }
 
@@ -580,13 +599,18 @@ fn site_build_observations() -> Vec<Value> {
             "/redirect-to-redirect/",
             SiteObservation::Redirect("docs/redirects.toml", "/legacy/"),
         ),
+        site_observation("/generated/", SiteObservation::Generated(None, &["api"])),
         site_observation(
-            "/generated/",
-            SiteObservation::Generated("site.config.js", &["api"]),
+            "/generated-duplicate/",
+            SiteObservation::Generated(None, &["first"]),
+        ),
+        site_observation(
+            "/generated-duplicate/",
+            SiteObservation::Generated(None, &["second"]),
         ),
         site_observation(
             "/generated-stale/",
-            SiteObservation::Generated("missing.config.js", &[]),
+            SiteObservation::Generated(Some("missing.config.js"), &[]),
         ),
         site_observation(
             "/generated-legacy/",

@@ -12,7 +12,7 @@ use url::Url;
 pub const MDBOOK_RENDER_CONTEXT_BYTES: u64 = 16_777_216;
 pub const MDBOOK_HTML_BYTES: u64 = 16_777_216;
 const MDBOOK_VERSION: &str = "0.5.4";
-const SITE_BUILD_VERSION: &str = "0.4.0";
+const SITE_BUILD_VERSION: &str = "0.5.0";
 const ROUTE_BYTES: usize = 16_384;
 const ANCHOR_BYTES: usize = 4_096;
 const CONTEXT_DOMAIN: &str = "amiss/controller-mdbook-site-context-v1";
@@ -56,7 +56,7 @@ pub enum MdBookEvidenceError {
 
 struct Page {
     output: PathBuf,
-    source: String,
+    source: Option<String>,
 }
 
 struct BuildPages {
@@ -123,19 +123,20 @@ pub fn mdbook_site_evidence(
             &mut href_count,
         )?;
         links.insert(route.clone(), destinations);
-        let html_digest = hb(HTML_DOMAIN, &html);
+        let html_digest = Value::string(hb(HTML_DOMAIN, &html).to_string());
+        let (kind, source) = page.source.as_ref().map_or_else(
+            || ("site-generated-route", Value::Null),
+            |source| ("site-route", Value::string(source.clone())),
+        );
         inputs.push(Value::object(vec![
             ("route".to_owned(), Value::string(route.clone())),
-            ("source".to_owned(), Value::string(page.source.clone())),
-            (
-                "html_digest".to_owned(),
-                Value::string(html_digest.to_string()),
-            ),
+            ("source".to_owned(), source.clone()),
+            ("html_digest".to_owned(), html_digest),
         ]));
         observations.push(Value::object(vec![
-            ("kind".to_owned(), Value::string("site-route".to_owned())),
+            ("kind".to_owned(), Value::string(kind.to_owned())),
             ("route".to_owned(), Value::string(route.clone())),
-            ("source".to_owned(), Value::string(page.source.clone())),
+            ("source".to_owned(), source),
             (
                 "anchors".to_owned(),
                 Value::array(anchors.into_iter().map(Value::string).collect()),
@@ -359,17 +360,21 @@ fn pages(
         pending.extend(sub_items.iter().rev());
         let path = optional_text(chapter, "path")?;
         let source_path = optional_text(chapter, "source_path")?;
-        let (Some(path), Some(source_path)) = (path, source_path) else {
-            if path.is_none() && source_path.is_none() {
+        let Some(path) = path else {
+            if source_path.is_none() {
                 continue;
             }
             return Err(MdBookEvidenceError::UnsupportedBuild);
         };
         let mut output = relative_path(path, false)?;
         output.set_extension("html");
-        let source_path = relative_path(source_path, false)?;
-        let source = repository_path(source_root.as_deref(), &source_path)?
-            .ok_or(MdBookEvidenceError::Path)?;
+        let source = source_path
+            .map(|source_path| {
+                let source_path = relative_path(source_path, false)?;
+                repository_path(source_root.as_deref(), &source_path)?
+                    .ok_or(MdBookEvidenceError::Path)
+            })
+            .transpose()?;
         let route = output_route(base, &output)?;
         insert_page(
             &mut pages,
@@ -633,7 +638,7 @@ fn reachable_sources(
     let mut sources = BTreeSet::new();
     for route in reached {
         let page = pages.get(&route).ok_or(MdBookEvidenceError::Navigation)?;
-        sources.insert(page.source.clone());
+        sources.extend(page.source.iter().cloned());
     }
     Ok(sources.into_iter().collect())
 }

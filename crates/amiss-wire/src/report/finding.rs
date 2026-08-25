@@ -208,7 +208,7 @@ declare_taxonomy! {
             metadata: &COVERAGE_DOCUMENT,
         },
         SiteBuildDefect => {
-            meaning: "a complete site build reports a route with conflicting owners or a redirect whose declared terminal route or anchor is not uniquely published; repair the attributed routing source",
+            meaning: "a complete site build reports a route with conflicting owners or a redirect whose declared terminal route or anchor is not uniquely published; repair the route table or its available routing source",
             metadata: &ABSOLUTE_OBSERVATION,
         },
         PolicyWeakened => {

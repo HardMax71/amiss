@@ -13,7 +13,7 @@ const INTERSPHINX_PRODUCER: &str = "sphinx-inventory-set";
 const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
-const SITE_BUILD_VERSION: &str = "0.4.0";
+const SITE_BUILD_VERSION: &str = "0.5.0";
 const SITE_ROUTE: &str = "site-route";
 const SITE_GENERATED_ROUTE: &str = "site-generated-route";
 const SITE_REDIRECT: &str = "site-redirect";
@@ -49,7 +49,7 @@ pub(crate) enum SiteRoute {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SiteClaim {
-    pub(crate) source: amiss_wire::model::RepoPath,
+    pub(crate) source: Option<amiss_wire::model::RepoPath>,
     pub(crate) digest: Digest,
     pub(crate) target: SiteTarget,
 }
@@ -90,7 +90,7 @@ pub(crate) struct SiteEvaluation {
 pub(crate) struct SiteDefect {
     pub(crate) id: Digest,
     pub(crate) evidence: Value,
-    pub(crate) source: amiss_wire::model::RepoPath,
+    pub(crate) source: Option<amiss_wire::model::RepoPath>,
     pub(crate) member_count: u64,
 }
 
@@ -239,7 +239,6 @@ fn site_build_inputs(
             })?;
             row.finish()?;
             if entrypoints.is_empty()
-                || reachable.is_empty()
                 || !navigation_contains(root.as_ref(), &manifest)
                 || reachable
                     .iter()
@@ -317,7 +316,12 @@ fn site_claim(
             amiss_wire::uri::site_route_valid,
         )
     })?;
-    let source = row.required("source", repo_path)?;
+    let source = row.required("source", |path, value| match backing {
+        Some(SitePageBacking::Generated) => de::nullable(value)
+            .map(|value| repo_path(path, value))
+            .transpose(),
+        Some(SitePageBacking::Repository) | None => repo_path(path, value).map(Some),
+    })?;
     let target = if let Some(backing) = backing {
         SiteTarget::Page {
             backing,
@@ -379,7 +383,9 @@ fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, cla
             let existing = entry.get_mut();
             let (mut sources, mut claims) = match existing {
                 SiteRoute::Ambiguous { sources, claims } => {
-                    if let Err(index) = sources.binary_search(&source) {
+                    if let Some(source) = source
+                        && let Err(index) = sources.binary_search(&source)
+                    {
                         sources.insert(index, source);
                     }
                     if let Err(index) = claims.binary_search(&claim) {
@@ -388,7 +394,10 @@ fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, cla
                     return;
                 }
                 SiteRoute::Unique(existing) => (
-                    vec![existing.source.clone(), source],
+                    [existing.source.clone(), source]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>(),
                     vec![existing.digest, claim],
                 ),
             };
@@ -406,7 +415,7 @@ fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
         .iter()
         .filter_map(|(route, target)| match target {
             SiteRoute::Ambiguous { sources, claims } => {
-                duplicate_route_defect(route, sources, claims)
+                Some(duplicate_route_defect(route, sources, claims))
             }
             SiteRoute::Unique(claim) => broken_redirect_defect(routes, route, claim),
         })
@@ -417,8 +426,7 @@ fn duplicate_route_defect(
     route: &str,
     sources: &[amiss_wire::model::RepoPath],
     claims: &[Digest],
-) -> Option<SiteDefect> {
-    let source = sources.first()?.clone();
+) -> SiteDefect {
     let evidence = Value::object(vec![
         (
             "claim_digests".to_owned(),
@@ -444,12 +452,12 @@ fn duplicate_route_defect(
             ),
         ),
     ]);
-    Some(SiteDefect {
+    SiteDefect {
         id: site_defect_id("duplicate-route", route),
         evidence,
-        source,
+        source: sources.first().cloned(),
         member_count: u64::try_from(claims.len()).unwrap_or(u64::MAX),
-    })
+    }
 }
 
 fn broken_redirect_defect(
@@ -464,6 +472,7 @@ fn broken_redirect_defect(
     else {
         return None;
     };
+    let source = claim.source.as_ref()?;
     let reason = match routes.get(destination) {
         None => "missing-route",
         Some(SiteRoute::Ambiguous { .. }) => "ambiguous-route",
@@ -502,12 +511,12 @@ fn broken_redirect_defect(
         ),
         ("reason".to_owned(), Value::string(reason.to_owned())),
         ("route".to_owned(), Value::string(route.to_owned())),
-        ("source".to_owned(), claim.source.to_value()),
+        ("source".to_owned(), source.to_value()),
     ]);
     Some(SiteDefect {
         id: site_defect_id("broken-redirect", route),
         evidence,
-        source: claim.source.clone(),
+        source: Some(source.clone()),
         member_count: 1,
     })
 }
@@ -538,7 +547,7 @@ fn validate_navigation(
                         ..
                     },
                 ..
-            }) => Some(source),
+            }) => source.as_ref(),
             SiteRoute::Unique(SiteClaim {
                 target:
                     SiteTarget::Page {
@@ -567,10 +576,13 @@ fn validate_navigation(
         else {
             return fail(path, ErrorKind::Inconsistent);
         };
-        if *backing == SitePageBacking::Repository
-            && navigation.reachable.binary_search(source).is_err()
-        {
-            return fail(path, ErrorKind::Inconsistent);
+        if *backing == SitePageBacking::Repository {
+            let Some(source) = source else {
+                return fail(path, ErrorKind::Inconsistent);
+            };
+            if navigation.reachable.binary_search(source).is_err() {
+                return fail(path, ErrorKind::Inconsistent);
+            }
         }
     }
     Ok(())

@@ -339,7 +339,7 @@ fn ordinary(
             defect.member_count,
             Location {
                 side: LocationSide::Candidate,
-                path: Some(defect.source.clone()),
+                path: defect.source.clone(),
                 span: None,
                 display: None,
             },
