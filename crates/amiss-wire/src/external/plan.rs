@@ -114,7 +114,10 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
                 .and_then(|scope| scope.text("kind"))
                 == Some("known-commit");
         if (!external && !historical)
-            || resolution.and_then(|value| value.text("reason")) == Some("intersphinx-inventory")
+            || matches!(
+                resolution.and_then(|value| value.text("reason")),
+                Some("intersphinx-inventory" | "site-build")
+            )
         {
             continue;
         }

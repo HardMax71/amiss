@@ -196,7 +196,7 @@ fn semantic_evidence(
         source_report_payload_digest,
         producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
         producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
-        producer_version: "0.2.0".to_owned(),
+        producer_version: "0.3.0".to_owned(),
         input_digest: hb("amiss/test-site-build", b"output"),
         complete: true,
         observations: Vec::new(),

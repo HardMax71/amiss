@@ -350,7 +350,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
 
 #[test]
 fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() {
-    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [changed redirect anchor](/changed/#absent) [cleared redirect anchor](/cleared/#absent) [broken redirect anchor](/broken-fragment/) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/)\n";
+    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [changed redirect anchor](/changed/#absent) [cleared redirect anchor](/cleared/#absent) [broken redirect anchor](/broken-fragment/) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/) [generated](/generated/) [generated anchor](/generated/#api) [generated absent](/generated/#absent) [generated stale](/generated-stale/) [generated redirect](/generated-legacy/) ![generated image](/generated/)\n";
     let fixture = amiss_fixtures::commit_pair(
         &[
             ("README.md", "# Repository\n"),
@@ -358,6 +358,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             ("docs/SUMMARY.md", "# Summary\n"),
             ("docs/index.md", index),
             ("docs/guide.md", "# Intro\n"),
+            ("site.config.js", "export default {};\n"),
         ],
         &[
             ("README.md", "# Repository\n"),
@@ -365,6 +366,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             ("docs/SUMMARY.md", "# Summary\n"),
             ("docs/index.md", index),
             ("docs/guide.md", "# Intro\n"),
+            ("site.config.js", "export default {};\n"),
         ],
     )
     .unwrap();
@@ -386,7 +388,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         source_report_payload_digest: Some(hb("amiss-test/report", b"source report")),
         producer_kind: id("site-build"),
         producer_identity: id("amiss-test"),
-        producer_version: "0.2.0".to_owned(),
+        producer_version: "0.3.0".to_owned(),
         input_digest: hb("amiss-test/site-output", b"site output"),
         complete: true,
         observations: site_build_observations(),
@@ -413,7 +415,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             row.pointer("/candidate/intent/kind") == Some(&serde_json::json!("site-route"))
         })
         .collect();
-    assert_eq!(routes.len(), 14);
+    assert_eq!(routes.len(), 20);
     assert!(routes.iter().all(|row| {
         row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
     }));
@@ -428,6 +430,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         6,
         "only proved routes, anchors, and fragment-aware terminal redirects resolve: {routes:?}"
     );
+    assert_generated_routes(&routes);
     assert_eq!(
         routes
             .iter()
@@ -436,16 +439,35 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
                     == Some(&serde_json::json!("site-route"))
             })
             .count(),
-        8,
+        11,
         "unproved route uses remain explicitly unsupported: {routes:?}"
     );
-    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 6);
+    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 9);
     assert_eq!(
         envelope["payload"]["summary"]["references"]["unsupported"],
-        8
+        11
     );
     assert_unlinked(&envelope, &["docs/index.md"]);
     assert_site_defects(&envelope);
+}
+
+fn assert_generated_routes(routes: &[&serde_json::Value]) {
+    let generated: Vec<&&serde_json::Value> = routes
+        .iter()
+        .filter(|row| {
+            row.pointer("/candidate/resolution/reason") == Some(&serde_json::json!("site-build"))
+        })
+        .collect();
+    assert_eq!(
+        generated.len(),
+        3,
+        "generated pages resolve from build evidence without becoming repository blobs: {routes:?}"
+    );
+    assert!(
+        generated
+            .iter()
+            .all(|row| row.pointer("/candidate/external_destination").is_none())
+    );
 }
 
 fn assert_site_defects(envelope: &serde_json::Value) {
@@ -547,10 +569,22 @@ fn site_build_observations() -> Vec<Value> {
             "/redirect-to-redirect/",
             SiteObservation::Redirect("docs/redirects.toml", "/legacy/"),
         ),
+        site_observation(
+            "/generated/",
+            SiteObservation::Generated("site.config.js", &["api"]),
+        ),
+        site_observation(
+            "/generated-stale/",
+            SiteObservation::Generated("missing.config.js", &[]),
+        ),
+        site_observation(
+            "/generated-legacy/",
+            SiteObservation::Redirect("docs/redirects.toml", "/generated/"),
+        ),
         site_navigation(
             Some("docs"),
             "docs/SUMMARY.md",
-            &["/guide/"],
+            &["/generated/"],
             &["docs/guide.md"],
         ),
     ]

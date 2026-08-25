@@ -45,6 +45,10 @@ fn fieldless_reasons_round_trip_generated_names() {
         Ok(ExternalReference::ForeignRepository)
     );
     assert_eq!(ExternalReference::Url.as_ref(), "url");
+    assert_eq!(
+        "site-build".parse::<ExternalReference>(),
+        Ok(ExternalReference::SiteBuild)
+    );
     assert!("not-a-reason".parse::<InvalidReference>().is_err());
 }
 

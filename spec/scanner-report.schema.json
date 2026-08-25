@@ -2970,7 +2970,8 @@
           "enum": [
             "url",
             "foreign-repository",
-            "intersphinx-inventory"
+            "intersphinx-inventory",
+            "site-build"
           ]
         }
       }

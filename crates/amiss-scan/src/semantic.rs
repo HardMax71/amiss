@@ -12,8 +12,9 @@ const INTERSPHINX_PRODUCER: &str = "sphinx-inventory-set";
 const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
-const SITE_BUILD_VERSION: &str = "0.2.0";
+const SITE_BUILD_VERSION: &str = "0.3.0";
 const SITE_ROUTE: &str = "site-route";
+const SITE_GENERATED_ROUTE: &str = "site-generated-route";
 const SITE_REDIRECT: &str = "site-redirect";
 const SITE_NAVIGATION: &str = "site-navigation";
 const SITE_CLAIM_DOMAIN: &str = "amiss/scanner-site-claim";
@@ -55,12 +56,19 @@ pub(crate) struct SiteClaim {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SiteTarget {
     Page {
+        backing: SitePageBacking,
         anchors: Vec<String>,
     },
     Redirect {
         destination: String,
         fragment: Option<String>,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SitePageBacking {
+    Repository,
+    Generated,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -285,9 +293,10 @@ fn site_claim(
     observation: Value,
     anchor_count: &mut usize,
 ) -> Result<Option<(String, SiteClaim)>, Error> {
-    let kind = match observation.text("kind") {
-        Some(SITE_ROUTE) => SITE_ROUTE,
-        Some(SITE_REDIRECT) => SITE_REDIRECT,
+    let (kind, backing) = match observation.text("kind") {
+        Some(SITE_ROUTE) => (SITE_ROUTE, Some(SitePageBacking::Repository)),
+        Some(SITE_GENERATED_ROUTE) => (SITE_GENERATED_ROUTE, Some(SitePageBacking::Generated)),
+        Some(SITE_REDIRECT) => (SITE_REDIRECT, None),
         Some(_) | None => return Ok(None),
     };
     let digest = hj(SITE_CLAIM_DOMAIN, &observation);
@@ -301,8 +310,9 @@ fn site_claim(
         )
     })?;
     let source = row.required("source", repo_path)?;
-    let target = match kind {
-        SITE_ROUTE => SiteTarget::Page {
+    let target = if let Some(backing) = backing {
+        SiteTarget::Page {
+            backing,
             anchors: row.required("anchors", |path, value| {
                 sorted_set(path, value, anchor_count, |path, value| {
                     bounded_text(path, value, LABEL_BYTES, |value| {
@@ -310,36 +320,34 @@ fn site_claim(
                     })
                 })
             })?,
-        },
-        SITE_REDIRECT => {
-            let (destination, fragment) = row.required("destination", |path, value| {
-                let mut destination = de::string(path, value)?;
-                if destination.len() > DESTINATION_BYTES {
-                    return fail(path, ErrorKind::InvalidValue);
-                }
-                let fragment = destination.find('#').and_then(|separator| {
-                    let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
-                    destination.truncate(separator);
-                    Some(fragment)
-                });
-                if !amiss_wire::uri::site_route_valid(&destination)
-                    || fragment
-                        .as_deref()
-                        .is_some_and(|value| amiss_wire::uri::decode_fragment(value).is_none())
-                {
-                    return fail(path, ErrorKind::InvalidValue);
-                }
-                Ok((destination, fragment))
-            })?;
-            if route == destination {
-                return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
-            }
-            SiteTarget::Redirect {
-                destination,
-                fragment,
-            }
         }
-        _ => return fail(path, ErrorKind::Inconsistent),
+    } else {
+        let (destination, fragment) = row.required("destination", |path, value| {
+            let mut destination = de::string(path, value)?;
+            if destination.len() > DESTINATION_BYTES {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+            let fragment = destination.find('#').and_then(|separator| {
+                let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
+                destination.truncate(separator);
+                Some(fragment)
+            });
+            if !amiss_wire::uri::site_route_valid(&destination)
+                || fragment
+                    .as_deref()
+                    .is_some_and(|value| amiss_wire::uri::decode_fragment(value).is_none())
+            {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+            Ok((destination, fragment))
+        })?;
+        if route == destination {
+            return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
+        }
+        SiteTarget::Redirect {
+            destination,
+            fragment,
+        }
     };
     row.finish()?;
     Ok(Some((
@@ -456,7 +464,7 @@ fn broken_redirect_defect(
             ..
         })) => "nonterminal-redirect",
         Some(SiteRoute::Unique(SiteClaim {
-            target: SiteTarget::Page { anchors },
+            target: SiteTarget::Page { anchors, .. },
             ..
         })) => {
             let fragment = fragment
@@ -516,11 +524,20 @@ fn validate_navigation(
         .filter_map(|route| match route {
             SiteRoute::Unique(SiteClaim {
                 source,
-                target: SiteTarget::Page { .. },
+                target:
+                    SiteTarget::Page {
+                        backing: SitePageBacking::Repository,
+                        ..
+                    },
                 ..
             }) => Some(source),
             SiteRoute::Unique(SiteClaim {
-                target: SiteTarget::Redirect { .. },
+                target:
+                    SiteTarget::Page {
+                        backing: SitePageBacking::Generated,
+                        ..
+                    }
+                    | SiteTarget::Redirect { .. },
                 ..
             })
             | SiteRoute::Ambiguous { .. } => None,
@@ -536,13 +553,15 @@ fn validate_navigation(
     for entrypoint in &navigation.entrypoints {
         let Some(SiteRoute::Unique(SiteClaim {
             source,
-            target: SiteTarget::Page { .. },
+            target: SiteTarget::Page { backing, .. },
             ..
         })) = routes.get(entrypoint)
         else {
             return fail(path, ErrorKind::Inconsistent);
         };
-        if navigation.reachable.binary_search(source).is_err() {
+        if *backing == SitePageBacking::Repository
+            && navigation.reachable.binary_search(source).is_err()
+        {
             return fail(path, ErrorKind::Inconsistent);
         }
     }

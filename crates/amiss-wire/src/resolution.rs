@@ -191,6 +191,7 @@ pub enum ExternalReference {
     Url,
     ForeignRepository,
     IntersphinxInventory,
+    SiteBuild,
 }
 
 /// The total outcome of resolving one authored reference. The outer variants

@@ -179,6 +179,34 @@ fn the_delta_is_set_wise_and_document_attributed() {
     assert_eq!(retained(&plan), 1);
 }
 
+#[test]
+fn trusted_semantic_resolutions_never_enter_the_network_plan() {
+    let observations = [
+        ("docs/a.md", "intersphinx-inventory"),
+        ("docs/b.md", "site-build"),
+    ]
+    .into_iter()
+    .map(|(document, reason)| {
+        row(
+            Value::Null,
+            object(vec![
+                ("document", string(document)),
+                (
+                    "resolution",
+                    object(vec![
+                        ("kind", string("external")),
+                        ("reason", string(reason)),
+                    ]),
+                ),
+            ]),
+        )
+    })
+    .collect();
+    let plan = planned(observations);
+    assert_eq!(destinations(&plan, "introduced"), Vec::new());
+    assert_eq!(retained(&plan), 0);
+}
+
 /// A destination that only moved between documents is retained, never
 /// introduced: membership is repository-wide, attribution is per document.
 #[test]
