@@ -93,7 +93,8 @@ impl StoredRun {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredRefs {
-    forge: StoredForge,
+    #[serde(with = "StoredForge")]
+    forge: ForgeDialect,
     candidate: String,
     target: String,
     default_branch: String,
@@ -102,7 +103,7 @@ struct StoredRefs {
 impl StoredRefs {
     fn new(refs: &RunRefs) -> Self {
         Self {
-            forge: StoredForge::new(refs.forge),
+            forge: refs.forge,
             candidate: refs.candidate.as_str().to_owned(),
             target: refs.target.as_str().to_owned(),
             default_branch: refs.default_branch.as_str().to_owned(),
@@ -111,7 +112,7 @@ impl StoredRefs {
 
     fn materialize(&self) -> MaterializeResult<RunRefs> {
         Ok(RunRefs {
-            forge: self.forge.materialize(),
+            forge: self.forge,
             candidate: branch(&self.candidate)?,
             target: branch(&self.target)?,
             default_branch: branch(&self.default_branch)?,
@@ -165,34 +166,16 @@ impl StoredObjectFormat {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "ForgeDialect", rename_all = "lowercase")]
 enum StoredForge {
     Github,
     Gitlab,
     Gitea,
     #[serde(rename = "bitbucket-cloud")]
     BitbucketCloud,
-}
-
-impl StoredForge {
-    const fn new(forge: ForgeDialect) -> Self {
-        match forge {
-            ForgeDialect::Github => Self::Github,
-            ForgeDialect::Gitlab => Self::Gitlab,
-            ForgeDialect::Gitea => Self::Gitea,
-            ForgeDialect::BitbucketCloud => Self::BitbucketCloud,
-        }
-    }
-
-    const fn materialize(self) -> ForgeDialect {
-        match self {
-            Self::Github => ForgeDialect::Github,
-            Self::Gitlab => ForgeDialect::Gitlab,
-            Self::Gitea => ForgeDialect::Gitea,
-            Self::BitbucketCloud => ForgeDialect::BitbucketCloud,
-        }
-    }
+    #[serde(rename = "bitbucket-data-center")]
+    BitbucketDataCenter,
 }
 
 fn branch(raw: &str) -> MaterializeResult<BranchRef> {

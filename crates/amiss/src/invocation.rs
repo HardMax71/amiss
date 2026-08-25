@@ -23,7 +23,7 @@ pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha25
             [--repository <host>/<owner>/<name>
              --ref refs/heads/<name>
              --default-branch-ref refs/heads/<name>
-             [--forge <github|gitlab|gitea|bitbucket-cloud>]]
+             [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
             [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
@@ -31,7 +31,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
             [--repository <host>/<owner>/<name>
              --ref refs/heads/<name>
              --default-branch-ref refs/heads/<name>
-             [--forge <github|gitlab|gitea|bitbucket-cloud>]]
+             [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss adopt --repo <path> --object-format <sha1|sha256>
@@ -39,7 +39,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --repository <host>/<owner>/<name>
             --ref refs/heads/<name>
             --default-branch-ref refs/heads/<name>
-            [--forge <github|gitlab|gitea|bitbucket-cloud>]
+            [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]
             --floor-digest sha256:<64-hex> --debt-owner <name>
             --debt-reason <text> --created-at <utc-instant>
             --expires-at <utc-instant> --debt-output <path>

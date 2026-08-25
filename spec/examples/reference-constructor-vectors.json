@@ -524,6 +524,13 @@
       "expected": "bitbucket-cloud"
     },
     {
+      "id": "FD-008-bitbucket-data-center-explicit",
+      "operation": "forge-dialect-default",
+      "host": "bitbucket.example",
+      "flag": "bitbucket-data-center",
+      "expected": "bitbucket-data-center"
+    },
+    {
       "id": "GT-001-branch-either-kind",
       "operation": "forge-form",
       "dialect": "gitea",
@@ -674,6 +681,127 @@
       "encoded_suffix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/docs/a.md",
       "expected": {
         "status": "unsupported-version-scope"
+      }
+    },
+    {
+      "id": "DC-001-candidate-ref-query",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "at=refs%2Fheads%2Ffeature%2Fx",
+      "candidate_ref": "refs/heads/feature/x",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-002-default-ref-without-query",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-003-other-named-ref-known-path",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "at=refs%2Ftags%2Fv1",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-004-commit-unavailable-version-scope",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "at=6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "commit_oid": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-005-history-query",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "until=6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22&untilPath=docs%2Fa.md",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "commit_oid": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-006-history-path-mismatch",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "until=6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22&untilPath=docs%2Fb.md",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-007-line-range",
+      "operation": "bitbucket-data-center-line-fragment",
+      "value": "10-20",
+      "expected": true
+    },
+    {
+      "id": "DC-008-github-line-range-rejected",
+      "operation": "bitbucket-data-center-line-fragment",
+      "value": "L10-L20",
+      "expected": false
+    },
+    {
+      "id": "DC-009-context-path-personal-route",
+      "operation": "forge-identity",
+      "dialect": "bitbucket-data-center",
+      "url": "https://bitbucket.example/bitbucket/users/acme/repos/widgets/browse/docs/a.md?at=refs%2Fheads%2Fmain",
+      "identity_host": "bitbucket.example",
+      "identity_owner": "acme",
+      "identity_name": "widgets",
+      "expected": "same-repository"
+    },
+    {
+      "id": "DC-010-directory-hint",
+      "operation": "forge-form",
+      "dialect": "bitbucket-data-center",
+      "suffix": "projects/ACME/repos/widgets/browse/docs/",
+      "expected": "tree"
+    },
+    {
+      "id": "DC-011-raw-form-foreign",
+      "operation": "forge-form",
+      "dialect": "bitbucket-data-center",
+      "suffix": "projects/ACME/repos/widgets/raw/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "DC-012-abbreviated-oid-refused",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "at=deadbee",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "DC-013-other-object-format-known-path",
+      "operation": "bitbucket-data-center-ref-query",
+      "encoded_suffix": "docs/a.md",
+      "query": "at=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
       }
     }
   ]

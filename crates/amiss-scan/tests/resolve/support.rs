@@ -120,6 +120,7 @@ pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
         ForgeDialect::Gitlab => ("gitlab.com", "refs/heads/feature/x"),
         ForgeDialect::Gitea => ("codeberg.org", "refs/heads/feature/x"),
         ForgeDialect::BitbucketCloud => ("bitbucket.org", "refs/heads/feature"),
+        ForgeDialect::BitbucketDataCenter => ("bitbucket.example", "refs/heads/feature/x"),
     };
     ForgeContext {
         host: host.to_owned(),

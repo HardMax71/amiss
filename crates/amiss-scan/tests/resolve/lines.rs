@@ -295,18 +295,20 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
         forge_context(ForgeDialect::Github),
         forge_context(ForgeDialect::Gitlab),
         forge_context(ForgeDialect::Gitea),
+        forge_context(ForgeDialect::BitbucketDataCenter),
     ];
     let native_cases = [
-        (&contexts[0], "L2-L3", "L2-3"),
-        (&contexts[1], "L2-3", "L2-L3"),
-        (&contexts[2], "L2-L3", "L2-3"),
+        (&contexts[0], "L2-L3", "L2-3", "L5"),
+        (&contexts[1], "L2-3", "L2-L3", "L5"),
+        (&contexts[2], "L2-L3", "L2-3", "L5"),
+        (&contexts[3], "2-3", "L2-L3", "5"),
     ];
     let expected = Some(expected_line_projection(
         GitMode::RegularFile,
         b"two\nthree\r",
     ));
 
-    for (context, accepted, rejected) in native_cases {
+    for (context, accepted, rejected, out_of_range) in native_cases {
         let row = bed
             .run_as(
                 Adapter::Markdown,
@@ -346,7 +348,7 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
                 Some(context),
                 "docs/guide.md",
                 false,
-                "../src/lines.rs#L5",
+                &format!("../src/lines.rs#{out_of_range}"),
             )
             .unwrap_or_else(|_defect| panic!("resolve out of range"))
             .1;
@@ -368,6 +370,10 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
         (
             &contexts[2],
             "https://codeberg.org/acme/widgets/src/branch/feature/x/src/lines.rs#L2-L3",
+        ),
+        (
+            &contexts[3],
+            "https://bitbucket.example/projects/ACME/repos/widgets/browse/src/lines.rs?at=refs%2Fheads%2Ffeature%2Fx#2-3",
         ),
     ];
     for (context, destination) in absolute_cases {

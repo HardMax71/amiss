@@ -22,7 +22,7 @@ use crate::support;
 
 use support::{ReportSchemaFragment, fixture_bytes};
 
-const REQUIRED_VECTOR_IDS: [&str; 24] = [
+const REQUIRED_VECTOR_IDS: [&str; 25] = [
     "CI-001-native-github-equivalent",
     "CI-002-repository-path-changed",
     "CI-003-target-kind-changed",
@@ -47,6 +47,7 @@ const REQUIRED_VECTOR_IDS: [&str; 24] = [
     "CI-022-external-components-identical",
     "CI-023-other-components-identical",
     "CI-024-native-bitbucket-cloud-equivalent",
+    "CI-025-native-bitbucket-data-center-equivalent",
 ];
 
 fn field<'a>(members: &'a [(String, Value)], name: &str) -> &'a Value {
@@ -91,6 +92,7 @@ fn intent_kind(value: &Value) -> IntentKind {
         "same-repository-gitlab" => IntentKind::SameRepositoryGitlab,
         "same-repository-gitea" => IntentKind::SameRepositoryGitea,
         "same-repository-bitbucket-cloud" => IntentKind::SameRepositoryBitbucketCloud,
+        "same-repository-bitbucket-data-center" => IntentKind::SameRepositoryBitbucketDataCenter,
         "external-url" => IntentKind::ExternalUrl,
         "site-route" => IntentKind::SiteRoute,
         "unsupported" => IntentKind::Unsupported,

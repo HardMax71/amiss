@@ -139,10 +139,10 @@
         },
         "dialect": {
           "description": "The URL grammar that split the path: the known-host table's entry, or the report's own declared dialect on its declared host.",
-          "enum": ["github", "gitlab", "gitea", "bitbucket-cloud"]
+          "enum": ["github", "gitlab", "gitea", "bitbucket-cloud", "bitbucket-data-center"]
         },
         "owner": {
-          "description": "The owner segments before the name, joined; nested only under the gitlab dialect.",
+          "description": "The owner segments before the name, joined; nested only under the gitlab dialect. A Bitbucket Data Center project key or personal-user slug occupies this field.",
           "type": "string",
           "minLength": 1
         },

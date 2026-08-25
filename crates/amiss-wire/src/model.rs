@@ -431,6 +431,8 @@ pub enum ForgeDialect {
     Gitea,
     #[strum(serialize = "bitbucket-cloud")]
     BitbucketCloud,
+    #[strum(serialize = "bitbucket-data-center")]
+    BitbucketDataCenter,
 }
 
 impl ForgeDialect {

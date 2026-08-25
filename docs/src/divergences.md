@@ -28,9 +28,14 @@ form, which some tooling still generates, is foreign because the typed `src/bran
 spelling is what the forge emits. A gitea tag link is out of version scope even when its
 segments spell the candidate branch exactly, because no tag is a trusted ref. The
 Bitbucket Cloud source form gives the commitish exactly one segment, so a candidate branch
-containing `/` is not guessed into its filepath. The line-anchor grammars do not leak either:
-`#L10-20` selects lines only under gitlab, `#L10-L20` only under github and gitea, and
-`#file.rs-10` only under bitbucket-cloud when the basename agrees.
+containing `/` is not guessed into its filepath. Bitbucket Data Center keeps the path before its
+revision query, so only an exact full ref or object ID in `at=`, or its path-bound `until` history
+pair, selects a version; abbreviated IDs and extra parameters remain version-scoped. A literal
+installation context without a reserved `projects` or `users` segment may precede the route, but a
+`raw` route is foreign. The
+line-anchor grammars do not leak either: `#L10-20` selects lines only under gitlab, `#L10-L20`
+only under github and gitea, `#file.rs-10` only under bitbucket-cloud when the basename agrees, and
+`#10-20` only under bitbucket-data-center.
 
 The parser pin records its known differences instead of hiding them. Measured against the
 pinned grammar bundle and against GitHub's own rendering, exactly one difference

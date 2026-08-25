@@ -8,6 +8,7 @@ pub enum IntentKind {
     SameRepositoryGitlab,
     SameRepositoryGitea,
     SameRepositoryBitbucketCloud,
+    SameRepositoryBitbucketDataCenter,
     ExternalUrl,
     SiteRoute,
     Label,
@@ -144,7 +145,7 @@ declare_taxonomy! {
             metadata: &COVERAGE_OBSERVATION,
         },
         UnsupportedReferenceSemantics => {
-            meaning: "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, a destination that needs a document attribute this run does not evaluate, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed",
+            meaning: "the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string the selected grammar does not recognize, a destination that needs a document attribute this run does not evaluate, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed",
             metadata: &UNSUPPORTED_OBSERVATION,
         },
         UnsupportedDocumentFormat => {

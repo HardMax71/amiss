@@ -95,7 +95,12 @@ impl EvaluationRequest {
             || forge.is_some() && repository.is_none()
             || matches!(
                 forge,
-                Some(ForgeDialect::Github | ForgeDialect::Gitea | ForgeDialect::BitbucketCloud)
+                Some(
+                    ForgeDialect::Github
+                        | ForgeDialect::Gitea
+                        | ForgeDialect::BitbucketCloud
+                        | ForgeDialect::BitbucketDataCenter,
+                )
             ) && repository
                 .as_ref()
                 .is_some_and(|identity| identity.owner().contains('/'))
