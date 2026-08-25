@@ -151,6 +151,17 @@ pattern changed. A release cut before the prober has no such asset; there the so
 build `cargo build --locked --release -p amiss-probe` stands in, which is also what the
 dogfood job runs so it probes with the pull request's own prober.
 
+That dogfood job uses
+[GitHub's cache](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)
+only to replay successful, nonempty evidence when the same workflow run is retried. The exact
+key carries the cache schema and probe options, runner platform, immutable run and commit
+identities, and the probe manifest and lockfile hash; it has
+no prefix fallback. The first attempt restores nothing, and an empty plan saves nothing. A
+restored file is still untrusted input: `external-assess` must accept its exact plan binding before
+the probe is skipped. A miss, cache outage, or invalid body runs the probe again, and every attempt
+derives the assessment locally. A new workflow run therefore never inherits an observation from
+the old one, and the cache never becomes a baseline or changes the advisory policy.
+
 The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
 lines the findings name, with fixes rendered as suggested edits and the finding key
 deduplicating alerts across runs. Two steps after any direct invocation:
