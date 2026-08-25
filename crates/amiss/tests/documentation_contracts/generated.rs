@@ -237,9 +237,10 @@ fn the_status_page_names_every_grammar_form() {
     );
     let spelled = [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven",
     ]
     .get(forms.len())
-    .expect("the grammar stays below eleven forms");
+    .expect("the grammar stays below twelve forms");
     assert!(
         row.contains(&format!("closed at those {spelled} forms")),
         "{} Command row miscounts the closed grammar",

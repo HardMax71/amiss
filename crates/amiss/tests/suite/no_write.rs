@@ -173,6 +173,20 @@ fn every_command_leaves_the_repository_byte_identical() {
             "--explain-scope",
         ],
         vec!["check", "--repo", &fx.repo, "--not-a-flag"],
+        vec![
+            "policy-include",
+            "--path",
+            "docs",
+            "--suffix",
+            ".md",
+            "--adapter",
+            "markdown",
+            "--repo",
+            &fx.repo,
+            "--object-format",
+            "sha1",
+            "--index",
+        ],
     ];
     for args in runs {
         let (code, _stdout) = amiss(&args);

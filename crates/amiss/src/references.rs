@@ -1,4 +1,3 @@
-use std::io::Write as _;
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
@@ -34,8 +33,9 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
                 eprintln!("amiss refs: the projection is larger than a scanner report can be");
                 return failure;
             }
-            if let Err(defect) = write_json(&occurrences)
-                && defect.kind() != std::io::ErrorKind::BrokenPipe
+            if let Err(defect) = crate::output::write_json_array(&occurrences, |occurrence| {
+                json::canonical(occurrence)
+            }) && defect.kind() != std::io::ErrorKind::BrokenPipe
             {
                 eprintln!("amiss refs: the projection could not be written");
                 return failure;
@@ -125,18 +125,4 @@ fn projected_bytes(occurrences: &[&Value]) -> u64 {
         .fold(3_u64.saturating_add(separators), |total, occurrence| {
             total.saturating_add(json::canonical_length(occurrence))
         })
-}
-
-fn write_json(occurrences: &[&Value]) -> std::io::Result<()> {
-    let stdout = std::io::stdout();
-    let mut out = std::io::BufWriter::new(stdout.lock());
-    out.write_all(b"[")?;
-    for (index, occurrence) in occurrences.iter().enumerate() {
-        if index > 0 {
-            out.write_all(b",")?;
-        }
-        out.write_all(&json::canonical(occurrence))?;
-    }
-    out.write_all(b"]\n")?;
-    out.flush()
 }

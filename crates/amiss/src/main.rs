@@ -4,7 +4,9 @@ mod codequality;
 mod external;
 mod human;
 mod input;
+mod output;
 mod payload;
+mod policy_include;
 mod references;
 mod render;
 mod repair;
@@ -128,6 +130,7 @@ fn main() -> ExitCode {
             invocation::Command::Assess(assess) => external::run_assess(&assess, &mut reserve),
             invocation::Command::Render(render) => render::run(&render, &mut reserve),
             invocation::Command::Refs(refs) => references::run(&refs),
+            invocation::Command::PolicyInclude(include) => policy_include::run(&include),
         },
     }
 }
