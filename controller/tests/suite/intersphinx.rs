@@ -44,7 +44,7 @@ pub(super) fn evidence() -> Vec<amiss_controller::SemanticEvidenceTemplate> {
 fn a_bounded_inventory_becomes_only_complete_label_evidence() {
     let evidence = evidence();
     let candidate = hb("amiss/test-candidate", b"candidate");
-    let envelopes = bind_semantic_evidence(&evidence, candidate).unwrap();
+    let envelopes = bind_semantic_evidence(&evidence, &[], candidate).unwrap();
     let parsed = amiss_wire::semantic::parse(&canonical(envelopes.first().unwrap())).unwrap();
 
     assert_eq!(parsed.payload.candidate_identity_digest, candidate);

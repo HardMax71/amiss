@@ -7,6 +7,7 @@ use amiss_controller::{Acquisition, AcquisitionTarget, OidPair, RunRequest};
 use amiss_fixtures::{CommitPair, commit_pair};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput};
 use amiss_wire::digest::Digest;
+use amiss_wire::json::Value;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 /// The checked repository and the action repository a provider lane acquires,
@@ -101,9 +102,9 @@ impl Acquisition for CopyAcquisition {
         &mut self,
         _request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Value>, Self::Error> {
         copy_tree(&self.repository, target.repository, &target.cancelled)?;
-        copy_tree(&self.action, target.action, &target.cancelled)
+        copy_tree(&self.action, target.action, &target.cancelled).map(|()| Vec::new())
     }
 }
 

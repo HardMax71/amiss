@@ -8,18 +8,19 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    AcquiredControl, BootstrapJobError, BootstrapJobInput, ChangeId, ChangeLocator, CheckPlan,
-    ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy, IntegrationId, OidPair,
-    PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, bootstrap_job,
-    check_binding, check_plan,
+    AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, ChangeId, ChangeLocator,
+    CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy, IntegrationId,
+    OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
+    bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
 };
-use amiss_wire::json;
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::json::{self, Value};
 use amiss_wire::model::{
-    BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
+    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestTrust, SnapshotRequest,
@@ -165,6 +166,44 @@ fn plan(policy: PolicyControls) -> CheckPlan {
     check_plan(Profile::Enforce, policy, execution()).unwrap()
 }
 
+fn bootstrap(
+    run: &RunRequest,
+    acquired_semantic_evidence: &[Value],
+) -> Result<BootstrapJob, BootstrapJobError> {
+    bootstrap_job(BootstrapJobInput {
+        run,
+        evaluation_instant: instant("2026-07-12T10:00:00Z"),
+        valid_until: instant("2026-07-12T10:05:00Z"),
+        acquired_semantic_evidence,
+    })
+}
+
+fn candidate_identity(run: &RunRequest) -> Digest {
+    let job = bootstrap(run, &[]).unwrap();
+    let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
+    let supplied_time = controls.trusted_time.unwrap();
+    TrustedTimeStatement::parse(&json::canonical(&supplied_time.value))
+        .unwrap()
+        .candidate_identity_digest()
+}
+
+fn semantic_evidence(
+    candidate_identity_digest: Digest,
+    source_report_payload_digest: Option<Digest>,
+) -> Value {
+    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+        candidate_identity_digest,
+        source_report_payload_digest,
+        producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+        producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
+        producer_version: "0.1.0".to_owned(),
+        input_digest: hb("amiss/test-site-build", b"output"),
+        complete: true,
+        observations: Vec::new(),
+    })
+    .unwrap()
+}
+
 #[test]
 fn job_construction_binds_the_complete_authenticated_run() {
     let run = run_request(policy());
@@ -172,6 +211,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
         run: &run,
         evaluation_instant: instant("2026-07-12T10:00:00Z"),
         valid_until: instant("2026-07-12T10:05:00Z"),
+        acquired_semantic_evidence: &[],
     })
     .unwrap();
 
@@ -220,6 +260,61 @@ fn job_construction_binds_the_complete_authenticated_run() {
 }
 
 #[test]
+fn acquired_semantic_evidence_joins_the_exact_candidate() {
+    let run = run_request(policy());
+    let evidence = semantic_evidence(candidate_identity(&run), None);
+    let evidence_digest = amiss_wire::semantic::parse(&json::canonical(&evidence))
+        .unwrap()
+        .payload_digest;
+    let job = bootstrap(&run, std::slice::from_ref(&evidence)).unwrap();
+    let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
+    let payload_digests = controls
+        .semantic_evidence
+        .iter()
+        .map(|value| {
+            amiss_wire::semantic::parse(&json::canonical(value))
+                .unwrap()
+                .payload_digest
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(controls.semantic_evidence.len(), 2);
+    assert!(payload_digests.contains(&evidence_digest));
+    assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
+}
+
+#[test]
+fn acquired_semantic_evidence_must_be_pre_scan_and_candidate_bound() {
+    let run = run_request(PolicyControls::default());
+    let candidate = candidate_identity(&run);
+    let defects = [
+        Value::Null,
+        semantic_evidence(hb("amiss/test-candidate", b"other"), None),
+        semantic_evidence(candidate, Some(hb("amiss/test-report", b"report"))),
+    ];
+
+    for defect in defects {
+        assert_eq!(
+            bootstrap(&run, std::slice::from_ref(&defect)).unwrap_err(),
+            BootstrapJobError::SemanticEvidence
+        );
+    }
+
+    let duplicate = semantic_evidence(candidate, None);
+    assert_eq!(
+        bootstrap(&run, &[duplicate.clone(), duplicate]).unwrap_err(),
+        BootstrapJobError::SemanticEvidence
+    );
+
+    let over_limit =
+        vec![Value::Null; amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)];
+    assert_eq!(
+        bootstrap(&run, &over_limit).unwrap_err(),
+        BootstrapJobError::SemanticEvidence
+    );
+}
+
+#[test]
 fn job_construction_rejects_mismatched_run_control_and_time() {
     let mut run = run_request(PolicyControls::default());
     run.provider_run.candidate_commit = oid('5');
@@ -228,6 +323,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
+            acquired_semantic_evidence: &[],
         })
         .unwrap_err(),
         BootstrapJobError::RunIdentity
@@ -253,6 +349,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
+            acquired_semantic_evidence: &[],
         })
         .unwrap_err(),
         BootstrapJobError::ControlBinding
@@ -264,6 +361,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:20:00Z"),
+            acquired_semantic_evidence: &[],
         })
         .unwrap_err(),
         BootstrapJobError::TrustedTime
@@ -308,6 +406,7 @@ fn a_validated_plan_cannot_be_changed_in_place() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
+            acquired_semantic_evidence: &[],
         })
         .unwrap_err(),
         BootstrapJobError::CheckPlan
@@ -317,13 +416,14 @@ fn a_validated_plan_cannot_be_changed_in_place() {
 #[test]
 fn a_job_cannot_escape_the_ledger_frozen_plan_binding() {
     let mut run = run_request(PolicyControls::default());
-    run.check.plan_digest = amiss_wire::digest::hb("amiss/test-plan", b"other");
+    run.check.plan_digest = hb("amiss/test-plan", b"other");
 
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
+            acquired_semantic_evidence: &[],
         })
         .unwrap_err(),
         BootstrapJobError::CheckPlan

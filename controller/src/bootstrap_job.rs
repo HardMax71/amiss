@@ -135,6 +135,7 @@ pub struct BootstrapJobInput<'a> {
     pub run: &'a RunRequest,
     pub evaluation_instant: UtcInstant,
     pub valid_until: UtcInstant,
+    pub acquired_semantic_evidence: &'a [Value],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -210,7 +211,11 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             expected_digest: checked_plan.execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
-        bind_semantic_evidence(&checked_plan.policy.semantic_evidence, candidate_identity)?,
+        bind_semantic_evidence(
+            &checked_plan.policy.semantic_evidence,
+            input.acquired_semantic_evidence,
+            candidate_identity,
+        )?,
     )?;
     let streams = RequestStreams {
         evaluation: evaluation
@@ -227,23 +232,29 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     })
 }
 
-/// Binds controller-produced evidence to one exact candidate and orders the
-/// resulting envelope set by payload identity.
+/// Binds controller-produced templates and acquired envelopes to one exact
+/// candidate and orders the resulting set by payload identity.
 ///
 /// # Errors
 ///
-/// A template cannot form a valid bounded envelope or two envelopes collide.
+/// An envelope is malformed, exceeds a limit, names another subject, or
+/// collides with another envelope.
 pub fn bind_semantic_evidence(
     templates: &[SemanticEvidenceTemplate],
+    acquired: &[Value],
     candidate_identity_digest: Digest,
 ) -> Result<Vec<Value>, BootstrapJobError> {
-    if templates.len() > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT {
+    let count = templates
+        .len()
+        .checked_add(acquired.len())
+        .ok_or(BootstrapJobError::SemanticEvidence)?;
+    if count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT {
         return Err(BootstrapJobError::SemanticEvidence);
     }
     let mut envelopes = templates
         .iter()
         .map(|template| {
-            let value = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+            amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
                 candidate_identity_digest,
                 source_report_payload_digest: None,
                 producer_kind: template.producer_kind.clone(),
@@ -253,12 +264,17 @@ pub fn bind_semantic_evidence(
                 complete: template.complete,
                 observations: template.observations.as_ref().to_vec(),
             })
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-            let payload_digest = value
-                .text("payload_digest")
-                .and_then(Digest::from_wire)
-                .ok_or(BootstrapJobError::SemanticEvidence)?;
-            Ok((payload_digest, value))
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)
+        })
+        .chain(acquired.iter().cloned().map(Ok))
+        .map(|value| {
+            let value = value?;
+            let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
+                .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+            (envelope.payload.candidate_identity_digest == candidate_identity_digest
+                && envelope.payload.source_report_payload_digest.is_none())
+            .then_some((envelope.payload_digest, value))
+            .ok_or(BootstrapJobError::SemanticEvidence)
         })
         .collect::<Result<Vec<_>, BootstrapJobError>>()?;
     envelopes.sort_by_key(|(digest, _value)| *digest);

@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use amiss_controller::{Acquisition, AcquisitionTarget, RunRequest};
+use amiss_wire::json::Value;
 use amiss_wire::model::Oid;
 use secrecy::SecretString;
 
@@ -106,7 +107,7 @@ where
         &mut self,
         request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Value>, Self::Error> {
         active(target.cancelled.as_ref())?;
         let plan = (self.plan)(request)
             .map_err(|_defect| GitFetchError("the Git fetch plan is invalid"))?;
@@ -146,7 +147,7 @@ where
             bounds: self.bounds,
             cancelled: target.cancelled.as_ref(),
         })?;
-        active(target.cancelled.as_ref())
+        active(target.cancelled.as_ref()).map(|()| Vec::new())
     }
 }
 

@@ -123,7 +123,7 @@ pub fn intersphinx_evidence(
         complete: true,
         observations: Arc::from(observations),
     }];
-    crate::bind_semantic_evidence(&evidence, input_digest)
+    crate::bind_semantic_evidence(&evidence, &[], input_digest)
         .map_err(|_defect| IntersphinxError::Evidence)?;
     Ok(evidence)
 }

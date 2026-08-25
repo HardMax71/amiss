@@ -143,6 +143,7 @@ impl Harness {
                 scratch,
                 evaluation_instant: &self.evaluation_instant,
                 valid_until: &self.valid_until,
+                semantic_evidence: &[],
                 wall_timeout,
             },
             heartbeat,

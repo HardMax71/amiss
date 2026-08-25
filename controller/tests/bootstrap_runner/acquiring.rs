@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, mpsc};
 
 use amiss_controller::{AcquiringRunner, Acquisition, AcquisitionTarget, ControllerClock, Runner};
 use amiss_fixtures::path_arg;
+use amiss_wire::json::Value;
 
 use super::*;
 
@@ -16,6 +17,7 @@ enum AcquisitionFixture {
         repository: PathBuf,
         action: PathBuf,
         paths: Arc<AcquiredPaths>,
+        semantic_evidence: Vec<Value>,
     },
     Reject,
     IgnoreCancellation {
@@ -32,12 +34,13 @@ impl Acquisition for AcquisitionFixture {
         &mut self,
         _request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Value>, Self::Error> {
         match self {
             Self::Clone {
                 repository,
                 action,
                 paths,
+                semantic_evidence,
             } => {
                 paths
                     .0
@@ -45,7 +48,8 @@ impl Acquisition for AcquisitionFixture {
                     .unwrap()
                     .extend([target.repository.to_path_buf(), target.action.to_path_buf()]);
                 clone_repository(repository, target.repository, &target.cancelled)?;
-                clone_repository(action, target.action, &target.cancelled)
+                clone_repository(action, target.action, &target.cancelled)?;
+                Ok(semantic_evidence.clone())
             }
             Self::Reject => Err(std::io::Error::other("acquisition rejected")),
             Self::IgnoreCancellation {
@@ -97,6 +101,7 @@ fn uses_private_exact_roots_and_controller_time() {
         repository: harness.repository.root().to_path_buf(),
         action: harness.action.root().to_path_buf(),
         paths: Arc::clone(&paths),
+        semantic_evidence: Vec::new(),
     };
     let mut runner = acquiring_runner(&harness, acquisition, Some(1_753_219_200_000));
     let mut heartbeat = Heartbeat::renewing();
@@ -131,11 +136,29 @@ fn acquisition_and_clock_defects_are_unavailable() {
         repository: harness.repository.root().to_path_buf(),
         action: harness.action.root().to_path_buf(),
         paths: Arc::new(AcquiredPaths::default()),
+        semantic_evidence: Vec::new(),
     };
     let mut no_time = acquiring_runner(&harness, acquisition, None);
     assert_eq!(
         no_time.run(&harness.request, &mut Heartbeat::renewing()),
         RunnerOutcome::Unavailable
+    );
+}
+
+#[test]
+fn malformed_acquired_semantic_evidence_is_a_tampered_runtime() {
+    let harness = Harness::new("runner-pass", None);
+    let acquisition = AcquisitionFixture::Clone {
+        repository: harness.repository.root().to_path_buf(),
+        action: harness.action.root().to_path_buf(),
+        paths: Arc::new(AcquiredPaths::default()),
+        semantic_evidence: vec![Value::Null],
+    };
+    let mut runner = acquiring_runner(&harness, acquisition, Some(1_753_219_200_000));
+
+    assert_eq!(
+        runner.run(&harness.request, &mut Heartbeat::renewing()),
+        RunnerOutcome::TamperedRuntime
     );
 }
 

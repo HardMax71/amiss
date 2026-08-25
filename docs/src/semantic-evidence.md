@@ -62,7 +62,14 @@ routes remain invalid or unsupported rather than becoming guessed passes. The ba
 consumes candidate build output.
 
 Only the sealed controls request has this intake. The public command supplies an empty set. A
-successful report projects the accepted envelopes' payload and producer/input identities under
+controller plan may hold candidate-independent templates such as an Intersphinx inventory set. A
+trusted acquisition may instead return already-formed pre-scan envelopes beside the exact
+repository and action roots. While building the sealed job, the controller strictly parses both
+sets, requires every envelope to name the exact candidate and no source report, applies their one
+combined count limit, orders them by payload digest, and rejects collisions. A malformed, stale,
+post-scan, duplicate, or oversized acquired set is runtime tampering, not absent evidence.
+
+A successful report projects the accepted envelopes' payload and producer/input identities under
 `controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
 inventory-backed external destination is already resolved evidence, so the external-probe plan does
 not schedule it for a second network judgment.
@@ -75,6 +82,11 @@ its input digest. The resulting template is held once in the controller plan and
 candidate identity only while the sealed job is built. Fetching and caching remain deployment
 concerns outside both the engine and the repository being checked; [provider
 configuration](provider-controls.md) accepts only the bounded local result.
+
+The built-in provider acquisitions currently return no candidate-specific envelopes. The
+acquisition boundary makes a completed-build producer possible without freezing candidate output
+into a startup plan or letting the scanner search the repository for evidence; it does not itself
+run a site generator or make repository-controlled output authoritative.
 
 The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
