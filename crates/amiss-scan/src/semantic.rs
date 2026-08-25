@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_wire::de::{self, Error, ErrorKind, Obj, fail};
-use amiss_wire::digest::Digest;
+use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
@@ -12,10 +12,12 @@ const INTERSPHINX_PRODUCER: &str = "sphinx-inventory-set";
 const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
-const SITE_BUILD_VERSION: &str = "0.1.0";
+const SITE_BUILD_VERSION: &str = "0.2.0";
 const SITE_ROUTE: &str = "site-route";
 const SITE_REDIRECT: &str = "site-redirect";
 const SITE_NAVIGATION: &str = "site-navigation";
+const SITE_CLAIM_DOMAIN: &str = "amiss/scanner-site-claim";
+const SITE_DEFECT_DOMAIN: &str = "amiss/scanner-site-defect";
 const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
@@ -24,7 +26,7 @@ pub struct Inputs {
     pub(crate) candidate_bindings: Vec<Digest>,
     pub(crate) labels: Arc<BTreeMap<String, InventoryLabel>>,
     pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
-    pub(crate) navigation: Option<Arc<SiteNavigation>>,
+    pub(crate) site: SiteEvaluation,
     pub(crate) provenance: Vec<Provenance>,
 }
 
@@ -36,15 +38,29 @@ pub(crate) enum InventoryLabel {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SiteRoute {
+    Unique(SiteClaim),
+    Ambiguous {
+        sources: Vec<amiss_wire::model::RepoPath>,
+        claims: Vec<Digest>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SiteClaim {
+    pub(crate) source: amiss_wire::model::RepoPath,
+    pub(crate) digest: Digest,
+    pub(crate) target: SiteTarget,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SiteTarget {
     Page {
-        source: amiss_wire::model::RepoPath,
         anchors: Vec<String>,
     },
     Redirect {
         destination: String,
         fragment: Option<String>,
     },
-    Ambiguous,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,6 +69,20 @@ pub(crate) struct SiteNavigation {
     pub(crate) manifest: amiss_wire::model::RepoPath,
     pub(crate) entrypoints: Vec<String>,
     pub(crate) reachable: Vec<amiss_wire::model::RepoPath>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SiteEvaluation {
+    pub(crate) navigation: Option<Arc<SiteNavigation>>,
+    pub(crate) defects: Arc<[SiteDefect]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SiteDefect {
+    pub(crate) id: Digest,
+    pub(crate) evidence: Value,
+    pub(crate) source: amiss_wire::model::RepoPath,
+    pub(crate) member_count: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,7 +98,7 @@ pub struct Provenance {
 pub(crate) struct Context {
     pub(crate) labels: Arc<BTreeMap<String, InventoryLabel>>,
     pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
-    pub(crate) navigation: Option<Arc<SiteNavigation>>,
+    pub(crate) site: SiteEvaluation,
     pub(crate) provenance: Vec<Provenance>,
 }
 
@@ -142,7 +172,7 @@ pub(crate) fn parse(values: &[Value]) -> Result<Inputs, Error> {
                     return fail(&path, ErrorKind::Inconsistent);
                 }
                 site_build = true;
-                inputs.navigation =
+                inputs.site =
                     site_build_inputs(&mut inputs.routes, &path, observations, &mut site_items)?;
             }
             _ => {}
@@ -164,7 +194,7 @@ fn site_build_inputs(
     path: &str,
     observations: Vec<Value>,
     item_count: &mut usize,
-) -> Result<Option<Arc<SiteNavigation>>, Error> {
+) -> Result<SiteEvaluation, Error> {
     let mut navigation = None;
     for (index, observation) in observations.into_iter().enumerate() {
         let observation_path = format!("{path}.payload.observations[{index}]");
@@ -211,20 +241,22 @@ fn site_build_inputs(
                     reachable,
                 },
             ));
-        } else {
-            insert_site(
-                Arc::make_mut(routes),
-                &observation_path,
-                observation,
-                item_count,
-            )?;
+        } else if let Some((route, claim)) = site_claim(&observation_path, observation, item_count)?
+        {
+            merge_site_claim(Arc::make_mut(routes), route, claim);
         }
     }
     let Some((navigation_path, navigation)) = navigation else {
-        return Ok(None);
+        return Ok(SiteEvaluation {
+            navigation: None,
+            defects: site_defects(routes).into(),
+        });
     };
     validate_navigation(routes, &navigation_path, &navigation)?;
-    Ok(Some(Arc::new(navigation)))
+    Ok(SiteEvaluation {
+        navigation: Some(Arc::new(navigation)),
+        defects: site_defects(routes).into(),
+    })
 }
 
 pub(crate) fn bind(inputs: &Inputs, candidate: Digest) -> Result<Context, ErrorDetail> {
@@ -243,22 +275,22 @@ pub(crate) fn bind(inputs: &Inputs, candidate: Digest) -> Result<Context, ErrorD
     Ok(Context {
         labels: inputs.labels.clone(),
         routes: inputs.routes.clone(),
-        navigation: inputs.navigation.clone(),
+        site: inputs.site.clone(),
         provenance: inputs.provenance.clone(),
     })
 }
 
-fn insert_site(
-    routes: &mut BTreeMap<String, SiteRoute>,
+fn site_claim(
     path: &str,
     observation: Value,
     anchor_count: &mut usize,
-) -> Result<(), Error> {
+) -> Result<Option<(String, SiteClaim)>, Error> {
     let kind = match observation.text("kind") {
         Some(SITE_ROUTE) => SITE_ROUTE,
         Some(SITE_REDIRECT) => SITE_REDIRECT,
-        Some(_) | None => return Ok(()),
+        Some(_) | None => return Ok(None),
     };
+    let digest = hj(SITE_CLAIM_DOMAIN, &observation);
     let mut row = observation_row(path, observation, kind)?;
     let route = row.required("route", |path, value| {
         bounded_text(
@@ -268,55 +300,210 @@ fn insert_site(
             amiss_wire::uri::site_route_valid,
         )
     })?;
-    let target = if kind == SITE_ROUTE {
-        site_page(&mut row, anchor_count)?
-    } else {
-        site_redirect(path, &mut row, &route)?
+    let source = row.required("source", repo_path)?;
+    let target = match kind {
+        SITE_ROUTE => SiteTarget::Page {
+            anchors: row.required("anchors", |path, value| {
+                sorted_set(path, value, anchor_count, |path, value| {
+                    bounded_text(path, value, LABEL_BYTES, |value| {
+                        !value.is_empty() && value.chars().all(|character| !character.is_control())
+                    })
+                })
+            })?,
+        },
+        SITE_REDIRECT => {
+            let (destination, fragment) = row.required("destination", |path, value| {
+                let mut destination = de::string(path, value)?;
+                if destination.len() > DESTINATION_BYTES {
+                    return fail(path, ErrorKind::InvalidValue);
+                }
+                let fragment = destination.find('#').and_then(|separator| {
+                    let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
+                    destination.truncate(separator);
+                    Some(fragment)
+                });
+                if !amiss_wire::uri::site_route_valid(&destination)
+                    || fragment
+                        .as_deref()
+                        .is_some_and(|value| amiss_wire::uri::decode_fragment(value).is_none())
+                {
+                    return fail(path, ErrorKind::InvalidValue);
+                }
+                Ok((destination, fragment))
+            })?;
+            if route == destination {
+                return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
+            }
+            SiteTarget::Redirect {
+                destination,
+                fragment,
+            }
+        }
+        _ => return fail(path, ErrorKind::Inconsistent),
     };
     row.finish()?;
-    insert_or_ambiguous(routes, route, target, SiteRoute::Ambiguous);
-    Ok(())
+    Ok(Some((
+        route,
+        SiteClaim {
+            source,
+            digest,
+            target,
+        },
+    )))
 }
 
-fn site_page(row: &mut Obj, anchor_count: &mut usize) -> Result<SiteRoute, Error> {
-    let source = row.required("source", repo_path)?;
-    let anchors = row.required("anchors", |path, value| {
-        sorted_set(path, value, anchor_count, |path, value| {
-            bounded_text(path, value, LABEL_BYTES, |value| {
-                !value.is_empty() && value.chars().all(|character| !character.is_control())
-            })
-        })
-    })?;
-    Ok(SiteRoute::Page { source, anchors })
-}
-
-fn site_redirect(path: &str, row: &mut Obj, route: &str) -> Result<SiteRoute, Error> {
-    let (destination, fragment) = row.required("destination", |path, value| {
-        let mut destination = de::string(path, value)?;
-        if destination.len() > DESTINATION_BYTES {
-            return fail(path, ErrorKind::InvalidValue);
+fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, claim: SiteClaim) {
+    match routes.entry(route) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(SiteRoute::Unique(claim));
         }
-        let fragment = destination.find('#').and_then(|separator| {
-            let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
-            destination.truncate(separator);
-            Some(fragment)
-        });
-        if !amiss_wire::uri::site_route_valid(&destination)
-            || fragment
-                .as_deref()
-                .is_some_and(|value| amiss_wire::uri::decode_fragment(value).is_none())
-        {
-            return fail(path, ErrorKind::InvalidValue);
+        std::collections::btree_map::Entry::Occupied(mut entry) => {
+            let source = claim.source.clone();
+            let claim = claim.digest;
+            let existing = entry.get_mut();
+            let (mut sources, mut claims) = match existing {
+                SiteRoute::Ambiguous { sources, claims } => {
+                    if let Err(index) = sources.binary_search(&source) {
+                        sources.insert(index, source);
+                    }
+                    if let Err(index) = claims.binary_search(&claim) {
+                        claims.insert(index, claim);
+                    }
+                    return;
+                }
+                SiteRoute::Unique(existing) => (
+                    vec![existing.source.clone(), source],
+                    vec![existing.digest, claim],
+                ),
+            };
+            sources.sort();
+            sources.dedup();
+            claims.sort();
+            claims.dedup();
+            *existing = SiteRoute::Ambiguous { sources, claims };
         }
-        Ok((destination, fragment))
-    })?;
-    if route == destination {
-        return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
     }
-    Ok(SiteRoute::Redirect {
+}
+
+fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
+    routes
+        .iter()
+        .filter_map(|(route, target)| match target {
+            SiteRoute::Ambiguous { sources, claims } => {
+                duplicate_route_defect(route, sources, claims)
+            }
+            SiteRoute::Unique(claim) => broken_redirect_defect(routes, route, claim),
+        })
+        .collect()
+}
+
+fn duplicate_route_defect(
+    route: &str,
+    sources: &[amiss_wire::model::RepoPath],
+    claims: &[Digest],
+) -> Option<SiteDefect> {
+    let source = sources.first()?.clone();
+    let evidence = Value::object(vec![
+        (
+            "claim_digests".to_owned(),
+            Value::array(
+                claims
+                    .iter()
+                    .map(|claim| Value::string(claim.to_string()))
+                    .collect(),
+            ),
+        ),
+        (
+            "kind".to_owned(),
+            Value::string("duplicate-route".to_owned()),
+        ),
+        ("route".to_owned(), Value::string(route.to_owned())),
+        (
+            "sources".to_owned(),
+            Value::array(
+                sources
+                    .iter()
+                    .map(amiss_wire::model::RepoPath::to_value)
+                    .collect(),
+            ),
+        ),
+    ]);
+    Some(SiteDefect {
+        id: site_defect_id("duplicate-route", route),
+        evidence,
+        source,
+        member_count: u64::try_from(claims.len()).unwrap_or(u64::MAX),
+    })
+}
+
+fn broken_redirect_defect(
+    routes: &BTreeMap<String, SiteRoute>,
+    route: &str,
+    claim: &SiteClaim,
+) -> Option<SiteDefect> {
+    let SiteTarget::Redirect {
         destination,
         fragment,
+    } = &claim.target
+    else {
+        return None;
+    };
+    let reason = match routes.get(destination) {
+        None => "missing-route",
+        Some(SiteRoute::Ambiguous { .. }) => "ambiguous-route",
+        Some(SiteRoute::Unique(SiteClaim {
+            target: SiteTarget::Redirect { .. },
+            ..
+        })) => "nonterminal-redirect",
+        Some(SiteRoute::Unique(SiteClaim {
+            target: SiteTarget::Page { anchors },
+            ..
+        })) => {
+            let fragment = fragment
+                .as_deref()
+                .filter(|fragment| !fragment.is_empty())?;
+            let decoded = amiss_wire::uri::decode_fragment(fragment)?;
+            if anchors.binary_search(&decoded).is_ok() {
+                return None;
+            }
+            "missing-anchor"
+        }
+    };
+    let mut published = destination.clone();
+    if let Some(fragment) = fragment {
+        published.push('#');
+        published.push_str(fragment);
+    }
+    let evidence = Value::object(vec![
+        (
+            "claim_digest".to_owned(),
+            Value::string(claim.digest.to_string()),
+        ),
+        ("destination".to_owned(), Value::string(published)),
+        (
+            "kind".to_owned(),
+            Value::string("broken-redirect".to_owned()),
+        ),
+        ("reason".to_owned(), Value::string(reason.to_owned())),
+        ("route".to_owned(), Value::string(route.to_owned())),
+        ("source".to_owned(), claim.source.to_value()),
+    ]);
+    Some(SiteDefect {
+        id: site_defect_id("broken-redirect", route),
+        evidence,
+        source: claim.source.clone(),
+        member_count: 1,
     })
+}
+
+fn site_defect_id(kind: &str, route: &str) -> Digest {
+    hj(
+        SITE_DEFECT_DOMAIN,
+        &Value::object(vec![
+            ("kind".to_owned(), Value::string(kind.to_owned())),
+            ("route".to_owned(), Value::string(route.to_owned())),
+        ]),
+    )
 }
 
 fn validate_navigation(
@@ -327,8 +514,16 @@ fn validate_navigation(
     let page_sources: BTreeSet<&amiss_wire::model::RepoPath> = routes
         .values()
         .filter_map(|route| match route {
-            SiteRoute::Page { source, .. } => Some(source),
-            SiteRoute::Redirect { .. } | SiteRoute::Ambiguous => None,
+            SiteRoute::Unique(SiteClaim {
+                source,
+                target: SiteTarget::Page { .. },
+                ..
+            }) => Some(source),
+            SiteRoute::Unique(SiteClaim {
+                target: SiteTarget::Redirect { .. },
+                ..
+            })
+            | SiteRoute::Ambiguous { .. } => None,
         })
         .collect();
     if navigation
@@ -339,7 +534,12 @@ fn validate_navigation(
         return fail(path, ErrorKind::Inconsistent);
     }
     for entrypoint in &navigation.entrypoints {
-        let Some(SiteRoute::Page { source, .. }) = routes.get(entrypoint) else {
+        let Some(SiteRoute::Unique(SiteClaim {
+            source,
+            target: SiteTarget::Page { .. },
+            ..
+        })) = routes.get(entrypoint)
+        else {
             return fail(path, ErrorKind::Inconsistent);
         };
         if navigation.reachable.binary_search(source).is_err() {

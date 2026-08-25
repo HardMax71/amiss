@@ -59,6 +59,13 @@ static RATCHETED_OBSERVATION: FindingMetadata = FindingMetadata {
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Fail,
 };
+static ABSOLUTE_OBSERVATION: FindingMetadata = FindingMetadata {
+    scope: FindingScope::Observation,
+    evidence_class: "deterministic-structural",
+    invariant_class: "absolute",
+    observe_disposition: Disposition::Warn,
+    enforce_disposition: Disposition::Fail,
+};
 static RATCHETED_CONTROL: FindingMetadata = FindingMetadata {
     scope: FindingScope::Control,
     evidence_class: "deterministic-structural",
@@ -199,6 +206,10 @@ declare_taxonomy! {
         UnlinkedDocument => {
             meaning: "a scanned structured document inside a complete site build's source root is unreachable from every rendered navigation entrypoint; link the page from rendered navigation or keep non-page material outside that root",
             metadata: &COVERAGE_DOCUMENT,
+        },
+        SiteBuildDefect => {
+            meaning: "a complete site build reports a route with conflicting owners or a redirect whose declared terminal route or anchor is not uniquely published; repair the attributed routing source",
+            metadata: &ABSOLUTE_OBSERVATION,
         },
         PolicyWeakened => {
             meaning: "the candidate loosens its own repository policy, dropping an include, a protected path, or a raised disposition; loosening the rules is reported under the rules being loosened",

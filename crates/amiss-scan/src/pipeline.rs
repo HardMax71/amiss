@@ -299,7 +299,7 @@ fn conclude(
     setup: &Setup,
     base: (&SnapshotDiscovery, Side),
     candidate: (&SnapshotDiscovery, Side),
-    navigation: Option<&crate::semantic::SiteNavigation>,
+    site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
     failures: &[ErrorDetail],
 ) -> Built {
@@ -331,12 +331,12 @@ fn conclude(
         }
     }
     match correlate(base.1, candidate_side) {
-        Ok(comparisons) => crate::report::construct_with_navigation(
+        Ok(comparisons) => crate::report::construct_with_site(
             setup,
             base.0,
             candidate.0,
             comparisons,
-            navigation,
+            site,
             claims,
         ),
         Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
@@ -398,16 +398,13 @@ fn pair_effects(
     base: (&SnapshotDiscovery, &mut ScanResources),
     candidate: (&SnapshotDiscovery, &mut ScanResources),
     failures: &mut Vec<ErrorDetail>,
-) -> (
-    crate::policy::Effects,
-    Option<std::sync::Arc<crate::semantic::SiteNavigation>>,
-) {
+) -> (crate::policy::Effects, crate::semantic::SiteEvaluation) {
     let mut effects = crate::policy::effects(
         base_policy,
         candidate_policy,
         &inventory_lookup(candidate.0),
     );
-    let navigation = external.install(&mut effects);
+    let site = external.install(&mut effects);
     if let Err(row) = apply_floor(
         repo,
         git_resources,
@@ -419,7 +416,7 @@ fn pair_effects(
     ) {
         failures.push(row);
     }
-    (effects, navigation)
+    (effects, site)
 }
 
 /// Applies a verified floor to the run: the verified provenance and

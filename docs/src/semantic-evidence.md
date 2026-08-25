@@ -44,21 +44,23 @@ precedence. Missing evidence, an incomplete producer, another producer version, 
 binding, or an invalid observation can never clear a missing label.
 
 The second compiled consumer accepts at most one complete `site-build` producer at version
-`0.1.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
+`0.2.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
 document, and a byte-sorted unique set of decoded anchor identities. Routes exclude authority,
 query, and fragment components; sources obey the repository-path grammar; anchors and their
 aggregate count are bounded. On the candidate side only, an exact route resolves to its scanned
 structured source, and a nonempty fragment additionally requires an exact member of the published
 anchor set. Query text remains identity data. A route absent from the evidence, an absent anchor,
-duplicate ownership, a missing or unscanned source, and image use remain unsupported rather than
-being guessed into either a pass or a failure. A `site-redirect` observation maps one exact redirect
-route to its exact terminal route, not an intermediate hop. The destination may carry a fragment
-but no query. It resolves only when that terminal route has one source-backed `site-route` and the
-effective fragment is in its anchor set. Following the
+a missing or unscanned source, and image use remain unsupported rather than being guessed into
+either a pass or a failure. A `site-redirect` observation maps one exact redirect route and its
+repository routing source to its exact terminal route, not an intermediate hop. The destination may
+carry a fragment but no query. It resolves only when that terminal route has one source-backed
+`site-route` and the effective fragment is in its anchor set. Following the
 [HTTP Location rule](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.2), an absent
 destination fragment inherits the authored fragment, a nonempty one replaces it, and an empty `#`
-suppresses inheritance. Self-redirects, malformed fragments, and missing or ambiguous terminal
-routes remain invalid or unsupported rather than becoming guessed passes. A `site-navigation`
+suppresses inheritance. Self-redirects and malformed fragments make the evidence invalid.
+Conflicting route owners and redirects ending at a missing, ambiguous, nonterminal, or anchor-less
+target do not resolve and each produce one `site-build-defect` whose fact retains the exact route,
+claim identity, reason, and routing source. A `site-navigation`
 observation adds one source root, its navigation manifest, rendered entrypoint routes, and the
 byte-sorted unique source set reachable through the completed link graph. Every entrypoint must be
 a unique source-backed route, every reachable source must own one such route, and all named sources
@@ -120,6 +122,6 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-Generated pages without source attribution, redirect defects, locales, and versions remain future
-observation grammars over this same boundary. The engine still executes no producer and treats no
+Generated pages without source attribution, locales, and versions remain future observation
+grammars over this same boundary. The engine still executes no producer and treats no
 repository-controlled evidence as authority.

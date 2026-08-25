@@ -2,7 +2,7 @@ use amiss_wire::controls::TargetKind;
 use amiss_wire::uri::decode_fragment;
 
 use crate::Error;
-use crate::semantic::{SiteRoute, View};
+use crate::semantic::{SiteClaim, SiteRoute, SiteTarget, View};
 
 use super::syntax::split_components;
 use super::{Resolution, Resolver, lookup};
@@ -18,17 +18,31 @@ pub(super) fn resolve(
     };
     let (route, _query, fragment) = split_components(destination);
     let (page, fragment) = match routes.get(route) {
-        Some(page @ SiteRoute::Page { .. }) => (Some(page), fragment.as_deref()),
-        Some(SiteRoute::Redirect {
-            destination,
-            fragment: redirected_fragment,
-        }) => (
+        Some(
+            page @ SiteRoute::Unique(SiteClaim {
+                target: SiteTarget::Page { .. },
+                ..
+            }),
+        ) => (Some(page), fragment.as_deref()),
+        Some(SiteRoute::Unique(SiteClaim {
+            target:
+                SiteTarget::Redirect {
+                    destination,
+                    fragment: redirected_fragment,
+                },
+            ..
+        })) => (
             routes.get(destination),
             redirected_fragment.as_deref().or(fragment.as_deref()),
         ),
-        Some(SiteRoute::Ambiguous) | None => (None, None),
+        Some(SiteRoute::Ambiguous { .. }) | None => (None, None),
     };
-    let Some(SiteRoute::Page { source, anchors }) = page else {
+    let Some(SiteRoute::Unique(SiteClaim {
+        source,
+        target: SiteTarget::Page { anchors },
+        ..
+    })) = page
+    else {
         return Ok(None);
     };
     if is_image || !resolver.snapshot.is_scanned_structured(source) {

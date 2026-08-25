@@ -354,12 +354,14 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     let fixture = amiss_fixtures::commit_pair(
         &[
             ("README.md", "# Repository\n"),
+            ("docs/redirects.toml", "# Redirect rules\n"),
             ("docs/SUMMARY.md", "# Summary\n"),
             ("docs/index.md", index),
             ("docs/guide.md", "# Intro\n"),
         ],
         &[
             ("README.md", "# Repository\n"),
+            ("docs/redirects.toml", "# Redirect rules\n"),
             ("docs/SUMMARY.md", "# Summary\n"),
             ("docs/index.md", index),
             ("docs/guide.md", "# Intro\n"),
@@ -384,7 +386,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         source_report_payload_digest: Some(hb("amiss-test/report", b"source report")),
         producer_kind: id("site-build"),
         producer_identity: id("amiss-test"),
-        producer_version: "0.1.0".to_owned(),
+        producer_version: "0.2.0".to_owned(),
         input_digest: hb("amiss-test/site-output", b"site output"),
         complete: true,
         observations: site_build_observations(),
@@ -443,6 +445,64 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         8
     );
     assert_unlinked(&envelope, &["docs/index.md"]);
+    assert_site_defects(&envelope);
+}
+
+fn assert_site_defects(envelope: &serde_json::Value) {
+    let defects: Vec<&serde_json::Value> = envelope
+        .pointer("/payload/findings")
+        .and_then(serde_json::Value::as_array)
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "site-build-defect")
+        .collect();
+    assert_eq!(
+        defects.len(),
+        6,
+        "complete route-table defects: {defects:?}"
+    );
+    for (route, kind, reason, members) in [
+        ("/broken-fragment/", "broken-redirect", "missing-anchor", 1),
+        ("/broken/", "broken-redirect", "missing-route", 1),
+        ("/collision/", "duplicate-route", "", 2),
+        ("/duplicate/", "duplicate-route", "", 2),
+        (
+            "/redirect-to-duplicate/",
+            "broken-redirect",
+            "ambiguous-route",
+            1,
+        ),
+        (
+            "/redirect-to-redirect/",
+            "broken-redirect",
+            "nonterminal-redirect",
+            1,
+        ),
+    ] {
+        let row = defects
+            .iter()
+            .find(|row| {
+                row.pointer("/candidate_fact/evidence/route") == Some(&serde_json::json!(route))
+            })
+            .unwrap();
+        assert_eq!(
+            row.pointer("/candidate_fact/evidence/kind"),
+            Some(&serde_json::json!(kind))
+        );
+        if reason.is_empty() {
+            assert!(row.pointer("/candidate_fact/evidence/reason").is_none());
+        } else {
+            assert_eq!(
+                row.pointer("/candidate_fact/evidence/reason"),
+                Some(&serde_json::json!(reason))
+            );
+        }
+        assert_eq!(
+            row.pointer("/aggregation/member_count"),
+            Some(&serde_json::json!(members))
+        );
+        assert!(row.pointer("/location/path").is_some());
+    }
 }
 
 fn site_build_observations() -> Vec<Value> {
@@ -454,16 +514,39 @@ fn site_build_observations() -> Vec<Value> {
         site_observation("/stale/", SiteObservation::Page("docs/removed.md", &[])),
         site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
         site_observation("/duplicate/", SiteObservation::Page("docs/index.md", &[])),
-        site_observation("/legacy/", SiteObservation::Redirect("/guide/")),
-        site_observation("/changed/", SiteObservation::Redirect("/guide/#intr%6F")),
-        site_observation("/cleared/", SiteObservation::Redirect("/guide/#")),
+        site_observation(
+            "/legacy/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/"),
+        ),
+        site_observation(
+            "/changed/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/#intr%6F"),
+        ),
+        site_observation(
+            "/cleared/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/#"),
+        ),
         site_observation(
             "/broken-fragment/",
-            SiteObservation::Redirect("/guide/#absent"),
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/#absent"),
         ),
-        site_observation("/broken/", SiteObservation::Redirect("/missing/")),
+        site_observation(
+            "/broken/",
+            SiteObservation::Redirect("docs/redirects.toml", "/missing/"),
+        ),
         site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
-        site_observation("/collision/", SiteObservation::Redirect("/guide/")),
+        site_observation(
+            "/collision/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/"),
+        ),
+        site_observation(
+            "/redirect-to-duplicate/",
+            SiteObservation::Redirect("docs/redirects.toml", "/duplicate/"),
+        ),
+        site_observation(
+            "/redirect-to-redirect/",
+            SiteObservation::Redirect("docs/redirects.toml", "/legacy/"),
+        ),
         site_navigation(
             Some("docs"),
             "docs/SUMMARY.md",
