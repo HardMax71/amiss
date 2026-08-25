@@ -377,11 +377,44 @@ fn the_render_form_requires_one_non_json_projection() {
         };
         assert_eq!(render.report, std::path::Path::new("report.json"));
         assert_eq!(render.format, expected);
+        assert!(!render.full);
     }
+
+    let Outcome::Accepted(command) = parse(&argv(&[
+        "render",
+        "--report",
+        "report.json",
+        "--format",
+        "human",
+        "--full",
+    ])) else {
+        panic!("expected full human render acceptance");
+    };
+    let amiss::invocation::Command::Render(render) = *command else {
+        panic!("expected a render command");
+    };
+    assert!(render.full);
 
     for tokens in [
         argv(&["render", "--report", "report.json"]),
         argv(&["render", "--report", "report.json", "--format", "json"]),
+        argv(&[
+            "render",
+            "--report",
+            "report.json",
+            "--format",
+            "sarif",
+            "--full",
+        ]),
+        argv(&[
+            "render",
+            "--report",
+            "report.json",
+            "--format",
+            "human",
+            "--full",
+            "--full",
+        ]),
         argv(&[
             "render",
             "--report",
@@ -397,6 +430,14 @@ fn the_render_form_requires_one_non_json_projection() {
             "report.json",
             "--format",
             "codequality",
+        ]),
+        argv(&[
+            "external-plan",
+            "--report",
+            "report.json",
+            "--format",
+            "human",
+            "--full",
         ]),
     ] {
         assert_eq!(

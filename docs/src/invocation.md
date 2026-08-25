@@ -49,7 +49,8 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
-amiss render --report <path> --format <human|sarif|codequality>
+amiss render --report <path>
+             (--format human [--full] | --format <sarif|codequality>)
 amiss refs --report <path>
            (--target <repo-path> | --target-bytes-hex <lower-hex>)
            [--format <human|json>]
@@ -73,7 +74,8 @@ trust them when the short form reads ambiguous.
 | `--forge` | `github`, `gitlab`, `gitea`, `bitbucket-cloud`, or `bitbucket-data-center` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
-| `--format` | `human`, `json`, `sarif`, or `codequality` | ten grouped items, the exact report in [The report](report.md), or its SARIF or GitLab Code Quality projection |
+| `--full` | none | prints every feedback item when replaying a report as human output; foreign to every other form and format |
+| `--format` | `human`, `json`, `sarif`, or `codequality` | grouped human items, the exact report in [The report](report.md), or its SARIF or GitLab Code Quality projection; human output is bounded unless replayed with `--full` |
 | `--path` | repo-relative path | the file the authored claim pins |
 | `--line` | positive line number | the line the claim expects, one-based |
 | `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |
@@ -152,6 +154,9 @@ and a consistent recorded result. A successful projection exits with that record
 a closed stdout does not change it. Invalid, unreadable, or oversized report input exits 2 without
 output. JSON is not an admitted projection because the report file is already canonical JSON;
 requesting it is a grammar refusal and may emit the standard incomplete JSON refusal envelope.
+Human replay additionally accepts `--full`, which prints every Fix, Check, and Existing item in
+the report's canonical order without overflow lines. It changes no facts, totals, notes, or exit
+class; the ordinary human projection keeps the two independent ten-item windows.
 
 Exit codes are three classes, not detail. 0 means the run completed and nothing blocks. 1
 means a finding blocks. 2 means nothing trustworthy could be produced. A consumer that

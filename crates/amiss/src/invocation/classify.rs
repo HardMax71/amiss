@@ -18,6 +18,9 @@ pub(super) fn command(
     if gathered.lexical_defect || duplicated(gathered) {
         codes.insert(Code::InvalidInvocation);
     }
+    if gathered.full > 0 && (gathered.verb != Some(Verb::Render) || format != OutputFormat::Human) {
+        codes.insert(Code::InvalidInvocation);
+    }
     match gathered.verb {
         Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
         Some(Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render | Verb::Refs) => {
@@ -153,7 +156,11 @@ fn classify_report_command(
                     &gathered.target_bytes_hex,
                 ],
             )?;
-            Ok(Command::Render(RenderInvocation { report, format }))
+            Ok(Command::Render(RenderInvocation {
+                report,
+                format,
+                full: gathered.full == 1,
+            }))
         }
         Some(Verb::Refs) => {
             let [report] = classify_pure(

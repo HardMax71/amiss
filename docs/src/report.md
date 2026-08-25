@@ -172,7 +172,8 @@ human lanes. The same projection bounds apply.
 A JSON report can be projected later without repeating repository evaluation:
 `amiss render --report amiss-report.json --format sarif` or `--format codequality` emits
 the same bytes that the originating `check` would have emitted in that format. Human is
-available too. The renderer verifies the active envelope and compatibility, the payload
+available too; adding `--full` to that human replay emits every feedback row rather than the
+two ten-item windows. The renderer verifies the active envelope and compatibility, the payload
 digest, and the recorded result tuple, then exits with that report's original verdict.
 JSON is not a render target because the input file is already that canonical projection.
 

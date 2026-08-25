@@ -54,6 +54,7 @@ pub(super) struct Gathered {
     pub(super) target_bytes_hex: Slot,
     pub(super) index: usize,
     pub(super) explain_scope: usize,
+    pub(super) full: usize,
     pub(super) lexical_defect: bool,
 }
 
@@ -78,6 +79,10 @@ pub(super) fn gather(argv: &[OsString]) -> Gathered {
         }
         if token == "--explain-scope" {
             gathered.explain_scope = gathered.explain_scope.saturating_add(1);
+            continue;
+        }
+        if token == "--full" {
+            gathered.full = gathered.full.saturating_add(1);
             continue;
         }
         let Some(slot) = slot_for(&mut gathered, token) else {
@@ -138,6 +143,7 @@ pub(super) fn output_selection(format: &Slot) -> Option<OutputFormat> {
 pub(super) fn duplicated(gathered: &Gathered) -> bool {
     gathered.index > 1
         || gathered.explain_scope > 1
+        || gathered.full > 1
         || [
             &gathered.repo,
             &gathered.object_format,

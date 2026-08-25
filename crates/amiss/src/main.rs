@@ -128,13 +128,14 @@ fn project(
     envelope: &amiss_wire::json::Value,
     format: OutputFormat,
     explain_scope: bool,
+    full_feedback: bool,
     reserve: &mut FatalSerializer,
 ) {
     match format {
         OutputFormat::Json => emit(reserve, envelope),
         OutputFormat::Sarif => emit(reserve, &sarif::log(envelope)),
         OutputFormat::CodeQuality => emit(reserve, &codequality::issues(envelope)),
-        OutputFormat::Human => human::report(envelope, explain_scope),
+        OutputFormat::Human => human::report(envelope, explain_scope, full_feedback),
     }
 }
 
@@ -356,6 +357,7 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         &built.envelope,
         invocation.format,
         invocation.explain_scope,
+        false,
         reserve,
     );
     exit_class(built.exit_code)
@@ -410,6 +412,7 @@ fn fatal(
         &built.envelope,
         invocation.format,
         invocation.explain_scope,
+        false,
         reserve,
     );
     ExitCode::from(ExitClass::Failure.code())

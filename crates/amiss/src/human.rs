@@ -38,8 +38,8 @@ macro_rules! say {
 /// cannot change facts, ordering, totals, or exit. It prints two ten-row
 /// windows, fix and check items then the existing backlog, each with its own
 /// overflow line, plus retained analysis errors, their meanings, and the
-/// exact raw totals.
-pub(crate) fn report(envelope: &Value, explain_scope: bool) {
+/// exact raw totals. A full replay removes only the two row limits.
+pub(crate) fn report(envelope: &Value, explain_scope: bool, full_feedback: bool) {
     let mut out = Channel::new();
     let envelope = View::of(envelope);
     let payload = envelope.view("payload");
@@ -106,11 +106,13 @@ pub(crate) fn report(envelope: &Value, explain_scope: bool) {
             .clone()
             .filter(|item| item.text("action") != "existing"),
         "feedback",
+        full_feedback,
     );
     windowed(
         &mut out,
         items.filter(|item| item.text("action") == "existing"),
         "existing",
+        full_feedback,
     );
     notes(&mut out, payload);
     totals(&mut out, payload);
@@ -148,9 +150,12 @@ fn windowed<'value>(
     out: &mut Channel,
     items: impl Iterator<Item = View<'value>> + Clone,
     label: &str,
+    full: bool,
 ) {
-    let overflow = items.clone().count().saturating_sub(10);
-    for item in items.take(10) {
+    let count = items.clone().count();
+    let limit = if full { count } else { 10 };
+    let overflow = count.saturating_sub(limit);
+    for item in items.take(limit) {
         let mut action = item.text("action").to_owned();
         if let Some(first) = action.get_mut(0..1) {
             first.make_ascii_uppercase();

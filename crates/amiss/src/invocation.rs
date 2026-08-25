@@ -45,7 +45,8 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
-amiss render --report <path> --format <human|sarif|codequality>
+amiss render --report <path>
+             (--format human [--full] | --format <sarif|codequality>)
 amiss refs --report <path>
            (--target <repo-path> | --target-bytes-hex <lower-hex>)
            [--format <human|json>]
@@ -118,6 +119,7 @@ pub struct AssessInvocation {
 pub struct RenderInvocation {
     pub report: PathBuf,
     pub format: OutputFormat,
+    pub full: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
