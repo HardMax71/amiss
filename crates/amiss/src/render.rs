@@ -22,6 +22,12 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut FatalSerializer) 
             return failure;
         }
     };
-    crate::project(&envelope, invocation.format, false, reserve);
+    crate::project(
+        &envelope,
+        invocation.format,
+        false,
+        invocation.full,
+        reserve,
+    );
     ExitCode::from(verdict.code())
 }

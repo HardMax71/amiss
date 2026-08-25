@@ -267,6 +267,32 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
         Some(202),
         "the report retains every item; only presentation is capped"
     );
+    let report_path = format!("{}/many-report.json", fx.repo);
+    assert!(
+        fs::write(&report_path, stdout).is_ok(),
+        "write the canonical report"
+    );
+    let (code, stdout, stderr) = amiss(&[
+        "render",
+        "--report",
+        &report_path,
+        "--format",
+        "human",
+        "--full",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let text = String::from_utf8_lossy(&stdout);
+    let fixes = text.lines().filter(|line| line.starts_with("Fix ")).count();
+    let existing = text
+        .lines()
+        .filter(|line| line.starts_with("Existing "))
+        .count();
+    assert_eq!(
+        (fixes, existing),
+        (201, 1),
+        "full replay prints every feedback item"
+    );
+    assert!(!text.contains(" overflow:"), "{text}");
 }
 
 /// The carried backlog is listed, not only counted: a pre-existing broken
