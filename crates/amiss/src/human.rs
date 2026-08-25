@@ -145,7 +145,6 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
     }
 }
 
-/// Ten rows and an overflow line, the wire's own action word as the label.
 fn windowed<'value>(
     out: &mut Channel,
     items: impl Iterator<Item = View<'value>> + Clone,
