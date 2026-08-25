@@ -12,11 +12,21 @@ use url::Url;
 pub const MDBOOK_RENDER_CONTEXT_BYTES: u64 = 16_777_216;
 pub const MDBOOK_HTML_BYTES: u64 = 16_777_216;
 const MDBOOK_VERSION: &str = "0.5.4";
-const SITE_BUILD_VERSION: &str = "0.3.0";
+const SITE_BUILD_VERSION: &str = "0.4.0";
 const ROUTE_BYTES: usize = 16_384;
 const ANCHOR_BYTES: usize = 4_096;
+const CONTEXT_DOMAIN: &str = "amiss/controller-mdbook-site-context-v1";
+const CONFIG_DOMAIN: &str = "amiss/controller-mdbook-config-v1";
 const INPUT_DOMAIN: &str = "amiss/controller-mdbook-site-input-v1";
 const HTML_DOMAIN: &str = "amiss/controller-mdbook-html-v1";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SiteBuildContext {
+    pub configuration: RepoPathText,
+    pub route_prefix: String,
+    pub locale: Option<String>,
+    pub version: Option<String>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum MdBookEvidenceError {
@@ -32,6 +42,8 @@ pub enum MdBookEvidenceError {
     Path,
     #[error("the mdBook route prefix or a resulting route is invalid")]
     Route,
+    #[error("the mdBook configuration, locale, or version identity is invalid")]
+    ContextIdentity,
     #[error("the completed mdBook HTML output cannot be read")]
     Output(#[source] std::io::Error),
     #[error("a published mdBook anchor is invalid or exceeds its ceiling")]
@@ -57,10 +69,10 @@ struct BuildPages {
 /// Produces one complete candidate-bound route, anchor, and navigation table
 /// from a pinned mdBook renderer context and its completed HTML output.
 ///
-/// `repository_book_root` locates the mdBook root inside the candidate tree;
-/// `route_prefix` locates the HTML output inside the published site. The open
-/// output directory remains the caller's capability and is never inferred
-/// from repository-controlled context paths.
+/// The site context locates the exact `book.toml` inside the candidate tree
+/// and the HTML output inside the published site. The open output directory
+/// remains the caller's capability and is never inferred from
+/// repository-controlled context paths.
 ///
 /// # Errors
 ///
@@ -69,8 +81,7 @@ struct BuildPages {
 /// invalid, ambiguous, incomplete, or outside a fixed ceiling.
 pub fn mdbook_site_evidence(
     candidate_identity_digest: Digest,
-    repository_book_root: Option<&RepoPathText>,
-    route_prefix: &str,
+    site: &SiteBuildContext,
     context_bytes: &[u8],
     html_output: &Dir,
 ) -> Result<Value, MdBookEvidenceError> {
@@ -78,9 +89,14 @@ pub fn mdbook_site_evidence(
         return Err(MdBookEvidenceError::ContextBytes);
     }
     let context = amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
-    let (source_directory, items) = render_context(&context)?;
-    let base = route_base(route_prefix)?;
-    let build = pages(items, &source_directory, repository_book_root, &base)?;
+    let (expectation, base, repository_book_root) = site_build_context(site)?;
+    let (source_directory, items, config_digest) = render_context(&context)?;
+    let build = pages(
+        items,
+        &source_directory,
+        repository_book_root.as_deref(),
+        &base,
+    )?;
     if build.rows.len() >= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
@@ -145,28 +161,104 @@ pub fn mdbook_site_evidence(
                 Value::string(MDBOOK_VERSION.to_owned()),
             ),
             (
-                "route_prefix".to_owned(),
-                Value::string(route_prefix.to_owned()),
+                "context_digest".to_owned(),
+                Value::string(expectation.context_digest.to_string()),
+            ),
+            (
+                "config_digest".to_owned(),
+                Value::string(config_digest.to_string()),
             ),
             ("navigation".to_owned(), navigation),
             ("pages".to_owned(), Value::array(inputs)),
+        ]),
+    );
+    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+        candidate_identity_digest,
+        source_report_payload_digest: None,
+        producer_kind: expectation.producer_kind,
+        producer_identity: expectation.producer_identity,
+        producer_version: expectation.producer_version,
+        context_digest: expectation.context_digest,
+        input_digest,
+        complete: true,
+        observations,
+    })
+    .map_err(|_defect| MdBookEvidenceError::Evidence)
+}
+
+/// Freezes the operator-owned site identity that acquired evidence must match.
+///
+/// # Errors
+///
+/// The configuration is not a repository `book.toml`, the publication prefix
+/// is not an absolute site route, or a locale/version identity is invalid.
+pub fn mdbook_site_expectation(
+    site: &SiteBuildContext,
+) -> Result<crate::SemanticEvidenceExpectation, MdBookEvidenceError> {
+    site_build_context(site).map(|(expectation, _base, _root)| expectation)
+}
+
+fn site_build_context(
+    site: &SiteBuildContext,
+) -> Result<(crate::SemanticEvidenceExpectation, Url, Option<String>), MdBookEvidenceError> {
+    let configuration = site.configuration.as_str();
+    let repository_book_root = if configuration == "book.toml" {
+        None
+    } else {
+        configuration
+            .strip_suffix("/book.toml")
+            .filter(|root| !root.is_empty())
+            .map(str::to_owned)
+            .map(Some)
+            .ok_or(MdBookEvidenceError::ContextIdentity)?
+    };
+    if [site.locale.as_deref(), site.version.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|identity| !amiss_wire::semantic::producer_version_valid(identity))
+    {
+        return Err(MdBookEvidenceError::ContextIdentity);
+    }
+    let base = route_base(&site.route_prefix)?;
+    let context_digest = hj(
+        CONTEXT_DOMAIN,
+        &Value::object(vec![
+            (
+                "configuration".to_owned(),
+                Value::string(configuration.to_owned()),
+            ),
+            (
+                "locale".to_owned(),
+                site.locale
+                    .as_ref()
+                    .map_or(Value::Null, |locale| Value::string(locale.clone())),
+            ),
+            (
+                "route_prefix".to_owned(),
+                Value::string(site.route_prefix.clone()),
+            ),
+            (
+                "version".to_owned(),
+                site.version
+                    .as_ref()
+                    .map_or(Value::Null, |version| Value::string(version.clone())),
+            ),
         ]),
     );
     let producer_kind =
         ArtifactId::new("site-build".to_owned()).ok_or(MdBookEvidenceError::Evidence)?;
     let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
         .ok_or(MdBookEvidenceError::Evidence)?;
-    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
-        candidate_identity_digest,
-        source_report_payload_digest: None,
-        producer_kind,
-        producer_identity,
-        producer_version: SITE_BUILD_VERSION.to_owned(),
-        input_digest,
-        complete: true,
-        observations,
-    })
-    .map_err(|_defect| MdBookEvidenceError::Evidence)
+    Ok((
+        crate::SemanticEvidenceExpectation {
+            producer_kind,
+            producer_identity,
+            producer_version: SITE_BUILD_VERSION.to_owned(),
+            context_digest,
+        },
+        base,
+        repository_book_root,
+    ))
 }
 
 fn navigation_observation(build: &BuildPages, reachable: Vec<String>) -> Value {
@@ -194,13 +286,14 @@ fn navigation_observation(build: &BuildPages, reachable: Vec<String>) -> Value {
     ])
 }
 
-fn render_context(context: &Value) -> Result<(PathBuf, &[Value]), MdBookEvidenceError> {
+fn render_context(context: &Value) -> Result<(PathBuf, &[Value], Digest), MdBookEvidenceError> {
     if context.text("version") != Some(MDBOOK_VERSION) {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
     let config = context
         .member("config")
         .ok_or(MdBookEvidenceError::ContextShape)?;
+    let config_digest = hj(CONFIG_DOMAIN, config);
     let book_config = config
         .member("book")
         .ok_or(MdBookEvidenceError::ContextShape)?;
@@ -223,19 +316,16 @@ fn render_context(context: &Value) -> Result<(PathBuf, &[Value]), MdBookEvidence
     else {
         return Err(MdBookEvidenceError::ContextShape);
     };
-    Ok((source_directory, items))
+    Ok((source_directory, items, config_digest))
 }
 
 fn pages(
     items: &[Value],
     source_directory: &Path,
-    repository_book_root: Option<&RepoPathText>,
+    repository_book_root: Option<&str>,
     base: &Url,
 ) -> Result<BuildPages, MdBookEvidenceError> {
-    let source_root = repository_path(
-        repository_book_root.map(RepoPathText::as_str),
-        source_directory,
-    )?;
+    let source_root = repository_path(repository_book_root, source_directory)?;
     let manifest = repository_path(source_root.as_deref(), Path::new("SUMMARY.md"))?
         .ok_or(MdBookEvidenceError::Path)?;
     let mut pending: Vec<&Value> = items.iter().rev().collect();

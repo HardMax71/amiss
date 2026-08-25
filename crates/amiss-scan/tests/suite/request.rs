@@ -9,7 +9,9 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::AnalysisErrorCode;
-use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl, SuppliedTime};
+use amiss_wire::requests::{
+    ControlsRequest, RequestTrust, SuppliedControl, SuppliedSemanticEvidence, SuppliedTime,
+};
 use amiss_wire::semantic::SemanticEvidence;
 
 const FLOOR: &str = r#"{
@@ -88,9 +90,19 @@ fn semantic_evidence(
         producer_identity: ArtifactId::new("amiss-test".to_owned())
             .expect("the producer identity is valid"),
         producer_version: producer_version.to_owned(),
+        context_digest: input_digest,
         input_digest,
         complete: true,
         observations,
+    }
+}
+
+fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
+    let expected_context_digest = evidence.context_digest;
+    SuppliedSemanticEvidence {
+        value: amiss_wire::semantic::envelope(evidence)
+            .expect("the generic envelope admits producer-defined semantics"),
+        expected_context_digest,
     }
 }
 
@@ -202,20 +214,36 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
 
     for evidence in [incomplete, unsupported, malformed] {
         let mut request = empty();
-        request.semantic_evidence = vec![
-            amiss_wire::semantic::envelope(evidence)
-                .expect("the generic envelope admits producer-defined semantics"),
-        ];
+        request.semantic_evidence = vec![supplied_semantic(evidence)];
         let error = controls(&request).expect_err("the inventory consumer fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
 }
 
 #[test]
+fn semantic_evidence_must_match_the_independently_supplied_context() {
+    let evidence = semantic_evidence(
+        "sphinx-inventory-set",
+        "1",
+        hb("test/inventory", b"inventory"),
+        None,
+        Vec::new(),
+    );
+    let mut request = empty();
+    request.semantic_evidence = vec![SuppliedSemanticEvidence {
+        value: amiss_wire::semantic::envelope(evidence).expect("the generic envelope is valid"),
+        expected_context_digest: hb("test/inventory", b"another inventory"),
+    }];
+
+    let error = controls(&request).expect_err("a foreign context never reaches a consumer");
+    assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
+}
+
+#[test]
 fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let valid = semantic_evidence(
         "site-build",
-        "0.3.0",
+        "0.4.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![
@@ -257,7 +285,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     )];
     let malformed_fragment_redirect = semantic_evidence(
         "site-build",
-        "0.3.0",
+        "0.4.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![site_observation(
@@ -297,10 +325,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         (self_redirect, AnalysisErrorCode::ConfigurationInvalid),
     ] {
         let mut request = empty();
-        request.semantic_evidence = vec![
-            amiss_wire::semantic::envelope(evidence)
-                .expect("the generic envelope admits producer-defined semantics"),
-        ];
+        request.semantic_evidence = vec![supplied_semantic(evidence)];
         let error = controls(&request).expect_err("the site-build consumer fails closed");
         assert_eq!(error.code, expected);
     }
@@ -328,16 +353,13 @@ fn site_claims_require_repository_source_attribution() {
     ] {
         let evidence = semantic_evidence(
             "site-build",
-            "0.3.0",
+            "0.4.0",
             hb("test/site-output", b"site output"),
             Some(hb("test/report", b"source report")),
             vec![observation],
         );
         let mut request = empty();
-        request.semantic_evidence = vec![
-            amiss_wire::semantic::envelope(evidence)
-                .expect("the generic envelope admits producer-defined semantics"),
-        ];
+        request.semantic_evidence = vec![supplied_semantic(evidence)];
         let error = controls(&request).expect_err("a claim without its source fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
@@ -372,16 +394,13 @@ fn inconsistent_site_navigation_never_becomes_input() {
     for navigation in cases {
         let evidence = semantic_evidence(
             "site-build",
-            "0.3.0",
+            "0.4.0",
             hb("test/site-output", b"site output"),
             None,
             vec![page.clone(), navigation],
         );
         let mut request = empty();
-        request.semantic_evidence = vec![
-            amiss_wire::semantic::envelope(evidence)
-                .expect("the generic envelope admits producer-defined semantics"),
-        ];
+        request.semantic_evidence = vec![supplied_semantic(evidence)];
         let error = controls(&request).expect_err("inconsistent navigation fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }

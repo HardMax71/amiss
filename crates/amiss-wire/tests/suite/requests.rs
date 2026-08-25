@@ -14,7 +14,8 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL,
     REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust,
-    SEMANTIC_EVIDENCE_REQUEST_LIMIT, SnapshotRequest, commit_candidate_identity_digest,
+    SEMANTIC_EVIDENCE_REQUEST_LIMIT, SnapshotRequest, SuppliedSemanticEvidence,
+    commit_candidate_identity_digest,
 };
 
 fn request_example(name: &str) -> Vec<u8> {
@@ -356,15 +357,19 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
 
 #[test]
 fn semantic_evidence_is_a_bounded_set_of_envelopes() {
+    let supplied = |value| SuppliedSemanticEvidence {
+        value,
+        expected_context_digest: hj("amiss/test-context", &Value::Null),
+    };
     let mut wrong_shape = ControlsRequest::default();
-    wrong_shape.semantic_evidence.push(Value::Null);
+    wrong_shape.semantic_evidence.push(supplied(Value::Null));
     let error = wrong_shape.canonical_bytes().unwrap_err();
-    assert_eq!(error.path, "$.semantic_evidence[0]");
+    assert_eq!(error.path, "$.semantic_evidence[0].value");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
     let oversized = ControlsRequest {
         semantic_evidence: vec![
-            Value::object(Vec::new());
+            supplied(Value::object(Vec::new()));
             SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)
         ],
         ..ControlsRequest::default()

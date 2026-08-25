@@ -6,7 +6,8 @@
 use std::fs;
 
 use amiss_controller::{
-    MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, mdbook_site_evidence,
+    MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
+    mdbook_site_evidence, mdbook_site_expectation,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::json::{Value, canonical};
@@ -51,6 +52,15 @@ fn context(version: &str, html_renderer: bool, items: &[serde_json::Value]) -> V
 
 fn output(root: &tempfile::TempDir) -> Dir {
     Dir::open_ambient_dir(root.path(), ambient_authority()).unwrap()
+}
+
+fn site(configuration: &str, route_prefix: &str) -> SiteBuildContext {
+    SiteBuildContext {
+        configuration: RepoPathText::new(configuration.to_owned()).unwrap(),
+        route_prefix: route_prefix.to_owned(),
+        locale: None,
+        version: None,
+    }
 }
 
 fn observation<'a>(observations: &'a [Value], route: &str) -> &'a Value {
@@ -106,21 +116,18 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         ],
     );
     let candidate = hb("amiss/test-mdbook-candidate", b"candidate");
-    let book_root = RepoPathText::new("docs".to_owned()).unwrap();
+    let site = site("docs/book.toml", "/manual/");
 
-    let evidence = mdbook_site_evidence(
-        candidate,
-        Some(&book_root),
-        "/manual/",
-        &context,
-        &output(&root),
-    )
-    .unwrap();
+    let evidence = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
     let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
 
     assert_eq!(parsed.payload.candidate_identity_digest, candidate);
     assert_eq!(parsed.payload.producer_kind.as_str(), "site-build");
-    assert_eq!(parsed.payload.producer_version, "0.3.0");
+    assert_eq!(parsed.payload.producer_version, "0.4.0");
+    assert_eq!(
+        parsed.payload.context_digest,
+        mdbook_site_expectation(&site).unwrap().context_digest
+    );
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 4);
     let intro = observation(&parsed.payload.observations, "/manual/intro.html");
@@ -149,14 +156,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         ["docs/guide/README.md", "docs/guide/nested/chapter.md"]
     );
 
-    let repeated = mdbook_site_evidence(
-        candidate,
-        Some(&book_root),
-        "/manual/",
-        &context,
-        &output(&root),
-    )
-    .unwrap();
+    let repeated = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
     assert_eq!(evidence, repeated);
 }
 
@@ -192,8 +192,7 @@ fn completed_links_not_chapter_membership_define_navigation() {
 
     let evidence = mdbook_site_evidence(
         hb("amiss/test", b"candidate"),
-        None,
-        "/manual/",
+        &site("book.toml", "/manual/"),
         &context,
         &output(&root),
     )
@@ -212,14 +211,78 @@ fn completed_links_not_chapter_membership_define_navigation() {
 }
 
 #[test]
+fn configuration_locale_and_version_define_the_planned_context() {
+    let base = site("docs/book.toml", "/manual/");
+    let mut variants = Vec::new();
+    let mut configuration = base.clone();
+    configuration.configuration = RepoPathText::new("archive/book.toml".to_owned()).unwrap();
+    variants.push(configuration);
+    let mut prefix = base.clone();
+    prefix.route_prefix = "/archive/".to_owned();
+    variants.push(prefix);
+    let mut locale = base.clone();
+    locale.locale = Some("fr-FR".to_owned());
+    variants.push(locale);
+    let mut version = base.clone();
+    version.version = Some("2.1.0".to_owned());
+    variants.push(version);
+
+    let expected = mdbook_site_expectation(&base).unwrap().context_digest;
+    assert!(
+        variants.into_iter().all(|variant| {
+            mdbook_site_expectation(&variant).unwrap().context_digest != expected
+        })
+    );
+    assert!(matches!(
+        mdbook_site_expectation(&site("docs/config.toml", "/manual/")),
+        Err(MdBookEvidenceError::ContextIdentity)
+    ));
+    let mut invalid_locale = base;
+    invalid_locale.locale = Some("en us".to_owned());
+    assert!(matches!(
+        mdbook_site_expectation(&invalid_locale),
+        Err(MdBookEvidenceError::ContextIdentity)
+    ));
+}
+
+#[test]
+fn resolved_renderer_configuration_is_part_of_the_input_identity() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("chapter.html"), "<h1 id=\"chapter\"></h1>").unwrap();
+    fs::write(
+        root.path().join("index.html"),
+        "<a href=\"chapter.html\">chapter</a>",
+    )
+    .unwrap();
+    let items = [chapter(Some("chapter.md"), Some("chapter.md"), &[])];
+    let original = context("0.5.4", true, &items);
+    let changed = String::from_utf8(original.clone())
+        .unwrap()
+        .replace(
+            r#""book":{"src":"guide"}"#,
+            r#""book":{"src":"guide","title":"changed"}"#,
+        )
+        .into_bytes();
+    assert_ne!(original, changed);
+    let candidate = hb("amiss/test", b"candidate");
+    let site = site("book.toml", "/");
+    let first = mdbook_site_evidence(candidate, &site, &original, &output(&root)).unwrap();
+    let second = mdbook_site_evidence(candidate, &site, &changed, &output(&root)).unwrap();
+    let first = amiss_wire::semantic::parse(&canonical(&first)).unwrap();
+    let second = amiss_wire::semantic::parse(&canonical(&second)).unwrap();
+
+    assert_eq!(first.payload.context_digest, second.payload.context_digest);
+    assert_ne!(first.payload.input_digest, second.payload.input_digest);
+}
+
+#[test]
 fn version_renderer_source_and_route_ownership_must_be_exact() {
     let root = tempfile::tempdir().unwrap();
     let ordinary = [chapter(Some("chapter.md"), Some("chapter.md"), &[])];
     assert!(matches!(
         mdbook_site_evidence(
             hb("amiss/test", b"candidate"),
-            None,
-            "/",
+            &site("book.toml", "/"),
             &context("0.5.3", true, &ordinary),
             &output(&root),
         ),
@@ -228,8 +291,7 @@ fn version_renderer_source_and_route_ownership_must_be_exact() {
     assert!(matches!(
         mdbook_site_evidence(
             hb("amiss/test", b"candidate"),
-            None,
-            "/",
+            &site("book.toml", "/"),
             &context("0.5.4", false, &ordinary),
             &output(&root),
         ),
@@ -238,8 +300,7 @@ fn version_renderer_source_and_route_ownership_must_be_exact() {
     assert!(matches!(
         mdbook_site_evidence(
             hb("amiss/test", b"candidate"),
-            None,
-            "/",
+            &site("book.toml", "/"),
             &context("0.5.4", true, &[chapter(Some("generated.md"), None, &[])],),
             &output(&root),
         ),
@@ -248,8 +309,7 @@ fn version_renderer_source_and_route_ownership_must_be_exact() {
     assert!(matches!(
         mdbook_site_evidence(
             hb("amiss/test", b"candidate"),
-            None,
-            "/",
+            &site("book.toml", "/"),
             &context(
                 "0.5.4",
                 true,
@@ -274,14 +334,18 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
         &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
     );
     assert!(matches!(
-        mdbook_site_evidence(candidate, None, "relative/", &ordinary, &output(&root)),
+        mdbook_site_evidence(
+            candidate,
+            &site("book.toml", "relative/"),
+            &ordinary,
+            &output(&root),
+        ),
         Err(MdBookEvidenceError::Route)
     ));
     assert!(matches!(
         mdbook_site_evidence(
             candidate,
-            None,
-            "/",
+            &site("book.toml", "/"),
             &context(
                 "0.5.4",
                 true,
@@ -292,14 +356,18 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
         Err(MdBookEvidenceError::Path)
     ));
     assert!(matches!(
-        mdbook_site_evidence(candidate, None, "/", &ordinary, &output(&root)),
+        mdbook_site_evidence(
+            candidate,
+            &site("book.toml", "/"),
+            &ordinary,
+            &output(&root),
+        ),
         Err(MdBookEvidenceError::Output(_))
     ));
     assert!(matches!(
         mdbook_site_evidence(
             candidate,
-            None,
-            "/",
+            &site("book.toml", "/"),
             br#"{"version":"0.5.4","version":"0.5.4"}"#,
             &output(&root),
         ),
@@ -307,14 +375,24 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
     ));
     let oversized_context = vec![b' '; usize::try_from(MDBOOK_RENDER_CONTEXT_BYTES).unwrap() + 1];
     assert!(matches!(
-        mdbook_site_evidence(candidate, None, "/", &oversized_context, &output(&root)),
+        mdbook_site_evidence(
+            candidate,
+            &site("book.toml", "/"),
+            &oversized_context,
+            &output(&root),
+        ),
         Err(MdBookEvidenceError::ContextBytes)
     ));
 
     let file = fs::File::create(root.path().join("chapter.html")).unwrap();
     file.set_len(MDBOOK_HTML_BYTES + 1).unwrap();
     assert!(matches!(
-        mdbook_site_evidence(candidate, None, "/", &ordinary, &output(&root)),
+        mdbook_site_evidence(
+            candidate,
+            &site("book.toml", "/"),
+            &ordinary,
+            &output(&root),
+        ),
         Err(MdBookEvidenceError::Output(_))
     ));
 }
@@ -336,8 +414,7 @@ fn unrepresentable_published_anchor_fails_the_complete_set() {
     assert!(matches!(
         mdbook_site_evidence(
             hb("amiss/test", b"candidate"),
-            None,
-            "/",
+            &site("book.toml", "/"),
             &context,
             &output(&root),
         ),

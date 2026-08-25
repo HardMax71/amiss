@@ -40,6 +40,7 @@ fn evidence(observations: Vec<Value>) -> SemanticEvidence {
         producer_kind: id("sphinx-inventory"),
         producer_identity: id("amiss-intersphinx"),
         producer_version: "0.1.0".to_owned(),
+        context_digest: digest(C),
         input_digest: digest(C),
         complete: true,
         observations,

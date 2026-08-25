@@ -26,6 +26,7 @@ pub struct PolicyControls {
     pub debt_snapshot: Option<AcquiredControl>,
     pub waiver_bundle: Option<AcquiredControl>,
     pub semantic_evidence: Vec<super::SemanticEvidenceTemplate>,
+    pub semantic_acquisitions: Vec<super::SemanticEvidenceExpectation>,
 }
 
 #[derive(Clone, Copy)]
@@ -144,6 +145,7 @@ pub(super) fn validate_request_size(
         semantic_evidence: super::bind_semantic_evidence(
             &policy.semantic_evidence,
             &[],
+            &[],
             execution.digest(),
         )?,
     };
@@ -230,7 +232,7 @@ pub(super) fn request(
     run: &RunIdentity,
     trusted_time: SuppliedTime,
     execution_constraint: SuppliedControl,
-    semantic_evidence: Vec<json::Value>,
+    semantic_evidence: Vec<amiss_wire::requests::SuppliedSemanticEvidence>,
 ) -> Result<ControlsRequest, BootstrapJobError> {
     let organization_floor = policy
         .organization_floor

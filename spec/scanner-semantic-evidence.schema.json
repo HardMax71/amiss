@@ -79,7 +79,7 @@
     "Producer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["identity", "input_digest", "kind", "version"],
+      "required": ["context_digest", "identity", "input_digest", "kind", "version"],
       "properties": {
         "kind": {
           "description": "The bounded producer class selected by a compiled consumer.",
@@ -96,8 +96,12 @@
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
         },
+        "context_digest": {
+          "description": "The producer-kind-defined semantic context selected independently of runtime evidence, such as a configuration path, publication prefix, locale, and version.",
+          "$ref": "#/$defs/Digest"
+        },
         "input_digest": {
-          "description": "The producer-kind-defined digest of every configuration, inventory, or completed build input needed to interpret completeness and observations.",
+          "description": "The producer-kind-defined digest of every inventory or completed runtime input needed to interpret completeness and observations.",
           "$ref": "#/$defs/Digest"
         }
       }

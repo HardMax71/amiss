@@ -7,12 +7,13 @@ use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
+use amiss_wire::requests::SuppliedSemanticEvidence;
 
 const INTERSPHINX_PRODUCER: &str = "sphinx-inventory-set";
 const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
-const SITE_BUILD_VERSION: &str = "0.3.0";
+const SITE_BUILD_VERSION: &str = "0.4.0";
 const SITE_ROUTE: &str = "site-route";
 const SITE_GENERATED_ROUTE: &str = "site-generated-route";
 const SITE_REDIRECT: &str = "site-redirect";
@@ -116,16 +117,22 @@ pub(crate) struct View<'a> {
     pub(crate) routes: Option<&'a BTreeMap<String, SiteRoute>>,
 }
 
-pub(crate) fn parse(values: &[Value]) -> Result<Inputs, Error> {
+pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
     let mut previous = None;
     let mut intersphinx = false;
     let mut site_build = false;
     let mut site_items = 0_usize;
-    for (index, value) in values.iter().enumerate() {
+    for (index, supplied) in values.iter().enumerate() {
         let path = format!("$.semantic_evidence[{index}]");
-        let bytes = canonical(value);
+        let bytes = canonical(&supplied.value);
         let envelope = amiss_wire::semantic::parse(&bytes)?;
+        if envelope.payload.context_digest != supplied.expected_context_digest {
+            return fail(
+                &format!("{path}.expected_context_digest"),
+                ErrorKind::DigestMismatch,
+            );
+        }
         match previous.map(|digest: Digest| digest.cmp(&envelope.payload_digest)) {
             Some(Ordering::Equal) => {
                 return fail("$.semantic_evidence", ErrorKind::DuplicateMember);
@@ -141,6 +148,7 @@ pub(crate) fn parse(values: &[Value]) -> Result<Inputs, Error> {
             producer_kind,
             producer_identity,
             producer_version,
+            context_digest: _context_digest,
             input_digest,
             complete,
             observations,

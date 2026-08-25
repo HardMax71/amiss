@@ -119,11 +119,12 @@ pub fn intersphinx_evidence(
         producer_identity: ArtifactId::new("amiss-controller-intersphinx".to_owned())
             .ok_or(IntersphinxError::Identity)?,
         producer_version: "1".to_owned(),
+        context_digest: input_digest,
         input_digest,
         complete: true,
         observations: Arc::from(observations),
     }];
-    crate::bind_semantic_evidence(&evidence, &[], input_digest)
+    crate::bind_semantic_evidence(&evidence, &[], &[], input_digest)
         .map_err(|_defect| IntersphinxError::Evidence)?;
     Ok(evidence)
 }

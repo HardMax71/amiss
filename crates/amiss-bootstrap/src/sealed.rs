@@ -126,14 +126,17 @@ pub(super) fn capture_requests(
 }
 
 fn semantic_expectations(
-    values: &[amiss_wire::json::Value],
+    values: &[amiss_wire::requests::SuppliedSemanticEvidence],
 ) -> Execution<Vec<SealedSemanticExpectation>> {
     values
         .iter()
-        .map(|value| {
-            let bytes = canonical(value);
+        .map(|supplied| {
+            let bytes = canonical(&supplied.value);
             let envelope = amiss_wire::semantic::parse(&bytes)
                 .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
+            if envelope.payload.context_digest != supplied.expected_context_digest {
+                return Err(tampered("semantic-evidence-invalid"));
+            }
             Ok(SealedSemanticExpectation {
                 payload_digest: envelope.payload_digest.to_string(),
                 producer_kind: envelope.payload.producer_kind.as_str().to_owned(),
