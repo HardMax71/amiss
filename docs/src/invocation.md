@@ -82,7 +82,7 @@ trust them when the short form reads ambiguous.
 | `--path` | repo-relative path | the file an authored claim pins, or the exact root of an authored suffix selector |
 | `--line` | positive line number | the line the claim expects, one-based |
 | `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |
-| `--suffix` | dot-prefixed UTF-8 suffix | the exact 2–64 byte tail of an authored tree selector; no slash, backslash, NUL, glob, or normalization |
+| `--suffix` | dot-prefixed UTF-8 suffix | the exact 2–64 byte tail of an authored tree selector; no slash, backslash, or NUL; glob metacharacters stay literal and no normalization occurs |
 | `--adapter` | `asciidoc`, `markdown`, `mdx`, `plain-advisory`, or `rst` | the built-in grammar an authored selector binds to matching paths |
 | `--floor-digest` | `sha256:` and 64 hex | the organization floor the minted debt snapshot binds to |
 | `--debt-owner` | text | the item owner the floor must authorize |
