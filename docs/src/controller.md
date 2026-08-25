@@ -299,8 +299,11 @@ and size. It does not authenticate the engine report itself.
 trees have been acquired. It first reopens both repositories and verifies the requested commits
 and trees. It derives the sealed bootstrap job from the `RunRequest` and trusted instants rather
 than accepting a separately assembled job, so a caller cannot pair one run with another run's
-control files. It also reads the selected bootstrap under a fixed byte ceiling and matches its
-digest to the frozen execution plan before copying it into a fresh private scratch directory.
+control files. Trusted acquisition may return pre-scan semantic-evidence envelopes with the roots;
+job construction parses them, requires the exact candidate and no source-report binding, combines
+their limits and ordering with plan templates, and fails closed on any defect. It also reads the
+selected bootstrap under a fixed byte ceiling and matches its digest to the frozen execution plan
+before copying it into a fresh private scratch directory.
 
 The directory holds only the copied bootstrap, canonical request files, report, and final result
 record. The controller creates both output files and retains their open handles. The bootstrap may
@@ -335,6 +338,8 @@ store and retrieval route, worker, orchestrator, acquisition boundary, and super
 runner. Focused tests cover ingress limits and tampering, replay, rotation and revocation, file
 corruption, cross-process ownership, reclaim, exact publication retry across restart, full roots,
 artifact expiry, clock rollback, runner timeout, process descendants, and output replacement.
+The acquisition result can also carry candidate-specific pre-scan semantic evidence into the
+sealed controls request; the built-in provider acquisitions currently leave that set empty.
 
 Three merge-gate shapes join those pieces. GitHub uses a signed pull-request event, App refresh,
 strict App-bound ruleset, authoritative test merge, and App-owned Check Run. GitLab uses policy

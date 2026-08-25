@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use amiss_wire::controls::STATEMENT_TTL_MAX_SECONDS;
+use amiss_wire::json::Value;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::WATCHDOG_MILLISECONDS;
 
@@ -26,12 +27,12 @@ pub trait Acquisition: Send {
     ///
     /// # Errors
     ///
-    /// The exact repository or action objects could not be acquired.
+    /// The exact repository, action, or candidate evidence could not be acquired.
     fn acquire(
         &mut self,
         request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<Vec<Value>, Self::Error>;
 }
 
 pub struct AcquiringRunner<A> {
@@ -100,6 +101,7 @@ impl<A: Acquisition + 'static> Runner for AcquiringRunner<A> {
                 scratch: &self.scratch,
                 evaluation_instant: &evaluation_instant,
                 valid_until: &valid_until,
+                semantic_evidence: &acquired.semantic_evidence,
                 wall_timeout: self.wall_timeout,
             },
             heartbeat,
@@ -110,6 +112,7 @@ impl<A: Acquisition + 'static> Runner for AcquiringRunner<A> {
 struct AcquiredRun {
     repository: tempfile::TempDir,
     action: tempfile::TempDir,
+    semantic_evidence: Vec<Value>,
 }
 
 impl AcquiredRun {
@@ -120,7 +123,11 @@ impl AcquiredRun {
         let action = tempfile::Builder::new()
             .prefix("amiss-action-")
             .tempdir_in(scratch)?;
-        Ok(Self { repository, action })
+        Ok(Self {
+            repository,
+            action,
+            semantic_evidence: Vec::new(),
+        })
     }
 }
 
@@ -140,8 +147,8 @@ where
     let _worker = std::thread::Builder::new()
         .name("amiss-acquisition".to_owned())
         .spawn(move || {
-            let acquired = run_acquisition(&acquisition, &request, &roots, worker_cancelled);
-            let _ignored = sender.send((acquired, roots));
+            let evidence = run_acquisition(&acquisition, &request, &roots, worker_cancelled);
+            let _ignored = sender.send((evidence, roots));
         })
         .map_err(|_defect| ())?;
     await_acquisition(&receiver, &cancelled, heartbeat, renew_after)
@@ -152,31 +159,33 @@ fn run_acquisition<A: Acquisition>(
     request: &RunRequest,
     roots: &AcquiredRun,
     cancelled: Arc<AtomicBool>,
-) -> bool {
-    let Some(mut acquisition) = slot.lock().ok().and_then(|mut slot| slot.take()) else {
-        return false;
-    };
+) -> Option<Vec<Value>> {
+    let mut acquisition = slot.lock().ok().and_then(|mut slot| slot.take())?;
     let target = AcquisitionTarget {
         repository: roots.repository.path(),
         action: roots.action.path(),
         cancelled,
     };
-    let acquired = acquisition.acquire(request, target).is_ok();
-    slot.lock()
-        .is_ok_and(|mut slot| slot.replace(acquisition).is_none())
-        && acquired
+    let evidence = acquisition.acquire(request, target).ok();
+    let restored = slot
+        .lock()
+        .is_ok_and(|mut slot| slot.replace(acquisition).is_none());
+    restored.then_some(evidence).flatten()
 }
 
 fn await_acquisition(
-    receiver: &mpsc::Receiver<(bool, AcquiredRun)>,
+    receiver: &mpsc::Receiver<(Option<Vec<Value>>, AcquiredRun)>,
     cancelled: &AtomicBool,
     heartbeat: &mut dyn RunHeartbeat,
     mut renew_after: Duration,
 ) -> Result<AcquiredRun, ()> {
     loop {
         match receiver.recv_timeout(renew_after) {
-            Ok((true, roots)) => return Ok(roots),
-            Ok((false, _roots)) => return Err(()),
+            Ok((Some(evidence), mut roots)) => {
+                roots.semantic_evidence = evidence;
+                return Ok(roots);
+            }
+            Ok((None, _roots)) => return Err(()),
             Err(mpsc::RecvTimeoutError::Disconnected) => return Err(()),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 let Some(next) = renewal_wait(heartbeat.renew()) else {

@@ -143,6 +143,7 @@ pub(super) fn validate_request_size(
         }),
         semantic_evidence: super::bind_semantic_evidence(
             &policy.semantic_evidence,
+            &[],
             execution.digest(),
         )?,
     };

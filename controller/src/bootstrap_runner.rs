@@ -9,6 +9,7 @@ use std::time::Duration;
 use amiss_bootstrap::result::RESULT_BYTES;
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, BOOTSTRAP_EXECUTABLE_BYTES};
 use amiss_wire::digest::hb;
+use amiss_wire::json::Value;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::{MACHINE_JSON_BYTES, WATCHDOG_MILLISECONDS};
 use processkit::{
@@ -33,6 +34,7 @@ pub struct BootstrapRun<'a> {
     pub scratch: &'a Path,
     pub evaluation_instant: &'a UtcInstant,
     pub valid_until: &'a UtcInstant,
+    pub semantic_evidence: &'a [Value],
     pub wall_timeout: Duration,
 }
 
@@ -85,6 +87,7 @@ pub fn run_bootstrap(
         run: request,
         evaluation_instant: run.evaluation_instant.clone(),
         valid_until: run.valid_until.clone(),
+        acquired_semantic_evidence: run.semantic_evidence,
     }) else {
         return RunnerOutcome::TamperedRuntime;
     };

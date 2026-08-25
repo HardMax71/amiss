@@ -8,6 +8,7 @@ use amiss_controller_git::{
     ACTION_COMMIT_REF, ExactFetch, ExactWant, GitCredential, REPOSITORY_CANDIDATE_REF,
     REPOSITORY_TARGET_REF, fetch_exact,
 };
+use amiss_wire::json::Value;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use secrecy::SecretString;
 
@@ -138,7 +139,7 @@ impl<T: GitHubTokenSource> Acquisition for GitHubAcquisition<T> {
         &mut self,
         request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Value>, Self::Error> {
         active(&target)?;
         let plan = github_fetch_plan(request)?;
         let token = self
@@ -185,7 +186,7 @@ impl<T: GitHubTokenSource> Acquisition for GitHubAcquisition<T> {
             cancelled: target.cancelled.as_ref(),
         })
         .map_err(|_defect| fetch_error(target.cancelled.as_ref(), GitHubAcquireError::Action))?;
-        active(&target)
+        active(&target).map(|()| Vec::new())
     }
 }
 
