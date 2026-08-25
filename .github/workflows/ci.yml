@@ -206,7 +206,9 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/amiss-external/evidence.json
-          key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ hashFiles('Cargo.lock', 'controller/probe/Cargo.toml') }}
+          key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ github.run_attempt }}
+          restore-keys: |
+            external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-
       - id: external-advisory
         shell: bash
         env:
@@ -280,13 +282,12 @@ jobs:
       - name: Save retry-local external evidence
         if: >-
           steps.external-advisory.outputs.cacheable == 'true' &&
-          steps.external-advisory.outputs.produced == 'true' &&
-          steps.external-evidence-cache.outputs.cache-hit != 'true'
+          steps.external-advisory.outputs.produced == 'true'
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/amiss-external/evidence.json
-          key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ hashFiles('Cargo.lock', 'controller/probe/Cargo.toml') }}
+          key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ github.run_attempt }}
 
   fuzz:
     runs-on: ubuntu-latest

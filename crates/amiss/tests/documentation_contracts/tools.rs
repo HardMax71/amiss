@@ -182,19 +182,24 @@ fn retry_local_external_evidence_is_validated_before_reuse() {
             .count(),
         2
     );
-    assert!(!rail.contains("restore-keys:"));
+    assert_eq!(rail.matches("restore-keys: |").count(), 1);
     for identity in [
         "external-evidence-v1-amiss-probe-default",
         "${{ github.run_id }}",
         "${{ github.sha }}",
-        "hashFiles('Cargo.lock', 'controller/probe/Cargo.toml')",
     ] {
         assert_eq!(
             rail.matches(identity).count(),
-            2,
+            3,
             "cache key lost {identity}"
         );
     }
+    assert_eq!(
+        rail.matches("${{ github.sha }}-${{ github.run_attempt }}")
+            .count(),
+        2
+    );
+    assert!(!rail.contains("steps.external-evidence-cache.outputs.cache-hit"));
     assert!(rail.contains("cacheable=\\(.rows | length > 0)"));
     assert!(rail.contains("steps.external-advisory.outputs.produced == 'true'"));
     assert_eq!(
