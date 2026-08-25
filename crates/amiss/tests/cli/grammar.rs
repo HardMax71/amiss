@@ -5,8 +5,8 @@ use crate::support::{amiss, fixture, payload};
 /// the CLI's repository is a claim it cannot authenticate, the report has no
 /// field to record what was actually typed, and the wrapper that folds an
 /// authenticated identity is the layer allowed to do that. What the engine owes
-/// instead is a refusal that can be acted on, because there is no `--help` and a
-/// bare error code is not documentation.
+/// instead is a refusal that can be acted on, because a bare error code is not
+/// documentation.
 #[test]
 fn a_noncanonical_repository_owner_is_refused_in_terms_the_caller_can_act_on() {
     let fx = fixture();
@@ -38,18 +38,15 @@ fn a_noncanonical_repository_owner_is_refused_in_terms_the_caller_can_act_on() {
     );
 }
 
-/// The first thing a person or an agent tries is `--help`, and the docs live
-/// in a repository they are not standing in. The refusal is the only channel
-/// the binary owns at that moment, so it teaches the entire closed grammar.
 #[test]
 fn a_help_seeker_is_taught_the_closed_grammar() {
     let (code, stdout, stderr) = amiss(&["--help"]);
-    assert_eq!(code, 2, "there is no help lane, only the refusal");
-    assert!(stdout.is_empty(), "a refusal is not a report");
-    assert!(stderr.contains("INVALID_INVOCATION"), "{stderr}");
-    assert!(
-        stderr.contains(amiss::invocation::GRAMMAR),
-        "the refusal carries the whole grammar: {stderr}"
+    assert_eq!(code, 0, "help is a successful query: {stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+    assert_eq!(
+        stdout,
+        format!("{}\n", amiss::invocation::GRAMMAR).as_bytes(),
+        "help projects the canonical grammar and nothing else"
     );
 }
 
@@ -96,29 +93,27 @@ fn the_version_query_names_the_engine_that_writes_the_reports() {
     assert_eq!(engine, format!("engine {digest}"));
 }
 
-/// The grammar stays closed around the new form: it is not a flag `check`
-/// accepts, and it carries nothing of its own.
+/// The standalone queries are not flags and carry nothing of their own.
 #[test]
-fn the_version_query_stands_alone() {
-    for argv in [
-        ["--version", "--version"].as_slice(),
-        ["check", "--version"].as_slice(),
-    ] {
-        let (code, stdout, stderr) = amiss(argv);
-        assert_eq!(code, 2, "{argv:?} is not a version query");
-        assert!(stdout.is_empty(), "{argv:?} produced stdout");
+fn standalone_queries_accept_no_other_token() {
+    for flag in ["--help", "--version"] {
+        for argv in [[flag, flag].as_slice(), ["check", flag].as_slice()] {
+            let (code, stdout, stderr) = amiss(argv);
+            assert_eq!(code, 2, "{argv:?} is not a standalone query");
+            assert!(stdout.is_empty(), "{argv:?} produced stdout");
+            assert!(
+                stderr.contains(amiss::invocation::GRAMMAR),
+                "{argv:?} refusal carries the whole grammar: {stderr}"
+            );
+        }
+        let (code, stdout, _) = amiss(&[flag, "--format", "json"]);
+        assert_eq!(code, 2, "a second token makes it an invalid invocation");
+        let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
         assert!(
-            stderr.contains(amiss::invocation::GRAMMAR),
-            "{argv:?} refusal carries the whole grammar: {stderr}"
+            envelope.get("payload").is_some(),
+            "a selected format still refuses through the envelope"
         );
     }
-    let (code, stdout, _) = amiss(&["--version", "--format", "json"]);
-    assert_eq!(code, 2, "a second token makes it an invalid invocation");
-    let envelope: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
-    assert!(
-        envelope.get("payload").is_some(),
-        "a selected format still refuses through the envelope, never a version"
-    );
 }
 
 #[test]

@@ -54,7 +54,11 @@ fn apply_sandbox() {
 #[cfg(not(unix))]
 const fn apply_sandbox() {}
 
-#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+#[expect(
+    clippy::print_stderr,
+    clippy::print_stdout,
+    reason = "contract output channels"
+)]
 fn main() -> ExitCode {
     apply_sandbox();
     let mut reserve = FatalSerializer::new();
@@ -64,6 +68,10 @@ fn main() -> ExitCode {
     }
     let failure = ExitCode::from(ExitClass::Failure.code());
     match invocation::parse(&argv) {
+        Outcome::Help => {
+            println!("{}", invocation::GRAMMAR);
+            ExitCode::from(ExitClass::Success.code())
+        }
         Outcome::Version => version(),
         Outcome::MalformedOutputSelection => {
             eprint!("{}", invocation::MALFORMED_OUTPUT_LINE);

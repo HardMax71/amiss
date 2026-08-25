@@ -14,11 +14,11 @@ build that produced it.
 
 The public command line is closed: the grammar below is everything, and anything else
 exits 2 as an invalid invocation. The verb comes first; after it the options come in any
-order, each at most once. There is no `--help`. A refused invocation prints the violated
-contracts and then this whole grammar on stderr, so the binary teaches its own command
-line. The one exception is a malformed `--format` selection, which prints a single
-`amiss: invalid invocation` line, since the output channel itself was never agreed. The
-copy below is checked against the binary's in CI.
+order, each at most once. Standalone `--help` prints this whole grammar on stdout. A refused
+human invocation prints the violated contracts and then the same grammar on stderr, so the
+binary teaches its own command line on either path. The one exception is a malformed `--format`
+selection, which prints a single `amiss: invalid invocation` line, since the output channel itself
+was never agreed. The copy below is checked against the binary's in CI.
 
 <!-- amiss-doc-contract:invocation-grammar:start -->
 ```text
@@ -54,6 +54,7 @@ amiss render --report <path>
 amiss refs --report <path>
            (--target <repo-path> | --target-bytes-hex <lower-hex>)
            [--format <human|json>]
+amiss --help
 amiss --version
 ```
 <!-- amiss-doc-contract:invocation-grammar:end -->
@@ -90,6 +91,7 @@ trust them when the short form reads ambiguous.
 | `--evidence` | path | the producer observations the assessment form judges; foreign to every other form |
 | `--target` | repo-relative path | the text path whose candidate references `refs` returns |
 | `--target-bytes-hex` | lowercase even-length hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
+| `--help` | none | prints the canonical closed grammar; stands alone, with no verb or other flag |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 
 `--base` and `--candidate` take full commit IDs: lowercase hex, forty characters for
@@ -242,8 +244,13 @@ answer exits 0 even when the source report recorded blocking findings; incomplet
 unreadable, oversized, or digest-mismatched reports exit 2. Querying writes no state and changes
 no recorded verdict.
 
-`amiss --version` is the grammar's ninth form and stands alone: any second token makes it
-an ordinary, refused invocation. It opens no repository. It prints two lines and exits 0:
+`amiss --help` projects the exact Rust-owned grammar above, followed by one newline, and exits 0.
+It opens no repository and accepts no verb or second token. A combined, duplicated, or misspelled
+help flag is an ordinary refused invocation; selecting a machine format still uses that format's
+existing refusal envelope.
+
+`amiss --version` also stands alone: any second token makes it an ordinary, refused invocation. It
+opens no repository. It prints two lines and exits 0:
 
 ```text
 amiss <version>

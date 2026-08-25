@@ -14,10 +14,9 @@ pub use amiss_wire::report::AnalysisErrorCode as Code;
 
 pub const MALFORMED_OUTPUT_LINE: &str = "amiss: invalid invocation\n";
 
-/// The closed grammar, verbatim. A rejected human invocation prints it after
-/// the code lines, because there is no `--help` and the caller may hold
-/// neither the book nor a network; the documentation contract test keeps the
-/// invocation chapter's copy equal to this one.
+/// The closed grammar, verbatim. Help prints it directly, while a rejected
+/// human invocation prints it after the code lines; the documentation
+/// contract test keeps the invocation chapter's copy equal to this one.
 pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha256>
             --base <full-oid> (--candidate <full-oid> | --index)
             [--repository <host>/<owner>/<name>
@@ -50,8 +49,10 @@ amiss render --report <path>
 amiss refs --report <path>
            (--target <repo-path> | --target-bytes-hex <lower-hex>)
            [--format <human|json>]
+amiss --help
 amiss --version";
 
+const HELP_FLAG: &str = "--help";
 const VERSION_FLAG: &str = "--version";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
@@ -170,6 +171,7 @@ pub struct Invocation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
+    Help,
     /// Carries no options, so a second token is an ordinary invalid invocation.
     Version,
     /// Output selection itself is invalid: empty stdout, one fixed stderr
@@ -184,10 +186,13 @@ pub enum Outcome {
 
 #[must_use]
 pub fn parse(argv: &[OsString]) -> Outcome {
-    if let [only] = argv
-        && only.to_str() == Some(VERSION_FLAG)
-    {
-        return Outcome::Version;
+    if let [only] = argv {
+        if only.to_str() == Some(HELP_FLAG) {
+            return Outcome::Help;
+        }
+        if only.to_str() == Some(VERSION_FLAG) {
+            return Outcome::Version;
+        }
     }
     let gathered = arguments::gather(argv);
     let Some(format) = arguments::output_selection(&gathered.format) else {
