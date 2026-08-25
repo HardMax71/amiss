@@ -8,8 +8,8 @@ description: Check documentation against the repository tree with Amiss. Use bef
 Amiss compares two exact snapshots of a Git repository and reports every documentation
 reference that stopped resolving, every referenced file that changed under unchanged
 prose, and every loosened control. It is deterministic, reads only the repository, and
-never guesses. There is no `--help`; an invalid invocation prints the closed grammar on
-stderr, and that output is trustworthy.
+never guesses. `amiss --help` prints the closed grammar on stdout; an invalid human
+invocation prints the same grammar on stderr, and both outputs are trustworthy.
 
 ## Running it
 
