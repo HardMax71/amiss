@@ -266,8 +266,8 @@ jobs:
             produced=true
             source=fresh
           fi
-          jq -er '"cacheable=\(.payload.introduced | length > 0)"' plan.json \
-            >> "$GITHUB_OUTPUT" || advisory "the plan work count is unavailable"
+          jq -er '"cacheable=\(.rows | length > 0)"' "$evidence" \
+            >> "$GITHUB_OUTPUT" || advisory "the evidence row count is unavailable"
           echo "produced=$produced" >> "$GITHUB_OUTPUT"
           echo "advisory external rail: external evidence source: $source"
           cat assessment.txt

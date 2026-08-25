@@ -195,7 +195,7 @@ fn retry_local_external_evidence_is_validated_before_reuse() {
             "cache key lost {identity}"
         );
     }
-    assert!(rail.contains("cacheable=\\(.payload.introduced | length > 0)"));
+    assert!(rail.contains("cacheable=\\(.rows | length > 0)"));
     assert!(rail.contains("steps.external-advisory.outputs.produced == 'true'"));
     assert_eq!(
         rail.matches("./target/release/amiss external-assess")
