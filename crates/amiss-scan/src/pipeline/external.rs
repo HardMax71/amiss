@@ -23,13 +23,13 @@ impl ExternalVerified {
     pub(super) fn install(
         self,
         effects: &mut crate::policy::Effects,
-    ) -> Option<std::sync::Arc<crate::semantic::SiteNavigation>> {
+    ) -> crate::semantic::SiteEvaluation {
         effects.debt = self.debt;
         effects.waiver = self.waiver;
         effects.time = self.time;
         effects.constraint = self.constraint;
         effects.semantic_evidence = self.semantic.provenance;
-        self.semantic.navigation
+        self.semantic.site
     }
 
     pub(super) const fn debt(&self) -> Option<&crate::policy::DebtContext> {

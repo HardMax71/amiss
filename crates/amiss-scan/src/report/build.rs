@@ -28,20 +28,27 @@ pub fn construct(
     comparisons: Vec<Comparison>,
     claims: &[crate::claim::ClaimOutcome],
 ) -> Built {
-    construct_with_navigation(setup, base, candidate, comparisons, None, claims)
+    construct_with_site(
+        setup,
+        base,
+        candidate,
+        comparisons,
+        &crate::semantic::SiteEvaluation::default(),
+        claims,
+    )
 }
 
-pub(crate) fn construct_with_navigation(
+pub(crate) fn construct_with_site(
     setup: &Setup,
     base: &SnapshotDiscovery,
     candidate: &SnapshotDiscovery,
     comparisons: Vec<Comparison>,
-    navigation: Option<&crate::semantic::SiteNavigation>,
+    site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
 ) -> Built {
     let paired = paired_documents(base, candidate);
     let (governed, findings, exception_errors) =
-        evaluate_paired(setup, &paired, candidate, &comparisons, navigation, claims);
+        evaluate_paired(setup, &paired, candidate, &comparisons, site, claims);
 
     if let Some(crossing) = findings_ceiling_crossing(setup, &findings) {
         let mut details = logical_error_set(&governed, &exception_errors);
@@ -227,7 +234,7 @@ fn evaluate_paired(
     paired: &[PairedDocument<'_>],
     candidate: &SnapshotDiscovery,
     comparisons: &[Comparison],
-    navigation: Option<&crate::semantic::SiteNavigation>,
+    site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
 ) -> (
     Vec<crate::evaluate::GovernedSeed>,
@@ -237,12 +244,12 @@ fn evaluate_paired(
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
     let governed = governed_seeds(candidate, claims);
     let groups = crate::evaluate::claim_groups(claims);
-    let (findings, exception_errors) = crate::evaluate::evaluate_with_navigation(
+    let (findings, exception_errors) = crate::evaluate::evaluate_with_site(
         &inputs,
         comparisons,
         setup.profile,
         &setup.policy,
-        navigation,
+        site,
         &governed,
         &groups,
     );

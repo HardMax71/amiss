@@ -10,12 +10,12 @@ use super::claims::{ClaimGroup, claim_finding};
 use super::control::{GovernedSeed, control_finding, governed_finding};
 use super::debt::debt_pass;
 use super::documents::document_findings;
-use super::finding::{observation_location, observation_scope, simple};
+use super::finding::{candidate_fact_finding, observation_location, observation_scope, simple};
 use super::references::{comparison_findings, structural_findings};
 use super::waiver::waiver_pass;
 use super::{
-    Attribution, DebtApplied, DocumentInput, Finding, FindingFact, LocationSide, PolicyStep,
-    WaiverApplied, resolution_kinds,
+    Attribution, DebtApplied, DocumentInput, Finding, FindingFact, Location, LocationSide,
+    PolicyStep, WaiverApplied, resolution_kinds,
 };
 use crate::correlate::{Comparison, Outcome};
 
@@ -87,27 +87,27 @@ pub fn evaluate_with_policy(
     governed: &[GovernedSeed],
     claims: &[ClaimGroup],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
-    evaluate_with_navigation(
+    evaluate_with_site(
         documents,
         comparisons,
         profile,
         policy,
-        None,
+        &crate::semantic::SiteEvaluation::default(),
         governed,
         claims,
     )
 }
 
-pub(crate) fn evaluate_with_navigation(
+pub(crate) fn evaluate_with_site(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     profile: Profile,
     policy: &crate::policy::Effects,
-    navigation: Option<&crate::semantic::SiteNavigation>,
+    site: &crate::semantic::SiteEvaluation,
     governed: &[GovernedSeed],
     claims: &[ClaimGroup],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
-    let mut findings = ordinary(documents, comparisons, profile, navigation);
+    let mut findings = ordinary(documents, comparisons, profile, site);
     for seed in governed {
         findings.push(governed_finding(seed, profile));
     }
@@ -324,12 +324,27 @@ fn ordinary(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     profile: Profile,
-    navigation: Option<&crate::semantic::SiteNavigation>,
+    site: &crate::semantic::SiteEvaluation,
 ) -> Vec<Finding> {
     let mut findings: Vec<Finding> = Vec::new();
 
     for document in documents {
-        document_findings(document, profile, navigation, &mut findings);
+        document_findings(document, profile, site.navigation.as_deref(), &mut findings);
+    }
+    for defect in site.defects.iter() {
+        findings.push(candidate_fact_finding(
+            FindingKind::SiteBuildDefect,
+            observation_scope(defect.id),
+            defect.evidence.clone(),
+            defect.member_count,
+            Location {
+                side: LocationSide::Candidate,
+                path: Some(defect.source.clone()),
+                span: None,
+                display: None,
+            },
+            profile,
+        ));
     }
 
     let invalid = invalid_attributions(comparisons);

@@ -3504,6 +3504,7 @@
         "opaque-html-region",
         "observation-correlation-ambiguous",
         "unlinked-document",
+        "site-build-defect",
         "policy-weakened",
         "coverage-reduced",
         "control-plane-changed",

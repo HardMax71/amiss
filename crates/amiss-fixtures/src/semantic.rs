@@ -4,7 +4,7 @@ use amiss_wire::json::Value;
 #[derive(Clone, Copy)]
 pub enum SiteObservation<'a> {
     Page(&'a str, &'a [&'a str]),
-    Redirect(&'a str),
+    Redirect(&'a str, &'a str),
 }
 
 /// Builds one site-build semantic observation.
@@ -25,8 +25,9 @@ pub fn site_observation(route: &str, observation: SiteObservation<'_>) -> Value 
                 ),
             ));
         }
-        SiteObservation::Redirect(destination) => {
+        SiteObservation::Redirect(source, destination) => {
             members.push(("kind".to_owned(), Value::string("site-redirect".to_owned())));
+            members.push(("source".to_owned(), Value::string(source.to_owned())));
             members.push((
                 "destination".to_owned(),
                 Value::string(destination.to_owned()),
