@@ -67,8 +67,8 @@ adoption debt snapshot (a recorded list of known failures being worked off, mint
 from a real evaluation by [`amiss adopt`](invocation.md)), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
 execution constraint. The same request also carries a bounded set of
-[semantic-evidence envelopes](semantic-evidence.md), independently candidate-bound and interpreted
-only by a compiled consumer.
+[semantic-evidence envelopes](semantic-evidence.md), each paired with an independently planned
+context digest, candidate-bound, and interpreted only by a compiled consumer.
 
 Every control identity, and the release manifest's, uses one open repository grammar: a
 caller-canonical host, a slash-joined owner when the forge supports nested groups, and a
@@ -159,7 +159,8 @@ engine. Its report acceptance
 binds the requested profile; exact organization-floor, debt-snapshot, and waiver-bundle
 presence, digest, and trust source; the execution-constraint digest, trust source, and
 recomputed descriptor semantics; the trusted-time digest, provider run, instant, and recomputed
-statement semantics; every semantic envelope's payload and producer/input identities; and the
+statement semantics; every semantic envelope's payload and producer/input identities after its
+planned context matches; and the
 candidate identity and honest sandbox projection. The public
 [CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) still supplies
 each nullable value as `None` and the evidence set as empty. A report control row with

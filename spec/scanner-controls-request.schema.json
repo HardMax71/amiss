@@ -34,15 +34,30 @@
       "oneOf": [{ "$ref": "#/$defs/SuppliedControl" }, { "type": "null" }]
     },
     "semantic_evidence": {
-      "description": "Canonical semantic-evidence envelopes acquired outside the repository and sealed by the trusted caller.",
+      "description": "Canonical semantic-evidence envelopes paired with the independently planned semantic context each producer must identify.",
       "type": "array",
       "maxItems": 64,
       "items": {
-        "type": "object"
+        "$ref": "#/$defs/SuppliedSemanticEvidence"
       }
     }
   },
   "$defs": {
+    "SuppliedSemanticEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_context_digest", "value"],
+      "properties": {
+        "value": {
+          "description": "The exact semantic-evidence envelope under its own schema.",
+          "type": "object"
+        },
+        "expected_context_digest": {
+          "description": "The controller-plan-owned context identity the embedded producer must reproduce.",
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
     "SuppliedControl": {
       "type": "object",
       "additionalProperties": false,

@@ -33,8 +33,8 @@ pub use artifacts::{
 };
 pub use bootstrap_job::{
     AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, CheckBinding, CheckPlan,
-    ExternalPolicy, PolicyControls, SemanticEvidenceTemplate, bind_semantic_evidence,
-    bootstrap_job, check_binding, check_plan,
+    ExternalPolicy, PolicyControls, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
+    bind_semantic_evidence, bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
@@ -61,7 +61,8 @@ pub use intersphinx::{
     INTERSPHINX_INVENTORY_BYTES, IntersphinxError, IntersphinxInventory, intersphinx_evidence,
 };
 pub use mdbook::{
-    MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, mdbook_site_evidence,
+    MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
+    mdbook_site_evidence, mdbook_site_expectation,
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,

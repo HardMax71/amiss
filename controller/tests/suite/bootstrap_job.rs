@@ -12,7 +12,7 @@ use amiss_controller::{
     CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy, IntegrationId,
     OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
-    bootstrap_job, check_binding, check_plan,
+    SemanticEvidenceExpectation, bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
@@ -159,6 +159,7 @@ fn policy() -> PolicyControls {
         debt_snapshot: Some(acquired("debt-snapshot.json")),
         waiver_bundle: Some(acquired("waiver-bundle.json")),
         semantic_evidence: super::intersphinx::evidence(),
+        semantic_acquisitions: Vec::new(),
     }
 }
 
@@ -190,18 +191,29 @@ fn candidate_identity(run: &RunRequest) -> Digest {
 fn semantic_evidence(
     candidate_identity_digest: Digest,
     source_report_payload_digest: Option<Digest>,
+    context_digest: Digest,
 ) -> Value {
     amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         candidate_identity_digest,
         source_report_payload_digest,
         producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
         producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
-        producer_version: "0.3.0".to_owned(),
+        producer_version: "0.4.0".to_owned(),
+        context_digest,
         input_digest: hb("amiss/test-site-build", b"output"),
         complete: true,
         observations: Vec::new(),
     })
     .unwrap()
+}
+
+fn site_expectation(context_digest: Digest) -> SemanticEvidenceExpectation {
+    SemanticEvidenceExpectation {
+        producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+        producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
+        producer_version: "0.4.0".to_owned(),
+        context_digest,
+    }
 }
 
 #[test]
@@ -249,7 +261,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
     assert!(controls.debt_snapshot.is_some());
     assert!(controls.waiver_bundle.is_some());
     let semantic = amiss_wire::semantic::parse(&json::canonical(
-        controls.semantic_evidence.first().unwrap(),
+        &controls.semantic_evidence.first().unwrap().value,
     ))
     .unwrap();
     assert_eq!(
@@ -261,8 +273,12 @@ fn job_construction_binds_the_complete_authenticated_run() {
 
 #[test]
 fn acquired_semantic_evidence_joins_the_exact_candidate() {
-    let run = run_request(policy());
-    let evidence = semantic_evidence(candidate_identity(&run), None);
+    let candidate = candidate_identity(&run_request(policy()));
+    let context = hb("amiss/test-site-context", b"english/current");
+    let mut policy = policy();
+    policy.semantic_acquisitions = vec![site_expectation(context)];
+    let run = run_request(policy);
+    let evidence = semantic_evidence(candidate, None, context);
     let evidence_digest = amiss_wire::semantic::parse(&json::canonical(&evidence))
         .unwrap()
         .payload_digest;
@@ -271,8 +287,8 @@ fn acquired_semantic_evidence_joins_the_exact_candidate() {
     let payload_digests = controls
         .semantic_evidence
         .iter()
-        .map(|value| {
-            amiss_wire::semantic::parse(&json::canonical(value))
+        .map(|supplied| {
+            amiss_wire::semantic::parse(&json::canonical(&supplied.value))
                 .unwrap()
                 .payload_digest
         })
@@ -284,13 +300,22 @@ fn acquired_semantic_evidence_joins_the_exact_candidate() {
 }
 
 #[test]
-fn acquired_semantic_evidence_must_be_pre_scan_and_candidate_bound() {
-    let run = run_request(PolicyControls::default());
-    let candidate = candidate_identity(&run);
+fn acquired_semantic_evidence_must_be_pre_scan_candidate_and_context_bound() {
+    let candidate = candidate_identity(&run_request(PolicyControls::default()));
+    let context = hb("amiss/test-site-context", b"english/current");
+    let run = run_request(PolicyControls {
+        semantic_acquisitions: vec![site_expectation(context)],
+        ..PolicyControls::default()
+    });
     let defects = [
         Value::Null,
-        semantic_evidence(hb("amiss/test-candidate", b"other"), None),
-        semantic_evidence(candidate, Some(hb("amiss/test-report", b"report"))),
+        semantic_evidence(hb("amiss/test-candidate", b"other"), None, context),
+        semantic_evidence(candidate, Some(hb("amiss/test-report", b"report")), context),
+        semantic_evidence(
+            candidate,
+            None,
+            hb("amiss/test-site-context", b"french/current"),
+        ),
     ];
 
     for defect in defects {
@@ -300,7 +325,7 @@ fn acquired_semantic_evidence_must_be_pre_scan_and_candidate_bound() {
         );
     }
 
-    let duplicate = semantic_evidence(candidate, None);
+    let duplicate = semantic_evidence(candidate, None, context);
     assert_eq!(
         bootstrap(&run, &[duplicate.clone(), duplicate]).unwrap_err(),
         BootstrapJobError::SemanticEvidence
@@ -342,6 +367,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         debt_snapshot: None,
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
+        semantic_acquisitions: Vec::new(),
     };
     let run = run_request(wrong_policy);
     assert_eq!(
@@ -380,6 +406,7 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
         debt_snapshot: None,
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
+        semantic_acquisitions: Vec::new(),
     };
     assert_eq!(
         check_plan(Profile::Enforce, policy, execution(),).unwrap_err(),

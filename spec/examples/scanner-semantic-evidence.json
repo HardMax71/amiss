@@ -9,7 +9,8 @@
     "producer": {
       "kind": "site-build",
       "identity": "amiss-site-output",
-      "version": "0.3.0",
+      "version": "0.4.0",
+      "context_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     "complete": true,
@@ -22,5 +23,5 @@
       }
     ]
   },
-  "payload_digest": "sha256:f55b9935e7b982cdba8c95452cbef12cf1ea64f9bf0e2cace2c9040057c9d0f0"
+  "payload_digest": "sha256:34305365c6b7f73511a696dfa87619e2a633b74a026d9f7ef64de7b411c1898e"
 }

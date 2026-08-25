@@ -11,8 +11,8 @@ The semantic-evidence envelope is that boundary. Its payload binds:
 - the scanner candidate-identity digest, which already covers repository identity, refs, both
   snapshot materializations, and forge semantics;
 - an optional source-report payload digest when evidence was derived after a scan;
-- the producer kind, stable implementation identity, version, and the kind-defined digest of all
-  configuration, inventories, or completed-build input;
+- the producer kind, stable implementation identity, version, independently selected semantic
+  context, and the kind-defined digest of all inventories or completed-build input;
 - whether the producer completed that exact input;
 - at most 100,000 observation objects, sorted by canonical JSON and unique.
 
@@ -29,10 +29,11 @@ recognizes. An unknown kind therefore remains inert data. Parsing the envelope n
 a pass, a block, or a suppression.
 
 This contract authenticates nothing by itself. Provider-enforced use must acquire it outside the
-repository and bind its expected digest through a trusted sealed input. A repository file, cache
-entry, or self-asserted local producer cannot promote its own observations to authority. Partial
-evidence may prove a fact positively only where a later kind contract permits it; absence can carry
-meaning only for a declared complete set over the exact input digest.
+repository. Each sealed value carries an independently planned expected context digest; the engine
+requires the producer's context digest to match before interpreting any observation. A repository
+file, cache entry, or self-asserted local producer cannot promote its own observations to authority.
+Partial evidence may prove a fact positively only where a later kind contract permits it; absence
+can carry meaning only for a declared complete set over the exact input digest.
 
 The first compiled consumer accepts one complete `sphinx-inventory-set` producer at version `1`,
 with no source-report binding. A `sphinx-label` observation carries an inventory identity, a
@@ -44,7 +45,7 @@ precedence. Missing evidence, an incomplete producer, another producer version, 
 binding, or an invalid observation can never clear a missing label.
 
 The second compiled consumer accepts at most one complete `site-build` producer at version
-`0.3.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
+`0.4.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
 document, and a byte-sorted unique set of decoded anchor identities. Routes exclude authority,
 query, and fragment components; sources obey the repository-path grammar; anchors and their
 aggregate count are bounded. On the candidate side only, an exact route resolves to its scanned
@@ -75,10 +76,13 @@ output.
 Only the sealed controls request has this intake. The public command supplies an empty set. A
 controller plan may hold candidate-independent templates such as an Intersphinx inventory set. A
 trusted acquisition may instead return already-formed pre-scan envelopes beside the exact
-repository and action roots. While building the sealed job, the controller strictly parses both
-sets, requires every envelope to name the exact candidate and no source report, applies their one
-combined count limit, orders them by payload digest, and rejects collisions. A malformed, stale,
-post-scan, duplicate, or oversized acquired set is runtime tampering, not absent evidence.
+repository and action roots. The frozen plan names each acquired producer kind, identity, version,
+and expected context exactly once. While building the sealed job, the controller strictly parses
+both sets, requires every acquired envelope to match one planned producer and context, names the
+exact candidate and no source report, applies their one combined count limit, orders them by
+payload digest, and rejects collisions. The engine repeats the context comparison from the sealed
+pair before consuming the evidence. A missing, extra, malformed, stale, wrong-context, post-scan,
+duplicate, or oversized acquired set is runtime tampering, not absent evidence.
 
 A successful report projects the accepted envelopes' payload and producer/input identities under
 `controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
@@ -94,7 +98,9 @@ candidate identity only while the sealed job is built. Fetching and caching rema
 concerns outside both the engine and the repository being checked; [provider
 configuration](provider-controls.md) accepts only the bounded local result.
 
-The controller's first site-build producer consumes the exact post-preprocessor
+The controller's first site-build producer consumes an operator-owned identity containing the
+exact repository `book.toml` path, publication prefix, optional locale, and optional version, plus
+the exact post-preprocessor
 [mdBook renderer context](https://rust-lang.github.io/mdBook/for_developers/backends.html) from
 mdBook `0.5.4` and a caller-opened completed HTML output directory. It uses the renderer's `path`
 and `source_path`, rather than reconstructing routes from `SUMMARY.md`, so the built page and its
@@ -110,8 +116,10 @@ HTML. The producer honors the document's first `base` URL when usable, retains o
 proved page under the same publication origin, and walks that bounded graph from the independent
 `index.html` entrypoint. It emits the configured source root, its `SUMMARY.md` manifest, the
 entrypoint, and the sorted set of reachable repository sources beside the sorted page anchors, then
-binds every exact page digest and the navigation result into the input digest. The wrong mdBook
-version, no HTML renderer, an escaping or non-text path, generated content without `source_path`,
+binds the resolved renderer configuration, every exact page digest, and the navigation result into
+the input digest. A plan independently freezes the site identity; evidence from another
+configuration path, publication prefix, locale, or version is refused. The wrong mdBook version,
+no HTML renderer, an escaping or non-text path, generated content without `source_path`,
 duplicate route ownership, an unreadable page, an unrepresentable anchor or link, or an oversized
 graph refuses the complete set. Theme, preprocessor, and configuration effects are therefore
 observed in their finished bytes without running any of them inside Amiss.
@@ -126,6 +134,5 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-Generated pages without repository attribution, locales, and versions remain future observation
-grammars over this same boundary. The engine still executes no producer and treats no
-repository-controlled evidence as authority.
+Generated pages without repository attribution remain a future grammar over this same boundary.
+The engine still executes no producer and treats no repository-controlled evidence as authority.

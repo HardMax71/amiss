@@ -132,6 +132,14 @@ pub struct SuppliedTime {
     pub provider_run_attempt: u64,
 }
 
+/// One semantic envelope paired with the independently planned build or
+/// inventory context it must identify.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SuppliedSemanticEvidence {
+    pub value: Value,
+    pub expected_context_digest: Digest,
+}
+
 /// The external-input request: five nullable supplied controls and the
 /// bounded semantic-evidence set the trusted caller acquired.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -141,7 +149,7 @@ pub struct ControlsRequest {
     pub waiver_bundle: Option<SuppliedControl>,
     pub trusted_time: Option<SuppliedTime>,
     pub execution_constraint: Option<SuppliedControl>,
-    pub semantic_evidence: Vec<Value>,
+    pub semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }
 
 impl ControlsRequest {
@@ -336,13 +344,30 @@ fn controls_value(request: &ControlsRequest) -> Result<Value, Error> {
     ));
     rows.push((
         "semantic_evidence",
-        Value::Array(request.semantic_evidence.clone().into_boxed_slice()),
+        Value::array(
+            request
+                .semantic_evidence
+                .iter()
+                .map(|evidence| {
+                    object(vec![
+                        ("value", evidence.value.clone()),
+                        (
+                            "expected_context_digest",
+                            text(&evidence.expected_context_digest.to_string()),
+                        ),
+                    ])
+                })
+                .collect(),
+        ),
     ));
     rows.push(("schema", text(CONTROLS_REQUEST_SCHEMA)));
     Ok(object(rows))
 }
 
-fn decode_semantic_evidence(path: &str, value: Value) -> Result<Vec<Value>, Error> {
+fn decode_semantic_evidence(
+    path: &str,
+    value: Value,
+) -> Result<Vec<SuppliedSemanticEvidence>, Error> {
     let values = de::array(path, value)?;
     if values.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
         return fail(path, ErrorKind::LimitExceeded);
@@ -350,7 +375,17 @@ fn decode_semantic_evidence(path: &str, value: Value) -> Result<Vec<Value>, Erro
     values
         .into_iter()
         .enumerate()
-        .map(|(index, value)| embedded_value(&format!("{path}[{index}]"), value))
+        .map(|(index, value)| {
+            let item_path = format!("{path}[{index}]");
+            let mut item = Obj::new(&item_path, value)?;
+            let value = item.required("value", embedded_value)?;
+            let expected_context_digest = item.required("expected_context_digest", de::digest)?;
+            item.finish()?;
+            Ok(SuppliedSemanticEvidence {
+                value,
+                expected_context_digest,
+            })
+        })
         .collect()
 }
 

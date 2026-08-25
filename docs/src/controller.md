@@ -300,8 +300,9 @@ trees have been acquired. It first reopens both repositories and verifies the re
 and trees. It derives the sealed bootstrap job from the `RunRequest` and trusted instants rather
 than accepting a separately assembled job, so a caller cannot pair one run with another run's
 control files. Trusted acquisition may return pre-scan semantic-evidence envelopes with the roots;
-job construction parses them, requires the exact candidate and no source-report binding, combines
-their limits and ordering with plan templates, and fails closed on any defect. It also reads the
+job construction matches them one-to-one with plan-frozen producer and context identities, requires
+the exact candidate and no source-report binding, combines their limits and ordering with plan
+templates, and fails closed on any defect. It also reads the
 selected bootstrap under a fixed byte ceiling and matches its digest to the frozen execution plan
 before copying it into a fresh private scratch directory.
 

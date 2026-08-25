@@ -1,5 +1,6 @@
 mod controls;
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use amiss_wire::controls::{
@@ -7,17 +8,17 @@ use amiss_wire::controls::{
 };
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{self, Value};
-use amiss_wire::model::UtcInstant;
+use amiss_wire::model::{ArtifactId, UtcInstant};
 use amiss_wire::requests::{
     EvaluationRequest, RequestStreams, RequestTrust, SnapshotRequest, SuppliedControl,
-    SuppliedTime, commit_candidate_identity_digest,
+    SuppliedSemanticEvidence, SuppliedTime, commit_candidate_identity_digest,
 };
 
 use crate::RunRequest;
 
 pub use controls::{AcquiredControl, PolicyControls};
 
-const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v3";
+const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v4";
 
 #[derive(
     Clone,
@@ -65,12 +66,21 @@ pub enum BootstrapJobError {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SemanticEvidenceTemplate {
-    pub(crate) producer_kind: amiss_wire::model::ArtifactId,
-    pub(crate) producer_identity: amiss_wire::model::ArtifactId,
+    pub(crate) producer_kind: ArtifactId,
+    pub(crate) producer_identity: ArtifactId,
     pub(crate) producer_version: String,
+    pub(crate) context_digest: Digest,
     pub(crate) input_digest: Digest,
     pub(crate) complete: bool,
     pub(crate) observations: Arc<[Value]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SemanticEvidenceExpectation {
+    pub producer_kind: ArtifactId,
+    pub producer_identity: ArtifactId,
+    pub producer_version: String,
+    pub context_digest: Digest,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,9 +106,18 @@ pub struct CheckBinding {
 /// A policy artifact or execution constraint is invalid.
 pub fn check_plan(
     profile: Profile,
-    policy: PolicyControls,
+    mut policy: PolicyControls,
     execution: ExecutionConstraintDescriptor,
 ) -> Result<CheckPlan, BootstrapJobError> {
+    policy.semantic_acquisitions = normalized_expectations(&policy.semantic_acquisitions)?;
+    if policy
+        .semantic_evidence
+        .len()
+        .checked_add(policy.semantic_acquisitions.len())
+        .is_none_or(|count| count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT)
+    {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
     let policy_identity = controls::identity(&policy)?;
     let constraint = execution
         .canonical_bytes()
@@ -111,6 +130,7 @@ pub fn check_plan(
             policy.external_policy,
             &policy_identity,
             &policy.semantic_evidence,
+            &policy.semantic_acquisitions,
             &execution,
         ),
     );
@@ -213,6 +233,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         },
         bind_semantic_evidence(
             &checked_plan.policy.semantic_evidence,
+            &checked_plan.policy.semantic_acquisitions,
             input.acquired_semantic_evidence,
             candidate_identity,
         )?,
@@ -241,9 +262,13 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
 /// collides with another envelope.
 pub fn bind_semantic_evidence(
     templates: &[SemanticEvidenceTemplate],
+    expectations: &[SemanticEvidenceExpectation],
     acquired: &[Value],
     candidate_identity_digest: Digest,
-) -> Result<Vec<Value>, BootstrapJobError> {
+) -> Result<Vec<SuppliedSemanticEvidence>, BootstrapJobError> {
+    if expectations.len() != acquired.len() {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
     let count = templates
         .len()
         .checked_add(acquired.len())
@@ -251,33 +276,53 @@ pub fn bind_semantic_evidence(
     if count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT {
         return Err(BootstrapJobError::SemanticEvidence);
     }
+    let mut expected = BTreeSet::from_iter(normalized_expectations(expectations)?);
+    let templates = templates.iter().map(|template| {
+        let value = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+            candidate_identity_digest,
+            source_report_payload_digest: None,
+            producer_kind: template.producer_kind.clone(),
+            producer_identity: template.producer_identity.clone(),
+            producer_version: template.producer_version.clone(),
+            context_digest: template.context_digest,
+            input_digest: template.input_digest,
+            complete: template.complete,
+            observations: template.observations.as_ref().to_vec(),
+        })
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        checked_evidence(
+            value,
+            &envelope,
+            template.context_digest,
+            candidate_identity_digest,
+        )
+    });
+    let acquired = acquired.iter().cloned().map(|value| {
+        let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        let expectation = SemanticEvidenceExpectation {
+            producer_kind: envelope.payload.producer_kind.clone(),
+            producer_identity: envelope.payload.producer_identity.clone(),
+            producer_version: envelope.payload.producer_version.clone(),
+            context_digest: envelope.payload.context_digest,
+        };
+        expected
+            .remove(&expectation)
+            .then_some(())
+            .ok_or(BootstrapJobError::SemanticEvidence)?;
+        checked_evidence(
+            value,
+            &envelope,
+            expectation.context_digest,
+            candidate_identity_digest,
+        )
+    });
     let mut envelopes = templates
-        .iter()
-        .map(|template| {
-            amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
-                candidate_identity_digest,
-                source_report_payload_digest: None,
-                producer_kind: template.producer_kind.clone(),
-                producer_identity: template.producer_identity.clone(),
-                producer_version: template.producer_version.clone(),
-                input_digest: template.input_digest,
-                complete: template.complete,
-                observations: template.observations.as_ref().to_vec(),
-            })
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)
-        })
-        .chain(acquired.iter().cloned().map(Ok))
-        .map(|value| {
-            let value = value?;
-            let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
-                .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-            (envelope.payload.candidate_identity_digest == candidate_identity_digest
-                && envelope.payload.source_report_payload_digest.is_none())
-            .then_some((envelope.payload_digest, value))
-            .ok_or(BootstrapJobError::SemanticEvidence)
-        })
+        .chain(acquired)
         .collect::<Result<Vec<_>, BootstrapJobError>>()?;
-    envelopes.sort_by_key(|(digest, _value)| *digest);
+    envelopes.sort_by_key(|(digest, _evidence)| *digest);
     if envelopes
         .windows(2)
         .any(|pair| matches!(pair, [left, right] if left.0 == right.0))
@@ -286,8 +331,27 @@ pub fn bind_semantic_evidence(
     }
     Ok(envelopes
         .into_iter()
-        .map(|(_digest, value)| value)
+        .map(|(_digest, evidence)| evidence)
         .collect())
+}
+
+fn checked_evidence(
+    value: Value,
+    envelope: &amiss_wire::semantic::SemanticEvidenceEnvelope,
+    expected_context_digest: Digest,
+    candidate_identity_digest: Digest,
+) -> Result<(Digest, SuppliedSemanticEvidence), BootstrapJobError> {
+    (envelope.payload.candidate_identity_digest == candidate_identity_digest
+        && envelope.payload.source_report_payload_digest.is_none()
+        && envelope.payload.context_digest == expected_context_digest)
+        .then_some((
+            envelope.payload_digest,
+            SuppliedSemanticEvidence {
+                value,
+                expected_context_digest,
+            },
+        ))
+        .ok_or(BootstrapJobError::SemanticEvidence)
 }
 
 fn binding(plan: &CheckPlan) -> CheckBinding {
@@ -310,6 +374,7 @@ fn plan_value(
     external_policy: ExternalPolicy,
     policy: &controls::PolicyIdentity,
     semantic_evidence: &[SemanticEvidenceTemplate],
+    semantic_acquisitions: &[SemanticEvidenceExpectation],
     execution: &ExecutionConstraintDescriptor,
 ) -> Value {
     Value::object(vec![
@@ -372,6 +437,10 @@ fn plan_value(
                                 Value::string(template.producer_version.clone()),
                             ),
                             (
+                                "context_digest".to_owned(),
+                                Value::string(template.context_digest.to_string()),
+                            ),
+                            (
                                 "input_digest".to_owned(),
                                 Value::string(template.input_digest.to_string()),
                             ),
@@ -381,7 +450,56 @@ fn plan_value(
                     .collect(),
             ),
         ),
+        (
+            "semantic_acquisitions".to_owned(),
+            Value::array(
+                semantic_acquisitions
+                    .iter()
+                    .map(expectation_value)
+                    .collect(),
+            ),
+        ),
     ])
+}
+
+fn expectation_value(expectation: &SemanticEvidenceExpectation) -> Value {
+    Value::object(vec![
+        (
+            "producer_kind".to_owned(),
+            Value::string(expectation.producer_kind.as_str().to_owned()),
+        ),
+        (
+            "producer_identity".to_owned(),
+            Value::string(expectation.producer_identity.as_str().to_owned()),
+        ),
+        (
+            "producer_version".to_owned(),
+            Value::string(expectation.producer_version.clone()),
+        ),
+        (
+            "context_digest".to_owned(),
+            Value::string(expectation.context_digest.to_string()),
+        ),
+    ])
+}
+
+fn normalized_expectations(
+    expectations: &[SemanticEvidenceExpectation],
+) -> Result<Vec<SemanticEvidenceExpectation>, BootstrapJobError> {
+    if expectations.iter().any(|expectation| {
+        !amiss_wire::semantic::producer_version_valid(&expectation.producer_version)
+    }) {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    let mut normalized = expectations.to_vec();
+    normalized.sort();
+    if normalized
+        .windows(2)
+        .any(|pair| matches!(pair, [left, right] if left == right))
+    {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    Ok(normalized)
 }
 
 fn control_identity_value(identity: Option<controls::ControlIdentity>) -> Value {

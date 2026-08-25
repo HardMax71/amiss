@@ -19,6 +19,7 @@ pub struct SemanticEvidence {
     pub producer_kind: ArtifactId,
     pub producer_identity: ArtifactId,
     pub producer_version: String,
+    pub context_digest: Digest,
     pub input_digest: Digest,
     pub complete: bool,
     pub observations: Vec<Value>,
@@ -65,7 +66,7 @@ pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
 /// Fails when producer metadata or an observation violates the same bounds [`parse`] enforces,
 /// when observations repeat, or when the resulting envelope exceeds the byte ceiling.
 pub fn envelope(mut evidence: SemanticEvidence) -> Result<Value, Error> {
-    if !valid_version(&evidence.producer_version) {
+    if !producer_version_valid(&evidence.producer_version) {
         return fail("$.payload.producer.version", ErrorKind::InvalidValue);
     }
     evidence.observations = ordered_observations(evidence.observations)?;
@@ -101,6 +102,7 @@ fn decode_payload(path: &str, value: Value) -> Result<SemanticEvidence, Error> {
     let producer_kind = producer.required("kind", decode_id)?;
     let producer_identity = producer.required("identity", decode_id)?;
     let producer_version = producer.required("version", decode_version)?;
+    let context_digest = producer.required("context_digest", de::digest)?;
     let input_digest = producer.required("input_digest", de::digest)?;
     producer.finish()?;
     let complete_path = payload.field("complete");
@@ -117,6 +119,7 @@ fn decode_payload(path: &str, value: Value) -> Result<SemanticEvidence, Error> {
         producer_kind,
         producer_identity,
         producer_version,
+        context_digest,
         input_digest,
         complete,
         observations,
@@ -130,14 +133,15 @@ fn decode_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
 
 fn decode_version(path: &str, value: Value) -> Result<String, Error> {
     let version = de::string(path, value)?;
-    if valid_version(&version) {
+    if producer_version_valid(&version) {
         Ok(version)
     } else {
         fail(path, ErrorKind::InvalidValue)
     }
 }
 
-fn valid_version(version: &str) -> bool {
+#[must_use]
+pub fn producer_version_valid(version: &str) -> bool {
     let Some((&first, tail)) = version.as_bytes().split_first() else {
         return false;
     };
@@ -208,6 +212,7 @@ fn payload_value(evidence: SemanticEvidence) -> Value {
         producer_kind,
         producer_identity,
         producer_version,
+        context_digest,
         input_digest,
         complete,
         observations,
@@ -234,6 +239,7 @@ fn payload_value(evidence: SemanticEvidence) -> Value {
                 ("kind", text(producer_kind.as_str())),
                 ("identity", text(producer_identity.as_str())),
                 ("version", text(&producer_version)),
+                ("context_digest", text(&context_digest.to_string())),
                 ("input_digest", text(&input_digest.to_string())),
             ]),
         ),
