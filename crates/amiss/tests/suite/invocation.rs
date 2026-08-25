@@ -53,7 +53,10 @@ fn parse_tokens(tokens: &[String]) -> Outcome {
 fn rejected_codes(outcome: Outcome) -> Vec<Code> {
     match outcome {
         Outcome::Rejected { codes, .. } => codes.into_iter().collect(),
-        Outcome::Accepted(_) | Outcome::MalformedOutputSelection | Outcome::Version => {
+        Outcome::Accepted(_)
+        | Outcome::Help
+        | Outcome::MalformedOutputSelection
+        | Outcome::Version => {
             panic!("expected rejection, got {outcome:?}")
         }
     }
@@ -709,20 +712,23 @@ fn classifies_the_forge_dialect_grammar() {
     );
 }
 
-/// A second form of the grammar, not an option: only the whole argv matches.
+/// The standalone forms are whole command lines, not options.
 #[test]
-fn the_version_form_is_the_entire_argument_vector() {
-    assert_eq!(parse(&argv(&["--version"])), Outcome::Version);
-    for tokens in [
-        vec!["--version", "--version"],
-        vec!["--version", "--format", "human"],
-        vec!["check", "--version"],
-        vec!["--Version"],
-    ] {
-        assert_ne!(
-            parse(&argv(&tokens)),
-            Outcome::Version,
-            "{tokens:?} is not the version form"
-        );
+fn standalone_forms_are_the_entire_argument_vector() {
+    for (flag, expected) in [("--help", Outcome::Help), ("--version", Outcome::Version)] {
+        assert_eq!(parse(&argv(&[flag])), expected);
+        for tokens in [
+            vec![flag, flag],
+            vec![flag, "--format", "human"],
+            vec!["check", flag],
+        ] {
+            assert_ne!(
+                parse(&argv(&tokens)),
+                expected,
+                "{tokens:?} is not a standalone form"
+            );
+        }
     }
+    assert_ne!(parse(&argv(&["--Help"])), Outcome::Help);
+    assert_ne!(parse(&argv(&["--Version"])), Outcome::Version);
 }
