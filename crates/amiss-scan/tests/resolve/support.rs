@@ -114,14 +114,20 @@ pub(crate) fn bed() -> Bed {
     bed_with(ScanLimits::CONTRACT)
 }
 
-pub(crate) fn github_context() -> ForgeContext {
+pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
+    let (host, candidate_ref) = match dialect {
+        ForgeDialect::Github => ("github.com", "refs/heads/feature/x"),
+        ForgeDialect::Gitlab => ("gitlab.com", "refs/heads/feature/x"),
+        ForgeDialect::Gitea => ("codeberg.org", "refs/heads/feature/x"),
+        ForgeDialect::BitbucketCloud => ("bitbucket.org", "refs/heads/feature"),
+    };
     ForgeContext {
-        host: "github.com".to_owned(),
-        dialect: ForgeDialect::Github,
+        host: host.to_owned(),
+        dialect,
         object_format: ObjectFormat::Sha1,
         owner: "acme".to_owned(),
         repository: "widgets".to_owned(),
-        candidate_ref: "refs/heads/feature/x".to_owned(),
+        candidate_ref: candidate_ref.to_owned(),
         default_ref: "refs/heads/main".to_owned(),
     }
 }
@@ -155,7 +161,7 @@ impl Bed {
 #[test]
 pub(crate) fn github_urls_need_the_whole_trusted_chain() {
     let mut bed = bed();
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
 
     let (intent, row) = bed
         .run_as(
@@ -214,7 +220,7 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
 #[test]
 fn github_with_a_different_trusted_identity_is_foreign() {
     let mut bed = bed();
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
     let (intent, foreign) = bed
         .run_as(
             Adapter::Markdown,
@@ -289,7 +295,7 @@ fn github_with_a_different_trusted_identity_is_foreign() {
 #[test]
 fn github_candidate_urls_resolve_targets_and_fragments() {
     let mut bed = bed();
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
     let (_i, tree) = bed
         .run_as(
             Adapter::Markdown,
@@ -371,6 +377,7 @@ fn forge_urls_without_a_declared_context_are_external() {
         "https://github.com/acme/widgets/blob/feature/x/docs/guide.md",
         "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md",
         "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/guide.md",
+        "https://bitbucket.org/acme/widgets/src/feature/docs/guide.md",
     ];
 
     for url in urls {
@@ -389,7 +396,7 @@ fn forge_urls_without_a_declared_context_are_external() {
 #[test]
 fn a_host_prefix_lookalike_authority_stays_external() {
     let mut bed = bed();
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
     let (intent, row) = bed
         .run_as(
             Adapter::Markdown,
@@ -403,25 +410,13 @@ fn a_host_prefix_lookalike_authority_stays_external() {
     assert_eq!(intent.kind, IntentKind::ExternalUrl);
 }
 
-pub(crate) fn gitlab_context() -> ForgeContext {
-    ForgeContext {
-        host: "gitlab.com".to_owned(),
-        dialect: ForgeDialect::Gitlab,
-        object_format: ObjectFormat::Sha1,
-        owner: "acme".to_owned(),
-        repository: "widgets".to_owned(),
-        candidate_ref: "refs/heads/feature/x".to_owned(),
-        default_ref: "refs/heads/main".to_owned(),
-    }
-}
-
 /// The gitlab dialect against a real tree: the canonical separator form
 /// resolves, an encoded owner segment is foreign, and a ref matching
 /// neither trusted ref is version-scoped out with its path disclosed.
 #[test]
 pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
     let mut bed = bed();
-    let context = gitlab_context();
+    let context = forge_context(ForgeDialect::Gitlab);
     let (intent, row) = bed
         .run_as(
             Adapter::Markdown,
@@ -468,16 +463,4 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
         "0123456789012345678901234567890123456789"
     );
     assert_eq!(path.as_str(), Some("docs/guide.md"));
-}
-
-pub(crate) fn gitea_context() -> ForgeContext {
-    ForgeContext {
-        host: "codeberg.org".to_owned(),
-        dialect: ForgeDialect::Gitea,
-        object_format: ObjectFormat::Sha1,
-        owner: "acme".to_owned(),
-        repository: "widgets".to_owned(),
-        candidate_ref: "refs/heads/feature/x".to_owned(),
-        default_ref: "refs/heads/main".to_owned(),
-    }
 }

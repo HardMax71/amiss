@@ -30,6 +30,7 @@ fn external_scheme(intent: &Intent) -> Option<&str> {
         | IntentKind::SameRepositoryGithub
         | IntentKind::SameRepositoryGitlab
         | IntentKind::SameRepositoryGitea
+        | IntentKind::SameRepositoryBitbucketCloud
         | IntentKind::SiteRoute
         | IntentKind::Label
         | IntentKind::Unsupported => None,

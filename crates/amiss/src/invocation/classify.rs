@@ -493,8 +493,10 @@ fn classify_forge(
     let dialect = declared
         .or_else(|| ForgeDialect::default_for_host(identity.repository.host()))
         .ok_or(Code::InvalidEvent)?;
-    if matches!(dialect, ForgeDialect::Github | ForgeDialect::Gitea)
-        && identity.repository.owner().contains('/')
+    if matches!(
+        dialect,
+        ForgeDialect::Github | ForgeDialect::Gitea | ForgeDialect::BitbucketCloud
+    ) && identity.repository.owner().contains('/')
     {
         Err(Code::InvalidEvent)
     } else {

@@ -145,6 +145,7 @@ fn dialect_of(case: &Value) -> ForgeDialect {
         "github" => ForgeDialect::Github,
         "gitlab" => ForgeDialect::Gitlab,
         "gitea" => ForgeDialect::Gitea,
+        "bitbucket-cloud" => ForgeDialect::BitbucketCloud,
         other => panic!("unknown dialect {other}"),
     }
 }
@@ -176,6 +177,11 @@ fn split_input(case: &Value) -> (ForgeContext, String) {
                 "https://codeberg.org/acme/widgets/src/commit/{}/{suffix}",
                 text(case, "oid_segment")
             ),
+        ),
+        "bitbucket-cloud-ref-split" => (
+            ForgeDialect::BitbucketCloud,
+            "bitbucket.org",
+            format!("https://bitbucket.org/acme/widgets/src/{suffix}"),
         ),
         _ => (
             ForgeDialect::Github,
@@ -250,6 +256,12 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id:
     }
 }
 
+fn split_case(bed: &mut Bed, case: &Value, id: &str) {
+    let (run_context, url) = split_input(case);
+    let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
+    assert_split_outcome(&intent, &row, case.get("expected").unwrap(), id);
+}
+
 fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
     let value = text(case, "value");
     let (run_context, url) = if text(case, "operation") == "gitlab-line-fragment" {
@@ -275,6 +287,18 @@ fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
                 "refs/heads/main",
             ),
             format!("https://codeberg.org/acme/widgets/src/branch/main/docs/a.md#{value}"),
+        )
+    } else if text(case, "operation") == "bitbucket-cloud-line-fragment" {
+        (
+            context(
+                ForgeDialect::BitbucketCloud,
+                "bitbucket.org",
+                "acme",
+                "widgets",
+                "refs/heads/main",
+                "refs/heads/main",
+            ),
+            format!("https://bitbucket.org/acme/widgets/src/main/docs/a.md#{value}"),
         )
     } else {
         (
@@ -347,6 +371,7 @@ fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
                 IntentKind::SameRepositoryGithub
                     | IntentKind::SameRepositoryGitlab
                     | IntentKind::SameRepositoryGitea
+                    | IntentKind::SameRepositoryBitbucketCloud
             ),
             "{id}: got {:?}",
             intent.kind
@@ -375,6 +400,7 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
         ForgeDialect::Github => "github.com",
         ForgeDialect::Gitlab => "gitlab.com",
         ForgeDialect::Gitea => "codeberg.org",
+        ForgeDialect::BitbucketCloud => "bitbucket.org",
     };
     let run_context = context(
         dialect,
@@ -557,14 +583,15 @@ fn dispatch(bed: &mut Bed, case: &Value) {
     let id = text(case, "id");
     match text(case, "operation") {
         "target-kind" => target_kind_case(bed, case, id),
-        "github-line-fragment" | "gitlab-line-fragment" | "gitea-line-fragment" => {
-            line_fragment_case(bed, case, id);
-        }
-        "github-ref-split" | "gitlab-ref-split" | "gitea-branch-split" | "gitea-commit-split" => {
-            let (run_context, url) = split_input(case);
-            let (intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
-            assert_split_outcome(&intent, &row, case.get("expected").unwrap(), id);
-        }
+        "github-line-fragment"
+        | "gitlab-line-fragment"
+        | "gitea-line-fragment"
+        | "bitbucket-cloud-line-fragment" => line_fragment_case(bed, case, id),
+        "github-ref-split"
+        | "gitlab-ref-split"
+        | "gitea-branch-split"
+        | "gitea-commit-split"
+        | "bitbucket-cloud-ref-split" => split_case(bed, case, id),
         "github-identity" | "forge-identity" => identity_case(bed, case, id),
         "forge-form" => forge_form_case(bed, case, id),
         "forge-dialect-default" => dialect_default_case(case, id),

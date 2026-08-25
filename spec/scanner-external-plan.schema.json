@@ -139,7 +139,7 @@
         },
         "dialect": {
           "description": "The URL grammar that split the path: the known-host table's entry, or the report's own declared dialect on its declared host.",
-          "enum": ["github", "gitlab", "gitea"]
+          "enum": ["github", "gitlab", "gitea", "bitbucket-cloud"]
         },
         "owner": {
           "description": "The owner segments before the name, joined; nested only under the gitlab dialect.",

@@ -14,7 +14,7 @@ site-route, and unsupported references keep their raw destination identity, with
 external class binding scheme, query, and fragment, and the remaining classes binding
 their kind, query, and fragment. The
 [correlation-intent vectors](https://github.com/HardMax71/amiss/blob/main/spec/examples/correlation-intent-vectors.json) pin those
-fields and the GitHub, GitLab, and Gitea equivalence rows through the production projection in
+fields and the GitHub, GitLab, Gitea, and Bitbucket Cloud equivalence rows through the production projection in
 the [vector test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/correlation_vectors.rs).
 
 A candidate edge normally stays within one document. The only cross-document exception is a

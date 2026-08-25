@@ -242,6 +242,7 @@ fn the_kind_projections_are_populated_and_distinct() {
         IntentKind::SameRepositoryGithub,
         IntentKind::SameRepositoryGitlab,
         IntentKind::SameRepositoryGitea,
+        IntentKind::SameRepositoryBitbucketCloud,
         IntentKind::ExternalUrl,
         IntentKind::SiteRoute,
         IntentKind::Label,

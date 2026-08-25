@@ -43,7 +43,8 @@ fn correlation_intent(observation: &Observation) -> CorrelationIntent<'_> {
         IntentKind::RepositoryPath
         | IntentKind::SameRepositoryGithub
         | IntentKind::SameRepositoryGitlab
-        | IntentKind::SameRepositoryGitea => CorrelationIntent::Repository {
+        | IntentKind::SameRepositoryGitea
+        | IntentKind::SameRepositoryBitbucketCloud => CorrelationIntent::Repository {
             commit_oid: intent.commit_oid.as_ref(),
             path: intent.repository_path.as_ref(),
             target_kind: intent.target_kind.unwrap_or(TargetKind::Either),

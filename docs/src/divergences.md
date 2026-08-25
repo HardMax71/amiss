@@ -27,9 +27,10 @@ from the separator, and GitLab reserves the name anyway. Gitea's untyped `src/<r
 form, which some tooling still generates, is foreign because the typed `src/branch/`
 spelling is what the forge emits. A gitea tag link is out of version scope even when its
 segments spell the candidate branch exactly, because no tag is a trusted ref. The
-line-anchor grammars do not leak either: `#L10-20` selects lines only under the gitlab
-dialect, `#L10-L20` only under github and gitea, so the same fragment can resolve on one
-forge and remain unsupported on another. Single-line `#L10` is common to all three.
+Bitbucket Cloud source form gives the commitish exactly one segment, so a candidate branch
+containing `/` is not guessed into its filepath. The line-anchor grammars do not leak either:
+`#L10-20` selects lines only under gitlab, `#L10-L20` only under github and gitea, and
+`#file.rs-10` only under bitbucket-cloud when the basename agrees.
 
 The parser pin records its known differences instead of hiding them. Measured against the
 pinned grammar bundle and against GitHub's own rendering, exactly one difference

@@ -171,6 +171,8 @@ enum StoredForge {
     Github,
     Gitlab,
     Gitea,
+    #[serde(rename = "bitbucket-cloud")]
+    BitbucketCloud,
 }
 
 impl StoredForge {
@@ -179,6 +181,7 @@ impl StoredForge {
             ForgeDialect::Github => Self::Github,
             ForgeDialect::Gitlab => Self::Gitlab,
             ForgeDialect::Gitea => Self::Gitea,
+            ForgeDialect::BitbucketCloud => Self::BitbucketCloud,
         }
     }
 
@@ -187,6 +190,7 @@ impl StoredForge {
             Self::Github => ForgeDialect::Github,
             Self::Gitlab => ForgeDialect::Gitlab,
             Self::Gitea => ForgeDialect::Gitea,
+            Self::BitbucketCloud => ForgeDialect::BitbucketCloud,
         }
     }
 }

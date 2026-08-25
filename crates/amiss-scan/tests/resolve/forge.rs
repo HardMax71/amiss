@@ -4,13 +4,13 @@ use amiss_scan::resolve::{ForgeContext, RAW_EVIDENCE_DOMAIN};
 use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{ResourceName, TargetKind};
 use amiss_wire::digest::hb;
-use amiss_wire::model::{Adapter, ObjectFormat, Oid};
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, ExternalReference, Missing, Target, UnsupportedSemantics, VersionScope,
 };
 
-use crate::support::{Bed, bed, bed_at, gitea_context, github_context, gitlab_context};
+use crate::support::{Bed, bed, bed_at, forge_context};
 
 const HISTORICAL_BODY: &str = "# Historical heading\n\nhistorical body\n";
 
@@ -44,19 +44,24 @@ fn history_bed(git_limits: GitLimits) -> (Bed, String) {
 fn same_repository_intents_retain_query_and_fragment() {
     let cases = [
         (
-            github_context(),
+            forge_context(ForgeDialect::Github),
             IntentKind::SameRepositoryGithub,
             "https://github.com/acme/widgets/blob/feature/x/docs/guide.md?plain=1#intro",
         ),
         (
-            gitlab_context(),
+            forge_context(ForgeDialect::Gitlab),
             IntentKind::SameRepositoryGitlab,
             "https://gitlab.com/acme/widgets/-/blob/feature/x/docs/guide.md?plain=1#intro",
         ),
         (
-            gitea_context(),
+            forge_context(ForgeDialect::Gitea),
             IntentKind::SameRepositoryGitea,
             "https://codeberg.org/acme/widgets/src/branch/feature/x/docs/guide.md?plain=1#intro",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketCloud),
+            IntentKind::SameRepositoryBitbucketCloud,
+            "https://bitbucket.org/acme/widgets/src/feature/docs/guide.md?plain=1#intro",
         ),
     ];
     for (context, kind, destination) in cases {
@@ -87,16 +92,20 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
         .clone();
     let cases = [
         (
-            github_context(),
+            forge_context(ForgeDialect::Github),
             format!("https://github.com/acme/widgets/blob/{raw}/docs/guide.md"),
         ),
         (
-            gitlab_context(),
+            forge_context(ForgeDialect::Gitlab),
             format!("https://gitlab.com/acme/widgets/-/blob/{raw}/docs/guide.md"),
         ),
         (
-            gitea_context(),
+            forge_context(ForgeDialect::Gitea),
             format!("https://codeberg.org/acme/widgets/src/commit/{raw}/docs/guide.md"),
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketCloud),
+            format!("https://bitbucket.org/acme/widgets/src/{raw}/docs/guide.md"),
         ),
     ];
     for (context, destination) in cases {
@@ -119,7 +128,7 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
         );
     }
 
-    let mut sha256 = github_context();
+    let mut sha256 = forge_context(ForgeDialect::Github);
     sha256.object_format = ObjectFormat::Sha256;
     let (_intent, resolution) = bed
         .run_as(
@@ -156,7 +165,7 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
 #[test]
 fn an_exact_historical_url_reads_only_its_own_tree_and_content() {
     let (mut bed, historical) = history_bed(GitLimits::CONTRACT);
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
     let destination = format!("https://github.com/acme/widgets/blob/{historical}/docs/guide.md");
     let (intent, resolution) = bed
         .run_as(
@@ -211,7 +220,7 @@ fn an_exact_historical_url_reads_only_its_own_tree_and_content() {
 #[test]
 fn historical_absence_requires_a_complete_local_walk() {
     let (mut bed, historical) = history_bed(GitLimits::CONTRACT);
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
     let (intent, missing_path) = bed
         .run_as(
             Adapter::Markdown,
@@ -256,7 +265,7 @@ fn historical_queries_stay_outside_unscanned_build_semantics() {
     let (_intent, resolution) = bed
         .run_as(
             Adapter::Markdown,
-            Some(&github_context()),
+            Some(&forge_context(ForgeDialect::Github)),
             "docs/guide.md",
             false,
             &format!("https://github.com/acme/widgets/blob/{historical}/docs/guide.md?plain=1"),
@@ -278,7 +287,7 @@ fn repeated_historical_walks_share_the_tree_entry_budget() {
     let destination = format!("https://github.com/acme/widgets/blob/{historical}/docs/guide.md");
     bed.run_as(
         Adapter::Markdown,
-        Some(&github_context()),
+        Some(&forge_context(ForgeDialect::Github)),
         "docs/guide.md",
         false,
         &destination,
@@ -287,7 +296,7 @@ fn repeated_historical_walks_share_the_tree_entry_budget() {
     assert_eq!(
         bed.run_as(
             Adapter::Markdown,
-            Some(&github_context()),
+            Some(&forge_context(ForgeDialect::Github)),
             "docs/guide.md",
             false,
             &destination,
@@ -303,7 +312,7 @@ fn repeated_historical_walks_share_the_tree_entry_budget() {
 #[test]
 fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
     let raw = "0123456789012345678901234567890123456789";
-    let mut context = github_context();
+    let mut context = forge_context(ForgeDialect::Github);
     context.candidate_ref = format!("refs/heads/{raw}");
     let (intent, resolution) = bed()
         .run_as(
@@ -328,7 +337,7 @@ fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
 #[test]
 fn gitea_recognition_resolves_against_the_tree() {
     let mut bed = bed();
-    let context = gitea_context();
+    let context = forge_context(ForgeDialect::Gitea);
     let (intent, row) = bed
         .run_as(
             Adapter::Markdown,
@@ -396,6 +405,61 @@ fn gitea_recognition_resolves_against_the_tree() {
     );
 }
 
+#[test]
+fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
+    let mut bed = bed();
+    let context = forge_context(ForgeDialect::BitbucketCloud);
+    let (intent, candidate) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://bitbucket.org/acme/widgets/src/feature/src/lib.rs?fileviewer=file-view-default#lib.rs-1",
+        )
+        .unwrap();
+    assert_eq!(intent.kind, IntentKind::SameRepositoryBitbucketCloud);
+    assert_eq!(intent.target_kind, Some(TargetKind::Either));
+    assert_eq!(
+        intent.query.as_deref(),
+        Some("fileviewer=file-view-default")
+    );
+    assert_eq!(intent.fragment.as_deref(), Some("lib.rs-1"));
+    assert!(matches!(candidate, Resolution::Resolved(_)));
+
+    let (_intent, custom_viewer) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&context),
+            "docs/guide.md",
+            false,
+            "https://bitbucket.org/acme/widgets/src/feature/src/lib.rs?fileviewer=custom",
+        )
+        .unwrap();
+    assert!(matches!(
+        custom_viewer,
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::Query(_))
+    ));
+
+    let slashed = ForgeContext {
+        candidate_ref: "refs/heads/feature/x".to_owned(),
+        ..context
+    };
+    let (_intent, no_guessed_split) = bed
+        .run_as(
+            Adapter::Markdown,
+            Some(&slashed),
+            "docs/guide.md",
+            false,
+            "https://bitbucket.org/acme/widgets/src/feature/x/docs/guide.md",
+        )
+        .unwrap();
+    let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = no_guessed_split else {
+        panic!("unexpected resolution: {no_guessed_split:?}");
+    };
+    assert_eq!(path.as_str(), Some("x/docs/guide.md"));
+}
+
 /// One wrong fact makes a same-repository spelling foreign: the owner, the
 /// project, or the form, each alone, on every dialect.
 #[test]
@@ -403,28 +467,36 @@ fn one_wrong_fact_makes_a_foreign_url() {
     let mut bed = bed();
     let cases = [
         (
-            github_context(),
+            forge_context(ForgeDialect::Github),
             "https://github.com/other/widgets/blob/main/docs/guide.md",
         ),
         (
-            github_context(),
+            forge_context(ForgeDialect::Github),
             "https://github.com/acme/other/blob/main/docs/guide.md",
         ),
         (
-            github_context(),
+            forge_context(ForgeDialect::Github),
             "https://github.com/acme/widgets/raw/main/docs/guide.md",
         ),
         (
-            gitea_context(),
+            forge_context(ForgeDialect::Gitea),
             "https://codeberg.org/other/widgets/src/branch/main/docs/guide.md",
         ),
         (
-            gitea_context(),
+            forge_context(ForgeDialect::Gitea),
             "https://codeberg.org/acme/other/src/branch/main/docs/guide.md",
         ),
         (
-            gitlab_context(),
+            forge_context(ForgeDialect::Gitlab),
             "https://gitlab.com/group/widgets/-/blob/main/docs/guide.md",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketCloud),
+            "https://bitbucket.org/other/widgets/src/feature/docs/guide.md",
+        ),
+        (
+            forge_context(ForgeDialect::BitbucketCloud),
+            "https://bitbucket.org/acme/widgets/raw/feature/docs/guide.md",
         ),
     ];
     for (context, destination) in cases {
@@ -446,7 +518,7 @@ fn one_wrong_fact_makes_a_foreign_url() {
 #[test]
 fn a_commit_selector_is_an_exact_oid() {
     let mut bed = bed();
-    let context = gitea_context();
+    let context = forge_context(ForgeDialect::Gitea);
     for selector in [
         "6A66EF14B9B8B174A54CCF8EA4B0DD18F42F9F22",
         "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f2",
@@ -474,7 +546,7 @@ fn a_commit_selector_is_an_exact_oid() {
     ] {
         let context = ForgeContext {
             object_format,
-            ..gitea_context()
+            ..forge_context(ForgeDialect::Gitea)
         };
         let (intent, row) = bed
             .run_as(
@@ -501,7 +573,7 @@ fn nested_group_owners_match_segment_by_segment() {
     let mut bed = bed();
     let nested = ForgeContext {
         owner: "group/sub".to_owned(),
-        ..gitlab_context()
+        ..forge_context(ForgeDialect::Gitlab)
     };
     let (intent, row) = bed
         .run_as(
@@ -535,7 +607,7 @@ fn nested_group_owners_match_segment_by_segment() {
 #[test]
 fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
     let mut bed = bed();
-    let context = gitlab_context();
+    let context = forge_context(ForgeDialect::Gitlab);
     let (tree, tree_row) = bed
         .run_as(
             Adapter::Markdown,
@@ -572,7 +644,7 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
 #[test]
 fn a_directory_hint_needs_a_segment_before_its_slash() {
     let mut bed = bed();
-    let context = gitea_context();
+    let context = forge_context(ForgeDialect::Gitea);
     let (hinted, hinted_row) = bed
         .run_as(
             Adapter::Markdown,
@@ -607,7 +679,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
     let (github, github_row) = bed
         .run_as(
             Adapter::Markdown,
-            Some(&github_context()),
+            Some(&forge_context(ForgeDialect::Github)),
             "docs/guide.md",
             false,
             "https://github.com/acme/widgets/tree/feature/x/",

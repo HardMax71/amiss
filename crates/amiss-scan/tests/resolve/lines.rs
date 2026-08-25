@@ -3,10 +3,10 @@ use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::Adapter;
+use amiss_wire::model::{Adapter, ForgeDialect};
 use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Target, UnsupportedSemantics};
 
-use crate::support::{MIXED_LINES, bed, bed_with, gitea_context, github_context, gitlab_context};
+use crate::support::{MIXED_LINES, bed, bed_with, forge_context};
 
 #[test]
 fn line_fragments_have_a_hard_grammar() {
@@ -291,7 +291,11 @@ fn line_selection_bounds_are_structural_missing_outcomes() {
 #[test]
 fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
     let mut bed = bed();
-    let contexts = [github_context(), gitlab_context(), gitea_context()];
+    let contexts = [
+        forge_context(ForgeDialect::Github),
+        forge_context(ForgeDialect::Gitlab),
+        forge_context(ForgeDialect::Gitea),
+    ];
     let native_cases = [
         (&contexts[0], "L2-L3", "L2-3"),
         (&contexts[1], "L2-3", "L2-L3"),

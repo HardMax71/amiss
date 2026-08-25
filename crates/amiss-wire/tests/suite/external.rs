@@ -388,6 +388,10 @@ fn a_known_host_destination_carries_its_forge_shape() {
             r#"{"dialect":"gitea","form":"src","host":"codeberg.org","name":"widgets","owner":"acme","tail":"branch/main/a.md"}"#,
         ),
         (
+            "https://bitbucket.org/acme/widgets/src/main/a.md",
+            r#"{"dialect":"bitbucket-cloud","form":"src","host":"bitbucket.org","name":"widgets","owner":"acme","tail":"main/a.md"}"#,
+        ),
+        (
             "https://github.com/acme/widgets/blob/main/f.md#L10",
             r#"{"dialect":"github","form":"blob","host":"github.com","name":"widgets","owner":"acme","tail":"main/f.md"}"#,
         ),

@@ -37,7 +37,7 @@
     },
     "forge": {
       "description": "The same-repository URL dialect selected by the authenticated caller. Null means no forge URL grammar applies.",
-      "enum": ["github", "gitlab", "gitea", null]
+      "enum": ["github", "gitlab", "gitea", "bitbucket-cloud", null]
     },
     "candidate_ref": {
       "description": "The candidate branch used when recognizing same-repository forge URLs. It may differ from the protected target branch for pull requests.",
@@ -89,7 +89,9 @@
     },
     {
       "if": {
-        "properties": { "forge": { "enum": ["github", "gitea"] } },
+        "properties": {
+          "forge": { "enum": ["github", "gitea", "bitbucket-cloud"] }
+        },
         "required": ["forge"]
       },
       "then": {
