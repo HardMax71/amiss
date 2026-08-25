@@ -2,6 +2,7 @@ use std::ffi::OsString;
 
 use amiss::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};
 use amiss_wire::controls::Profile;
+use amiss_wire::model::ForgeDialect;
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -171,7 +172,7 @@ fn classifies_profile_host_and_event_rows() {
     );
     assert_eq!(
         other_forge.forge,
-        Some(amiss_wire::model::ForgeDialect::Gitlab),
+        Some(ForgeDialect::Gitlab),
         "the known-host table names the dialect"
     );
 
@@ -548,7 +549,7 @@ fn refuses_an_unknown_host_without_a_dialect() {
         flagged.identity.unwrap().repository.owner(),
         "group/subgroup"
     );
-    assert_eq!(flagged.forge, Some(amiss_wire::model::ForgeDialect::Gitlab));
+    assert_eq!(flagged.forge, Some(ForgeDialect::Gitlab));
 }
 
 /// dialect refuses a nested owner it could never match.
@@ -568,25 +569,24 @@ fn classifies_the_forge_dialect_grammar() {
         )
     };
 
-    let Outcome::Accepted(defaulted_command) = parse_tokens(&identity("github.com/acme/repo"))
-    else {
-        panic!("expected acceptance");
-    };
-    let amiss::invocation::Command::Scan(defaulted) = *defaulted_command else {
-        panic!("expected a scan command");
-    };
-    assert_eq!(
-        defaulted.forge,
-        Some(amiss_wire::model::ForgeDialect::Github),
-        "the known-host table fills the dialect"
-    );
+    for (repository, expected) in [
+        ("github.com/acme/repo", ForgeDialect::Github),
+        ("codeberg.org/acme/repo", ForgeDialect::Gitea),
+        ("bitbucket.org/acme/repo", ForgeDialect::BitbucketCloud),
+    ] {
+        assert_eq!(
+            scan_of(parse_tokens(&identity(repository))).forge,
+            Some(expected),
+            "{repository} selects its known-host dialect"
+        );
+    }
 
     let explicit = with(
         &identity("ghes.corp.example/acme/repo"),
         &["--forge", "github"],
     );
     let ghes = scan_of(parse_tokens(&explicit));
-    assert_eq!(ghes.forge, Some(amiss_wire::model::ForgeDialect::Github));
+    assert_eq!(ghes.forge, Some(ForgeDialect::Github));
     assert_eq!(
         ghes.identity.unwrap().repository.host(),
         "ghes.corp.example"
@@ -597,18 +597,6 @@ fn classifies_the_forge_dialect_grammar() {
         vec![Code::InvalidEvent],
         "the github dialect cannot match a nested owner"
     );
-    let Outcome::Accepted(codeberg_command) = parse_tokens(&identity("codeberg.org/acme/repo"))
-    else {
-        panic!("expected acceptance");
-    };
-    let amiss::invocation::Command::Scan(codeberg) = *codeberg_command else {
-        panic!("expected a scan command");
-    };
-    assert_eq!(
-        codeberg.forge,
-        Some(amiss_wire::model::ForgeDialect::Gitea),
-        "codeberg defaults to the gitea dialect"
-    );
     assert_eq!(
         rejected_codes(parse_tokens(&with(
             &identity("git.example.internal/group/sub/repo"),
@@ -616,6 +604,14 @@ fn classifies_the_forge_dialect_grammar() {
         ))),
         vec![Code::InvalidEvent],
         "the gitea dialect cannot match a nested owner either"
+    );
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(
+            &identity("bitbucket.example/group/sub/repo"),
+            &["--forge", "bitbucket-cloud"],
+        ))),
+        vec![Code::InvalidEvent],
+        "the Bitbucket Cloud dialect cannot match a nested owner"
     );
     assert_eq!(
         rejected_codes(parse_tokens(&with(

@@ -517,6 +517,13 @@
       "expected": "gitea"
     },
     {
+      "id": "FD-007-bitbucket-cloud-default",
+      "operation": "forge-dialect-default",
+      "host": "bitbucket.org",
+      "flag": null,
+      "expected": "bitbucket-cloud"
+    },
+    {
       "id": "GT-001-branch-either-kind",
       "operation": "forge-form",
       "dialect": "gitea",
@@ -602,6 +609,72 @@
       "dialect": "gitea",
       "suffix": "acme/widgets/src/commit/6A66EF14B9B8B174A54CCF8EA4B0DD18F42F9F22/docs/a.md",
       "expected": "foreign"
+    },
+    {
+      "id": "BC-001-candidate-source",
+      "operation": "bitbucket-cloud-ref-split",
+      "encoded_suffix": "main/docs/a.md",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "candidate",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "BC-002-other-named-ref-known-path",
+      "operation": "bitbucket-cloud-ref-split",
+      "encoded_suffix": "release/docs/a.md",
+      "candidate_ref": "refs/heads/main",
+      "default_ref": "refs/heads/main",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "BC-003-commit-unavailable-version-scope",
+      "operation": "bitbucket-cloud-ref-split",
+      "encoded_suffix": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22/docs/a.md",
+      "expected": {
+        "status": "unsupported-version-scope",
+        "commit_oid": "6a66ef14b9b8b174a54ccf8ea4b0dd18f42f9f22",
+        "path": "docs/a.md"
+      }
+    },
+    {
+      "id": "BC-004-line",
+      "operation": "bitbucket-cloud-line-fragment",
+      "value": "a.md-10",
+      "expected": true
+    },
+    {
+      "id": "BC-005-line-filename-mismatch",
+      "operation": "bitbucket-cloud-line-fragment",
+      "value": "other.md-10",
+      "expected": false
+    },
+    {
+      "id": "BC-006-directory-hint",
+      "operation": "forge-form",
+      "dialect": "bitbucket-cloud",
+      "suffix": "acme/widgets/src/main/docs/",
+      "expected": "tree"
+    },
+    {
+      "id": "BC-007-raw-form-foreign",
+      "operation": "forge-form",
+      "dialect": "bitbucket-cloud",
+      "suffix": "acme/widgets/raw/main/docs/a.md",
+      "expected": "foreign"
+    },
+    {
+      "id": "BC-008-other-object-format-ambiguous",
+      "operation": "bitbucket-cloud-ref-split",
+      "encoded_suffix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/docs/a.md",
+      "expected": {
+        "status": "unsupported-version-scope"
+      }
     }
   ]
 }

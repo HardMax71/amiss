@@ -429,6 +429,8 @@ pub enum ForgeDialect {
     Github,
     Gitlab,
     Gitea,
+    #[strum(serialize = "bitbucket-cloud")]
+    BitbucketCloud,
 }
 
 impl ForgeDialect {
@@ -439,6 +441,7 @@ impl ForgeDialect {
             "github.com" => Some(Self::Github),
             "gitlab.com" => Some(Self::Gitlab),
             "codeberg.org" => Some(Self::Gitea),
+            "bitbucket.org" => Some(Self::BitbucketCloud),
             _ => None,
         }
     }

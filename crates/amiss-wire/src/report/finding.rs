@@ -7,6 +7,7 @@ pub enum IntentKind {
     SameRepositoryGithub,
     SameRepositoryGitlab,
     SameRepositoryGitea,
+    SameRepositoryBitbucketCloud,
     ExternalUrl,
     SiteRoute,
     Label,

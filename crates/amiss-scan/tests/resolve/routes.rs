@@ -1,11 +1,11 @@
 use amiss_scan::Resolution;
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::resolution::{Missing, Target};
 
 use amiss_wire::model::Adapter;
 use amiss_wire::resolution::UnsupportedSemantics;
 
-use crate::support::{bed, github_context};
+use crate::support::{bed, forge_context};
 
 /// A destination the tree does not hold is answered by the file a modelled
 /// router would serve under that spelling, and the report names that file.
@@ -82,7 +82,7 @@ fn a_promised_directory_and_a_forge_url_are_never_re_spelled() {
     };
     assert_eq!(path.as_str(), Some("docs/guide"));
 
-    let context = github_context();
+    let context = forge_context(ForgeDialect::Github);
     let row = bed
         .run_as(
             Adapter::Markdown,

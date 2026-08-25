@@ -93,6 +93,10 @@ fn the_known_host_table_is_exact() {
         ForgeDialect::default_for_host("codeberg.org"),
         Some(ForgeDialect::Gitea)
     );
+    assert_eq!(
+        ForgeDialect::default_for_host("bitbucket.org"),
+        Some(ForgeDialect::BitbucketCloud)
+    );
     assert_eq!(ForgeDialect::default_for_host("forge.example"), None);
 }
 

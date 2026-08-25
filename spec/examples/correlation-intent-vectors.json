@@ -527,6 +527,28 @@
         "external_scheme": null
       },
       "expected_equal": true
+    },
+    {
+      "id": "CI-024-native-bitbucket-cloud-equivalent",
+      "left": {
+        "kind": "repository-path",
+        "raw_destination_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "right": {
+        "kind": "same-repository-bitbucket-cloud",
+        "raw_destination_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "repository_path": "docs/a.md",
+        "target_kind": "either",
+        "query_digest": null,
+        "fragment_digest": null,
+        "external_scheme": null
+      },
+      "expected_equal": true
     }
   ]
 }

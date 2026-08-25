@@ -133,7 +133,8 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             }
             IntentKind::SameRepositoryGithub
             | IntentKind::SameRepositoryGitlab
-            | IntentKind::SameRepositoryGitea => {
+            | IntentKind::SameRepositoryGitea
+            | IntentKind::SameRepositoryBitbucketCloud => {
                 counts.same_repository = counts.same_repository.saturating_add(1);
             }
             IntentKind::ExternalUrl => {

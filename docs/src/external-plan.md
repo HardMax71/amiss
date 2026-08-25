@@ -25,7 +25,7 @@ Each row carries the destination exactly as the report recorded it, after the fo
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted
 documents naming it. Unavailable exact history uses `https`, the only scheme accepted by the
 same-repository forge grammar. A destination on a forge host the run can name, github.com,
-gitlab.com, codeberg.org, or the report's own declared host under its declared dialect,
+gitlab.com, codeberg.org, bitbucket.org, or the report's own declared host under its declared dialect,
 also carries a `repository` object: host, dialect, owner, name, then verbatim the path
 segment after them as `form` and everything later as one opaque `tail`. The tail stays
 unsplit on purpose. Branch names may contain slashes, so separating revision from path

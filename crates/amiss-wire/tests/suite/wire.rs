@@ -245,6 +245,11 @@ fn the_open_identity_grammar_admits_claims_and_keeps_structure() {
         ForgeDialect::default_for_host("github.com"),
         Some(ForgeDialect::Github)
     );
+    assert_eq!(
+        ForgeDialect::default_for_host("bitbucket.org"),
+        Some(ForgeDialect::BitbucketCloud)
+    );
     assert_eq!(ForgeDialect::default_for_host("ghes.corp.example"), None);
     assert_eq!(ForgeDialect::Github.as_ref(), "github");
+    assert_eq!(ForgeDialect::BitbucketCloud.as_ref(), "bitbucket-cloud");
 }

@@ -93,10 +93,12 @@ impl EvaluationRequest {
         if !identity_fields.iter().all(|present| *present)
             && identity_fields.iter().any(|present| *present)
             || forge.is_some() && repository.is_none()
-            || matches!(forge, Some(ForgeDialect::Github | ForgeDialect::Gitea))
-                && repository
-                    .as_ref()
-                    .is_some_and(|identity| identity.owner().contains('/'))
+            || matches!(
+                forge,
+                Some(ForgeDialect::Github | ForgeDialect::Gitea | ForgeDialect::BitbucketCloud)
+            ) && repository
+                .as_ref()
+                .is_some_and(|identity| identity.owner().contains('/'))
         {
             return fail(&forge_path, ErrorKind::Inconsistent);
         }

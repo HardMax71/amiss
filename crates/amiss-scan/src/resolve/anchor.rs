@@ -82,7 +82,7 @@ pub(super) fn fragment_resolution(
     let Target::Blob(blob) = entry else {
         return Err(Error::Internal);
     };
-    if let Some(range) = line_fragment(forge, decoded) {
+    if let Some(range) = line_fragment(forge, path, decoded) {
         return line_resolution(resolver, path, mode, blob, range);
     }
     match classify(path.as_bytes()) {

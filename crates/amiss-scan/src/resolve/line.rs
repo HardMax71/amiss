@@ -180,17 +180,35 @@ pub(crate) fn safe_line_number(text: &str) -> Option<u64> {
     text.parse::<u64>().ok().filter(|value| *value <= MAX_SAFE)
 }
 
-/// Line-fragment syntax after one decode, in the dialect's spelling:
-/// `L<n>` alone, or the range form the forge renders. Each number safe, and
-/// a range end at least its start. A native reference uses the declared run
-/// dialect, falling back to the GitHub/Gitea spelling when no forge context
-/// exists.
-pub(super) fn line_fragment(forge: Option<ForgeDialect>, decoded: &str) -> Option<LineRange> {
+/// Line-fragment syntax after one decode, in the dialect's spelling. A native
+/// reference uses the declared run dialect, falling back to GitHub spelling.
+pub(super) fn line_fragment(
+    forge: Option<ForgeDialect>,
+    path: &RepoPath,
+    decoded: &str,
+) -> Option<LineRange> {
     let number = safe_line_number;
+    if forge == Some(ForgeDialect::BitbucketCloud) {
+        let (name, line) = decoded.rsplit_once('-')?;
+        let basename = path
+            .as_bytes()
+            .rsplit(|byte| *byte == b'/')
+            .next()
+            .unwrap_or_default();
+        if name.as_bytes() != basename {
+            return None;
+        }
+        let line = number(line)?;
+        return Some(LineRange {
+            first: line,
+            last: line,
+        });
+    }
     let rest = decoded.strip_prefix('L')?;
-    let range = match forge {
-        None | Some(ForgeDialect::Github | ForgeDialect::Gitea) => rest.split_once("-L"),
-        Some(ForgeDialect::Gitlab) => rest.split_once('-'),
+    let range = if forge == Some(ForgeDialect::Gitlab) {
+        rest.split_once('-')
+    } else {
+        rest.split_once("-L")
     };
     match range {
         None => number(rest).map(|line| LineRange {

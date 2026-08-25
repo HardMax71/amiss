@@ -20,6 +20,7 @@ pub(super) fn resolve(
         ForgeDialect::Github => github(context, suffix),
         ForgeDialect::Gitlab => gitlab(context, suffix),
         ForgeDialect::Gitea => gitea(context, suffix),
+        ForgeDialect::BitbucketCloud => bitbucket_cloud(context, suffix),
     };
     match route {
         ForgeRoute::Foreign => Ok(foreign_row(query, fragment)),
@@ -33,6 +34,13 @@ pub(super) fn resolve(
                 version,
                 path,
             } = matched;
+            let lookup_query = if context.dialect == ForgeDialect::BitbucketCloud
+                && query.as_deref() == Some("fileviewer=file-view-default")
+            {
+                None
+            } else {
+                query.as_deref()
+            };
             let (commit_oid, resolution) = match version {
                 ForgeVersion::Candidate => (
                     None,
@@ -40,7 +48,7 @@ pub(super) fn resolve(
                         resolver,
                         &path,
                         target_kind,
-                        query.as_deref(),
+                        lookup_query,
                         fragment.as_deref(),
                         Some(context.dialect),
                     )?,
@@ -55,7 +63,7 @@ pub(super) fn resolve(
                         &oid,
                         &path,
                         target_kind,
-                        query.as_deref(),
+                        lookup_query,
                         fragment.as_deref(),
                         context.dialect,
                     )?
@@ -137,12 +145,7 @@ fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     else {
         return ForgeRoute::Foreign;
     };
-    let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
-    if !literal_ascii(owner)
-        || !literal_ascii(repository)
-        || !owner.eq_ignore_ascii_case(&identity.owner)
-        || !repository.eq_ignore_ascii_case(&identity.repository)
-    {
+    if !repository_pair_matches(identity, owner, repository) {
         return ForgeRoute::Foreign;
     }
     let target_kind = match *form {
@@ -152,20 +155,16 @@ fn github(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     };
 
     let tolerate_terminal_slash = target_kind == TargetKind::Tree;
-    match versioned_split(
-        identity,
-        tolerate_terminal_slash,
-        segments.get(3..).unwrap_or_default(),
-        TailVersions::NamedOrCommit,
-    ) {
-        Ok((version, path)) => ForgeRoute::Same(ForgeMatch {
-            intent_kind: IntentKind::SameRepositoryGithub,
-            target_kind,
-            version,
-            path,
-        }),
-        Err(resolution) => ForgeRoute::Unsupported(resolution),
-    }
+    same_route(
+        IntentKind::SameRepositoryGithub,
+        target_kind,
+        versioned_split(
+            identity,
+            tolerate_terminal_slash,
+            segments.get(3..).unwrap_or_default(),
+            TailVersions::NamedOrCommit,
+        ),
+    )
 }
 
 /// GitLab's canonical form: every segment before the reserved `-` separator
@@ -208,20 +207,16 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let tail = segments
         .get(separator.saturating_add(2)..)
         .unwrap_or_default();
-    match versioned_split(
-        identity,
-        target_kind == TargetKind::Tree,
-        tail,
-        TailVersions::NamedOrCommit,
-    ) {
-        Ok((version, path)) => ForgeRoute::Same(ForgeMatch {
-            intent_kind: IntentKind::SameRepositoryGitlab,
-            target_kind,
-            version,
-            path,
-        }),
-        Err(resolution) => ForgeRoute::Unsupported(resolution),
-    }
+    same_route(
+        IntentKind::SameRepositoryGitlab,
+        target_kind,
+        versioned_split(
+            identity,
+            target_kind == TargetKind::Tree,
+            tail,
+            TailVersions::NamedOrCommit,
+        ),
+    )
 }
 
 /// The gitea family's typed forms, shared by Gitea, Forgejo, and Codeberg:
@@ -234,23 +229,12 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
 /// `src/<ref>/` form and every other selector are foreign: only the spellings
 /// the forge's own browser emits are pinned.
 fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
-    let segments: Vec<&str> = suffix.split('/').collect();
-    let literal_ascii = |text: &str| !text.is_empty() && text.is_ascii() && !text.contains('%');
-    let (Some(owner), Some(project), Some(&"src"), Some(selector)) = (
-        segments.first(),
-        segments.get(1),
-        segments.get(2),
-        segments.get(3),
-    ) else {
+    let Some(segments) = source_segments(identity, suffix) else {
         return ForgeRoute::Foreign;
     };
-    if !literal_ascii(owner)
-        || !literal_ascii(project)
-        || !owner.eq_ignore_ascii_case(&identity.owner)
-        || !project.eq_ignore_ascii_case(&identity.repository)
-    {
+    let Some(selector) = segments.get(3) else {
         return ForgeRoute::Foreign;
-    }
+    };
     let raw_tail = segments.get(5..).unwrap_or_default();
     let directory_hint = raw_tail.len() > 1 && raw_tail.last() == Some(&"");
     let target_kind = if directory_hint {
@@ -276,25 +260,118 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
                     VersionScope::UnknownPath,
                 ));
             }
-            match decoded_tail(directory_hint, raw_tail) {
-                Ok(decoded) => {
-                    contained_path(&decoded).map(|path| (ForgeVersion::Commit(commit_oid), path))
-                }
-                Err(resolution) => Err(resolution),
-            }
+            decoded_tail(directory_hint, raw_tail).and_then(|decoded| {
+                contained_path(&decoded).map(|path| (ForgeVersion::Commit(commit_oid), path))
+            })
         }
         "tag" => Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath)),
         _ => return ForgeRoute::Foreign,
     };
-    match split {
-        Ok((version, path)) => ForgeRoute::Same(ForgeMatch {
-            intent_kind: IntentKind::SameRepositoryGitea,
+    same_route(IntentKind::SameRepositoryGitea, target_kind, split)
+}
+
+/// Bitbucket Cloud's source form has one commitish segment, so the path split
+/// is known even when that segment names an untrusted branch or tag.
+fn bitbucket_cloud(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
+    let Some(segments) = source_segments(identity, suffix) else {
+        return ForgeRoute::Foreign;
+    };
+
+    let raw_tail = segments.get(3..).unwrap_or_default();
+    let directory_hint = raw_tail.len() > 2 && raw_tail.last() == Some(&"");
+    let target_kind = if directory_hint {
+        TargetKind::Tree
+    } else {
+        TargetKind::Either
+    };
+    same_route(
+        IntentKind::SameRepositoryBitbucketCloud,
+        target_kind,
+        bitbucket_cloud_split(identity, directory_hint, raw_tail),
+    )
+}
+
+fn bitbucket_cloud_split(
+    identity: &ForgeContext,
+    directory_hint: bool,
+    raw_tail: &[&str],
+) -> Result<(ForgeVersion, RepoPath), Resolution> {
+    let decoded = decoded_tail(directory_hint, raw_tail)?;
+    let version = decoded
+        .first()
+        .ok_or(Resolution::Invalid(InvalidReference::Syntax))?;
+    let candidate = identity
+        .candidate_ref
+        .strip_prefix("refs/heads/")
+        .unwrap_or(identity.candidate_ref.as_str())
+        .as_bytes();
+    let default = identity
+        .default_ref
+        .strip_prefix("refs/heads/")
+        .unwrap_or(identity.default_ref.as_str())
+        .as_bytes();
+    let candidate_matches = version.as_slice() == candidate;
+    let default_matches = version.as_slice() == default;
+    let oid_format = match version.len() {
+        40 => Some(ObjectFormat::Sha1),
+        64 => Some(ObjectFormat::Sha256),
+        _ => None,
+    };
+    let commit_oid = oid_format
+        .zip(std::str::from_utf8(version).ok())
+        .and_then(|(format, value)| Oid::new(format, value.to_owned()));
+    if commit_oid
+        .as_ref()
+        .is_some_and(|oid| oid.object_format() != identity.object_format)
+        || commit_oid.is_some() && (candidate_matches || default_matches)
+    {
+        return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
+    }
+    let literal_oid = raw_tail
+        .first()
+        .is_some_and(|raw| raw.as_bytes() == version.as_slice());
+    let version = match commit_oid.filter(|_oid| literal_oid) {
+        Some(oid) => ForgeVersion::Commit(oid),
+        None if candidate_matches => ForgeVersion::Candidate,
+        None => ForgeVersion::OtherNamedRef,
+    };
+    Ok((
+        version,
+        contained_path(decoded.get(1..).unwrap_or_default())?,
+    ))
+}
+
+fn repository_pair_matches(identity: &ForgeContext, owner: &str, repository: &str) -> bool {
+    [owner, repository]
+        .iter()
+        .all(|text| !text.is_empty() && text.is_ascii() && !text.contains('%'))
+        && owner.eq_ignore_ascii_case(&identity.owner)
+        && repository.eq_ignore_ascii_case(&identity.repository)
+}
+
+fn source_segments<'a>(identity: &ForgeContext, suffix: &'a str) -> Option<Vec<&'a str>> {
+    let segments: Vec<&str> = suffix.split('/').collect();
+    let (Some(owner), Some(repository), Some(&"src")) =
+        (segments.first(), segments.get(1), segments.get(2))
+    else {
+        return None;
+    };
+    repository_pair_matches(identity, owner, repository).then_some(segments)
+}
+
+fn same_route(
+    intent_kind: IntentKind,
+    target_kind: TargetKind,
+    split: Result<(ForgeVersion, RepoPath), Resolution>,
+) -> ForgeRoute {
+    split.map_or_else(ForgeRoute::Unsupported, |(version, path)| {
+        ForgeRoute::Same(ForgeMatch {
+            intent_kind,
             target_kind,
             version,
             path,
-        }),
-        Err(resolution) => ForgeRoute::Unsupported(resolution),
-    }
+        })
+    })
 }
 
 /// Splits a decoded tail through the two trusted refs and, where the forge

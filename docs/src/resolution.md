@@ -35,18 +35,19 @@ complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
 dialect's spelling is converted to a path when it names the candidate branch or one full lowercase
-object ID in the run's declared SHA-1 or SHA-256 format. Exact IDs on all three dialects resolve
+object ID in the run's declared SHA-1 or SHA-256 format. Exact IDs on all four dialects resolve
 only through that commit and its objects already present under the declared Git roots. A completely
 walked local tree can prove a missing path; an unavailable commit, tree, or target object instead
 retains `unsupported-version-scope` with the exact commit and contained path, plus the decoded URL
 for the provider-evidence layer. The engine still fetches nothing. A named branch or tag outside the
-candidate remains version-scoped without guessed commit identity. Historical queries and
-transclusion-dependent absence remain unsupported because an object walk is not a historical site
-build. A URL outside the declared repository is external. It records the decoded destination so the
+candidate remains version-scoped without guessed commit identity. Historical queries other than
+Bitbucket Cloud's canonical `fileviewer=file-view-default` choice and transclusion-dependent absence
+remain unsupported because an object walk is not a historical site build. A URL outside the
+declared repository is external. It records the decoded destination so the
 layer that does fetch can read the list without walking the tree again, and it raises no finding,
 because there is nothing it decided.
 
-Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
+Four dialects exist, each pinned to the exact URL grammar its forge's browser emits.
 The github dialect reads `owner/name/blob-or-tree/ref/path` and serves GitHub and any
 GitHub Enterprise host the identity declares. The gitlab dialect reads the canonical
 separator form `group[/subgroup...]/name/-/blob-or-tree/ref/path`, nested groups compared
@@ -54,9 +55,13 @@ whole. The gitea dialect serves Gitea, Forgejo, and Codeberg with typed selector
 `src/branch/` splits like the others, `src/commit/` resolves its full lowercase object ID from the
 local object database and retains a known immutable scope when those objects are unavailable, and
 `src/tag/` is always out of version scope because no tag is a trusted ref. Line anchors
-follow the forge: `#L10-L20` is a line reference on github and gitea, `#L10-20` on
-gitlab, and each range spelling is nothing on the other's forge. `#L10` is common to all
-three. Relative references use the run's declared dialect when one is present. A recognized reference's
+The [bitbucket-cloud dialect](https://support.atlassian.com/bitbucket-cloud/docs/hyperlink-to-source-code-in-bitbucket/)
+reads `owner/name/src/commitish/path`; Cloud places the
+commitish in one segment, so another branch or tag still retains a known path, while a candidate
+branch containing `/` cannot match that form. Its canonical default-viewer query is presentation
+only. Line anchors follow the forge: `#L10-L20` is a line reference on github and gitea,
+`#L10-20` on gitlab, and `#lib.rs-10` on bitbucket-cloud when `lib.rs` is the target's exact
+basename. Relative references use the run's declared dialect when one is present. A recognized reference's
 intent kind names the dialect that read it, not the host, so an Enterprise repository's
 links carry the same kind GitHub's do. A branch spelled exactly like a full object ID is refused as
 ambiguous rather than assigned whichever interpretation happens to win on a forge.
