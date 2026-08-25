@@ -163,6 +163,54 @@ fn the_tools_composite_reads_the_bench() {
     );
 }
 
+#[test]
+fn retry_local_external_evidence_is_validated_before_reuse() {
+    let raw = fs::read_to_string(repository_root().join(".github/workflows/ci.yml"))
+        .expect("the CI workflow is readable");
+    let rail = raw
+        .split_once("\n  external-advisory:\n")
+        .and_then(|(_, rest)| rest.split_once("\n  fuzz:\n"))
+        .map(|(rail, _)| rail)
+        .expect("the external advisory job is bounded by the fuzz job");
+
+    assert_eq!(rail.matches("uses: actions/cache/restore@").count(), 1);
+    assert_eq!(rail.matches("uses: actions/cache/save@").count(), 1);
+    assert_eq!(rail.matches("continue-on-error: true").count(), 2);
+    assert!(rail.contains("if: github.run_attempt != '1'"));
+    assert_eq!(
+        rail.matches("${{ runner.temp }}/amiss-external/evidence.json")
+            .count(),
+        2
+    );
+    assert!(!rail.contains("restore-keys:"));
+    for identity in [
+        "external-evidence-v1-amiss-probe-default",
+        "${{ github.run_id }}",
+        "${{ github.sha }}",
+        "hashFiles('Cargo.lock', 'controller/probe/Cargo.toml')",
+    ] {
+        assert_eq!(
+            rail.matches(identity).count(),
+            2,
+            "cache key lost {identity}"
+        );
+    }
+    assert!(rail.contains("cacheable=\\(.payload.introduced | length > 0)"));
+    assert!(rail.contains("steps.external-advisory.outputs.produced == 'true'"));
+    assert_eq!(
+        rail.matches("./target/release/amiss external-assess")
+            .count(),
+        2
+    );
+    let validation = rail
+        .find("if [ -f \"$evidence\" ]")
+        .expect("cached evidence is checked");
+    let probe = rail
+        .find("./target/release/amiss-probe --plan")
+        .expect("the fallback probe remains");
+    assert!(validation < probe, "the cache bypasses evidence validation");
+}
+
 /// The agent lanes install through the composite, never through their own pins.
 #[test]
 fn the_agent_lanes_ride_the_composite() {
