@@ -155,7 +155,7 @@ declare_taxonomy! {
             metadata: &UNSUPPORTED_OBSERVATION,
         },
         UnsupportedVersionScope => {
-            meaning: "a forge URL names this repository at another version, a different branch, tag, or commit; only the candidate version is read, so the link is recognized and left unresolved",
+            meaning: "a forge URL names this repository at another named version or an exact commit whose required objects are unavailable; use the candidate ref, or make the exact commit available",
             metadata: &UNSUPPORTED_OBSERVATION,
         },
         UnsupportedCapability => {

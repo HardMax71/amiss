@@ -1,9 +1,10 @@
 # The external plan
 
-A [report](report.md) records every external destination where it was seen and decides
-nothing about it, because the engine never fetches one. The external plan is the pure
-derivation that turns one written report into the work another layer may do: which
-distinct destinations this change introduced, which it removed, and where each one lives.
+A [report](report.md) retains a destination when its resolution delegates evidence to another
+layer: an external URL the engine does not judge, or a same-repository exact commit whose required
+objects are unavailable locally. The external plan is the pure derivation that turns one written
+report into the work another layer may do: which distinct delegated destinations this change
+introduced, which it removed, and where each one lives.
 
 ```sh
 amiss external-plan --report report.json --format json
@@ -21,8 +22,9 @@ counted under `retained_count` and never listed, which keeps the plan proportion
 the change rather than to the corpus.
 
 Each row carries the destination exactly as the report recorded it, after the format's
-own decoding, the address a fetcher would request; its lowercased scheme; and the sorted
-documents naming it. A destination on a forge host the run can name, github.com,
+own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted
+documents naming it. Unavailable exact history uses `https`, the only scheme accepted by the
+same-repository forge grammar. A destination on a forge host the run can name, github.com,
 gitlab.com, codeberg.org, or the report's own declared host under its declared dialect,
 also carries a `repository` object: host, dialect, owner, name, then verbatim the path
 segment after them as `form` and everything later as one opaque `tail`. The tail stays
@@ -46,5 +48,5 @@ and the composition with a checker that does fetch is one pipe, shown in
 Exit 0 wrote the plan, human or JSON. Exit 2 means the input could not be trusted:
 unreadable, larger than a scanner report can be, not the scanner's strict JSON, not a
 report envelope, a payload that fails its recorded digest, an incomplete report, or an
-external occurrence missing its destination, document, or scheme. There is no exit 1,
+eligible occurrence missing its destination, document, or required scheme. There is no exit 1,
 since a plan carries data and no verdict.
