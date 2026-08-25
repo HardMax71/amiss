@@ -103,6 +103,7 @@ name = "amiss-controller"
 version = "0.25.0"
 dependencies = [
  "amiss-bootstrap",
+ "amiss-controller-files",
  "amiss-controller-fixtures",
  "amiss-fixtures",
  "amiss-git",
@@ -110,10 +111,12 @@ dependencies = [
  "amiss-wire",
  "atomicwrites",
  "base64 0.23.1",
+ "cap-std",
  "flate2",
  "getrandom 0.4.3",
  "hex",
  "hmac",
+ "html5gum",
  "percent-encoding",
  "processkit",
  "same-file",
@@ -2254,6 +2257,12 @@ checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
 ]
+
+[[package]]
+name = "html5gum"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "428502d3ec1742c35e015871aef742bc4722a9acfcb616b8ff79b519922e1c36"
 
 [[package]]
 name = "http"

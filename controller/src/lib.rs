@@ -16,6 +16,7 @@ mod file_ledger;
 mod identity;
 mod ingress;
 mod intersphinx;
+mod mdbook;
 mod orchestration;
 mod plans;
 mod provider;
@@ -58,6 +59,9 @@ pub use ingress::{
 };
 pub use intersphinx::{
     INTERSPHINX_INVENTORY_BYTES, IntersphinxError, IntersphinxInventory, intersphinx_evidence,
+};
+pub use mdbook::{
+    MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, mdbook_site_evidence,
 };
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,

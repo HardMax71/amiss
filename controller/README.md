@@ -7,7 +7,7 @@ so the scanner an `amiss` user downloads carries none of this.
 They separate shared mechanics from provider code:
 
 - `amiss-controller` defines provider-neutral ingress, orchestration, durable delivery records,
-  and supervised bootstrap contracts.
+  bounded semantic-evidence producers, and supervised bootstrap contracts.
 - `amiss-controller-files` owns bounded no-follow reads for local trust files.
 - `amiss-controller-constraint` derives one canonical execution constraint from an exact local
   action commit and bootstrap.
