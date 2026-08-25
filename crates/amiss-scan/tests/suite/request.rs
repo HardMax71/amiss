@@ -215,7 +215,7 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
 fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let valid = semantic_evidence(
         "site-build",
-        "0.2.0",
+        "0.3.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![
@@ -234,7 +234,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let mut incomplete = valid.clone();
     incomplete.complete = false;
     let mut unsupported = valid.clone();
-    unsupported.producer_version = "0.1.0".to_owned();
+    unsupported.producer_version = "0.2.0".to_owned();
     let mut invalid_route = valid.clone();
     invalid_route.observations = vec![site_observation(
         "//other.example/guide",
@@ -257,7 +257,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     )];
     let malformed_fragment_redirect = semantic_evidence(
         "site-build",
-        "0.2.0",
+        "0.3.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![site_observation(
@@ -307,28 +307,40 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
 }
 
 #[test]
-fn site_redirects_require_repository_source_attribution() {
-    let evidence = semantic_evidence(
-        "site-build",
-        "0.2.0",
-        hb("test/site-output", b"site output"),
-        Some(hb("test/report", b"source report")),
-        vec![Value::object(vec![
+fn site_claims_require_repository_source_attribution() {
+    for observation in [
+        Value::object(vec![
             (
                 "destination".to_owned(),
                 Value::string("/guide/".to_owned()),
             ),
             ("kind".to_owned(), Value::string("site-redirect".to_owned())),
             ("route".to_owned(), Value::string("/legacy/".to_owned())),
-        ])],
-    );
-    let mut request = empty();
-    request.semantic_evidence = vec![
-        amiss_wire::semantic::envelope(evidence)
-            .expect("the generic envelope admits producer-defined semantics"),
-    ];
-    let error = controls(&request).expect_err("a redirect without its source fails closed");
-    assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+        ]),
+        Value::object(vec![
+            ("anchors".to_owned(), Value::array(Vec::new())),
+            (
+                "kind".to_owned(),
+                Value::string("site-generated-route".to_owned()),
+            ),
+            ("route".to_owned(), Value::string("/generated/".to_owned())),
+        ]),
+    ] {
+        let evidence = semantic_evidence(
+            "site-build",
+            "0.3.0",
+            hb("test/site-output", b"site output"),
+            Some(hb("test/report", b"source report")),
+            vec![observation],
+        );
+        let mut request = empty();
+        request.semantic_evidence = vec![
+            amiss_wire::semantic::envelope(evidence)
+                .expect("the generic envelope admits producer-defined semantics"),
+        ];
+        let error = controls(&request).expect_err("a claim without its source fails closed");
+        assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+    }
 }
 
 #[test]
@@ -360,7 +372,7 @@ fn inconsistent_site_navigation_never_becomes_input() {
     for navigation in cases {
         let evidence = semantic_evidence(
             "site-build",
-            "0.2.0",
+            "0.3.0",
             hb("test/site-output", b"site output"),
             None,
             vec![page.clone(), navigation],

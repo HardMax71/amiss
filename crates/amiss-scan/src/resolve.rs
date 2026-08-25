@@ -229,7 +229,7 @@ impl<'a> Resolver<'a> {
         }
         let destination = matches!(
             resolution,
-            Resolution::External(_)
+            Resolution::External(ExternalReference::Url | ExternalReference::ForeignRepository)
                 | Resolution::UnsupportedVersion(VersionScope::KnownCommit { .. })
         )
         .then(|| occurrence.occurrence.semantic_destination.clone());

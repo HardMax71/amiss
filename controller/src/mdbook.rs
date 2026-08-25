@@ -12,7 +12,7 @@ use url::Url;
 pub const MDBOOK_RENDER_CONTEXT_BYTES: u64 = 16_777_216;
 pub const MDBOOK_HTML_BYTES: u64 = 16_777_216;
 const MDBOOK_VERSION: &str = "0.5.4";
-const SITE_BUILD_VERSION: &str = "0.2.0";
+const SITE_BUILD_VERSION: &str = "0.3.0";
 const ROUTE_BYTES: usize = 16_384;
 const ANCHOR_BYTES: usize = 4_096;
 const INPUT_DOMAIN: &str = "amiss/controller-mdbook-site-input-v1";

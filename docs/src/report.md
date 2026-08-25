@@ -51,7 +51,9 @@ than as the bytes the source spells. A locally resolved or disproved historical 
 delegated destination. An ordinary external URL raises no finding and the summary counts it under
 `external_out_of_scope`, because the engine never fetched it and so decided nothing. A Sphinx
 label resolved through candidate-bound inventory evidence instead carries
-`reason: "intersphinx-inventory"` and counts as resolved.
+`reason: "intersphinx-inventory"` and counts as resolved. A generated route proved by complete
+site-build evidence similarly carries `reason: "site-build"`, counts as resolved, and has no
+`external_destination` because it delegates no network request.
 [The external plan](external-plan.md) derives the introduced and removed destinations from
 a written report, and [Amiss and link checkers](comparison.md) shows the pipe that hands
 them to the tool that does fetch.

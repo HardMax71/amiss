@@ -154,7 +154,8 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
         match &observation.resolution {
             Resolution::Resolved(_)
             | Resolution::External(
-                amiss_wire::resolution::ExternalReference::IntersphinxInventory,
+                amiss_wire::resolution::ExternalReference::IntersphinxInventory
+                | amiss_wire::resolution::ExternalReference::SiteBuild,
             ) => {
                 counts.resolved = counts.resolved.saturating_add(1);
             }

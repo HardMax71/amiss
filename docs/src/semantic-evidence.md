@@ -44,17 +44,20 @@ precedence. Missing evidence, an incomplete producer, another producer version, 
 binding, or an invalid observation can never clear a missing label.
 
 The second compiled consumer accepts at most one complete `site-build` producer at version
-`0.2.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
+`0.3.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
 document, and a byte-sorted unique set of decoded anchor identities. Routes exclude authority,
 query, and fragment components; sources obey the repository-path grammar; anchors and their
 aggregate count are bounded. On the candidate side only, an exact route resolves to its scanned
 structured source, and a nonempty fragment additionally requires an exact member of the published
-anchor set. Query text remains identity data. A route absent from the evidence, an absent anchor,
-a missing or unscanned source, and image use remain unsupported rather than being guessed into
-either a pass or a failure. A `site-redirect` observation maps one exact redirect route and its
-repository routing source to its exact terminal route, not an intermediate hop. The destination may
-carry a fragment but no query. It resolves only when that terminal route has one source-backed
-`site-route` and the effective fragment is in its anchor set. Following the
+anchor set. A `site-generated-route` carries the same route and anchors but treats its repository
+source as attribution for generated output, not as the target body. It resolves as
+`external/site-build` only while that attribution is an exact ordinary candidate blob. Query text
+remains identity data. A route absent from the evidence, an absent anchor, a missing or unsuitable
+source, and image use remain unsupported rather than being guessed into either a pass or a failure.
+A `site-redirect` observation maps one exact redirect route and its repository routing source to
+its exact terminal route, not an intermediate hop. The destination may carry a fragment but no
+query. It resolves only when that terminal route has one uniquely claimed source-backed or
+generated page and the effective fragment is in its anchor set. Following the
 [HTTP Location rule](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.2), an absent
 destination fragment inherits the authored fragment, a nonempty one replaces it, and an empty `#`
 suppresses inheritance. Self-redirects and malformed fragments make the evidence invalid.
@@ -63,10 +66,11 @@ target do not resolve and each produce one `site-build-defect` whose fact retain
 claim identity, reason, and routing source. A `site-navigation`
 observation adds one source root, its navigation manifest, rendered entrypoint routes, and the
 byte-sorted unique source set reachable through the completed link graph. Every entrypoint must be
-a unique source-backed route, every reachable source must own one such route, and all named sources
-must remain beneath the declared root. Only then does `unlinked-document` mean a scanned structured
-source inside that root which is neither the manifest nor reachable. Without this observation the
-engine makes no navigation claim. The base side never consumes candidate build output.
+a unique page route, every reachable source must own a repository-backed route, and all named
+sources must remain beneath the declared root. Only then does `unlinked-document` mean a scanned
+structured source inside that root which is neither the manifest nor reachable. Without this
+observation the engine makes no navigation claim. The base side never consumes candidate build
+output.
 
 Only the sealed controls request has this intake. The public command supplies an empty set. A
 controller plan may hold candidate-independent templates such as an Intersphinx inventory set. A
@@ -122,6 +126,6 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-Generated pages without source attribution, locales, and versions remain future observation
+Generated pages without repository attribution, locales, and versions remain future observation
 grammars over this same boundary. The engine still executes no producer and treats no
 repository-controlled evidence as authority.

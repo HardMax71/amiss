@@ -120,7 +120,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
 
     assert_eq!(parsed.payload.candidate_identity_digest, candidate);
     assert_eq!(parsed.payload.producer_kind.as_str(), "site-build");
-    assert_eq!(parsed.payload.producer_version, "0.2.0");
+    assert_eq!(parsed.payload.producer_version, "0.3.0");
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 4);
     let intro = observation(&parsed.payload.observations, "/manual/intro.html");

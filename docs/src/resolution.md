@@ -255,10 +255,11 @@ objects already present under the declared Git roots; unavailable objects are de
 provider evidence instead of fetched. `--default-branch-ref` supplies a second trusted spelling so
 the resolver can split a ref from its path without guessing, and a URL naming the default branch
 while the candidate ref differs is still `unsupported-version-scope`. Site generators and language-aware tools still
-own route and symbol semantics. A complete site-build producer can contribute exact positive route,
-anchor, and fragment-aware terminal-redirect facts for the candidate; absent, ambiguous, or stale
-mappings remain unsupported, while conflicting ownership and broken declared redirects become
-source-attributed build defects. Guessing beyond that evidence would turn honest ignorance into a false pass. The
+own route and symbol semantics. A complete site-build producer can contribute exact positive
+source-backed or source-attributed generated route, anchor, and fragment-aware terminal-redirect
+facts for the candidate; absent, ambiguous, or stale mappings remain unsupported, while conflicting
+ownership and broken declared redirects become source-attributed build defects. Guessing beyond
+that evidence would turn honest ignorance into a false pass. The
 [resolver tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-scan/tests/resolve)
 pin these distinctions.
 
