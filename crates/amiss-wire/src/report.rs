@@ -126,7 +126,7 @@ pub enum ReportDefect {
     InvalidResult,
     #[error("the report is incomplete, so its sides cannot be compared")]
     Incomplete,
-    #[error("an external occurrence is missing its destination, document, or scheme")]
+    #[error("a delegated occurrence is missing its destination, document, or required scheme")]
     MalformedExternal,
 }
 

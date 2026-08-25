@@ -199,6 +199,62 @@ fn a_destination_moving_documents_is_retained() {
 }
 
 #[test]
+fn unavailable_exact_history_enters_the_same_setwise_plan() {
+    let destination =
+        "https://github.com/acme/widgets/blob/0123456789012345678901234567890123456789/docs/a.md";
+    let historical = object(vec![
+        ("document", string("docs/a.md")),
+        ("external_destination", string(destination)),
+        ("intent", object(Vec::new())),
+        (
+            "resolution",
+            object(vec![
+                ("kind", string("unsupported-version")),
+                (
+                    "scope",
+                    object(vec![
+                        ("kind", string("known-commit")),
+                        (
+                            "commit_oid",
+                            string("0123456789012345678901234567890123456789"),
+                        ),
+                        ("path", string("docs/a.md")),
+                    ]),
+                ),
+            ]),
+        ),
+    ]);
+    let introduced_plan = planned(vec![row(Value::Null, historical.clone())]);
+    assert_eq!(
+        destinations(&introduced_plan, "introduced"),
+        vec![(destination.to_owned(), vec!["docs/a.md".to_owned()])]
+    );
+    let introduced = &array(field(field(&introduced_plan, "payload"), "introduced"))[0];
+    assert_eq!(text(field(introduced, "scheme")), "https");
+    assert_eq!(
+        String::from_utf8(amiss_wire::json::canonical(field(introduced, "repository")))
+            .expect("canonical utf-8"),
+        r#"{"dialect":"github","form":"blob","host":"github.com","name":"widgets","owner":"acme","tail":"0123456789012345678901234567890123456789/docs/a.md"}"#
+    );
+
+    let retained_plan = planned(vec![row(historical.clone(), historical.clone())]);
+    assert_eq!(destinations(&retained_plan, "introduced"), Vec::new());
+    assert_eq!(destinations(&retained_plan, "removed"), Vec::new());
+    assert_eq!(retained(&retained_plan), 1);
+
+    let Value::Object(historical) = historical else {
+        panic!("the occurrence is an object");
+    };
+    let mut historical = historical.into_vec();
+    historical.retain(|(name, _)| name != "external_destination");
+    let source = report(vec![row(Value::Null, Value::object(historical))]);
+    assert_eq!(
+        plan(&source, "0.0.0", &sample_digest()),
+        Err(PlanDefect::MalformedExternal)
+    );
+}
+
+#[test]
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
     let derived = plan(&source, "0.0.0", &sample_digest()).expect("an empty report yields a plan");

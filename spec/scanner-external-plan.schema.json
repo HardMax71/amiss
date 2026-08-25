@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:scanner-external-plan",
   "title": "Amiss external plan",
-  "description": "The pure derivation `amiss external-plan` makes from one complete scanner report: the distinct external destinations the candidate introduced and the base lost, each with the documents naming it, bound to the report payload digest the derivation verified. The engine never fetches a destination; the plan only names the work an evidence producer may do.",
+  "description": "The pure derivation `amiss external-plan` makes from one complete scanner report: the distinct destinations delegated to evidence that the candidate introduced and the base lost, each with the documents naming it, bound to the report payload digest the derivation verified. The engine never fetches a destination; the plan only names the work an evidence producer may do.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -95,7 +95,7 @@
       }
     },
     "DestinationRow": {
-      "description": "One distinct external destination on the counted side, with every document naming it.",
+      "description": "One distinct destination delegated to evidence on the counted side, with every document naming it.",
       "type": "object",
       "additionalProperties": false,
       "required": ["destination", "documents", "scheme"],
@@ -107,7 +107,7 @@
           "maxLength": 16384
         },
         "scheme": {
-          "description": "The occurrence intent's lowercased scheme.",
+          "description": "The lowercased request scheme: the occurrence intent's scheme for an external URL, or https for a recognized same-repository forge URL.",
           "type": "string",
           "pattern": "^[a-z][a-z0-9+.-]*$"
         },

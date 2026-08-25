@@ -38,12 +38,12 @@ dialect's spelling is converted to a path when it names the candidate branch or 
 object ID in the run's declared SHA-1 or SHA-256 format. Exact IDs on all three dialects resolve
 only through that commit and its objects already present under the declared Git roots. A completely
 walked local tree can prove a missing path; an unavailable commit, tree, or target object instead
-retains `unsupported-version-scope` with the exact commit and contained path. A named branch or tag
-outside the candidate remains version-scoped without guessed commit identity. Historical queries
-and transclusion-dependent absence remain unsupported because an object walk is not a historical
-site build. A URL outside the declared repository is external, and the engine never fetches one. It records an
-external occurrence with the destination the format decodes to, the address a fetcher
-would request, so the layer that does fetch can read the list without walking the tree again, and it raises no finding,
+retains `unsupported-version-scope` with the exact commit and contained path, plus the decoded URL
+for the provider-evidence layer. The engine still fetches nothing. A named branch or tag outside the
+candidate remains version-scoped without guessed commit identity. Historical queries and
+transclusion-dependent absence remain unsupported because an object walk is not a historical site
+build. A URL outside the declared repository is external. It records the decoded destination so the
+layer that does fetch can read the list without walking the tree again, and it raises no finding,
 because there is nothing it decided.
 
 Three dialects exist, each pinned to the exact URL grammar its forge's browser emits.
@@ -232,10 +232,11 @@ budget cannot afford keeps `unsupported-reference-semantics`, which now means ex
 "not evaluated". The projection stays the whole file: an anchor says where to look, not
 which bytes the reference depends on.
 
-Version scope is equally narrow. Only the candidate version is read.
-`--default-branch-ref` supplies a second trusted spelling so the resolver can split a ref
-from its path without guessing, and a URL naming the default branch while the candidate
-ref differs is still `unsupported-version-scope`. Site generators and language-aware tools still
+Version scope is equally narrow. The candidate is read, and a full immutable ID is read only from
+objects already present under the declared Git roots; unavailable objects are delegated for
+provider evidence instead of fetched. `--default-branch-ref` supplies a second trusted spelling so
+the resolver can split a ref from its path without guessing, and a URL naming the default branch
+while the candidate ref differs is still `unsupported-version-scope`. Site generators and language-aware tools still
 own route and symbol semantics. A complete site-build producer can contribute exact positive route,
 anchor, and fragment-aware terminal-redirect facts for the candidate; absent, ambiguous, or stale mappings remain
 unsupported. Guessing beyond that evidence would turn honest ignorance into a false pass. The

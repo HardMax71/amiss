@@ -7,7 +7,7 @@ use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference, Missing,
-    Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget,
+    Resolution as WireResolution, Target, UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 use amiss_wire::uri::{absolute_valid, decode_fragment, scheme};
 
@@ -227,8 +227,12 @@ impl<'a> Resolver<'a> {
         )? {
             resolution = evidence;
         }
-        let destination = matches!(resolution, Resolution::External(_))
-            .then(|| occurrence.occurrence.semantic_destination.clone());
+        let destination = matches!(
+            resolution,
+            Resolution::External(_)
+                | Resolution::UnsupportedVersion(VersionScope::KnownCommit { .. })
+        )
+        .then(|| occurrence.occurrence.semantic_destination.clone());
         Ok((intent, resolution, destination))
     }
 }

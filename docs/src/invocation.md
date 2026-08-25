@@ -207,11 +207,11 @@ the report carried no candidate tree, or the minted bytes failed the engine's ow
 `amiss external-plan` derives [the external plan](external-plan.md) from a report file a
 `check --format json` run already wrote. It opens no repository and touches no network:
 it verifies the report's own payload digest, refuses an incomplete report, and projects
-the external delta the report already carries. `--format` takes `human` or `json` here;
+the delegated-evidence delta the report already carries. `--format` takes `human` or `json` here;
 SARIF and Code Quality remain report projections and are refused here. Exit 0 wrote the plan. Exit 2 means the input
 could not be trusted: unreadable, larger than a scanner report can be, not the scanner's
 strict JSON, not a report envelope, digest mismatch, incomplete, or carrying a malformed
-external occurrence.
+eligible occurrence.
 
 `amiss external-assess` judges [an external plan](external-plan.md) against one
 producer's observations, writing [the external assessment](external-assessment.md)

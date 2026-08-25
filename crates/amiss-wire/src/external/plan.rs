@@ -14,15 +14,16 @@ struct Entry {
 }
 
 /// Derives the external plan from one complete scanner report: the distinct
-/// external destinations the candidate introduced and the base lost, each
-/// with its documents, bound to the payload digest the derivation verified.
+/// destinations delegated to evidence that the candidate introduced and the
+/// base lost, each with its documents, bound to the payload digest the
+/// derivation verified.
 /// The engine never fetches a destination; the plan only names the work an
 /// evidence producer may do.
 ///
 /// # Errors
 ///
 /// Returns the first [`PlanDefect`] when the value is not a report envelope,
-/// its digest does not hold, it is incomplete, or an external occurrence
+/// its digest does not hold, it is incomplete, or a delegated occurrence
 /// lacks a field the exactly-when contract promises.
 pub fn plan(
     envelope: &Value,
@@ -96,8 +97,7 @@ pub fn plan(
     ]))
 }
 
-/// One side's destination map, from every observation row's occurrence on
-/// that side whose resolution is external.
+/// One side's destinations delegated to another evidence layer.
 fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>, PlanDefect> {
     let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
     for row in observations {
@@ -105,7 +105,14 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
             continue;
         };
         let resolution = occurrence.member("resolution");
-        if resolution.and_then(|value| value.text("kind")) != Some("external")
+        let external = resolution.and_then(|value| value.text("kind")) == Some("external");
+        let historical = resolution.and_then(|value| value.text("kind"))
+            == Some("unsupported-version")
+            && resolution
+                .and_then(|value| value.member("scope"))
+                .and_then(|scope| scope.text("kind"))
+                == Some("known-commit");
+        if (!external && !historical)
             || resolution.and_then(|value| value.text("reason")) == Some("intersphinx-inventory")
         {
             continue;
@@ -116,10 +123,14 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
         let document = occurrence
             .text("document")
             .filter(|value| !value.is_empty());
-        let scheme = occurrence
-            .member("intent")
-            .and_then(|intent| intent.text("external_scheme"))
-            .filter(|value| !value.is_empty());
+        let scheme = if historical {
+            Some("https")
+        } else {
+            occurrence
+                .member("intent")
+                .and_then(|intent| intent.text("external_scheme"))
+                .filter(|value| !value.is_empty())
+        };
         let (Some(destination), Some(document), Some(scheme)) = (destination, document, scheme)
         else {
             return Err(PlanDefect::MalformedExternal);

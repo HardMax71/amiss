@@ -3,6 +3,40 @@ use std::path::Path;
 
 use crate::support::{amiss, payload};
 
+#[expect(
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "test assertion helper"
+)]
+fn assert_historical_request(repo: &str, report: &[u8], destination: &str) {
+    let report_path = format!("{repo}/report.json");
+    fs::write(&report_path, report).unwrap();
+    let (code, stdout, stderr) = amiss(&[
+        "external-plan",
+        "--report",
+        &report_path,
+        "--format",
+        "json",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let plan: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+    let history = plan["payload"]["introduced"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["destination"] == destination))
+        .unwrap_or_else(|| panic!("unavailable exact history enters the provider plan"));
+    assert_eq!(history["scheme"], "https");
+    assert_eq!(history["repository"]["host"], "ghes.example");
+    assert_eq!(history["repository"]["dialect"], "github");
+    assert_eq!(history["repository"]["owner"], "acme");
+    assert_eq!(history["repository"]["name"], "widget");
+    assert_eq!(history["repository"]["form"], "blob");
+    assert_eq!(
+        history["repository"]["tail"],
+        "0123456789012345678901234567890123456789/docs/guide.md"
+    );
+}
+
 /// A self-hosted GitHub-dialect forge, end to end: the declared host opens
 /// recognition for its own URLs, github.com URLs in the same run are a
 /// different site, the dialect and host land in the evaluation, and the
@@ -79,15 +113,19 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
         .and_then(|observations| {
             observations.iter().find_map(|observation| {
                 let scope = &observation["candidate"]["resolution"]["scope"];
-                (scope["kind"] == "known-commit").then_some(scope)
+                (scope["kind"] == "known-commit").then_some(&observation["candidate"])
             })
         })
         .unwrap_or_else(|| panic!("the immutable scope is reported"));
+    let scope = &history["resolution"]["scope"];
     assert_eq!(
-        history["commit_oid"],
+        scope["commit_oid"],
         "0123456789012345678901234567890123456789"
     );
-    assert_eq!(history["path"], "docs/guide.md");
+    assert_eq!(scope["path"], "docs/guide.md");
+    let historical_destination = "https://ghes.example/acme/widget/blob/0123456789012345678901234567890123456789/docs/guide.md";
+    assert_eq!(history["external_destination"], historical_destination);
+    assert_historical_request(&fx.repo, &stdout, historical_destination);
 }
 
 /// A self-hosted GitLab with nested groups, end to end: the explicit dialect

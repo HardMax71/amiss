@@ -2539,7 +2539,7 @@
     "KnownCommitVersionScope": {
       "type": "object",
       "additionalProperties": false,
-      "description": "A same-repository forge URL named one full immutable object ID in the run's declared object format and one contained path. This preserves identity but does not claim that the historical commit was read.",
+      "description": "A same-repository forge URL named one full immutable object ID in the run's declared object format and one contained path, but at least one required object was unavailable under the declared Git roots.",
       "required": [
         "kind",
         "commit_oid",
@@ -3244,26 +3244,58 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 16384,
-          "description": "The destination the parser publishes after the format's own decoding, which is what a fetcher would request. Present exactly when the resolution is external, so another layer can read the list without the tree."
+          "description": "The destination the parser publishes after the format's own decoding, which is what an evidence producer would request. Present exactly when the resolution is external or is an unavailable exact historical commit, so another layer can read the list without the tree."
         }
       },
       "allOf": [
         {
           "if": {
-            "properties": {
-              "resolution": {
+            "anyOf": [
+              {
                 "properties": {
-                  "kind": {
-                    "const": "external"
+                  "resolution": {
+                    "properties": {
+                      "kind": {
+                        "const": "external"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
                   }
                 },
                 "required": [
-                  "kind"
+                  "resolution"
+                ]
+              },
+              {
+                "properties": {
+                  "resolution": {
+                    "properties": {
+                      "kind": {
+                        "const": "unsupported-version"
+                      },
+                      "scope": {
+                        "properties": {
+                          "kind": {
+                            "const": "known-commit"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "scope"
+                    ]
+                  }
+                },
+                "required": [
+                  "resolution"
                 ]
               }
-            },
-            "required": [
-              "resolution"
             ]
           },
           "then": {

@@ -73,7 +73,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `unsupported-reference-semantics`: the reference uses semantics this run did not evaluate: a site route, a protocol-relative destination, a query string, a destination that needs a document attribute this run does not evaluate, or a fragment on a target it cannot answer for; the unchecked part is declared instead of guessed
 - `unsupported-document-format`: a document this run discovered has no parser in this engine, whether a markup it does not read or a policy include; it is counted, and its content is never scanned
 - `unsupported-target-kind`: the reference resolves to a symlink or submodule, which Amiss does not follow; the boundary is declared instead of crossed
-- `unsupported-version-scope`: a forge URL names this repository at another version, a different branch, tag, or commit; only the candidate version is read, so the link is recognized and left unresolved
+- `unsupported-version-scope`: a forge URL names this repository at another named version or an exact commit whose required objects are unavailable; use the candidate ref, or make the exact commit available
 - `unsupported-capability`: a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim
 - `dependency-changed-subject-unchanged`: the referenced content changed and the block citing it did not; a reason for a person to reread the prose, never a machine verdict that it is wrong
 - `dependency-and-subject-cochanged`: the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on
