@@ -29,9 +29,9 @@ trusted absolute forge spellings continue through the private
 A relative path resolves from the document's own directory and must stay inside the
 repository; `../../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
 with `/` is a site route, not a repository-root shorthand. It stays unsupported unless sealed,
-candidate-bound site-build evidence maps that exact route and optional decoded anchor to a scanned
-source document, either directly or through a proved fragment-aware terminal redirect. Forge URLs need the
-complete identity group, not only the repository name. When
+candidate-bound site-build evidence maps that exact route and optional decoded anchor to a
+published source-backed or generated page, either directly or through a proved fragment-aware
+terminal redirect. Forge URLs need the complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
 dialect's spelling is converted to a path when it names the candidate branch or one full lowercase
@@ -254,12 +254,12 @@ Version scope is equally narrow. The candidate is read, and a full immutable ID 
 objects already present under the declared Git roots; unavailable objects are delegated for
 provider evidence instead of fetched. `--default-branch-ref` supplies a second trusted spelling so
 the resolver can split a ref from its path without guessing, and a URL naming the default branch
-while the candidate ref differs is still `unsupported-version-scope`. Site generators and language-aware tools still
-own route and symbol semantics. A complete site-build producer can contribute exact positive
-source-backed or source-attributed generated route, anchor, and fragment-aware terminal-redirect
-facts for the candidate; absent, ambiguous, or stale mappings remain unsupported, while conflicting
-ownership and broken declared redirects become source-attributed build defects. Guessing beyond
-that evidence would turn honest ignorance into a false pass. The
+while the candidate ref differs is still `unsupported-version-scope`. Site generators and
+language-aware tools still own route and symbol semantics. A complete site-build producer can
+contribute exact positive source-backed or generated route, anchor, and fragment-aware
+terminal-redirect facts for the candidate; absent, ambiguous, or stale mappings remain unsupported,
+while conflicting ownership and broken declared redirects become build defects retaining every
+available source. Guessing beyond that evidence would turn honest ignorance into a false pass. The
 [resolver tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss-scan/tests/resolve)
 pin these distinctions.
 

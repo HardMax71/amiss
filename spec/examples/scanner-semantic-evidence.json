@@ -9,19 +9,19 @@
     "producer": {
       "kind": "site-build",
       "identity": "amiss-site-output",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "context_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     "complete": true,
     "observations": [
       {
-        "kind": "site-route",
-        "route": "/external-assessment.html",
-        "source": "docs/src/external-assessment.md",
-        "anchors": ["the-external-assessment"]
+        "kind": "site-generated-route",
+        "route": "/generated/index.html",
+        "source": null,
+        "anchors": ["generated-api"]
       }
     ]
   },
-  "payload_digest": "sha256:34305365c6b7f73511a696dfa87619e2a633b74a026d9f7ef64de7b411c1898e"
+  "payload_digest": "sha256:9c6ed9d1a72296dc862198eaee1a38fbf7a41be73513321b21ea55ae4ebd350c"
 }

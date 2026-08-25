@@ -243,7 +243,7 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
 fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let valid = semantic_evidence(
         "site-build",
-        "0.4.0",
+        "0.5.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![
@@ -285,7 +285,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     )];
     let malformed_fragment_redirect = semantic_evidence(
         "site-build",
-        "0.4.0",
+        "0.5.0",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![site_observation(
@@ -332,7 +332,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
 }
 
 #[test]
-fn site_claims_require_repository_source_attribution() {
+fn site_claims_require_explicit_source_attribution() {
     for observation in [
         Value::object(vec![
             (
@@ -341,6 +341,21 @@ fn site_claims_require_repository_source_attribution() {
             ),
             ("kind".to_owned(), Value::string("site-redirect".to_owned())),
             ("route".to_owned(), Value::string("/legacy/".to_owned())),
+        ]),
+        Value::object(vec![
+            ("anchors".to_owned(), Value::array(Vec::new())),
+            ("kind".to_owned(), Value::string("site-route".to_owned())),
+            ("route".to_owned(), Value::string("/guide/".to_owned())),
+            ("source".to_owned(), Value::Null),
+        ]),
+        Value::object(vec![
+            (
+                "destination".to_owned(),
+                Value::string("/guide/".to_owned()),
+            ),
+            ("kind".to_owned(), Value::string("site-redirect".to_owned())),
+            ("route".to_owned(), Value::string("/legacy/".to_owned())),
+            ("source".to_owned(), Value::Null),
         ]),
         Value::object(vec![
             ("anchors".to_owned(), Value::array(Vec::new())),
@@ -353,7 +368,7 @@ fn site_claims_require_repository_source_attribution() {
     ] {
         let evidence = semantic_evidence(
             "site-build",
-            "0.4.0",
+            "0.5.0",
             hb("test/site-output", b"site output"),
             Some(hb("test/report", b"source report")),
             vec![observation],
@@ -363,6 +378,24 @@ fn site_claims_require_repository_source_attribution() {
         let error = controls(&request).expect_err("a claim without its source fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
+}
+
+#[test]
+fn generated_site_claims_admit_absent_repository_attribution() {
+    let evidence = semantic_evidence(
+        "site-build",
+        "0.5.0",
+        hb("test/site-output", b"site output"),
+        Some(hb("test/report", b"source report")),
+        vec![
+            site_observation("/generated/", SiteObservation::Generated(None, &["intro"])),
+            site_navigation(Some("docs"), "docs/SUMMARY.md", &["/generated/"], &[]),
+        ],
+    );
+    let mut request = empty();
+    request.semantic_evidence = vec![supplied_semantic(evidence)];
+
+    controls(&request).expect("explicit null attribution is a valid generated-page claim");
 }
 
 #[test]
@@ -394,7 +427,7 @@ fn inconsistent_site_navigation_never_becomes_input() {
     for navigation in cases {
         let evidence = semantic_evidence(
             "site-build",
-            "0.4.0",
+            "0.5.0",
             hb("test/site-output", b"site output"),
             None,
             vec![page.clone(), navigation],

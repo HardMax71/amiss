@@ -4,7 +4,7 @@ use amiss_wire::json::Value;
 #[derive(Clone, Copy)]
 pub enum SiteObservation<'a> {
     Page(&'a str, &'a [&'a str]),
-    Generated(&'a str, &'a [&'a str]),
+    Generated(Option<&'a str>, &'a [&'a str]),
     Redirect(&'a str, &'a str),
 }
 
@@ -31,7 +31,10 @@ pub fn site_observation(route: &str, observation: SiteObservation<'_>) -> Value 
                 "kind".to_owned(),
                 Value::string("site-generated-route".to_owned()),
             ));
-            members.push(("source".to_owned(), Value::string(source.to_owned())));
+            members.push((
+                "source".to_owned(),
+                source.map_or(Value::Null, |source| Value::string(source.to_owned())),
+            ));
             members.push((
                 "anchors".to_owned(),
                 Value::array(

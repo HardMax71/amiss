@@ -45,16 +45,18 @@ precedence. Missing evidence, an incomplete producer, another producer version, 
 binding, or an invalid observation can never clear a missing label.
 
 The second compiled consumer accepts at most one complete `site-build` producer at version
-`0.4.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
+`0.5.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
 document, and a byte-sorted unique set of decoded anchor identities. Routes exclude authority,
 query, and fragment components; sources obey the repository-path grammar; anchors and their
 aggregate count are bounded. On the candidate side only, an exact route resolves to its scanned
 structured source, and a nonempty fragment additionally requires an exact member of the published
-anchor set. A `site-generated-route` carries the same route and anchors but treats its repository
-source as attribution for generated output, not as the target body. It resolves as
-`external/site-build` only while that attribution is an exact ordinary candidate blob. Query text
-remains identity data. A route absent from the evidence, an absent anchor, a missing or unsuitable
-source, and image use remain unsupported rather than being guessed into either a pass or a failure.
+anchor set. A `site-generated-route` carries the same route and anchors plus a required nullable
+source. A repository path is attribution for generated output, not its target body, and must remain
+an exact ordinary candidate blob. `null` says the completed page has no repository attribution; it
+does not invent a virtual source. Either form resolves as `external/site-build`. A missing source
+field or malformed attribution rejects the complete evidence. Query text remains identity data. A
+route absent from the evidence, an absent anchor, an unsuitable attributed source, and image use
+remain unsupported rather than being guessed into either a pass or a failure.
 A `site-redirect` observation maps one exact redirect route and its repository routing source to
 its exact terminal route, not an intermediate hop. The destination may carry a fragment but no
 query. It resolves only when that terminal route has one uniquely claimed source-backed or
@@ -64,14 +66,16 @@ destination fragment inherits the authored fragment, a nonempty one replaces it,
 suppresses inheritance. Self-redirects and malformed fragments make the evidence invalid.
 Conflicting route owners and redirects ending at a missing, ambiguous, nonterminal, or anchor-less
 target do not resolve and each produce one `site-build-defect` whose fact retains the exact route,
-claim identity, reason, and routing source. A `site-navigation`
-observation adds one source root, its navigation manifest, rendered entrypoint routes, and the
-byte-sorted unique source set reachable through the completed link graph. Every entrypoint must be
-a unique page route, every reachable source must own a repository-backed route, and all named
-sources must remain beneath the declared root. Only then does `unlinked-document` mean a scanned
-structured source inside that root which is neither the manifest nor reachable. Without this
-observation the engine makes no navigation claim. The base side never consumes candidate build
-output.
+claim identity, reason, and every available routing source. A conflict containing only unattributed
+generated pages has an empty source set and no location path rather than a fabricated one. A
+`site-navigation` observation adds one source root, its navigation manifest, rendered entrypoint
+routes, and the byte-sorted unique source set reachable through the completed link graph; that set
+may be empty.
+Every entrypoint must be a unique page route, every reachable source must own a repository-backed
+route, and all named sources must remain beneath the declared root. Only then does
+`unlinked-document` mean a scanned structured source inside that root which is neither the manifest
+nor reachable. Without this observation the engine makes no navigation claim. The base side never
+consumes candidate build output.
 
 Only the sealed controls request has this intake. The public command supplies an empty set. A
 controller plan may hold candidate-independent templates such as an Intersphinx inventory set. A
@@ -104,12 +108,12 @@ the exact post-preprocessor
 [mdBook renderer context](https://rust-lang.github.io/mdBook/for_developers/backends.html) from
 mdBook `0.5.4` and a caller-opened completed HTML output directory. It uses the renderer's `path`
 and `source_path`, rather than reconstructing routes from `SUMMARY.md`, so the built page and its
-original repository source remain distinct after preprocessing. The first rendered chapter's
-independent `index.html` copy is read separately. Every other route follows the HTML renderer's
-`.html` path rule beneath one trusted publication prefix, with URI path segments encoded from the
-actual output names.
+original repository source, when one exists, remain distinct after preprocessing. The first
+rendered chapter's independent `index.html` copy is read separately. Every other route follows the
+HTML renderer's `.html` path rule beneath one trusted publication prefix, with URI path segments
+encoded from the actual output names.
 
-The producer reads only those source-backed pages named by the context, with one 16 MiB context
+The producer reads only the rendered pages named by the context, with one 16 MiB context
 ceiling and one 16 MiB aggregate HTML ceiling. A no-follow directory capability bounds every page
 read. A WHATWG tokenizer extracts decoded `id` values and hyperlink destinations from the completed
 HTML. The producer honors the document's first `base` URL when usable, retains only links to another
@@ -119,10 +123,11 @@ entrypoint, and the sorted set of reachable repository sources beside the sorted
 binds the resolved renderer configuration, every exact page digest, and the navigation result into
 the input digest. A plan independently freezes the site identity; evidence from another
 configuration path, publication prefix, locale, or version is refused. The wrong mdBook version,
-no HTML renderer, an escaping or non-text path, generated content without `source_path`,
+no HTML renderer, an escaping or non-text output or source path, a source without an output path,
 duplicate route ownership, an unreadable page, an unrepresentable anchor or link, or an oversized
-graph refuses the complete set. Theme, preprocessor, and configuration effects are therefore
-observed in their finished bytes without running any of them inside Amiss.
+graph refuses the complete set. A rendered chapter with an output path and no `source_path` instead
+becomes an explicitly unattributed generated route. Theme, preprocessor, and configuration effects
+are therefore observed in their finished bytes without running any of them inside Amiss.
 
 A trusted candidate acquisition may call this producer after an operator-owned build and return
 the already candidate-bound envelope. The built-in provider acquisitions still return none: the
@@ -134,5 +139,4 @@ The schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
-Generated pages without repository attribution remain a future grammar over this same boundary.
 The engine still executes no producer and treats no repository-controlled evidence as authority.

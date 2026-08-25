@@ -63,19 +63,26 @@ pub(super) fn resolve(
     }
     match backing {
         SitePageBacking::Repository => {
+            let Some(source) = source else {
+                return Ok(None);
+            };
             if !resolver.snapshot.is_scanned_structured(source) {
                 return Ok(None);
             }
             let resolution = lookup(resolver, source, TargetKind::Blob, None, None, None)?;
             Ok(matches!(&resolution, Resolution::Resolved(_)).then_some(resolution))
         }
-        SitePageBacking::Generated => Ok(matches!(
-            resolver.snapshot.locate(source),
-            Some(Located::Entry(
-                GitMode::RegularFile | GitMode::ExecutableFile,
-                _
-            ))
-        )
-        .then_some(Resolution::External(ExternalReference::SiteBuild))),
+        SitePageBacking::Generated => Ok(source
+            .as_ref()
+            .is_none_or(|source| {
+                matches!(
+                    resolver.snapshot.locate(source),
+                    Some(Located::Entry(
+                        GitMode::RegularFile | GitMode::ExecutableFile,
+                        _
+                    ))
+                )
+            })
+            .then_some(Resolution::External(ExternalReference::SiteBuild))),
     }
 }

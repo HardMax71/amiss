@@ -123,7 +123,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
 
     assert_eq!(parsed.payload.candidate_identity_digest, candidate);
     assert_eq!(parsed.payload.producer_kind.as_str(), "site-build");
-    assert_eq!(parsed.payload.producer_version, "0.4.0");
+    assert_eq!(parsed.payload.producer_version, "0.5.0");
     assert_eq!(
         parsed.payload.context_digest,
         mdbook_site_expectation(&site).unwrap().context_digest
@@ -158,6 +158,49 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
 
     let repeated = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
     assert_eq!(evidence, repeated);
+}
+
+#[test]
+fn generated_chapters_need_no_repository_attribution() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("generated.html"),
+        r#"<h1 id="generated"></h1>"#,
+    )
+    .unwrap();
+    fs::write(root.path().join("index.html"), "<p>generated index</p>").unwrap();
+    let context = context("0.5.4", true, &[chapter(Some("generated.md"), None, &[])]);
+
+    let evidence = mdbook_site_evidence(
+        hb("amiss/test", b"candidate"),
+        &site("book.toml", "/manual/"),
+        &context,
+        &output(&root),
+    )
+    .unwrap();
+    let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
+    let routes: Vec<&Value> = parsed
+        .payload
+        .observations
+        .iter()
+        .filter(|row| row.text("kind") == Some("site-generated-route"))
+        .collect();
+    assert_eq!(routes.len(), 2);
+    assert!(
+        routes
+            .iter()
+            .all(|route| route.member("source") == Some(&Value::Null))
+    );
+    let generated = observation(&parsed.payload.observations, "/manual/generated.html");
+    assert_eq!(texts(generated, "anchors"), ["generated"]);
+    let navigation = parsed
+        .payload
+        .observations
+        .iter()
+        .find(|row| row.text("kind") == Some("site-navigation"))
+        .unwrap();
+    assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
+    assert!(texts(navigation, "reachable").is_empty());
 }
 
 #[test]
@@ -276,7 +319,7 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
 }
 
 #[test]
-fn version_renderer_source_and_route_ownership_must_be_exact() {
+fn version_renderer_and_route_ownership_must_be_exact() {
     let root = tempfile::tempdir().unwrap();
     let ordinary = [chapter(Some("chapter.md"), Some("chapter.md"), &[])];
     assert!(matches!(
@@ -293,15 +336,6 @@ fn version_renderer_source_and_route_ownership_must_be_exact() {
             hb("amiss/test", b"candidate"),
             &site("book.toml", "/"),
             &context("0.5.4", false, &ordinary),
-            &output(&root),
-        ),
-        Err(MdBookEvidenceError::UnsupportedBuild)
-    ));
-    assert!(matches!(
-        mdbook_site_evidence(
-            hb("amiss/test", b"candidate"),
-            &site("book.toml", "/"),
-            &context("0.5.4", true, &[chapter(Some("generated.md"), None, &[])],),
             &output(&root),
         ),
         Err(MdBookEvidenceError::UnsupportedBuild)
