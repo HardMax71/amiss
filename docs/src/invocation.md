@@ -38,6 +38,8 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
+amiss policy-include --path <repo-path> --suffix <suffix> --adapter <adapter>
+                     [--repo <path> --object-format <sha1|sha256> --index]
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
             --repository <host>/<owner>/<name>
@@ -64,11 +66,11 @@ trust them when the short form reads ambiguous.
 
 | Flag | Value | Role |
 | --- | --- | --- |
-| `--repo` | path | the repository checkout to read |
-| `--object-format` | `sha1` or `sha256` | the repository's object format |
+| `--repo` | path | the repository checkout to read; optional only for a policy-include row without an index preview |
+| `--object-format` | `sha1` or `sha256` | the repository's object format; paired with `--repo` and `--index` in a policy-include preview |
 | `--base` | full commit ID | the state the comparison starts from |
 | `--candidate` | full commit ID | the state under review; exclusive with `--index` |
-| `--index` | none | checks the staged state against the base instead |
+| `--index` | none | checks the staged state against the base, or selects it for a policy-include preview |
 | `--repository` | `<host>/<owner>/<name>`; owner and name lowercase | unverified identity claim for same-repository URLs |
 | `--ref` | `refs/heads/<name>` | the candidate branch this tree belongs to; in the adopt form, also the ref the minted debt binds to |
 | `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
@@ -77,9 +79,11 @@ trust them when the short form reads ambiguous.
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--full` | none | prints every feedback item when replaying a report as human output; foreign to every other form and format |
 | `--format` | `human`, `json`, `sarif`, or `codequality` | grouped human items, the exact report in [The report](report.md), or its SARIF or GitLab Code Quality projection; human output is bounded unless replayed with `--full` |
-| `--path` | repo-relative path | the file the authored claim pins |
+| `--path` | repo-relative path | the file an authored claim pins, or the exact root of an authored suffix selector |
 | `--line` | positive line number | the line the claim expects, one-based |
 | `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |
+| `--suffix` | dot-prefixed UTF-8 suffix | the exact 2–64 byte tail of an authored tree selector; no slash, backslash, NUL, glob, or normalization |
+| `--adapter` | `asciidoc`, `markdown`, `mdx`, `plain-advisory`, or `rst` | the built-in grammar an authored selector binds to matching paths |
 | `--floor-digest` | `sha256:` and 64 hex | the organization floor the minted debt snapshot binds to |
 | `--debt-owner` | text | the item owner the floor must authorize |
 | `--debt-reason` | text | why the debt is being recorded |
@@ -190,6 +194,23 @@ entity among the causes, is refused rather than printed broken. Exit 0 prints th
 definition. Exit 1 refuses the file or the line: unreadable, past the end, not UTF-8, or
 numbered beyond the platform. Exit 2 is an invalid invocation, which is also where a
 `--name` outside its grammar or a `--path` carrying reserved bytes lands.
+
+`amiss policy-include` authors the one exact root-and-suffix selector from
+[repository policy](controls.md). Without the optional group it prints one canonical JSON include
+row to stdout, ready to insert into the policy's sorted `document_includes` array. The row is built
+and accepted by `ScannerPolicy` before it is printed, so the helper has no parallel path, suffix,
+adapter, or canonicalization grammar. It never reads or edits an existing policy and therefore
+cannot merge, replace, broaden, or reorder repository controls.
+
+Adding `--repo`, `--object-format`, and `--index` together switches the output to one canonical
+JSON array of the current stage-zero paths that the selector matches, in raw Git path order. The
+preview uses the scanner's production suffix matcher, its repository/index reader and ceilings,
+and an end-of-read index identity check. A path that is not UTF-8 uses the report's existing
+`{"bytes_hex":"..."}` form. This previews selection only: a built-in document classification still
+wins its adapter, and a later scan can still reject an unavailable object or unsupported entry
+kind. The three preview flags are one group; partial groups and every unrelated option are invalid
+invocations. Exit 0 wrote the row or complete preview, exit 1 means the repository, index, or output
+was unavailable, and exit 2 means the closed invocation or selector grammar was invalid.
 
 `amiss adopt` onboards a repository that already has drift. It runs the evaluation under
 enforce, accepting no `--profile`, and mints a [debt snapshot](controls.md) from every

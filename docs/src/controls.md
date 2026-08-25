@@ -49,6 +49,11 @@ win. The stable selector identity remains `(path, kind)`, so changing or removin
 replacing it with a broader tree—reports policy weakening instead of disguising the old selector
 as a new one.
 
+[`amiss policy-include`](invocation.md) prints a validated canonical row for the suffixed-tree form
+without touching the policy file. Its optional staged-index preview applies this same matching
+implementation and reports exact path identities; it does not invent excludes or merge the row
+into existing controls.
+
 Each snapshot policy can carry the [published repository-policy entry ceiling](limits.md), so
 the base/candidate classification union can contain twice that many distinct roots. Tree roots
 and suffix roots are indexed separately; lookup probes path ancestors and suffix components,

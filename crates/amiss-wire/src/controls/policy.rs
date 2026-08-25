@@ -20,6 +20,22 @@ pub struct DocumentInclude {
     pub adapter: Option<Adapter>,
 }
 
+/// Projects one validated include row through the scanner-policy wire shape.
+#[must_use]
+pub fn document_include_value(include: DocumentInclude) -> Value {
+    let mut fields = vec![
+        ("path".into(), Value::String(include.path.as_str().into())),
+        ("kind".into(), Value::String(include.kind.as_ref().into())),
+    ];
+    if let Some(suffix) = include.suffix {
+        fields.push(("suffix".into(), Value::String(suffix.into())));
+    }
+    if let Some(adapter) = include.adapter {
+        fields.push(("adapter".into(), Value::String(adapter.as_ref().into())));
+    }
+    Value::Object(fields.into_boxed_slice())
+}
+
 fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
     Obj::new(path, value).and_then(|mut obj| {
         let mut include = DocumentInclude {
@@ -88,19 +104,7 @@ impl ScannerPolicy {
             .sort_by(|left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()));
         let include_rows: Vec<Value> = document_includes
             .into_iter()
-            .map(|include| {
-                let mut rows = vec![
-                    ("path".into(), Value::String(include.path.as_str().into())),
-                    ("kind".into(), Value::String(include.kind.as_ref().into())),
-                ];
-                if let Some(suffix) = include.suffix {
-                    rows.push(("suffix".into(), Value::String(suffix.into())));
-                }
-                if let Some(adapter) = include.adapter {
-                    rows.push(("adapter".into(), Value::String(adapter.as_ref().into())));
-                }
-                Value::Object(rows.into_boxed_slice())
-            })
+            .map(document_include_value)
             .collect();
         let inventory: Vec<Value> = protected_inventory
             .into_iter()

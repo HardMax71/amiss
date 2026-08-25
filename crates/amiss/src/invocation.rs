@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use amiss_wire::controls::Profile;
+use amiss_wire::controls::{Profile, ScannerPolicy};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
 use strum::EnumString;
 
@@ -33,6 +33,8 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
+amiss policy-include --path <repo-path> --suffix <suffix> --adapter <adapter>
+                     [--repo <path> --object-format <sha1|sha256> --index]
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
             --repository <host>/<owner>/<name>
@@ -66,6 +68,7 @@ pub enum Verb {
     ExternalAssess,
     Render,
     Refs,
+    PolicyInclude,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
@@ -130,6 +133,18 @@ pub struct RefsInvocation {
     pub format: OutputFormat,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PolicyIncludePreview {
+    pub repo: PathBuf,
+    pub object_format: ObjectFormat,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PolicyIncludeInvocation {
+    pub policy: ScannerPolicy,
+    pub preview: Option<PolicyIncludePreview>,
+}
+
 /// One accepted command line: a scan-shaped verb, the authoring form, or a
 /// report-bound pure form.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,6 +155,7 @@ pub enum Command {
     Assess(AssessInvocation),
     Render(RenderInvocation),
     Refs(RefsInvocation),
+    PolicyInclude(PolicyIncludeInvocation),
 }
 
 /// The adoption metadata the engine cannot know: who owns the recorded

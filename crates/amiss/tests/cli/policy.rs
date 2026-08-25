@@ -3,6 +3,81 @@ use std::fs;
 use crate::support::{amiss, fixture, git, payload};
 
 #[test]
+fn policy_include_authors_one_row_and_previews_the_exact_staged_matches() {
+    let (code, stdout, stderr) = amiss(&[
+        "policy-include",
+        "--path",
+        "manual",
+        "--suffix",
+        ".txt",
+        "--adapter",
+        "rst",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        stdout,
+        br#"{"adapter":"rst","kind":"tree","path":"manual","suffix":".txt"}
+"#
+    );
+
+    let fx = fixture();
+    let root = fx.root();
+    fs::create_dir_all(root.join("manual/nested")).unwrap_or_default();
+    fs::create_dir_all(root.join("manualish")).unwrap_or_default();
+    fs::write(root.join("manual/a.txt"), "A\n").unwrap_or_default();
+    fs::write(root.join("manual/nested/b.txt"), "B\n").unwrap_or_default();
+    fs::write(root.join("manual/c.md"), "C\n").unwrap_or_default();
+    fs::write(root.join("manualish/d.txt"), "D\n").unwrap_or_default();
+    git(root, &["add", "."]);
+
+    let (code, stdout, stderr) = amiss(&[
+        "policy-include",
+        "--path",
+        "manual",
+        "--suffix",
+        ".txt",
+        "--adapter",
+        "rst",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--index",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        stdout,
+        br#"["manual/a.txt","manual/nested/b.txt"]
+"#,
+        "the preview applies the production root and suffix boundaries"
+    );
+
+    let object = "0000000000000000000000000000000000000000";
+    amiss_fixtures::index_file(root, &[(b"manual/\xff.txt", object)]).unwrap_or_default();
+    let (code, stdout, stderr) = amiss(&[
+        "policy-include",
+        "--path",
+        "manual",
+        "--suffix",
+        ".txt",
+        "--adapter",
+        "rst",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--index",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        stdout,
+        br#"[{"bytes_hex":"6d616e75616c2fff2e747874"}]
+"#,
+        "raw Git paths keep the report's canonical bytes form"
+    );
+}
+
+#[test]
 fn repository_policy_includes_raises_and_weakening() {
     let fx = fixture();
     let root = fx.root();

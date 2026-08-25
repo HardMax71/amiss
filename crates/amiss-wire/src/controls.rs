@@ -37,7 +37,10 @@ pub use floor::{
     FloorDefect, FloorDisposition, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
     ResourceLimit,
 };
-pub use policy::{DOCUMENT_SUFFIX_BYTES, DocumentInclude, FindingDisposition, ScannerPolicy};
+pub use policy::{
+    DOCUMENT_SUFFIX_BYTES, DocumentInclude, FindingDisposition, ScannerPolicy,
+    document_include_value,
+};
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
     ContentAvailability, Disposition, EligibleFindingKind, EntryKind, GitMode, IncludeKind,

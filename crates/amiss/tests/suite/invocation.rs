@@ -2,7 +2,7 @@ use std::ffi::OsString;
 
 use amiss::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};
 use amiss_wire::controls::Profile;
-use amiss_wire::model::ForgeDialect;
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat};
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -142,10 +142,113 @@ fn rejects_structural_defects_as_invalid_invocation() {
         ),
         replace_value(&valid_pair(), ".", ""),
         with(&valid_pair(), &["--repository", "github.com/acme/repo"]),
+        with(
+            &valid_pair(),
+            &["--path", "docs", "--suffix", ".txt", "--adapter", "rst"],
+        ),
     ];
     for tokens in cases {
         assert_eq!(
             rejected_codes(parse_tokens(&tokens)),
+            vec![Code::InvalidInvocation],
+            "tokens {tokens:?}"
+        );
+    }
+}
+
+#[test]
+fn the_policy_include_form_uses_the_policy_grammar_and_an_optional_index_group() {
+    let Outcome::Accepted(command) = parse(&argv(&[
+        "policy-include",
+        "--path",
+        "docs",
+        "--suffix",
+        ".txt",
+        "--adapter",
+        "rst",
+    ])) else {
+        panic!("expected policy include acceptance");
+    };
+    let amiss::invocation::Command::PolicyInclude(invocation) = *command else {
+        panic!("expected a policy include command");
+    };
+    let [include] = invocation.policy.document_includes() else {
+        panic!("expected one validated include");
+    };
+    assert_eq!(include.path.as_str(), "docs");
+    assert_eq!(include.suffix.as_deref(), Some(".txt"));
+    assert_eq!(include.adapter, Some(Adapter::Rst));
+    assert!(invocation.preview.is_none());
+
+    let Outcome::Accepted(command) = parse(&argv(&[
+        "policy-include",
+        "--path",
+        "docs",
+        "--suffix",
+        ".txt",
+        "--adapter",
+        "rst",
+        "--repo",
+        ".",
+        "--object-format",
+        "sha1",
+        "--index",
+    ])) else {
+        panic!("expected policy include preview acceptance");
+    };
+    let amiss::invocation::Command::PolicyInclude(invocation) = *command else {
+        panic!("expected a policy include command");
+    };
+    let Some(preview) = invocation.preview else {
+        panic!("expected the complete preview group");
+    };
+    assert_eq!(preview.repo, std::path::Path::new("."));
+    assert_eq!(preview.object_format, ObjectFormat::Sha1);
+
+    for tokens in [
+        argv(&[
+            "policy-include",
+            "--path",
+            "docs",
+            "--suffix",
+            "txt",
+            "--adapter",
+            "rst",
+        ]),
+        argv(&[
+            "policy-include",
+            "--path",
+            "docs",
+            "--suffix",
+            ".txt",
+            "--adapter",
+            "html",
+        ]),
+        argv(&[
+            "policy-include",
+            "--path",
+            "docs",
+            "--suffix",
+            ".txt",
+            "--adapter",
+            "rst",
+            "--repo",
+            ".",
+        ]),
+        argv(&[
+            "policy-include",
+            "--path",
+            "docs",
+            "--suffix",
+            ".txt",
+            "--adapter",
+            "rst",
+            "--format",
+            "human",
+        ]),
+    ] {
+        assert_eq!(
+            rejected_codes(parse(&tokens)),
             vec![Code::InvalidInvocation],
             "tokens {tokens:?}"
         );
