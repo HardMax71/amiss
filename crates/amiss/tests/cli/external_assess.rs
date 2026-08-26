@@ -141,7 +141,31 @@ fn the_human_projection_windows_the_refuted() {
     assert_eq!(
         String::from_utf8(stdout).unwrap(),
         "amiss external-assess: refuted 1 unproven 0 reachable 0\n\
-         refuted https://new.example/n (gone)\n"
+         refuted \"https://new.example/n\" (gone)\n"
+    );
+}
+
+#[test]
+fn the_human_projection_suggests_only_a_proved_permanent_retarget() {
+    let (pair, plan_path, plan) = planned_pair();
+    let mut evidence = evidence_json(&plan, 200, "head");
+    evidence["rows"][0]["final_destination"] = serde_json::json!("https://current.example/n");
+    evidence["rows"][0]["redirect_chain_permanent"] = serde_json::json!(true);
+    let evidence_path = format!("{}/evidence.json", pair.repo);
+    fs::write(&evidence_path, serde_json::to_string(&evidence).unwrap()).unwrap();
+
+    let (code, stdout, stderr) = support::amiss(&[
+        "external-assess",
+        "--plan",
+        &plan_path,
+        "--evidence",
+        &evidence_path,
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    assert_eq!(
+        String::from_utf8(stdout).unwrap(),
+        "amiss external-assess: refuted 0 unproven 0 reachable 1\n\
+         retarget suggestion \"https://new.example/n\" -> \"https://current.example/n\"\n"
     );
 }
 

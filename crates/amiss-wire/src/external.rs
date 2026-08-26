@@ -53,14 +53,15 @@ pub fn evidence_file(
 
 /// One http-probe observation row: the final status or the transport
 /// failure, exactly one of the two, and where redirects ended when that
-/// differs from the destination.
+/// differs from the destination. The redirect flag proves every observed
+/// hop was permanent.
 #[must_use]
 pub fn probe_evidence_row(
     destination: &str,
     method: &str,
     status: Option<i64>,
     failure: Option<&str>,
-    final_destination: Option<&str>,
+    redirect: Option<(&str, bool)>,
     checked_at: &str,
 ) -> Value {
     let mut members = vec![
@@ -69,14 +70,13 @@ pub fn probe_evidence_row(
         ("method", string(method)),
         ("checked_at", string(checked_at)),
     ];
-    if let Some(status) = status {
-        members.push(("status", Value::Integer(status)));
-    }
-    if let Some(failure) = failure {
-        members.push(("failure", string(failure)));
-    }
-    if let Some(final_destination) = final_destination {
+    members.extend(status.map(|status| ("status", Value::Integer(status))));
+    members.extend(failure.map(|failure| ("failure", string(failure))));
+    if let Some((final_destination, permanent)) = redirect {
         members.push(("final_destination", string(final_destination)));
+        if permanent {
+            members.push(("redirect_chain_permanent", Value::Bool(true)));
+        }
     }
     object(members)
 }

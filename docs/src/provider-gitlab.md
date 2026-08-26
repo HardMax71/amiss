@@ -375,10 +375,12 @@ The endpoint returns:
 | `503` | The service is unready, or capacity, trusted time, storage, provider access, acquisition, or evaluation was unavailable. |
 
 A completed result with a still-live artifact also returns `Link: <...>; rel="amiss-report"`,
-`X-Amiss-Artifact-Auth: bearer`, and `X-Amiss-Artifact-Expires-Unix-Millis: <instant>`. These
-headers appear with `X-Amiss-Report-Digest` and an optional `X-Amiss-Assessment-Digest` on both
-`204` and completed `412` responses; only the status decides the policy job. Retrieve the Link
-target with the separately configured artifact bearer token and recompute its SHA-256 digest.
+`X-Amiss-Artifact-Auth: bearer`, and `X-Amiss-Artifact-Expires-Unix-Millis: <instant>`. A completed
+external assessment adds an `amiss-assessment` Link target, its digest, and refuted, unproven, and
+reachable count headers; an incomplete one carries only the incomplete state. These headers appear
+with `X-Amiss-Report-Digest` on both `204` and completed `412` responses; only the status decides
+the policy job. Retrieve either Link target with the separately configured artifact bearer token
+and recompute its SHA-256 digest.
 
 The service checks bounds, OIDC, and the configured plan before creating an owner session, touching
 a delivery row, or starting API, Git, or runner work. The policy job must treat only `204` as

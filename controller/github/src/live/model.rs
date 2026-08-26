@@ -115,6 +115,7 @@ pub(super) struct CheckRunRecord {
     pub name: String,
     pub head_sha: String,
     pub external_id: Option<String>,
+    pub details_url: Option<String>,
     pub status: String,
     pub conclusion: Option<String>,
     pub output: CheckRunOutputRecord,
@@ -143,6 +144,8 @@ pub(super) struct CreateCheckRun {
     pub name: String,
     pub head_sha: String,
     pub external_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details_url: Option<String>,
     pub status: &'static str,
     pub conclusion: String,
     pub output: CreateCheckRunOutput,

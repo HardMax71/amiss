@@ -71,13 +71,15 @@ fn main() -> ExitCode {
             Observation::Answered {
                 method,
                 status,
-                final_destination,
+                redirect,
             } => probe_evidence_row(
                 destination,
                 method,
                 Some(status),
                 None,
-                final_destination.as_deref(),
+                redirect
+                    .as_ref()
+                    .map(|redirect| (redirect.destination.as_str(), redirect.permanent)),
                 &checked_at,
             ),
             Observation::Failed { method, failure } => {

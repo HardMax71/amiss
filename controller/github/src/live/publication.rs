@@ -130,6 +130,10 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
         name: config.required_status_name.clone(),
         head_sha: publication.gate_commit.as_str().to_owned(),
         external_id: publication.evaluation_id.as_str().to_owned(),
+        details_url: publication
+            .artifact
+            .as_ref()
+            .map(|artifact| artifact.locator.clone()),
         status: COMPLETED,
         conclusion: conclusion.to_owned(),
         output: CreateCheckRunOutput {
@@ -164,6 +168,7 @@ fn matches_expected(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
     run.name == expected.name
         && run.head_sha == expected.head_sha
         && run.external_id.as_deref() == Some(expected.external_id.as_str())
+        && run.details_url == expected.details_url
         && run.status == expected.status
         && run.conclusion.as_deref() == Some(expected.conclusion.as_str())
         && run.output.title.as_deref() == Some(expected.output.title.as_str())
