@@ -259,6 +259,98 @@ starship reads 5.7 seconds on the same tree, engine
 distinct anchor target; what remains is the parse-and-discovery baseline over the
 mirrors' 17 MB, a recorded fact with a weekly bench now watching the mirror shape.
 
+## Notebook Markdown yield, measured and held
+
+The notebook question was measured on 2026-08-26 before admitting another document
+format. Ten pinned trees supplied 3,878 exact lowercase `.ipynb` blobs and 461,907,733
+bytes. Every tree with at most 120 notebooks supplied all of them; larger trees supplied
+120 paths at evenly spaced indexes after lexicographic sorting, including the first and
+last. That deterministic sample held 762 blobs and 104,270,321 raw bytes.
+
+| Repository | Head | Notebooks | Empty | Over 4 MiB | Sample |
+| --- | --- | ---: | ---: | ---: | ---: |
+| openai/openai-cookbook | `a7c8782de788` | 271 | 0 | 4 | 120 |
+| microsoft/ML-For-Beginners | `d0d0ea2b2d22` | 2,856 | 224 | 0 | 120 |
+| jakevdp/PythonDataScienceHandbook | `d66231454ef7` | 136 | 0 | 0 | 120 |
+| fastai/fastbook | `e8baa81d89f0` | 44 | 0 | 0 | 44 |
+| tensorflow/docs | `35e0922e059d` | 188 | 0 | 0 | 120 |
+| pandas-dev/pandas | `668be9d6d677` | 1 | 0 | 0 | 1 |
+| matplotlib/matplotlib | `e519c449e932` | 3 | 0 | 0 | 3 |
+| jupyter/notebook | `062a2e41d3d2` | 16 | 0 | 0 | 16 |
+| anthropics/claude-cookbooks | `35f2eec7e448` | 98 | 0 | 1 | 98 |
+| keras-team/keras-io | `7990430c3246` | 265 | 0 | 0 | 120 |
+
+Fourteen sampled blobs were empty, all from the Microsoft tree. The other 748 were
+nbformat 4.0 through 4.5 documents. Their Markdown `source` values were joined exactly as
+the [notebook format](https://nbformat.readthedocs.io/en/stable/format_description.html)
+requires and each cell was passed independently through the production Markdown
+extractor. No code, output, attachment, kernel, or repository program was interpreted.
+The extractor accepted all 15,245 cells.
+
+| Repository | Valid sample | Markdown cells | With reference | With path-like | Path-like occurrences | All occurrences | Output share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| openai/openai-cookbook | 120 | 2,041 | 111 | 52 | 211 | 1,006 | 40.4% |
+| microsoft/ML-For-Beginners | 106 | 938 | 104 | 20 | 68 | 765 | 90.4% |
+| jakevdp/PythonDataScienceHandbook | 120 | 3,000 | 116 | 110 | 926 | 1,711 | 93.0% |
+| fastai/fastbook | 44 | 2,429 | 26 | 17 | 137 | 342 | 82.5% |
+| tensorflow/docs | 120 | 3,366 | 120 | 58 | 272 | 2,366 | 7.8% |
+| pandas-dev/pandas | 1 | 86 | 1 | 1 | 53 | 73 | 0.0% |
+| matplotlib/matplotlib | 3 | 25 | 0 | 0 | 0 | 0 | 81.8% |
+| jupyter/notebook | 16 | 149 | 7 | 3 | 11 | 49 | 4.6% |
+| anthropics/claude-cookbooks | 98 | 1,202 | 66 | 32 | 109 | 502 | 73.4% |
+| keras-team/keras-io | 120 | 2,009 | 119 | 13 | 38 | 1,100 | 5.1% |
+
+`Path-like` is deliberately the lower-bound lexical class: no URI scheme, no leading
+fragment, no `attachment:` scheme, and no network-path `//` prefix. It does not count a
+same-repository forge URL which the resolver could answer. Even under that restriction,
+306 of 748 valid notebooks held 1,825 candidates for the existing repository resolver.
+The full extraction held 7,914 occurrences: 5,836 scheme-bearing or network-path
+destinations, 231 cell-local fragments, and 22 attachments in addition to those 1,825.
+The format has real coverage yield rather than merely category adjacency.
+
+The cell bodies are small. The file row covers all 3,878 tree entries; the other two rows
+cover the sample.
+
+| Value | p50 | p95 | p99 | Maximum |
+| --- | ---: | ---: | ---: | ---: |
+| notebook bytes | 26,351 | 494,520 | 696,869 | 11,132,496 |
+| Markdown-cell bytes | 221 | 1,504 | 2,785 | 38,276 |
+| Markdown-cell lines | 3 | 19 | 41 | 569 |
+
+Only five tree entries exceed the current 4 MiB document ceiling, and none exceeds 16
+MiB. Size is not the reason to refuse the format. Materializing the notebook is: code-cell
+`outputs` alone occupied 69,870,711 of the sample's 100,218,023 whitespace-free JSON bytes,
+69.7 percent, before counting execution state or notebook metadata. Outputs were present
+in 342 notebooks, exceeded half the bytes in 204, and exceeded 90 percent in 106. Five
+more notebooks carried 15,230,286 bytes of Markdown attachments. A future reader must
+skip those values while decoding rather than build an owned notebook tree or feed them
+to the Markdown parser.
+
+Location is the unsatisfied gate. Of 15,245 Markdown cells, 15,189 used an array source
+and 56 one string; 104 of 78,157 array members themselves held more than one source line.
+A decoded Markdown span can therefore cross JSON strings, quotes, commas, and escapes. It
+is not one physical notebook byte span. Cell IDs do not rescue the current contract:
+only 2,429 of 27,601 cells had one, and the sample contained one duplicate. An index plus
+an optional valid ID and a cell-local span can name the source honestly, but the current
+report location has only repository path and physical document span.
+
+The provider UIs cannot consume a substitute. GitHub Check annotations require a path
+and physical start/end lines, while its rich notebook diff still requires switching to
+the raw source diff to comment on a line
+([Checks API](https://docs.github.com/en/rest/checks/runs),
+[notebook diff limitation](https://github.blog/changelog/2023-03-01-feature-preview-rich-jupyter-notebook-diffs/)).
+GitLab transforms notebook diffs on commit and compare pages, explicitly not on merge
+request pages, and offers no code suggestions for notebooks
+([GitLab notebook diffs](https://docs.gitlab.com/user/project/repository/files/jupyter_notebooks/)).
+A raw-JSON annotation would be clickable but would name the serialization rather than the
+Markdown source the finding describes.
+
+Notebook parsing is therefore held, not rejected. Shipping waits for a cell-aware report
+location and at least one provider or design partner that can use it. That change must be
+reviewed as a wire migration before the parser: cell source stays isolated, output and
+metadata stay skipped, empty or malformed notebooks fail visibly, and a cell-local
+finding is never disguised as a contiguous raw-JSON span.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
