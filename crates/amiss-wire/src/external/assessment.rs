@@ -247,17 +247,24 @@ fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect>
                 }
                 (_, _) => return Err(AssessDefect::MalformedEvidence),
             };
-            let retarget = match row.member("final_destination") {
-                Some(Value::String(final_destination)) if !final_destination.is_empty() => {
-                    Some(final_destination.to_string())
+            let final_destination = match row.member("final_destination") {
+                Some(Value::String(destination)) if !destination.is_empty() => {
+                    Some(destination.as_ref())
                 }
                 None | Some(Value::Null) => None,
+                Some(_) => return Err(AssessDefect::MalformedEvidence),
+            };
+            let redirect_chain_permanent = match row.member("redirect_chain_permanent") {
+                Some(Value::Bool(true)) if final_destination.is_some() => true,
+                None | Some(Value::Null) => false,
                 Some(_) => return Err(AssessDefect::MalformedEvidence),
             };
             Ok(Observed::Probe {
                 method_get,
                 status,
-                retarget,
+                retarget: final_destination
+                    .filter(|_destination| redirect_chain_permanent)
+                    .map(str::to_owned),
             })
         }
         Some("forge-api") => {

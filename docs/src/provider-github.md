@@ -366,7 +366,9 @@ duplicate or conflicting current rows.
 
 The Check Run summary names the provider, repository, change, provider run, gate commit, refs,
 commits, trees, plan, execution constraint, report digest, authenticated artifact locator, and
-exclusive expiry. An unavailable result also carries one stable `failure` label such as `timeout`
+exclusive expiry. The Check Run details URL names the same report; completed external verification
+adds the assessment locator and its three verdict counts, while incomplete verification says so
+without counts. An unavailable result also carries one stable `failure` label such as `timeout`
 or `tampered-runtime`. Below those bindings the summary lists the report's own grouped feedback:
 the fix, check, and existing counts, then up to ten items naming a target and an affected-place
 count, every repository-derived value rendered under the human-atom law so hostile path bytes

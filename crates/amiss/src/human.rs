@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 
@@ -120,10 +121,9 @@ pub(crate) fn report(envelope: &Value, explain_scope: bool, full_feedback: bool)
 
 pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
     let mut out = Channel::new();
-    let shown_target = target.as_str().map_or_else(
-        || amiss_wire::human::atom_bytes(target.as_bytes()),
-        amiss_wire::human::atom,
-    );
+    let shown_target = target
+        .as_str()
+        .map_or_else(|| atom_bytes(target.as_bytes()), atom);
     say!(
         out,
         "amiss refs: target {shown_target} candidate occurrences {}",
@@ -138,9 +138,9 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
             row.atom_or_dash("document"),
             span.number("start_line"),
             span.number("start_column"),
-            amiss_wire::human::atom(row.text("source_construct")),
-            amiss_wire::human::atom(row.view("resolution").text("kind")),
-            amiss_wire::human::atom(row.text("observation_id")),
+            atom(row.text("source_construct")),
+            atom(row.view("resolution").text("kind")),
+            atom(row.text("observation_id")),
         );
     }
 }
@@ -302,12 +302,13 @@ pub(crate) fn assessment(envelope: &Value) {
         "amiss external-assess: refuted {refuted} unproven {unproven} reachable {reachable}",
     ));
     for row in verdicts
+        .clone()
         .filter(|row| row.text("verdict") == "refuted")
         .take(10)
     {
         out.line(format_args!(
             "refuted {} ({})",
-            row.text("destination"),
+            atom(row.text("destination")),
             row.text("reason")
         ));
     }
@@ -315,6 +316,21 @@ pub(crate) fn assessment(envelope: &Value) {
     if overflow > 0 {
         out.line(format_args!(
             "refuted overflow: {overflow} more in the full assessment"
+        ));
+    }
+    let retargets = verdicts.filter(|row| !row.text("retarget").is_empty());
+    let retarget_count = retargets.clone().count();
+    for row in retargets.take(10) {
+        out.line(format_args!(
+            "retarget suggestion {} -> {}",
+            atom(row.text("destination")),
+            atom(row.text("retarget"))
+        ));
+    }
+    let overflow = retarget_count.saturating_sub(10);
+    if overflow > 0 {
+        out.line(format_args!(
+            "retarget overflow: {overflow} more in the full assessment"
         ));
     }
 }

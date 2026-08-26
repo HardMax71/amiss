@@ -458,6 +458,13 @@ fn publication_summary_carries_the_report_feedback_lines() {
         summary.contains(publication.artifact.as_ref().unwrap().locator.as_str()),
         "{summary}"
     );
+    assert_eq!(
+        expected.details_url.as_deref(),
+        publication
+            .artifact
+            .as_ref()
+            .map(|artifact| artifact.locator.as_str())
+    );
 }
 
 #[test]
@@ -904,6 +911,7 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
         name: expected.name.clone(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
+        details_url: expected.details_url.clone(),
         status: expected.status.to_owned(),
         conclusion: Some(expected.conclusion.clone()),
         output: CheckRunOutputRecord {

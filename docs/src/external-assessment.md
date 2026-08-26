@@ -14,8 +14,9 @@ amiss external-assess --plan plan.json --evidence evidence.json --format json
 
 Evidence carries observations, never verdicts. A probe row reports the final status or
 the transport failure, exactly one of the two, the method that saw it, and where
-redirects ended. A forge row reports what the API said: the repository's visibility
-first, then how the opaque tail resolved against its refs. The file binds the exact plan
+redirects ended. It marks that destination as a permanent retarget only when every
+observed hop used 301 or 308. A forge row reports what the API said: the repository's
+visibility first, then how the opaque tail resolved against its refs. The file binds the exact plan
 by payload digest, and the discipline is strict in both directions: a row naming a
 destination the plan did not introduce, repeating one, or binding another plan refuses
 the whole run, while destinations the file never mentions simply stay unproven. The
@@ -33,15 +34,18 @@ is a wall, not a grave: unproven. Transport failures, unfollowed redirects, and 
 evidence are unproven too, each with its reason named. On the forge side a missing
 repository never refutes, since forges answer 404 for private repositories they will not
 name; refutation needs a readable repository whose refs resolved and whose path or
-revision then proved absent. Where redirects ended, permanent or not, lands as a
-`retarget` suggestion on the row, never a finding. And `reachable` claims exactly what it
-says: something answered, not that the content is still right.
+revision then proved absent. Every redirect destination remains evidence, but only an
+all-301/308 chain lands as a `retarget` suggestion on the row, never a finding or an
+automatic edit. And `reachable` claims exactly what it says: something answered, not that
+the content is still right.
 
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.
 Exit 0 wrote the assessment, refuted rows included. The command itself remains advisory; a
-consumer decides what those rows do. Exit 2 means an input could not be trusted.
+consumer decides what those rows do. Human output shows up to ten permanent-retarget
+suggestions and names any overflow; JSON retains every row. Exit 2 means an input could not
+be trusted.
 
 Provider plans expose that decision as `external_policy`. `off` makes no external API calls;
 `advisory`, the default, retains and counts the assessment without changing the engine result;

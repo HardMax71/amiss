@@ -4,7 +4,7 @@ use std::net::IpAddr;
 
 use url::Url;
 
-use super::{get_retries, global, redirect_target, shown, vetted};
+use super::{advance_redirect, get_retries, global, redirect_target, shown, vetted};
 
 fn ip(text: &str) -> IpAddr {
     text.parse().unwrap()
@@ -130,6 +130,18 @@ fn redirect_targets_join_relative_locations() {
         "https://other.example/x"
     );
     assert!(redirect_target(&current, &reqwest::header::HeaderMap::new()).is_none());
+}
+
+#[test]
+fn a_retarget_needs_an_entirely_permanent_redirect_chain() {
+    let first = advance_redirect(None, 301);
+    assert_eq!(first, (301, true));
+    assert_eq!(advance_redirect(Some(first), 308), (308, true));
+    assert_eq!(advance_redirect(Some(first), 302), (302, false));
+    assert_eq!(
+        advance_redirect(Some(advance_redirect(None, 307)), 301),
+        (301, false)
+    );
 }
 
 #[test]

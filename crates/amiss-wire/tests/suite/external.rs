@@ -533,7 +533,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
     }
 }
 
-use amiss_wire::external::{AssessDefect, EVIDENCE_SCHEMA, assess};
+use amiss_wire::external::{AssessDefect, EVIDENCE_SCHEMA, assess, probe_evidence_row};
 
 fn evidence(plan: &Value, rows: Vec<Value>) -> Value {
     object(vec![
@@ -669,6 +669,80 @@ fn the_judgment_policy_is_conservative() {
             ),
         ],
     );
+}
+
+#[test]
+fn only_a_proved_permanent_redirect_becomes_a_retarget() {
+    let permanent = "https://a.example/old";
+    let temporary = "https://b.example/old";
+    let permanent_target = "https://a.example/current";
+    let temporary_target = "https://b.example/current";
+    let plan = planned(vec![
+        row(Value::Null, external_occurrence("docs/a.md", permanent)),
+        row(Value::Null, external_occurrence("docs/a.md", temporary)),
+    ]);
+    let observed = evidence(
+        &plan,
+        vec![
+            probe_evidence_row(
+                permanent,
+                "head",
+                Some(200),
+                None,
+                Some((permanent_target, true)),
+                "t0",
+            ),
+            probe_evidence_row(
+                temporary,
+                "head",
+                Some(200),
+                None,
+                Some((temporary_target, false)),
+                "t0",
+            ),
+        ],
+    );
+    let assessment =
+        assess(&plan, &observed, "0.0.0", &sample_digest()).expect("the redirects are evidence");
+    let verdicts = array(field(field(&assessment, "payload"), "verdicts"));
+    let verdict = |destination: &str| {
+        verdicts
+            .iter()
+            .find(|row| row.text("destination") == Some(destination))
+            .expect("the plan destination has one verdict")
+    };
+    assert_eq!(verdict(permanent).text("retarget"), Some(permanent_target));
+    assert_eq!(verdict(temporary).text("retarget"), None);
+
+    for malformed in [
+        object(vec![
+            ("checked_at", string("t0")),
+            ("destination", string(permanent)),
+            ("kind", string("http-probe")),
+            ("method", string("head")),
+            ("redirect_chain_permanent", Value::Bool(true)),
+            ("status", Value::Integer(200)),
+        ]),
+        object(vec![
+            ("checked_at", string("t0")),
+            ("destination", string(permanent)),
+            ("final_destination", string(permanent_target)),
+            ("kind", string("http-probe")),
+            ("method", string("head")),
+            ("redirect_chain_permanent", Value::Bool(false)),
+            ("status", Value::Integer(200)),
+        ]),
+    ] {
+        assert_eq!(
+            assess(
+                &plan,
+                &evidence(&plan, vec![malformed]),
+                "0.0.0",
+                &sample_digest()
+            ),
+            Err(AssessDefect::MalformedEvidence)
+        );
+    }
 }
 
 #[test]

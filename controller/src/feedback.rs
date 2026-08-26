@@ -31,6 +31,18 @@ pub fn with_feedback(
         ]);
         if let Some(digest) = artifact.assessment_digest {
             lines.push(format!("assessment: {digest}"));
+            lines.push(format!(
+                "assessment-artifact: {}/assessment",
+                artifact.locator.strip_suffix("/report")?
+            ));
+        }
+        if artifact.external_incomplete {
+            lines.push("external-assessment: incomplete".to_owned());
+        } else if let Some(tally) = artifact.external_tally {
+            lines.push(format!(
+                "external-assessment: refuted {} unproven {} reachable {}",
+                tally.refuted, tally.unproven, tally.reachable
+            ));
         }
     }
     lines.extend(feedback_lines(report, artifact.is_some()));

@@ -77,10 +77,12 @@ and posts or reuses one exact review.
 
 The review body binds the evaluation, conclusion, provider, repository, pull request, provider
 run, refs, commits, trees, plan, execution constraint, report digest, authenticated artifact
-locator, and exclusive expiry. Below those bindings it lists the report's grouped feedback the
-way the GitHub summary does: counts, then up to ten items with atom-rendered targets; the locator
-provides every row. The `required_status_name` from the execution constraint is a readable review
-label and retry binding; the provider gate itself is the dedicated reviewer identity.
+locator, and exclusive expiry. Completed external verification adds the assessment locator and
+its three verdict counts; incomplete verification says so without counts. Below those bindings it
+lists the report's grouped feedback the way the GitHub summary does: counts, then up to ten items
+with atom-rendered targets; the locator provides every row. The `required_status_name` from the
+execution constraint is a readable review label and retry binding; the provider gate itself is the
+dedicated reviewer identity.
 
 ## Dedicated reviewer
 
