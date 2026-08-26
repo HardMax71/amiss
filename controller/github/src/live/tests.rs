@@ -228,9 +228,12 @@ fn unavailable_event_candidate_fails_closed() {
 }
 
 #[test]
-fn publication_reuses_only_one_exact_owned_check() {
+fn publication_reuses_only_one_compatible_owned_check() {
     let fixture = Fixture::new();
-    let publication = fixture.publication(CheckConclusion::Pass);
+    let mut publication = fixture.publication(CheckConclusion::Pass);
+    publication.artifact = Some(artifact_reference(
+        publication.report.as_deref().unwrap_or_default(),
+    ));
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let exact = check_run(APP_ID, &expected);
@@ -238,6 +241,20 @@ fn publication_reuses_only_one_exact_owned_check() {
         publication_decision(&fixture.config, &publication, std::slice::from_ref(&exact)).unwrap(),
         PublicationDecision::Reuse
     ));
+
+    let mut legacy = exact.clone();
+    legacy.details_url = None;
+    assert!(matches!(
+        publication_decision(&fixture.config, &publication, std::slice::from_ref(&legacy)).unwrap(),
+        PublicationDecision::Reuse
+    ));
+
+    let mut wrong_details = exact.clone();
+    wrong_details.details_url = Some("https://artifacts.example/wrong".to_owned());
+    assert_eq!(
+        decision_error(&fixture, &publication, &[wrong_details]),
+        ProviderError::InvalidResponse
+    );
 
     let mut changed = exact.clone();
     changed.conclusion = Some("failure".to_owned());
@@ -372,7 +389,10 @@ fn an_owned_check_run_is_exact_in_every_field_that_names_it() {
 #[test]
 fn a_created_check_run_answers_on_every_clause() {
     let fixture = Fixture::new();
-    let publication = fixture.publication(CheckConclusion::Pass);
+    let mut publication = fixture.publication(CheckConclusion::Pass);
+    publication.artifact = Some(artifact_reference(
+        publication.report.as_deref().unwrap_or_default(),
+    ));
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     assert_eq!(
@@ -387,8 +407,16 @@ fn a_created_check_run_answers_on_every_clause() {
     appless.app = None;
     let mut other_summary = check_run(APP_ID, &expected);
     other_summary.output.summary = Some("something else entirely".to_owned());
+    let mut missing_details = check_run(APP_ID, &expected);
+    missing_details.details_url = None;
 
-    for broken in [unnumbered, another_app, appless, other_summary] {
+    for broken in [
+        unnumbered,
+        another_app,
+        appless,
+        other_summary,
+        missing_details,
+    ] {
         assert_eq!(
             validate_created(&fixture.config, &expected, &broken),
             Err(ProviderError::InvalidResponse),
@@ -420,16 +448,9 @@ fn publication_summary_carries_the_report_feedback_lines() {
         }))
         .unwrap(),
     );
-    let artifact_id = "a".repeat(64);
-    publication.artifact = Some(ArtifactReference {
-        id: artifact_id.clone(),
-        locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
-        expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
-        assessment_digest: None,
-        external_tally: None,
-        external_incomplete: false,
-    });
+    publication.artifact = Some(artifact_reference(
+        publication.report.as_deref().unwrap_or_default(),
+    ));
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let summary = &expected.output.summary;
@@ -919,6 +940,19 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
             summary: Some(expected.output.summary.clone()),
         },
         app: Some(CheckRunApp { id: app_id }),
+    }
+}
+
+fn artifact_reference(report: &[u8]) -> ArtifactReference {
+    let id = "a".repeat(64);
+    ArtifactReference {
+        id: id.clone(),
+        locator: format!("https://amiss.example/artifacts/{id}/report"),
+        expires_at_unix_millis: 1_800_000_000_000,
+        report_digest: sha256(report),
+        assessment_digest: None,
+        external_tally: None,
+        external_incomplete: false,
     }
 }
 

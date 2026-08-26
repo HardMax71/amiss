@@ -70,7 +70,15 @@ pub(super) fn publication_decision(
     }
 
     match matching {
-        Some(run) if matches_expected(run, &expected) => Ok(PublicationDecision::Reuse),
+        Some(run)
+            if matches_identity_and_output(run, &expected)
+                && run
+                    .details_url
+                    .as_ref()
+                    .is_none_or(|url| expected.details_url.as_ref() == Some(url)) =>
+        {
+            Ok(PublicationDecision::Reuse)
+        }
         Some(_) => Err(ProviderError::InvalidResponse),
         None => Ok(PublicationDecision::Create(expected)),
     }
@@ -82,7 +90,11 @@ pub(super) fn validate_created(
     created: &CheckRunRecord,
 ) -> Result<(), ProviderError> {
     let own_app = created.app.as_ref().map(|app| app.id) == Some(config.app_id);
-    if created.id == 0 || !own_app || !matches_expected(created, expected) {
+    if created.id == 0
+        || !own_app
+        || created.details_url != expected.details_url
+        || !matches_identity_and_output(created, expected)
+    {
         return Err(ProviderError::InvalidResponse);
     }
     Ok(())
@@ -164,11 +176,10 @@ fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {
     }
 }
 
-fn matches_expected(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
+fn matches_identity_and_output(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
     run.name == expected.name
         && run.head_sha == expected.head_sha
         && run.external_id.as_deref() == Some(expected.external_id.as_str())
-        && run.details_url == expected.details_url
         && run.status == expected.status
         && run.conclusion.as_deref() == Some(expected.conclusion.as_str())
         && run.output.title.as_deref() == Some(expected.output.title.as_str())
