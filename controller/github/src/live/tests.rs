@@ -228,12 +228,9 @@ fn unavailable_event_candidate_fails_closed() {
 }
 
 #[test]
-fn publication_reuses_only_one_compatible_owned_check() {
+fn publication_reuses_only_one_exact_owned_check() {
     let fixture = Fixture::new();
-    let mut publication = fixture.publication(CheckConclusion::Pass);
-    publication.artifact = Some(artifact_reference(
-        publication.report.as_deref().unwrap_or_default(),
-    ));
+    let publication = fixture.publication(CheckConclusion::Pass);
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let exact = check_run(APP_ID, &expected);
@@ -241,20 +238,6 @@ fn publication_reuses_only_one_compatible_owned_check() {
         publication_decision(&fixture.config, &publication, std::slice::from_ref(&exact)).unwrap(),
         PublicationDecision::Reuse
     ));
-
-    let mut legacy = exact.clone();
-    legacy.details_url = None;
-    assert!(matches!(
-        publication_decision(&fixture.config, &publication, std::slice::from_ref(&legacy)).unwrap(),
-        PublicationDecision::Reuse
-    ));
-
-    let mut wrong_details = exact.clone();
-    wrong_details.details_url = Some("https://artifacts.example/wrong".to_owned());
-    assert_eq!(
-        decision_error(&fixture, &publication, &[wrong_details]),
-        ProviderError::InvalidResponse
-    );
 
     let mut changed = exact.clone();
     changed.conclusion = Some("failure".to_owned());
@@ -288,6 +271,58 @@ fn publication_reuses_only_one_compatible_owned_check() {
         publication_decision(&fixture.config, &publication, &[other_evaluation, exact]).unwrap(),
         PublicationDecision::Reuse
     ));
+}
+
+#[test]
+fn previous_assessment_projections_are_compatible_summaries() {
+    let fixture = Fixture::new();
+    let mut publication = fixture.publication(CheckConclusion::Pass);
+    let mut completed = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    let artifact_root = completed
+        .locator
+        .strip_suffix("/report")
+        .unwrap()
+        .to_owned();
+    completed.assessment_digest = Some(sha256(b"assessment"));
+    completed.external_tally = Some(amiss_controller::ExternalTally {
+        refuted: 1,
+        unproven: 2,
+        reachable: 3,
+    });
+    let mut incomplete = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    incomplete.external_incomplete = true;
+
+    for (artifact, omitted) in [
+        (
+            completed,
+            vec![
+                format!("assessment-artifact: {artifact_root}/assessment"),
+                "external-assessment: refuted 1 unproven 2 reachable 3".to_owned(),
+            ],
+        ),
+        (
+            incomplete,
+            vec!["external-assessment: incomplete".to_owned()],
+        ),
+    ] {
+        publication.artifact = Some(artifact);
+        let expected = created_from_decision(
+            publication_decision(&fixture.config, &publication, &[]).unwrap(),
+        );
+        let previous = omitted
+            .iter()
+            .fold(expected.output.summary.clone(), |summary, line| {
+                summary.replace(&format!("\n{line}"), "")
+            });
+        assert_ne!(previous, expected.output.summary);
+        let mut run = check_run(APP_ID, &expected);
+        run.output.summary = Some(previous);
+        assert!(matches!(
+            publication_decision(&fixture.config, &publication, std::slice::from_ref(&run))
+                .unwrap(),
+            PublicationDecision::Reuse
+        ));
+    }
 }
 
 /// A credential is scoped to the installation it was configured for, and the
@@ -389,10 +424,7 @@ fn an_owned_check_run_is_exact_in_every_field_that_names_it() {
 #[test]
 fn a_created_check_run_answers_on_every_clause() {
     let fixture = Fixture::new();
-    let mut publication = fixture.publication(CheckConclusion::Pass);
-    publication.artifact = Some(artifact_reference(
-        publication.report.as_deref().unwrap_or_default(),
-    ));
+    let publication = fixture.publication(CheckConclusion::Pass);
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     assert_eq!(
@@ -407,16 +439,8 @@ fn a_created_check_run_answers_on_every_clause() {
     appless.app = None;
     let mut other_summary = check_run(APP_ID, &expected);
     other_summary.output.summary = Some("something else entirely".to_owned());
-    let mut missing_details = check_run(APP_ID, &expected);
-    missing_details.details_url = None;
 
-    for broken in [
-        unnumbered,
-        another_app,
-        appless,
-        other_summary,
-        missing_details,
-    ] {
+    for broken in [unnumbered, another_app, appless, other_summary] {
         assert_eq!(
             validate_created(&fixture.config, &expected, &broken),
             Err(ProviderError::InvalidResponse),
@@ -478,13 +502,6 @@ fn publication_summary_carries_the_report_feedback_lines() {
     assert!(
         summary.contains(publication.artifact.as_ref().unwrap().locator.as_str()),
         "{summary}"
-    );
-    assert_eq!(
-        expected.details_url.as_deref(),
-        publication
-            .artifact
-            .as_ref()
-            .map(|artifact| artifact.locator.as_str())
     );
 }
 
@@ -932,7 +949,6 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
         name: expected.name.clone(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
-        details_url: expected.details_url.clone(),
         status: expected.status.to_owned(),
         conclusion: Some(expected.conclusion.clone()),
         output: CheckRunOutputRecord {

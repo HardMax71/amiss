@@ -357,6 +357,11 @@ Otherwise the adapter reads checks for that gate commit, required name, and App.
 historical rows with another external ID, reuses one exact current match, and fails closed on
 duplicate or conflicting current rows.
 
+Crash recovery across this assessment-feedback upgrade admits one older projection: every stable
+field must match, and the summary may differ only by lacking the `assessment-artifact` and
+`external-assessment` lines. The adapter reuses that already-created Check Run without rewriting
+it. Normal graceful drain avoids this state; every other mismatch still fails closed.
+
 | Controller result | GitHub Check Run conclusion |
 | --- | --- |
 | Pass | `success` |
@@ -366,10 +371,12 @@ duplicate or conflicting current rows.
 
 The Check Run summary names the provider, repository, change, provider run, gate commit, refs,
 commits, trees, plan, execution constraint, report digest, authenticated artifact locator, and
-exclusive expiry. The Check Run details URL names the same report; completed external verification
-adds the assessment locator and its three verdict counts, while incomplete verification says so
-without counts. An unavailable result also carries one stable `failure` label such as `timeout`
-or `tampered-runtime`. Below those bindings the summary lists the report's own grouped feedback:
+exclusive expiry. The native details URL remains unset because a browser click cannot carry the
+artifact bearer header; authorized clients retrieve the summary's locator. Completed external
+verification adds the assessment locator and its three verdict counts, while incomplete
+verification says so without counts. An unavailable result also carries one stable `failure`
+label such as `timeout` or `tampered-runtime`. Below those bindings the summary lists the report's
+own grouped feedback:
 the fix, check, and existing counts, then up to ten items naming a target and an affected-place
 count, every repository-derived value rendered under the human-atom law so hostile path bytes
 never become markdown or workflow syntax. The digest stays the evidence; the listed lines are a
