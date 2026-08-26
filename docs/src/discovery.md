@@ -12,6 +12,10 @@ tree-and-suffix selector bound to `rst`; unrelated suffixes remain outside. `.ip
 are `unparsed-markup`: this engine has no parser for a notebook or
 for Org markup, so those files are discovered and counted as `unsupported-document-format`
 and their content is never read, the same honest count an unbound policy include reaches.
+Notebook Markdown has measured reference yield, but its decoded cell spans are not physical JSON
+spans and the current report cannot name a cell; the
+[notebook measurement](ledger.md#notebook-markdown-yield-measured-and-held) records why that
+format remains visible but unparsed.
 An include may instead bind one of the five built-in adapters, which reads the named path or
 tree under that grammar without installing another parser. One grammar answers per path per
 evaluation: the candidate policy's bindings, or the base's when the candidate carries none,
