@@ -138,17 +138,13 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
                 ),
             };
         }
+        let observed_redirect = advance_redirect(standing_redirect, status);
         let Some(next) = redirect_target(&url, response.headers()) else {
             return Attempted::Answered {
                 status,
-                redirect: moved(
-                    start,
-                    &url,
-                    standing_redirect.is_some_and(|(_status, permanent)| permanent),
-                ),
+                redirect: moved(start, &url, observed_redirect.1),
             };
         };
-        let observed_redirect = advance_redirect(standing_redirect, status);
         // A hop the policy refuses is still worth recording: the standing
         // redirect and where it pointed, never a request to it.
         match vetted(next.clone()) {
