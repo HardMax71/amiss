@@ -341,10 +341,18 @@ fn result_response<E>(result: Result<amiss_controller::HandleOutcome, E>) -> Res
 
 fn artifact_headers(status: StatusCode, artifact: &ArtifactReference) -> Option<Response> {
     let mut response = status.into_response();
-    response.headers_mut().insert(
-        header::LINK,
-        HeaderValue::from_str(&format!("<{}>; rel=\"amiss-report\"", artifact.locator)).ok()?,
-    );
+    let link = if artifact.assessment_digest.is_some() {
+        format!(
+            "<{}>; rel=\"amiss-report\", <{}/assessment>; rel=\"amiss-assessment\"",
+            artifact.locator,
+            artifact.locator.strip_suffix("/report")?
+        )
+    } else {
+        format!("<{}>; rel=\"amiss-report\"", artifact.locator)
+    };
+    response
+        .headers_mut()
+        .insert(header::LINK, HeaderValue::from_str(&link).ok()?);
     response
         .headers_mut()
         .insert("x-amiss-artifact-auth", HeaderValue::from_static("bearer"));
@@ -361,6 +369,26 @@ fn artifact_headers(status: StatusCode, artifact: &ArtifactReference) -> Option<
             "x-amiss-assessment-digest",
             HeaderValue::from_str(&digest.to_string()).ok()?,
         );
+    }
+    if artifact.external_incomplete {
+        response.headers_mut().insert(
+            "x-amiss-external-assessment",
+            HeaderValue::from_static("incomplete"),
+        );
+    } else if let Some(tally) = artifact.external_tally {
+        response.headers_mut().insert(
+            "x-amiss-external-assessment",
+            HeaderValue::from_static("complete"),
+        );
+        for (name, count) in [
+            ("x-amiss-external-refuted", tally.refuted),
+            ("x-amiss-external-unproven", tally.unproven),
+            ("x-amiss-external-reachable", tally.reachable),
+        ] {
+            response
+                .headers_mut()
+                .insert(name, HeaderValue::from_str(&count.to_string()).ok()?);
+        }
     }
     Some(response)
 }

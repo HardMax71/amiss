@@ -273,6 +273,58 @@ fn publication_reuses_only_one_exact_owned_check() {
     ));
 }
 
+#[test]
+fn previous_assessment_projections_are_compatible_summaries() {
+    let fixture = Fixture::new();
+    let mut publication = fixture.publication(CheckConclusion::Pass);
+    let mut completed = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    let artifact_root = completed
+        .locator
+        .strip_suffix("/report")
+        .unwrap()
+        .to_owned();
+    completed.assessment_digest = Some(sha256(b"assessment"));
+    completed.external_tally = Some(amiss_controller::ExternalTally {
+        refuted: 1,
+        unproven: 2,
+        reachable: 3,
+    });
+    let mut incomplete = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    incomplete.external_incomplete = true;
+
+    for (artifact, omitted) in [
+        (
+            completed,
+            vec![
+                format!("assessment-artifact: {artifact_root}/assessment"),
+                "external-assessment: refuted 1 unproven 2 reachable 3".to_owned(),
+            ],
+        ),
+        (
+            incomplete,
+            vec!["external-assessment: incomplete".to_owned()],
+        ),
+    ] {
+        publication.artifact = Some(artifact);
+        let expected = created_from_decision(
+            publication_decision(&fixture.config, &publication, &[]).unwrap(),
+        );
+        let previous = omitted
+            .iter()
+            .fold(expected.output.summary.clone(), |summary, line| {
+                summary.replace(&format!("\n{line}"), "")
+            });
+        assert_ne!(previous, expected.output.summary);
+        let mut run = check_run(APP_ID, &expected);
+        run.output.summary = Some(previous);
+        assert!(matches!(
+            publication_decision(&fixture.config, &publication, std::slice::from_ref(&run))
+                .unwrap(),
+            PublicationDecision::Reuse
+        ));
+    }
+}
+
 /// A credential is scoped to the installation it was configured for, and the
 /// refusal happens before any request leaves. What the App carries out is
 /// whatever its client answers, so against a host that does not resolve every
@@ -420,16 +472,9 @@ fn publication_summary_carries_the_report_feedback_lines() {
         }))
         .unwrap(),
     );
-    let artifact_id = "a".repeat(64);
-    publication.artifact = Some(ArtifactReference {
-        id: artifact_id.clone(),
-        locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
-        expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
-        assessment_digest: None,
-        external_tally: None,
-        external_incomplete: false,
-    });
+    publication.artifact = Some(artifact_reference(
+        publication.report.as_deref().unwrap_or_default(),
+    ));
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let summary = &expected.output.summary;
@@ -911,6 +956,19 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
             summary: Some(expected.output.summary.clone()),
         },
         app: Some(CheckRunApp { id: app_id }),
+    }
+}
+
+fn artifact_reference(report: &[u8]) -> ArtifactReference {
+    let id = "a".repeat(64);
+    ArtifactReference {
+        id: id.clone(),
+        locator: format!("https://amiss.example/artifacts/{id}/report"),
+        expires_at_unix_millis: 1_800_000_000_000,
+        report_digest: sha256(report),
+        assessment_digest: None,
+        external_tally: None,
+        external_incomplete: false,
     }
 }
 

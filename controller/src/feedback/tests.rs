@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::{feedback_lines, with_feedback};
-use crate::ArtifactReference;
+use crate::{ArtifactReference, ExternalTally};
 
 fn report(feedback: &serde_json::Value) -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
@@ -157,6 +157,33 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
     assert!(projected.contains(&format!("artifact: {}", artifact.locator)));
     assert!(projected.contains("artifact-auth: bearer"));
     assert!(projected.contains("artifact-expires-unix-millis: 1800000000000"));
+
+    let mut assessed = artifact.clone();
+    assessed.assessment_digest = Some(amiss_wire::digest::sha256(b"assessment"));
+    assessed.external_tally = Some(ExternalTally {
+        refuted: 1,
+        unproven: 2,
+        reachable: 3,
+    });
+    let projected = with_feedback("summary", Some(&bytes), Some(&assessed)).unwrap();
+    assert!(
+        projected.contains("external-assessment: refuted 1 unproven 2 reachable 3"),
+        "{projected}"
+    );
+    assert!(
+        projected.contains(&format!(
+            "assessment-artifact: https://amiss.example/artifacts/{id}/assessment"
+        )),
+        "{projected}"
+    );
+
+    let mut incomplete = artifact.clone();
+    incomplete.external_incomplete = true;
+    let projected = with_feedback("summary", Some(&bytes), Some(&incomplete)).unwrap();
+    assert!(
+        projected.contains("external-assessment: incomplete"),
+        "{projected}"
+    );
 
     let mut mismatched = artifact;
     mismatched.report_digest = amiss_wire::digest::sha256(b"different");

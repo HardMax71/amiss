@@ -199,7 +199,18 @@ jobs:
         with:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - shell: bash
+      - id: external-evidence-cache
+        name: Restore retry-local external evidence
+        if: github.run_attempt != '1'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/amiss-external/evidence.json
+          key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ github.run_attempt }}
+          restore-keys: |
+            external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-
+      - id: external-advisory
+        shell: bash
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           EVENT: ${{ github.event_name }}
@@ -238,16 +249,45 @@ jobs:
             || advisory "the scan could not complete"
           ./target/release/amiss external-plan --report report.json --format json > plan.json \
             || advisory "the plan could not derive"
-          ./target/release/amiss-probe --plan plan.json > evidence.json \
-            || advisory "the probe could not run"
-          ./target/release/amiss external-assess --plan plan.json --evidence evidence.json \
-            > assessment.txt || advisory "the assessment could not judge"
+          evidence_root="${RUNNER_TEMP}/amiss-external"
+          evidence="$evidence_root/evidence.json"
+          pending="$evidence_root/evidence.pending"
+          mkdir -p "$evidence_root"
+          produced=false
+          if [ -f "$evidence" ] \
+            && ./target/release/amiss external-assess \
+              --plan plan.json --evidence "$evidence" > assessment.txt 2>/dev/null
+          then
+            source=cache
+          else
+            ./target/release/amiss-probe --plan plan.json > "$pending" \
+              || advisory "the probe could not run"
+            mv "$pending" "$evidence"
+            ./target/release/amiss external-assess --plan plan.json --evidence "$evidence" \
+              > assessment.txt || advisory "the assessment could not judge"
+            produced=true
+            source=fresh
+          fi
+          jq -er '"cacheable=\(.rows | length > 0)"' "$evidence" \
+            >> "$GITHUB_OUTPUT" || advisory "the evidence row count is unavailable"
+          echo "produced=$produced" >> "$GITHUB_OUTPUT"
+          echo "advisory external rail: external evidence source: $source"
           cat assessment.txt
           {
+            echo "external evidence source: $source"
             echo '```'
             cat assessment.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Save retry-local external evidence
+        if: >-
+          steps.external-advisory.outputs.cacheable == 'true' &&
+          steps.external-advisory.outputs.produced == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/amiss-external/evidence.json
+          key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ github.run_attempt }}
 
   fuzz:
     runs-on: ubuntu-latest

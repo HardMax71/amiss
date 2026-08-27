@@ -10,7 +10,7 @@
     },
     "schema": "amiss/external-assessment-payload",
     "subject": {
-      "evidence_digest": "sha256:66d6099a3149b89f9a8c2cd573f0d276f7cf6c9a8627fc0f80f8eb21a1bc87aa",
+      "evidence_digest": "sha256:9afa65bf82931c421df15d5b541ccc1ecfe95dbd68ad45d500b42cc33e0f5a93",
       "plan_payload_digest": "sha256:12e60a4671ae63c8b79689d7ae9c3db290c7d76f45548e3c6c8137e8b388fb52",
       "report_payload_digest": "sha256:31b3c038a1b15e8a223f8629f8fbbbc4841a7ebb9aac2273f64d6120f5b9fa00"
     },
@@ -21,10 +21,11 @@
           "docs/guide.md"
         ],
         "reason": "gone",
+        "retarget": "https://example.com/current-manual",
         "verdict": "refuted"
       }
     ]
   },
-  "payload_digest": "sha256:87abf7795878bfe16312382d060c80d0be8df96021acc928ee33217580e35384",
+  "payload_digest": "sha256:739168996c855d8ae7ee3b3727b22cce9185b5723647eec57e2accb7b4f704f4",
   "schema": "amiss/external-assessment-envelope"
 }

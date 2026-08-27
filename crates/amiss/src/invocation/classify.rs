@@ -1,13 +1,16 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
+use amiss_wire::controls::{DocumentInclude, IncludeKind, Profile, ScannerPolicy};
+use amiss_wire::model::{
+    Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepoPathText, RepositoryIdentity,
+};
 
 use super::arguments::{Gathered, Slot, duplicated};
 use super::{
     Adoption, AssessInvocation, AuthorInvocation, CandidateSelector, Code, Command, Invocation,
-    OutputFormat, PlanInvocation, ProviderIdentity, RefsInvocation, RenderInvocation, Verb,
+    OutputFormat, PlanInvocation, PolicyIncludeInvocation, PolicyIncludePreview, ProviderIdentity,
+    RefsInvocation, RenderInvocation, Verb,
 };
 
 pub(super) fn command(
@@ -23,6 +26,9 @@ pub(super) fn command(
     }
     match gathered.verb {
         Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
+        Some(Verb::PolicyInclude) => {
+            return classify_policy_include(codes, gathered).map(Command::PolicyInclude);
+        }
         Some(Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render | Verb::Refs) => {
             return classify_report_command(codes, gathered, format);
         }
@@ -190,7 +196,7 @@ fn classify_report_command(
                 format,
             }))
         }
-        Some(Verb::Check | Verb::Fix | Verb::Adopt | Verb::Claim) | None => {
+        Some(Verb::Check | Verb::Fix | Verb::Adopt | Verb::Claim | Verb::PolicyInclude) | None => {
             codes.insert(Code::InvalidInvocation);
             Err(codes)
         }
@@ -223,6 +229,8 @@ fn classify_claim(
         &gathered.evidence,
         &gathered.target,
         &gathered.target_bytes_hex,
+        &gathered.suffix,
+        &gathered.adapter,
     ];
     if foreign.iter().any(|slot| slot.occurrences > 0)
         || gathered.index > 0
@@ -277,6 +285,96 @@ fn classify_claim(
     }
 }
 
+fn classify_policy_include(
+    mut codes: BTreeSet<Code>,
+    gathered: &Gathered,
+) -> Result<PolicyIncludeInvocation, BTreeSet<Code>> {
+    let foreign = [
+        &gathered.base,
+        &gathered.candidate,
+        &gathered.repository,
+        &gathered.ref_name,
+        &gathered.default_branch_ref,
+        &gathered.forge,
+        &gathered.profile,
+        &gathered.format,
+        &gathered.floor_digest,
+        &gathered.debt_owner,
+        &gathered.debt_reason,
+        &gathered.created_at,
+        &gathered.expires_at,
+        &gathered.debt_output,
+        &gathered.claim_line,
+        &gathered.claim_name,
+        &gathered.report,
+        &gathered.plan,
+        &gathered.evidence,
+        &gathered.target,
+        &gathered.target_bytes_hex,
+    ];
+    if foreign.iter().any(|slot| slot.occurrences > 0) || gathered.explain_scope > 0 {
+        codes.insert(Code::InvalidInvocation);
+    }
+
+    let path = gathered
+        .claim_path
+        .unique_value()
+        .and_then(|value| RepoPathText::new(value.to_owned()));
+    let suffix = gathered.suffix.unique_value().map(str::to_owned);
+    let adapter = gathered
+        .adapter
+        .unique_value()
+        .and_then(|value| value.parse::<Adapter>().ok());
+    let policy = match (path, suffix, adapter) {
+        (Some(path), Some(suffix), Some(adapter)) => ScannerPolicy::new(
+            vec![DocumentInclude {
+                path,
+                kind: IncludeKind::Tree,
+                suffix: Some(suffix),
+                adapter: Some(adapter),
+            }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .ok(),
+        (None, _, _) | (_, None, _) | (_, _, None) => None,
+    };
+    if policy.is_none() {
+        codes.insert(Code::InvalidInvocation);
+    }
+
+    let preview_presence = [
+        gathered.repo.occurrences > 0,
+        gathered.object_format.occurrences > 0,
+        gathered.index > 0,
+    ];
+    let preview = if preview_presence == [false, false, false] {
+        Some(None)
+    } else if preview_presence == [true, true, true] {
+        classify_target(gathered).ok().map(|(repo, object_format)| {
+            Some(PolicyIncludePreview {
+                repo,
+                object_format,
+            })
+        })
+    } else {
+        None
+    };
+    if preview.is_none() {
+        codes.insert(Code::InvalidInvocation);
+    }
+
+    match (policy, preview) {
+        (Some(policy), Some(preview)) if codes.is_empty() => {
+            Ok(PolicyIncludeInvocation { policy, preview })
+        }
+        (_, _) => {
+            codes.insert(Code::InvalidInvocation);
+            Err(codes)
+        }
+    }
+}
+
 /// The pure-form gate: a report-bound verb reads its own path flags and
 /// projects only through one of its admitted formats; every scan, claim, and
 /// adoption option is foreign, as are the other pure forms' paths. Accepts
@@ -308,6 +406,8 @@ fn classify_pure<const N: usize>(
         &gathered.claim_path,
         &gathered.claim_line,
         &gathered.claim_name,
+        &gathered.suffix,
+        &gathered.adapter,
     ];
     if foreign
         .iter()
@@ -375,6 +475,18 @@ fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
         &gathered.evidence,
         &gathered.target,
         &gathered.target_bytes_hex,
+    ]
+    .iter()
+    .any(|slot| slot.occurrences > 0)
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
+    if [
+        &gathered.claim_path,
+        &gathered.claim_line,
+        &gathered.claim_name,
+        &gathered.suffix,
+        &gathered.adapter,
     ]
     .iter()
     .any(|slot| slot.occurrences > 0)

@@ -130,7 +130,7 @@
           ]
         },
         "retarget": {
-          "description": "Where redirects ended when the probe was moved: a suggestion, never a finding.",
+          "description": "Where a probe ended after every observed redirect hop was 301 or 308: a suggestion, never a finding or automatic edit.",
           "type": "string",
           "minLength": 1,
           "maxLength": 16384

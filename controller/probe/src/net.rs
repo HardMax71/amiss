@@ -15,7 +15,7 @@ pub(crate) enum Observation {
     Answered {
         method: &'static str,
         status: i64,
-        final_destination: Option<String>,
+        redirect: Option<Redirect>,
     },
     Failed {
         method: &'static str,
@@ -24,10 +24,15 @@ pub(crate) enum Observation {
     Refused,
 }
 
+pub(crate) struct Redirect {
+    pub destination: String,
+    pub permanent: bool,
+}
+
 enum Attempted {
     Answered {
         status: i64,
-        final_destination: Option<String>,
+        redirect: Option<Redirect>,
     },
     Failed(&'static str),
     Refused,
@@ -42,33 +47,26 @@ pub(crate) fn probe(destination: &str, deadline: Instant) -> Observation {
         return Observation::Refused;
     };
     match attempt(&url, false, deadline) {
-        Attempted::Answered {
-            status,
-            final_destination,
-        } if get_retries(status) => match attempt(&url, true, deadline) {
-            Attempted::Answered {
-                status,
-                final_destination,
-            } => Observation::Answered {
-                method: "get",
-                status,
-                final_destination,
-            },
-            // A failed retry does not erase the HEAD answer; the judge
-            // treats an unconfirmed absence as unproven anyway.
-            Attempted::Failed(_) | Attempted::Refused => Observation::Answered {
-                method: "head",
-                status,
-                final_destination,
-            },
-        },
-        Attempted::Answered {
-            status,
-            final_destination,
-        } => Observation::Answered {
+        Attempted::Answered { status, redirect } if get_retries(status) => {
+            match attempt(&url, true, deadline) {
+                Attempted::Answered { status, redirect } => Observation::Answered {
+                    method: "get",
+                    status,
+                    redirect,
+                },
+                // A failed retry does not erase the HEAD answer; the judge
+                // treats an unconfirmed absence as unproven anyway.
+                Attempted::Failed(_) | Attempted::Refused => Observation::Answered {
+                    method: "head",
+                    status,
+                    redirect,
+                },
+            }
+        }
+        Attempted::Answered { status, redirect } => Observation::Answered {
             method: "head",
             status,
-            final_destination,
+            redirect,
         },
         Attempted::Failed(failure) => Observation::Failed {
             method: "head",
@@ -86,7 +84,7 @@ const fn get_retries(status: i64) -> bool {
 
 fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
     let mut url = start.clone();
-    let mut standing_redirect = None;
+    let mut standing_redirect: Option<(i64, bool)> = None;
     for _hop in 0..=MAX_HOPS {
         // The ceiling binds before the resolver and again before the send,
         // so only one lookup or one in-flight request can overhang it.
@@ -97,10 +95,13 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
         // pointed at it: the redirect is the observation, the hop is not.
         let address = match (resolved_global(&url), standing_redirect) {
             (Ok(address), _) => address,
-            (Err(_defect), Some(status)) => {
+            (Err(_defect), Some((status, permanent))) => {
                 return Attempted::Answered {
                     status,
-                    final_destination: Some(url.to_string()),
+                    redirect: Some(Redirect {
+                        destination: url.to_string(),
+                        permanent,
+                    }),
                 };
             }
             (Err(Resolution::NoRecords), None) => return Attempted::Failed("dns"),
@@ -130,26 +131,34 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
         if !response.status().is_redirection() {
             return Attempted::Answered {
                 status,
-                final_destination: moved(start, &url),
+                redirect: moved(
+                    start,
+                    &url,
+                    standing_redirect.is_some_and(|(_status, permanent)| permanent),
+                ),
             };
         }
+        let observed_redirect = advance_redirect(standing_redirect, status);
         let Some(next) = redirect_target(&url, response.headers()) else {
             return Attempted::Answered {
                 status,
-                final_destination: moved(start, &url),
+                redirect: moved(start, &url, observed_redirect.1),
             };
         };
         // A hop the policy refuses is still worth recording: the standing
         // redirect and where it pointed, never a request to it.
         match vetted(next.clone()) {
             Some(vetted) => {
-                standing_redirect = Some(status);
+                standing_redirect = Some(observed_redirect);
                 url = vetted;
             }
             None => {
                 return Attempted::Answered {
                     status,
-                    final_destination: Some(next.to_string()),
+                    redirect: Some(Redirect {
+                        destination: next.to_string(),
+                        permanent: observed_redirect.1,
+                    }),
                 };
             }
         }
@@ -157,9 +166,9 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
     // Hops exhausted: the last redirect the server actually sent is the
     // record, never an invented status.
     match standing_redirect {
-        Some(status) => Attempted::Answered {
+        Some((status, permanent)) => Attempted::Answered {
             status,
-            final_destination: moved(start, &url),
+            redirect: moved(start, &url, permanent),
         },
         None => Attempted::Failed("refused"),
     }
@@ -172,18 +181,30 @@ fn remaining(deadline: Instant) -> Option<Duration> {
 
 /// The budget ran out mid-walk: the standing redirect is still the record
 /// when one was observed, and plain exhaustion otherwise.
-fn spent(standing_redirect: Option<i64>, url: &Url) -> Attempted {
+fn spent(standing_redirect: Option<(i64, bool)>, url: &Url) -> Attempted {
     match standing_redirect {
-        Some(status) => Attempted::Answered {
+        Some((status, permanent)) => Attempted::Answered {
             status,
-            final_destination: Some(url.to_string()),
+            redirect: Some(Redirect {
+                destination: url.to_string(),
+                permanent,
+            }),
         },
         None => Attempted::Failed("timeout"),
     }
 }
 
-fn moved(start: &Url, current: &Url) -> Option<String> {
-    (current != start).then(|| current.to_string())
+fn moved(start: &Url, current: &Url, permanent: bool) -> Option<Redirect> {
+    (current != start).then(|| Redirect {
+        destination: current.to_string(),
+        permanent,
+    })
+}
+
+fn advance_redirect(standing: Option<(i64, bool)>, status: i64) -> (i64, bool) {
+    let permanent = matches!(status, 301 | 308)
+        && standing.is_none_or(|(_previous_status, permanent)| permanent);
+    (status, permanent)
 }
 
 fn redirect_target(current: &Url, headers: &reqwest::header::HeaderMap) -> Option<Url> {
