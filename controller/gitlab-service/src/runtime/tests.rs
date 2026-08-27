@@ -9,10 +9,10 @@ use std::time::Duration;
 
 use amiss_controller::{
     ArtifactReference, ArtifactStoreConfig, AuthenticatedDelivery, ChangeSnapshot, CheckConclusion,
-    ControllerClock, DeliveryRoute, FileArtifactStore, FileLedgerConfig, FileLedgerRoot,
-    HandleOutcome, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry, ProviderAdapter,
-    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
-    ReplayWindow, RunFailure, SignedTimePolicy, SystemClock, VerifiedDelivery,
+    ControllerClock, DeliveryRoute, ExternalTally, FileArtifactStore, FileLedgerConfig,
+    FileLedgerRoot, HandleOutcome, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
+    ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    Publication, ReplayWindow, RunFailure, SignedTimePolicy, SystemClock, VerifiedDelivery,
 };
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest, Operations};
@@ -59,6 +59,7 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
     let id = "c".repeat(64);
     let locator = format!("https://amiss.example/artifacts/{id}/report");
     let report_digest = amiss_wire::digest::sha256(b"report");
+    let assessment_digest = amiss_wire::digest::sha256(b"assessment");
     let response = result_response::<ServiceError>(Ok(HandleOutcome::Published {
         conclusion: CheckConclusion::Pass,
         artifact: Some(ArtifactReference {
@@ -66,8 +67,12 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
             locator: locator.clone(),
             expires_at_unix_millis: 1_800_000_000_000,
             report_digest,
-            assessment_digest: None,
-            external_tally: None,
+            assessment_digest: Some(assessment_digest),
+            external_tally: Some(ExternalTally {
+                refuted: 1,
+                unproven: 2,
+                reachable: 3,
+            }),
             external_incomplete: false,
         }),
     }));
@@ -75,7 +80,10 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
     assert_eq!(
         response.headers()[header::LINK],
-        format!("<{locator}>; rel=\"amiss-report\"")
+        format!(
+            "<{locator}>; rel=\"amiss-report\", <{}/assessment>; rel=\"amiss-assessment\"",
+            locator.strip_suffix("/report").unwrap()
+        )
     );
     assert_eq!(response.headers()["x-amiss-artifact-auth"], "bearer");
     assert_eq!(
@@ -86,6 +94,17 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
         response.headers()["x-amiss-report-digest"],
         report_digest.to_string()
     );
+    assert_eq!(
+        response.headers()["x-amiss-assessment-digest"],
+        assessment_digest.to_string()
+    );
+    assert_eq!(
+        response.headers()["x-amiss-external-assessment"],
+        "complete"
+    );
+    assert_eq!(response.headers()["x-amiss-external-refuted"], "1");
+    assert_eq!(response.headers()["x-amiss-external-unproven"], "2");
+    assert_eq!(response.headers()["x-amiss-external-reachable"], "3");
 }
 
 #[test]

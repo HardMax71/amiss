@@ -21,12 +21,17 @@ Every report-bearing provider publication binds all of the following:
 - when external verification completed, the canonical assessment digest.
 
 GitHub Check Runs and Gitea-family reviews carry these as `report`, `artifact`,
-`artifact-auth`, `artifact-expires-unix-millis`, and optional `assessment` lines. GitLab returns
-the locator as `Link: <...>; rel="amiss-report"` and returns the authorization and expiry as
-`X-Amiss-Artifact-Auth` and `X-Amiss-Artifact-Expires-Unix-Millis` headers. It publishes the report
-digest as `X-Amiss-Report-Digest` and, when present, the assessment digest as
-`X-Amiss-Assessment-Digest`. The report URL always ends in `/<artifact-id>/report`. When present,
-the exact external inputs are sibling URLs ending in `/plan`, `/evidence`, and `/assessment`.
+`artifact-auth`, `artifact-expires-unix-millis`, and optional `assessment` lines. GitHub leaves the
+Check Run's native details URL unset because that browser link cannot supply the required bearer
+header; authorized clients use the locator in the summary. A completed external assessment adds
+its direct `assessment-artifact` locator and its refuted, unproven, and reachable counts; an
+incomplete one is named as incomplete instead of inventing counts. GitLab returns the report
+locator as `Link: <...>; rel="amiss-report"` and, when present, the assessment sibling as
+`rel="amiss-assessment"`. It returns authorization, expiry, assessment state, and completed counts
+as `X-Amiss-*` headers. The report and optional assessment digests remain
+`X-Amiss-Report-Digest` and `X-Amiss-Assessment-Digest`. The report URL always ends in
+`/<artifact-id>/report`. When present, the exact external inputs are sibling URLs ending in
+`/plan`, `/evidence`, and `/assessment`.
 
 The controller writes the exact report and optional external chain before its final provider
 refresh and publication stage. The artifact identity binds the evaluation ID, every component

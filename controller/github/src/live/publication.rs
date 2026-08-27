@@ -70,8 +70,16 @@ pub(super) fn publication_decision(
     }
 
     match matching {
-        Some(run) if matches_expected(run, &expected) => Ok(PublicationDecision::Reuse),
-        Some(_) => Err(ProviderError::InvalidResponse),
+        Some(run) => {
+            let summary = run.output.summary.as_deref();
+            let compatible = summary == Some(expected.output.summary.as_str())
+                || legacy_summary(&expected.output.summary)
+                    .as_deref()
+                    .is_some_and(|legacy| summary == Some(legacy));
+            (compatible && matches_stable_fields(run, &expected))
+                .then_some(PublicationDecision::Reuse)
+                .ok_or(ProviderError::InvalidResponse)
+        }
         None => Ok(PublicationDecision::Create(expected)),
     }
 }
@@ -161,11 +169,26 @@ fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {
 }
 
 fn matches_expected(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
+    run.output.summary.as_deref() == Some(expected.output.summary.as_str())
+        && matches_stable_fields(run, expected)
+}
+
+fn matches_stable_fields(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
     run.name == expected.name
         && run.head_sha == expected.head_sha
         && run.external_id.as_deref() == Some(expected.external_id.as_str())
         && run.status == expected.status
         && run.conclusion.as_deref() == Some(expected.conclusion.as_str())
         && run.output.title.as_deref() == Some(expected.output.title.as_str())
-        && run.output.summary.as_deref() == Some(expected.output.summary.as_str())
+}
+
+fn legacy_summary(summary: &str) -> Option<String> {
+    let legacy = summary
+        .lines()
+        .filter(|line| {
+            !line.starts_with("assessment-artifact: ") && !line.starts_with("external-assessment: ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    (legacy.len() != summary.len()).then_some(legacy)
 }

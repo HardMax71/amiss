@@ -85,6 +85,10 @@
           "minLength": 1,
           "maxLength": 16384
         },
+        "redirect_chain_permanent": {
+          "description": "Present only when every observed redirect hop was 301 or 308. This is evidence for a retarget suggestion, never an automatic edit.",
+          "const": true
+        },
         "checked_at": {
           "description": "The producer's own observation instant; the engine never reads a clock, so staleness policy belongs to the producer's operator.",
           "type": "string",
@@ -104,7 +108,10 @@
             "required": ["status"]
           }
         }
-      ]
+      ],
+      "dependentRequired": {
+        "redirect_chain_permanent": ["final_destination"]
+      }
     },
     "ForgeRow": {
       "description": "One forge API verification of a destination the plan shaped: repository visibility first, then the opaque tail's resolution, admissible only when the repository was readable.",

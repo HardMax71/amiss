@@ -8,8 +8,10 @@
     {
       "checked_at": "2026-08-14T00:00:00Z",
       "destination": "https://example.com/manual",
+      "final_destination": "https://example.com/current-manual",
       "kind": "http-probe",
       "method": "get",
+      "redirect_chain_permanent": true,
       "status": 410
     }
   ],

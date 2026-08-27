@@ -144,7 +144,9 @@ above, with every defect degrading into one summary line rather than a failed ch
 ```
 
 The assessment refutes only what a probe or forge API positively disproved, so its rows
-are telemetry to read, not a gate to wire, until the rates have earned that. The prober
+are telemetry to read, not a gate to wire, until the rates have earned that. Its human summary
+also windows permanent-redirect retarget suggestions; temporary redirects remain evidence and
+never become edit suggestions. The prober
 ships beside the engine in every release, in the same `SHA256SUMS` and sigstore bundle,
 so the download above is the same [Verified consumption](security.md) recipe with the
 pattern changed. A release cut before the prober has no such asset; there the source
