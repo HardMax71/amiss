@@ -473,6 +473,65 @@ renderer conformance and, for Quarto and Org publishing, trustworthy build conte
 Shipping waits for that evidence and a provider or design partner that needs the format;
 executable outputs and plugins remain external evidence in every design.
 
+## Editor latency and reverse-impact demand, measured and held
+
+The reverse-impact query had no user population to measure on 2026-08-27. It merged in
+[PR #526](https://github.com/HardMax71/amiss/pull/526) on August 24, after
+[v0.25.0](https://github.com/HardMax71/amiss/releases/tag/v0.25.0), the latest release, was
+cut on August 21. Authenticated GitHub code search for the exact `amiss refs` phrase returned
+six matches, all in this repository, and the issue register held no LSP request. Aggregate clone
+traffic cannot distinguish a command invocation. A source build may have used the query, but
+there is no observable evidence that an author has, much less that its latency blocks an editor
+workflow.
+
+The performance half was measured independently rather than inferred from that absence. The
+release-mode binary at `b70ec4164269`, engine
+`sha256:c8c667d59c8b960472815999ba45b1fbafcdfaa1adf017c0f238d722a696b1d3`, ran on Linux
+6.12 on an AMD Ryzen 7 PRO 7840U. Each sample was a new process against a warm page cache,
+with stdin closed and output written to the null device. One unrecorded warm-up preceded each
+series. Wall time surrounded process creation and `wait4`; CPU time and peak resident memory
+came from that same child. The table uses the median and nearest-rank p95.
+
+Three fully hydrated depth-one SHA-1 clones span the existing workload. Each staged index
+equaled its base. Django's local base additionally held the same exact
+`{"path":"docs","kind":"tree","suffix":".txt","adapter":"rst"}` policy binding as
+the earlier yield study, so both sides scanned the adopted document set. Every warm-up produced
+a complete observe report with no analysis error.
+
+| Repository | Upstream head | Scanned documents | References | Report bytes |
+| --- | --- | ---: | ---: | ---: |
+| sharkdp/hyperfine | `f12f3d9f86f3` | 3 | 48 | 173,805 |
+| django/django | `7576781cc671` | 683 | 3,028 | 16,569,453 |
+| starship/starship | `cb5415985ca1` | 449 | 8,608 | 37,472,463 |
+
+`Startup` is `amiss --help`. A `refs` row reopens the corresponding complete report and
+queries its most frequent repository target. A `scan` row runs the complete staged evaluation
+and serialization under `--profile observe --format json`.
+
+| Surface | Samples | Wall p50 | Wall p95 | CPU p50 | RSS p50 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| startup | 100 | 2.46 ms | 2.88 ms | 2.21 ms | 13.8 MiB |
+| hyperfine `refs` | 30 | 7.40 ms | 8.06 ms | 7.06 ms | 13.8 MiB |
+| hyperfine scan | 20 | 45.26 ms | 48.27 ms | 44.40 ms | 13.8 MiB |
+| Django `refs` | 15 | 396.58 ms | 608.42 ms | 395.90 ms | 69.7 MiB |
+| Django scan | 12 | 800.73 ms | 865.33 ms | 794.81 ms | 68.0 MiB |
+| starship `refs` | 10 | 579.13 ms | 644.62 ms | 571.47 ms | 154.1 MiB |
+| starship scan | 7 | 4,677.57 ms | 5,551.65 ms | 4,682.70 ms | 129.7 MiB |
+
+Process startup is not the bottleneck: even the smallest complete scan costs eighteen times its
+fresh-process floor, while starship costs about nineteen hundred times it. A resident daemon would
+save roughly 2.5 ms and leave the material work untouched. Report replay stays subsecond here, but
+its owned JSON tree makes the 35.7 MiB starship report peak above the full scan. That mirror
+workload clearly exceeds interactive latency and needs a proved selective or incremental
+evaluation, not merely a process kept alive.
+
+No editor mode ships from this evidence. Reopen the question only after a release containing
+`refs` has an external user or design partner who can name the interaction and repository where
+latency hurts. Start by measuring a stateless explicit invocation there. Any later worktree or
+buffer overlay remains observe-only convenience output, never provider-gating evidence; hidden
+incremental state, a long-lived engine, and background network access remain out until their own
+correctness and resource model is proved.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
