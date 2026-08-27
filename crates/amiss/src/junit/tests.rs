@@ -87,6 +87,14 @@ fn empty_success_and_hostile_xml_scalars_stay_well_formed() {
     assert!(empty.contains("tests=\"1\" failures=\"0\" errors=\"0\""));
     assert!(empty.contains("<testcase classname=\"amiss.result\" name=\"report\" time=\"0\"/>"));
 
+    let failed = render(&envelope("fail", Vec::new(), Vec::new()));
+    assert!(failed.contains("<failure message=\"fail\" type=\"amiss-result\">fail</failure>"));
+    let incomplete = render(&envelope("incomplete", Vec::new(), Vec::new()));
+    assert!(
+        incomplete
+            .contains("<error message=\"incomplete\" type=\"amiss-result\">incomplete</error>")
+    );
+
     let hostile = row(vec![
         ("kind", Value::string("kind<&\"")),
         ("finding_key", Value::string("key<&\"")),

@@ -59,15 +59,15 @@ pub(crate) fn write(envelope: &Value, output: &mut dyn std::io::Write) -> std::i
 
     if rows == 0 {
         let status = match result.text("status") {
-            "fail" => CaseStatus::Problem {
+            status @ "fail" => CaseStatus::Problem {
                 element: "failure",
                 kind: "amiss-result",
-                description: "the report recorded blocking findings",
+                description: status,
             },
-            "incomplete" => CaseStatus::Problem {
+            status @ "incomplete" => CaseStatus::Problem {
                 element: "error",
                 kind: "amiss-result",
-                description: "the report recorded an incomplete evaluation",
+                description: status,
             },
             _ => CaseStatus::Pass,
         };
