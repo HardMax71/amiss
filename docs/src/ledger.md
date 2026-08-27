@@ -309,11 +309,12 @@ destinations, 231 cell-local fragments, and 22 attachments in addition to those 
 The format has real coverage yield rather than merely category adjacency.
 
 The cell bodies are small. The file row covers all 3,878 tree entries; the other two rows
-cover the sample.
+cover the sample. Each percentile selects the sorted value at zero-based index
+`round((n - 1) * p / 100)`, with half-way ranks rounded to even.
 
 | Value | p50 | p95 | p99 | Maximum |
 | --- | ---: | ---: | ---: | ---: |
-| notebook bytes | 26,351 | 494,520 | 696,869 | 11,132,496 |
+| notebook bytes | 26,351 | 494,513 | 678,502 | 11,132,496 |
 | Markdown-cell bytes | 221 | 1,504 | 2,785 | 38,276 |
 | Markdown-cell lines | 3 | 19 | 41 | 569 |
 
