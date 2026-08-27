@@ -589,6 +589,20 @@ fn the_refs_form_accepts_text_or_canonical_path_bytes() {
         assert_eq!(refs.target.as_bytes(), expected);
         assert_eq!(refs.format, OutputFormat::Json);
     }
+
+    assert_eq!(
+        rejected_codes(parse(&argv(&[
+            "refs",
+            "--report",
+            "report.json",
+            "--target",
+            "docs/a.md",
+            "--format",
+            "junit",
+        ]))),
+        vec![Code::InvalidInvocation],
+        "JUnit is admitted only by the report renderer"
+    );
 }
 
 #[cfg(unix)]
