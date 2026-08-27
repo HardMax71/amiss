@@ -32,6 +32,11 @@ updates:
         patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
+    exclude-paths:
+      - .github/workflows/agent-mention.lock.yml
+      - .github/workflows/agent-review.lock.yml
+      - .github/workflows/agent-triage.lock.yml
+      - .github/workflows/agentic_commands.yml
     schedule:
       interval: weekly
     cooldown:
