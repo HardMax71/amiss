@@ -15,7 +15,10 @@ and their content is never read, the same honest count an unbound policy include
 Notebook Markdown has measured reference yield, but its decoded cell spans are not physical JSON
 spans and the current report cannot name a cell; the
 [notebook measurement](ledger.md#notebook-markdown-yield-measured-and-held) records why that
-format remains visible but unparsed.
+format remains visible but unparsed. Quarto's `.qmd` suffix remains outside the document set,
+while MyST's `.md` files receive only the CommonMark/GFM semantics their suffix promises. The
+[adjacent-format measurement](ledger.md#myst-quarto-and-org-yield-measured-and-held) records
+why MyST, Quarto, and Org need renderer-aware adapters rather than suffix aliases.
 An include may instead bind one of the five built-in adapters, which reads the named path or
 tree under that grammar without installing another parser. One grammar answers per path per
 evaluation: the candidate policy's bindings, or the base's when the candidate carries none,

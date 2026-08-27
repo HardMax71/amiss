@@ -34,3 +34,25 @@ The permanent boundaries stay in [What Amiss is not](non-goals.md): no semantic 
 verdicts about prose, no repository-executed hooks, no live-network validation inside the
 engine, no automatic prose rewriting, and no repository-controlled weakening of a
 required policy.
+
+### Renderer-aware adjacent formats
+
+The [measured MyST, Quarto, and Org yield](ledger.md#myst-quarto-and-org-yield-measured-and-held)
+establishes useful repository-reference coverage, but does not make any of these formats
+committed work. They remain three separate future tracks:
+
+- A MyST adapter would be explicitly policy-bound because `.md` already means CommonMark/GFM.
+  It must model directives, roles, labels, and transclusion context against a pinned renderer
+  contract rather than reinterpret every Markdown document.
+- A Quarto adapter would preserve the ordinary Markdown subset while modeling Quarto's
+  main-document include context and static cross-references. Executed cells, notebook embeds,
+  plugins, and renderer-produced declarations remain external evidence; `.qmd` is not a suffix
+  alias for Markdown.
+- An Org adapter would need lossless physical spans and bounded file-link, include, setup, and
+  search syntax. Publishing roots and generated routes must arrive as sealed renderer evidence;
+  the engine never evaluates Emacs Lisp or Babel, and oversized documents remain visible
+  refusals rather than raising the global ceiling.
+
+Admission still requires design-partner or provider demand and pinned conformance against the
+official renderer. All three can use the existing physical byte-span location shape, so none is
+reason to reopen the wire solely to name a source construct.
