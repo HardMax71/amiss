@@ -169,13 +169,22 @@ shape for analysis errors or a refusal: a rejected invocation answers with a val
 artifact, the exit class still carries the truth, and error detail stays on the JSON and
 human lanes. The same projection bounds apply.
 
+A render-only `--format junit` projects one suite for generic CI test dashboards. Findings
+become cases under their stable finding keys: `fail` becomes a failure, while `warn` and `record`
+remain passing cases with their exact disposition in `system-out`. Retained analysis errors become
+error cases. A row-free passing report emits one passing report case so the artifact remains
+visible. File attributes carry only text that round-trips exactly through XML 1.0, and time is
+always zero because the report records no duration. JUnit remains display data—the renderer's exit
+is still the report's recorded verdict.
+
 A JSON report can be projected later without repeating repository evaluation:
-`amiss render --report amiss-report.json --format sarif` or `--format codequality` emits
-the same bytes that the originating `check` would have emitted in that format. Human is
-available too; adding `--full` to that human replay emits every feedback row rather than the
-two ten-item windows. The renderer verifies the active envelope and compatibility, the payload
-digest, and the recorded result tuple, then exits with that report's original verdict.
-JSON is not a render target because the input file is already that canonical projection.
+`amiss render --report amiss-report.json --format sarif`, `--format codequality`, or
+`--format junit` emits an alternate deterministic view. SARIF and Code Quality are byte-identical
+to their originating `check` projections; JUnit has no direct-check form. Human is available too;
+adding `--full` to that human replay emits every feedback row rather than the two ten-item windows.
+The renderer verifies the active envelope and compatibility, the payload digest, and the recorded
+result tuple, then exits with that report's original verdict. JSON is not a render target because
+the input file is already that canonical projection.
 
 The report is evidence of engine evaluation, not a self-authenticating provider attestation. A
 control row with `status: "verified"` means that the engine accepted the supplied digest and

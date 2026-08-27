@@ -52,7 +52,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss render --report <path>
-             (--format human [--full] | --format <sarif|codequality>)
+             (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
            (--target <repo-path> | --target-bytes-hex <lower-hex>)
            [--format <human|json>]
@@ -78,7 +78,7 @@ trust them when the short form reads ambiguous.
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--full` | none | prints every feedback item when replaying a report as human output; foreign to every other form and format |
-| `--format` | `human`, `json`, `sarif`, or `codequality` | grouped human items, the exact report in [The report](report.md), or its SARIF or GitLab Code Quality projection; human output is bounded unless replayed with `--full` |
+| `--format` | `human`, `json`, `sarif`, `codequality`, or render-only `junit` | grouped human items, the exact report in [The report](report.md), or one of its CI projections; human output is bounded unless replayed with `--full` |
 | `--path` | repo-relative path | the file an authored claim pins, or the exact root of an authored suffix selector |
 | `--line` | positive line number | the line the claim expects, one-based |
 | `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |
@@ -141,7 +141,8 @@ nothing about how the run was invoked.
 trailing newline. `sarif` and `codequality` project the same report for code-scanning
 uploads and GitLab merge-request widgets. A refused invocation still emits a refusal
 envelope under json and sarif, and an empty array under codequality, so a consumer never
-parses half a document.
+parses half a document. JUnit is deliberately absent from `check`: it can only reopen a
+validated report through `render`.
 
 `human` is the default. It prints a status header, one `error` row per retained analysis
 error, at most ten grouped Fix and Check items naming only a target and an affected-place
@@ -153,7 +154,7 @@ volume cannot push it off the terminal. The full findings stay in JSON. `--expla
 fixed and one naming this run's counts, and changes nothing in JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
 
-`amiss render --report <path> --format <human|sarif|codequality>` reopens one JSON report
+`amiss render --report <path> --format <human|sarif|codequality|junit>` reopens one JSON report
 and emits an alternate projection without reading the repository or evaluating it again. It
 accepts only the active report envelope, supported wire compatibility, matching payload digest,
 and a consistent recorded result. A successful projection exits with that recorded 0, 1, or 2;
@@ -163,6 +164,15 @@ requesting it is a grammar refusal and may emit the standard incomplete JSON ref
 Human replay additionally accepts `--full`, which prints every Fix, Check, and Existing item in
 the report's canonical order without overflow lines. It changes no facts, totals, notes, or exit
 class; the ordinary human projection keeps the two independent ten-item windows.
+
+JUnit emits one deterministic suite. Each finding is one case named by its kind and stable
+finding key: effective `fail` is a failure, while `warn` and `record` remain passing cases whose
+disposition and description ride in `system-out`. Each retained analysis error is an error case.
+A report with no rows gets one passing report case so CI dashboards retain the artifact. File
+locations ride only when their exact text can round-trip through an XML 1.0 attribute, and every
+duration is zero because the canonical report records no timing. The XML cannot change the recorded
+verdict; [GitLab likewise treats a JUnit artifact](https://docs.gitlab.com/ci/testing/unit_test_reports/)
+as display data rather than the job result.
 
 Exit codes are three classes, not detail. 0 means the run completed and nothing blocks. 1
 means a finding blocks. 2 means nothing trustworthy could be produced. A consumer that
@@ -240,7 +250,7 @@ the report carried no candidate tree, or the minted bytes failed the engine's ow
 `check --format json` run already wrote. It opens no repository and touches no network:
 it verifies the report's own payload digest, refuses an incomplete report, and projects
 the delegated-evidence delta the report already carries. `--format` takes `human` or `json` here;
-SARIF and Code Quality remain report projections and are refused here. Exit 0 wrote the plan. Exit 2 means the input
+SARIF, Code Quality, and JUnit remain report projections and are refused here. Exit 0 wrote the plan. Exit 2 means the input
 could not be trusted: unreadable, larger than a scanner report can be, not the scanner's
 strict JSON, not a report envelope, digest mismatch, incomplete, or carrying a malformed
 eligible occurrence.

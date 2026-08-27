@@ -34,6 +34,9 @@ pub(super) fn command(
         }
         Some(Verb::Check | Verb::Fix | Verb::Adopt) | None => {}
     }
+    if format == OutputFormat::Junit {
+        codes.insert(Code::InvalidInvocation);
+    }
     for required in [&gathered.repo, &gathered.object_format, &gathered.base] {
         if required.occurrences == 0 {
             codes.insert(Code::InvalidInvocation);
@@ -153,6 +156,7 @@ fn classify_report_command(
                     OutputFormat::Human,
                     OutputFormat::Sarif,
                     OutputFormat::CodeQuality,
+                    OutputFormat::Junit,
                 ],
                 [&gathered.report],
                 &[

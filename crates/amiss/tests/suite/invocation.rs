@@ -447,6 +447,12 @@ fn output_selection_follows_the_format_law() {
         assert_eq!(invocation.format, expected);
     }
 
+    assert_eq!(
+        rejected_codes(parse_tokens(&with(&valid_pair(), &["--format", "junit"]))),
+        vec![Code::InvalidInvocation],
+        "JUnit is admitted only by the report renderer"
+    );
+
     for malformed in [
         with(&valid_pair(), &["--format", "yaml"]),
         with(&valid_pair(), &["--format", "Json"]),
@@ -468,6 +474,7 @@ fn the_render_form_requires_one_non_json_projection() {
         ("human", OutputFormat::Human),
         ("sarif", OutputFormat::Sarif),
         ("codequality", OutputFormat::CodeQuality),
+        ("junit", OutputFormat::Junit),
     ] {
         let Outcome::Accepted(command) = parse(&argv(&[
             "render",
