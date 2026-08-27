@@ -352,6 +352,127 @@ reviewed as a wire migration before the parser: cell source stays isolated, outp
 metadata stay skipped, empty or malformed notebooks fail visibly, and a cell-local
 finding is never disguised as a contiguous raw-JSON span.
 
+## MyST, Quarto, and Org yield, measured and held
+
+The three adjacent markup formats were measured on 2026-08-27 before admitting another
+parser. Thirteen pinned trees supplied every exact lowercase source suffix outside the
+nine built-in excluded directory names: `.md` in four MyST-family trees, `.qmd` in four
+Quarto trees, and `.org` in five Org trees. There was no sampling. The resulting 1,559
+documents held 22,015,633 bytes.
+
+For MyST and Quarto, every document was first passed unchanged through the production
+Markdown extractor. A second, source-positioned pass counted only the documented dialect
+forms outside ordinary code fences and escaped examples: MyST directives and roles, and
+exact Quarto shortcodes and cross-references. Triple-brace Quarto examples are escapes, not
+shortcodes. Org bracket
+links and keywords were read with lossless `orgize` 0.10.0-alpha.10 and cross-checked
+against Pandoc 3.1.11.1. No code cell, Babel block, plugin, shortcode, included file, or
+repository program was executed. A repository candidate was then resolved under the
+format's documented relative-path rule against the pinned Git tree; generated output and
+renderer context were never guessed into existence.
+
+### MyST
+
+| Repository | Head | Documents | Markdown references | Markdown path-like | Dialect repo targets | Existing | Internal roles |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| jupyter-book/mystmd | `d41a821e2244` | 312 | 1,343 | 255 | 129 | 126 | 728 |
+| jupyter-book/jupyter-book | `fc05697264cc` | 42 | 857 | 39 | 5 | 5 | 2 |
+| canonical/lxd | `44a4c0ded139` | 235 | 966 | 348 | 254 | 253 | 1,344 |
+| pyOpenSci/python-package-guide | `10277117d7bd` | 53 | 1,118 | 253 | 35 | 35 | 0 |
+
+These files are already discovered as Markdown, and the production adapter accepted all
+642. It extracted 4,284 ordinary references, including 895 path-like repository
+candidates. That is genuine existing coverage, but not MyST coverage. The dialect pass
+found another 423 repository candidates in `{include}`, `{literalinclude}`, `{image}` and
+`{figure}` directives and `{doc}` and `{download}` roles; 419 name an entry under the
+documented source-relative spelling. It also found 2,074 internal role uses, predominantly
+2,069 `{ref}`, `{numref}`, and `{eq}` uses whose label and inventory semantics CommonMark
+does not have. Twenty-one dialect file targets are external.
+
+The four file targets a plain source-relative lookup did not find are the useful boundary,
+not four defects. Three are deliberate `my-file` teaching values in MyST's own reference
+guide. LXD's root `CONTRIBUTING.md` supplies the fourth: `doc/contributing.md` includes it,
+and its `{doc}` role reaches `doc/debugging.md` in the including Sphinx document's context.
+The [MyST include contract](https://mystmd.org/guide/directives) makes the include path
+relative to its source, while roles and extension points still require the parsed document
+context. A suffix alias cannot reproduce that distinction.
+
+### Quarto
+
+| Repository | Head | Documents | Markdown references | Markdown path-like | Includes | Cross-references | Executable cells |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| quarto-dev/quarto-web | `db4c9fc6a00e` | 578 | 3,973 | 1,974 | 376 | 61 | 322 |
+| ropensci-books/targets | `1d14652363c1` | 20 | 643 | 11 | 0 | 2 | 261 |
+| r-universe-org/docs | `f5e288ed1e7e` | 25 | 199 | 31 | 0 | 0 | 15 |
+| nasa/ECOSTRESS-Data-Resources | `d9155bc369ac` | 3 | 14 | 1 | 0 | 0 | 0 |
+
+All 626 `.qmd` documents were valid input to the production Markdown adapter, which found
+4,829 references and 2,017 path-like repository candidates. Amiss currently sees none of
+them because `.qmd` is outside the document set. The Quarto-only pass found 376 exact
+`include` shortcode targets, every one present in the pinned tree, and 63 cross-reference
+uses. Initial YAML metadata held 35 file-bearing fields which expanded to 22 concrete
+bibliography, resource, or body-include values.
+
+That large safe-looking Markdown subset still does not justify binding `.qmd` to the
+Markdown adapter. Quarto's [include contract](https://quarto.org/docs/authoring/includes.html)
+preprocesses an include even inside a code fence and resolves references in the inserted
+text from the main document rather than from the included file. The same corpus held 598
+executable or diagram cells and 452 other renderer shortcodes, including 18 notebook
+embeds. Cross-reference declarations can also be produced by executed cells. Those are
+renderer evidence, not repository syntax the engine may simulate.
+
+### Org
+
+| Repository | Head | Documents | Bracket links | Relative files | Internal | Include/setup | Existing | Plain-tree miss | Source blocks |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| bzg/org-mode | `76e4dbe07f93` | 45 | 486 | 4 | 370 | 7 | 11 | 0 | 274 |
+| org-roam/org-roam | `903bd4ec56d2` | 1 | 60 | 3 | 10 | 0 | 3 | 0 | 59 |
+| tecosaur/orgmode.org | `770916ecb648` | 16 | 212 | 54 | 0 | 32 | 64 | 22 | 25 |
+| SystemCrafters/systemcrafters.github.io | `6ccb1aa279f7` | 186 | 942 | 192 | 0 | 0 | 82 | 110 | 752 |
+| caiorss/C-Cpp-Notes | `98ccfc4b0858` | 43 | 7,870 | 271 | 0 | 39 | 267 | 43 | 4,284 |
+
+The lossless pass found 9,570 double-bracket links: 524 relative file links, 380 internal
+targets, 8,644 external schemes, one absolute file, and 21 custom or fuzzy shapes. Sixty-one
+`INCLUDE` and seventeen `SETUPFILE` keywords raise the explicit repository-candidate total
+to 602. Of those, 427 reach an entry by the plain source-relative rule and 175 do not.
+Pandoc produced 12,628 link or image nodes because its Org reader also recognizes plain
+external URLs; those add no same-repository coverage and were not substituted for the
+lossless source counts.
+
+The misses split along renderer boundaries. `orgmode.org` links generated manual, guide,
+PDF, and HTML outputs absent from the source tree. System Crafters' committed
+`live-streams.org` is a generated sitemap whose sibling-looking links resolve from the
+`content/live-streams` publishing project, not from the file's physical `content` parent.
+The C++ notes repeatedly include an absent `theme/style.org`, while two encoded file names
+need Org's decoding rule. The [Org file-link contract](https://orgmode.org/manual/External-Links.html),
+[include grammar](https://orgmode.org/manual/Include-Files.html), and
+[HTML export rewrite](https://orgmode.org/manual/Links-in-HTML-export.html) are separate
+semantics; recognizing brackets alone would turn build context into false missing rows.
+
+One Org document, `Rosetta_Stone_Translation.org`, is 7,154,544 bytes and exceeds the
+default 4 MiB document ceiling. It carries 2,189 bracket links, three repository
+candidates, and thirteen source blocks. The other 290 Org documents fit the current byte
+limit. The size crossing remains a visible per-document refusal and is not a reason to
+raise the built-in per-document ceiling for a new parser.
+
+### Admission decision
+
+The measurement establishes real yield but admits none of the three formats yet. MyST
+needs a distinct, policy-bindable grammar for roles, directives, labels, and transclusion
+context; the production dependency graph has no pure-Rust MyST parser pinned to that
+contract. Quarto needs a dedicated adapter which preserves the measured Markdown subset
+while representing includes and refusing execution- or plugin-derived targets; calling it
+Markdown would overstate coverage. Org needs a bounded parser pinned against the GNU Org
+renderer plus explicit publishing-context evidence; the pure-Rust parser used for
+measurement is still an alpha, not the production contract.
+
+Unlike notebooks, all three formats can identify their authored constructs with physical
+byte spans in the source file. None needs a new location shape or wire v2; an admitted
+adapter would still move the normal additive schema and examples. What is missing is
+renderer conformance and, for Quarto and Org publishing, trustworthy build context.
+Shipping waits for that evidence and a provider or design partner that needs the format;
+executable outputs and plugins remain external evidence in every design.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit
