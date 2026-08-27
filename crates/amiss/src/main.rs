@@ -4,6 +4,7 @@ mod codequality;
 mod external;
 mod human;
 mod input;
+mod junit;
 mod output;
 mod payload;
 mod policy_include;
@@ -113,7 +114,7 @@ fn main() -> ExitCode {
             failure
         }
         Outcome::Rejected {
-            format: OutputFormat::Human,
+            format: OutputFormat::Human | OutputFormat::Junit,
             codes,
         } => {
             for code in &codes {
@@ -146,6 +147,7 @@ fn project(
         OutputFormat::Json => emit(reserve, envelope),
         OutputFormat::Sarif => emit(reserve, &sarif::log(envelope)),
         OutputFormat::CodeQuality => emit(reserve, &codequality::issues(envelope)),
+        OutputFormat::Junit => emit_junit(envelope),
         OutputFormat::Human => human::report(envelope, explain_scope, full_feedback),
     }
 }
@@ -429,9 +431,23 @@ fn fatal(
     ExitCode::from(ExitClass::Failure.code())
 }
 
-#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
-    if let Err(defect) = reserve.emit(envelope, &mut std::io::stdout())
+    diagnose_emission(
+        reserve
+            .emit(envelope, &mut std::io::stdout())
+            .map(|_written| ()),
+    );
+}
+
+fn emit_junit(envelope: &amiss_wire::json::Value) {
+    let stdout = std::io::stdout();
+    let mut output = std::io::BufWriter::new(stdout.lock());
+    diagnose_emission(junit::write(envelope, &mut output));
+}
+
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn diagnose_emission(result: std::io::Result<()>) {
+    if let Err(defect) = result
         && defect.kind() != std::io::ErrorKind::BrokenPipe
     {
         eprintln!(

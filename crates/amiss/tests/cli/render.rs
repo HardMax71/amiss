@@ -143,7 +143,7 @@ fn a_closed_pipe_preserves_the_report_verdict() {
         "write report fixture"
     );
 
-    for format in ["human", "sarif", "codequality"] {
+    for format in ["human", "sarif", "codequality", "junit"] {
         let mut child = Command::new(env!("CARGO_BIN_EXE_amiss"))
             .args(["render", "--report", &report_path, "--format", format])
             .stdout(Stdio::piped())

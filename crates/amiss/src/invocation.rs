@@ -47,7 +47,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss render --report <path>
-             (--format human [--full] | --format <sarif|codequality>)
+             (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
            (--target <repo-path> | --target-bytes-hex <lower-hex>)
            [--format <human|json>]
@@ -78,6 +78,7 @@ pub enum OutputFormat {
     Json,
     Sarif,
     CodeQuality,
+    Junit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

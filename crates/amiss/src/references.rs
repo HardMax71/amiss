@@ -41,7 +41,7 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
                 return failure;
             }
         }
-        OutputFormat::Sarif | OutputFormat::CodeQuality => {}
+        OutputFormat::Sarif | OutputFormat::CodeQuality | OutputFormat::Junit => {}
     }
     ExitCode::from(ExitClass::Success.code())
 }

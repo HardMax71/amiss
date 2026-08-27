@@ -91,8 +91,11 @@ fn project(
                 return ExitCode::from(ExitClass::Failure.code());
             }
         }
-        // The grammar admits human and json only; the other two never reach here.
-        OutputFormat::Human | OutputFormat::Sarif | OutputFormat::CodeQuality => {
+        // The grammar admits human and json only; the other formats never reach here.
+        OutputFormat::Human
+        | OutputFormat::Sarif
+        | OutputFormat::CodeQuality
+        | OutputFormat::Junit => {
             human(envelope);
         }
     }
