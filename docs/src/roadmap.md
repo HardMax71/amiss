@@ -56,3 +56,18 @@ committed work. They remain three separate future tracks:
 Admission still requires design-partner or provider demand and pinned conformance against the
 official renderer. All three can use the existing physical byte-span location shape, so none is
 reason to reopen the wire solely to name a source construct.
+
+### Editor feedback remains held
+
+The [editor-latency measurement](ledger.md#editor-latency-and-reverse-impact-demand-measured-and-held)
+found that the reverse-impact query had not yet shipped, with no observable external use and no
+editor-integration request.
+Fresh-process startup is about 2.5 ms; complete scans range from 45 ms on Hyperfine to 4.7 seconds
+on starship's translation mirrors. Keeping the engine resident would remove the negligible part
+and retain the expensive one.
+
+An LSP, worktree overlay, or incremental daemon is therefore research, not committed work. Reopen
+it after a released `refs` command has a user who can identify a concrete author interaction and
+repository where latency blocks them. Measure a stateless invocation there first. Any convenience
+result remains observe-only and cannot satisfy a provider gate; persistent incremental state and
+background network access need separate proof before they enter the design.
