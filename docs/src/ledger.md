@@ -532,6 +532,48 @@ buffer overlay remains observe-only convenience output, never provider-gating ev
 incremental state, a long-lived engine, and background network access remain out until their own
 correctness and resource model is proved.
 
+## Provider service packaging demand audited and held
+
+No operator request justified a deployment package on 2026-08-28. Authenticated GitHub issue and
+pull-request searches for `docker`, `container image`, `OCI image`, `Helm`, `Kubernetes`,
+`self-hosted`, `provider service`, `systemd`, and `deployment platform` returned no result in this
+repository. Exact public code searches for each of `amiss-controller-github`,
+`amiss-controller-gitlab`, and `amiss-controller-gitea` found only this source tree. The one
+observable live lane repository is the maintainer-owned
+[`amiss-lane-github`](https://github.com/HardMax71/amiss-lane-github), whose stated purpose is to
+exercise a real GitHub App against a deliberate test scenario. It proves that a source-built lane
+has run; it does not establish demand for an image or an operator's packaging contract.
+
+The latest release at the time of the audit was
+[`v0.25.0`](https://github.com/HardMax71/amiss/releases/tag/v0.25.0). Its platform assets contain
+the scanner and prober, checksums, and provenance, but no provider service. That is consistent with
+the supported contract rather than a missing release step: the three service crates are
+unpublished, and their setup pages direct an operator to build the chosen repository commit with
+`--locked`. One commit therefore selects the controller, provider adapter, engine wire,
+constraint producer, and sealed bootstrap together.
+
+The process boundary is already suitable for an operator-selected supervisor. Each service loads
+one absolute strict-JSON configuration, validates it offline before startup, binds plain HTTP to a
+private address behind an operator TLS proxy, exposes private health, readiness, and fixed metrics
+routes, and drains admitted work on termination. Configuration names pre-created, disjoint
+scratch, ledger, artifact, and, for webhook lanes, inbox roots. Credentials, webhook keys,
+execution constraints, bootstrap binaries, and optional controls arrive through bounded regular
+files. These are the inputs an image would have to mount and the state a rollout would have to
+preserve.
+
+There is consequently no neutral container definition to add. Choosing a base and target
+architecture would not answer the runtime user and filesystem ownership, secret injection, TLS
+edge, private-route exposure, persistent-volume backup, or configuration migration rules. A Helm
+chart or generated configuration would make even more assumptions, while a separately versioned
+provider package would break the single-commit closure before 1.0.
+
+No OCI image, service-manager unit, configuration generator, or control plane ships from this
+audit. Reopen packaging when an operator names the deployment platform, image-signing verification
+flow, upgrade and rollback contract, and isolation model for secrets, routes, and durable roots.
+The first package must preserve the same-commit service/bootstrap/engine closure and reuse the
+release's existing platform provenance where that operator can verify it; it must not publish the
+controller crates as a second library product.
+
 ## What a row must be
 
 A row enters this page only from a recorded run: the machine report kept, the commit

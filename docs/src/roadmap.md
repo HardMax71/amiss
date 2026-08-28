@@ -71,3 +71,16 @@ it after a released `refs` command has a user who can identify a concrete author
 repository where latency blocks them. Measure a stateless invocation there first. Any convenience
 result remains observe-only and cannot satisfy a provider gate; persistent incremental state and
 background network access need separate proof before they enter the design.
+
+### Provider packaging remains demand-gated
+
+The [packaging-demand audit](ledger.md#provider-service-packaging-demand-audited-and-held) found no
+operator request and no public use of a provider service outside this source tree. The
+maintainer-owned live GitHub lane proves the source-built service path, not demand for an OCI image,
+service-manager unit, configuration generator, or control plane.
+
+Packaging remains research until an operator supplies the deployment platform, signing and
+verification flow, upgrade and rollback expectations, and the isolation model for secrets,
+routes, and durable state. Any eventual artifact must keep the service, bootstrap, wire, and
+engine on one chosen commit before 1.0. The unpublished controller crates do not become a
+separately versioned product to make packaging easier.
