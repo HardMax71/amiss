@@ -8,13 +8,13 @@ use std::time::{Duration, Instant};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
-use super::{PackLimits, index_options, validate_and_spool, with_index_interrupt};
+use super::{DEFAULT_LIMITS, PackLimits, index_options, validate_and_spool, with_index_interrupt};
 
 const SECOND: Duration = Duration::from_secs(1);
 
 #[test]
 fn fixed_limits_and_indexing_are_advertised() {
-    let limits = PackLimits::DEFAULT;
+    let limits = DEFAULT_LIMITS;
     assert_eq!(limits.pack_bytes, 2_147_483_648);
     assert_eq!(limits.objects, 2_000_000);
     assert_eq!(limits.object_bytes, 134_217_728);
@@ -331,7 +331,8 @@ fn validate_at(
     timeout: Duration,
 ) -> Result<(), super::PackError> {
     let mut input = Cursor::new(bytes);
-    let mut spool = tempfile::tempfile().map_err(super::io_error)?;
+    let mut spool = tempfile::tempfile()
+        .map_err(|_defect| super::PackError("the pack stream is unreadable"))?;
     validate_and_spool(&mut input, &mut spool, limits, cancelled, started, timeout)
 }
 
