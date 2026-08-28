@@ -27,18 +27,17 @@ pub(super) fn page_facts(
             Token::StartTag(tag) => {
                 let name = tag.name.as_ref();
                 let is_base = name == b"base".as_slice();
-                let is_link = name == b"a".as_slice() || name == b"area".as_slice();
+                let is_anchor = name == b"a".as_slice();
+                let is_link = is_anchor || name == b"area".as_slice();
                 for (name, value) in tag.attributes {
-                    if name.as_ref() == b"id".as_slice() {
+                    let name = name.as_ref();
+                    if name == b"id".as_slice() || (is_anchor && name == b"name".as_slice()) {
                         let anchor = String::from_utf8(value.value.0)
                             .map_err(|_defect| MdBookEvidenceError::Anchor)?;
-                        if anchor.is_empty()
-                            || anchor.len() > ANCHOR_BYTES
-                            || anchor.chars().any(char::is_control)
-                        {
+                        if anchor.len() > ANCHOR_BYTES || anchor.chars().any(char::is_control) {
                             return Err(MdBookEvidenceError::Anchor);
                         }
-                        if anchors.insert(anchor) {
+                        if !anchor.is_empty() && anchors.insert(anchor) {
                             *anchor_count = anchor_count
                                 .checked_add(1)
                                 .filter(|count| {
@@ -46,7 +45,7 @@ pub(super) fn page_facts(
                                 })
                                 .ok_or(MdBookEvidenceError::Anchor)?;
                         }
-                    } else if name.as_ref() == b"href".as_slice()
+                    } else if name == b"href".as_slice()
                         && ((is_base && base_href.is_none()) || is_link)
                     {
                         let href = String::from_utf8(value.value.0)

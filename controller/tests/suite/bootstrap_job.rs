@@ -198,7 +198,7 @@ fn semantic_evidence(
         source_report_payload_digest,
         producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
         producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
-        producer_version: "0.5.0".to_owned(),
+        producer_version: "0.5.1".to_owned(),
         context_digest,
         input_digest: hb("amiss/test-site-build", b"output"),
         complete: true,
@@ -211,7 +211,7 @@ fn site_expectation(context_digest: Digest) -> SemanticEvidenceExpectation {
     SemanticEvidenceExpectation {
         producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
         producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
-        producer_version: "0.5.0".to_owned(),
+        producer_version: "0.5.1".to_owned(),
         context_digest,
     }
 }

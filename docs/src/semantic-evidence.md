@@ -45,12 +45,14 @@ precedence. Missing evidence, an incomplete producer, another producer version, 
 binding, or an invalid observation can never clear a missing label.
 
 The second compiled consumer accepts at most one complete `site-build` producer at version
-`0.5.0`. A `site-route` observation carries one exact absolute-path URI, one repository source
+`0.5.1`. A `site-route` observation carries one exact absolute-path URI, one repository source
 document, and a byte-sorted unique set of decoded anchor identities. Routes exclude authority,
 query, and fragment components; sources obey the repository-path grammar; anchors and their
 aggregate count are bounded. On the candidate side only, an exact route resolves to its scanned
-structured source, and a nonempty fragment additionally requires an exact member of the published
-anchor set. A `site-generated-route` carries the same route and anchors plus a required nullable
+structured source. A nonempty fragment first matches a published `id` or legacy `<a name>` anchor
+verbatim, then by percent-decoded identity; ASCII-case-insensitive `top` identifies the page top.
+This preserves a literal percent sign in a valid anchor without making malformed escapes resolve by
+guesswork. A `site-generated-route` carries the same route and anchors plus a required nullable
 source. A repository path is attribution for generated output, not its target body, and must remain
 an exact ordinary candidate blob. `null` says the completed page has no repository attribution; it
 does not invent a virtual source. Either form resolves as `external/site-build`. A missing source
@@ -63,7 +65,8 @@ query. It resolves only when that terminal route has one uniquely claimed source
 generated page and the effective fragment is in its anchor set. Following the
 [HTTP Location rule](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.2), an absent
 destination fragment inherits the authored fragment, a nonempty one replaces it, and an empty `#`
-suppresses inheritance. Self-redirects and malformed fragments make the evidence invalid.
+suppresses inheritance. Self-redirects and fragments containing raw control characters make the
+evidence invalid.
 Conflicting route owners and redirects ending at a missing, ambiguous, nonterminal, or anchor-less
 target do not resolve and each produce one `site-build-defect` whose fact retains the exact route,
 claim identity, reason, and every available routing source. A conflict containing only unattributed

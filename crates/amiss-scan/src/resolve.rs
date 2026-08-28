@@ -151,8 +151,21 @@ impl<'a> Resolver<'a> {
         if let Some(raw_fragment) = &fragment
             && decode_fragment(raw_fragment).is_none()
         {
+            let intent = if path_part.starts_with('/') && !path_part.starts_with("//") {
+                Intent {
+                    kind: IntentKind::SiteRoute,
+                    commit_oid: None,
+                    repository_path: None,
+                    target_kind: None,
+                    external_scheme: None,
+                    query,
+                    fragment,
+                }
+            } else {
+                unsupported_intent(query, fragment)
+            };
             return Ok((
-                unsupported_intent(query, fragment.clone()),
+                intent,
                 Resolution::Invalid(InvalidReference::FragmentEncoding),
             ));
         }
@@ -216,15 +229,19 @@ impl<'a> Resolver<'a> {
             is_image,
             &occurrence.occurrence.semantic_destination,
         )?;
-        if matches!(
-            resolution,
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
-        ) && let Some(evidence) = site::resolve(
-            self,
-            semantic,
-            &occurrence.occurrence.semantic_destination,
-            is_image,
-        )? {
+        if intent.kind == IntentKind::SiteRoute
+            && matches!(
+                resolution,
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
+                    | Resolution::Invalid(InvalidReference::FragmentEncoding)
+            )
+            && let Some(evidence) = site::resolve(
+                self,
+                semantic,
+                &occurrence.occurrence.semantic_destination,
+                is_image,
+            )?
+        {
             resolution = evidence;
         }
         let destination = matches!(

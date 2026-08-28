@@ -243,7 +243,7 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
 fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let valid = semantic_evidence(
         "site-build",
-        "0.5.0",
+        "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![
@@ -285,7 +285,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     )];
     let malformed_fragment_redirect = semantic_evidence(
         "site-build",
-        "0.5.0",
+        "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![site_observation(
@@ -296,6 +296,9 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let mut query_redirect = malformed_fragment_redirect.clone();
     let mut foreign_redirect = malformed_fragment_redirect.clone();
     let mut self_redirect = malformed_fragment_redirect.clone();
+    let mut accepted = empty();
+    accepted.semantic_evidence = vec![supplied_semantic(malformed_fragment_redirect)];
+    controls(&accepted).expect("a literal percent sign remains a valid redirect fragment");
     query_redirect.observations = vec![site_observation(
         "/legacy/",
         SiteObservation::Redirect("docs/redirects.toml", "/guide/?language=en"),
@@ -316,10 +319,6 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         (invalid_source, AnalysisErrorCode::ConfigurationInvalid),
         (unsorted_anchors, AnalysisErrorCode::NoncanonicalArray),
         (duplicate_anchors, AnalysisErrorCode::NoncanonicalArray),
-        (
-            malformed_fragment_redirect,
-            AnalysisErrorCode::ConfigurationInvalid,
-        ),
         (query_redirect, AnalysisErrorCode::ConfigurationInvalid),
         (foreign_redirect, AnalysisErrorCode::ConfigurationInvalid),
         (self_redirect, AnalysisErrorCode::ConfigurationInvalid),
@@ -368,7 +367,7 @@ fn site_claims_require_explicit_source_attribution() {
     ] {
         let evidence = semantic_evidence(
             "site-build",
-            "0.5.0",
+            "0.5.1",
             hb("test/site-output", b"site output"),
             Some(hb("test/report", b"source report")),
             vec![observation],
@@ -384,7 +383,7 @@ fn site_claims_require_explicit_source_attribution() {
 fn generated_site_claims_admit_absent_repository_attribution() {
     let evidence = semantic_evidence(
         "site-build",
-        "0.5.0",
+        "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![
@@ -427,7 +426,7 @@ fn inconsistent_site_navigation_never_becomes_input() {
     for navigation in cases {
         let evidence = semantic_evidence(
             "site-build",
-            "0.5.0",
+            "0.5.1",
             hb("test/site-output", b"site output"),
             None,
             vec![page.clone(), navigation],

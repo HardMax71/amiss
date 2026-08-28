@@ -15,7 +15,7 @@ const INTERSPHINX_PRODUCER: &str = "sphinx-inventory-set";
 const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
-const SITE_BUILD_VERSION: &str = "0.5.0";
+const SITE_BUILD_VERSION: &str = "0.5.1";
 
 pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
