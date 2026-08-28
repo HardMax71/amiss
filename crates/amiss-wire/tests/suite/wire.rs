@@ -1,6 +1,6 @@
 use amiss_wire::ExitClass;
 use amiss_wire::de::{self, Error as DecodeError, ErrorKind as DecodeErrorKind, Obj};
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::{hb, hb_stream, hj};
 use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
 
 #[expect(clippy::unwrap_used, reason = "test helper on inputs that must fail")]
@@ -166,6 +166,18 @@ fn reproduces_the_normative_seed_vectors() {
 fn domain_separation_changes_the_digest() {
     assert_ne!(hb("amiss/a", b"x"), hb("amiss/b", b"x"));
     assert_ne!(hb("amiss/a", b"x"), hb("amiss/a", b"y"));
+}
+
+#[test]
+fn streamed_byte_digests_are_the_digest_of_the_concatenated_bytes() {
+    assert_eq!(
+        hb_stream("amiss/a", |write| {
+            write(b"one");
+            write(b"\n");
+            write(b"two");
+        }),
+        hb("amiss/a", b"one\ntwo")
+    );
 }
 
 #[test]

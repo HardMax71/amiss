@@ -1,6 +1,4 @@
-use amiss_wire::controls::{
-    CODE_TEXT_PROJECTION, PREVIOUS_CODE_SINK, Profile, projection_source_value,
-};
+use amiss_wire::controls::{PREVIOUS_CODE_SINK, Profile, projection_source_value};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
@@ -36,7 +34,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         ("name".to_owned(), Value::string(assertion.name.clone())),
         (
             "projection".to_owned(),
-            Value::string(CODE_TEXT_PROJECTION.to_owned()),
+            Value::string(assertion.projection.as_ref().to_owned()),
         ),
         (
             "sink".to_owned(),

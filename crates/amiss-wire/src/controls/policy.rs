@@ -12,11 +12,16 @@ use super::{
 
 /// Maximum UTF-8 byte length of one exact document suffix selector.
 pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
-pub const CODE_TEXT_PROJECTION: &str = "code-text-v1";
 pub const PREVIOUS_CODE_SINK: &str = "previous-code";
 pub const BLOB_LINES_SOURCE: &str = "blob-lines";
 pub const NAMED_REGION_SOURCE: &str = "named-region";
 pub const SOURCE_MARKER_BYTES: usize = 256;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
+pub enum ProjectionKind {
+    #[strum(serialize = "code-text-v1")]
+    CodeTextV1,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentInclude {
@@ -42,36 +47,42 @@ pub fn document_include_value(include: DocumentInclude) -> Value {
     Value::Object(fields.into_boxed_slice())
 }
 
+fn exact_suffix(path: &str, value: Value) -> Result<String, Error> {
+    let suffix = de::string(path, value)?;
+    let Some(tail) = suffix.strip_prefix('.') else {
+        return fail(path, ErrorKind::InvalidValue);
+    };
+    if tail.is_empty()
+        || suffix.len() > DOCUMENT_SUFFIX_BYTES
+        || tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
+    {
+        return fail(path, ErrorKind::InvalidValue);
+    }
+    Ok(suffix)
+}
+
 fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
-    Obj::new(path, value).and_then(|mut obj| {
-        let mut include = DocumentInclude {
-            path: obj.required("path", decode_repo_path)?,
-            kind: obj.required("kind", decode_enum)?,
-            suffix: None,
-            adapter: None,
-        };
-        let suffix_path = obj.field("suffix");
-        if let Some(value) = obj.take_optional("suffix") {
-            let suffix = de::string(&suffix_path, value)?;
-            if include.kind != IncludeKind::Tree {
-                return fail(&suffix_path, ErrorKind::Inconsistent);
-            }
-            let Some(tail) = suffix.strip_prefix('.') else {
-                return fail(&suffix_path, ErrorKind::InvalidValue);
-            };
-            if tail.is_empty()
-                || suffix.len() > DOCUMENT_SUFFIX_BYTES
-                || tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
-            {
-                return fail(&suffix_path, ErrorKind::InvalidValue);
-            }
-            include.suffix = Some(suffix);
-        }
-        include.adapter = obj
-            .take_optional("adapter")
-            .map(|value| decode_enum(&obj.field("adapter"), value))
-            .transpose()?;
-        obj.finish().map(|()| include)
+    let mut obj = Obj::new(path, value)?;
+    let include_path = obj.required("path", decode_repo_path)?;
+    let kind = obj.required("kind", decode_enum)?;
+    let suffix_path = obj.field("suffix");
+    let raw_suffix = obj.take_optional("suffix");
+    if raw_suffix.is_some() && kind != IncludeKind::Tree {
+        return fail(&suffix_path, ErrorKind::Inconsistent);
+    }
+    let suffix = raw_suffix
+        .map(|value| exact_suffix(&suffix_path, value))
+        .transpose()?;
+    let adapter = obj
+        .take_optional("adapter")
+        .map(|value| decode_enum(&obj.field("adapter"), value))
+        .transpose()?;
+    obj.finish()?;
+    Ok(DocumentInclude {
+        path: include_path,
+        kind,
+        suffix,
+        adapter,
     })
 }
 
@@ -105,6 +116,7 @@ pub enum ProjectionSource {
 pub struct ProjectionAssertion {
     pub document: RepoPathText,
     pub name: String,
+    pub projection: ProjectionKind,
     pub source: ProjectionSource,
 }
 
@@ -169,9 +181,7 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
     if !governed_name_valid(&name) {
         return fail(&obj.field("name"), ErrorKind::InvalidValue);
     }
-    obj.required("projection", |path, value| {
-        de::const_str(path, value, CODE_TEXT_PROJECTION)
-    })?;
+    let projection = obj.required("projection", decode_enum)?;
     obj.required("sink", |path, value| {
         de::const_str(path, value, PREVIOUS_CODE_SINK)
     })?;
@@ -180,6 +190,7 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
     Ok(ProjectionAssertion {
         document,
         name,
+        projection,
         source,
     })
 }
@@ -212,22 +223,6 @@ pub fn projection_source_value(source: &ProjectionSource) -> Value {
             ),
         ])),
     }
-}
-
-fn projection_assertion_value(assertion: ProjectionAssertion) -> Value {
-    Value::Object(Box::new([
-        (
-            "document".into(),
-            Value::String(assertion.document.as_str().into()),
-        ),
-        ("name".into(), Value::String(assertion.name.into())),
-        (
-            "projection".into(),
-            Value::String(CODE_TEXT_PROJECTION.into()),
-        ),
-        ("sink".into(), Value::String(PREVIOUS_CODE_SINK.into())),
-        ("source".into(), projection_source_value(&assertion.source)),
-    ]))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -273,7 +268,21 @@ impl ScannerPolicy {
             .collect();
         let assertions: Vec<Value> = projection_assertions
             .into_iter()
-            .map(projection_assertion_value)
+            .map(|assertion| {
+                Value::Object(Box::new([
+                    (
+                        "document".into(),
+                        Value::String(assertion.document.as_str().into()),
+                    ),
+                    ("name".into(), Value::String(assertion.name.into())),
+                    (
+                        "projection".into(),
+                        Value::String(assertion.projection.as_ref().into()),
+                    ),
+                    ("sink".into(), Value::String(PREVIOUS_CODE_SINK.into())),
+                    ("source".into(), projection_source_value(&assertion.source)),
+                ]))
+            })
             .collect();
         let dispositions: Vec<Value> = finding_dispositions
             .into_iter()

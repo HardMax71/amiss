@@ -1,5 +1,5 @@
 use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
+    DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
 };
 use amiss_wire::de::ErrorKind;
 
@@ -19,6 +19,7 @@ fn parses_the_policy_fixture() {
     let assertion = &policy.projection_assertions()[0];
     assert_eq!(assertion.document.as_str(), "docs/architecture.md");
     assert_eq!(assertion.name, "request-shape");
+    assert_eq!(assertion.projection, ProjectionKind::CodeTextV1);
     let ProjectionSource::BlobLines(source) = &assertion.source else {
         panic!("fixture assertion uses blob lines");
     };

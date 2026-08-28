@@ -94,6 +94,13 @@ pub fn hb(domain: &str, bytes: &[u8]) -> Digest {
 }
 
 #[must_use]
+pub fn hb_stream(domain: &str, emit: impl FnOnce(&mut dyn FnMut(&[u8]))) -> Digest {
+    hash(domain, |hasher| {
+        emit(&mut |piece| hasher.update(piece));
+    })
+}
+
+#[must_use]
 pub fn hj(domain: &str, value: &Value) -> Digest {
     canonical_hash(domain, value, |_| {})
 }
