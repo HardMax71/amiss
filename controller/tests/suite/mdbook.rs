@@ -93,7 +93,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     fs::create_dir(root.path().join("nested")).unwrap();
     fs::write(
         root.path().join("intro.html"),
-        br#"<!doctype html><h1 id="intro"></h1><span id="entity&amp;anchor"></span><i id="intro"></i>"#,
+        br#"<!doctype html><h1 id="intro"></h1><span id="entity&amp;anchor"></span><i id="intro"></i><a name="legacy"></a><a id="both" name="named"></a><a name=""></a><area name="map">"#,
     )
     .unwrap();
     fs::write(
@@ -123,7 +123,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
 
     assert_eq!(parsed.payload.candidate_identity_digest, candidate);
     assert_eq!(parsed.payload.producer_kind.as_str(), "site-build");
-    assert_eq!(parsed.payload.producer_version, "0.5.0");
+    assert_eq!(parsed.payload.producer_version, "0.5.1");
     assert_eq!(
         parsed.payload.context_digest,
         mdbook_site_expectation(&site).unwrap().context_digest
@@ -132,7 +132,10 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     assert_eq!(parsed.payload.observations.len(), 4);
     let intro = observation(&parsed.payload.observations, "/manual/intro.html");
     assert_eq!(intro.text("source"), Some("docs/guide/README.md"));
-    assert_eq!(texts(intro, "anchors"), ["entity&anchor", "intro"]);
+    assert_eq!(
+        texts(intro, "anchors"),
+        ["both", "entity&anchor", "intro", "legacy", "named"]
+    );
     let index = observation(&parsed.payload.observations, "/manual/index.html");
     assert_eq!(index.text("source"), Some("docs/guide/README.md"));
     assert_eq!(texts(index, "anchors"), ["home"]);

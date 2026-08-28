@@ -140,7 +140,7 @@ fn site_claim(
             if !amiss_wire::uri::site_route_valid(&destination)
                 || fragment
                     .as_deref()
-                    .is_some_and(|value| amiss_wire::uri::decode_fragment(value).is_none())
+                    .is_some_and(|value| value.chars().any(char::is_control))
             {
                 return fail(path, ErrorKind::InvalidValue);
             }
@@ -280,8 +280,7 @@ fn broken_redirect_defect(
             let fragment = fragment
                 .as_deref()
                 .filter(|fragment| !fragment.is_empty())?;
-            let decoded = amiss_wire::uri::decode_fragment(fragment)?;
-            if anchors.binary_search(&decoded).is_ok() {
+            if fragment_target(anchors, fragment) {
                 return None;
             }
             "missing-anchor"
@@ -312,6 +311,22 @@ fn broken_redirect_defect(
         source: Some(source.clone()),
         member_count: 1,
     })
+}
+
+pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
+    let published = |candidate: &str| {
+        candidate.eq_ignore_ascii_case("top")
+            || anchors
+                .binary_search_by(|anchor| anchor.as_str().cmp(candidate))
+                .is_ok()
+    };
+    published(fragment)
+        || (fragment.as_bytes().contains(&b'%')
+            && percent_encoding::percent_decode_str(fragment)
+                .decode_utf8()
+                .ok()
+                .as_deref()
+                .is_some_and(published))
 }
 
 fn site_defect_id(kind: &str, route: &str) -> Digest {

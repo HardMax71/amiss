@@ -11,7 +11,7 @@ use amiss_wire::model::ArtifactId;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
 pub(crate) use parse::parse;
-pub(crate) use site::navigation_contains;
+pub(crate) use site::{fragment_target, navigation_contains};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Inputs {

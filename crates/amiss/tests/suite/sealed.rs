@@ -360,7 +360,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
 
 #[test]
 fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() {
-    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [changed redirect anchor](/changed/#absent) [cleared redirect anchor](/cleared/#absent) [broken redirect anchor](/broken-fragment/) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/) [generated](/generated/) [generated anchor](/generated/#api) [generated absent](/generated/#absent) [generated stale](/generated-stale/) [generated redirect](/generated-legacy/) ![generated image](/generated/)\n";
+    let index = "# Index\n\n[route](/guide/) [anchor](/guide/#intr%6F) [raw anchor](/guide/#raw%anchor) [mixed anchor](/guide/#mixed%20anchor%tail) [page top](/guide/#TOP) [absent](/guide/#absent) [unknown](/missing/) [stale](/stale/) [duplicate](/duplicate/) [redirect](/legacy/) [redirect anchor](/legacy/#intro) [changed redirect anchor](/changed/#absent) [cleared redirect anchor](/cleared/#absent) [broken redirect anchor](/broken-fragment/) [broken redirect](/broken/) [collision](/collision/) ![image](/legacy/) [generated](/generated/) [generated anchor](/generated/#api) [generated absent](/generated/#absent) [generated stale](/generated-stale/) [generated redirect](/generated-legacy/) ![generated image](/generated/)\n";
     let fixture = amiss_fixtures::commit_pair(
         &[
             ("README.md", "# Repository\n"),
@@ -399,7 +399,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         source_report_payload_digest: Some(hb("amiss-test/report", b"source report")),
         producer_kind: id("site-build"),
         producer_identity: id("amiss-test"),
-        producer_version: "0.5.0".to_owned(),
+        producer_version: "0.5.1".to_owned(),
         context_digest,
         input_digest: hb("amiss-test/site-output", b"site output"),
         complete: true,
@@ -419,18 +419,41 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
     let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    let routes: Vec<&serde_json::Value> = envelope["payload"]["observations"]
-        .as_array()
+    assert_site_routes(&envelope);
+    assert_unlinked(&envelope, &["docs/index.md"]);
+    assert_site_defects(&envelope);
+}
+
+fn assert_site_routes(envelope: &serde_json::Value) {
+    let routes: Vec<&serde_json::Value> = envelope
+        .pointer("/payload/observations")
+        .and_then(serde_json::Value::as_array)
         .unwrap()
         .iter()
         .filter(|row| {
             row.pointer("/candidate/intent/kind") == Some(&serde_json::json!("site-route"))
         })
         .collect();
-    assert_eq!(routes.len(), 20);
-    assert!(routes.iter().all(|row| {
-        row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
-    }));
+    assert_eq!(routes.len(), 23);
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|row| {
+                row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
+            })
+            .count(),
+        21
+    );
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|row| {
+                row.pointer("/base/resolution/reason")
+                    == Some(&serde_json::json!("fragment-encoding"))
+            })
+            .count(),
+        2
+    );
     assert_eq!(
         routes
             .iter()
@@ -439,7 +462,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
                     == Some(&serde_json::json!("docs/guide.md"))
             })
             .count(),
-        6
+        9
     );
     assert_generated_routes(&routes);
     assert_eq!(
@@ -453,13 +476,14 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         11,
         "unproved route uses remain explicitly unsupported: {routes:?}"
     );
-    assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 9);
     assert_eq!(
-        envelope["payload"]["summary"]["references"]["unsupported"],
-        11
+        envelope.pointer("/payload/summary/references/resolved"),
+        Some(&serde_json::json!(12))
     );
-    assert_unlinked(&envelope, &["docs/index.md"]);
-    assert_site_defects(&envelope);
+    assert_eq!(
+        envelope.pointer("/payload/summary/references/unsupported"),
+        Some(&serde_json::json!(11))
+    );
 }
 
 fn assert_generated_routes(routes: &[&serde_json::Value]) {
@@ -561,7 +585,10 @@ fn site_build_observations() -> Vec<Value> {
     vec![
         site_observation(
             "/guide/",
-            SiteObservation::Page("docs/guide.md", &["intro"]),
+            SiteObservation::Page(
+                "docs/guide.md",
+                &["intro", "mixed anchor%tail", "raw%anchor"],
+            ),
         ),
         site_observation("/stale/", SiteObservation::Page("docs/removed.md", &[])),
         site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
@@ -577,6 +604,18 @@ fn site_build_observations() -> Vec<Value> {
         site_observation(
             "/cleared/",
             SiteObservation::Redirect("docs/redirects.toml", "/guide/#"),
+        ),
+        site_observation(
+            "/raw-fragment/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/#raw%anchor"),
+        ),
+        site_observation(
+            "/mixed-fragment/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/#mixed%20anchor%tail"),
+        ),
+        site_observation(
+            "/top-fragment/",
+            SiteObservation::Redirect("docs/redirects.toml", "/guide/#TOP"),
         ),
         site_observation(
             "/broken-fragment/",

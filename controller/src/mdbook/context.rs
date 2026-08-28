@@ -8,7 +8,7 @@ use url::Url;
 
 use super::{MDBOOK_VERSION, MdBookEvidenceError, SiteBuildContext};
 
-const SITE_BUILD_VERSION: &str = "0.5.0";
+const SITE_BUILD_VERSION: &str = "0.5.1";
 const ROUTE_BYTES: usize = 16_384;
 const CONTEXT_DOMAIN: &str = "amiss/controller-mdbook-site-context-v1";
 const CONFIG_DOMAIN: &str = "amiss/controller-mdbook-config-v1";

@@ -1,10 +1,9 @@
 use amiss_wire::controls::{GitMode, TargetKind};
 use amiss_wire::resolution::ExternalReference;
-use amiss_wire::uri::decode_fragment;
 
 use crate::Error;
 use crate::discovery::Located;
-use crate::semantic::{SiteClaim, SitePageBacking, SiteRoute, SiteTarget, View};
+use crate::semantic::{SiteClaim, SitePageBacking, SiteRoute, SiteTarget, View, fragment_target};
 
 use super::syntax::split_components;
 use super::{Resolution, Resolver, lookup};
@@ -50,16 +49,10 @@ pub(super) fn resolve(
     if is_image {
         return Ok(None);
     }
-    if let Some(fragment) = fragment.filter(|fragment| !fragment.is_empty()) {
-        let Some(decoded) = decode_fragment(fragment) else {
-            return Ok(None);
-        };
-        if anchors
-            .binary_search_by(|anchor| anchor.as_str().cmp(&decoded))
-            .is_err()
-        {
-            return Ok(None);
-        }
+    if let Some(fragment) = fragment.filter(|fragment| !fragment.is_empty())
+        && !fragment_target(anchors, fragment)
+    {
+        return Ok(None);
     }
     match backing {
         SitePageBacking::Repository => {
