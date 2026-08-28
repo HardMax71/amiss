@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::controls::{
     Disposition as PolicyDisposition, DocumentInclude, FindingDisposition, IncludeKind,
-    SCANNER_POLICY_PATH, ScannerPolicy,
+    ProjectionAssertion, SCANNER_POLICY_PATH, ScannerPolicy,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
@@ -73,6 +73,24 @@ fn include_weakening(
     base.adapter
         .filter(|adapter| candidate.adapter != Some(*adapter))
         .map(|_removed| "policy/include-binding-removed")
+}
+
+fn removed_projection_assertions(
+    base: &[ProjectionAssertion],
+    candidate: &[ProjectionAssertion],
+) -> Vec<ControlSeed> {
+    let identities: BTreeSet<(&str, &str)> = candidate
+        .iter()
+        .map(|row| (row.document.as_str(), row.name.as_str()))
+        .collect();
+    base.iter()
+        .filter(|row| !identities.contains(&(row.document.as_str(), row.name.as_str())))
+        .map(|row| ControlSeed {
+            kind: FindingKind::PolicyWeakened,
+            rule_id: format!("policy/projection-assertion-removed/{}", row.name),
+            control_path: Some(RepoPath::from(&row.document)),
+        })
+        .collect()
 }
 
 /// The verified debt snapshot as evaluation context: provenance plus the
@@ -163,28 +181,23 @@ pub fn effects(
     candidate_documents: &dyn Fn(&str) -> InventoryState,
 ) -> Effects {
     let mut controls: Vec<ControlSeed> = Vec::new();
-    let base_includes = base
-        .policy
-        .as_ref()
-        .map_or(&[][..], ScannerPolicy::document_includes);
-    let base_inventory = base
-        .policy
-        .as_ref()
-        .map_or(&[][..], ScannerPolicy::protected_inventory);
-    let candidate_includes: BTreeMap<(&str, IncludeKind), &DocumentInclude> = candidate
-        .policy
-        .as_ref()
+    let base_policy = base.policy.as_ref();
+    let candidate_policy = candidate.policy.as_ref();
+    let base_includes = base_policy.map_or(&[][..], ScannerPolicy::document_includes);
+    let base_inventory = base_policy.map_or(&[][..], ScannerPolicy::protected_inventory);
+    let base_assertions = base_policy.map_or(&[][..], ScannerPolicy::projection_assertions);
+    let candidate_includes: BTreeMap<(&str, IncludeKind), &DocumentInclude> = candidate_policy
         .map_or(&[][..], ScannerPolicy::document_includes)
         .iter()
         .map(|row| ((row.path.as_str(), row.kind), row))
         .collect();
-    let candidate_inventory: BTreeSet<&str> = candidate
-        .policy
-        .as_ref()
+    let candidate_inventory: BTreeSet<&str> = candidate_policy
         .map_or(&[][..], ScannerPolicy::protected_inventory)
         .iter()
         .map(RepoPathText::as_str)
         .collect();
+    let candidate_assertions =
+        candidate_policy.map_or(&[][..], ScannerPolicy::projection_assertions);
 
     for include in base_includes {
         let candidate = candidate_includes
@@ -208,8 +221,12 @@ pub fn effects(
             });
         }
     }
-    let base_raised = raised(base.policy.as_ref());
-    let candidate_raised = raised(candidate.policy.as_ref());
+    controls.extend(removed_projection_assertions(
+        base_assertions,
+        candidate_assertions,
+    ));
+    let base_raised = raised(base_policy);
+    let candidate_raised = raised(candidate_policy);
     for (kind, strength) in &base_raised {
         let now = candidate_raised
             .iter()

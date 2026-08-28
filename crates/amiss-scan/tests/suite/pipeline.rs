@@ -811,6 +811,59 @@ fn an_unclaimed_projection_marker_stays_inside_the_governed_boundary() {
     );
 }
 
+#[test]
+fn removing_a_projection_assertion_is_policy_weakening() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    fs::write(root.join("source.txt"), "value\n").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(root, "docs.md", "sample", "source.txt", 1, 1);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "projected"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    fs::write(root.join("docs.md"), "# projection retired\n").unwrap();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "retired"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(
+        built.exit_code, 1,
+        "policy weakening always blocks: {payload}"
+    );
+    let weakened = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "policy-weakened")
+        .unwrap_or_else(|| panic!("assertion removal is visible: {payload}"));
+    assert_eq!(
+        weakened["key_input"]["scope"]["rule_id"],
+        "policy/projection-assertion-removed/sample"
+    );
+    assert_eq!(weakened["key_input"]["scope"]["control_path"], "docs.md");
+}
+
 /// Two same-subject defects fold into one item annotated at the least
 /// location, whatever order the fold visits the findings.
 #[test]
