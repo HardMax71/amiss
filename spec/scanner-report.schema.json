@@ -4155,6 +4155,46 @@
         }
       }
     },
+    "ProjectionSourceMarker": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[ -~]*[!-~][ -~]*$"
+    },
+    "ProjectionNamedRegionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "start_marker",
+        "end_marker"
+      ],
+      "properties": {
+        "kind": {
+          "const": "named-region"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPathText"
+        },
+        "start_marker": {
+          "$ref": "#/$defs/ProjectionSourceMarker"
+        },
+        "end_marker": {
+          "$ref": "#/$defs/ProjectionSourceMarker"
+        }
+      }
+    },
+    "ProjectionSource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProjectionBlobLineSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionNamedRegionSource"
+        }
+      ]
+    },
     "ProjectionFactEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -4188,7 +4228,7 @@
           "const": "previous-code"
         },
         "source": {
-          "$ref": "#/$defs/ProjectionBlobLineSource"
+          "$ref": "#/$defs/ProjectionSource"
         },
         "observed": {
           "enum": [
@@ -4200,6 +4240,12 @@
             "source-not-a-blob",
             "source-lfs-pointer",
             "source-lines-out-of-range",
+            "source-start-marker-absent",
+            "source-start-marker-ambiguous",
+            "source-end-marker-absent",
+            "source-end-marker-ambiguous",
+            "source-region-order-invalid",
+            "source-region-not-utf8",
             "content-differs"
           ]
         },

@@ -1,4 +1,6 @@
-use amiss_wire::controls::{BLOB_LINES_SOURCE, CODE_TEXT_PROJECTION, PREVIOUS_CODE_SINK, Profile};
+use amiss_wire::controls::{
+    CODE_TEXT_PROJECTION, PREVIOUS_CODE_SINK, Profile, projection_source_value,
+};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
@@ -42,24 +44,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         ),
         (
             "source".to_owned(),
-            Value::object(vec![
-                (
-                    "kind".to_owned(),
-                    Value::string(BLOB_LINES_SOURCE.to_owned()),
-                ),
-                (
-                    "path".to_owned(),
-                    Value::string(assertion.source.path.as_str().to_owned()),
-                ),
-                (
-                    "first_line".to_owned(),
-                    Value::Integer(i64::try_from(assertion.source.first_line).unwrap_or(i64::MAX)),
-                ),
-                (
-                    "last_line".to_owned(),
-                    Value::Integer(i64::try_from(assertion.source.last_line).unwrap_or(i64::MAX)),
-                ),
-            ]),
+            projection_source_value(&assertion.source),
         ),
         (
             "observed".to_owned(),

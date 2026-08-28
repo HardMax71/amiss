@@ -15,6 +15,8 @@ pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
 pub const CODE_TEXT_PROJECTION: &str = "code-text-v1";
 pub const PREVIOUS_CODE_SINK: &str = "previous-code";
 pub const BLOB_LINES_SOURCE: &str = "blob-lines";
+pub const NAMED_REGION_SOURCE: &str = "named-region";
+pub const SOURCE_MARKER_BYTES: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocumentInclude {
@@ -87,10 +89,23 @@ pub struct BlobLineSelection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NamedRegionSelection {
+    pub path: RepoPathText,
+    pub start_marker: String,
+    pub end_marker: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProjectionSource {
+    BlobLines(BlobLineSelection),
+    NamedRegion(NamedRegionSelection),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectionAssertion {
     pub document: RepoPathText,
     pub name: String,
-    pub source: BlobLineSelection,
+    pub source: ProjectionSource,
 }
 
 fn safe_line(path: &str, value: Value) -> Result<u64, Error> {
@@ -101,22 +116,50 @@ fn safe_line(path: &str, value: Value) -> Result<u64, Error> {
     u64::try_from(line).map_err(|_negative| Error::new(path, ErrorKind::InvalidValue))
 }
 
-fn decode_projection_source(path: &str, value: Value) -> Result<BlobLineSelection, Error> {
+fn source_marker(path: &str, value: Value) -> Result<String, Error> {
+    let marker = de::string(path, value)?;
+    let bytes = marker.as_bytes();
+    if bytes.is_empty()
+        || bytes.len() > SOURCE_MARKER_BYTES
+        || !bytes.iter().any(u8::is_ascii_graphic)
+        || !bytes
+            .iter()
+            .all(|byte| byte.is_ascii_graphic() || *byte == b' ')
+    {
+        return fail(path, ErrorKind::InvalidValue);
+    }
+    Ok(marker)
+}
+
+fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource, Error> {
     let mut obj = Obj::new(path, value)?;
-    obj.required("kind", |path, value| {
-        de::const_str(path, value, BLOB_LINES_SOURCE)
-    })?;
-    let source = BlobLineSelection {
-        path: obj.required("path", decode_repo_path)?,
-        first_line: obj.required("first_line", safe_line)?,
-        last_line: obj.required("last_line", safe_line)?,
+    let kind_path = obj.field("kind");
+    let kind = obj.required("kind", de::string)?;
+    let source = if kind == BLOB_LINES_SOURCE {
+        let selection = BlobLineSelection {
+            path: obj.required("path", decode_repo_path)?,
+            first_line: obj.required("first_line", safe_line)?,
+            last_line: obj.required("last_line", safe_line)?,
+        };
+        if selection.first_line > selection.last_line {
+            return fail(path, ErrorKind::Inconsistent);
+        }
+        ProjectionSource::BlobLines(selection)
+    } else if kind == NAMED_REGION_SOURCE {
+        let selection = NamedRegionSelection {
+            path: obj.required("path", decode_repo_path)?,
+            start_marker: obj.required("start_marker", source_marker)?,
+            end_marker: obj.required("end_marker", source_marker)?,
+        };
+        if selection.start_marker == selection.end_marker {
+            return fail(path, ErrorKind::Inconsistent);
+        }
+        ProjectionSource::NamedRegion(selection)
+    } else {
+        return fail(&kind_path, ErrorKind::InvalidValue);
     };
     obj.finish()?;
-    if source.first_line <= source.last_line {
-        Ok(source)
-    } else {
-        fail(path, ErrorKind::Inconsistent)
-    }
+    Ok(source)
 }
 
 fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAssertion, Error> {
@@ -141,6 +184,36 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
     })
 }
 
+#[must_use]
+pub fn projection_source_value(source: &ProjectionSource) -> Value {
+    match source {
+        ProjectionSource::BlobLines(selection) => Value::Object(Box::new([
+            ("kind".into(), Value::String(BLOB_LINES_SOURCE.into())),
+            ("path".into(), Value::String(selection.path.as_str().into())),
+            (
+                "first_line".into(),
+                Value::Integer(i64::try_from(selection.first_line).unwrap_or(i64::MAX)),
+            ),
+            (
+                "last_line".into(),
+                Value::Integer(i64::try_from(selection.last_line).unwrap_or(i64::MAX)),
+            ),
+        ])),
+        ProjectionSource::NamedRegion(selection) => Value::Object(Box::new([
+            ("kind".into(), Value::String(NAMED_REGION_SOURCE.into())),
+            ("path".into(), Value::String(selection.path.as_str().into())),
+            (
+                "start_marker".into(),
+                Value::String(selection.start_marker.clone().into()),
+            ),
+            (
+                "end_marker".into(),
+                Value::String(selection.end_marker.clone().into()),
+            ),
+        ])),
+    }
+}
+
 fn projection_assertion_value(assertion: ProjectionAssertion) -> Value {
     Value::Object(Box::new([
         (
@@ -153,24 +226,7 @@ fn projection_assertion_value(assertion: ProjectionAssertion) -> Value {
             Value::String(CODE_TEXT_PROJECTION.into()),
         ),
         ("sink".into(), Value::String(PREVIOUS_CODE_SINK.into())),
-        (
-            "source".into(),
-            Value::Object(Box::new([
-                ("kind".into(), Value::String(BLOB_LINES_SOURCE.into())),
-                (
-                    "path".into(),
-                    Value::String(assertion.source.path.as_str().into()),
-                ),
-                (
-                    "first_line".into(),
-                    Value::Integer(i64::try_from(assertion.source.first_line).unwrap_or(i64::MAX)),
-                ),
-                (
-                    "last_line".into(),
-                    Value::Integer(i64::try_from(assertion.source.last_line).unwrap_or(i64::MAX)),
-                ),
-            ])),
-        ),
+        ("source".into(), projection_source_value(&assertion.source)),
     ]))
 }
 

@@ -1,7 +1,7 @@
 {
   "payload": {
     "engine": {
-      "engine_digest": "sha256:293b250bcce9851f6617d06fb83047470e1f021f45544e4f772b9e870bb80e85",
+      "engine_digest": "sha256:2d0c413b5f5c93e0b910ad7713325954d7a013265f80ee3585c7e27ab422aba8",
       "engine_version": "0.26.0"
     },
     "producer": {
@@ -10,9 +10,9 @@
     },
     "schema": "amiss/external-assessment-payload",
     "subject": {
-      "evidence_digest": "sha256:b4cb2b60a7e015ff4caeeb4f718638868193104b73082520e385bf0551b1e8ef",
-      "plan_payload_digest": "sha256:b0623befd24dc6c1d97168170e26b62250cefd1bb1ffee81d6701e9ba3faf8ca",
-      "report_payload_digest": "sha256:68089f73230342aedafcb36c1b84783f7171ac4c5bf24f75d1d4e49607e2390b"
+      "evidence_digest": "sha256:ffbf26239ddbd7e9145f9fea54045149db3101b881ba66c3205e95945d1bfa62",
+      "plan_payload_digest": "sha256:90fe93973962eff3f588c6d183db319ecebd536547ed0c0cf0a2cd80e1f6a3ca",
+      "report_payload_digest": "sha256:eef6601b8c71041e64e95ab983ee3fe72853bf4a161a31c450e7a4a27071fd18"
     },
     "verdicts": [
       {
@@ -26,6 +26,6 @@
       }
     ]
   },
-  "payload_digest": "sha256:3f7534b45b4363c0158dd1e59dc8ac7dd5f3ed7702f866a117767f18f99fea11",
+  "payload_digest": "sha256:9440221c0db0868f70e4f51fb88453e49fb5f9133a4f1f4c4b7d42dd8063a667",
   "schema": "amiss/external-assessment-envelope"
 }

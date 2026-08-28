@@ -1,7 +1,20 @@
 {
   "schema": "amiss/scanner-policy",
   "document_includes": [],
-  "projection_assertions": [],
+  "projection_assertions": [
+    {
+      "document": "docs/api.md",
+      "name": "request-shape",
+      "projection": "code-text-v1",
+      "sink": "previous-code",
+      "source": {
+        "kind": "named-region",
+        "path": "examples/request.json",
+        "start_marker": "// amiss:request:start",
+        "end_marker": "// amiss:request:end"
+      }
+    }
+  ],
   "protected_inventory": [],
   "finding_dispositions": []
 }

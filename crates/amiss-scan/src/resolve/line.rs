@@ -1,8 +1,9 @@
 use amiss_md::lines::scan;
-use amiss_wire::controls::{BlobLineSelection, GitMode};
+use amiss_wire::controls::{GitMode, NamedRegionSelection, ProjectionSource};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, UnsupportedSemantics};
+use memchr::memmem::Finder;
 
 use crate::Error;
 use crate::projection::{DriftReason, Verdict, normalized_line_endings};
@@ -97,10 +98,13 @@ impl Resolver<'_> {
 
     pub(crate) fn resolve_code_projection(
         &mut self,
-        selection: &BlobLineSelection,
+        selection: &ProjectionSource,
         sink: &SemanticCodeSink,
     ) -> Result<Verdict, Error> {
-        let path = RepoPath::from(&selection.path);
+        let path = match selection {
+            ProjectionSource::BlobLines(source) => RepoPath::from(&source.path),
+            ProjectionSource::NamedRegion(source) => RepoPath::from(&source.path),
+        };
         let observed_bytes = u64::try_from(sink.value.len()).unwrap_or(u64::MAX);
         let Some((mode, oid)) = self
             .snapshot
@@ -132,25 +136,40 @@ impl Resolver<'_> {
         else {
             return Err(Error::Internal);
         };
-        let range = LineRange {
-            first: selection.first_line,
-            last: selection.last_line,
+        let selected = match selection {
+            ProjectionSource::BlobLines(selection) => {
+                let range = LineRange {
+                    first: selection.first_line,
+                    last: selection.last_line,
+                };
+                if let std::collections::btree_map::Entry::Vacant(slot) =
+                    line_projections.entry(range)
+                {
+                    self.scan.charge(
+                        Aggregate::LineFragmentBytes,
+                        u64::try_from(body.len()).unwrap_or(u64::MAX),
+                    )?;
+                    slot.insert(selected_line_bytes(body, range).map(|selected| {
+                        target_projection(
+                            TARGET_LINE_PROJECTION_DOMAIN,
+                            mode,
+                            hb(RAW_EVIDENCE_DOMAIN, selected),
+                        )
+                    }));
+                }
+                selected_line_bytes(body, range).ok_or(DriftReason::SourceLinesOutOfRange)
+            }
+            ProjectionSource::NamedRegion(selection) => {
+                self.scan.charge(
+                    Aggregate::LineFragmentBytes,
+                    u64::try_from(body.len()).unwrap_or(u64::MAX),
+                )?;
+                named_region_bytes(body, selection)
+            }
         };
-        if let std::collections::btree_map::Entry::Vacant(slot) = line_projections.entry(range) {
-            self.scan.charge(
-                Aggregate::LineFragmentBytes,
-                u64::try_from(body.len()).unwrap_or(u64::MAX),
-            )?;
-            slot.insert(selected_line_bytes(body, range).map(|selected| {
-                target_projection(
-                    TARGET_LINE_PROJECTION_DOMAIN,
-                    mode,
-                    hb(RAW_EVIDENCE_DOMAIN, selected),
-                )
-            }));
-        }
-        let Some(selected) = selected_line_bytes(body, range) else {
-            return Ok(source_drift(DriftReason::SourceLinesOutOfRange, sink));
+        let selected = match selected {
+            Ok(selected) => selected,
+            Err(reason) => return Ok(source_drift(reason, sink)),
         };
         let normalized = normalized_line_endings(selected);
         let expected = normalized
@@ -168,6 +187,69 @@ impl Resolver<'_> {
             observed_bytes: Some(observed_bytes),
         })
     }
+}
+
+struct MarkerLine {
+    start: usize,
+    after: usize,
+}
+
+fn unique_marker_line(
+    body: &[u8],
+    marker: &[u8],
+    absent: DriftReason,
+    ambiguous: DriftReason,
+) -> Result<MarkerLine, DriftReason> {
+    let finder = Finder::new(marker);
+    let mut unique = None;
+    for marker_at in finder.find_iter(body) {
+        if marker_at > 0 && !matches!(body.get(marker_at.saturating_sub(1)), Some(b'\r' | b'\n')) {
+            continue;
+        }
+        let marker_end = marker_at.saturating_add(marker.len());
+        let after = match (body.get(marker_end), body.get(marker_end.saturating_add(1))) {
+            (Some(b'\r'), Some(b'\n')) => marker_end.saturating_add(2),
+            (Some(b'\r' | b'\n'), _) => marker_end.saturating_add(1),
+            (None, _) => marker_end,
+            (Some(_), _) => continue,
+        };
+        if unique
+            .replace(MarkerLine {
+                start: marker_at,
+                after,
+            })
+            .is_some()
+        {
+            return Err(ambiguous);
+        }
+    }
+    unique.ok_or(absent)
+}
+
+fn named_region_bytes<'a>(
+    body: &'a [u8],
+    selection: &NamedRegionSelection,
+) -> Result<&'a [u8], DriftReason> {
+    let start_line = unique_marker_line(
+        body,
+        selection.start_marker.as_bytes(),
+        DriftReason::SourceStartMarkerAbsent,
+        DriftReason::SourceStartMarkerAmbiguous,
+    )?;
+    let end_line = unique_marker_line(
+        body,
+        selection.end_marker.as_bytes(),
+        DriftReason::SourceEndMarkerAbsent,
+        DriftReason::SourceEndMarkerAmbiguous,
+    )?;
+    if start_line.start >= end_line.start || start_line.after > end_line.start {
+        return Err(DriftReason::SourceRegionOrderInvalid);
+    }
+    let selected = body
+        .get(start_line.after..end_line.start)
+        .ok_or(DriftReason::SourceRegionOrderInvalid)?;
+    std::str::from_utf8(selected).map_err(|_invalid| DriftReason::SourceRegionNotUtf8)?;
+    Ok(selected)
 }
 
 fn source_drift(reason: DriftReason, sink: &SemanticCodeSink) -> Verdict {

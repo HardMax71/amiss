@@ -244,7 +244,7 @@ declare_taxonomy! {
             metadata: &RATCHETED_CONTROL,
         },
         ProjectionDrift => {
-            meaning: "a policy-owned projection cannot prove that its visible code block equals the selected repository lines; restore its unique sink and source or make their projected bytes agree",
+            meaning: "a policy-owned projection cannot prove that its visible code block equals its selected repository source; restore its unique sink and source or make their projected bytes agree",
             metadata: &RATCHETED_CONTROL,
         },
     }

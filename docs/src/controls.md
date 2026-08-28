@@ -56,12 +56,17 @@ and leaves the run incomplete, so a repository grows its policy only after every
 reading it has learned the field.
 
 A projection assertion is owned by the policy, under the stable identity `(document, name)`.
-The first closed form selects an inclusive one-based line interval from a tracked regular or
-executable blob and compares its `code-text-v1` projection with the semantic Markdown or MDX code
-block immediately before `[amiss:<name>]: <amiss:projection>`. It converts CRLF and bare CR to LF
-and removes exactly one final line ending; it does not normalize indentation or any other byte.
-The document must be in the scanner's discovered set. Missing, duplicate, or non-adjacent sinks,
-and absent, non-blob, LFS, or out-of-range sources, produce one `projection-drift` finding. A
+One source form selects an inclusive one-based line interval from a tracked regular or executable
+blob. The other selects bytes between distinct exact `start_marker` and `end_marker` lines; each
+printable-ASCII marker line is at most 256 bytes, occurs exactly once, and is itself excluded. Amiss
+does not parse a source language or its comment syntax. Duplicate, missing, reversed, same-line,
+or non-UTF-8 regions are typed drift, while edits outside the selected region are irrelevant.
+
+The source's `code-text-v1` projection is compared with the semantic Markdown or MDX code block
+immediately before `[amiss:<name>]: <amiss:projection>`. It converts CRLF and bare CR to LF and
+removes exactly one final line ending; it does not normalize indentation or any other byte. The
+document must be in the scanner's discovered set. Missing, duplicate, or non-adjacent sinks, and
+absent, non-blob, LFS, or otherwise invalid sources, produce one `projection-drift` finding. A
 marker with no matching policy row remains an unsupported reserved capability and makes the run
 incomplete. Removing the marker while the policy row survives therefore cannot disable the
 relation, while removing the policy row is `policy-weakened` even when the marker is removed too.

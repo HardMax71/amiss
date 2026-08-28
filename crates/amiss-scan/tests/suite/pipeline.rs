@@ -69,20 +69,24 @@ fn oid(hex: &str) -> Oid {
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn projection_policy(
-    root: &Path,
-    document: &str,
-    name: &str,
-    source: &str,
-    first_line: u64,
-    last_line: u64,
-) {
+fn projection_policy(root: &Path, document: &str, name: &str, source: &serde_json::Value) {
     fs::create_dir_all(root.join(".amiss")).unwrap();
     fs::write(
         root.join(".amiss/scanner-policy.json"),
-        format!(
-            r#"{{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[{{"document":"{document}","name":"{name}","projection":"code-text-v1","sink":"previous-code","source":{{"kind":"blob-lines","path":"{source}","first_line":{first_line},"last_line":{last_line}}}}}],"protected_inventory":[],"finding_dispositions":[]}}"#
-        ),
+        serde_json::to_vec(&serde_json::json!({
+            "schema": "amiss/scanner-policy",
+            "document_includes": [],
+            "projection_assertions": [{
+                "document": document,
+                "name": name,
+                "projection": "code-text-v1",
+                "sink": "previous-code",
+                "source": source,
+            }],
+            "protected_inventory": [],
+            "finding_dispositions": [],
+        }))
+        .unwrap(),
     )
     .unwrap();
 }
@@ -554,7 +558,17 @@ fn a_code_projection_attests_in_committed_and_staged_snapshots() {
         b"```text\r\none\r\ntwo\r\nthree\r\n```\r\n[amiss:sample]: <amiss:projection>\r\n",
     )
     .unwrap();
-    projection_policy(root, "docs.md", "sample", "source.txt", 1, 3);
+    projection_policy(
+        root,
+        "docs.md",
+        "sample",
+        &serde_json::json!({
+            "kind": "blob-lines",
+            "path": "source.txt",
+            "first_line": 1,
+            "last_line": 3,
+        }),
+    );
     git(root, &["add", "."]);
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
@@ -600,7 +614,17 @@ fn trailing_blank_lines_remain_projection_content() {
         let base = base_commit(root);
         fs::write(root.join("source.txt"), source).unwrap();
         fs::write(root.join("docs.md"), document).unwrap();
-        projection_policy(root, "docs.md", "sample", "source.txt", 1, last_line);
+        projection_policy(
+            root,
+            "docs.md",
+            "sample",
+            &serde_json::json!({
+                "kind": "blob-lines",
+                "path": "source.txt",
+                "first_line": 1,
+                "last_line": last_line,
+            }),
+        );
         git(root, &["add", "."]);
         git(root, &["commit", "-qm", "projected"]);
         let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -642,7 +666,17 @@ fn a_changed_projection_reports_the_exact_relation_and_visible_sink() {
         "```text\nstale\n```\n[amiss:sample]: <amiss:projection>\n",
     )
     .unwrap();
-    projection_policy(root, "docs.md", "sample", "source.txt", 1, 1);
+    projection_policy(
+        root,
+        "docs.md",
+        "sample",
+        &serde_json::json!({
+            "kind": "blob-lines",
+            "path": "source.txt",
+            "first_line": 1,
+            "last_line": 1,
+        }),
+    );
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "drifted"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
@@ -702,9 +736,12 @@ fn declared_projection_sink_defects_are_findings_not_silent_boundaries() {
             root,
             "docs.md",
             "sample",
-            "source.txt",
-            first_line,
-            first_line,
+            &serde_json::json!({
+                "kind": "blob-lines",
+                "path": "source.txt",
+                "first_line": first_line,
+                "last_line": first_line,
+            }),
         );
         git(root, &["add", "."]);
         git(root, &["commit", "-qm", "projected"]);
@@ -778,6 +815,210 @@ fn declared_projection_sink_defects_are_findings_not_silent_boundaries() {
 }
 
 #[test]
+fn a_named_region_attests_across_endings_and_ignores_outside_edits() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(
+        root.join("source.txt"),
+        b"const a = \"// amiss:start\";\r\n// amiss:start\r\none\r\ntwo\r// amiss:end\r\nconst b = \"// amiss:end\";\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```text\none\ntwo\n```\n[amiss:sample]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(
+        root,
+        "docs.md",
+        "sample",
+        &serde_json::json!({
+            "kind": "named-region",
+            "path": "source.txt",
+            "start_marker": "// amiss:start",
+            "end_marker": "// amiss:end",
+        }),
+    );
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "projected"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let committed = payload(&commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    ));
+    assert!(
+        committed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "projection-drift"),
+        "{committed}"
+    );
+
+    fs::write(
+        root.join("source.txt"),
+        b"const changed = \"// amiss:start\";\r\n// amiss:start\r\none\r\ntwo\r// amiss:end\r\nconst b = \"// amiss:end\";\n",
+    )
+    .unwrap();
+    git(root, &["add", "source.txt"]);
+    let staged = payload(&staged_index(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&candidate),
+    ));
+    assert_eq!(staged["result"]["status"], "pass", "{staged}");
+    assert!(
+        staged["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "projection-drift"),
+        "{staged}"
+    );
+}
+
+#[test]
+fn a_named_region_mismatch_carries_the_exact_selector() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(
+        root.join("source.txt"),
+        "// amiss:start\ncurrent\n// amiss:end\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```text\nstale\n```\n[amiss:sample]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(
+        root,
+        "docs.md",
+        "sample",
+        &serde_json::json!({
+            "kind": "named-region",
+            "path": "source.txt",
+            "start_marker": "// amiss:start",
+            "end_marker": "// amiss:end",
+        }),
+    );
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "drifted"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    crate::support::assert_report(&envelope, "named projection report");
+    let payload = payload(&built);
+    let row = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .unwrap_or_else(|| panic!("named-region drift is reported: {payload}"));
+    let source = &row["candidate_fact"]["evidence"]["source"];
+    assert_eq!(source["kind"], "named-region");
+    assert_eq!(source["path"], "source.txt");
+    assert_eq!(source["start_marker"], "// amiss:start");
+    assert_eq!(source["end_marker"], "// amiss:end");
+}
+
+#[test]
+fn named_region_marker_defects_are_typed_projection_drift() {
+    let cases: &[(&[u8], &str)] = &[
+        (b"// amiss:end\n", "source-start-marker-absent"),
+        (
+            b"const a = \"// amiss:start\";\nvalue\nconst b = \"// amiss:end\";\n",
+            "source-start-marker-absent",
+        ),
+        (
+            b"// amiss:start\nvalue\nconst b = \"// amiss:end\";\n",
+            "source-end-marker-absent",
+        ),
+        (
+            b"// amiss:start\nvalue\n// amiss:start\n// amiss:end\n",
+            "source-start-marker-ambiguous",
+        ),
+        (b"// amiss:start\n", "source-end-marker-absent"),
+        (
+            b"// amiss:start\nvalue\n// amiss:end\n// amiss:end\n",
+            "source-end-marker-ambiguous",
+        ),
+        (
+            b"// amiss:end\nvalue\n// amiss:start\n",
+            "source-region-order-invalid",
+        ),
+        (
+            b"// amiss:start // amiss:end\n",
+            "source-start-marker-absent",
+        ),
+        (
+            b"// amiss:start\n\xff\n// amiss:end\n",
+            "source-region-not-utf8",
+        ),
+    ];
+    for (source, reason) in cases {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let base = base_commit(root);
+        fs::write(root.join("source.txt"), source).unwrap();
+        fs::write(
+            root.join("docs.md"),
+            "```text\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
+        )
+        .unwrap();
+        projection_policy(
+            root,
+            "docs.md",
+            "sample",
+            &serde_json::json!({
+                "kind": "named-region",
+                "path": "source.txt",
+                "start_marker": "// amiss:start",
+                "end_marker": "// amiss:end",
+            }),
+        );
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "defect"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let payload = payload(&commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        ));
+        assert_eq!(payload["result"]["complete"], true, "{reason}: {payload}");
+        let rows: Vec<_> = payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["kind"] == "projection-drift")
+            .collect();
+        assert_eq!(rows.len(), 1, "{reason}: {payload}");
+        assert_eq!(rows[0]["candidate_fact"]["evidence"]["observed"], *reason);
+    }
+}
+
+#[test]
 fn an_unclaimed_projection_marker_stays_inside_the_governed_boundary() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
@@ -823,7 +1064,17 @@ fn removing_a_projection_assertion_is_policy_weakening() {
         "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
     )
     .unwrap();
-    projection_policy(root, "docs.md", "sample", "source.txt", 1, 1);
+    projection_policy(
+        root,
+        "docs.md",
+        "sample",
+        &serde_json::json!({
+            "kind": "blob-lines",
+            "path": "source.txt",
+            "first_line": 1,
+            "last_line": 1,
+        }),
+    );
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "projected"]);
     let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();

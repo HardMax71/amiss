@@ -95,7 +95,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `waiver-invalid`: a waiver item cannot apply, expired against trusted time or issued outside the floor's authority; an invalid waiver suppresses nothing
 - `claim-broken`: a value claim's target line no longer says what the document claims it says; update the claim or the target so the two agree
 - `claim-target-missing`: a value claim names a target line no regular file in the candidate can answer; point the claim at a tracked file and a line inside it
-- `projection-drift`: a policy-owned projection cannot prove that its visible code block equals the selected repository lines; restore its unique sink and source or make their projected bytes agree
+- `projection-drift`: a policy-owned projection cannot prove that its visible code block equals its selected repository source; restore its unique sink and source or make their projected bytes agree
 <!-- amiss-doc-contract:finding-meanings:end -->
 
 ## Before and after

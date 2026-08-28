@@ -443,6 +443,7 @@ dependencies = [
  "dhat",
  "divan",
  "jsonschema",
+ "memchr",
  "percent-encoding",
  "serde_json",
  "stats_alloc",

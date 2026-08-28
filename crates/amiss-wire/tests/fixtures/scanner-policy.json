@@ -16,6 +16,18 @@
         "first_line": 10,
         "last_line": 14
       }
+    },
+    {
+      "document": "docs/generated.md",
+      "name": "generated-shape",
+      "projection": "code-text-v1",
+      "sink": "previous-code",
+      "source": {
+        "kind": "named-region",
+        "path": "examples/generated.txt",
+        "start_marker": "// amiss:generated:start",
+        "end_marker": "// amiss:generated:end"
+      }
     }
   ],
   "protected_inventory": [
