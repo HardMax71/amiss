@@ -183,6 +183,11 @@ A qualifying non-UTF-8 path or path containing a control character refuses the p
 of disappearing from or splitting the authoritative set. A path outside the repository grammar
 already makes the candidate globally incomplete before projection evaluation.
 
+On a mismatch the report retains exact expected, observed, missing, and extra row counts and
+distinguishes a pure ordering defect. It copies at most the first 32 missing and 32 extra
+byte-sorted rows, at most 32 KiB per side, and states the exact omitted counts; duplicate visible
+rows count as extras.
+
 An attested projection emits nothing. Every nonattested relation emits one `projection-drift`
 finding under `claim/projection/<name>`, points at the visible code block when one is uniquely
 addressable, and carries only digests and byte counts rather than copying either full value into the

@@ -4237,6 +4237,64 @@
         }
       ]
     },
+    "ProjectionRowDifference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ordering_only",
+        "expected_records",
+        "observed_records",
+        "missing_records",
+        "extra_records",
+        "missing_preview",
+        "extra_preview",
+        "missing_omitted",
+        "extra_omitted"
+      ],
+      "properties": {
+        "kind": {
+          "const": "rows"
+        },
+        "ordering_only": {
+          "type": "boolean"
+        },
+        "expected_records": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "observed_records": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "missing_records": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "extra_records": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "missing_preview": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "extra_preview": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 32768
+          }
+        },
+        "missing_omitted": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "extra_omitted": {
+          "$ref": "#/$defs/SafeUInt"
+        }
+      }
+    },
     "ProjectionFactEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -4324,6 +4382,9 @@
             }
           ]
         },
+        "difference": {
+          "$ref": "#/$defs/ProjectionRowDifference"
+        },
         "sources": {
           "type": "array",
           "maxItems": 16384,
@@ -4373,6 +4434,34 @@
               "source": {
                 "$ref": "#/$defs/ProjectionTreePathSource"
               }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "projection",
+              "observed"
+            ],
+            "properties": {
+              "projection": {
+                "const": "sorted-rows-v1"
+              },
+              "observed": {
+                "const": "content-differs"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "difference"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "difference"
+              ]
             }
           }
         }

@@ -55,6 +55,19 @@ pub(crate) enum DriftReason {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RowDifference {
+    pub ordering_only: bool,
+    pub expected_records: u64,
+    pub observed_records: u64,
+    pub missing_records: u64,
+    pub extra_records: u64,
+    pub missing_preview: Vec<String>,
+    pub extra_preview: Vec<String>,
+    pub missing_omitted: u64,
+    pub extra_omitted: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Verdict {
     Attested,
     Drift {
@@ -63,6 +76,7 @@ pub(crate) enum Verdict {
         observed_digest: Option<Digest>,
         expected_bytes: Option<u64>,
         observed_bytes: Option<u64>,
+        row_difference: Option<Box<RowDifference>>,
     },
 }
 
@@ -73,6 +87,7 @@ pub(crate) fn unavailable(reason: DriftReason, sink: &SemanticCodeSink) -> Verdi
         observed_digest: Some(sink.digest),
         expected_bytes: None,
         observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
+        row_difference: None,
     }
 }
 
@@ -105,6 +120,7 @@ fn drift(
             observed_digest: None,
             expected_bytes: None,
             observed_bytes: None,
+            row_difference: None,
         },
     }
 }

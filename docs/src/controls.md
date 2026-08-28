@@ -75,7 +75,9 @@ The `sorted-rows-v1` projection pairs the same sink with a `tree-paths` source: 
 root, an optional exact suffix, and a positive maximum relative depth. It filters the complete
 ordered snapshot map without another Git walk or object read, excludes directory entries, and
 projects all other tracked paths relative to the root. A qualifying non-UTF-8 path or path with a
-control character is typed drift; an invalid Git path already makes the candidate incomplete.
+control character is typed drift; an invalid Git path already makes the candidate incomplete. Row
+mismatches carry exact counts, a pure-ordering flag, and at most 32 rows and 32 KiB of byte-sorted
+preview on each side, with exact omitted counts.
 
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching

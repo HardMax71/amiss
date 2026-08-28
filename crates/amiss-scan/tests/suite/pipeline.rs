@@ -1083,8 +1083,10 @@ fn a_tree_inventory_is_root_relative_and_reuses_the_staged_snapshot() {
         "{committed}"
     );
 
-    fs::write(root.join("examples/z.txt"), "z").unwrap();
-    git(root, &["add", "examples/z.txt"]);
+    for index in 0..33 {
+        fs::write(root.join(format!("examples/z{index:02}.txt")), "z").unwrap();
+    }
+    git(root, &["add", "examples"]);
     let built = staged_index(&repo, &engine(), None, &shell(), &oid(&candidate));
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     crate::support::assert_report(&envelope, "staged tree inventory");
@@ -1103,9 +1105,125 @@ fn a_tree_inventory_is_root_relative_and_reuses_the_staged_snapshot() {
     assert_eq!(evidence["source"]["suffix"], ".txt");
     assert_eq!(evidence["source"]["maximum_depth"], 2);
     assert!(evidence["expected_digest"].is_string(), "{staged}");
-    assert!(
-        evidence["expected_bytes"].as_u64() > evidence["observed_bytes"].as_u64(),
-        "{staged}"
+    let difference = &evidence["difference"];
+    assert_eq!(difference["expected_records"], 35);
+    assert_eq!(difference["observed_records"], 2);
+    assert_eq!(difference["missing_records"], 33);
+    assert_eq!(difference["extra_records"], 0);
+    assert_eq!(difference["ordering_only"], false);
+    assert_eq!(
+        difference["missing_preview"].as_array().map(Vec::len),
+        Some(32)
+    );
+    assert_eq!(difference["missing_preview"][0], "z00.txt");
+    assert_eq!(difference["missing_preview"][31], "z31.txt");
+    assert_eq!(difference["missing_omitted"], 1);
+}
+
+#[test]
+fn a_tree_inventory_distinguishes_a_pure_ordering_defect() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::create_dir_all(root.join("inventory")).unwrap();
+    fs::write(root.join("inventory/a.txt"), "a").unwrap();
+    fs::write(root.join("inventory/b.txt"), "b").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```text\nb.txt\na.txt\n```\n[amiss:inventory]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(
+        root,
+        "docs.md",
+        "inventory",
+        "sorted-rows-v1",
+        &serde_json::json!({
+            "kind": "tree-paths",
+            "root": "inventory",
+            "maximum_depth": 1,
+        }),
+    );
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "reordered inventory"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let payload = payload(&commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    ));
+    let difference = &payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .unwrap_or_else(|| panic!("the order-only drift is reported: {payload}"))["candidate_fact"]
+        ["evidence"]["difference"];
+    assert_eq!(difference["ordering_only"], true, "{payload}");
+    assert_eq!(difference["missing_records"], 0, "{payload}");
+    assert_eq!(difference["extra_records"], 0, "{payload}");
+}
+
+#[test]
+fn a_tree_inventory_counts_duplicate_visible_rows_as_extras() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::create_dir_all(root.join("inventory/deep")).unwrap();
+    for path in ["inventory/a.txt", "inventory/b.txt", "inventory/deep/c.txt"] {
+        fs::write(root.join(path), path).unwrap();
+    }
+    fs::write(
+        root.join("docs.md"),
+        "```text\na.txt\nextra.txt\nextra.txt\n```\n[amiss:inventory]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(
+        root,
+        "docs.md",
+        "inventory",
+        "sorted-rows-v1",
+        &serde_json::json!({
+            "kind": "tree-paths",
+            "root": "inventory",
+            "suffix": ".txt",
+            "maximum_depth": 2,
+        }),
+    );
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "drifted inventory"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let payload = payload(&commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    ));
+    let difference = &payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .unwrap_or_else(|| panic!("the inventory drift is reported: {payload}"))["candidate_fact"]
+        ["evidence"]["difference"];
+    assert_eq!(difference["expected_records"], 3);
+    assert_eq!(difference["observed_records"], 3);
+    assert_eq!(difference["missing_records"], 2);
+    assert_eq!(difference["extra_records"], 2);
+    assert_eq!(
+        difference["missing_preview"],
+        serde_json::json!(["b.txt", "deep/c.txt"])
+    );
+    assert_eq!(
+        difference["extra_preview"],
+        serde_json::json!(["extra.txt", "extra.txt"])
     );
 }
 
@@ -1165,6 +1283,7 @@ fn a_tree_inventory_never_turns_unrepresentable_paths_into_absence() {
             ["evidence"];
         assert_eq!(evidence["observed"], reason, "{payload}");
         assert!(evidence["expected_digest"].is_null(), "{payload}");
+        assert!(evidence.get("difference").is_none(), "{payload}");
     }
 }
 
@@ -1217,6 +1336,7 @@ fn a_tree_inventory_requires_an_existing_tree_root() {
             ["evidence"];
         assert_eq!(evidence["observed"], reason, "{payload}");
         assert!(evidence["expected_digest"].is_null(), "{payload}");
+        assert!(evidence.get("difference").is_none(), "{payload}");
     }
 }
 
