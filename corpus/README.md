@@ -10,7 +10,7 @@ declares. An implementation that does not reproduce this manifest may not sit un
 evaluator.
 
 The manifest is canonical JSON with a trailing newline, and its digest is pinned in
-`crates/amiss-md/tests/corpus.rs`. Regenerate with:
+`crates/amiss-md/tests/suite/corpus.rs`. Regenerate with:
 
     AMISS_CORPUS_BLESS=1 cargo nextest run -p amiss-md -E 'test(manifest)'
 
@@ -19,9 +19,9 @@ hand. A golden cannot move without the move showing up in review.
 
 ## Inputs
 
-Every input is upstream bytes, pinned by SHA-256 in `crates/amiss-md/src/corpus.rs`. Nothing in
-this directory is touched by the formatting hooks, because a fixer that appended a newline would
-silently break a pin.
+Every input is upstream bytes, pinned by SHA-256 in
+`crates/amiss-md/tests/suite/corpus_support.rs`. Nothing in this directory is touched by the
+formatting hooks, because a fixer that appended a newline would silently break a pin.
 Licenses, exact upstream revisions, and attributions are collected in
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
 
