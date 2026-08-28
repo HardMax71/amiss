@@ -97,3 +97,49 @@ control byte, or bytes outside UTF-8) leaves the field null, and so does a name 
 definitions aggregate, since grouped members share one finding but not one edit. A
 `claim-target-missing` finding never carries a fix, because nothing derivable says
 where the target went.
+
+## Policy-owned code projections
+
+A projection checks visible example text rather than an invisible expected title. Its relation
+lives in `.amiss/scanner-policy.json`:
+
+```json
+{
+  "document": "docs/api.md",
+  "name": "request-shape",
+  "projection": "code-text-v1",
+  "sink": "previous-code",
+  "source": {
+    "kind": "blob-lines",
+    "path": "examples/request.json",
+    "first_line": 1,
+    "last_line": 12
+  }
+}
+```
+
+The Markdown or MDX document addresses the visible sink with an invisible definition immediately
+after its code block:
+
+````markdown
+```json
+{"operation":"check"}
+```
+[amiss:request-shape]: <amiss:projection>
+````
+
+Whitespace may separate the code block and marker; prose or another node may not. The name is
+unique within the document and joins the policy row to the marker. It is deliberately not encoded
+in the destination query, and neither the marker nor the source file owns the relation. That
+separation gives deletion safe behavior: a missing marker is drift while the policy survives, and
+a removed policy identity is policy weakening.
+
+`code-text-v1` selects the inclusive raw source lines, converts CRLF and bare CR endings to LF,
+then removes exactly one terminal LF to match the parser's semantic code value. Every other byte,
+including indentation and trailing spaces, remains significant. The source uses the existing
+bounded target cache and line-fragment meter; it is never executed or fetched. An attested
+projection emits nothing. Every nonattested relation emits one `projection-drift` finding under
+`claim/projection/<name>`, points at the visible code block when one is uniquely addressable, and
+carries only digests and byte counts rather than copying either full value into the report. No
+projection fix is emitted: a later rewrite feature must first prove an exact editable content span,
+reparse the whole document, and re-evaluate the relation.

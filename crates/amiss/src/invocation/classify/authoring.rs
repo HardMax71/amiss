@@ -50,14 +50,10 @@ pub(super) fn classify_claim(
         }
         Some(path) => Some(PathBuf::from(path)),
     };
-    let name = gathered.claim_name.unique_value().filter(|value| {
-        let mut bytes = value.bytes();
-        let head = bytes
-            .next()
-            .is_some_and(|byte| byte.is_ascii_alphanumeric());
-        head && value.len() <= 120
-            && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-    });
+    let name = gathered
+        .claim_name
+        .unique_value()
+        .filter(|value| amiss_wire::extraction::governed_name_valid(value));
     let line = gathered.claim_line.unique_value().and_then(|value| {
         let lawful = !value.is_empty()
             && value.len() <= 16
@@ -138,6 +134,7 @@ pub(super) fn classify_policy_include(
                 suffix: Some(suffix),
                 adapter: Some(adapter),
             }],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         )

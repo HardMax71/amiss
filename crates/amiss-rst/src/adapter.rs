@@ -69,6 +69,7 @@ pub fn analyze(source: &[u8]) -> Result<Analysis, AnalyzeError> {
                     title: Some(carrier.title),
                     label: carrier.label,
                     angled: true,
+                    previous_code: None,
                 })
                 .collect(),
             headings: read

@@ -188,6 +188,23 @@ pub struct GovernedDefinition {
     pub title: Option<String>,
     pub label: String,
     pub angled: bool,
+    pub previous_code: Option<SemanticCodeBlock>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticCodeBlock {
+    pub span: (usize, usize),
+    pub value: String,
+}
+
+#[must_use]
+pub fn governed_name_valid(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.len() <= 120
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 /// One reserved carrier line, the non-Markdown spelling of the governed

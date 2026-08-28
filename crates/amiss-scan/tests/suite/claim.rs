@@ -10,6 +10,7 @@ fn definition(label: &str, url: &str, title: Option<&str>, angled: bool) -> Gove
         title: title.map(str::to_owned),
         label: label.to_owned(),
         angled,
+        previous_code: None,
     }
 }
 

@@ -4,14 +4,16 @@ Two kinds of configuration can shape a run, and they carry opposite amounts of t
 
 The repository policy is the one input read from the scanned tree itself, and it is
 correspondingly weak. `.amiss/scanner-policy.json` can add directories to scan, list
-protected paths whose removal is always a finding, and raise the disposition of
+protected paths whose removal is always a finding, declare exact source-to-document
+projections, and raise the disposition of
 `explicit-target-missing`, `explicit-target-type-mismatch`, and `invalid-reference`. Raise
 only: repository policy combines with the built-in profile by maximum, so it can promote an
 observe warning to `fail` and can never downgrade or suppress it. An unknown
 field makes the whole file invalid and the run incomplete, which is what keeps the policy
 from growing into a plugin system one field at a time.
 
-The complete grammar in one example, every field required and the file valid only whole:
+The complete grammar in one example, with `projection_assertions` optional for compatibility
+with policies written before projections existed and the file valid only whole:
 
 ```json
 {
@@ -20,6 +22,20 @@ The complete grammar in one example, every field required and the file valid onl
     { "path": "build/docs", "kind": "tree" },
     { "path": "docs", "kind": "tree", "suffix": ".txt", "adapter": "rst" },
     { "path": "notes/ARCHITECTURE", "kind": "document", "adapter": "markdown" }
+  ],
+  "projection_assertions": [
+    {
+      "document": "docs/api.md",
+      "name": "request-shape",
+      "projection": "code-text-v1",
+      "sink": "previous-code",
+      "source": {
+        "kind": "blob-lines",
+        "path": "examples/request.json",
+        "first_line": 1,
+        "last_line": 12
+      }
+    }
   ],
   "protected_inventory": ["docs/install.md"],
   "finding_dispositions": [
@@ -39,6 +55,17 @@ also sets the upgrade order: an engine that predates a policy field refuses the 
 and leaves the run incomplete, so a repository grows its policy only after every engine
 reading it has learned the field.
 
+A projection assertion is owned by the policy, under the stable identity `(document, name)`.
+The first closed form selects an inclusive one-based line interval from a tracked regular or
+executable blob and compares its `code-text-v1` projection with the semantic Markdown or MDX code
+block immediately before `[amiss:<name>]: <amiss:projection>`. It converts CRLF and bare CR to LF
+and removes exactly one final line ending; it does not normalize indentation or any other byte.
+The document must be in the scanner's discovered set. Missing, duplicate, or non-adjacent sinks,
+and absent, non-blob, LFS, or out-of-range sources, produce one `projection-drift` finding. A
+marker with no matching policy row remains an unsupported reserved capability and makes the run
+incomplete. Removing the marker while the policy row survives therefore cannot disable the
+relation, while removing the policy row is `policy-weakened` even when the marker is removed too.
+
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching
 is bytewise, including for paths JSON cannot represent as text. A tree may carry one `suffix`:
@@ -54,7 +81,8 @@ without touching the policy file. Its optional staged-index preview applies this
 implementation and reports exact path identities; it does not invent excludes or merge the row
 into existing controls.
 
-Each snapshot policy can carry the [published repository-policy entry ceiling](limits.md), so
+Document includes, projection assertions, inventory members, and disposition rows share each
+snapshot's [published repository-policy entry ceiling](limits.md), so
 the base/candidate classification union can contain twice that many distinct roots. Tree roots
 and suffix roots are indexed separately; lookup probes path ancestors and suffix components,
 never every policy row. The

@@ -28,6 +28,19 @@
     "$ref": "#/$defs/DocumentInclude"
    }
   },
+  "projection_assertions": {
+   "type": "array",
+   "maxItems": 100000,
+   "description": "Policy-owned source-to-document relations. Sort by document UTF-8 bytes, then name; that pair is the stable assertion identity.",
+   "x-amiss-order": [
+    "document",
+    "name"
+   ],
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/ProjectionAssertion"
+   }
+  },
   "protected_inventory": {
    "type": "array",
    "maxItems": 100000,
@@ -112,6 +125,66 @@
      }
     }
    ]
+  },
+  "PositiveSafeUInt": {
+   "type": "integer",
+   "minimum": 1,
+   "maximum": 9007199254740991
+  },
+  "BlobLineSelection": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "path",
+    "first_line",
+    "last_line"
+   ],
+   "properties": {
+    "kind": {
+     "const": "blob-lines"
+    },
+    "path": {
+     "$ref": "#/$defs/RepoPath"
+    },
+    "first_line": {
+     "$ref": "#/$defs/PositiveSafeUInt"
+    },
+    "last_line": {
+     "$ref": "#/$defs/PositiveSafeUInt"
+    }
+   }
+  },
+  "ProjectionAssertion": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "document",
+    "name",
+    "projection",
+    "sink",
+    "source"
+   ],
+   "properties": {
+    "document": {
+     "$ref": "#/$defs/RepoPath"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 120,
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "projection": {
+     "const": "code-text-v1"
+    },
+    "sink": {
+     "const": "previous-code"
+    },
+    "source": {
+     "$ref": "#/$defs/BlobLineSelection"
+    }
+   }
   },
   "FindingKind": {
    "enum": [
