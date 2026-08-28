@@ -4295,6 +4295,33 @@
         }
       }
     },
+    "ProjectionCountDifference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "expected_count",
+        "observed_count"
+      ],
+      "properties": {
+        "kind": {
+          "const": "count"
+        },
+        "expected_count": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "observed_count": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SafeUInt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "ProjectionFactEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -4324,7 +4351,8 @@
         "projection": {
           "enum": [
             "code-text-v1",
-            "sorted-rows-v1"
+            "sorted-rows-v1",
+            "decimal-count-v1"
           ]
         },
         "sink": {
@@ -4383,7 +4411,14 @@
           ]
         },
         "difference": {
-          "$ref": "#/$defs/ProjectionRowDifference"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ProjectionRowDifference"
+            },
+            {
+              "$ref": "#/$defs/ProjectionCountDifference"
+            }
+          ]
         },
         "sources": {
           "type": "array",
@@ -4425,7 +4460,10 @@
             ],
             "properties": {
               "projection": {
-                "const": "sorted-rows-v1"
+                "enum": [
+                  "sorted-rows-v1",
+                  "decimal-count-v1"
+                ]
               }
             }
           },
@@ -4445,7 +4483,10 @@
             ],
             "properties": {
               "projection": {
-                "const": "sorted-rows-v1"
+                "enum": [
+                  "sorted-rows-v1",
+                  "decimal-count-v1"
+                ]
               },
               "observed": {
                 "const": "content-differs"
@@ -4462,6 +4503,44 @@
               "required": [
                 "difference"
               ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "projection"
+            ],
+            "properties": {
+              "projection": {
+                "const": "sorted-rows-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "difference": {
+                "$ref": "#/$defs/ProjectionRowDifference"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "projection"
+            ],
+            "properties": {
+              "projection": {
+                "const": "decimal-count-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "difference": {
+                "$ref": "#/$defs/ProjectionCountDifference"
+              }
             }
           }
         }

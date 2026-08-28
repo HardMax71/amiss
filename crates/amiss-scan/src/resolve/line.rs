@@ -187,7 +187,7 @@ impl Resolver<'_> {
             observed_digest: Some(sink.digest),
             expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
             observed_bytes: Some(observed_bytes),
-            row_difference: None,
+            difference: None,
         })
     }
 }

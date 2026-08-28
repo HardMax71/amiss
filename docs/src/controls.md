@@ -79,6 +79,11 @@ control character is typed drift; an invalid Git path already makes the candidat
 mismatches carry exact counts, a pure-ordering flag, and at most 32 rows and 32 KiB of byte-sorted
 preview on each side, with exact omitted counts.
 
+`decimal-count-v1` applies to that same complete `tree-paths` source and emits only the canonical
+unsigned ASCII member count. It includes qualifying non-UTF-8 and control-containing path names
+because none are rendered. A sign, leading zero, grouping separator, label, or whitespace makes
+the visible value noncanonical rather than a second spelling of the same count.
+
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching
 is bytewise, including for paths JSON cannot represent as text. A tree may carry one `suffix`:

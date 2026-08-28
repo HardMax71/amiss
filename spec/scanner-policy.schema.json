@@ -256,8 +256,9 @@
     },
     "projection": {
      "enum": [
-      "code-text-v1",
-      "sorted-rows-v1"
+     "code-text-v1",
+      "sorted-rows-v1",
+      "decimal-count-v1"
      ]
     },
     "sink": {
@@ -288,7 +289,10 @@
      "if": {
       "properties": {
        "projection": {
-        "const": "sorted-rows-v1"
+        "enum": [
+         "sorted-rows-v1",
+         "decimal-count-v1"
+        ]
        }
       }
      },

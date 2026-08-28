@@ -97,6 +97,45 @@ fn projection_policy(
     .unwrap();
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn stage_projection_index(root: &Path, document: &[u8], source_paths: &[&[u8]]) {
+    let document_oid = amiss_fixtures::loose_object(root, "blob", document).unwrap();
+    let policy_bytes = fs::read(root.join(".amiss/scanner-policy.json")).unwrap();
+    let policy_oid = amiss_fixtures::loose_object(root, "blob", &policy_bytes).unwrap();
+    let source_oid = amiss_fixtures::loose_object(root, "blob", b"source").unwrap();
+    let mut entries = vec![
+        (
+            b".amiss/scanner-policy.json".as_slice(),
+            policy_oid.as_str(),
+        ),
+        (b"docs.md".as_slice(), document_oid.as_str()),
+    ];
+    entries.extend(
+        source_paths
+            .iter()
+            .map(|source_path| (*source_path, source_oid.as_str())),
+    );
+    amiss_fixtures::index_file(root, &entries).unwrap();
+}
+
+#[expect(
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "test assertion helper"
+)]
+fn projection_difference<'a>(
+    payload: &'a serde_json::Value,
+    context: &str,
+) -> &'a serde_json::Value {
+    &payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .unwrap_or_else(|| panic!("{context}: {payload}"))["candidate_fact"]["evidence"]["difference"]
+}
+
 #[test]
 fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
     let dir = TempDir::new().unwrap();
@@ -1228,6 +1267,113 @@ fn a_tree_inventory_counts_duplicate_visible_rows_as_extras() {
 }
 
 #[test]
+fn a_tree_inventory_count_uses_one_canonical_decimal() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::create_dir_all(root.join("inventory")).unwrap();
+    fs::write(root.join("inventory/a.txt"), "a").unwrap();
+    fs::write(root.join("inventory/b.txt"), "b").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```text\n2\n```\n[amiss:inventory]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(
+        root,
+        "docs.md",
+        "inventory",
+        "decimal-count-v1",
+        &serde_json::json!({
+            "kind": "tree-paths",
+            "root": "inventory",
+            "suffix": ".txt",
+            "maximum_depth": 1,
+        }),
+    );
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "counted inventory"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let committed = payload(&commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    ));
+    assert!(
+        committed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "projection-drift"),
+        "{committed}"
+    );
+
+    for visible in ["02", "9007199254740992"] {
+        fs::write(
+            root.join("docs.md"),
+            format!("```text\n{visible}\n```\n[amiss:inventory]: <amiss:projection>\n"),
+        )
+        .unwrap();
+        git(root, &["add", "docs.md"]);
+        let noncanonical = payload(&staged_index(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&candidate),
+        ));
+        let difference = projection_difference(&noncanonical, "the noncanonical count is reported");
+        assert_eq!(difference["kind"], "count", "{noncanonical}");
+        assert_eq!(difference["expected_count"], 2, "{noncanonical}");
+        assert!(difference["observed_count"].is_null(), "{noncanonical}");
+    }
+
+    fs::write(
+        root.join("docs.md"),
+        "```text\n2\n```\n[amiss:inventory]: <amiss:projection>\n",
+    )
+    .unwrap();
+    fs::write(root.join("inventory/c.txt"), "c").unwrap();
+    git(root, &["add", "docs.md", "inventory/c.txt"]);
+    let stale = payload(&staged_index(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&candidate),
+    ));
+    let difference = projection_difference(&stale, "the stale count is reported");
+    assert_eq!(difference["expected_count"], 3, "{stale}");
+    assert_eq!(difference["observed_count"], 2, "{stale}");
+
+    let count_document = b"```text\n1\n```\n[amiss:inventory]: <amiss:projection>\n";
+    stage_projection_index(
+        root,
+        count_document,
+        &[b"inventory/non-utf8-\xff.txt".as_slice()],
+    );
+    let unrenderable = payload(&staged_index(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&candidate),
+    ));
+    assert!(
+        unrenderable["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "projection-drift"),
+        "the exact count includes an unrenderable path: {unrenderable}"
+    );
+}
+
+#[test]
 fn a_tree_inventory_never_turns_unrepresentable_paths_into_absence() {
     for (source_path, reason) in [
         (
@@ -1256,34 +1402,19 @@ fn a_tree_inventory_never_turns_unrepresentable_paths_into_absence() {
                 "maximum_depth": 2,
             }),
         );
-        let document_oid = amiss_fixtures::loose_object(root, "blob", document).unwrap();
-        let policy_bytes = fs::read(root.join(".amiss/scanner-policy.json")).unwrap();
-        let policy_oid = amiss_fixtures::loose_object(root, "blob", &policy_bytes).unwrap();
-        let source_oid = amiss_fixtures::loose_object(root, "blob", b"source").unwrap();
-        amiss_fixtures::index_file(
-            root,
-            &[
-                (
-                    b".amiss/scanner-policy.json".as_slice(),
-                    policy_oid.as_str(),
-                ),
-                (b"docs.md".as_slice(), document_oid.as_str()),
-                (source_path, source_oid.as_str()),
-            ],
-        )
-        .unwrap();
+        stage_projection_index(root, document, &[source_path]);
         let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-        let payload = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)));
-        let evidence = &payload["findings"]
+        let row_payload = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)));
+        let evidence = &row_payload["findings"]
             .as_array()
             .unwrap()
             .iter()
             .find(|row| row["kind"] == "projection-drift")
-            .unwrap_or_else(|| panic!("the source refusal is reported: {payload}"))["candidate_fact"]
+            .unwrap_or_else(|| panic!("the source refusal is reported: {row_payload}"))["candidate_fact"]
             ["evidence"];
-        assert_eq!(evidence["observed"], reason, "{payload}");
-        assert!(evidence["expected_digest"].is_null(), "{payload}");
-        assert!(evidence.get("difference").is_none(), "{payload}");
+        assert_eq!(evidence["observed"], reason, "{row_payload}");
+        assert!(evidence["expected_digest"].is_null(), "{row_payload}");
+        assert!(evidence.get("difference").is_none(), "{row_payload}");
     }
 }
 
