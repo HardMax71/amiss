@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_md::corpus::{self, Case, Fixtures};
 use sha2::{Digest as _, Sha256};
+
+use crate::corpus_support::{self as corpus, Case, Fixtures};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

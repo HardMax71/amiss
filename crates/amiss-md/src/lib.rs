@@ -1,5 +1,4 @@
 pub mod accounting;
-pub mod corpus;
 pub mod extract;
 pub mod frontmatter;
 mod js;
