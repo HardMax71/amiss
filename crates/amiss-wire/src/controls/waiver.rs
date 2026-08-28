@@ -7,8 +7,9 @@ use crate::model::{
 };
 
 use super::{
-    Fact, WAIVER_BUNDLE_SCHEMA, decode_branch_ref, decode_instant, decode_items, decode_repository,
-    decode_waiver_item, root, sorted_set,
+    Fact, WAIVER_BUNDLE_SCHEMA, decode_artifact_id, decode_branch_ref, decode_instant,
+    decode_items, decode_owner, decode_repository, decode_tree, item::decode_item_core, root,
+    sorted_set,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,7 +94,33 @@ impl WaiverBundle {
 
         let items_path = obj.field("items");
         let raw = de::array(&items_path, obj.take("items")?)?;
-        let items = decode_items(&items_path, raw, 100_000, decode_waiver_item)?;
+        let items = decode_items(&items_path, raw, 100_000, |path, value| {
+            let mut item = Obj::new(path, value)?;
+            let waiver_id = item.required("waiver_id", decode_artifact_id)?;
+            let core = decode_item_core(&mut item, "authorized_fact")?;
+            let candidate_tree = item.required("candidate_tree", decode_tree)?;
+            let issuer = item.required("issuer", decode_owner)?;
+            let not_before = item.required("not_before", decode_instant)?;
+            item.required("residual_disposition", |path, value| {
+                de::const_str(path, value, "warn")
+            })?;
+            item.finish()?;
+            (core.created_at <= not_before && not_before < core.expires_at)
+                .then_some(WaiverItem {
+                    waiver_id,
+                    finding_key: core.finding_key,
+                    authorized_fact: core.fact,
+                    authorized_fact_digest: core.fact_digest,
+                    candidate_tree,
+                    owner: core.owner,
+                    issuer,
+                    reason: core.reason,
+                    created_at: core.created_at,
+                    not_before,
+                    expires_at: core.expires_at,
+                })
+                .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
+        })?;
         sorted_set(&items_path, &items, |a, b| {
             waiver_sort_key(a).cmp(&waiver_sort_key(b))
         })?;
