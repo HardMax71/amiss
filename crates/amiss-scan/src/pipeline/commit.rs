@@ -9,9 +9,10 @@ use crate::resources::{ScanLimits, ScanResources};
 
 use super::external::{external_gate, external_reason};
 use super::{
-    Evaluated, ExternalVerified, PipelineFailure, PipelineResult, ResolvedTree, SetupShell,
-    binding_mismatch, conclude, controls_failure, detail, effective_limits, effective_shell,
-    evaluate_tree, floor_gate, pair_effects, policy_unavailable_reason, resolve_tree,
+    CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
+    PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
+    effective_limits, effective_shell, evaluate_tree, floor_gate, pair_effects,
+    policy_unavailable_reason, resolve_tree,
 };
 
 /// The fallback identity projection when a snapshot cannot be established:
@@ -183,7 +184,7 @@ fn commit_pair_result(
     )?;
     let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
 
-    let (base, candidate, claims) = evaluated_pair(
+    let (base, candidate, outcomes) = evaluated_pair(
         repo,
         &mut git_resources,
         (&mut base_scan, &mut candidate_scan),
@@ -191,6 +192,7 @@ fn commit_pair_result(
         forge,
         &external.semantic,
         &includes,
+        &candidate_policy,
         base_tree,
         candidate_tree,
     );
@@ -221,7 +223,7 @@ fn commit_pair_result(
                 (&base.discovery, base.side),
                 (&candidate.discovery, candidate.side),
                 &site,
-                &claims,
+                &outcomes,
                 &failures,
             )
         }
@@ -279,9 +281,10 @@ fn evaluated_pair(
     forge: Option<&ForgeContext>,
     semantic: &crate::semantic::Context,
     includes: &crate::policy::Includes,
+    candidate_policy: &crate::policy::PolicySide,
     base_tree: ResolvedTree,
     candidate_tree: ResolvedTree,
-) -> (Evaluation, Evaluation, Vec<crate::claim::ClaimOutcome>) {
+) -> (Evaluation, Evaluation, CandidateOutcomes) {
     let (base_scan, candidate_scan) = scans;
     let base = evaluate_tree(
         repo,
@@ -298,7 +301,7 @@ fn evaluated_pair(
         None,
     );
     candidate_scan.scans = std::mem::take(&mut base_scan.scans);
-    let mut claims: Vec<crate::claim::ClaimOutcome> = Vec::new();
+    let mut outcomes = CandidateOutcomes::default();
     let candidate = evaluate_tree(
         repo,
         git_resources,
@@ -311,7 +314,10 @@ fn evaluated_pair(
         },
         includes,
         candidate_tree,
-        Some(&mut claims),
+        Some(CandidateEvaluation {
+            policy: candidate_policy.policy.as_ref(),
+            outcomes: &mut outcomes,
+        }),
     );
-    (base, candidate, claims)
+    (base, candidate, outcomes)
 }

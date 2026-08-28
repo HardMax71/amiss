@@ -1,16 +1,19 @@
 use amiss_md::lines::scan;
-use amiss_wire::controls::GitMode;
+use amiss_wire::controls::{BlobLineSelection, GitMode};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, UnsupportedSemantics};
 
 use crate::Error;
+use crate::projection::{DriftReason, Verdict, normalized_line_endings};
 use crate::resources::Aggregate;
+use crate::scan::SemanticCodeSink;
 
 use super::content::{Content, content_cache, read_target, target_projection};
 use super::{RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
+const PROJECTION_SOURCE_DOMAIN: &str = "amiss/scanner-code-text-source";
 
 impl Resolver<'_> {
     /// Answers one value claim against the snapshot: the target must be a
@@ -90,6 +93,90 @@ impl Resolver<'_> {
                 observed: observed.to_vec(),
             })
         }
+    }
+
+    pub(crate) fn resolve_code_projection(
+        &mut self,
+        selection: &BlobLineSelection,
+        sink: &SemanticCodeSink,
+    ) -> Result<Verdict, Error> {
+        let path = RepoPath::from(&selection.path);
+        let observed_bytes = u64::try_from(sink.value.len()).unwrap_or(u64::MAX);
+        let Some((mode, oid)) = self
+            .snapshot
+            .entries
+            .get(path.as_bytes())
+            .map(|(mode, oid)| (*mode, oid.clone()))
+        else {
+            return Ok(source_drift(DriftReason::SourceAbsent, sink));
+        };
+        if matches!(mode, GitMode::Tree | GitMode::Gitlink | GitMode::Symlink) {
+            return Ok(source_drift(DriftReason::SourceNotABlob, sink));
+        }
+        let evidence = read_target(self, &path, mode, &oid)?;
+        if matches!(evidence, BlobContent::LfsPointer { .. }) {
+            return Ok(source_drift(DriftReason::SourceLfsPointer, sink));
+        }
+        let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&path)
+        else {
+            return Err(Error::Internal);
+        };
+        if cached.mode != mode || cached.content.evidence() != evidence {
+            return Err(Error::Internal);
+        }
+        let Content::Ordinary {
+            body,
+            line_projections,
+            ..
+        } = &mut cached.content
+        else {
+            return Err(Error::Internal);
+        };
+        let range = LineRange {
+            first: selection.first_line,
+            last: selection.last_line,
+        };
+        if let std::collections::btree_map::Entry::Vacant(slot) = line_projections.entry(range) {
+            self.scan.charge(
+                Aggregate::LineFragmentBytes,
+                u64::try_from(body.len()).unwrap_or(u64::MAX),
+            )?;
+            slot.insert(selected_line_bytes(body, range).map(|selected| {
+                target_projection(
+                    TARGET_LINE_PROJECTION_DOMAIN,
+                    mode,
+                    hb(RAW_EVIDENCE_DOMAIN, selected),
+                )
+            }));
+        }
+        let Some(selected) = selected_line_bytes(body, range) else {
+            return Ok(source_drift(DriftReason::SourceLinesOutOfRange, sink));
+        };
+        let normalized = normalized_line_endings(selected);
+        let expected = normalized
+            .as_ref()
+            .strip_suffix(b"\n")
+            .unwrap_or(normalized.as_ref());
+        if expected == sink.value.as_bytes() {
+            return Ok(Verdict::Attested);
+        }
+        Ok(Verdict::Drift {
+            reason: DriftReason::ContentDiffers,
+            expected_digest: Some(hb(PROJECTION_SOURCE_DOMAIN, expected)),
+            observed_digest: Some(sink.digest),
+            expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
+            observed_bytes: Some(observed_bytes),
+        })
+    }
+}
+
+fn source_drift(reason: DriftReason, sink: &SemanticCodeSink) -> Verdict {
+    Verdict::Drift {
+        reason,
+        expected_digest: None,
+        observed_digest: Some(sink.digest),
+        expected_bytes: None,
+        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
     }
 }
 

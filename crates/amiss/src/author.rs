@@ -95,6 +95,6 @@ fn round_trips(definition: &str, author: &AuthorInvocation, expected: &str) -> b
                 && claim.expected == expected
                 && claim.path.as_str() == Some(author.path.as_str())
         }
-        GovernedForm::Unknown => false,
+        GovernedForm::Projection { .. } | GovernedForm::Unknown => false,
     }
 }

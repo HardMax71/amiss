@@ -15,6 +15,7 @@ mod debt;
 mod documents;
 mod finding;
 mod model;
+mod projections;
 mod references;
 mod run;
 mod waiver;
@@ -28,7 +29,7 @@ pub use model::{
     FindingKey, Location, LocationSide, PolicyStep, WaiverApplied,
 };
 pub use references::structural_facts;
-pub(crate) use run::evaluate_with_site;
+pub(crate) use run::{GovernedInputs, evaluate_with_site};
 use run::{candidate_digest_of, tree_value};
 pub use run::{evaluate, evaluate_with_policy};
 

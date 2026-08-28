@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use amiss_md::lines::scan;
 use amiss_md::{Analysis, AnalyzeError, Occurrence, Opaque, Work, analyze};
 use amiss_wire::digest::{Digest, hb};
+use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::Adapter;
 
 use crate::resources::ScanResources;
@@ -40,9 +41,19 @@ pub struct GovernedSource {
     pub display: SpanDisplay,
     pub digest: Digest,
     pub form: crate::claim::GovernedForm,
+    pub previous_code: Option<SemanticCodeSink>,
 }
 
 pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source";
+pub const PROJECTION_SINK_DOMAIN: &str = "amiss/scanner-projection-sink";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticCodeSink {
+    pub span: (usize, usize),
+    pub display: SpanDisplay,
+    pub digest: Digest,
+    pub value: String,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Scanned {
@@ -173,28 +184,13 @@ pub fn scan_bytes(
         });
     }
 
-    let mut governed = Vec::with_capacity(extraction.governed.len());
-    for definition in &extraction.governed {
-        let span = definition.span;
-        document_references = document_references.saturating_add(1);
-        resources.charge_reference(0, document_references)?;
-        let bytes = source
-            .get(span.0..span.1)
-            .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
-        let (start_line, start_column) = position(source, &line_ends, span.0);
-        let (end_line, end_column) = position(source, &line_ends, span.1);
-        governed.push(GovernedSource {
-            span,
-            display: SpanDisplay {
-                start_line,
-                start_column,
-                end_line,
-                end_column,
-            },
-            digest: hb(GOVERNED_SOURCE_DOMAIN, bytes),
-            form: crate::claim::classify(definition),
-        });
-    }
+    let governed = governed_sources(
+        resources,
+        source,
+        &line_ends,
+        &extraction.governed,
+        document_references,
+    )?;
 
     Ok(Scanned {
         adapter,
@@ -210,6 +206,65 @@ pub fn scan_bytes(
             transclusions: extraction.transclusions,
         }),
     })
+}
+
+fn governed_sources(
+    resources: &mut ScanResources,
+    source: &[u8],
+    line_ends: &[usize],
+    definitions: &[GovernedDefinition],
+    mut document_references: u64,
+) -> Result<Vec<GovernedSource>, Error> {
+    let mut governed = Vec::with_capacity(definitions.len());
+    for definition in definitions {
+        let span = definition.span;
+        document_references = document_references.saturating_add(1);
+        resources.charge_reference(0, document_references)?;
+        let bytes = source
+            .get(span.0..span.1)
+            .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
+        let (start_line, start_column) = position(source, line_ends, span.0);
+        let (end_line, end_column) = position(source, line_ends, span.1);
+        let previous_code = definition
+            .previous_code
+            .as_ref()
+            .map(|code| {
+                source
+                    .get(code.span.0..code.span.1)
+                    .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
+                let (start_line, start_column) = position(source, line_ends, code.span.0);
+                let (end_line, end_column) = position(source, line_ends, code.span.1);
+                let value = crate::projection::normalized_line_endings(code.value.as_bytes());
+                let value = std::str::from_utf8(value.as_ref())
+                    .map_err(|_invalid| Error::Internal)?
+                    .to_owned();
+                Ok::<_, Error>(SemanticCodeSink {
+                    span: code.span,
+                    display: SpanDisplay {
+                        start_line,
+                        start_column,
+                        end_line,
+                        end_column,
+                    },
+                    digest: hb(PROJECTION_SINK_DOMAIN, value.as_bytes()),
+                    value,
+                })
+            })
+            .transpose()?;
+        governed.push(GovernedSource {
+            span,
+            display: SpanDisplay {
+                start_line,
+                start_column,
+                end_line,
+                end_column,
+            },
+            digest: hb(GOVERNED_SOURCE_DOMAIN, bytes),
+            form: crate::claim::classify(definition),
+            previous_code,
+        });
+    }
+    Ok(governed)
 }
 
 /// Replays a successful artifact against the independent snapshot ledger.
