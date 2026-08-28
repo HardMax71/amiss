@@ -6,8 +6,8 @@ use amiss_scan::policy::{
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{
     BlobLineSelection, Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN,
-    FindingDisposition, IncludeKind, ProjectionAssertion, PromotableFindingKind, ResourceName,
-    ScannerPolicy, WaiverBundle,
+    FindingDisposition, IncludeKind, ProjectionAssertion, ProjectionSource, PromotableFindingKind,
+    ResourceName, ScannerPolicy, WaiverBundle,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
@@ -144,11 +144,11 @@ fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
                 document: RepoPathText::new("docs/example.md".to_owned())
                     .expect("valid document path"),
                 name: "example".to_owned(),
-                source: BlobLineSelection {
+                source: ProjectionSource::BlobLines(BlobLineSelection {
                     path: RepoPathText::new("src/lib.rs".to_owned()).expect("valid source path"),
                     first_line,
                     last_line: first_line,
-                },
+                }),
             }],
             Vec::new(),
             Vec::new(),

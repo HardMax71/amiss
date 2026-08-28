@@ -39,6 +39,12 @@ pub(crate) enum DriftReason {
     SourceNotABlob,
     SourceLfsPointer,
     SourceLinesOutOfRange,
+    SourceStartMarkerAbsent,
+    SourceStartMarkerAmbiguous,
+    SourceEndMarkerAbsent,
+    SourceEndMarkerAmbiguous,
+    SourceRegionOrderInvalid,
+    SourceRegionNotUtf8,
     ContentDiffers,
 }
 

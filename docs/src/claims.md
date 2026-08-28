@@ -134,10 +134,26 @@ in the destination query, and neither the marker nor the source file owns the re
 separation gives deletion safe behavior: a missing marker is drift while the policy survives, and
 a removed policy identity is policy weakening.
 
-`code-text-v1` selects the inclusive raw source lines, converts CRLF and bare CR endings to LF,
-then removes exactly one terminal LF to match the parser's semantic code value. Every other byte,
-including indentation and trailing spaces, remains significant. The source uses the existing
-bounded target cache and line-fragment meter; it is never executed or fetched. An attested
+`code-text-v1` converts CRLF and bare CR endings to LF, then removes exactly one terminal LF to
+match the parser's semantic code value. Every other byte, including indentation and trailing
+spaces, remains significant. The first selector shown above takes inclusive raw source lines. A
+movement-stable selector can instead name the bytes between two complete marker lines:
+
+```json
+{
+  "kind": "named-region",
+  "path": "examples/request.json",
+  "start_marker": "// amiss:request:start",
+  "end_marker": "// amiss:request:end"
+}
+```
+
+Each marker is a distinct exact printable-ASCII token of at most 256 bytes, and the complete line
+equal to that token must occur once. The scanner interprets no surrounding comment syntax or
+embedded occurrence as a boundary. It excludes both complete marker lines and
+refuses duplicate, missing, reversed, same-line, or non-UTF-8 regions as typed projection drift.
+Edits outside the region do not affect its projected digest. Both selectors use the existing
+bounded target cache and line-fragment meter; source bytes are never executed or fetched. An attested
 projection emits nothing. Every nonattested relation emits one `projection-drift` finding under
 `claim/projection/<name>`, points at the visible code block when one is uniquely addressable, and
 carries only digests and byte counts rather than copying either full value into the report. No

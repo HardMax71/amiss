@@ -42,25 +42,66 @@ fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
     let candidate = revision(dir.path(), "HEAD");
     let repo = amiss_git::Repository::open(dir.path(), ObjectFormat::Sha1)
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
-    let shell = SetupShell {
-        engine: engine(),
-        profile: amiss_wire::controls::Profile::Observe,
-        repository: None,
-        forge: None,
-        candidate_ref: None,
-        target_ref: None,
-        default_branch_ref: None,
-        floor: None,
-        debt: None,
-        waiver: None,
-        time: None,
-        constraint: None,
-        semantic: amiss_scan::semantic::Inputs::default(),
-        requests: RequestDigests::default(),
-        external_defect: None,
-        errors_retained: 64,
-    };
+    let shell = bench_shell();
     bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate));
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ProjectionShape {
+    None,
+    BlobLines,
+    NamedRegion,
+}
+
+/// Integrated candidate evaluation with the same late 15 MB source present
+/// in both cases, so the delta includes bounded Git reading and marker search.
+#[divan::bench(
+    args = [
+        ProjectionShape::None,
+        ProjectionShape::BlobLines,
+        ProjectionShape::NamedRegion,
+    ],
+    sample_count = 10
+)]
+fn projection_source_15_mb(bencher: Bencher<'_, '_>, shape: ProjectionShape) {
+    let dir = tempfile::TempDir::new().unwrap_or_else(|defect| panic!("tempdir: {defect}"));
+    amiss_fixtures::git(dir.path(), &["init", "-q"])
+        .unwrap_or_else(|defect| panic!("git init: {defect}"));
+    let mut source = vec![b'x'; 15_000_000];
+    source.extend_from_slice(b"\n// amiss:start\nvalue\n// amiss:end\n");
+    std::fs::write(dir.path().join("source.txt"), source)
+        .unwrap_or_else(|defect| panic!("source: {defect}"));
+    let document = match shape {
+        ProjectionShape::None => "# Documentation\n",
+        ProjectionShape::BlobLines | ProjectionShape::NamedRegion => {
+            std::fs::create_dir_all(dir.path().join(".amiss"))
+                .unwrap_or_else(|defect| panic!("control directory: {defect}"));
+            let source = if matches!(shape, ProjectionShape::BlobLines) {
+                r#"{"kind":"blob-lines","path":"source.txt","first_line":3,"last_line":3}"#
+            } else {
+                r#"{"kind":"named-region","path":"source.txt","start_marker":"// amiss:start","end_marker":"// amiss:end"}"#
+            };
+            std::fs::write(
+                dir.path().join(".amiss/scanner-policy.json"),
+                format!(
+                    r#"{{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[{{"document":"docs.md","name":"sample","projection":"code-text-v1","sink":"previous-code","source":{source}}}],"protected_inventory":[],"finding_dispositions":[]}}"#
+                ),
+            )
+            .unwrap_or_else(|defect| panic!("policy: {defect}"));
+            "```text\nvalue\n```\n[amiss:sample]: <amiss:projection>\n"
+        }
+    };
+    std::fs::write(dir.path().join("docs.md"), document)
+        .unwrap_or_else(|defect| panic!("document: {defect}"));
+    amiss_fixtures::git(dir.path(), &["add", "."])
+        .unwrap_or_else(|defect| panic!("git add: {defect}"));
+    amiss_fixtures::git(dir.path(), &["commit", "-qm", "fixture"])
+        .unwrap_or_else(|defect| panic!("git commit: {defect}"));
+    let candidate = revision(dir.path(), "HEAD");
+    let repo = amiss_git::Repository::open(dir.path(), ObjectFormat::Sha1)
+        .unwrap_or_else(|defect| panic!("open: {defect:?}"));
+    let shell = bench_shell();
+    bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &candidate, &candidate));
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -229,6 +270,27 @@ fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-bench".to_owned(),
         digest: hb("amiss/scanner-engine", b"bench engine"),
+    }
+}
+
+fn bench_shell() -> SetupShell {
+    SetupShell {
+        engine: engine(),
+        profile: amiss_wire::controls::Profile::Observe,
+        repository: None,
+        forge: None,
+        candidate_ref: None,
+        target_ref: None,
+        default_branch_ref: None,
+        floor: None,
+        debt: None,
+        waiver: None,
+        time: None,
+        constraint: None,
+        semantic: amiss_scan::semantic::Inputs::default(),
+        requests: RequestDigests::default(),
+        external_defect: None,
+        errors_retained: 64,
     }
 }
 

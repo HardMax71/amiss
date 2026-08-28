@@ -155,6 +155,46 @@
     }
    }
   },
+  "SourceMarker": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 256,
+   "pattern": "^[ -~]*[!-~][ -~]*$"
+  },
+  "NamedRegionSelection": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "path",
+    "start_marker",
+    "end_marker"
+   ],
+   "properties": {
+    "kind": {
+     "const": "named-region"
+    },
+    "path": {
+     "$ref": "#/$defs/RepoPath"
+    },
+    "start_marker": {
+     "$ref": "#/$defs/SourceMarker"
+    },
+    "end_marker": {
+     "$ref": "#/$defs/SourceMarker"
+    }
+   }
+  },
+  "ProjectionSource": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/BlobLineSelection"
+    },
+    {
+     "$ref": "#/$defs/NamedRegionSelection"
+    }
+   ]
+  },
   "ProjectionAssertion": {
    "type": "object",
    "additionalProperties": false,
@@ -182,7 +222,7 @@
      "const": "previous-code"
     },
     "source": {
-     "$ref": "#/$defs/BlobLineSelection"
+     "$ref": "#/$defs/ProjectionSource"
     }
    }
   },

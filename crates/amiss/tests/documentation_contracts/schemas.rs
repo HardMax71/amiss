@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{
     DOCUMENT_SUFFIX_BYTES, DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor,
-    ScannerPolicy, TrustedTimeStatement, WaiverBundle,
+    SOURCE_MARKER_BYTES, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
@@ -225,7 +225,7 @@ fn active_report_schema_ids_match_the_writer_contract() {
 }
 
 #[test]
-fn the_policy_suffix_schema_tracks_the_reader_bound() {
+fn the_policy_schema_tracks_the_reader_bounds() {
     let path = repository_root().join("spec/scanner-policy.schema.json");
     let schema: serde_json::Value =
         serde_json::from_slice(&fs::read(path).expect("scanner policy schema is readable"))
@@ -236,6 +236,13 @@ fn the_policy_suffix_schema_tracks_the_reader_bound() {
             .and_then(serde_json::Value::as_u64),
         u64::try_from(DOCUMENT_SUFFIX_BYTES).ok(),
         "the schema and strict reader must publish one suffix ceiling"
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/SourceMarker/maxLength")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(SOURCE_MARKER_BYTES).ok(),
+        "the schema and strict reader must publish one source-marker ceiling"
     );
 }
 

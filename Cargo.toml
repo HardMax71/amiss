@@ -56,6 +56,7 @@ hmac = "0.13"
 html5gum = { version = "=0.8.4", default-features = false }
 jsonschema = { version = "0.49", default-features = false, features = ["resolve-file"] }
 jsonwebtoken = { version = "11.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+memchr = "2.8.3"
 pem = "4.0.0"
 percent-encoding = "2"
 quick-xml = "0.41"

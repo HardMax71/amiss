@@ -1,4 +1,6 @@
-use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, ScannerPolicy};
+use amiss_wire::controls::{
+    DOCUMENT_SUFFIX_BYTES, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
+};
 use amiss_wire::de::ErrorKind;
 
 use crate::support::POLICY;
@@ -7,7 +9,7 @@ use crate::support::POLICY;
 fn parses_the_policy_fixture() {
     let policy = ScannerPolicy::parse(POLICY).unwrap();
     assert_eq!(policy.document_includes().len(), 2);
-    assert_eq!(policy.projection_assertions().len(), 1);
+    assert_eq!(policy.projection_assertions().len(), 2);
     assert_eq!(policy.protected_inventory().len(), 2);
     assert_eq!(policy.finding_dispositions().len(), 1);
     assert_eq!(
@@ -17,14 +19,17 @@ fn parses_the_policy_fixture() {
     let assertion = &policy.projection_assertions()[0];
     assert_eq!(assertion.document.as_str(), "docs/architecture.md");
     assert_eq!(assertion.name, "request-shape");
-    assert_eq!(
-        assertion.source.path.as_str(),
-        "crates/amiss/src/request.rs"
-    );
-    assert_eq!(
-        (assertion.source.first_line, assertion.source.last_line),
-        (10, 14)
-    );
+    let ProjectionSource::BlobLines(source) = &assertion.source else {
+        panic!("fixture assertion uses blob lines");
+    };
+    assert_eq!(source.path.as_str(), "crates/amiss/src/request.rs");
+    assert_eq!((source.first_line, source.last_line), (10, 14));
+    let ProjectionSource::NamedRegion(source) = &policy.projection_assertions()[1].source else {
+        panic!("fixture second assertion uses a named region");
+    };
+    assert_eq!(source.path.as_str(), "examples/generated.txt");
+    assert_eq!(source.start_marker, "// amiss:generated:start");
+    assert_eq!(source.end_marker, "// amiss:generated:end");
     assert_eq!(
         policy.digest(),
         ScannerPolicy::parse(POLICY).unwrap().digest()
@@ -73,6 +78,17 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
         ScannerPolicy::parse(reversed.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
     );
+
+    let named = policy_with_assertions(
+        r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"named-region","path":"src/lib.rs","start_marker":"// amiss:start","end_marker":"// amiss:end"}}"#,
+    );
+    let parsed = ScannerPolicy::parse(named.as_bytes()).unwrap();
+    let ProjectionSource::NamedRegion(source) = &parsed.projection_assertions()[0].source else {
+        panic!("named-region source survives the policy reader");
+    };
+    assert_eq!(source.path.as_str(), "src/lib.rs");
+    assert_eq!(source.start_marker, "// amiss:start");
+    assert_eq!(source.end_marker, "// amiss:end");
 }
 
 #[test]
@@ -100,6 +116,27 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
             .kind,
         ErrorKind::Json(_)
     ));
+
+    let named = |start: &str, end: &str| {
+        policy_with_assertions(&format!(
+            r#"{{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{{"kind":"named-region","path":"src/lib.rs","start_marker":{start},"end_marker":{end}}}}}"#
+        ))
+    };
+    for invalid in [
+        named(r#"""#, r#""end""#),
+        named(r#""   ""#, r#""end""#),
+        named(r#""\tstart""#, r#""end""#),
+        named(r#""same""#, r#""same""#),
+        named(
+            &format!("\"{}\"", "x".repeat(SOURCE_MARKER_BYTES.saturating_add(1))),
+            r#""end""#,
+        ),
+    ] {
+        assert!(
+            ScannerPolicy::parse(invalid.as_bytes()).is_err(),
+            "{invalid}"
+        );
+    }
 }
 
 #[test]
