@@ -296,40 +296,44 @@ fn native(
         (unsupported_intent(query, fragment), resolution)
     };
 
-    if path_part.is_empty() {
-        return self_target(
-            resolver,
-            document_path,
-            is_image,
-            query.as_deref(),
-            fragment.as_deref(),
-            forge,
-        );
-    }
-    let (joined, target_kind) = match normalized_native_path(document_path, is_image, path_part) {
-        Ok(target) => target,
-        Err(resolution) => return Ok(terminal(resolution, query, fragment)),
+    let (path, target_kind, route) = if path_part.is_empty() {
+        (
+            document_path.clone(),
+            if is_image {
+                TargetKind::Blob
+            } else {
+                TargetKind::Either
+            },
+            None,
+        )
+    } else {
+        let (path, target_kind) = match normalized_native_path(document_path, is_image, path_part) {
+            Ok(target) => target,
+            Err(resolution) => return Ok(terminal(resolution, query, fragment)),
+        };
+        let route = routed(resolver.snapshot, &path, target_kind);
+        (path, target_kind, Some(route))
     };
-
-    let intent = Intent {
-        kind: IntentKind::RepositoryPath,
-        commit_oid: None,
-        repository_path: Some(joined.clone()),
-        target_kind: Some(target_kind),
-        external_scheme: None,
-        query: query.clone(),
-        fragment: fragment.clone(),
-    };
-    let located = routed(resolver.snapshot, &joined, target_kind);
     let row = lookup(
         resolver,
-        &located,
+        route.as_ref().unwrap_or(&path),
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
         forge,
     )?;
-    Ok((intent, row))
+    Ok((
+        Intent {
+            kind: IntentKind::RepositoryPath,
+            commit_oid: None,
+            repository_path: Some(path),
+            target_kind: Some(target_kind),
+            external_scheme: None,
+            query,
+            fragment,
+        },
+        row,
+    ))
 }
 
 /// A page identity is answered by a site catalogue this engine does not build.
@@ -470,34 +474,6 @@ fn declares(
         .declarations
         .insert(ignore_path.clone(), parsed);
     Ok(answer)
-}
-
-/// An empty native destination targets the source document itself, whether
-/// or not a query or fragment is present.
-fn self_target(
-    resolver: &mut Resolver<'_>,
-    document_path: &RepoPath,
-    is_image: bool,
-    query: Option<&str>,
-    fragment: Option<&str>,
-    forge: Option<ForgeDialect>,
-) -> Result<(Intent, Resolution), Error> {
-    let self_kind = if is_image {
-        TargetKind::Blob
-    } else {
-        TargetKind::Either
-    };
-    let intent = Intent {
-        kind: IntentKind::RepositoryPath,
-        commit_oid: None,
-        repository_path: Some(document_path.clone()),
-        target_kind: Some(self_kind),
-        external_scheme: None,
-        query: query.map(str::to_owned),
-        fragment: fragment.map(str::to_owned),
-    };
-    let row = lookup(resolver, document_path, self_kind, query, fragment, forge)?;
-    Ok((intent, row))
 }
 
 /// A located directory. A tree target has no content to read, which lets an

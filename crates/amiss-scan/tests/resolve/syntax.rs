@@ -211,15 +211,36 @@ fn special_entries_are_never_followed() {
 #[test]
 fn empty_destinations_target_the_source_document() {
     let mut bed = bed();
-    for destination in ["", "?q", "#"] {
-        let row = bed
-            .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
-            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
-            .1;
-        let Resolution::Resolved(Target::Blob(blob)) = row else {
-            panic!("unexpected resolution for {destination}: {row:?}");
-        };
-        assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
+    for (is_image, target_kind) in [(false, TargetKind::Either), (true, TargetKind::Blob)] {
+        for (destination, query, fragment) in [
+            ("", None, None),
+            ("?q", Some("q"), None),
+            ("#", None, Some("")),
+        ] {
+            let (intent, row) = bed
+                .run_as(
+                    Adapter::Markdown,
+                    None,
+                    "docs/guide.md",
+                    is_image,
+                    destination,
+                )
+                .unwrap_or_else(|_defect| panic!("resolve {destination}"));
+            let Resolution::Resolved(Target::Blob(blob)) = row else {
+                panic!("unexpected resolution for {destination}: {row:?}");
+            };
+            assert_eq!(
+                intent
+                    .repository_path
+                    .as_ref()
+                    .and_then(|path| path.as_str()),
+                Some("docs/guide.md")
+            );
+            assert_eq!(intent.target_kind, Some(target_kind));
+            assert_eq!(intent.query.as_deref(), query);
+            assert_eq!(intent.fragment.as_deref(), fragment);
+            assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
+        }
     }
 
     let row = bed
