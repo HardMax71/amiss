@@ -398,6 +398,7 @@ dependencies = [
  "libc",
  "sha1-checked",
  "sha2",
+ "strum",
  "tempfile",
  "windows-sys 0.61.2",
 ]

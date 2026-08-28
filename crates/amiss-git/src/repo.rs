@@ -201,7 +201,7 @@ impl Repository {
         };
         let (kind, body) =
             self.read_pack_at(resources, set, pack_index, offset, depth, value_cap)?;
-        let raw_header = format!("{} {}\0", kind.as_str(), body.len()).into_bytes();
+        let raw_header = format!("{} {}\0", kind.as_ref(), body.len()).into_bytes();
         verify_oid(self.object_format, oid, &raw_header, &body)?;
         Ok(Object { kind, body })
     }
