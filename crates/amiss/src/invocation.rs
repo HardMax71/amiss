@@ -1,5 +1,6 @@
 mod arguments;
 mod classify;
+mod tests;
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;
@@ -10,14 +11,14 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, Re
 use strum::EnumString;
 
 /// The canonical analysis-error taxonomy used by invocation refusals.
-pub use amiss_wire::report::AnalysisErrorCode as Code;
+pub(crate) use amiss_wire::report::AnalysisErrorCode as Code;
 
-pub const MALFORMED_OUTPUT_LINE: &str = "amiss: invalid invocation\n";
+pub(crate) const MALFORMED_OUTPUT_LINE: &str = "amiss: invalid invocation\n";
 
 /// The closed grammar, verbatim. Help prints it directly, while a rejected
 /// human invocation prints it after the code lines; the documentation
 /// contract test keeps the invocation chapter's copy equal to this one.
-pub const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha256>
+pub(crate) const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha1|sha256>
             --base <full-oid> (--candidate <full-oid> | --index)
             [--repository <host>/<owner>/<name>
              --ref refs/heads/<name>
@@ -59,7 +60,7 @@ const VERSION_FLAG: &str = "--version";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
 #[strum(serialize_all = "kebab-case")]
-pub enum Verb {
+pub(crate) enum Verb {
     Check,
     Fix,
     Adopt,
@@ -73,7 +74,7 @@ pub enum Verb {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
 #[strum(serialize_all = "lowercase")]
-pub enum OutputFormat {
+pub(crate) enum OutputFormat {
     Human,
     Json,
     Sarif,
@@ -82,74 +83,74 @@ pub enum OutputFormat {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CandidateSelector {
+pub(crate) enum CandidateSelector {
     Commit(Oid),
     Index,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProviderIdentity {
-    pub repository: RepositoryIdentity,
-    pub ref_name: BranchRef,
-    pub default_branch_ref: BranchRef,
+pub(crate) struct ProviderIdentity {
+    pub(crate) repository: RepositoryIdentity,
+    pub(crate) ref_name: BranchRef,
+    pub(crate) default_branch_ref: BranchRef,
 }
 
 /// The claim the author wants pinned: where, which line, and its name.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AuthorInvocation {
-    pub repo: PathBuf,
-    pub path: String,
-    pub line: u64,
-    pub name: String,
+pub(crate) struct AuthorInvocation {
+    pub(crate) repo: PathBuf,
+    pub(crate) path: String,
+    pub(crate) line: u64,
+    pub(crate) name: String,
 }
 
 /// The plan form's shape: the report it reads and the projection it prints.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PlanInvocation {
-    pub report: PathBuf,
-    pub format: OutputFormat,
+pub(crate) struct PlanInvocation {
+    pub(crate) report: PathBuf,
+    pub(crate) format: OutputFormat,
 }
 
 /// The assessment form's shape: the plan and evidence it judges and the
 /// projection it prints.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AssessInvocation {
-    pub plan: PathBuf,
-    pub evidence: PathBuf,
-    pub format: OutputFormat,
+pub(crate) struct AssessInvocation {
+    pub(crate) plan: PathBuf,
+    pub(crate) evidence: PathBuf,
+    pub(crate) format: OutputFormat,
 }
 
 /// The report and alternate projection selected by the rendering form.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RenderInvocation {
-    pub report: PathBuf,
-    pub format: OutputFormat,
-    pub full: bool,
+pub(crate) struct RenderInvocation {
+    pub(crate) report: PathBuf,
+    pub(crate) format: OutputFormat,
+    pub(crate) full: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RefsInvocation {
-    pub report: PathBuf,
-    pub target: RepoPath,
-    pub format: OutputFormat,
+pub(crate) struct RefsInvocation {
+    pub(crate) report: PathBuf,
+    pub(crate) target: RepoPath,
+    pub(crate) format: OutputFormat,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PolicyIncludePreview {
-    pub repo: PathBuf,
-    pub object_format: ObjectFormat,
+pub(crate) struct PolicyIncludePreview {
+    pub(crate) repo: PathBuf,
+    pub(crate) object_format: ObjectFormat,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PolicyIncludeInvocation {
-    pub policy: ScannerPolicy,
-    pub preview: Option<PolicyIncludePreview>,
+pub(crate) struct PolicyIncludeInvocation {
+    pub(crate) policy: ScannerPolicy,
+    pub(crate) preview: Option<PolicyIncludePreview>,
 }
 
 /// One accepted command line: a scan-shaped verb, the authoring form, or a
 /// report-bound pure form.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Command {
+pub(crate) enum Command {
     Scan(Box<Invocation>),
     Author(AuthorInvocation),
     Plan(PlanInvocation),
@@ -162,32 +163,32 @@ pub enum Command {
 /// The adoption metadata the engine cannot know: who owns the recorded
 /// debt, why, its instants, the floor it binds to, and where the file goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Adoption {
-    pub floor_digest: String,
-    pub owner: String,
-    pub reason: String,
-    pub created_at: String,
-    pub expires_at: String,
-    pub output: PathBuf,
+pub(crate) struct Adoption {
+    pub(crate) floor_digest: String,
+    pub(crate) owner: String,
+    pub(crate) reason: String,
+    pub(crate) created_at: String,
+    pub(crate) expires_at: String,
+    pub(crate) output: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Invocation {
-    pub verb: Verb,
-    pub repo: PathBuf,
-    pub object_format: ObjectFormat,
-    pub base: Oid,
-    pub candidate: CandidateSelector,
-    pub identity: Option<ProviderIdentity>,
-    pub forge: Option<ForgeDialect>,
-    pub profile: Profile,
-    pub explain_scope: bool,
-    pub format: OutputFormat,
-    pub adoption: Option<Adoption>,
+pub(crate) struct Invocation {
+    pub(crate) verb: Verb,
+    pub(crate) repo: PathBuf,
+    pub(crate) object_format: ObjectFormat,
+    pub(crate) base: Oid,
+    pub(crate) candidate: CandidateSelector,
+    pub(crate) identity: Option<ProviderIdentity>,
+    pub(crate) forge: Option<ForgeDialect>,
+    pub(crate) profile: Profile,
+    pub(crate) explain_scope: bool,
+    pub(crate) format: OutputFormat,
+    pub(crate) adoption: Option<Adoption>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     Help,
     /// Carries no options, so a second token is an ordinary invalid invocation.
     Version,
@@ -202,7 +203,7 @@ pub enum Outcome {
 }
 
 #[must_use]
-pub fn parse(argv: &[OsString]) -> Outcome {
+pub(crate) fn parse(argv: &[OsString]) -> Outcome {
     if let [only] = argv {
         if only.to_str() == Some(HELP_FLAG) {
             return Outcome::Help;

@@ -16,7 +16,7 @@ use amiss_wire::report::{
 };
 use strum::IntoEnumIterator;
 
-use crate::support::{report_schema, repository_root, schema_enum};
+use crate::support::{command_grammar, report_schema, repository_root, schema_enum};
 
 fn documented_contract(document: &str, name: &str) -> String {
     let start = format!("<!-- amiss-doc-contract:{name}:start -->");
@@ -202,7 +202,7 @@ fn documented_grammar_matches_the_refusal_grammar() {
         .expect("the grammar contract is one text fence");
     assert_eq!(
         body,
-        amiss::invocation::GRAMMAR,
+        command_grammar(),
         "{} drifted from the grammar the refusal prints",
         path.display(),
     );
@@ -216,7 +216,7 @@ fn the_status_page_names_every_grammar_form() {
         .lines()
         .find(|line| line.starts_with("| Command |"))
         .expect("the supported-surface table has a Command row");
-    let forms: Vec<String> = amiss::invocation::GRAMMAR
+    let forms: Vec<String> = command_grammar()
         .lines()
         .filter_map(|line| line.strip_prefix("amiss "))
         .filter_map(|form| form.split_whitespace().next())

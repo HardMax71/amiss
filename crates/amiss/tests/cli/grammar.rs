@@ -43,10 +43,10 @@ fn a_help_seeker_is_taught_the_closed_grammar() {
     let (code, stdout, stderr) = amiss(&["--help"]);
     assert_eq!(code, 0, "help is a successful query: {stderr}");
     assert!(stderr.is_empty(), "{stderr}");
-    assert_eq!(
-        stdout,
-        format!("{}\n", amiss::invocation::GRAMMAR).as_bytes(),
-        "help projects the canonical grammar and nothing else"
+    let (_, _, rejected) = amiss(&["--help", "--help"]);
+    assert!(
+        rejected.as_bytes().ends_with(&stdout),
+        "help and rejection project the same complete grammar: {rejected}"
     );
 }
 
@@ -96,13 +96,15 @@ fn the_version_query_names_the_engine_that_writes_the_reports() {
 /// The standalone queries are not flags and carry nothing of their own.
 #[test]
 fn standalone_queries_accept_no_other_token() {
+    let (_, grammar, _) = amiss(&["--help"]);
+    let grammar = String::from_utf8(grammar).unwrap();
     for flag in ["--help", "--version"] {
         for argv in [[flag, flag].as_slice(), ["check", flag].as_slice()] {
             let (code, stdout, stderr) = amiss(argv);
             assert_eq!(code, 2, "{argv:?} is not a standalone query");
             assert!(stdout.is_empty(), "{argv:?} produced stdout");
             assert!(
-                stderr.contains(amiss::invocation::GRAMMAR),
+                stderr.contains(grammar.trim_end()),
                 "{argv:?} refusal carries the whole grammar: {stderr}"
             );
         }
