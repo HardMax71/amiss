@@ -3,11 +3,60 @@ use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
 
-use crate::projection::{Outcome, Verdict};
+use crate::projection::{Outcome, RowDifference, Verdict};
 
 use super::Finding;
 use super::claims::{source_multiplicities, sources_value};
 use super::control::control_fact_finding;
+
+fn row_difference_value(difference: &RowDifference) -> Value {
+    let integer = |value| Value::Integer(i64::try_from(value).unwrap_or(i64::MAX));
+    let rows = |values: &[String]| {
+        Value::array(
+            values
+                .iter()
+                .cloned()
+                .map(Value::string)
+                .collect::<Vec<_>>(),
+        )
+    };
+    Value::object(vec![
+        ("kind".to_owned(), Value::string("rows".to_owned())),
+        (
+            "ordering_only".to_owned(),
+            Value::Bool(difference.ordering_only),
+        ),
+        (
+            "expected_records".to_owned(),
+            integer(difference.expected_records),
+        ),
+        (
+            "observed_records".to_owned(),
+            integer(difference.observed_records),
+        ),
+        (
+            "missing_records".to_owned(),
+            integer(difference.missing_records),
+        ),
+        (
+            "extra_records".to_owned(),
+            integer(difference.extra_records),
+        ),
+        (
+            "missing_preview".to_owned(),
+            rows(&difference.missing_preview),
+        ),
+        ("extra_preview".to_owned(), rows(&difference.extra_preview)),
+        (
+            "missing_omitted".to_owned(),
+            integer(difference.missing_omitted),
+        ),
+        (
+            "extra_omitted".to_owned(),
+            integer(difference.extra_omitted),
+        ),
+    ])
+}
 
 pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<Finding> {
     let Verdict::Drift {
@@ -16,6 +65,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         observed_digest,
         expected_bytes,
         observed_bytes,
+        ref row_difference,
     } = outcome.verdict
     else {
         return None;
@@ -29,7 +79,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         })
     };
     let assertion = &outcome.assertion;
-    let evidence = Value::object(vec![
+    let mut evidence = vec![
         ("kind".to_owned(), Value::string("projection".to_owned())),
         ("name".to_owned(), Value::string(assertion.name.clone())),
         (
@@ -64,12 +114,15 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
                 outcome.carrier_digests.iter().copied(),
             )),
         ),
-    ]);
+    ];
+    if let Some(difference) = row_difference.as_deref() {
+        evidence.push(("difference".to_owned(), row_difference_value(difference)));
+    }
     Some(control_fact_finding(
         FindingKind::ProjectionDrift,
         &RepoPath::from(&assertion.document),
         &format!("claim/projection/{}", assertion.name),
-        evidence,
+        Value::object(evidence),
         1,
         (outcome.representative_span, outcome.representative_display),
         profile,
