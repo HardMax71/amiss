@@ -47,6 +47,7 @@
         "enforcement_source": "local-process",
         "verification": null
       },
+      "semantic_evidence": [],
       "trusted_time_source": {
         "status": "none"
       },
@@ -270,7 +271,8 @@
               "kind": "missing",
               "reason": "path-not-found",
               "path": "docs/missing.md",
-              "near": null
+              "near": null,
+              "same_object_at": null
             }
           },
           "finding_kind": "explicit-target-missing",
@@ -296,7 +298,7 @@
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:8964bd6fdd03d135e3f22a0d7f143e25a5ebb81129f6019dbc48749f1e7728e2",
+        "candidate_fact_digest": "sha256:9a825b87f2a94b43910d112d2c7111a8aacec8b73b6737ae2bf27da16f31375c",
         "configured_disposition": "warn",
         "coverage_requirement": "none",
         "debt": null,
@@ -347,107 +349,6 @@
             "after": "warn",
             "before": "record",
             "rule_id": "scanner-policy-defaults/explicit-target-missing/observe",
-            "source": "built-in"
-          }
-        ],
-        "waiver": null
-      },
-      {
-        "aggregation": {
-          "locations_omitted": 0,
-          "member_count": 1,
-          "representative_rule": "lowest-location-then-observation-id",
-          "strategy": "one-per-finding-key"
-        },
-        "attribution": "not-applicable",
-        "base_fact": null,
-        "base_fact_digest": null,
-        "candidate_fact": {
-          "evidence": {
-            "document_result": {
-              "base": {
-                "adapter_id": "markdown",
-                "byte_count": 9,
-                "content_availability": "available",
-                "entry_kind": "blob",
-                "entry_oid": "dd159bb469b4a6327d0af92b107a5c6e9c06b9ab",
-                "extracted_references": 0,
-                "frontmatter_bytes": 0,
-                "frontmatter_regions": 0,
-                "git_mode": "100644",
-                "opaque_html_bytes": 0,
-                "opaque_html_regions": 0,
-                "opaque_mdx_bytes": 0,
-                "opaque_mdx_regions": 0,
-                "raw_digest": "sha256:abfe85f9824d70a9377a2e2df5c2fa088524ea6aabe6c243fcf1615fe2591be1",
-                "status": "scanned",
-                "unsupported_reason": null
-              },
-              "candidate": {
-                "adapter_id": "markdown",
-                "byte_count": 9,
-                "content_availability": "available",
-                "entry_kind": "blob",
-                "entry_oid": "dd159bb469b4a6327d0af92b107a5c6e9c06b9ab",
-                "extracted_references": 0,
-                "frontmatter_bytes": 0,
-                "frontmatter_regions": 0,
-                "git_mode": "100644",
-                "opaque_html_bytes": 0,
-                "opaque_html_regions": 0,
-                "opaque_mdx_bytes": 0,
-                "opaque_mdx_regions": 0,
-                "raw_digest": "sha256:abfe85f9824d70a9377a2e2df5c2fa088524ea6aabe6c243fcf1615fe2591be1",
-                "status": "scanned",
-                "unsupported_reason": null
-              },
-              "change": "unchanged",
-              "classification": "structured-markdown",
-              "path": "README.md"
-            },
-            "kind": "document"
-          },
-          "finding_kind": "unlinked-document",
-          "key_input": {
-            "finding_kind": "unlinked-document",
-            "schema": "amiss/scanner-finding-key-input",
-            "scope": {
-              "document": "README.md",
-              "kind": "document"
-            }
-          },
-          "schema": "amiss/scanner-fact"
-        },
-        "candidate_fact_digest": "sha256:03435dba460b53ae52d67ce064ebefac80ea9951b230c78155fbeffbad644ef0",
-        "configured_disposition": "record",
-        "coverage_requirement": "none",
-        "debt": null,
-        "effective_disposition": "record",
-        "evidence_class": "coverage-boundary",
-        "finding_key": "sha256:313ef1f52df3990af3444d3ccd2885c5f082cdaea38bda3f98266e5394ae42d3",
-        "fix": null,
-        "invariant_class": "advisory",
-        "key_input": {
-          "finding_kind": "unlinked-document",
-          "schema": "amiss/scanner-finding-key-input",
-          "scope": {
-            "document": "README.md",
-            "kind": "document"
-          }
-        },
-        "kind": "unlinked-document",
-        "description": "a scanned document from which zero references were extracted; despite the name, it claims nothing about inbound links from other pages",
-        "location": {
-          "path": "README.md",
-          "side": "candidate",
-          "span": null
-        },
-        "observation_ids": [],
-        "policy_trace": [
-          {
-            "after": "record",
-            "before": "record",
-            "rule_id": "scanner-policy-defaults/unlinked-document/observe",
             "source": "built-in"
           }
         ],
@@ -785,7 +686,8 @@
             "kind": "missing",
             "reason": "path-not-found",
             "path": "docs/missing.md",
-            "near": null
+            "near": null,
+            "same_object_at": null
           },
           "source_construct": "markdown-inline-link",
           "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
@@ -950,7 +852,7 @@
       "complete": true,
       "error_count": 0,
       "exit_code": 0,
-      "finding_count": 3,
+      "finding_count": 2,
       "status": "pass"
     },
     "schema": "amiss/scanner-report-payload",
@@ -970,7 +872,7 @@
         "opaque_mdx_regions": 0,
         "outside_document_set": 0,
         "scanned": 2,
-        "unlinked": 1,
+        "unlinked": 0,
         "unsupported": 0
       },
       "findings": {
@@ -978,11 +880,11 @@
         "debt_tolerated": 0,
         "fail": 0,
         "introduced": 1,
-        "not_applicable": 2,
+        "not_applicable": 1,
         "pre_existing": 0,
-        "record": 2,
+        "record": 1,
         "resolved": 0,
-        "total": 3,
+        "total": 2,
         "unknown": 0,
         "unsupported_capabilities": 0,
         "waived": 0,
@@ -1001,6 +903,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:0d0bd6728afb22b27c8a39b9ff96ea6b0e3a133cd9d12952c279a83cf9518b9e",
+  "payload_digest": "sha256:31b3c038a1b15e8a223f8629f8fbbbc4841a7ebb9aac2273f64d6120f5b9fa00",
   "schema": "amiss/scanner-report-envelope"
 }
