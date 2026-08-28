@@ -1,6 +1,7 @@
 mod accounting;
 mod conformance;
 mod corpus;
+mod corpus_support;
 mod extract;
 mod fixtures;
 mod frontmatter;

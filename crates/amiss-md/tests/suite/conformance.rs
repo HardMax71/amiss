@@ -1,8 +1,8 @@
-use amiss_md::corpus::{self, Case, Expect};
 use amiss_md::profile::parse_options;
 use amiss_wire::model::Adapter;
 use markdown::{CompileOptions, Options, ParseOptions, to_html_with_options};
 
+use crate::corpus_support::{self as corpus, Case, Expect};
 use crate::fixtures::{github_pairs, harvest};
 
 /// GFM 0.29 is `cmark-gfm`'s text, while the pinned parse additions are the

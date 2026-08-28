@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_md::corpus;
 use amiss_wire::digest::hb;
 use amiss_wire::json::canonical;
 
+use crate::corpus_support as corpus;
 use crate::fixtures::harvest;
 
 fn root() -> PathBuf {

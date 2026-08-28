@@ -3,53 +3,54 @@ use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 
-use crate::extract::{Extraction, Heading, Occurrence, analyze};
+use amiss_md::{Extraction, Heading, Occurrence, analyze};
 
-pub const SCHEMA: &str = "amiss/parser-profile-corpus";
+pub(crate) const SCHEMA: &str = "amiss/parser-profile-corpus";
 
-pub const COMMONMARK_FAMILY: &str = "commonmark-0.31.2";
-pub const COMMONMARK_PIN: &str =
+pub(crate) const COMMONMARK_FAMILY: &str = "commonmark-0.31.2";
+pub(crate) const COMMONMARK_PIN: &str =
     "sha256:d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20";
 
-pub const GFM_FAMILY: &str = "gfm-0.29";
-pub const GFM_PIN: &str = "sha256:7d8e5814befec287ac116786d81ff14e0adc9b13295b4494649e995408fd871c";
+pub(crate) const GFM_FAMILY: &str = "gfm-0.29";
+pub(crate) const GFM_PIN: &str =
+    "sha256:7d8e5814befec287ac116786d81ff14e0adc9b13295b4494649e995408fd871c";
 
-pub const MDX_JSX_FAMILY: &str = "micromark-mdx-jsx-3.0.2";
-pub const MDX_JSX_PIN: &str =
+pub(crate) const MDX_JSX_FAMILY: &str = "micromark-mdx-jsx-3.0.2";
+pub(crate) const MDX_JSX_PIN: &str =
     "sha256:17df57441a015be02a333f78fb8aeddf0d93586019fc7c4ae665d00dab666c32";
 
-pub const MDX_EXPRESSION_FAMILY: &str = "micromark-mdx-expression-3.0.1";
-pub const MDX_EXPRESSION_PIN: &str =
+pub(crate) const MDX_EXPRESSION_FAMILY: &str = "micromark-mdx-expression-3.0.1";
+pub(crate) const MDX_EXPRESSION_PIN: &str =
     "sha256:2aaf8667378829192bf25674fed0edeccd759a7ce0b0c3eaf5625faeea364be6";
 
-pub const MDX_ESM_FAMILY: &str = "micromark-mdxjs-esm-3.0.0";
-pub const MDX_ESM_PIN: &str =
+pub(crate) const MDX_ESM_FAMILY: &str = "micromark-mdxjs-esm-3.0.0";
+pub(crate) const MDX_ESM_PIN: &str =
     "sha256:fdffc20bfaef4fcbdc6640a7fef9dfa6ec35715d455baeadd8a6c34e866a3151";
 
-pub const FOOTNOTE_FAMILY: &str = "micromark-gfm-footnote-2.1.0";
-pub const FOOTNOTE_PIN: &str =
+pub(crate) const FOOTNOTE_FAMILY: &str = "micromark-gfm-footnote-2.1.0";
+pub(crate) const FOOTNOTE_PIN: &str =
     "sha256:41a437756e5c4615dfe9269acb23acbc74d8b01d9f7cabb4f121e8ca7e5d1a18";
 
-pub const STRIKETHROUGH_FAMILY: &str = "micromark-gfm-strikethrough-2.1.0";
-pub const STRIKETHROUGH_PIN: &str =
+pub(crate) const STRIKETHROUGH_FAMILY: &str = "micromark-gfm-strikethrough-2.1.0";
+pub(crate) const STRIKETHROUGH_PIN: &str =
     "sha256:b7bdf617e8535348265bb8d91f0c7da65b7849e150460a44b063b22640e5178b";
 
 /// The footnote suite also drives a directory of documents against the HTML
 /// github.com itself renders for them. That directory is pinned whole, by one
 /// digest over the canonical JSON of every file in it.
-pub const GITHUB_FOOTNOTE_FAMILY: &str = "github-gfm-footnote-2.1.0";
-pub const GITHUB_FOOTNOTE_PIN: &str =
+pub(crate) const GITHUB_FOOTNOTE_FAMILY: &str = "github-gfm-footnote-2.1.0";
+pub(crate) const GITHUB_FOOTNOTE_PIN: &str =
     "sha256:24829d3c8c494684d63bd3d613578504371f0da8b8ef1a6bbae5a7093fa27e1a";
 
 /// Every case is charged under every profile, so a grammar change anywhere
 /// moves the manifest. The manifest names what it covers, so a reader never
 /// mistakes a partial corpus for a complete one.
-pub const PROFILES: [Adapter; 3] = [Adapter::Markdown, Adapter::Mdx, Adapter::PlainAdvisory];
+pub(crate) const PROFILES: [Adapter; 3] = [Adapter::Markdown, Adapter::Mdx, Adapter::PlainAdvisory];
 
 /// What upstream says about a case: the HTML it publishes for the example, or
 /// the message it rejects the example with, or nothing beyond acceptance.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Expect {
+pub(crate) enum Expect {
     Html(String),
     Accepted,
     Rejected(String),
@@ -58,31 +59,31 @@ pub enum Expect {
 /// One executable example. `tag` carries the GFM extension marker, where
 /// `disabled` means upstream does not execute the example.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Case {
-    pub family: &'static str,
-    pub number: usize,
-    pub section: String,
-    pub tag: Option<String>,
-    pub source: String,
-    pub expect: Expect,
-    pub config: String,
+pub(crate) struct Case {
+    pub(crate) family: &'static str,
+    pub(crate) number: usize,
+    pub(crate) section: String,
+    pub(crate) tag: Option<String>,
+    pub(crate) source: String,
+    pub(crate) expect: Expect,
+    pub(crate) config: String,
 }
 
 impl Case {
     #[must_use]
-    pub fn case_id(&self) -> String {
+    pub(crate) fn case_id(&self) -> String {
         format!("{}/{}", self.family, self.number)
     }
 
     /// Upstream executes an example unless it marked it `disabled`.
     #[must_use]
-    pub fn executable(&self) -> bool {
+    pub(crate) fn executable(&self) -> bool {
         self.tag.as_deref() != Some("disabled")
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Defect {
+pub(crate) enum Defect {
     NotJson,
     NotAnExampleArray,
     MissingMember,
@@ -94,7 +95,7 @@ pub enum Defect {
 ///
 /// `NotJson` when the bytes fail strict JSON, and `NotAnExampleArray` or
 /// `MissingMember` when the array does not hold the documented example shape.
-pub fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
+pub(crate) fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
     let Value::Array(rows) = parse(spec_json).map_err(|_invalid| Defect::NotJson)? else {
         return Err(Defect::NotAnExampleArray);
     };
@@ -131,7 +132,7 @@ pub fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
 /// extension marker; source and expected HTML are split by a lone `.`; and a
 /// tab is written as U+2192.
 #[must_use]
-pub fn gfm(spec_text: &str) -> Vec<Case> {
+pub(crate) fn gfm(spec_text: &str) -> Vec<Case> {
     const FENCE: &str = "````````````````````````````````";
 
     let mut cases = Vec::new();
@@ -192,9 +193,9 @@ pub fn gfm(spec_text: &str) -> Vec<Case> {
 /// A harvested fixture family, with the count of calls whose source is not a
 /// literal (they pass a variable) so a dropped case is never silent.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Fixtures {
-    pub cases: Vec<Case>,
-    pub skipped: usize,
+pub(crate) struct Fixtures {
+    pub(crate) cases: Vec<Case>,
+    pub(crate) skipped: usize,
 }
 
 /// Reads a micromark extension's own test suite. Each `micromark(...)` call is
@@ -203,7 +204,7 @@ pub struct Fixtures {
 /// the reason it gives. A source assembled by concatenation is refused rather
 /// than truncated to its first literal.
 #[must_use]
-pub fn micromark_fixtures(family: &'static str, text: &str) -> Fixtures {
+pub(crate) fn micromark_fixtures(family: &'static str, text: &str) -> Fixtures {
     let bytes = text.as_bytes();
     let mut cases = Vec::new();
     let mut skipped = 0_usize;
@@ -621,8 +622,8 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
         }
         Err(error) => {
             let code = match error {
-                crate::AnalyzeError::Fault(fault) => AnalysisErrorCode::from(fault),
-                crate::AnalyzeError::EmbeddedCodeAllowance { .. } => {
+                amiss_md::AnalyzeError::Fault(fault) => AnalysisErrorCode::from(fault),
+                amiss_md::AnalyzeError::EmbeddedCodeAllowance { .. } => {
                     AnalysisErrorCode::ResourceLimitExceeded
                 }
             };
@@ -672,7 +673,7 @@ fn case_value(case: &Case) -> Value {
 /// Builds the manifest: every case's raw source, what upstream says about it,
 /// and its exact node count and depth under every published profile.
 #[must_use]
-pub fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
+pub(crate) fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
     let families = [
         (COMMONMARK_FAMILY, COMMONMARK_PIN),
         (GFM_FAMILY, GFM_PIN),
@@ -718,7 +719,7 @@ pub fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Value {
 /// Cases are numbered by sorted name so the manifest never moves with the
 /// directory listing.
 #[must_use]
-pub fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
+pub(crate) fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
     pairs
         .iter()
         .enumerate()
@@ -737,7 +738,7 @@ pub fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
 /// One digest over a whole directory, so a fixture cannot be edited, added, or
 /// dropped without the pin moving.
 #[must_use]
-pub fn directory_digest(files: &[(String, String)]) -> String {
+pub(crate) fn directory_digest(files: &[(String, String)]) -> String {
     let members: Vec<(String, Value)> = files
         .iter()
         .map(|(name, body)| (name.clone(), Value::string(body.clone())))
