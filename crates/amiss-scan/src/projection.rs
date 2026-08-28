@@ -68,6 +68,15 @@ pub(crate) struct RowDifference {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Difference {
+    Rows(Box<RowDifference>),
+    Count {
+        expected_count: u64,
+        observed_count: Option<u64>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Verdict {
     Attested,
     Drift {
@@ -76,7 +85,7 @@ pub(crate) enum Verdict {
         observed_digest: Option<Digest>,
         expected_bytes: Option<u64>,
         observed_bytes: Option<u64>,
-        row_difference: Option<Box<RowDifference>>,
+        difference: Option<Difference>,
     },
 }
 
@@ -87,7 +96,7 @@ pub(crate) fn unavailable(reason: DriftReason, sink: &SemanticCodeSink) -> Verdi
         observed_digest: Some(sink.digest),
         expected_bytes: None,
         observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
-        row_difference: None,
+        difference: None,
     }
 }
 
@@ -120,7 +129,7 @@ fn drift(
             observed_digest: None,
             expected_bytes: None,
             observed_bytes: None,
-            row_difference: None,
+            difference: None,
         },
     }
 }
@@ -189,11 +198,11 @@ pub(crate) fn evaluate(
     };
     let verdict = match assertion.projection {
         ProjectionKind::CodeTextV1 => resolver.resolve_code_projection(&assertion.source, sink)?,
-        ProjectionKind::SortedRowsV1 => {
+        ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1 => {
             let ProjectionSource::TreePaths(selection) = &assertion.source else {
                 return Err(Error::Internal);
             };
-            inventory::evaluate(discovery, selection, sink)
+            inventory::evaluate(discovery, selection, assertion.projection, sink)?
         }
     };
     Ok(Outcome {

@@ -24,6 +24,8 @@ pub enum ProjectionKind {
     CodeTextV1,
     #[strum(serialize = "sorted-rows-v1")]
     SortedRowsV1,
+    #[strum(serialize = "decimal-count-v1")]
+    DecimalCountV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -212,10 +214,13 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
             ProjectionKind::CodeTextV1,
             ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
         )
-        | (ProjectionKind::SortedRowsV1, ProjectionSource::TreePaths(_)) => {}
+        | (
+            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1,
+            ProjectionSource::TreePaths(_),
+        ) => {}
         (ProjectionKind::CodeTextV1, ProjectionSource::TreePaths(_))
         | (
-            ProjectionKind::SortedRowsV1,
+            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1,
             ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
         ) => return fail(path, ErrorKind::Inconsistent),
     }

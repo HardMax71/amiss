@@ -1,16 +1,18 @@
 use std::cmp::Ordering;
 use std::ops::Bound;
 
-use amiss_wire::controls::{GitMode, TreePathSelection};
-use amiss_wire::digest::hb_stream;
+use amiss_wire::controls::{GitMode, ProjectionKind, TreePathSelection};
+use amiss_wire::digest::{Digest, hb, hb_stream};
 use amiss_wire::model::RepoPath;
 
+use crate::Error;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::scan::SemanticCodeSink;
 
-use super::{DriftReason, RowDifference, Verdict, unavailable};
+use super::{Difference, DriftReason, RowDifference, Verdict, unavailable};
 
 const SOURCE_DOMAIN: &str = "amiss/scanner-sorted-rows-source";
+const COUNT_SOURCE_DOMAIN: &str = "amiss/scanner-decimal-count-source";
 const PREVIEW_ROWS_PER_SIDE: usize = 32;
 const PREVIEW_BYTES_PER_SIDE: usize = 32 * 1024;
 
@@ -33,10 +35,10 @@ fn preview_row(preview: &mut Preview, row: &str) {
     preview.bytes = bytes;
 }
 
-fn selected_rows<'a>(
+fn selected_paths<'a>(
     discovery: &'a SnapshotDiscovery,
-    selection: &TreePathSelection,
-) -> Result<Vec<&'a str>, DriftReason> {
+    selection: &'a TreePathSelection,
+) -> Result<impl Iterator<Item = &'a [u8]> + 'a, DriftReason> {
     let root = RepoPath::from(&selection.root);
     let root_bytes = root.as_bytes();
     match discovery.locate(&root) {
@@ -50,38 +52,44 @@ fn selected_rows<'a>(
 
     let mut prefix = root_bytes.to_vec();
     prefix.push(b'/');
-    let mut rows = Vec::new();
-    for (path, (mode, _oid)) in discovery
+    let maximum_depth = selection.maximum_depth;
+    let suffix = selection.suffix.as_deref().map(str::as_bytes);
+    Ok(discovery
         .entries
         .range::<[u8], _>((Bound::Included(prefix.as_slice()), Bound::Unbounded))
-    {
-        let Some(relative) = path.as_bytes().strip_prefix(prefix.as_slice()) else {
-            break;
-        };
-        match mode {
-            GitMode::Tree => continue,
-            GitMode::RegularFile
-            | GitMode::ExecutableFile
-            | GitMode::Symlink
-            | GitMode::Gitlink => {}
-        }
-        let depth = u64::try_from(relative.split(|byte| *byte == b'/').count()).unwrap_or(u64::MAX);
-        if depth > selection.maximum_depth
-            || selection
-                .suffix
-                .as_ref()
-                .is_some_and(|suffix| !relative.ends_with(suffix.as_bytes()))
-        {
-            continue;
-        }
-        let row =
-            std::str::from_utf8(relative).map_err(|_invalid| DriftReason::SourceTreePathNotUtf8)?;
-        if row.chars().any(char::is_control) {
-            return Err(DriftReason::SourceTreePathNotARow);
-        }
-        rows.push(row);
-    }
-    Ok(rows)
+        .map_while(move |(path, (mode, _oid))| {
+            path.as_bytes()
+                .strip_prefix(prefix.as_slice())
+                .map(|relative| (relative, *mode))
+        })
+        .filter_map(move |(relative, mode)| {
+            let depth =
+                u64::try_from(relative.split(|byte| *byte == b'/').count()).unwrap_or(u64::MAX);
+            let included_mode = match mode {
+                GitMode::Tree => false,
+                GitMode::RegularFile
+                | GitMode::ExecutableFile
+                | GitMode::Symlink
+                | GitMode::Gitlink => true,
+            };
+            (included_mode
+                && depth <= maximum_depth
+                && suffix.is_none_or(|tail| relative.ends_with(tail)))
+            .then_some(relative)
+        }))
+}
+
+fn selected_rows<'a>(paths: impl Iterator<Item = &'a [u8]>) -> Result<Vec<&'a str>, DriftReason> {
+    paths
+        .map(|path| {
+            let row =
+                std::str::from_utf8(path).map_err(|_invalid| DriftReason::SourceTreePathNotUtf8)?;
+            if row.chars().any(char::is_control) {
+                return Err(DriftReason::SourceTreePathNotARow);
+            }
+            Ok(row)
+        })
+        .collect()
 }
 
 fn projected_bytes(rows: &[&str]) -> u64 {
@@ -92,7 +100,7 @@ fn projected_bytes(rows: &[&str]) -> u64 {
     )
 }
 
-fn projected_digest(rows: &[&str]) -> amiss_wire::digest::Digest {
+fn projected_digest(rows: &[&str]) -> Digest {
     hb_stream(SOURCE_DOMAIN, |write| {
         for (index, row) in rows.iter().enumerate() {
             if index != 0 {
@@ -175,24 +183,83 @@ fn difference(rows: &[&str], observed: &str) -> RowDifference {
     }
 }
 
+fn canonical_count(value: &str) -> Option<u64> {
+    let bytes = value.as_bytes();
+    if bytes == b"0" {
+        return Some(0);
+    }
+    if !matches!(bytes.first(), Some(b'1'..=b'9'))
+        || !bytes
+            .get(1..)
+            .unwrap_or_default()
+            .iter()
+            .all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    value.parse().ok().filter(|count| {
+        u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).is_ok_and(|maximum| *count <= maximum)
+    })
+}
+
+fn mismatch(
+    sink: &SemanticCodeSink,
+    expected_digest: Digest,
+    expected_bytes: u64,
+    difference: Difference,
+) -> Verdict {
+    Verdict::Drift {
+        reason: DriftReason::ContentDiffers,
+        expected_digest: Some(expected_digest),
+        observed_digest: Some(sink.digest),
+        expected_bytes: Some(expected_bytes),
+        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
+        difference: Some(difference),
+    }
+}
+
 pub(super) fn evaluate(
     discovery: &SnapshotDiscovery,
     selection: &TreePathSelection,
+    projection: ProjectionKind,
     sink: &SemanticCodeSink,
-) -> Verdict {
-    let rows = match selected_rows(discovery, selection) {
-        Ok(rows) => rows,
-        Err(reason) => return unavailable(reason, sink),
+) -> Result<Verdict, Error> {
+    let paths = match selected_paths(discovery, selection) {
+        Ok(paths) => paths,
+        Err(reason) => return Ok(unavailable(reason, sink)),
     };
-    if rows_match(&rows, &sink.value) {
-        return Verdict::Attested;
-    }
-    Verdict::Drift {
-        reason: DriftReason::ContentDiffers,
-        expected_digest: Some(projected_digest(&rows)),
-        observed_digest: Some(sink.digest),
-        expected_bytes: Some(projected_bytes(&rows)),
-        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
-        row_difference: Some(Box::new(difference(&rows, &sink.value))),
+    match projection {
+        ProjectionKind::SortedRowsV1 => {
+            let rows = match selected_rows(paths) {
+                Ok(rows) => rows,
+                Err(reason) => return Ok(unavailable(reason, sink)),
+            };
+            if rows_match(&rows, &sink.value) {
+                return Ok(Verdict::Attested);
+            }
+            Ok(mismatch(
+                sink,
+                projected_digest(&rows),
+                projected_bytes(&rows),
+                Difference::Rows(Box::new(difference(&rows, &sink.value))),
+            ))
+        }
+        ProjectionKind::DecimalCountV1 => {
+            let expected_count = u64::try_from(paths.count()).unwrap_or(u64::MAX);
+            let expected = expected_count.to_string();
+            if expected == sink.value {
+                return Ok(Verdict::Attested);
+            }
+            Ok(mismatch(
+                sink,
+                hb(COUNT_SOURCE_DOMAIN, expected.as_bytes()),
+                u64::try_from(expected.len()).unwrap_or(u64::MAX),
+                Difference::Count {
+                    expected_count,
+                    observed_count: canonical_count(&sink.value),
+                },
+            ))
+        }
+        ProjectionKind::CodeTextV1 => Err(Error::Internal),
     }
 }

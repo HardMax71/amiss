@@ -188,6 +188,13 @@ distinguishes a pure ordering defect. It copies at most the first 32 missing and
 byte-sorted rows, at most 32 KiB per side, and states the exact omitted counts; duplicate visible
 rows count as extras.
 
+`decimal-count-v1` uses the same complete tree selection but projects only its member count. Its
+visible value is the canonical unsigned ASCII decimal: zero is `0`, a positive count has no leading
+zero, and signs, grouping, labels, and whitespace are never accepted. Because no path text enters
+that projection, qualifying non-UTF-8 and control-containing names still contribute to the exact
+count. A mismatch reports the expected count and the observed count only when the visible value is
+itself canonical.
+
 An attested projection emits nothing. Every nonattested relation emits one `projection-drift`
 finding under `claim/projection/<name>`, points at the visible code block when one is uniquely
 addressable, and carries only digests and byte counts rather than copying either full value into the

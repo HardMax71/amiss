@@ -105,6 +105,17 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
     assert_eq!(source.root.as_str(), "crates");
     assert_eq!(source.suffix.as_deref(), Some(".rs"));
     assert_eq!(source.maximum_depth, 3);
+
+    let count = tree.replace("sorted-rows-v1", "decimal-count-v1");
+    let parsed = ScannerPolicy::parse(count.as_bytes()).unwrap();
+    assert_eq!(
+        parsed.projection_assertions()[0].projection,
+        ProjectionKind::DecimalCountV1
+    );
+    assert!(matches!(
+        parsed.projection_assertions()[0].source,
+        ProjectionSource::TreePaths(_)
+    ));
 }
 
 #[test]
@@ -131,6 +142,7 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
         tree.replace("\"maximum_depth\":2", "\"maximum_depth\":0"),
         tree.replace("\"suffix\":\".rs\",", "\"suffix\":\"rs\","),
         valid.replace("code-text-v1", "sorted-rows-v1"),
+        valid.replace("code-text-v1", "decimal-count-v1"),
     ] {
         assert!(
             ScannerPolicy::parse(policy_with_assertions(&invalid).as_bytes()).is_err(),
