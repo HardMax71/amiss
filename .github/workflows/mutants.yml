@@ -28,12 +28,9 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/tools
       # A diff of anything but the checked-out tree refuses with exit 5.
-      - if: ${{ !startsWith(github.head_ref, 'release-plz-') }}
-        run: git diff "origin/$BASE_REF".. > git.diff
+      - run: git diff "origin/$BASE_REF".. > git.diff
         env:
           BASE_REF: ${{ github.base_ref }}
-      - if: startsWith(github.head_ref, 'release-plz-')
-        run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
       - id: split
         env:
           PER_SHARD: "5"
@@ -66,12 +63,9 @@ jobs:
           shared-key: mutants-v2
           save-if: "false"
       # A diff of anything but the checked-out tree refuses with exit 5.
-      - if: ${{ !startsWith(github.head_ref, 'release-plz-') }}
-        run: git diff "origin/$BASE_REF".. > git.diff
+      - run: git diff "origin/$BASE_REF".. > git.diff
         env:
           BASE_REF: ${{ github.base_ref }}
-      - if: startsWith(github.head_ref, 'release-plz-')
-        run: git diff "$(git describe --tags --abbrev=0)".. > git.diff
       # Built before mutation, so a stale cache cannot time a mutant out.
       - run: cargo nextest run --no-run --workspace --locked --cargo-profile mutants
       # ci proves this same commit, so the shards skip their own baseline.

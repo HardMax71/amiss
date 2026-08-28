@@ -80,9 +80,9 @@ per mutant. The shards used to pay a worse floor, a cold workspace build plus a 
 pass repeated in every shard; now each shard restores the build cache that the baseline job
 saves on every push to main, and skips its own baseline because ci proves the same commit in
 the same run, so what remains is the build delta against the last merge and the mutants
-themselves. A release pull
-request measures what the release ships, every change since the last tag, rather than the version
-bump standing in front of it. Both ask the whole workspace whether a mutant lives.
+themselves. A release pull request measures its version and generated-file diff like every other
+pull request. The code it packages was already measured before each change reached `main`; measuring
+the accumulated release again would duplicate that work and eventually exceed the bounded PR lane.
 
 The sweep over every mutant in both workspaces runs only when someone asks for it, through
 `workflow_dispatch`. It is split across shards sized from the mutant count rather than a fixed
