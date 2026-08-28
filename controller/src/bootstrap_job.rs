@@ -1,24 +1,27 @@
 mod controls;
+mod plan;
+mod semantic;
 
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
 };
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::Digest;
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::{ArtifactId, UtcInstant};
 use amiss_wire::requests::{
     EvaluationRequest, RequestStreams, RequestTrust, SnapshotRequest, SuppliedControl,
-    SuppliedSemanticEvidence, SuppliedTime, commit_candidate_identity_digest,
+    SuppliedTime, commit_candidate_identity_digest,
 };
 
 use crate::RunRequest;
 
 pub use controls::{AcquiredControl, PolicyControls};
+pub use plan::{check_binding, check_plan};
+pub use semantic::bind_semantic_evidence;
 
-const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v4";
+use plan::{binding, validated_plan};
 
 #[derive(
     Clone,
@@ -96,59 +99,6 @@ pub struct CheckBinding {
     pub plan_digest: Digest,
     pub required_status_name: String,
     pub execution_constraint_digest: Digest,
-}
-
-/// Freezes the controller-owned policy and required-check target reused by
-/// every claim for one authenticated delivery.
-///
-/// # Errors
-///
-/// A policy artifact or execution constraint is invalid.
-pub fn check_plan(
-    profile: Profile,
-    mut policy: PolicyControls,
-    execution: ExecutionConstraintDescriptor,
-) -> Result<CheckPlan, BootstrapJobError> {
-    policy.semantic_acquisitions = normalized_expectations(&policy.semantic_acquisitions)?;
-    if policy
-        .semantic_evidence
-        .len()
-        .checked_add(policy.semantic_acquisitions.len())
-        .is_none_or(|count| count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT)
-    {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
-    let policy_identity = controls::identity(&policy)?;
-    let constraint = execution
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    controls::validate_request_size(&policy, &policy_identity, &execution, &constraint)?;
-    let digest = hj(
-        CHECK_PLAN_DOMAIN,
-        &plan_value(
-            profile,
-            policy.external_policy,
-            &policy_identity,
-            &policy.semantic_evidence,
-            &policy.semantic_acquisitions,
-            &execution,
-        ),
-    );
-    Ok(CheckPlan {
-        digest,
-        profile,
-        policy,
-        execution,
-    })
-}
-
-/// Projects the small retry-safe binding persisted by the delivery record.
-///
-/// # Errors
-///
-/// The public plan fields no longer reproduce the frozen digest.
-pub fn check_binding(plan: &CheckPlan) -> Result<CheckBinding, BootstrapJobError> {
-    validated_plan(plan).map(|checked| binding(&checked))
 }
 
 pub struct BootstrapJobInput<'a> {
@@ -250,270 +200,6 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     Ok(BootstrapJob {
         streams,
         constraint,
-    })
-}
-
-/// Binds controller-produced templates and acquired envelopes to one exact
-/// candidate and orders the resulting set by payload identity.
-///
-/// # Errors
-///
-/// An envelope is malformed, exceeds a limit, names another subject, or
-/// collides with another envelope.
-pub fn bind_semantic_evidence(
-    templates: &[SemanticEvidenceTemplate],
-    expectations: &[SemanticEvidenceExpectation],
-    acquired: &[Value],
-    candidate_identity_digest: Digest,
-) -> Result<Vec<SuppliedSemanticEvidence>, BootstrapJobError> {
-    if expectations.len() != acquired.len() {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
-    let count = templates
-        .len()
-        .checked_add(acquired.len())
-        .ok_or(BootstrapJobError::SemanticEvidence)?;
-    if count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
-    let mut expected = BTreeSet::from_iter(normalized_expectations(expectations)?);
-    let templates = templates.iter().map(|template| {
-        let value = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
-            candidate_identity_digest,
-            source_report_payload_digest: None,
-            producer_kind: template.producer_kind.clone(),
-            producer_identity: template.producer_identity.clone(),
-            producer_version: template.producer_version.clone(),
-            context_digest: template.context_digest,
-            input_digest: template.input_digest,
-            complete: template.complete,
-            observations: template.observations.as_ref().to_vec(),
-        })
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        checked_evidence(
-            value,
-            &envelope,
-            template.context_digest,
-            candidate_identity_digest,
-        )
-    });
-    let acquired = acquired.iter().cloned().map(|value| {
-        let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        let expectation = SemanticEvidenceExpectation {
-            producer_kind: envelope.payload.producer_kind.clone(),
-            producer_identity: envelope.payload.producer_identity.clone(),
-            producer_version: envelope.payload.producer_version.clone(),
-            context_digest: envelope.payload.context_digest,
-        };
-        expected
-            .remove(&expectation)
-            .then_some(())
-            .ok_or(BootstrapJobError::SemanticEvidence)?;
-        checked_evidence(
-            value,
-            &envelope,
-            expectation.context_digest,
-            candidate_identity_digest,
-        )
-    });
-    let mut envelopes = templates
-        .chain(acquired)
-        .collect::<Result<Vec<_>, BootstrapJobError>>()?;
-    envelopes.sort_by_key(|(digest, _evidence)| *digest);
-    if envelopes
-        .windows(2)
-        .any(|pair| matches!(pair, [left, right] if left.0 == right.0))
-    {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
-    Ok(envelopes
-        .into_iter()
-        .map(|(_digest, evidence)| evidence)
-        .collect())
-}
-
-fn checked_evidence(
-    value: Value,
-    envelope: &amiss_wire::semantic::SemanticEvidenceEnvelope,
-    expected_context_digest: Digest,
-    candidate_identity_digest: Digest,
-) -> Result<(Digest, SuppliedSemanticEvidence), BootstrapJobError> {
-    (envelope.payload.candidate_identity_digest == candidate_identity_digest
-        && envelope.payload.source_report_payload_digest.is_none()
-        && envelope.payload.context_digest == expected_context_digest)
-        .then_some((
-            envelope.payload_digest,
-            SuppliedSemanticEvidence {
-                value,
-                expected_context_digest,
-            },
-        ))
-        .ok_or(BootstrapJobError::SemanticEvidence)
-}
-
-fn binding(plan: &CheckPlan) -> CheckBinding {
-    CheckBinding {
-        plan_digest: plan.digest,
-        required_status_name: plan.execution.required_status_name().to_owned(),
-        execution_constraint_digest: plan.execution.digest(),
-    }
-}
-
-fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJobError> {
-    let checked = check_plan(plan.profile, plan.policy.clone(), plan.execution.clone())?;
-    (checked.digest == plan.digest)
-        .then_some(checked)
-        .ok_or(BootstrapJobError::CheckPlan)
-}
-
-fn plan_value(
-    profile: Profile,
-    external_policy: ExternalPolicy,
-    policy: &controls::PolicyIdentity,
-    semantic_evidence: &[SemanticEvidenceTemplate],
-    semantic_acquisitions: &[SemanticEvidenceExpectation],
-    execution: &ExecutionConstraintDescriptor,
-) -> Value {
-    Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string(CHECK_PLAN_DOMAIN.to_owned()),
-        ),
-        (
-            "profile".to_owned(),
-            Value::string(
-                match profile {
-                    Profile::Observe => "observe",
-                    Profile::EnforceIntroduced => "enforce-introduced",
-                    Profile::Enforce => "enforce",
-                }
-                .to_owned(),
-            ),
-        ),
-        (
-            "external_policy".to_owned(),
-            Value::string(external_policy.as_ref().to_owned()),
-        ),
-        (
-            "organization_floor".to_owned(),
-            control_identity_value(policy.organization_floor),
-        ),
-        (
-            "debt_snapshot".to_owned(),
-            control_identity_value(policy.debt_snapshot),
-        ),
-        (
-            "waiver_bundle".to_owned(),
-            control_identity_value(policy.waiver_bundle),
-        ),
-        (
-            "execution_constraint_digest".to_owned(),
-            Value::string(execution.digest().to_string()),
-        ),
-        (
-            "required_status_name".to_owned(),
-            Value::string(execution.required_status_name().to_owned()),
-        ),
-        (
-            "semantic_evidence".to_owned(),
-            Value::array(
-                semantic_evidence
-                    .iter()
-                    .map(|template| {
-                        Value::object(vec![
-                            (
-                                "producer_kind".to_owned(),
-                                Value::string(template.producer_kind.as_str().to_owned()),
-                            ),
-                            (
-                                "producer_identity".to_owned(),
-                                Value::string(template.producer_identity.as_str().to_owned()),
-                            ),
-                            (
-                                "producer_version".to_owned(),
-                                Value::string(template.producer_version.clone()),
-                            ),
-                            (
-                                "context_digest".to_owned(),
-                                Value::string(template.context_digest.to_string()),
-                            ),
-                            (
-                                "input_digest".to_owned(),
-                                Value::string(template.input_digest.to_string()),
-                            ),
-                            ("complete".to_owned(), Value::Bool(template.complete)),
-                        ])
-                    })
-                    .collect(),
-            ),
-        ),
-        (
-            "semantic_acquisitions".to_owned(),
-            Value::array(
-                semantic_acquisitions
-                    .iter()
-                    .map(expectation_value)
-                    .collect(),
-            ),
-        ),
-    ])
-}
-
-fn expectation_value(expectation: &SemanticEvidenceExpectation) -> Value {
-    Value::object(vec![
-        (
-            "producer_kind".to_owned(),
-            Value::string(expectation.producer_kind.as_str().to_owned()),
-        ),
-        (
-            "producer_identity".to_owned(),
-            Value::string(expectation.producer_identity.as_str().to_owned()),
-        ),
-        (
-            "producer_version".to_owned(),
-            Value::string(expectation.producer_version.clone()),
-        ),
-        (
-            "context_digest".to_owned(),
-            Value::string(expectation.context_digest.to_string()),
-        ),
-    ])
-}
-
-fn normalized_expectations(
-    expectations: &[SemanticEvidenceExpectation],
-) -> Result<Vec<SemanticEvidenceExpectation>, BootstrapJobError> {
-    if expectations.iter().any(|expectation| {
-        !amiss_wire::semantic::producer_version_valid(&expectation.producer_version)
-    }) {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
-    let mut normalized = expectations.to_vec();
-    normalized.sort();
-    if normalized
-        .windows(2)
-        .any(|pair| matches!(pair, [left, right] if left == right))
-    {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
-    Ok(normalized)
-}
-
-fn control_identity_value(identity: Option<controls::ControlIdentity>) -> Value {
-    identity.map_or(Value::Null, |control| {
-        Value::object(vec![
-            (
-                "digest".to_owned(),
-                Value::string(control.digest.to_string()),
-            ),
-            (
-                "trust_source".to_owned(),
-                Value::string(control.trust_source.as_ref().to_owned()),
-            ),
-        ])
     })
 }
 
