@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0](https://github.com/HardMax71/amiss/compare/v0.25.0...v0.26.0) - 2026-08-28
+
+### Changes
+
+- *(cli)* keep invocation parser private
+- address JUnit review findings
+- add render-only JUnit projection
+- Improve provider artifact feedback
+- Make retry cache generational
+- Enforce nonempty cached evidence
+- Cache retry-local external evidence
+- Author exact policy selectors
+- Project canonical help grammar
+- Remove stale window description
+- Render complete human feedback
+- Admit unattributed generated pages
+- Bind semantic evidence to planned context
+- Resolve generated site routes
+- Report site-build routing defects
+- Prove rendered mdBook navigation
+- Recognize Bitbucket Data Center source URLs
+- Recognize Bitbucket Cloud source URLs
+- Delegate unavailable history to provider evidence
+- Resolve locally available immutable forge references
+- Preserve immutable forge reference identity
+- Add reverse reference impact query
+- Resolve fragment-changing redirects
+- Consume terminal site redirects
+- Consume candidate site-build routes
+- Accept candidate-bound Intersphinx evidence
+- Define the semantic evidence envelope
+- add exact suffix policy selectors
+- Render report projections without rescanning
+- Keep Gitea format mismatches in repository scope
+- Share semantic destination URI validation
+- accept whitespace in rst directive paths
+- resolve bounded local transclusions
+- add exact relocation evidence
+- Keep semantic evidence within strict JSON
+
 ## [0.25.0](https://github.com/HardMax71/amiss/compare/v0.24.0...v0.25.0) - 2026-08-21
 
 ### Changes
