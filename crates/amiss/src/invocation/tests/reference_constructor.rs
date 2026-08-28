@@ -1,14 +1,7 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "conformance harness over asserted vector shapes"
-)]
-
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 
-use amiss::invocation::{Outcome, parse};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{
@@ -22,6 +15,8 @@ use amiss_wire::resolution::{
 };
 use serde_json::Value;
 use strum::IntoDiscriminant;
+
+use crate::invocation::{Outcome, parse};
 
 struct Bed {
     _pair: amiss_fixtures::CommitPair,
@@ -596,7 +591,7 @@ fn dialect_default_case(case: &Value, id: &str) {
     let Outcome::Accepted(command) = parse(&argv) else {
         panic!("{id}: expected acceptance");
     };
-    let amiss::invocation::Command::Scan(invocation) = *command else {
+    let crate::invocation::Command::Scan(invocation) = *command else {
         panic!("{id}: expected a scan command");
     };
     assert_eq!(

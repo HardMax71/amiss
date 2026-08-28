@@ -1,8 +1,9 @@
 use std::ffi::OsString;
 
-use amiss::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat};
+
+use crate::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -49,7 +50,6 @@ fn parse_tokens(tokens: &[String]) -> Outcome {
     parse(&argv)
 }
 
-#[expect(clippy::panic, reason = "test helper asserts the rejected shape")]
 fn rejected_codes(outcome: Outcome) -> Vec<Code> {
     match outcome {
         Outcome::Rejected { codes, .. } => codes.into_iter().collect(),
@@ -67,7 +67,7 @@ fn accepts_the_commit_pair_grammar() {
     let Outcome::Accepted(command) = parse_tokens(&valid_pair()) else {
         panic!("expected acceptance");
     };
-    let amiss::invocation::Command::Scan(invocation) = *command else {
+    let crate::invocation::Command::Scan(invocation) = *command else {
         panic!("expected a scan command");
     };
     assert_eq!(invocation.base.as_str(), BASE_A);
@@ -107,7 +107,7 @@ fn accepts_index_mode_with_identity_and_flags() {
     let Outcome::Accepted(command) = parse_tokens(&tokens) else {
         panic!("expected acceptance");
     };
-    let amiss::invocation::Command::Scan(invocation) = *command else {
+    let crate::invocation::Command::Scan(invocation) = *command else {
         panic!("expected a scan command");
     };
     assert_eq!(invocation.candidate, CandidateSelector::Index);
@@ -169,7 +169,7 @@ fn the_policy_include_form_uses_the_policy_grammar_and_an_optional_index_group()
     ])) else {
         panic!("expected policy include acceptance");
     };
-    let amiss::invocation::Command::PolicyInclude(invocation) = *command else {
+    let crate::invocation::Command::PolicyInclude(invocation) = *command else {
         panic!("expected a policy include command");
     };
     let [include] = invocation.policy.document_includes() else {
@@ -196,7 +196,7 @@ fn the_policy_include_form_uses_the_policy_grammar_and_an_optional_index_group()
     ])) else {
         panic!("expected policy include preview acceptance");
     };
-    let amiss::invocation::Command::PolicyInclude(invocation) = *command else {
+    let crate::invocation::Command::PolicyInclude(invocation) = *command else {
         panic!("expected a policy include command");
     };
     let Some(preview) = invocation.preview else {
@@ -283,7 +283,7 @@ fn classifies_profile_host_and_event_rows() {
     let Outcome::Accepted(other_forge_command) = parse_tokens(&gitlab) else {
         panic!("an identity on another forge is a claim, not a refusal");
     };
-    let amiss::invocation::Command::Scan(other_forge) = *other_forge_command else {
+    let crate::invocation::Command::Scan(other_forge) = *other_forge_command else {
         panic!("expected a scan command");
     };
     assert_eq!(
@@ -416,7 +416,7 @@ fn the_ramp_profile_parses_between_the_two() {
     let Outcome::Accepted(command) = parse_tokens(&ramp) else {
         panic!("expected acceptance");
     };
-    let amiss::invocation::Command::Scan(invocation) = *command else {
+    let crate::invocation::Command::Scan(invocation) = *command else {
         panic!("expected a scan command");
     };
     assert_eq!(invocation.profile, Profile::EnforceIntroduced);
@@ -441,7 +441,7 @@ fn output_selection_follows_the_format_law() {
         let Outcome::Accepted(command) = parse_tokens(&machine) else {
             panic!("expected acceptance of {value}");
         };
-        let amiss::invocation::Command::Scan(invocation) = *command else {
+        let crate::invocation::Command::Scan(invocation) = *command else {
             panic!("expected a scan command for {value}");
         };
         assert_eq!(invocation.format, expected);
@@ -485,7 +485,7 @@ fn the_render_form_requires_one_non_json_projection() {
         ])) else {
             panic!("expected render {value} acceptance");
         };
-        let amiss::invocation::Command::Render(render) = *command else {
+        let crate::invocation::Command::Render(render) = *command else {
             panic!("expected a render command");
         };
         assert_eq!(render.report, std::path::Path::new("report.json"));
@@ -503,7 +503,7 @@ fn the_render_form_requires_one_non_json_projection() {
     ])) else {
         panic!("expected full human render acceptance");
     };
-    let amiss::invocation::Command::Render(render) = *command else {
+    let crate::invocation::Command::Render(render) = *command else {
         panic!("expected a render command");
     };
     assert!(render.full);
@@ -582,7 +582,7 @@ fn the_refs_form_accepts_text_or_canonical_path_bytes() {
         ])) else {
             panic!("expected refs acceptance");
         };
-        let amiss::invocation::Command::Refs(refs) = *command else {
+        let crate::invocation::Command::Refs(refs) = *command else {
             panic!("expected a refs command");
         };
         assert_eq!(refs.report, std::path::Path::new("report.json"));
@@ -693,12 +693,11 @@ fn replace_value(base: &[String], from: &str, to: &str) -> Vec<String> {
         .collect()
 }
 
-#[expect(clippy::panic, reason = "test harness unwrap")]
-fn scan_of(outcome: Outcome) -> amiss::invocation::Invocation {
+fn scan_of(outcome: Outcome) -> crate::invocation::Invocation {
     let Outcome::Accepted(command) = outcome else {
         panic!("expected acceptance");
     };
-    let amiss::invocation::Command::Scan(invocation) = *command else {
+    let crate::invocation::Command::Scan(invocation) = *command else {
         panic!("expected a scan command");
     };
     *invocation

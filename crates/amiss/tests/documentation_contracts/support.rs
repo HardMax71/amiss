@@ -5,9 +5,24 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 pub(crate) fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+pub(crate) fn command_grammar() -> String {
+    let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
+        .arg("--help")
+        .output()
+        .expect("the command prints its grammar");
+    assert!(output.status.success(), "the help query succeeds");
+    assert!(output.stderr.is_empty(), "help writes no diagnostic");
+    String::from_utf8(output.stdout)
+        .expect("the grammar is UTF-8")
+        .strip_suffix('\n')
+        .expect("the grammar ends with one newline")
+        .to_owned()
 }
 
 pub(crate) fn report_schema() -> serde_json::Value {

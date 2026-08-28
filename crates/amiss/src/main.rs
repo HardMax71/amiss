@@ -4,6 +4,7 @@ mod codequality;
 mod external;
 mod human;
 mod input;
+mod invocation;
 mod junit;
 mod output;
 mod payload;
@@ -19,7 +20,6 @@ use std::env;
 use std::fs;
 use std::process::ExitCode;
 
-use amiss::invocation::{self, CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::model::Oid;
@@ -28,6 +28,7 @@ use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
     RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA, SnapshotRequest,
 };
+use invocation::{CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
 
 /// Self-restriction, in safe Rust only: no child processes (the contract's
 /// zero repository-process budget), no core dumps (the address space holds
