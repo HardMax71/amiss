@@ -33,7 +33,8 @@ pub use floor::{
     ResourceLimit,
 };
 pub use policy::{
-    DOCUMENT_SUFFIX_BYTES, DocumentInclude, FindingDisposition, ScannerPolicy,
+    BLOB_LINES_SOURCE, BlobLineSelection, CODE_TEXT_PROJECTION, DOCUMENT_SUFFIX_BYTES,
+    DocumentInclude, FindingDisposition, PREVIOUS_CODE_SINK, ProjectionAssertion, ScannerPolicy,
     document_include_value,
 };
 pub use resources::{ResourceName, ResourceNameIter};

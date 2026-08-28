@@ -296,6 +296,7 @@ pub fn acquire_entry(
         Ok(policy) => {
             let entries = [
                 policy.document_includes().len(),
+                policy.projection_assertions().len(),
                 policy.protected_inventory().len(),
                 policy.finding_dispositions().len(),
             ]

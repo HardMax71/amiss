@@ -1,8 +1,8 @@
 {
   "payload": {
     "engine": {
-      "engine_digest": "sha256:f7a89b2b73c0d52d643e529fcc2a928a752dfb0acf089c073e7cd93d6035007e",
-      "engine_version": "0.4.0"
+      "engine_digest": "sha256:293b250bcce9851f6617d06fb83047470e1f021f45544e4f772b9e870bb80e85",
+      "engine_version": "0.26.0"
     },
     "introduced": [
       {
@@ -16,23 +16,23 @@
     "removed": [],
     "report": {
       "base": {
-        "commit_oid": "7ed2c702c3f70bf9ab0837b5b0941b31a1cdd027",
+        "commit_oid": "2438d1ff22a97a98f08496d54c74ee0beef8effb",
         "kind": "git-commit",
         "object_format": "sha1",
-        "tree_oid": "7ce22021ddd28e84799fe3133e5c6e52cd893e0a"
+        "tree_oid": "4905d16292f730d3af6065e05f443abbfa86d334"
       },
       "candidate": {
-        "commit_oid": "e17ebaf2f75fbc0854cf389f4aa098854586cdc4",
+        "commit_oid": "445a6d430c67053fd7868ce778b8e6473ee04488",
         "kind": "git-commit",
         "object_format": "sha1",
-        "tree_oid": "bf414a1d28abffc17b8f2636aded1244f4173279"
+        "tree_oid": "8fa9a92fd38bc4b8f11d9b15e2ff1c662dc92888"
       },
       "mode": "commit-pair",
-      "payload_digest": "sha256:31b3c038a1b15e8a223f8629f8fbbbc4841a7ebb9aac2273f64d6120f5b9fa00"
+      "payload_digest": "sha256:68089f73230342aedafcb36c1b84783f7171ac4c5bf24f75d1d4e49607e2390b"
     },
     "retained_count": 0,
     "schema": "amiss/external-plan-payload"
   },
-  "payload_digest": "sha256:12e60a4671ae63c8b79689d7ae9c3db290c7d76f45548e3c6c8137e8b388fb52",
+  "payload_digest": "sha256:b0623befd24dc6c1d97168170e26b62250cefd1bb1ffee81d6701e9ba3faf8ca",
   "schema": "amiss/external-plan-envelope"
 }

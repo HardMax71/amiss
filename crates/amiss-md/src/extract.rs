@@ -160,9 +160,12 @@ fn extract_tree(
         },
         governed: governed
             .into_iter()
-            .map(|definition| GovernedDefinition {
-                span: translate(definition.span),
-                ..definition
+            .map(|mut definition| {
+                definition.span = translate(definition.span);
+                if let Some(code) = &mut definition.previous_code {
+                    code.span = translate(code.span);
+                }
+                definition
             })
             .collect(),
         headings: sweep

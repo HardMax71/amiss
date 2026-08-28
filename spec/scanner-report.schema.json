@@ -3513,7 +3513,8 @@
         "debt-expired",
         "waiver-invalid",
         "claim-broken",
-        "claim-target-missing"
+        "claim-target-missing",
+        "projection-drift"
       ]
     },
     "FindingFix": {
@@ -4130,6 +4131,118 @@
         }
       }
     },
+    "ProjectionBlobLineSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "first_line",
+        "last_line"
+      ],
+      "properties": {
+        "kind": {
+          "const": "blob-lines"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPathText"
+        },
+        "first_line": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        },
+        "last_line": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        }
+      }
+    },
+    "ProjectionFactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "projection",
+        "sink",
+        "source",
+        "observed",
+        "expected_digest",
+        "observed_digest",
+        "expected_bytes",
+        "observed_bytes",
+        "sources"
+      ],
+      "properties": {
+        "kind": {
+          "const": "projection"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "projection": {
+          "const": "code-text-v1"
+        },
+        "sink": {
+          "const": "previous-code"
+        },
+        "source": {
+          "$ref": "#/$defs/ProjectionBlobLineSource"
+        },
+        "observed": {
+          "enum": [
+            "sink-document-unavailable",
+            "sink-absent",
+            "sink-ambiguous",
+            "sink-not-adjacent",
+            "source-absent",
+            "source-not-a-blob",
+            "source-lfs-pointer",
+            "source-lines-out-of-range",
+            "content-differs"
+          ]
+        },
+        "expected_digest": {
+          "$ref": "#/$defs/NullableDigest"
+        },
+        "observed_digest": {
+          "$ref": "#/$defs/NullableDigest"
+        },
+        "expected_bytes": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SafeUInt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observed_bytes": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SafeUInt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "maxItems": 16384,
+          "uniqueItems": true,
+          "description": "Sorted by digest UTF-8 bytes; digest keys are unique and multiplicity preserves duplicate carriers.",
+          "x-amiss-order": [
+            "digest"
+          ],
+          "items": {
+            "$ref": "#/$defs/ControlStateSource"
+          }
+        }
+      }
+    },
     "ControlFactEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -4232,6 +4345,9 @@
             },
             {
               "$ref": "#/$defs/ClaimFactEvidence"
+            },
+            {
+              "$ref": "#/$defs/ProjectionFactEvidence"
             }
           ]
         }

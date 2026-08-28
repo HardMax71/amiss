@@ -212,7 +212,7 @@ declare_taxonomy! {
             metadata: &ABSOLUTE_OBSERVATION,
         },
         PolicyWeakened => {
-            meaning: "the candidate loosens its own repository policy, dropping an include, a protected path, or a raised disposition; loosening the rules is reported under the rules being loosened",
+            meaning: "the candidate loosens its own repository policy, dropping an include, a protected path, a projection assertion, or a raised disposition; loosening the rules is reported under the rules being loosened",
             metadata: &CONTROL_PLANE,
         },
         CoverageReduced => {
@@ -241,6 +241,10 @@ declare_taxonomy! {
         },
         ClaimTargetMissing => {
             meaning: "a value claim names a target line no regular file in the candidate can answer; point the claim at a tracked file and a line inside it",
+            metadata: &RATCHETED_CONTROL,
+        },
+        ProjectionDrift => {
+            meaning: "a policy-owned projection cannot prove that its visible code block equals the selected repository lines; restore its unique sink and source or make their projected bytes agree",
             metadata: &RATCHETED_CONTROL,
         },
     }

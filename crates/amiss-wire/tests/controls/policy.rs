@@ -7,16 +7,99 @@ use crate::support::POLICY;
 fn parses_the_policy_fixture() {
     let policy = ScannerPolicy::parse(POLICY).unwrap();
     assert_eq!(policy.document_includes().len(), 2);
+    assert_eq!(policy.projection_assertions().len(), 1);
     assert_eq!(policy.protected_inventory().len(), 2);
     assert_eq!(policy.finding_dispositions().len(), 1);
     assert_eq!(
         policy.document_includes()[0].suffix.as_deref(),
         Some(".txt")
     );
+    let assertion = &policy.projection_assertions()[0];
+    assert_eq!(assertion.document.as_str(), "docs/architecture.md");
+    assert_eq!(assertion.name, "request-shape");
+    assert_eq!(
+        assertion.source.path.as_str(),
+        "crates/amiss/src/request.rs"
+    );
+    assert_eq!(
+        (assertion.source.first_line, assertion.source.last_line),
+        (10, 14)
+    );
     assert_eq!(
         policy.digest(),
         ScannerPolicy::parse(POLICY).unwrap().digest()
     );
+}
+
+fn policy_with_assertions(assertions: &str) -> String {
+    format!(
+        r#"{{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[{assertions}],"protected_inventory":[],"finding_dispositions":[]}}"#
+    )
+}
+
+#[test]
+fn projection_assertions_have_one_closed_sorted_grammar() {
+    let row = |document: &str, name: &str, first: u64, last: u64| {
+        format!(
+            r#"{{"document":"{document}","name":"{name}","projection":"code-text-v1","sink":"previous-code","source":{{"kind":"blob-lines","path":"src/lib.rs","first_line":{first},"last_line":{last}}}}}"#
+        )
+    };
+    let valid = policy_with_assertions(&row("docs/a.md", "example", 1, 9_007_199_254_740_991));
+    assert!(ScannerPolicy::parse(valid.as_bytes()).is_ok());
+
+    let unsorted = policy_with_assertions(&format!(
+        "{},{}",
+        row("docs/b.md", "example", 1, 1),
+        row("docs/a.md", "example", 1, 1)
+    ));
+    assert_eq!(
+        ScannerPolicy::parse(unsorted.as_bytes()).unwrap_err().kind,
+        ErrorKind::UnsortedSet
+    );
+
+    let duplicate = policy_with_assertions(&format!(
+        "{},{}",
+        row("docs/a.md", "example", 1, 1),
+        row("docs/a.md", "example", 2, 2)
+    ));
+    assert_eq!(
+        ScannerPolicy::parse(duplicate.as_bytes()).unwrap_err().kind,
+        ErrorKind::DuplicateMember,
+        "a selector change does not mint another assertion identity"
+    );
+
+    let reversed = policy_with_assertions(&row("docs/a.md", "example", 2, 1));
+    assert_eq!(
+        ScannerPolicy::parse(reversed.as_bytes()).unwrap_err().kind,
+        ErrorKind::Inconsistent
+    );
+}
+
+#[test]
+fn projection_assertions_refuse_unknown_or_unsafe_words() {
+    let valid = r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"blob-lines","path":"src/lib.rs","first_line":1,"last_line":1}}"#;
+    for invalid in [
+        valid.replace("\"name\":\"example\"", "\"name\":\"-example\""),
+        valid.replace("code-text-v1", "code-text-v2"),
+        valid.replace("previous-code", "next-code"),
+        valid.replace("blob-lines", "blob-region"),
+        valid.replace("\"first_line\":1", "\"first_line\":0"),
+    ] {
+        let policy = policy_with_assertions(&invalid);
+        assert_eq!(
+            ScannerPolicy::parse(policy.as_bytes()).unwrap_err().kind,
+            ErrorKind::InvalidValue,
+            "invalid row: {invalid}"
+        );
+    }
+    let unsafe_integer =
+        policy_with_assertions(&valid.replace("\"last_line\":1", "\"last_line\":9007199254740992"));
+    assert!(matches!(
+        ScannerPolicy::parse(unsafe_integer.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::Json(_)
+    ));
 }
 
 #[test]

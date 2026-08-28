@@ -264,6 +264,33 @@ fn frontmatter_translates_governed_spans_too() {
     assert_eq!(spans, vec!["[amiss:a]: ./t.md \"v\""]);
 }
 
+#[test]
+fn an_adjacent_governed_definition_carries_the_previous_semantic_code_block() {
+    let source = "---\nt: x\n---\n\n```rust\r\nlet answer = 42;\r\n```\r\n\r\n[amiss:answer]: <amiss:projection>\r\n";
+    for adapter in [Adapter::Markdown, Adapter::Mdx] {
+        let got = extraction(adapter, source);
+        let definition = got.governed.first().expect("the projection carrier");
+        let code = definition
+            .previous_code
+            .as_ref()
+            .expect("ASCII whitespace preserves adjacency");
+        assert_eq!(code.value, "let answer = 42;");
+        assert_eq!(
+            source.get(code.span.0..code.span.1),
+            Some("```rust\r\nlet answer = 42;\r\n```")
+        );
+        assert!(code.span.1 < definition.span.0);
+    }
+}
+
+#[test]
+fn visible_content_between_code_and_carrier_breaks_the_sink_address() {
+    let source = "```\nvalue\n```\n\nprose\n\n[amiss:answer]: <amiss:projection>\n";
+    let got = extraction(Adapter::Markdown, source);
+    assert_eq!(got.governed.len(), 1);
+    assert_eq!(got.governed[0].previous_code, None);
+}
+
 /// A JSX element's outer span is opaque, so nothing inside it is extracted;
 /// constructs outside it still are. ESM and expressions contribute their own
 /// intervals.

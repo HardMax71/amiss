@@ -1,6 +1,7 @@
 {
   "schema": "amiss/scanner-policy",
   "document_includes": [],
+  "projection_assertions": [],
   "protected_inventory": [],
   "finding_dispositions": []
 }

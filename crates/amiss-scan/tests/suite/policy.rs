@@ -121,8 +121,13 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         .iter()
         .map(|raw| RepoPathText::new((*raw).to_owned()).expect("valid inventory path"))
         .collect();
-    let policy = ScannerPolicy::new(document_includes, protected_inventory, Vec::new())
-        .expect("valid policy fixture");
+    let policy = ScannerPolicy::new(
+        document_includes,
+        Vec::new(),
+        protected_inventory,
+        Vec::new(),
+    )
+    .expect("valid policy fixture");
     PolicySide {
         digest: Some(policy.digest()),
         policy: Some(policy),
@@ -156,6 +161,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
             }],
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .expect("valid suffix selector");
         PolicySide {
@@ -179,6 +185,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn disposition_side(rows: &[(PromotableFindingKind, Disposition)]) -> PolicySide {
     let policy = ScannerPolicy::new(
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         rows.iter()
@@ -472,6 +479,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
             }],
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .expect("valid binding fixture");
         PolicySide {
@@ -516,6 +524,7 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
                 suffix: suffix.map(str::to_owned),
                 adapter,
             }],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         )

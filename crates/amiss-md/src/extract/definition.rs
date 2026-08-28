@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use amiss_wire::extraction::{Fault, GovernedDefinition, Work};
+use amiss_wire::extraction::{Fault, GovernedDefinition, SemanticCodeBlock, Work};
 use markdown::mdast::Node;
 
 use super::source::definition_destination;
@@ -30,6 +30,7 @@ pub(super) struct CollectedDefinitions {
 pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefinitions, Fault> {
     let mut out = Vec::new();
     let mut governed = Vec::new();
+    let mut code_blocks = Vec::new();
     let mut used = BTreeSet::new();
     let mut work = Work {
         nodes: 0,
@@ -44,6 +45,9 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
         }
         if let Node::ImageReference(reference) = node {
             used.insert(reference.identifier.clone());
+        }
+        if let Node::Code(code) = node {
+            code_blocks.push((span_of(node)?, code.value.as_str()));
         }
         if let Node::Definition(definition) = node {
             let span = span_of(node)?;
@@ -60,6 +64,7 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
                     title: definition.title.clone(),
                     label: label.to_owned(),
                     angled,
+                    previous_code: None,
                 });
             }
             out.push((
@@ -79,6 +84,26 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
     }
     out.sort_by_key(|(span, _, _)| *span);
     governed.sort_by_key(|definition| definition.span);
+    code_blocks.sort_by_key(|(span, _)| *span);
+    for definition in &mut governed {
+        let before = code_blocks.partition_point(|(span, _)| span.1 <= definition.span.0);
+        let Some((span, value)) = before
+            .checked_sub(1)
+            .and_then(|index| code_blocks.get(index))
+        else {
+            continue;
+        };
+        let adjacent = suffix
+            .as_bytes()
+            .get(span.1..definition.span.0)
+            .is_some_and(|gap| gap.iter().all(u8::is_ascii_whitespace));
+        if adjacent {
+            definition.previous_code = Some(SemanticCodeBlock {
+                span: *span,
+                value: (*value).to_owned(),
+            });
+        }
+    }
     let mut resolved = HashMap::with_capacity(out.len());
     let mut orphans = BTreeMap::new();
     for (span, identifier, definition) in out {

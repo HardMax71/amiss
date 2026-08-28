@@ -10,9 +10,9 @@ only the effective one decides the exit. `record` is noted, `warn` is shown, `fa
 blocks. The location says where, down to byte offsets. The full row carries more,
 twenty-one members; [The report](report.md) holds the shape.
 
-The profile picks the built-in disposition for each kind. Five kinds flip between the
-columns: the three structural reference failures and both claim kinds warn under
-`observe` and fail under `enforce`. Seven control kinds fail under both profiles, one
+The profile picks the built-in disposition for each kind. Six kinds flip between the
+columns: the three structural reference failures, both value-claim kinds, and projection drift
+warn under `observe` and fail under `enforce`. Seven control kinds fail under both profiles, one
 kind warns under both, and the remaining thirteen are records. The exact table below copies
 [`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs),
 and CI checks the two stay equal.
@@ -57,6 +57,7 @@ control-binding mismatch.
 | `waiver-invalid` | `fail` | `fail` |
 | `claim-broken` | `warn` | `fail` |
 | `claim-target-missing` | `warn` | `fail` |
+| `projection-drift` | `warn` | `fail` |
 <!-- amiss-doc-contract:profiles:end -->
 
 ## What each kind means
@@ -86,7 +87,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `observation-correlation-ambiguous`: an occurrence has more than one plausible counterpart across the comparison; Amiss never chooses by input order, so the match is recorded as undecided
 - `unlinked-document`: a scanned structured document inside a complete site build's source root is unreachable from every rendered navigation entrypoint; link the page from rendered navigation or keep non-page material outside that root
 - `site-build-defect`: a complete site build reports a route with conflicting owners or a redirect whose declared terminal route or anchor is not uniquely published; repair the route table or its available routing source
-- `policy-weakened`: the candidate loosens its own repository policy, dropping an include, a protected path, or a raised disposition; loosening the rules is reported under the rules being loosened
+- `policy-weakened`: the candidate loosens its own repository policy, dropping an include, a protected path, a projection assertion, or a raised disposition; loosening the rules is reported under the rules being loosened
 - `coverage-reduced`: a protected path is gone or not a scannable document while its protection stands; restore it or amend the protection in a reviewed change
 - `control-plane-changed`: a floor-protected control path is not the identical present blob on both sides, in mode and content; the floor exists so control edits are always visible
 - `debt-worsened`: the finding an accepted debt item names no longer matches the recorded fact; debt tolerates exactly the recorded state, so any drift fails
@@ -94,6 +95,7 @@ finding row, so this page is a reference, not a second source of truth.
 - `waiver-invalid`: a waiver item cannot apply, expired against trusted time or issued outside the floor's authority; an invalid waiver suppresses nothing
 - `claim-broken`: a value claim's target line no longer says what the document claims it says; update the claim or the target so the two agree
 - `claim-target-missing`: a value claim names a target line no regular file in the candidate can answer; point the claim at a tracked file and a line inside it
+- `projection-drift`: a policy-owned projection cannot prove that its visible code block equals the selected repository lines; restore its unique sink and source or make their projected bytes agree
 <!-- amiss-doc-contract:finding-meanings:end -->
 
 ## Before and after
@@ -131,6 +133,7 @@ API described in [Controls and policy](controls.md).
 | `waiver-invalid` | Waiver expires at `2026-08-01T00:00:00Z`; trusted time is `2026-07-12T10:00:00Z`. | Keep the finding and trusted time unchanged; set `expires_at` to `2026-07-10T00:00:00Z`. |
 | `claim-broken` | `Cargo.toml` line 3 is `version = "0.16.0"` and a claim expects exactly that. | Bump line 3 to `version = "0.17.0"` and leave the claim unchanged. |
 | `claim-target-missing` | A claim names `Cargo.toml` line 3, which exists. | Delete `Cargo.toml` or point the claim at line 9999. |
+| `projection-drift` | A policy assertion selects `examples/request.json` lines 1–12, and the adjacent code block has the same projected bytes. | Change the selected lines without updating the visible code block. |
 <!-- amiss-doc-contract:finding-examples:end -->
 
 The control families exist so that loosening the rules and leaning on an invalid waiver

@@ -102,7 +102,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
             adapter: None,
         })
         .collect();
-    let policy = ScannerPolicy::new(document_includes, Vec::new(), Vec::new())
+    let policy = ScannerPolicy::new(document_includes, Vec::new(), Vec::new(), Vec::new())
         .expect("benchmark policy is valid");
     PolicySide {
         digest: Some(policy.digest()),

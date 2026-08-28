@@ -4,6 +4,20 @@
     { "path": "docs/adr", "kind": "tree", "suffix": ".txt", "adapter": "rst" },
     { "path": "docs/spec.rst", "kind": "document" }
   ],
+  "projection_assertions": [
+    {
+      "document": "docs/architecture.md",
+      "name": "request-shape",
+      "projection": "code-text-v1",
+      "sink": "previous-code",
+      "source": {
+        "kind": "blob-lines",
+        "path": "crates/amiss/src/request.rs",
+        "first_line": 10,
+        "last_line": 14
+      }
+    }
+  ],
   "protected_inventory": [
     "README.md",
     "docs/architecture.md"
