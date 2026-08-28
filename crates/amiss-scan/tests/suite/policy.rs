@@ -5,8 +5,9 @@ use amiss_scan::policy::{
 };
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{
-    Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN, FindingDisposition, IncludeKind,
-    PromotableFindingKind, ResourceName, ScannerPolicy, WaiverBundle,
+    BlobLineSelection, Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN,
+    FindingDisposition, IncludeKind, ProjectionAssertion, PromotableFindingKind, ResourceName,
+    ScannerPolicy, WaiverBundle,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
@@ -132,6 +133,51 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
         digest: Some(policy.digest()),
         policy: Some(policy),
     }
+}
+
+#[test]
+fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
+    let side = |first_line| {
+        let policy = ScannerPolicy::new(
+            Vec::new(),
+            vec![ProjectionAssertion {
+                document: RepoPathText::new("docs/example.md".to_owned())
+                    .expect("valid document path"),
+                name: "example".to_owned(),
+                source: BlobLineSelection {
+                    path: RepoPathText::new("src/lib.rs".to_owned()).expect("valid source path"),
+                    first_line,
+                    last_line: first_line,
+                },
+            }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("valid projection policy");
+        PolicySide {
+            digest: Some(policy.digest()),
+            policy: Some(policy),
+        }
+    };
+    let base = side(1);
+    let changed = effects(&base, &side(2), &|_| InventoryState::Scanned);
+    assert!(
+        changed.controls.iter().all(|row| !row
+            .rule_id
+            .starts_with("policy/projection-assertion-removed/")),
+        "selector state is not identity"
+    );
+    assert_ne!(changed.base_digest, changed.candidate_digest);
+
+    let removed = effects(&base, &PolicySide::default(), &|_| InventoryState::Scanned);
+    let [control] = removed.controls.as_slice() else {
+        panic!("one removed projection control: {:?}", removed.controls);
+    };
+    assert_eq!(
+        control.rule_id,
+        "policy/projection-assertion-removed/example"
+    );
+    assert_eq!(control.control_path, Some(path("docs/example.md")));
 }
 
 #[test]
