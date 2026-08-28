@@ -30,6 +30,17 @@ struct Evaluated {
     side: Side,
 }
 
+#[derive(Default)]
+pub(crate) struct CandidateOutcomes {
+    claims: Vec<crate::claim::ClaimOutcome>,
+    projections: Vec<crate::projection::Outcome>,
+}
+
+pub(crate) struct CandidateEvaluation<'a> {
+    policy: Option<&'a amiss_wire::controls::ScannerPolicy>,
+    outcomes: &'a mut CandidateOutcomes,
+}
+
 /// One resolved snapshot root: its tree OID plus the full identity block.
 type ResolvedTree = (Oid, SnapshotIdentity);
 
@@ -66,7 +77,7 @@ pub(crate) fn side_observations(
     scan_resources: &mut ScanResources,
     context: ObservationContext<'_>,
     discovery: &SnapshotDiscovery,
-    mut claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,
+    mut candidate: Option<CandidateEvaluation<'_>>,
 ) -> Result<(Side, Vec<ErrorDetail>), ErrorDetail> {
     let mut failures: Vec<ErrorDetail> = discovery
         .path_defects
@@ -145,11 +156,18 @@ pub(crate) fn side_observations(
                         path_span: occurrence.occurrence.path_span,
                     });
                 }
-                if let Some(outcomes) = claims.as_deref_mut() {
-                    document_claims(&mut resolver, (&record.path, scanned), outcomes)?;
+                if let Some(candidate) = candidate.as_mut() {
+                    document_claims(
+                        &mut resolver,
+                        (&record.path, scanned),
+                        &mut candidate.outcomes.claims,
+                    )?;
                 }
             }
         }
+    }
+    if let Some(candidate) = candidate {
+        evaluate_projections(&mut resolver, discovery, candidate)?;
     }
     Ok((
         Side {
@@ -158,6 +176,25 @@ pub(crate) fn side_observations(
         },
         failures,
     ))
+}
+
+fn evaluate_projections(
+    resolver: &mut Resolver<'_>,
+    discovery: &SnapshotDiscovery,
+    candidate: CandidateEvaluation<'_>,
+) -> Result<(), ErrorDetail> {
+    let CandidateEvaluation { policy, outcomes } = candidate;
+    let assertions = policy.map_or(
+        &[][..],
+        amiss_wire::controls::ScannerPolicy::projection_assertions,
+    );
+    for assertion in assertions {
+        let document = RepoPath::from(&assertion.document);
+        let outcome = crate::projection::evaluate(resolver, discovery, assertion)
+            .map_err(|defect| detail(&defect, Some(&document)))?;
+        outcomes.projections.push(outcome);
+    }
+    Ok(())
 }
 
 /// Verifies a supplied floor's binding against the run identity. A floor
@@ -300,7 +337,7 @@ fn conclude(
     base: (&SnapshotDiscovery, Side),
     candidate: (&SnapshotDiscovery, Side),
     site: &crate::semantic::SiteEvaluation,
-    claims: &[crate::claim::ClaimOutcome],
+    outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
 ) -> Built {
     if !failures.is_empty() {
@@ -337,7 +374,8 @@ fn conclude(
             candidate.0,
             comparisons,
             site,
-            claims,
+            &outcomes.claims,
+            &outcomes.projections,
         ),
         Err(defect) => construct_incomplete(setup, &[detail(&defect, None)]),
     }
@@ -530,7 +568,7 @@ fn evaluate_tree(
     semantic: crate::semantic::View<'_>,
     includes: &crate::policy::Includes,
     tree: (Oid, SnapshotIdentity),
-    claims: Option<&mut Vec<crate::claim::ClaimOutcome>>,
+    candidate: Option<CandidateEvaluation<'_>>,
 ) -> Result<(Evaluated, Vec<ErrorDetail>), ErrorDetail> {
     let (tree_oid, identity) = tree;
     let discovery = discover(repo, git_resources, scan_resources, includes, &tree_oid)
@@ -545,7 +583,7 @@ fn evaluate_tree(
             semantic,
         },
         &discovery,
-        claims,
+        candidate,
     )?;
     Ok((
         Evaluated {

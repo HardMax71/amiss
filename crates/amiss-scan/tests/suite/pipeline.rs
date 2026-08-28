@@ -68,6 +68,25 @@ fn oid(hex: &str) -> Oid {
     Oid::new(ObjectFormat::Sha1, hex.to_owned()).unwrap()
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn projection_policy(
+    root: &Path,
+    document: &str,
+    name: &str,
+    source: &str,
+    first_line: u64,
+    last_line: u64,
+) {
+    fs::create_dir_all(root.join(".amiss")).unwrap();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        format!(
+            r#"{{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[{{"document":"{document}","name":"{name}","projection":"code-text-v1","sink":"previous-code","source":{{"kind":"blob-lines","path":"{source}","first_line":{first_line},"last_line":{last_line}}}}}],"protected_inventory":[],"finding_dispositions":[]}}"#
+        ),
+    )
+    .unwrap();
+}
+
 #[test]
 fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
     let dir = TempDir::new().unwrap();
@@ -521,6 +540,274 @@ fn an_attested_value_claim_passes_and_is_counted() {
                 && row["kind"] != "unsupported-capability"),
         "an attested claim leaves no claim finding behind: {}",
         payload["findings"]
+    );
+}
+
+#[test]
+fn a_code_projection_attests_in_committed_and_staged_snapshots() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(root.join("source.txt"), b"one\r\ntwo\rthree\n").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        b"```text\r\none\r\ntwo\r\nthree\r\n```\r\n[amiss:sample]: <amiss:projection>\r\n",
+    )
+    .unwrap();
+    projection_policy(root, "docs.md", "sample", "source.txt", 1, 3);
+    git(root, &["add", "."]);
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let staged = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let staged_payload = payload(&staged);
+    assert_eq!(staged.exit_code, 0, "{staged_payload}");
+    assert_eq!(staged_payload["result"]["status"], "pass");
+    assert_eq!(staged_payload["errors"].as_array().map(Vec::len), Some(0));
+    assert!(
+        staged_payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "projection-drift"
+                && row["kind"] != "unsupported-capability"),
+        "{staged_payload}"
+    );
+
+    git(root, &["commit", "-qm", "projected"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let committed = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let committed_payload = payload(&committed);
+    assert_eq!(committed.exit_code, 0, "{committed_payload}");
+    assert_eq!(committed_payload["result"]["status"], "pass");
+    assert_eq!(
+        committed_payload["errors"].as_array().map(Vec::len),
+        Some(0)
+    );
+}
+
+#[test]
+fn trailing_blank_lines_remain_projection_content() {
+    let run = |source: &[u8], document: &[u8], last_line: u64| {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let base = base_commit(root);
+        fs::write(root.join("source.txt"), source).unwrap();
+        fs::write(root.join("docs.md"), document).unwrap();
+        projection_policy(root, "docs.md", "sample", "source.txt", 1, last_line);
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "projected"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        payload(&commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        ))
+    };
+    let clean = b"```text\nvalue\n```\n[amiss:sample]: <amiss:projection>\n";
+    let blank = b"```text\nvalue\n\n```\n[amiss:sample]: <amiss:projection>\n";
+    for (source, document, last_line, drifted) in [
+        (b"value\n\n".as_slice(), blank.as_slice(), 2, false),
+        (b"value\n".as_slice(), blank.as_slice(), 1, true),
+        (b"value\n\n".as_slice(), clean.as_slice(), 2, true),
+    ] {
+        let payload = run(source, document, last_line);
+        let projection_drifted = payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["kind"] == "projection-drift");
+        assert_eq!(projection_drifted, drifted, "{payload}");
+    }
+}
+
+#[test]
+fn a_changed_projection_reports_the_exact_relation_and_visible_sink() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(root.join("source.txt"), "current\n").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```text\nstale\n```\n[amiss:sample]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(root, "docs.md", "sample", "source.txt", 1, 1);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "drifted"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut setup = shell();
+    setup.profile = Profile::Enforce;
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &setup,
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    crate::support::assert_report(&envelope, "projection-drift report");
+    let payload = payload(&built);
+    assert_eq!(built.exit_code, 1, "{payload}");
+    let row = payload["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .unwrap_or_else(|| panic!("projection drift is reported: {payload}"));
+    assert_eq!(
+        row["key_input"]["scope"]["rule_id"],
+        "claim/projection/sample"
+    );
+    assert_eq!(row["location"]["path"], "docs.md");
+    assert_eq!(row["location"]["span"]["start_line"], 1);
+    let evidence = &row["candidate_fact"]["evidence"];
+    assert_eq!(evidence["kind"], "projection");
+    assert_eq!(evidence["projection"], "code-text-v1");
+    assert_eq!(evidence["sink"], "previous-code");
+    assert_eq!(evidence["source"]["kind"], "blob-lines");
+    assert_eq!(evidence["source"]["path"], "source.txt");
+    assert_eq!(evidence["observed"], "content-differs");
+    assert_eq!(evidence["expected_bytes"], 7);
+    assert_eq!(evidence["observed_bytes"], 5);
+    assert!(evidence["expected_digest"].is_string());
+    assert!(evidence["observed_digest"].is_string());
+    assert!(row["fix"].is_null());
+}
+
+#[test]
+fn declared_projection_sink_defects_are_findings_not_silent_boundaries() {
+    let run = |document: &str, source: Option<&str>, first_line: u64| {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let base = base_commit(root);
+        if let Some(source) = source {
+            fs::write(root.join("source.txt"), source).unwrap();
+        }
+        fs::write(root.join("docs.md"), document).unwrap();
+        projection_policy(
+            root,
+            "docs.md",
+            "sample",
+            "source.txt",
+            first_line,
+            first_line,
+        );
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "projected"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        payload(&commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        ))
+    };
+    let cases = [
+        ("# no marker\n", Some("value\n"), 1, "sink-absent"),
+        (
+            "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n[amiss:sample]: <amiss:projection>\n",
+            Some("value\n"),
+            1,
+            "sink-ambiguous",
+        ),
+        (
+            "```\nvalue\n```\nprose\n\n[amiss:sample]: <amiss:projection>\n",
+            Some("value\n"),
+            1,
+            "sink-not-adjacent",
+        ),
+        (
+            "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
+            None,
+            1,
+            "source-absent",
+        ),
+        (
+            "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
+            Some(
+                "version https://git-lfs.github.com/spec/v1\noid sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nsize 42\n",
+            ),
+            1,
+            "source-lfs-pointer",
+        ),
+        (
+            "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
+            Some("value\n"),
+            2,
+            "source-lines-out-of-range",
+        ),
+    ];
+    for (document, source, first_line, reason) in cases {
+        let payload = run(document, source, first_line);
+        assert_eq!(payload["result"]["complete"], true, "{reason}: {payload}");
+        assert_eq!(payload["errors"].as_array().map(Vec::len), Some(0));
+        let rows: Vec<_> = payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["kind"] == "projection-drift")
+            .collect();
+        assert_eq!(rows.len(), 1, "{reason}: {payload}");
+        assert_eq!(rows[0]["candidate_fact"]["evidence"]["observed"], reason);
+        assert!(
+            payload["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|row| row["kind"] != "unsupported-capability"),
+            "the declared assertion answers all matching carriers: {payload}"
+        );
+    }
+}
+
+#[test]
+fn an_unclaimed_projection_marker_stays_inside_the_governed_boundary() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::write(
+        root.join("docs.md"),
+        "```\nvalue\n```\n[amiss:sample]: <amiss:projection>\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "unclaimed"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let built = commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    );
+    let payload = payload(&built);
+    assert_eq!(built.exit_code, 2, "{payload}");
+    assert!(
+        payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["kind"] == "unsupported-capability"),
+        "{payload}"
     );
 }
 

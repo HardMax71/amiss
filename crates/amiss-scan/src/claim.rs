@@ -10,6 +10,7 @@ use crate::scan::SpanDisplay;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GovernedForm {
     Value(ValueClaim),
+    Projection { name: String },
     Unknown,
 }
 
@@ -28,9 +29,19 @@ pub struct ValueClaim {
 /// kind is refused rather than guessed at.
 #[must_use]
 pub fn classify(definition: &GovernedDefinition) -> GovernedForm {
-    match value_claim(definition) {
-        Some(claim) => GovernedForm::Value(claim),
-        None => GovernedForm::Unknown,
+    if let Some(claim) = value_claim(definition) {
+        GovernedForm::Value(claim)
+    } else if definition.angled
+        && definition.title.is_none()
+        && definition.url == "amiss:projection"
+        && let Some(name) = definition.label.strip_prefix(RESERVED_LABEL_PREFIX)
+        && amiss_wire::extraction::governed_name_valid(name)
+    {
+        GovernedForm::Projection {
+            name: name.to_owned(),
+        }
+    } else {
+        GovernedForm::Unknown
     }
 }
 
@@ -39,7 +50,7 @@ fn value_claim(definition: &GovernedDefinition) -> Option<ValueClaim> {
         return None;
     }
     let name = definition.label.strip_prefix(RESERVED_LABEL_PREFIX)?;
-    if !claim_name(name) {
+    if !amiss_wire::extraction::governed_name_valid(name) {
         return None;
     }
     let rest = definition.url.strip_prefix("amiss:value?path=")?;
@@ -60,16 +71,6 @@ fn value_claim(definition: &GovernedDefinition) -> Option<ValueClaim> {
         line,
         expected,
     })
-}
-
-/// A claim name is rule-id safe: it heads a rule id, so it holds no slash.
-fn claim_name(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    bytes.first().is_some_and(u8::is_ascii_alphanumeric)
-        && bytes.len() <= 120
-        && bytes
-            .iter()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 /// The one answer a value claim can get from the tree it names.
@@ -185,6 +186,6 @@ pub fn rewrite(
         {
             Some(replacement)
         }
-        GovernedForm::Value(_) | GovernedForm::Unknown => None,
+        GovernedForm::Value(_) | GovernedForm::Projection { .. } | GovernedForm::Unknown => None,
     }
 }

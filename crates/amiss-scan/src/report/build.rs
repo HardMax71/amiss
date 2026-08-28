@@ -1,5 +1,5 @@
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::{hj, hj_with_length};
+use amiss_wire::digest::{Digest, hj, hj_with_length};
 use amiss_wire::json::{Value, canonical_length};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::{
@@ -35,6 +35,7 @@ pub fn construct(
         comparisons,
         &crate::semantic::SiteEvaluation::default(),
         claims,
+        &[],
     )
 }
 
@@ -45,10 +46,18 @@ pub(crate) fn construct_with_site(
     comparisons: Vec<Comparison>,
     site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
+    projections: &[crate::projection::Outcome],
 ) -> Built {
     let paired = paired_documents(base, candidate);
-    let (governed, findings, exception_errors) =
-        evaluate_paired(setup, &paired, candidate, &comparisons, site, claims);
+    let (governed, findings, exception_errors) = evaluate_paired(
+        setup,
+        &paired,
+        candidate,
+        &comparisons,
+        site,
+        claims,
+        projections,
+    );
 
     if let Some(crossing) = findings_ceiling_crossing(setup, &findings) {
         let mut details = logical_error_set(&governed, &exception_errors);
@@ -70,16 +79,7 @@ pub(crate) fn construct_with_site(
     let finding_count = u64::try_from(findings.len()).unwrap_or(u64::MAX);
     let counts = summary_counts(&paired, &comparisons, &findings, finding_count);
     let (governed_claims, unattested_claims) = claim_counters(claims);
-    let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());
-    let mut comparison_rows = Vec::with_capacity(comparisons.len());
-    for comparison in comparisons {
-        let primary = comparison
-            .candidate
-            .as_ref()
-            .or(comparison.base.as_ref())
-            .map(|observation| observation.id);
-        comparison_rows.push((primary, comparison_value(&comparison)));
-    }
+    let (candidate_start, comparison_rows) = report_comparisons(comparisons);
     let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
     let comparison_runs = [base_only_rows, candidate_rows];
     let finding_rows: Vec<Value> = findings
@@ -162,6 +162,22 @@ fn result_value(
     ])
 }
 
+fn report_comparisons(comparisons: Vec<Comparison>) -> (usize, Vec<(Option<Digest>, Value)>) {
+    let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());
+    let rows = comparisons
+        .into_iter()
+        .map(|comparison| {
+            let primary = comparison
+                .candidate
+                .as_ref()
+                .or(comparison.base.as_ref())
+                .map(|observation| observation.id);
+            (primary, comparison_value(&comparison))
+        })
+        .collect();
+    (candidate_start, rows)
+}
+
 /// The deduplicated logical error set in canonical key order.
 fn logical_error_set(
     governed: &[crate::evaluate::GovernedSeed],
@@ -236,22 +252,26 @@ fn evaluate_paired(
     comparisons: &[Comparison],
     site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
+    projections: &[crate::projection::Outcome],
 ) -> (
     Vec<crate::evaluate::GovernedSeed>,
     Vec<Finding>,
     Vec<ErrorDetail>,
 ) {
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
-    let governed = governed_seeds(candidate, claims);
+    let governed = governed_seeds(candidate, claims, projections);
     let groups = crate::evaluate::claim_groups(claims);
     let (findings, exception_errors) = crate::evaluate::evaluate_with_site(
         &inputs,
         comparisons,
         setup.profile,
         &setup.policy,
-        site,
-        &governed,
-        &groups,
+        crate::evaluate::GovernedInputs {
+            site,
+            governed: &governed,
+            claims: &groups,
+            projections,
+        },
     );
     (governed, findings, exception_errors)
 }
@@ -328,11 +348,24 @@ fn run_result(findings: &[Finding], governed_errors: &[Value]) -> (bool, &'stati
 fn governed_seeds(
     candidate: &SnapshotDiscovery,
     claims: &[crate::claim::ClaimOutcome],
+    projections: &[crate::projection::Outcome],
 ) -> Vec<crate::evaluate::GovernedSeed> {
-    let answered: std::collections::BTreeSet<(&RepoPath, (usize, usize))> = claims
-        .iter()
-        .map(|outcome| (&outcome.document, outcome.span))
-        .collect();
+    let mut answered: std::collections::BTreeMap<
+        RepoPath,
+        std::collections::BTreeSet<(usize, usize)>,
+    > = std::collections::BTreeMap::new();
+    for outcome in claims {
+        answered
+            .entry(outcome.document.clone())
+            .or_default()
+            .insert(outcome.span);
+    }
+    for outcome in projections {
+        answered
+            .entry(RepoPath::from(&outcome.assertion.document))
+            .or_default()
+            .extend(outcome.answered_spans.iter().copied());
+    }
     let mut seeds = Vec::new();
     for record in &candidate.documents {
         let DocumentStatus::Scanned(scanned) = &record.status else {
@@ -343,7 +376,9 @@ fn governed_seeds(
             .iter()
             .filter(|governed| {
                 matches!(governed.form, crate::claim::GovernedForm::Unknown)
-                    || !answered.contains(&(&record.path, governed.span))
+                    || !answered
+                        .get(&record.path)
+                        .is_some_and(|spans| spans.contains(&governed.span))
             })
             .collect();
         if unanswered.is_empty() {

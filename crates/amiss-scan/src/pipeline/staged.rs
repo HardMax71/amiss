@@ -13,10 +13,10 @@ use crate::resources::{ScanLimits, ScanResources};
 
 use super::external::external_gate;
 use super::{
-    Evaluated, ExternalVerified, PipelineFailure, PipelineResult, ResolvedTree, SetupShell,
-    binding_mismatch, conclude, controls_failure, detail, effective_limits, effective_shell,
-    evaluate_tree, floor_gate, pair_effects, policy_unavailable_reason, resolve_tree,
-    side_observations,
+    CandidateEvaluation, CandidateOutcomes, Evaluated, ExternalVerified, PipelineFailure,
+    PipelineResult, ResolvedTree, SetupShell, binding_mismatch, conclude, controls_failure, detail,
+    effective_limits, effective_shell, evaluate_tree, floor_gate, pair_effects,
+    policy_unavailable_reason, resolve_tree, side_observations,
 };
 
 /// The staged candidate's discovery and observations plus every accumulated
@@ -38,7 +38,7 @@ fn staged_candidate(
     includes: &crate::policy::Includes,
     index: &amiss_git::LogicalIndex,
     base_failures: Vec<ErrorDetail>,
-    claims: &mut Vec<crate::claim::ClaimOutcome>,
+    candidate: CandidateEvaluation<'_>,
 ) -> PipelineResult<(SnapshotDiscovery, Option<Side>, Vec<ErrorDetail>)> {
     let discovery =
         crate::discovery::discover_index(repo, git_resources, candidate_scan, includes, index)
@@ -54,7 +54,7 @@ fn staged_candidate(
             semantic,
         },
         &discovery,
-        Some(claims),
+        Some(candidate),
     ) {
         Ok((side, candidate_failures)) => {
             failures.extend(candidate_failures);
@@ -430,7 +430,7 @@ fn staged_index_result(
     .map_err(|detail| not_evaluated(setup_shell, &base_placeholder, detail))?;
     candidate_scan.scans = std::mem::take(&mut base_scan.scans);
 
-    let mut claims: Vec<crate::claim::ClaimOutcome> = Vec::new();
+    let mut outcomes = CandidateOutcomes::default();
     let (candidate_discovery, candidate_side, mut failures) = staged_candidate(
         repo,
         &mut git_resources,
@@ -446,7 +446,10 @@ fn staged_index_result(
         &includes,
         &index,
         base_failures,
-        &mut claims,
+        CandidateEvaluation {
+            policy: candidate_policy.policy.as_ref(),
+            outcomes: &mut outcomes,
+        },
     )?;
     let (effects, site) = pair_effects(
         repo,
@@ -473,7 +476,7 @@ fn staged_index_result(
         base_evaluated,
         (candidate_discovery, candidate_side),
         &site,
-        &claims,
+        &outcomes,
         &failures,
         &initial,
     ))
@@ -493,7 +496,7 @@ fn staged_finish(
     base_evaluated: Evaluated,
     candidate: (SnapshotDiscovery, Option<Side>),
     site: &crate::semantic::SiteEvaluation,
-    claims: &[crate::claim::ClaimOutcome],
+    outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
     initial: &[u8],
 ) -> Built {
@@ -504,7 +507,7 @@ fn staged_finish(
             (&base_evaluated.discovery, base_evaluated.side),
             (&candidate.0, candidate_side),
             site,
-            claims,
+            outcomes,
             &[],
         ),
         _ => construct_incomplete(setup, failures),

@@ -11,6 +11,7 @@ use super::control::{GovernedSeed, control_finding, governed_finding};
 use super::debt::debt_pass;
 use super::documents::document_findings;
 use super::finding::{candidate_fact_finding, observation_location, observation_scope, simple};
+use super::projections::projection_finding;
 use super::references::{comparison_findings, structural_findings};
 use super::waiver::waiver_pass;
 use super::{
@@ -87,15 +88,27 @@ pub fn evaluate_with_policy(
     governed: &[GovernedSeed],
     claims: &[ClaimGroup],
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
+    let site = crate::semantic::SiteEvaluation::default();
     evaluate_with_site(
         documents,
         comparisons,
         profile,
         policy,
-        &crate::semantic::SiteEvaluation::default(),
-        governed,
-        claims,
+        GovernedInputs {
+            site: &site,
+            governed,
+            claims,
+            projections: &[],
+        },
     )
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct GovernedInputs<'a> {
+    pub(crate) site: &'a crate::semantic::SiteEvaluation,
+    pub(crate) governed: &'a [GovernedSeed],
+    pub(crate) claims: &'a [ClaimGroup],
+    pub(crate) projections: &'a [crate::projection::Outcome],
 }
 
 pub(crate) fn evaluate_with_site(
@@ -103,17 +116,21 @@ pub(crate) fn evaluate_with_site(
     comparisons: &[Comparison],
     profile: Profile,
     policy: &crate::policy::Effects,
-    site: &crate::semantic::SiteEvaluation,
-    governed: &[GovernedSeed],
-    claims: &[ClaimGroup],
+    inputs: GovernedInputs<'_>,
 ) -> (Vec<Finding>, Vec<ErrorDetail>) {
-    let mut findings = ordinary(documents, comparisons, profile, site);
-    for seed in governed {
+    let mut findings = ordinary(documents, comparisons, profile, inputs.site);
+    for seed in inputs.governed {
         findings.push(governed_finding(seed, profile));
     }
-    for group in claims {
+    for group in inputs.claims {
         findings.push(claim_finding(group, profile));
     }
+    findings.extend(
+        inputs
+            .projections
+            .iter()
+            .filter_map(|outcome| projection_finding(outcome, profile)),
+    );
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
             continue;
