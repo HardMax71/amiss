@@ -5,8 +5,8 @@ use crate::digest::{Digest, hj};
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
 use super::{
-    DEBT_SNAPSHOT_SCHEMA, Fact, decode_branch_ref, decode_debt_item, decode_instant, decode_items,
-    decode_repository, decode_tree, root, sorted_set,
+    DEBT_SNAPSHOT_SCHEMA, Fact, decode_artifact_id, decode_branch_ref, decode_instant,
+    decode_items, decode_repository, decode_tree, item::decode_item_core, root, sorted_set,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,7 +102,24 @@ impl DebtSnapshot {
 
         let items_path = obj.field("items");
         let raw = de::array(&items_path, obj.take("items")?)?;
-        let items = decode_items(&items_path, raw, 100_000, decode_debt_item)?;
+        let items = decode_items(&items_path, raw, 100_000, |path, value| {
+            let mut item = Obj::new(path, value)?;
+            let debt_id = item.required("debt_id", decode_artifact_id)?;
+            let core = decode_item_core(&mut item, "accepted_fact")?;
+            item.finish()?;
+            (core.created_at < core.expires_at)
+                .then_some(DebtItem {
+                    debt_id,
+                    finding_key: core.finding_key,
+                    accepted_fact: core.fact,
+                    accepted_fact_digest: core.fact_digest,
+                    owner: core.owner,
+                    reason: core.reason,
+                    created_at: core.created_at,
+                    expires_at: core.expires_at,
+                })
+                .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
+        })?;
         sorted_set(&items_path, &items, |a, b| {
             a.debt_id.as_str().cmp(b.debt_id.as_str())
         })?;
