@@ -232,7 +232,7 @@ fn the_policy_schema_tracks_the_reader_bounds() {
             .expect("scanner policy schema is JSON");
     assert_eq!(
         schema
-            .pointer("/$defs/DocumentInclude/properties/suffix/maxLength")
+            .pointer("/$defs/ExactSuffix/maxLength")
             .and_then(serde_json::Value::as_u64),
         u64::try_from(DOCUMENT_SUFFIX_BYTES).ok(),
         "the schema and strict reader must publish one suffix ceiling"

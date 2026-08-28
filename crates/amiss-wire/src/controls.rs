@@ -33,9 +33,9 @@ pub use floor::{
     ResourceLimit,
 };
 pub use policy::{
-    BLOB_LINES_SOURCE, BlobLineSelection, CODE_TEXT_PROJECTION, DOCUMENT_SUFFIX_BYTES,
-    DocumentInclude, FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection,
-    PREVIOUS_CODE_SINK, ProjectionAssertion, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
+    BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
+    FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
+    ProjectionAssertion, ProjectionKind, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
     document_include_value, projection_source_value,
 };
 pub use resources::{ResourceName, ResourceNameIter};

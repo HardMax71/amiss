@@ -92,11 +92,7 @@
      ]
     },
     "suffix": {
-     "type": "string",
-     "minLength": 2,
-     "maxLength": 64,
-     "pattern": "^\\.[^/\\\\\\u0000]+$",
-     "description": "Optional exact UTF-8 suffix for a tree selector. The Rust reader additionally caps its UTF-8 encoding at 64 bytes. No glob, wildcard, regex, normalization, or case folding is applied."
+     "$ref": "#/$defs/ExactSuffix"
     },
     "adapter": {
      "enum": [
@@ -125,6 +121,13 @@
      }
     }
    ]
+  },
+  "ExactSuffix": {
+   "type": "string",
+   "minLength": 2,
+   "maxLength": 64,
+   "pattern": "^\\.[^/\\\\\\u0000]+$",
+   "description": "Optional exact UTF-8 suffix for a tree selector. The Rust reader additionally caps its UTF-8 encoding at 64 bytes. No glob, wildcard, regex, normalization, or case folding is applied."
   },
   "PositiveSafeUInt": {
    "type": "integer",
