@@ -6,7 +6,7 @@ use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, Unsupport
 use memchr::memmem::Finder;
 
 use crate::Error;
-use crate::projection::{DriftReason, Verdict, normalized_line_endings};
+use crate::projection::{DriftReason, Verdict, normalized_line_endings, unavailable};
 use crate::resources::Aggregate;
 use crate::scan::SemanticCodeSink;
 
@@ -104,6 +104,7 @@ impl Resolver<'_> {
         let path = match selection {
             ProjectionSource::BlobLines(source) => RepoPath::from(&source.path),
             ProjectionSource::NamedRegion(source) => RepoPath::from(&source.path),
+            ProjectionSource::TreePaths(_) => return Err(Error::Internal),
         };
         let observed_bytes = u64::try_from(sink.value.len()).unwrap_or(u64::MAX);
         let Some((mode, oid)) = self
@@ -112,14 +113,14 @@ impl Resolver<'_> {
             .get(path.as_bytes())
             .map(|(mode, oid)| (*mode, oid.clone()))
         else {
-            return Ok(source_drift(DriftReason::SourceAbsent, sink));
+            return Ok(unavailable(DriftReason::SourceAbsent, sink));
         };
         if matches!(mode, GitMode::Tree | GitMode::Gitlink | GitMode::Symlink) {
-            return Ok(source_drift(DriftReason::SourceNotABlob, sink));
+            return Ok(unavailable(DriftReason::SourceNotABlob, sink));
         }
         let evidence = read_target(self, &path, mode, &oid)?;
         if matches!(evidence, BlobContent::LfsPointer { .. }) {
-            return Ok(source_drift(DriftReason::SourceLfsPointer, sink));
+            return Ok(unavailable(DriftReason::SourceLfsPointer, sink));
         }
         let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&path)
         else {
@@ -166,10 +167,11 @@ impl Resolver<'_> {
                 )?;
                 named_region_bytes(body, selection)
             }
+            ProjectionSource::TreePaths(_) => return Err(Error::Internal),
         };
         let selected = match selected {
             Ok(selected) => selected,
-            Err(reason) => return Ok(source_drift(reason, sink)),
+            Err(reason) => return Ok(unavailable(reason, sink)),
         };
         let normalized = normalized_line_endings(selected);
         let expected = normalized
@@ -250,16 +252,6 @@ fn named_region_bytes<'a>(
         .ok_or(DriftReason::SourceRegionOrderInvalid)?;
     std::str::from_utf8(selected).map_err(|_invalid| DriftReason::SourceRegionNotUtf8)?;
     Ok(selected)
-}
-
-fn source_drift(reason: DriftReason, sink: &SemanticCodeSink) -> Verdict {
-    Verdict::Drift {
-        reason,
-        expected_digest: None,
-        observed_digest: Some(sink.digest),
-        expected_bytes: None,
-        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
-    }
 }
 
 /// One line without the terminator that ended it.

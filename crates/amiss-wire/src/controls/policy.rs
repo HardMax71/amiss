@@ -15,12 +15,15 @@ pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
 pub const PREVIOUS_CODE_SINK: &str = "previous-code";
 pub const BLOB_LINES_SOURCE: &str = "blob-lines";
 pub const NAMED_REGION_SOURCE: &str = "named-region";
+pub const TREE_PATHS_SOURCE: &str = "tree-paths";
 pub const SOURCE_MARKER_BYTES: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
 pub enum ProjectionKind {
     #[strum(serialize = "code-text-v1")]
     CodeTextV1,
+    #[strum(serialize = "sorted-rows-v1")]
+    SortedRowsV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,9 +110,17 @@ pub struct NamedRegionSelection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreePathSelection {
+    pub root: RepoPathText,
+    pub suffix: Option<String>,
+    pub maximum_depth: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectionSource {
     BlobLines(BlobLineSelection),
     NamedRegion(NamedRegionSelection),
+    TreePaths(TreePathSelection),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,6 +178,16 @@ fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource
             return fail(path, ErrorKind::Inconsistent);
         }
         ProjectionSource::NamedRegion(selection)
+    } else if kind == TREE_PATHS_SOURCE {
+        let suffix_path = obj.field("suffix");
+        ProjectionSource::TreePaths(TreePathSelection {
+            root: obj.required("root", decode_repo_path)?,
+            suffix: obj
+                .take_optional("suffix")
+                .map(|value| exact_suffix(&suffix_path, value))
+                .transpose()?,
+            maximum_depth: obj.required("maximum_depth", safe_line)?,
+        })
     } else {
         return fail(&kind_path, ErrorKind::InvalidValue);
     };
@@ -186,6 +207,18 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
         de::const_str(path, value, PREVIOUS_CODE_SINK)
     })?;
     let source = obj.required("source", decode_projection_source)?;
+    match (projection, &source) {
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
+        )
+        | (ProjectionKind::SortedRowsV1, ProjectionSource::TreePaths(_)) => {}
+        (ProjectionKind::CodeTextV1, ProjectionSource::TreePaths(_))
+        | (
+            ProjectionKind::SortedRowsV1,
+            ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
+        ) => return fail(path, ErrorKind::Inconsistent),
+    }
     obj.finish()?;
     Ok(ProjectionAssertion {
         document,
@@ -222,6 +255,20 @@ pub fn projection_source_value(source: &ProjectionSource) -> Value {
                 Value::String(selection.end_marker.clone().into()),
             ),
         ])),
+        ProjectionSource::TreePaths(selection) => {
+            let mut fields = vec![
+                ("kind".into(), Value::String(TREE_PATHS_SOURCE.into())),
+                ("root".into(), Value::String(selection.root.as_str().into())),
+                (
+                    "maximum_depth".into(),
+                    Value::Integer(i64::try_from(selection.maximum_depth).unwrap_or(i64::MAX)),
+                ),
+            ];
+            if let Some(suffix) = &selection.suffix {
+                fields.push(("suffix".into(), Value::String(suffix.clone().into())));
+            }
+            Value::Object(fields.into_boxed_slice())
+        }
     }
 }
 

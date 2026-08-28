@@ -1,13 +1,15 @@
 use std::borrow::Cow;
 
-use amiss_wire::controls::ProjectionAssertion;
+use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::RepoPath;
 
 use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resolve::Resolver;
-use crate::scan::SpanDisplay;
+use crate::scan::{SemanticCodeSink, SpanDisplay};
+
+mod inventory;
 
 pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
     if !selected.contains(&b'\r') {
@@ -45,6 +47,10 @@ pub(crate) enum DriftReason {
     SourceEndMarkerAmbiguous,
     SourceRegionOrderInvalid,
     SourceRegionNotUtf8,
+    SourceTreeRootAbsent,
+    SourceTreeRootNotATree,
+    SourceTreePathNotUtf8,
+    SourceTreePathNotARow,
     ContentDiffers,
 }
 
@@ -58,6 +64,16 @@ pub(crate) enum Verdict {
         expected_bytes: Option<u64>,
         observed_bytes: Option<u64>,
     },
+}
+
+pub(crate) fn unavailable(reason: DriftReason, sink: &SemanticCodeSink) -> Verdict {
+    Verdict::Drift {
+        reason,
+        expected_digest: None,
+        observed_digest: Some(sink.digest),
+        expected_bytes: None,
+        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,7 +171,15 @@ pub(crate) fn evaluate(
             DriftReason::SinkNotAdjacent,
         ));
     };
-    let verdict = resolver.resolve_code_projection(&assertion.source, sink)?;
+    let verdict = match assertion.projection {
+        ProjectionKind::CodeTextV1 => resolver.resolve_code_projection(&assertion.source, sink)?,
+        ProjectionKind::SortedRowsV1 => {
+            let ProjectionSource::TreePaths(selection) = &assertion.source else {
+                return Err(Error::Internal);
+            };
+            inventory::evaluate(discovery, selection, sink)
+        }
+    };
     Ok(Outcome {
         assertion: assertion.clone(),
         carrier_digests,

@@ -98,7 +98,7 @@ definitions aggregate, since grouped members share one finding but not one edit.
 `claim-target-missing` finding never carries a fix, because nothing derivable says
 where the target went.
 
-## Policy-owned code projections
+## Policy-owned projections
 
 A projection checks visible example text rather than an invisible expected title. Its relation
 lives in `.amiss/scanner-policy.json`:
@@ -153,9 +153,39 @@ equal to that token must occur once. The scanner interprets no surrounding comme
 embedded occurrence as a boundary. It excludes both complete marker lines and
 refuses duplicate, missing, reversed, same-line, or non-UTF-8 regions as typed projection drift.
 Edits outside the region do not affect its projected digest. Both selectors use the existing
-bounded target cache and line-fragment meter; source bytes are never executed or fetched. An attested
-projection emits nothing. Every nonattested relation emits one `projection-drift` finding under
-`claim/projection/<name>`, points at the visible code block when one is uniquely addressable, and
-carries only digests and byte counts rather than copying either full value into the report. No
-projection fix is emitted: a later rewrite feature must first prove an exact editable content span,
+bounded target cache and line-fragment meter; source bytes are never executed or fetched.
+
+A complete tracked-path inventory uses the same visible sink without reading another source blob:
+
+```json
+{
+  "document": "docs/examples.md",
+  "name": "examples",
+  "projection": "sorted-rows-v1",
+  "sink": "previous-code",
+  "source": {
+    "kind": "tree-paths",
+    "root": "examples",
+    "suffix": ".md",
+    "maximum_depth": 2
+  }
+}
+```
+
+The root must exist as a tree in a commit or as a directory implied by the staged index. The source
+filters the discovery map Amiss already completed: descendants at or above `maximum_depth`, with an
+optional exact suffix, become root-relative UTF-8 rows. Regular, executable, symlink, and gitlink
+paths participate; tree entries themselves do not. `sorted-rows-v1` orders those rows by UTF-8
+bytes and joins them with LF, without a terminal LF. No glob, repository rewalk, object read,
+normalization, suffix stripping, or source-language rule is involved.
+
+A qualifying non-UTF-8 path or path containing a control character refuses the projection instead
+of disappearing from or splitting the authoritative set. A path outside the repository grammar
+already makes the candidate globally incomplete before projection evaluation.
+
+An attested projection emits nothing. Every nonattested relation emits one `projection-drift`
+finding under `claim/projection/<name>`, points at the visible code block when one is uniquely
+addressable, and carries only digests and byte counts rather than copying either full value into the
+report. No projection fix is emitted: a later rewrite feature must first prove an exact editable
+content span,
 reparse the whole document, and re-evaluate the relation.
