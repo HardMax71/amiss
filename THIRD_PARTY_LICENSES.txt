@@ -8379,7 +8379,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ================================================================================
-bitflags 2.13.0
+bitflags 2.13.1
 License: MIT OR Apache-2.0
 Source: https://github.com/bitflags/bitflags
 
@@ -9597,7 +9597,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-cfg_aliases 0.2.1
+cfg_aliases 0.2.2
 License: MIT
 Source: https://github.com/katharostech/cfg_aliases
 
@@ -12665,7 +12665,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-displaydoc 0.2.6
+displaydoc 0.2.7
 License: MIT OR Apache-2.0
 Source: https://github.com/yaahc/displaydoc
 
@@ -13266,7 +13266,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-fastrand 2.4.1
+fastrand 2.5.0
 License: Apache-2.0 OR MIT
 Source: https://github.com/smol-rs/fastrand
 
@@ -13501,7 +13501,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-find-msvc-tools 0.1.9
+find-msvc-tools 0.1.11
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/cc-rs
 
@@ -14322,7 +14322,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-futures-channel 0.3.33
+futures-channel 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/futures-rs
 
@@ -14561,7 +14561,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-futures-core 0.3.33
+futures-core 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/futures-rs
 
@@ -14800,7 +14800,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-futures-io 0.3.33
+futures-io 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/futures-rs
 
@@ -15039,7 +15039,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-futures-sink 0.3.33
+futures-sink 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/futures-rs
 
@@ -15278,7 +15278,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-futures-task 0.3.33
+futures-task 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/futures-rs
 
@@ -15517,7 +15517,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-futures-util 0.3.33
+futures-util 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/futures-rs
 
@@ -15785,7 +15785,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ================================================================================
-getrandom 0.4.3
+getrandom 0.3.4
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-random/getrandom
 
@@ -15995,7 +15995,7 @@ limitations under the License.
 
 --- LICENSE-MIT ---
 
-Copyright (c) 2018-2026 The rust-random Project Developers
+Copyright (c) 2018-2025 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -16260,7 +16260,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-http 1.4.2
+http 1.5.0
 License: MIT OR Apache-2.0
 Source: https://github.com/hyperium/http
 
@@ -16530,7 +16530,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-http-body-util 0.1.4
+http-body-util 0.1.5
 License: MIT
 Source: https://github.com/hyperium/http-body
 
@@ -16795,7 +16795,7 @@ THE SOFTWARE.
 
 
 ================================================================================
-hybrid-array 0.4.13
+hybrid-array 0.4.14
 License: MIT OR Apache-2.0
 Source: https://github.com/RustCrypto/hybrid-array
 
@@ -18193,7 +18193,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-ipnet 2.12.0
+ipnet 2.12.1
 License: MIT OR Apache-2.0
 Source: https://github.com/krisprice/ipnet
 
@@ -19561,7 +19561,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-litemap 0.8.2
+litemap 0.8.3
 License: Unicode-3.0
 Source: https://github.com/unicode-org/icu4x
 
@@ -21150,7 +21150,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-pkg-config 0.3.33
+pkg-config 0.3.34
 License: MIT OR Apache-2.0
 Source: https://github.com/rust-lang/pkg-config-rs
 
@@ -21441,7 +21441,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 
 ================================================================================
-proc-macro2 1.0.106
+proc-macro2 1.0.107
 License: MIT OR Apache-2.0
 Source: https://github.com/dtolnay/proc-macro2
 
@@ -21651,7 +21651,38 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-quote 1.0.46
+quick-xml 0.41.0
+License: MIT
+Source: https://github.com/tafia/quick-xml
+
+--- LICENSE-MIT.md ---
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Johann Tuffe
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+================================================================================
+quote 1.0.47
 License: MIT OR Apache-2.0
 Source: https://github.com/dtolnay/quote
 
@@ -22583,7 +22614,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-rustls 0.23.42
+rustls 0.23.43
 License: Apache-2.0 OR ISC OR MIT
 Source: https://github.com/rustls/rustls
 
@@ -25458,7 +25489,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ================================================================================
-simd-adler32 0.3.9
+simd-adler32 0.3.10
 License: MIT
 Source: https://github.com/mcountryman/simd-adler32
 
@@ -31796,7 +31827,7 @@ Source: https://github.com/microsoft/windows-rs
     SOFTWARE
 
 ================================================================================
-writeable 0.6.3
+writeable 0.6.4
 License: Unicode-3.0
 Source: https://github.com/unicode-org/icu4x
 
@@ -32304,7 +32335,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ================================================================================
-zerotrie 0.2.4
+zerotrie 0.2.5
 License: Unicode-3.0
 Source: https://github.com/unicode-org/icu4x
 
@@ -32466,7 +32497,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 
 ================================================================================
-zmij 1.0.22
+zmij 1.0.23
 License: MIT
 Source: https://github.com/dtolnay/zmij
 
