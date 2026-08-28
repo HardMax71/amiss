@@ -56,8 +56,8 @@ and leaves the run incomplete, so a repository grows its policy only after every
 reading it has learned the field.
 
 A projection assertion is owned by the policy, under the stable identity `(document, name)`.
-One source form selects an inclusive one-based line interval from a tracked regular or executable
-blob. The other selects bytes between distinct exact `start_marker` and `end_marker` lines; each
+The `code-text-v1` sources select either an inclusive one-based line interval from a tracked regular
+or executable blob, or bytes between distinct exact `start_marker` and `end_marker` lines. Each
 printable-ASCII marker line is at most 256 bytes, occurs exactly once, and is itself excluded. Amiss
 does not parse a source language or its comment syntax. Duplicate, missing, reversed, same-line,
 or non-UTF-8 regions are typed drift, while edits outside the selected region are irrelevant.
@@ -70,6 +70,12 @@ absent, non-blob, LFS, or otherwise invalid sources, produce one `projection-dri
 marker with no matching policy row remains an unsupported reserved capability and makes the run
 incomplete. Removing the marker while the policy row survives therefore cannot disable the
 relation, while removing the policy row is `policy-weakened` even when the marker is removed too.
+
+The `sorted-rows-v1` projection pairs the same sink with a `tree-paths` source: one existing tree
+root, an optional exact suffix, and a positive maximum relative depth. It filters the complete
+ordered snapshot map without another Git walk or object read, excludes directory entries, and
+projects all other tracked paths relative to the root. A qualifying non-UTF-8 path or path with a
+control character is typed drift; an invalid Git path already makes the candidate incomplete.
 
 A `document` include names one exact path. A `tree` include names that path and descendants
 separated by `/`; `specs` therefore covers `specs/api.md` but not `specs-old/api.md`. Matching

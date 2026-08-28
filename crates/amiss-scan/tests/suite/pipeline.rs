@@ -69,7 +69,13 @@ fn oid(hex: &str) -> Oid {
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn projection_policy(root: &Path, document: &str, name: &str, source: &serde_json::Value) {
+fn projection_policy(
+    root: &Path,
+    document: &str,
+    name: &str,
+    projection: &str,
+    source: &serde_json::Value,
+) {
     fs::create_dir_all(root.join(".amiss")).unwrap();
     fs::write(
         root.join(".amiss/scanner-policy.json"),
@@ -79,7 +85,7 @@ fn projection_policy(root: &Path, document: &str, name: &str, source: &serde_jso
             "projection_assertions": [{
                 "document": document,
                 "name": name,
-                "projection": "code-text-v1",
+                "projection": projection,
                 "sink": "previous-code",
                 "source": source,
             }],
@@ -562,6 +568,7 @@ fn a_code_projection_attests_in_committed_and_staged_snapshots() {
         root,
         "docs.md",
         "sample",
+        "code-text-v1",
         &serde_json::json!({
             "kind": "blob-lines",
             "path": "source.txt",
@@ -618,6 +625,7 @@ fn trailing_blank_lines_remain_projection_content() {
             root,
             "docs.md",
             "sample",
+            "code-text-v1",
             &serde_json::json!({
                 "kind": "blob-lines",
                 "path": "source.txt",
@@ -670,6 +678,7 @@ fn a_changed_projection_reports_the_exact_relation_and_visible_sink() {
         root,
         "docs.md",
         "sample",
+        "code-text-v1",
         &serde_json::json!({
             "kind": "blob-lines",
             "path": "source.txt",
@@ -736,6 +745,7 @@ fn declared_projection_sink_defects_are_findings_not_silent_boundaries() {
             root,
             "docs.md",
             "sample",
+            "code-text-v1",
             &serde_json::json!({
                 "kind": "blob-lines",
                 "path": "source.txt",
@@ -833,6 +843,7 @@ fn a_named_region_attests_across_endings_and_ignores_outside_edits() {
         root,
         "docs.md",
         "sample",
+        "code-text-v1",
         &serde_json::json!({
             "kind": "named-region",
             "path": "source.txt",
@@ -904,6 +915,7 @@ fn a_named_region_mismatch_carries_the_exact_selector() {
         root,
         "docs.md",
         "sample",
+        "code-text-v1",
         &serde_json::json!({
             "kind": "named-region",
             "path": "source.txt",
@@ -987,6 +999,7 @@ fn named_region_marker_defects_are_typed_projection_drift() {
             root,
             "docs.md",
             "sample",
+            "code-text-v1",
             &serde_json::json!({
                 "kind": "named-region",
                 "path": "source.txt",
@@ -1015,6 +1028,195 @@ fn named_region_marker_defects_are_typed_projection_drift() {
             .collect();
         assert_eq!(rows.len(), 1, "{reason}: {payload}");
         assert_eq!(rows[0]["candidate_fact"]["evidence"]["observed"], *reason);
+    }
+}
+
+#[test]
+fn a_tree_inventory_is_root_relative_and_reuses_the_staged_snapshot() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let base = base_commit(root);
+    fs::create_dir_all(root.join("examples/deep/more")).unwrap();
+    for (path, body) in [
+        ("examples/a.txt", "a"),
+        ("examples/b.md", "b"),
+        ("examples/deep/c.txt", "c"),
+        ("examples/deep/more/d.txt", "d"),
+    ] {
+        fs::write(root.join(path), body).unwrap();
+    }
+    fs::write(
+        root.join("docs.md"),
+        "```text\na.txt\ndeep/c.txt\n```\n[amiss:inventory]: <amiss:projection>\n",
+    )
+    .unwrap();
+    projection_policy(
+        root,
+        "docs.md",
+        "inventory",
+        "sorted-rows-v1",
+        &serde_json::json!({
+            "kind": "tree-paths",
+            "root": "examples",
+            "suffix": ".txt",
+            "maximum_depth": 2,
+        }),
+    );
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "inventory"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let committed = payload(&commit_pair(
+        &repo,
+        &engine(),
+        None,
+        &shell(),
+        &oid(&base),
+        &oid(&candidate),
+    ));
+    assert!(
+        committed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["kind"] != "projection-drift"),
+        "{committed}"
+    );
+
+    fs::write(root.join("examples/z.txt"), "z").unwrap();
+    git(root, &["add", "examples/z.txt"]);
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&candidate));
+    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    crate::support::assert_report(&envelope, "staged tree inventory");
+    let staged = payload(&built);
+    let evidence = &staged["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .unwrap_or_else(|| panic!("the staged inventory drift is reported: {staged}"))["candidate_fact"]
+        ["evidence"];
+    assert_eq!(evidence["projection"], "sorted-rows-v1");
+    assert_eq!(evidence["observed"], "content-differs");
+    assert_eq!(evidence["source"]["kind"], "tree-paths");
+    assert_eq!(evidence["source"]["root"], "examples");
+    assert_eq!(evidence["source"]["suffix"], ".txt");
+    assert_eq!(evidence["source"]["maximum_depth"], 2);
+    assert!(evidence["expected_digest"].is_string(), "{staged}");
+    assert!(
+        evidence["expected_bytes"].as_u64() > evidence["observed_bytes"].as_u64(),
+        "{staged}"
+    );
+}
+
+#[test]
+fn a_tree_inventory_never_turns_unrepresentable_paths_into_absence() {
+    for (source_path, reason) in [
+        (
+            b"inventory/non-utf8-\xff.txt".as_slice(),
+            "source-tree-path-not-utf8",
+        ),
+        (
+            b"inventory/line\nbreak.txt".as_slice(),
+            "source-tree-path-not-a-row",
+        ),
+    ] {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let base = base_commit(root);
+        let document = b"```text\nstale\n```\n[amiss:inventory]: <amiss:projection>\n";
+        fs::write(root.join("docs.md"), document).unwrap();
+        projection_policy(
+            root,
+            "docs.md",
+            "inventory",
+            "sorted-rows-v1",
+            &serde_json::json!({
+                "kind": "tree-paths",
+                "root": "inventory",
+                "suffix": ".txt",
+                "maximum_depth": 2,
+            }),
+        );
+        let document_oid = amiss_fixtures::loose_object(root, "blob", document).unwrap();
+        let policy_bytes = fs::read(root.join(".amiss/scanner-policy.json")).unwrap();
+        let policy_oid = amiss_fixtures::loose_object(root, "blob", &policy_bytes).unwrap();
+        let source_oid = amiss_fixtures::loose_object(root, "blob", b"source").unwrap();
+        amiss_fixtures::index_file(
+            root,
+            &[
+                (
+                    b".amiss/scanner-policy.json".as_slice(),
+                    policy_oid.as_str(),
+                ),
+                (b"docs.md".as_slice(), document_oid.as_str()),
+                (source_path, source_oid.as_str()),
+            ],
+        )
+        .unwrap();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let payload = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)));
+        let evidence = &payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["kind"] == "projection-drift")
+            .unwrap_or_else(|| panic!("the source refusal is reported: {payload}"))["candidate_fact"]
+            ["evidence"];
+        assert_eq!(evidence["observed"], reason, "{payload}");
+        assert!(evidence["expected_digest"].is_null(), "{payload}");
+    }
+}
+
+#[test]
+fn a_tree_inventory_requires_an_existing_tree_root() {
+    for (root_file, reason) in [
+        (None, "source-tree-root-absent"),
+        (Some("ordinary file"), "source-tree-root-not-a-tree"),
+    ] {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let base = base_commit(root);
+        if let Some(body) = root_file {
+            fs::write(root.join("inventory"), body).unwrap();
+        }
+        fs::write(
+            root.join("docs.md"),
+            "```text\nstale\n```\n[amiss:inventory]: <amiss:projection>\n",
+        )
+        .unwrap();
+        projection_policy(
+            root,
+            "docs.md",
+            "inventory",
+            "sorted-rows-v1",
+            &serde_json::json!({
+                "kind": "tree-paths",
+                "root": "inventory",
+                "maximum_depth": 2,
+            }),
+        );
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "invalid inventory root"]);
+        let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let payload = payload(&commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        ));
+        let evidence = &payload["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["kind"] == "projection-drift")
+            .unwrap_or_else(|| panic!("the invalid tree root is reported: {payload}"))["candidate_fact"]
+            ["evidence"];
+        assert_eq!(evidence["observed"], reason, "{payload}");
+        assert!(evidence["expected_digest"].is_null(), "{payload}");
     }
 }
 
@@ -1068,6 +1270,7 @@ fn removing_a_projection_assertion_is_policy_weakening() {
         root,
         "docs.md",
         "sample",
+        "code-text-v1",
         &serde_json::json!({
             "kind": "blob-lines",
             "path": "source.txt",

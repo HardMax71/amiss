@@ -188,6 +188,39 @@
     }
    }
   },
+  "TreePathSelection": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "root",
+    "maximum_depth"
+   ],
+   "properties": {
+    "kind": {
+     "const": "tree-paths"
+    },
+    "root": {
+     "$ref": "#/$defs/RepoPath"
+    },
+    "suffix": {
+     "$ref": "#/$defs/ExactSuffix"
+    },
+    "maximum_depth": {
+     "$ref": "#/$defs/PositiveSafeUInt"
+    }
+   }
+  },
+  "CodeTextSource": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/BlobLineSelection"
+    },
+    {
+     "$ref": "#/$defs/NamedRegionSelection"
+    }
+   ]
+  },
   "ProjectionSource": {
    "oneOf": [
     {
@@ -195,6 +228,9 @@
     },
     {
      "$ref": "#/$defs/NamedRegionSelection"
+    },
+    {
+     "$ref": "#/$defs/TreePathSelection"
     }
    ]
   },
@@ -219,7 +255,10 @@
      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
     "projection": {
-     "const": "code-text-v1"
+     "enum": [
+      "code-text-v1",
+      "sorted-rows-v1"
+     ]
     },
     "sink": {
      "const": "previous-code"
@@ -227,7 +266,41 @@
     "source": {
      "$ref": "#/$defs/ProjectionSource"
     }
-   }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "projection": {
+        "const": "code-text-v1"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "source": {
+        "$ref": "#/$defs/CodeTextSource"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "projection": {
+        "const": "sorted-rows-v1"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "source": {
+        "$ref": "#/$defs/TreePathSelection"
+       }
+      }
+     }
+    }
+   ]
   },
   "FindingKind": {
    "enum": [

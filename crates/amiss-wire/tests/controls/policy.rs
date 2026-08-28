@@ -90,6 +90,21 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
     assert_eq!(source.path.as_str(), "src/lib.rs");
     assert_eq!(source.start_marker, "// amiss:start");
     assert_eq!(source.end_marker, "// amiss:end");
+
+    let tree = policy_with_assertions(
+        r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"tree-paths","root":"crates","suffix":".rs","maximum_depth":3}}"#,
+    );
+    let parsed = ScannerPolicy::parse(tree.as_bytes()).unwrap();
+    assert_eq!(
+        parsed.projection_assertions()[0].projection,
+        ProjectionKind::SortedRowsV1
+    );
+    let ProjectionSource::TreePaths(source) = &parsed.projection_assertions()[0].source else {
+        panic!("tree-paths source survives the policy reader");
+    };
+    assert_eq!(source.root.as_str(), "crates");
+    assert_eq!(source.suffix.as_deref(), Some(".rs"));
+    assert_eq!(source.maximum_depth, 3);
 }
 
 #[test]
@@ -107,6 +122,19 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
             ScannerPolicy::parse(policy.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue,
             "invalid row: {invalid}"
+        );
+    }
+
+    let tree = r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"tree-paths","root":"crates","suffix":".rs","maximum_depth":2}}"#;
+    for invalid in [
+        tree.replace("sorted-rows-v1", "code-text-v1"),
+        tree.replace("\"maximum_depth\":2", "\"maximum_depth\":0"),
+        tree.replace("\"suffix\":\".rs\",", "\"suffix\":\"rs\","),
+        valid.replace("code-text-v1", "sorted-rows-v1"),
+    ] {
+        assert!(
+            ScannerPolicy::parse(policy_with_assertions(&invalid).as_bytes()).is_err(),
+            "{invalid}"
         );
     }
     let unsafe_integer =

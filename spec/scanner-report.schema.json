@@ -4185,6 +4185,45 @@
         }
       }
     },
+    "ProjectionExactSuffix": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^\\.[^/\\\\\\u0000]+$"
+    },
+    "ProjectionTreePathSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "root",
+        "maximum_depth"
+      ],
+      "properties": {
+        "kind": {
+          "const": "tree-paths"
+        },
+        "root": {
+          "$ref": "#/$defs/RepoPathText"
+        },
+        "suffix": {
+          "$ref": "#/$defs/ProjectionExactSuffix"
+        },
+        "maximum_depth": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        }
+      }
+    },
+    "ProjectionCodeTextSource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProjectionBlobLineSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionNamedRegionSource"
+        }
+      ]
+    },
     "ProjectionSource": {
       "oneOf": [
         {
@@ -4192,6 +4231,9 @@
         },
         {
           "$ref": "#/$defs/ProjectionNamedRegionSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionTreePathSource"
         }
       ]
     },
@@ -4222,7 +4264,10 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
         },
         "projection": {
-          "const": "code-text-v1"
+          "enum": [
+            "code-text-v1",
+            "sorted-rows-v1"
+          ]
         },
         "sink": {
           "const": "previous-code"
@@ -4246,6 +4291,10 @@
             "source-end-marker-ambiguous",
             "source-region-order-invalid",
             "source-region-not-utf8",
+            "source-tree-root-absent",
+            "source-tree-root-not-a-tree",
+            "source-tree-path-not-utf8",
+            "source-tree-path-not-a-row",
             "content-differs"
           ]
         },
@@ -4287,7 +4336,47 @@
             "$ref": "#/$defs/ControlStateSource"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "projection"
+            ],
+            "properties": {
+              "projection": {
+                "const": "code-text-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "source": {
+                "$ref": "#/$defs/ProjectionCodeTextSource"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "projection"
+            ],
+            "properties": {
+              "projection": {
+                "const": "sorted-rows-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "source": {
+                "$ref": "#/$defs/ProjectionTreePathSource"
+              }
+            }
+          }
+        }
+      ]
     },
     "ControlFactEvidence": {
       "type": "object",
