@@ -7,6 +7,8 @@ use crate::model::{
     ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity, UtcInstant,
 };
 
+pub use crate::semantic::RECORD_KEY_BYTES;
+
 mod debt;
 /// Execution-constraint descriptor, forge-neutral action-repository
 /// identity, and closed platform grammar.
@@ -35,8 +37,9 @@ pub use floor::{
 pub use policy::{
     BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
     FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
-    ProjectionAssertion, ProjectionKind, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
-    TREE_PATHS_SOURCE, TreePathSelection, document_include_value, projection_source_value,
+    ProjectionAssertion, ProjectionKind, ProjectionSource, RECORD_VALUE_SOURCE,
+    RecordValueSelection, SOURCE_MARKER_BYTES, ScannerPolicy, TREE_PATHS_SOURCE, TreePathSelection,
+    document_include_value, projection_source_value,
 };
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{

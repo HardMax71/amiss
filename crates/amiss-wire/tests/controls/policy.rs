@@ -116,6 +116,16 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
         parsed.projection_assertions()[0].source,
         ProjectionSource::TreePaths(_)
     ));
+
+    let record = policy_with_assertions(
+        r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-value","set":"rust/public-api","key":"amiss::check"}}"#,
+    );
+    let parsed = ScannerPolicy::parse(record.as_bytes()).unwrap();
+    let ProjectionSource::RecordValue(source) = &parsed.projection_assertions()[0].source else {
+        panic!("record-value source survives the policy reader");
+    };
+    assert_eq!(source.set.as_str(), "rust/public-api");
+    assert_eq!(source.key, "amiss::check");
 }
 
 #[test]
@@ -143,6 +153,9 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
         tree.replace("\"suffix\":\".rs\",", "\"suffix\":\"rs\","),
         valid.replace("code-text-v1", "sorted-rows-v1"),
         valid.replace("code-text-v1", "decimal-count-v1"),
+        r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-value","set":"rust/public-api","key":"amiss::check"}}"#.to_owned(),
+        r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-value","set":"Rust","key":"amiss::check"}}"#.to_owned(),
+        r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-value","set":"rust","key":"line\nbreak"}}"#.to_owned(),
     ] {
         assert!(
             ScannerPolicy::parse(policy_with_assertions(&invalid).as_bytes()).is_err(),

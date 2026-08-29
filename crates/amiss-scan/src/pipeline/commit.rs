@@ -316,6 +316,7 @@ fn evaluated_pair(
         candidate_tree,
         Some(CandidateEvaluation {
             policy: candidate_policy.policy.as_ref(),
+            record_sets: semantic.record_sets.as_ref(),
             outcomes: &mut outcomes,
         }),
     );

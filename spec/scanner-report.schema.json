@@ -4219,6 +4219,32 @@
         }
       }
     },
+    "ProjectionRecordKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "ProjectionRecordValueSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "set",
+        "key"
+      ],
+      "properties": {
+        "kind": {
+          "const": "record-value"
+        },
+        "set": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "key": {
+          "$ref": "#/$defs/ProjectionRecordKey"
+        }
+      }
+    },
     "ProjectionCodeTextSource": {
       "oneOf": [
         {
@@ -4226,6 +4252,9 @@
         },
         {
           "$ref": "#/$defs/ProjectionNamedRegionSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionRecordValueSource"
         }
       ]
     },
@@ -4239,6 +4268,9 @@
         },
         {
           "$ref": "#/$defs/ProjectionTreePathSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionRecordValueSource"
         }
       ]
     },
@@ -4386,6 +4418,9 @@
             "source-tree-root-not-a-tree",
             "source-tree-path-not-utf8",
             "source-tree-path-not-a-row",
+            "source-record-set-absent",
+            "source-record-absent",
+            "source-record-unproven",
             "content-differs"
           ]
         },

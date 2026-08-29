@@ -1,5 +1,28 @@
 use amiss_wire::json::Value;
 
+/// Builds one record-set semantic observation.
+#[must_use]
+pub fn record_set(name: &str, records: &[(&str, &str)]) -> Value {
+    Value::object(vec![
+        ("kind".to_owned(), Value::string("record-set".to_owned())),
+        ("name".to_owned(), Value::string(name.to_owned())),
+        (
+            "records".to_owned(),
+            Value::array(
+                records
+                    .iter()
+                    .map(|(key, value)| {
+                        Value::object(vec![
+                            ("key".to_owned(), Value::string((*key).to_owned())),
+                            ("value".to_owned(), Value::string((*value).to_owned())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
 /// A typed site-build observation fixture.
 #[derive(Clone, Copy)]
 pub enum SiteObservation<'a> {

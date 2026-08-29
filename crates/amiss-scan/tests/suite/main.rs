@@ -17,6 +17,7 @@ mod identity;
 mod lfs;
 mod pipeline;
 mod policy;
+mod record_projection;
 mod recorded;
 mod report;
 mod request;

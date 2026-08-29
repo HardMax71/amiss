@@ -14,6 +14,7 @@ use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::{AnalysisErrorCode, ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA};
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
+use amiss_wire::semantic::RECORD_KEY_BYTES;
 
 use crate::support::{report_schema, repository_root};
 
@@ -243,6 +244,13 @@ fn the_policy_schema_tracks_the_reader_bounds() {
             .and_then(serde_json::Value::as_u64),
         u64::try_from(SOURCE_MARKER_BYTES).ok(),
         "the schema and strict reader must publish one source-marker ceiling"
+    );
+    assert_eq!(
+        schema
+            .pointer("/$defs/RecordKey/maxLength")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(RECORD_KEY_BYTES).ok(),
+        "the schema and strict reader must publish one record-key ceiling"
     );
 }
 

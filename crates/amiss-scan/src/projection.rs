@@ -1,16 +1,22 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
-use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
-use amiss_wire::digest::Digest;
-use amiss_wire::model::RepoPath;
+use amiss_wire::controls::{
+    ProjectionAssertion, ProjectionKind, ProjectionSource, RecordValueSelection,
+};
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::{ArtifactId, RepoPath};
 
 use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resolve::Resolver;
 use crate::resources::Aggregate;
 use crate::scan::{SemanticCodeSink, SpanDisplay};
+use crate::semantic::RecordSet;
 
 mod inventory;
+
+pub(crate) const CODE_TEXT_SOURCE_DOMAIN: &str = "amiss/scanner-code-text-source";
 
 pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
     if !selected.contains(&b'\r') {
@@ -52,6 +58,9 @@ pub(crate) enum DriftReason {
     SourceTreeRootNotATree,
     SourceTreePathNotUtf8,
     SourceTreePathNotARow,
+    SourceRecordSetAbsent,
+    SourceRecordAbsent,
+    SourceRecordUnproven,
     ContentDiffers,
 }
 
@@ -138,6 +147,7 @@ fn drift(
 pub(crate) fn evaluate(
     resolver: &mut Resolver<'_>,
     discovery: &SnapshotDiscovery,
+    record_sets: &BTreeMap<ArtifactId, RecordSet>,
     assertion: &ProjectionAssertion,
 ) -> Result<Outcome, Error> {
     resolver.scan.charge(Aggregate::ProjectionAssertions, 1)?;
@@ -198,20 +208,31 @@ pub(crate) fn evaluate(
             DriftReason::SinkNotAdjacent,
         ));
     };
-    let verdict = match assertion.projection {
-        ProjectionKind::CodeTextV1 => resolver.resolve_code_projection(&assertion.source, sink)?,
-        ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1 => {
-            let ProjectionSource::TreePaths(selection) = &assertion.source else {
-                return Err(Error::Internal);
-            };
-            inventory::evaluate(
-                discovery,
-                selection,
-                assertion.projection,
-                sink,
-                resolver.scan,
-            )?
+    let verdict = match (assertion.projection, &assertion.source) {
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
+        ) => resolver.resolve_code_projection(&assertion.source, sink)?,
+        (ProjectionKind::CodeTextV1, ProjectionSource::RecordValue(selection)) => {
+            record_value(record_sets, selection, sink, resolver.scan)?
         }
+        (
+            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1,
+            ProjectionSource::TreePaths(selection),
+        ) => inventory::evaluate(
+            discovery,
+            selection,
+            assertion.projection,
+            sink,
+            resolver.scan,
+        )?,
+        (ProjectionKind::CodeTextV1, ProjectionSource::TreePaths(_))
+        | (
+            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1,
+            ProjectionSource::BlobLines(_)
+            | ProjectionSource::NamedRegion(_)
+            | ProjectionSource::RecordValue(_),
+        ) => return Err(Error::Internal),
     };
     Ok(Outcome {
         assertion: assertion.clone(),
@@ -220,5 +241,45 @@ pub(crate) fn evaluate(
         representative_span: Some(sink.span),
         representative_display: Some(sink.display),
         verdict,
+    })
+}
+
+fn record_value(
+    record_sets: &BTreeMap<ArtifactId, RecordSet>,
+    selection: &RecordValueSelection,
+    sink: &SemanticCodeSink,
+    resources: &mut crate::resources::ScanResources,
+) -> Result<Verdict, Error> {
+    let Some(set) = record_sets.get(&selection.set) else {
+        return Ok(unavailable(DriftReason::SourceRecordSetAbsent, sink));
+    };
+    let Some(value) = set.records.get(&selection.key) else {
+        return Ok(unavailable(
+            if set.complete {
+                DriftReason::SourceRecordAbsent
+            } else {
+                DriftReason::SourceRecordUnproven
+            },
+            sink,
+        ));
+    };
+    resources.charge(
+        Aggregate::ProjectionSelectedBytes,
+        u64::try_from(selection.key.len().saturating_add(value.len())).unwrap_or(u64::MAX),
+    )?;
+    resources.charge(
+        Aggregate::ProjectionProjectedBytes,
+        u64::try_from(value.len()).unwrap_or(u64::MAX),
+    )?;
+    if value == &sink.value {
+        return Ok(Verdict::Attested);
+    }
+    Ok(Verdict::Drift {
+        reason: DriftReason::ContentDiffers,
+        expected_digest: Some(hb(CODE_TEXT_SOURCE_DOMAIN, value.as_bytes())),
+        observed_digest: Some(sink.digest),
+        expected_bytes: Some(u64::try_from(value.len()).unwrap_or(u64::MAX)),
+        observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),
+        difference: None,
     })
 }

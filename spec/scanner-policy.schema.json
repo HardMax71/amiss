@@ -134,6 +134,18 @@
    "minimum": 1,
    "maximum": 9007199254740991
   },
+  "RecordSetName": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 128,
+   "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+  },
+  "RecordKey": {
+   "type": "string",
+   "minLength": 1,
+   "maxLength": 4096,
+   "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+  },
   "BlobLineSelection": {
    "type": "object",
    "additionalProperties": false,
@@ -211,6 +223,26 @@
     }
    }
   },
+  "RecordValueSelection": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "set",
+    "key"
+   ],
+   "properties": {
+    "kind": {
+     "const": "record-value"
+    },
+    "set": {
+     "$ref": "#/$defs/RecordSetName"
+    },
+    "key": {
+     "$ref": "#/$defs/RecordKey"
+    }
+   }
+  },
   "CodeTextSource": {
    "oneOf": [
     {
@@ -218,6 +250,9 @@
     },
     {
      "$ref": "#/$defs/NamedRegionSelection"
+    },
+    {
+     "$ref": "#/$defs/RecordValueSelection"
     }
    ]
   },
@@ -231,6 +266,9 @@
     },
     {
      "$ref": "#/$defs/TreePathSelection"
+    },
+    {
+     "$ref": "#/$defs/RecordValueSelection"
     }
    ]
   },
