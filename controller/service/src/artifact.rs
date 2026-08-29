@@ -209,6 +209,9 @@ fn artifact_component(raw: &str) -> Option<ArtifactComponent> {
         "plan" => Some(ArtifactComponent::Plan),
         "evidence" => Some(ArtifactComponent::Evidence),
         "assessment" => Some(ArtifactComponent::Assessment),
+        "publication-plan" => Some(ArtifactComponent::PublicationPlan),
+        "publication-evidence" => Some(ArtifactComponent::PublicationEvidence),
+        "publication-assessment" => Some(ArtifactComponent::PublicationAssessment),
         _ => None,
     }
 }

@@ -70,11 +70,11 @@ impl FileArtifactStore {
     }
 }
 
-pub(super) fn write_record(
+pub(super) fn write_record<const N: usize>(
     root: &Path,
     record: &Record,
     metadata: &[u8],
-    payloads: [(ArtifactComponent, Option<&[u8]>); 5],
+    payloads: [(ArtifactComponent, Option<&[u8]>); N],
 ) -> Result<(), ArtifactError> {
     let mut written = Vec::new();
     for (component, bytes) in payloads {
@@ -370,6 +370,9 @@ const fn component_suffix(component: ArtifactComponent) -> &'static str {
         ArtifactComponent::Plan => "plan",
         ArtifactComponent::Evidence => "evidence",
         ArtifactComponent::Assessment => "assessment",
+        ArtifactComponent::PublicationPlan => "publication-plan",
+        ArtifactComponent::PublicationEvidence => "publication-evidence",
+        ArtifactComponent::PublicationAssessment => "publication-assessment",
     }
 }
 
@@ -385,6 +388,9 @@ fn component_id(name: &str) -> Option<(&str, ArtifactComponent)> {
         ArtifactComponent::Plan,
         ArtifactComponent::Evidence,
         ArtifactComponent::Assessment,
+        ArtifactComponent::PublicationPlan,
+        ArtifactComponent::PublicationEvidence,
+        ArtifactComponent::PublicationAssessment,
     ]
     .into_iter()
     .find_map(|component| {

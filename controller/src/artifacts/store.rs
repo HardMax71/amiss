@@ -5,12 +5,12 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use super::format::{Blob, Record, RecordInput, Root};
+use super::format::{Blob, PublicationAudit, Record, RecordInput, Root};
 use super::{
     ArtifactBundle, ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference,
-    ArtifactStoreConfig,
+    ArtifactStoreConfig, PublicationAuditReference,
 };
-use crate::{ControllerClock, ControllerEvaluationId};
+use crate::{ControllerClock, ControllerEvaluationId, PublicationAuditBundle};
 
 pub struct FileArtifactStore {
     root: PathBuf,
@@ -46,6 +46,69 @@ impl FileArtifactStore {
         bundle: ArtifactBundle<'_>,
     ) -> Result<ArtifactReference, ArtifactError> {
         let input = record_input(bundle)?;
+        let payloads = [
+            (ArtifactComponent::Report, Some(bundle.report)),
+            (ArtifactComponent::Semantic, bundle.semantic),
+            (ArtifactComponent::Plan, bundle.plan),
+            (ArtifactComponent::Evidence, bundle.evidence),
+            (ArtifactComponent::Assessment, bundle.assessment),
+        ];
+        self.retain_record(evaluation_id, input, payloads)
+    }
+
+    /// Retains one validated publication audit as exact immutable bytes.
+    ///
+    /// # Errors
+    ///
+    /// The audit is invalid, the evaluation was rebound, capacity is exhausted,
+    /// or durable storage cannot be trusted.
+    pub fn retain_publication_audit(
+        &self,
+        evaluation_id: &ControllerEvaluationId,
+        bundle: PublicationAuditBundle<'_>,
+    ) -> Result<PublicationAuditReference, ArtifactError> {
+        let digests = crate::validate_publication_audit(bundle)?;
+        let input = RecordInput {
+            report: Blob::from_digest(bundle.report, digests.report_digest)?,
+            semantic: None,
+            plan: None,
+            evidence: None,
+            assessment: None,
+            external_tally: None,
+            external_incomplete: false,
+            publication_audit: Some(PublicationAudit {
+                plan: Blob::from_digest(bundle.plan, digests.plan_digest)?,
+                evidence: bundle
+                    .evidence
+                    .zip(digests.evidence_digest)
+                    .map(|(bytes, digest)| Blob::from_digest(bytes, digest))
+                    .transpose()?,
+                assessment: Blob::from_digest(bundle.assessment, digests.assessment_digest)?,
+                verdict: digests.verdict.as_ref().to_owned(),
+            }),
+        };
+        let payloads = [
+            (ArtifactComponent::Report, Some(bundle.report)),
+            (ArtifactComponent::PublicationPlan, Some(bundle.plan)),
+            (ArtifactComponent::PublicationEvidence, bundle.evidence),
+            (
+                ArtifactComponent::PublicationAssessment,
+                Some(bundle.assessment),
+            ),
+        ];
+        let artifact = self.retain_record(evaluation_id, input, payloads)?;
+        Ok(PublicationAuditReference {
+            artifact,
+            audit: digests,
+        })
+    }
+
+    fn retain_record<const N: usize>(
+        &self,
+        evaluation_id: &ControllerEvaluationId,
+        input: RecordInput,
+        payloads: [(ArtifactComponent, Option<&[u8]>); N],
+    ) -> Result<ArtifactReference, ArtifactError> {
         let mut state = self.lock_state()?;
         require_trusted(&state)?;
         let now = self.effective_now(&state)?;
@@ -85,7 +148,6 @@ impl FileArtifactStore {
             return Err(ArtifactError::Full);
         }
         self.advance_clock(&mut state, now)?;
-        let payloads = bundle_payloads(bundle);
         if let Err(error) = disk::write_record(&self.root, &record, &metadata_bytes, payloads) {
             state.trusted = false;
             return Err(error);
@@ -296,15 +358,6 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
         assessment: bundle.assessment.map(Blob::new).transpose()?,
         external_tally: bundle.external_tally,
         external_incomplete: bundle.external_incomplete,
+        publication_audit: None,
     })
-}
-
-fn bundle_payloads(bundle: ArtifactBundle<'_>) -> [(ArtifactComponent, Option<&[u8]>); 5] {
-    [
-        (ArtifactComponent::Report, Some(bundle.report)),
-        (ArtifactComponent::Semantic, bundle.semantic),
-        (ArtifactComponent::Plan, bundle.plan),
-        (ArtifactComponent::Evidence, bundle.evidence),
-        (ArtifactComponent::Assessment, bundle.assessment),
-    ]
 }

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use amiss_wire::digest::{Digest, hb};
+use amiss_wire::publication::{PUBLICATION_DOCUMENT_BYTES, PublicationVerdict};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,10 @@ pub(super) struct Blob {
 
 impl Blob {
     pub(super) fn new(bytes: &[u8]) -> Result<Self, ArtifactError> {
+        Self::from_digest(bytes, amiss_wire::digest::sha256(bytes))
+    }
+
+    pub(super) fn from_digest(bytes: &[u8], digest: Digest) -> Result<Self, ArtifactError> {
         let length = u64::try_from(bytes.len()).map_err(|_defect| ArtifactError::TooLarge)?;
         if bytes.is_empty() {
             return Err(ArtifactError::Corrupt);
@@ -46,7 +51,7 @@ impl Blob {
             return Err(ArtifactError::TooLarge);
         }
         Ok(Self {
-            digest: amiss_wire::digest::sha256(bytes).to_string(),
+            digest: digest.to_string(),
             length,
         })
     }
@@ -78,6 +83,18 @@ pub(super) struct Record {
     pub(super) external_incomplete: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) semantic: Option<Blob>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) publication_audit: Option<PublicationAudit>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PublicationAudit {
+    pub(super) plan: Blob,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) evidence: Option<Blob>,
+    pub(super) assessment: Blob,
+    pub(super) verdict: String,
 }
 
 pub(super) struct RecordInput {
@@ -88,6 +105,7 @@ pub(super) struct RecordInput {
     pub(super) external_tally: Option<ExternalTally>,
     pub(super) external_incomplete: bool,
     pub(super) semantic: Option<Blob>,
+    pub(super) publication_audit: Option<PublicationAudit>,
 }
 
 impl Record {
@@ -115,6 +133,7 @@ impl Record {
             external_tally: input.external_tally,
             external_incomplete: input.external_incomplete,
             semantic: input.semantic,
+            publication_audit: input.publication_audit,
         };
         record.id = record.expected_id()?;
         record.validate(retention)?;
@@ -130,6 +149,28 @@ impl Record {
                 .assessment
                 .as_ref()
                 .is_none_or(|_assessment| self.plan.is_some() && self.evidence.is_some());
+        let publication_valid = self.publication_audit.as_ref().is_none_or(|audit| {
+            audit.plan.valid()
+                && audit.plan.length <= PUBLICATION_DOCUMENT_BYTES
+                && audit
+                    .evidence
+                    .as_ref()
+                    .is_none_or(|blob| blob.valid() && blob.length <= PUBLICATION_DOCUMENT_BYTES)
+                && audit.assessment.valid()
+                && audit.assessment.length <= PUBLICATION_DOCUMENT_BYTES
+                && audit
+                    .verdict
+                    .parse::<PublicationVerdict>()
+                    .is_ok_and(|verdict| {
+                        verdict == PublicationVerdict::Unproven || audit.evidence.is_some()
+                    })
+                && self.semantic.is_none()
+                && self.plan.is_none()
+                && self.evidence.is_none()
+                && self.assessment.is_none()
+                && self.external_tally.is_none()
+                && !self.external_incomplete
+        });
         if self.schema != RECORD_SCHEMA
             || !valid_id(&self.id)
             || super::evaluation_id(&self.evaluation_id).is_err()
@@ -144,6 +185,7 @@ impl Record {
                 !blob.valid() || blob.length > crate::SEMANTIC_INPUT_ARTIFACT_BYTES
             })
             || !valid_chain
+            || !publication_valid
             || !self.expected_id().is_ok_and(|expected| expected == self.id)
         {
             return Err(ArtifactError::Corrupt);
@@ -186,6 +228,22 @@ impl Record {
                 self.assessment.as_ref(),
             ),
             (super::ArtifactComponent::Semantic, self.semantic.as_ref()),
+            (
+                super::ArtifactComponent::PublicationPlan,
+                self.publication_audit.as_ref().map(|audit| &audit.plan),
+            ),
+            (
+                super::ArtifactComponent::PublicationEvidence,
+                self.publication_audit
+                    .as_ref()
+                    .and_then(|audit| audit.evidence.as_ref()),
+            ),
+            (
+                super::ArtifactComponent::PublicationAssessment,
+                self.publication_audit
+                    .as_ref()
+                    .map(|audit| &audit.assessment),
+            ),
         ]
         .into_iter()
         .filter_map(|(component, blob)| blob.map(|blob| (component, blob)))
@@ -203,6 +261,8 @@ impl Record {
             external_incomplete: bool,
             #[serde(skip_serializing_if = "Option::is_none")]
             semantic: &'a Option<Blob>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            publication_audit: &'a Option<PublicationAudit>,
         }
         let identity = Identity {
             evaluation_id: &self.evaluation_id,
@@ -213,6 +273,7 @@ impl Record {
             external_tally: &self.external_tally,
             external_incomplete: self.external_incomplete,
             semantic: &self.semantic,
+            publication_audit: &self.publication_audit,
         };
         let bytes = serde_json::to_vec(&identity).map_err(|_defect| ArtifactError::Corrupt)?;
         Ok(hex::encode(hb(ID_DOMAIN, &bytes).as_bytes()))

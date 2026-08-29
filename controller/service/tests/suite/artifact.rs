@@ -1,13 +1,15 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_controller::{ArtifactBundle, ControllerClock, ControllerEvaluationId};
+use amiss_controller::{
+    ArtifactBundle, ControllerClock, ControllerEvaluationId, PublicationAuditBundle,
+};
 use amiss_controller_fixtures::clock::TestClock;
-use amiss_controller_fixtures::semantic::semantic_input_artifact;
 use amiss_controller_service::{
     ArtifactFiles, ArtifactLimits, EndpointConfig, artifact_routes, load_artifact_service,
     open_artifact_service,
 };
+use amiss_fixtures::publication_audit;
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -180,11 +182,8 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
 }
 
 #[tokio::test]
-async fn semantic_inputs_survive_authenticated_service_restart()
+async fn publication_audit_components_survive_authenticated_service_restart()
 -> Result<(), Box<dyn std::error::Error>> {
-    let fixture = semantic_input_artifact()?;
-    let report = fixture.report;
-    let semantic = fixture.artifact;
     let root = tempfile::tempdir()?;
     let artifact_root = root.path().join("artifacts");
     std::fs::create_dir(&artifact_root)?;
@@ -206,53 +205,81 @@ async fn semantic_inputs_survive_authenticated_service_restart()
     let service_config =
         || load_artifact_service(&files, artifact_root.clone(), ARTIFACT_LIMITS, &endpoint);
     let service = open_artifact_service(service_config()?, Arc::clone(&controller_clock))?;
-    let retained = service.store.retain(
-        &ControllerEvaluationId::new("evaluation/semantic-http".to_owned())
+    let publication = publication_audit(true)
+        .ok_or_else(|| std::io::Error::other("invalid publication fixture"))?;
+    let publication_reference = service.store.retain_publication_audit(
+        &ControllerEvaluationId::new("evaluation/publication-http".to_owned())
             .ok_or_else(|| std::io::Error::other("invalid fixture evaluation"))?,
-        ArtifactBundle {
-            report: &report,
-            semantic: Some(&semantic),
-            plan: None,
-            evidence: None,
-            assessment: None,
-            external_tally: None,
-            external_incomplete: false,
+        PublicationAuditBundle {
+            report: &publication.report,
+            plan: &publication.plan,
+            evidence: publication.evidence.as_deref(),
+            assessment: &publication.assessment,
         },
     )?;
-    let path = format!("/private/artifacts/{}/semantic", retained.id);
-    let authorized = || {
+    let publication_components = [
+        ("publication-plan", publication.plan.as_slice()),
+        (
+            "publication-evidence",
+            publication
+                .evidence
+                .as_deref()
+                .ok_or_else(|| std::io::Error::other("publication evidence fixture is absent"))?,
+        ),
+        ("publication-assessment", publication.assessment.as_slice()),
+    ];
+    let authorized = |path: &str| {
         Request::builder()
-            .uri(&path)
+            .uri(path)
             .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
             .body(Body::empty())
     };
     let app = artifact_routes(Router::new(), &service);
 
+    let publication_plan_path = format!(
+        "/private/artifacts/{}/publication-plan",
+        publication_reference.artifact.id
+    );
     let unauthenticated = app
         .clone()
-        .oneshot(Request::builder().uri(&path).body(Body::empty())?)
+        .oneshot(
+            Request::builder()
+                .uri(publication_plan_path)
+                .body(Body::empty())?,
+        )
         .await?;
     assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
-    let response = app.clone().oneshot(authorized()?).await?;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        to_bytes(response.into_body(), 1_048_576).await?,
-        semantic.as_slice()
-    );
+    for (component, expected) in publication_components {
+        let path = format!(
+            "/private/artifacts/{}/{component}",
+            publication_reference.artifact.id
+        );
+        let response = app.clone().oneshot(authorized(&path)?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(to_bytes(response.into_body(), 1_048_576).await?, expected);
+    }
     drop(app);
     drop(service);
 
     let reopened = open_artifact_service(service_config()?, controller_clock)?;
     let app = artifact_routes(Router::new(), &reopened);
-    let response = app.clone().oneshot(authorized()?).await?;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(
-        to_bytes(response.into_body(), 1_048_576).await?,
-        semantic.as_slice()
-    );
+    for (component, expected) in publication_components {
+        let path = format!(
+            "/private/artifacts/{}/{component}",
+            publication_reference.artifact.id
+        );
+        let response = app.clone().oneshot(authorized(&path)?).await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(to_bytes(response.into_body(), 1_048_576).await?, expected);
+    }
 
-    clock.set(retained.expires_at_unix_millis);
-    let expired = app.oneshot(authorized()?).await?;
+    clock.set(publication_reference.artifact.expires_at_unix_millis);
+    let expired = app
+        .oneshot(authorized(&format!(
+            "/private/artifacts/{}/publication-plan",
+            publication_reference.artifact.id
+        ))?)
+        .await?;
     assert_eq!(expired.status(), StatusCode::NOT_FOUND);
     Ok(())
 }

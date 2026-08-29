@@ -44,6 +44,15 @@ the scanner, semantic producer, or external verifier. A changed head or gate aft
 stages a superseded result with the retained chain, not the old pass or block. Rebinding one
 evaluation ID to different bytes is an error.
 
+The same store can retain a validated publication audit as a separate immutable record. Its
+reference carries the ordinary report artifact plus the exact plan, optional evidence, assessment,
+and verdict digests. The record survives restart and reopens only when its metadata, every retained
+byte, and the evaluation binding still agree. Publication audit components use the distinct
+siblings `/publication-plan`, `/publication-evidence`, and `/publication-assessment`; `/plan`,
+`/evidence`, and `/assessment` remain the external-link verification chain. This storage surface
+does not acquire a deployment receipt or publish an audit outcome. A later audit lane must retain
+the validated chain before staging any provider-visible result.
+
 If retention, validation, or retrieval cannot be trusted, a new publication fails closed. A
 summary without a retained locator says extra findings are “not displayed”; it never claims that
 an inaccessible report exists. Expiry cannot change a provider verdict that already completed.
@@ -73,6 +82,11 @@ When the publication advertises a semantic-input component, retrieve its exact s
 and candidate-bound envelopes with the same token from
 `https://amiss.example/amiss/artifacts/<artifact-id>/semantic`. Recompute the advertised digest
 before using any component as audit evidence.
+
+An authorized publication-audit client retrieves its three components from the publication
+siblings above. An unproven audit intentionally has no `/publication-evidence` component; its
+assessment binds a null evidence digest instead. The immutable artifact identity binds the audit
+digest set and verdict; callers must keep that complete reference with any staged audit outcome.
 
 Token files are exact bytes and cannot contain whitespace, including a trailing newline. Changing
 the token requires a service restart but not a new artifact root. If consumers must keep access to
@@ -113,5 +127,5 @@ mark prevents already removed bytes from returning after clock rollback.
 
 The base URL, retention, and capacity limits are recorded with a root. Changing any of them
 requires a new empty artifact root. Size the record limit for the largest report, semantic-input
-audit value, and external chain the lane is allowed to publish, and size total bytes plus record
-count for the expected publication rate over the retention period.
+audit value, external chain, or publication-audit chain a lane is allowed to retain, and size total
+bytes plus record count for the expected publication rate over the retention period.

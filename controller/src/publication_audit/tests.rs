@@ -1,31 +1,22 @@
 #![cfg(test)]
 
+use amiss_fixtures::{PublicationAuditFixture, publication_audit};
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::publication::{
-    PublicationEvidenceEnvelope, PublicationPlanEnvelope, PublicationVerdict, assess,
-    evidence as write_evidence, parse_evidence, parse_plan, plan as write_plan,
+    PublicationPlanEnvelope, PublicationVerdict, assess, parse_evidence, parse_plan,
+    plan as write_plan,
 };
 
 use super::{PublicationAuditBundle, report_docs, validate_publication_audit};
 use crate::ArtifactError;
 
-const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
-const PLAN: &[u8] = include_bytes!("../../../spec/examples/publication-plan.json");
-const EVIDENCE: &[u8] = include_bytes!("../../../spec/examples/publication-evidence.json");
-
-struct Fixture {
-    plan: Vec<u8>,
-    evidence: Option<Vec<u8>>,
-    assessment: Vec<u8>,
-}
-
 #[test]
 fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), ArtifactError> {
-    let fixture = fixture(true)?;
+    let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     let audit = validate_publication_audit(bundle(&fixture))?;
 
-    assert_eq!(audit.report_digest, sha256(REPORT));
+    assert_eq!(audit.report_digest, sha256(&fixture.report));
     assert_eq!(audit.plan_digest, sha256(&fixture.plan));
     assert_eq!(
         audit.evidence_digest,
@@ -38,7 +29,8 @@ fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), Artif
 
 #[test]
 fn the_reported_candidate_identity_has_the_published_preimage() -> Result<(), ArtifactError> {
-    let parsed = json::parse(REPORT).map_err(|_defect| ArtifactError::Corrupt)?;
+    let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
+    let parsed = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
     let payload = parsed.member("payload").ok_or(ArtifactError::Corrupt)?;
     let docs = report_docs(payload.clone()).ok_or(ArtifactError::Corrupt)?;
     let evaluation = payload.member("evaluation").ok_or(ArtifactError::Corrupt)?;
@@ -58,7 +50,7 @@ fn the_reported_candidate_identity_has_the_published_preimage() -> Result<(), Ar
 
 #[test]
 fn absent_evidence_remains_a_replayable_unproven_audit() -> Result<(), ArtifactError> {
-    let fixture = fixture(false)?;
+    let fixture = publication_audit(false).ok_or(ArtifactError::Corrupt)?;
     let audit = validate_publication_audit(bundle(&fixture))?;
 
     assert_eq!(audit.evidence_digest, None);
@@ -68,29 +60,29 @@ fn absent_evidence_remains_a_replayable_unproven_audit() -> Result<(), ArtifactE
 
 #[test]
 fn report_plan_and_assessment_rebindings_are_refused() -> Result<(), ArtifactError> {
-    let mut wrong_report = fixture(true)?;
+    let mut wrong_report = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     let mut plan = parse_plan(&wrong_report.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     plan.payload.report_payload_digest = Digest::from_wire(
         "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     )
     .ok_or(ArtifactError::Corrupt)?;
-    wrong_report = rebuilt(&plan, wrong_report.evidence.as_deref())?;
+    wrong_report = rebuilt(&wrong_report, &plan, wrong_report.evidence.as_deref())?;
     assert!(matches!(
         validate_publication_audit(bundle(&wrong_report)),
         Err(ArtifactError::Corrupt)
     ));
 
-    let mut wrong_docs = fixture(true)?;
+    let mut wrong_docs = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     let mut plan = parse_plan(&wrong_docs.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     plan.payload.docs.commit = plan.payload.docs.tree.clone();
-    wrong_docs = rebuilt(&plan, wrong_docs.evidence.as_deref())?;
+    wrong_docs = rebuilt(&wrong_docs, &plan, wrong_docs.evidence.as_deref())?;
     assert!(matches!(
         validate_publication_audit(bundle(&wrong_docs)),
         Err(ArtifactError::Corrupt)
     ));
 
-    let exact = fixture(true)?;
-    let other = fixture(false)?;
+    let exact = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
+    let other = publication_audit(false).ok_or(ArtifactError::Corrupt)?;
     assert!(matches!(
         validate_publication_audit(PublicationAuditBundle {
             assessment: &other.assessment,
@@ -104,8 +96,8 @@ fn report_plan_and_assessment_rebindings_are_refused() -> Result<(), ArtifactErr
 #[test]
 fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Result<(), ArtifactError>
 {
-    let fixture = fixture(true)?;
-    let mut report = json::parse(REPORT).map_err(|_defect| ArtifactError::Corrupt)?;
+    let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
+    let mut report = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
     let Value::Object(envelope) = &mut report else {
         return Err(ArtifactError::Corrupt);
     };
@@ -156,58 +148,11 @@ fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Resul
     Ok(())
 }
 
-fn fixture(with_evidence: bool) -> Result<Fixture, ArtifactError> {
-    let report = json::parse(REPORT).map_err(|_defect| ArtifactError::Corrupt)?;
-    let (payload, report_digest, _verdict) =
-        amiss_wire::report::validate_envelope(&report).map_err(|_defect| ArtifactError::Corrupt)?;
-    let mut plan = parse_plan(PLAN).map_err(|_defect| ArtifactError::Corrupt)?;
-    plan.payload.report_payload_digest =
-        Digest::from_wire(report_digest).ok_or(ArtifactError::Corrupt)?;
-    plan.payload.docs = report_docs(payload.clone()).ok_or(ArtifactError::Corrupt)?;
-    let plan_value = write_plan(&plan.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    let plan_bytes = json::canonical(&plan_value);
-    let plan = parse_plan(&plan_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
-    let evidence = with_evidence.then(|| evidence_for(&plan)).transpose()?;
-    let assessment = assess(
-        &plan,
-        evidence.as_ref(),
-        "0.26.0",
-        sha256(b"publication evaluator"),
-    )
-    .map_err(|_defect| ArtifactError::Corrupt)?;
-    let evidence_bytes = evidence
-        .as_ref()
-        .map(|envelope| {
-            write_evidence(&envelope.payload)
-                .map(|value| json::canonical(&value))
-                .map_err(|_defect| ArtifactError::Corrupt)
-        })
-        .transpose()?;
-    Ok(Fixture {
-        plan: plan_bytes,
-        evidence: evidence_bytes,
-        assessment: json::canonical(&assessment),
-    })
-}
-
-fn evidence_for(
-    plan: &PublicationPlanEnvelope,
-) -> Result<PublicationEvidenceEnvelope, ArtifactError> {
-    let mut evidence = parse_evidence(EVIDENCE).map_err(|_defect| ArtifactError::Corrupt)?;
-    evidence.payload.plan_payload_digest = plan.payload_digest;
-    evidence.payload.producer = plan.payload.producer.clone();
-    evidence.payload.docs = plan.payload.docs.clone();
-    evidence.payload.target = plan.payload.target.clone();
-    evidence.payload.site = plan.payload.site.clone();
-    evidence.payload.product = plan.payload.product.clone();
-    let value = write_evidence(&evidence.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    parse_evidence(&json::canonical(&value)).map_err(|_defect| ArtifactError::Corrupt)
-}
-
 fn rebuilt(
+    fixture: &PublicationAuditFixture,
     plan: &PublicationPlanEnvelope,
     evidence_bytes: Option<&[u8]>,
-) -> Result<Fixture, ArtifactError> {
+) -> Result<PublicationAuditFixture, ArtifactError> {
     let plan_value = write_plan(&plan.payload).map_err(|_defect| ArtifactError::Corrupt)?;
     let plan_bytes = json::canonical(&plan_value);
     let plan = parse_plan(&plan_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
@@ -224,16 +169,17 @@ fn rebuilt(
         sha256(b"publication evaluator"),
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    Ok(Fixture {
+    Ok(PublicationAuditFixture {
+        report: fixture.report.clone(),
         plan: plan_bytes,
         evidence,
         assessment: json::canonical(&assessment),
     })
 }
 
-fn bundle(fixture: &Fixture) -> PublicationAuditBundle<'_> {
+fn bundle(fixture: &PublicationAuditFixture) -> PublicationAuditBundle<'_> {
     PublicationAuditBundle {
-        report: REPORT,
+        report: &fixture.report,
         plan: &fixture.plan,
         evidence: fixture.evidence.as_deref(),
         assessment: &fixture.assessment,
