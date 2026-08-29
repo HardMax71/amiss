@@ -6,6 +6,16 @@ pub fn feature_only(value: usize) -> usize {
     value
 }
 
+#[cfg(target_pointer_width = "64")]
+pub fn target_word(value: u64) -> u64 {
+    value
+}
+
+#[cfg(target_pointer_width = "32")]
+pub fn target_word(value: u32) -> u32 {
+    value
+}
+
 macro_rules! public_function {
     ($name:ident) => {
         pub fn $name<T>(value: T) -> T
