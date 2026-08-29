@@ -5,10 +5,11 @@ use amiss_wire::json::Value;
 use super::controls;
 use super::{
     BootstrapJobError, CheckBinding, CheckPlan, ExternalPolicy, PolicyControls,
-    SemanticEvidenceExpectation, SemanticEvidenceTemplate,
+    SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
 };
 
-const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v5";
+const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v6";
+const CANDIDATE_BINDING: &str = "provider-run-candidate-commit";
 
 /// Freezes the controller-owned policy and required-check target reused by
 /// every claim for one authenticated delivery.
@@ -22,10 +23,13 @@ pub fn check_plan(
     execution: ExecutionConstraintDescriptor,
 ) -> Result<CheckPlan, BootstrapJobError> {
     policy.semantic_acquisitions = normalized_expectations(&policy.semantic_acquisitions)?;
+    policy.workflow_artifacts = normalized_workflow_artifacts(&policy.workflow_artifacts)?;
+    let acquisition_expectations =
+        normalized_expectations(&semantic_acquisition_expectations(&policy))?;
     if policy
         .semantic_evidence
         .len()
-        .checked_add(policy.semantic_acquisitions.len())
+        .checked_add(acquisition_expectations.len())
         .is_none_or(|count| count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT)
     {
         return Err(BootstrapJobError::SemanticEvidence);
@@ -43,6 +47,7 @@ pub fn check_plan(
             &policy_identity,
             &policy.semantic_evidence,
             &policy.semantic_acquisitions,
+            &policy.workflow_artifacts,
             &execution,
         ),
     );
@@ -84,6 +89,7 @@ fn plan_value(
     policy: &controls::PolicyIdentity,
     semantic_evidence: &[SemanticEvidenceTemplate],
     semantic_acquisitions: &[SemanticEvidenceExpectation],
+    workflow_artifacts: &[WorkflowArtifactExpectation],
     execution: &ExecutionConstraintDescriptor,
 ) -> Value {
     Value::object(vec![
@@ -161,6 +167,15 @@ fn plan_value(
                     .collect(),
             ),
         ),
+        (
+            "workflow_artifacts".to_owned(),
+            Value::array(
+                workflow_artifacts
+                    .iter()
+                    .map(workflow_artifact_value)
+                    .collect(),
+            ),
+        ),
     ])
 }
 
@@ -187,6 +202,116 @@ fn expectation_value(expectation: &SemanticEvidenceExpectation) -> Value {
             Value::string(expectation.context_digest.to_string()),
         ),
     ])
+}
+
+fn workflow_artifact_value(expectation: &WorkflowArtifactExpectation) -> Value {
+    Value::object(vec![
+        (
+            "provider_namespace".to_owned(),
+            Value::string(expectation.provider.namespace.as_str().to_owned()),
+        ),
+        (
+            "provider_instance".to_owned(),
+            Value::string(expectation.provider.instance.as_str().to_owned()),
+        ),
+        (
+            "repository_host".to_owned(),
+            Value::string(expectation.repository.host().to_owned()),
+        ),
+        (
+            "repository_owner".to_owned(),
+            Value::string(expectation.repository.owner().to_owned()),
+        ),
+        (
+            "repository_name".to_owned(),
+            Value::string(expectation.repository.name().to_owned()),
+        ),
+        (
+            "workflow_identity".to_owned(),
+            Value::string(expectation.workflow_identity.as_str().to_owned()),
+        ),
+        (
+            "event".to_owned(),
+            Value::string(expectation.event.as_str().to_owned()),
+        ),
+        (
+            "artifact_name".to_owned(),
+            Value::string(expectation.artifact_name.clone()),
+        ),
+        (
+            "payload_file".to_owned(),
+            Value::string(expectation.payload_file.as_str().to_owned()),
+        ),
+        (
+            "archive_byte_limit".to_owned(),
+            Value::Integer(i64::try_from(expectation.archive_byte_limit).unwrap_or(i64::MAX)),
+        ),
+        (
+            "file_byte_limit".to_owned(),
+            Value::Integer(i64::try_from(expectation.file_byte_limit).unwrap_or(i64::MAX)),
+        ),
+        (
+            "candidate_binding".to_owned(),
+            Value::string(CANDIDATE_BINDING.to_owned()),
+        ),
+        (
+            "semantic".to_owned(),
+            expectation_value(&expectation.semantic),
+        ),
+    ])
+}
+
+pub(super) fn semantic_acquisition_expectations(
+    policy: &PolicyControls,
+) -> Vec<SemanticEvidenceExpectation> {
+    let mut expectations = Vec::with_capacity(
+        policy
+            .semantic_acquisitions
+            .len()
+            .saturating_add(policy.workflow_artifacts.len()),
+    );
+    expectations.extend_from_slice(&policy.semantic_acquisitions);
+    expectations.extend(
+        policy
+            .workflow_artifacts
+            .iter()
+            .map(|artifact| artifact.semantic.clone()),
+    );
+    expectations
+}
+
+fn normalized_workflow_artifacts(
+    artifacts: &[WorkflowArtifactExpectation],
+) -> Result<Vec<WorkflowArtifactExpectation>, BootstrapJobError> {
+    if artifacts.iter().any(|artifact| {
+        artifact.repository.host() != artifact.provider.instance.as_str()
+            || artifact.artifact_name.is_empty()
+            || artifact.artifact_name.len() > 256
+            || artifact.artifact_name.chars().any(char::is_control)
+            || artifact
+                .payload_file
+                .as_str()
+                .bytes()
+                .any(|byte| byte.is_ascii_control())
+            || !(1..=super::MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES)
+                .contains(&artifact.archive_byte_limit)
+            || !(1..=super::MAX_WORKFLOW_ARTIFACT_FILE_BYTES).contains(&artifact.file_byte_limit)
+    }) {
+        return Err(BootstrapJobError::WorkflowArtifact);
+    }
+    let mut normalized = artifacts.to_vec();
+    normalized.sort();
+    if normalized.windows(2).any(|pair| {
+        matches!(pair, [left, right]
+            if left.provider == right.provider
+                && left.repository == right.repository
+                && left.workflow_identity == right.workflow_identity
+                && left.event == right.event
+                && left.artifact_name == right.artifact_name)
+    }) {
+        return Err(BootstrapJobError::WorkflowArtifact);
+    }
+    Ok(normalized)
 }
 
 pub(super) fn normalized_expectations(

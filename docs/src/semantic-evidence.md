@@ -108,6 +108,14 @@ them by payload digest, and rejects collisions. The engine repeats the context c
 sealed pair before consuming the evidence. A missing, extra, malformed, stale, wrong-context,
 duplicate, or oversized acquired set is runtime tampering, not absent evidence.
 
+The same plan contract can freeze each provider workflow artifact as an acquisition source. Its
+provider and repository, workflow identity, event, artifact name, sole payload member, producer
+contract, and separate archive and payload byte ceilings are all plan-digest inputs. The only
+candidate rule is exact equality with the authenticated provider run's candidate commit; it is not
+repository-selectable policy. This is a controller trust primitive, not a claim that every provider
+can fetch such artifacts: a lane must separately expose operator configuration and implement the
+provider-specific authenticated acquisition before the expectation is usable.
+
 Job construction also produces one canonical semantic-input audit value, capped by
 `SEMANTIC_INPUT_ARTIFACT_BYTES` before base64 allocation. In payload-digest order it holds each
 exact template byte stream, the exact canonical bound envelope, its acquisition identity when

@@ -10,10 +10,11 @@ use std::sync::Arc;
 use amiss_controller::{
     AcquiredControl, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,
     ChangeId, ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity,
-    ExternalPolicy, IntegrationId, OidPair, PolicyControls, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity,
-    RunRefs, RunRequest, SemanticEvidenceExpectation, SemanticEvidenceTemplate, bootstrap_job,
-    check_binding, check_plan,
+    ExternalPolicy, IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
+    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, OpaqueId, PolicyControls, ProviderIdentity,
+    ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    RunIdentity, RunRefs, RunRequest, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
+    WorkflowArtifactExpectation, bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
@@ -21,7 +22,8 @@ use amiss_wire::controls::{
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::{
-    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
+    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
+    UtcInstant,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestTrust, SnapshotRequest,
@@ -162,6 +164,7 @@ fn policy() -> PolicyControls {
         waiver_bundle: Some(acquired("waiver-bundle.json")),
         semantic_evidence: super::intersphinx::evidence(),
         semantic_acquisitions: Vec::new(),
+        workflow_artifacts: Vec::new(),
     }
 }
 
@@ -226,6 +229,31 @@ fn site_acquisition(context_digest: Digest) -> SiteAcquisition {
             bytes: bytes.into(),
         },
     }
+}
+
+fn workflow_acquisition(
+    acquisition_identity: &str,
+    artifact_name: &str,
+    context_digest: Digest,
+) -> (WorkflowArtifactExpectation, AcquiredSemanticTemplate) {
+    let mut acquisition = site_acquisition(context_digest);
+    let identity = ArtifactId::new(acquisition_identity.to_owned()).unwrap();
+    acquisition.expectation.acquisition_identity = identity.clone();
+    acquisition.template.acquisition_identity = identity;
+    (
+        WorkflowArtifactExpectation {
+            provider: provider(),
+            repository: repository(),
+            workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
+            event: OpaqueId::new("merge_request_event".to_owned()).unwrap(),
+            artifact_name: artifact_name.to_owned(),
+            payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
+            archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
+            file_byte_limit: MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
+            semantic: acquisition.expectation,
+        },
+        acquisition.template,
+    )
 }
 
 #[test]
@@ -350,6 +378,128 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
 }
 
 #[test]
+fn workflow_artifacts_are_normalized_and_feed_semantic_binding() {
+    let first = workflow_acquisition(
+        "workflow-site-primary",
+        "site-primary",
+        hb("amiss/test-site-context", b"primary"),
+    );
+    let second = workflow_acquisition(
+        "workflow-site-secondary",
+        "site-secondary",
+        hb("amiss/test-site-context", b"secondary"),
+    );
+    let forward = check_plan(
+        Profile::Enforce,
+        PolicyControls {
+            workflow_artifacts: vec![first.0.clone(), second.0.clone()],
+            ..PolicyControls::default()
+        },
+        execution(),
+    )
+    .unwrap();
+    let reverse = check_plan(
+        Profile::Enforce,
+        PolicyControls {
+            workflow_artifacts: vec![second.0.clone(), first.0.clone()],
+            ..PolicyControls::default()
+        },
+        execution(),
+    )
+    .unwrap();
+    assert_eq!(forward.digest, reverse.digest);
+    assert_eq!(forward.policy, reverse.policy);
+
+    let run = run_request(forward.policy);
+    let job = bootstrap(&run, &[second.1, first.1]).unwrap();
+    let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
+    assert_eq!(controls.semantic_evidence.len(), 2);
+    assert!(job.semantic_artifact.is_some());
+}
+
+#[test]
+fn workflow_artifact_plans_reject_invalid_or_ambiguous_sources() {
+    let (valid, _template) = workflow_acquisition(
+        "workflow-site-primary",
+        "site-primary",
+        hb("amiss/test-site-context", b"primary"),
+    );
+    let mut wrong_host = valid.clone();
+    wrong_host.provider =
+        ProviderIdentity::new("gitlab".to_owned(), "other.example".to_owned()).unwrap();
+    let mut empty_name = valid.clone();
+    empty_name.artifact_name.clear();
+    let mut control_name = valid.clone();
+    control_name.artifact_name = "site\nprimary".to_owned();
+    let mut control_path = valid.clone();
+    control_path.payload_file = RepoPathText::new("amiss/site\nprimary.json".to_owned()).unwrap();
+    let mut zero_archive = valid.clone();
+    zero_archive.archive_byte_limit = 0;
+    let mut large_archive = valid.clone();
+    large_archive.archive_byte_limit = MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES.saturating_add(1);
+    let mut zero_file = valid.clone();
+    zero_file.file_byte_limit = 0;
+    let mut large_file = valid.clone();
+    large_file.file_byte_limit = MAX_WORKFLOW_ARTIFACT_FILE_BYTES.saturating_add(1);
+
+    for defect in [
+        wrong_host,
+        empty_name,
+        control_name,
+        control_path,
+        zero_archive,
+        large_archive,
+        zero_file,
+        large_file,
+    ] {
+        assert_eq!(
+            check_plan(
+                Profile::Enforce,
+                PolicyControls {
+                    workflow_artifacts: vec![defect],
+                    ..PolicyControls::default()
+                },
+                execution(),
+            )
+            .unwrap_err(),
+            BootstrapJobError::WorkflowArtifact
+        );
+    }
+
+    let (same_artifact, _template) = workflow_acquisition(
+        "workflow-site-other",
+        "site-primary",
+        hb("amiss/test-site-context", b"other"),
+    );
+    assert_eq!(
+        check_plan(
+            Profile::Enforce,
+            PolicyControls {
+                workflow_artifacts: vec![valid.clone(), same_artifact],
+                ..PolicyControls::default()
+            },
+            execution(),
+        )
+        .unwrap_err(),
+        BootstrapJobError::WorkflowArtifact
+    );
+
+    assert_eq!(
+        check_plan(
+            Profile::Enforce,
+            PolicyControls {
+                semantic_acquisitions: vec![valid.semantic.clone()],
+                workflow_artifacts: vec![valid],
+                ..PolicyControls::default()
+            },
+            execution(),
+        )
+        .unwrap_err(),
+        BootstrapJobError::SemanticEvidence
+    );
+}
+
+#[test]
 fn acquired_semantic_templates_must_match_the_planned_identity_and_context() {
     let context = hb("amiss/test-site-context", b"english/current");
     let acquisition = site_acquisition(context);
@@ -432,6 +582,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
         semantic_acquisitions: Vec::new(),
+        workflow_artifacts: Vec::new(),
     };
     let run = run_request(wrong_policy);
     assert_eq!(
@@ -471,6 +622,7 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
         semantic_acquisitions: Vec::new(),
+        workflow_artifacts: Vec::new(),
     };
     assert_eq!(
         check_plan(Profile::Enforce, policy, execution(),).unwrap_err(),

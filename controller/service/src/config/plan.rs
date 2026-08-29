@@ -57,6 +57,7 @@ pub fn load_plan(raw: &CheckPlanFiles) -> Result<CheckPlan, ConfigError> {
         waiver_bundle: load_control(raw.waiver_bundle_file.as_deref())?,
         semantic_evidence,
         semantic_acquisitions: Vec::new(),
+        workflow_artifacts: Vec::new(),
     };
     check_plan(profile, policy, execution)
         .map_err(|defect| ConfigError::caused_by("check plan is invalid", defect))

@@ -9,13 +9,13 @@ use amiss_wire::controls::{
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::json::{self, Value};
-use amiss_wire::model::{ArtifactId, UtcInstant};
+use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity, UtcInstant};
 use amiss_wire::requests::{
     EvaluationRequest, RequestStreams, RequestTrust, SnapshotRequest, SuppliedControl,
     SuppliedSemanticEvidence, SuppliedTime, commit_candidate_identity_digest,
 };
 
-use crate::RunRequest;
+use crate::{OpaqueId, ProviderIdentity, RunRequest};
 
 pub use amiss_wire::semantic::SemanticEvidenceTemplate;
 pub use controls::{AcquiredControl, PolicyControls};
@@ -64,11 +64,15 @@ pub enum BootstrapJobError {
     TrustedTime,
     #[error("semantic evidence is invalid")]
     SemanticEvidence,
+    #[error("a workflow artifact expectation is invalid")]
+    WorkflowArtifact,
     #[error("the sealed requests cannot be encoded within the stream ceiling")]
     RequestEncoding,
 }
 
 pub const SEMANTIC_INPUT_ARTIFACT_BYTES: u64 = 50_331_648;
+pub const MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES: u64 = 33_554_432;
+pub const MAX_WORKFLOW_ARTIFACT_FILE_BYTES: u64 = amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AcquiredSemanticTemplate {
@@ -89,6 +93,19 @@ pub struct SemanticEvidenceExpectation {
     pub producer_identity: ArtifactId,
     pub producer_version: String,
     pub context_digest: Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WorkflowArtifactExpectation {
+    pub provider: ProviderIdentity,
+    pub repository: RepositoryIdentity,
+    pub workflow_identity: OpaqueId,
+    pub event: OpaqueId,
+    pub artifact_name: String,
+    pub payload_file: RepoPathText,
+    pub archive_byte_limit: u64,
+    pub file_byte_limit: u64,
+    pub semantic: SemanticEvidenceExpectation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -178,9 +195,10 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let constraint_value =
         json::parse(&constraint).map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let semantic_expectations = plan::semantic_acquisition_expectations(&checked_plan.policy);
     let semantic = bind_semantic_evidence(
         &checked_plan.policy.semantic_evidence,
-        &checked_plan.policy.semantic_acquisitions,
+        &semantic_expectations,
         input.acquired_semantic_templates,
         candidate_identity,
     )?;
