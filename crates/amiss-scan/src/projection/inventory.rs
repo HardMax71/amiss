@@ -7,6 +7,7 @@ use amiss_wire::model::RepoPath;
 
 use crate::Error;
 use crate::discovery::{Located, SnapshotDiscovery};
+use crate::resources::{Aggregate, ScanResources};
 use crate::scan::SemanticCodeSink;
 
 use super::{Difference, DriftReason, RowDifference, Verdict, unavailable};
@@ -22,17 +23,26 @@ struct Preview {
     closed: bool,
 }
 
-fn preview_row(preview: &mut Preview, row: &str) {
+fn preview_row(
+    preview: &mut Preview,
+    row: &str,
+    resources: &mut ScanResources,
+) -> Result<(), Error> {
     if preview.closed {
-        return;
+        return Ok(());
     }
     let bytes = preview.bytes.saturating_add(row.len());
     if preview.rows.len() == PREVIEW_ROWS_PER_SIDE || bytes > PREVIEW_BYTES_PER_SIDE {
         preview.closed = true;
-        return;
+        return Ok(());
     }
+    resources.charge(
+        Aggregate::ProjectionPreviewBytes,
+        u64::try_from(row.len()).unwrap_or(u64::MAX),
+    )?;
     preview.rows.push(row.to_owned());
     preview.bytes = bytes;
+    Ok(())
 }
 
 fn selected_paths<'a>(
@@ -79,19 +89,6 @@ fn selected_paths<'a>(
         }))
 }
 
-fn selected_rows<'a>(paths: impl Iterator<Item = &'a [u8]>) -> Result<Vec<&'a str>, DriftReason> {
-    paths
-        .map(|path| {
-            let row =
-                std::str::from_utf8(path).map_err(|_invalid| DriftReason::SourceTreePathNotUtf8)?;
-            if row.chars().any(char::is_control) {
-                return Err(DriftReason::SourceTreePathNotARow);
-            }
-            Ok(row)
-        })
-        .collect()
-}
-
 fn projected_bytes(rows: &[&str]) -> u64 {
     let separators = rows.len().saturating_sub(1);
     rows.iter().fold(
@@ -118,7 +115,11 @@ fn rows_match(rows: &[&str], observed: &str) -> bool {
     !observed.is_empty() && rows.iter().copied().eq(observed.split('\n'))
 }
 
-fn difference(rows: &[&str], observed: &str) -> RowDifference {
+fn difference(
+    rows: &[&str],
+    observed: &str,
+    resources: &mut ScanResources,
+) -> Result<RowDifference, Error> {
     let mut observed_rows: Vec<&str> = if observed.is_empty() {
         Vec::new()
     } else {
@@ -146,7 +147,7 @@ fn difference(rows: &[&str], observed: &str) -> RowDifference {
         match expected.as_bytes().cmp(actual.as_bytes()) {
             Ordering::Less => {
                 missing_records = missing_records.saturating_add(1);
-                preview_row(&mut missing, expected);
+                preview_row(&mut missing, expected, resources)?;
                 expected_at = expected_at.saturating_add(1);
             }
             Ordering::Equal => {
@@ -155,20 +156,20 @@ fn difference(rows: &[&str], observed: &str) -> RowDifference {
             }
             Ordering::Greater => {
                 extra_records = extra_records.saturating_add(1);
-                preview_row(&mut extra, actual);
+                preview_row(&mut extra, actual, resources)?;
                 observed_at = observed_at.saturating_add(1);
             }
         }
     }
     for row in rows.get(expected_at..).unwrap_or_default() {
         missing_records = missing_records.saturating_add(1);
-        preview_row(&mut missing, row);
+        preview_row(&mut missing, row, resources)?;
     }
     for row in observed_rows.get(observed_at..).unwrap_or_default() {
         extra_records = extra_records.saturating_add(1);
-        preview_row(&mut extra, row);
+        preview_row(&mut extra, row, resources)?;
     }
-    RowDifference {
+    Ok(RowDifference {
         ordering_only: missing_records == 0 && extra_records == 0,
         expected_records: u64::try_from(rows.len()).unwrap_or(u64::MAX),
         observed_records: u64::try_from(observed_rows.len()).unwrap_or(u64::MAX),
@@ -180,7 +181,7 @@ fn difference(rows: &[&str], observed: &str) -> RowDifference {
             .saturating_sub(u64::try_from(extra.rows.len()).unwrap_or(u64::MAX)),
         missing_preview: missing.rows,
         extra_preview: extra.rows,
-    }
+    })
 }
 
 fn canonical_count(value: &str) -> Option<u64> {
@@ -223,6 +224,7 @@ pub(super) fn evaluate(
     selection: &TreePathSelection,
     projection: ProjectionKind,
     sink: &SemanticCodeSink,
+    resources: &mut ScanResources,
 ) -> Result<Verdict, Error> {
     let paths = match selected_paths(discovery, selection) {
         Ok(paths) => paths,
@@ -230,23 +232,57 @@ pub(super) fn evaluate(
     };
     match projection {
         ProjectionKind::SortedRowsV1 => {
-            let rows = match selected_rows(paths) {
-                Ok(rows) => rows,
-                Err(reason) => return Ok(unavailable(reason, sink)),
+            let mut rows = Vec::new();
+            for path in paths {
+                resources.charge(
+                    Aggregate::ProjectionSelectedBytes,
+                    u64::try_from(path.len()).unwrap_or(u64::MAX),
+                )?;
+                let Ok(row) = std::str::from_utf8(path) else {
+                    return Ok(unavailable(DriftReason::SourceTreePathNotUtf8, sink));
+                };
+                if row.chars().any(char::is_control) {
+                    return Ok(unavailable(DriftReason::SourceTreePathNotARow, sink));
+                }
+                rows.push(row);
+            }
+            let expected_records = u64::try_from(rows.len()).unwrap_or(u64::MAX);
+            let observed_records = if sink.value.is_empty() {
+                0
+            } else {
+                u64::try_from(sink.value.split('\n').count()).unwrap_or(u64::MAX)
             };
+            resources.charge(
+                Aggregate::ProjectionComparedRecords,
+                expected_records.saturating_add(observed_records),
+            )?;
+            let expected_bytes = projected_bytes(&rows);
+            resources.charge(Aggregate::ProjectionProjectedBytes, expected_bytes)?;
             if rows_match(&rows, &sink.value) {
                 return Ok(Verdict::Attested);
             }
             Ok(mismatch(
                 sink,
                 projected_digest(&rows),
-                projected_bytes(&rows),
-                Difference::Rows(Box::new(difference(&rows, &sink.value))),
+                expected_bytes,
+                Difference::Rows(Box::new(difference(&rows, &sink.value, resources)?)),
             ))
         }
         ProjectionKind::DecimalCountV1 => {
-            let expected_count = u64::try_from(paths.count()).unwrap_or(u64::MAX);
+            let mut expected_count = 0_u64;
+            for path in paths {
+                resources.charge(
+                    Aggregate::ProjectionSelectedBytes,
+                    u64::try_from(path.len()).unwrap_or(u64::MAX),
+                )?;
+                expected_count = expected_count.saturating_add(1);
+            }
+            resources.charge(Aggregate::ProjectionComparedRecords, expected_count)?;
             let expected = expected_count.to_string();
+            resources.charge(
+                Aggregate::ProjectionProjectedBytes,
+                u64::try_from(expected.len()).unwrap_or(u64::MAX),
+            )?;
             if expected == sink.value {
                 return Ok(Verdict::Attested);
             }

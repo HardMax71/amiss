@@ -7,6 +7,7 @@ use amiss_wire::model::RepoPath;
 use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resolve::Resolver;
+use crate::resources::Aggregate;
 use crate::scan::{SemanticCodeSink, SpanDisplay};
 
 mod inventory;
@@ -139,6 +140,7 @@ pub(crate) fn evaluate(
     discovery: &SnapshotDiscovery,
     assertion: &ProjectionAssertion,
 ) -> Result<Outcome, Error> {
+    resolver.scan.charge(Aggregate::ProjectionAssertions, 1)?;
     let document = RepoPath::from(&assertion.document);
     let Some(record) = discovery.document(document.as_bytes()) else {
         return Ok(drift(
@@ -202,7 +204,13 @@ pub(crate) fn evaluate(
             let ProjectionSource::TreePaths(selection) = &assertion.source else {
                 return Err(Error::Internal);
             };
-            inventory::evaluate(discovery, selection, assertion.projection, sink)?
+            inventory::evaluate(
+                discovery,
+                selection,
+                assertion.projection,
+                sink,
+                resolver.scan,
+            )?
         }
     };
     Ok(Outcome {

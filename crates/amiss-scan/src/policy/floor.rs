@@ -172,6 +172,21 @@ pub fn tightened_limits(
             ResourceName::AggregateHeadingAnchorEvaluationBytesPerSnapshot => {
                 Some(&mut scan.aggregate_heading_anchor_evaluation_bytes_per_snapshot)
             }
+            ResourceName::ProjectionAssertionsPerSnapshot => {
+                Some(&mut scan.projection_assertions_per_snapshot)
+            }
+            ResourceName::AggregateProjectionSelectedBytesPerSnapshot => {
+                Some(&mut scan.aggregate_projection_selected_bytes_per_snapshot)
+            }
+            ResourceName::ProjectionRecordsComparedPerSnapshot => {
+                Some(&mut scan.projection_records_compared_per_snapshot)
+            }
+            ResourceName::AggregateProjectionProjectedBytesPerSnapshot => {
+                Some(&mut scan.aggregate_projection_projected_bytes_per_snapshot)
+            }
+            ResourceName::AggregateProjectionPreviewBytesPerSnapshot => {
+                Some(&mut scan.aggregate_projection_preview_bytes_per_snapshot)
+            }
             ResourceName::SelectedControlBlobBytes => Some(&mut scan.selected_control_blob_bytes),
             ResourceName::AggregateSelectedControlBytesPerSnapshot => {
                 Some(&mut scan.aggregate_selected_control_bytes_per_snapshot)

@@ -22,6 +22,13 @@ in one parse of the target and then answered from memory. This is the only place
 parses a file it did not discover as a document. A target the budget cannot afford is not
 judged: its anchors stay unsupported rather than becoming missing.
 
+Projection work has separate snapshot totals for admitted assertions, selected source bytes,
+records prepared for comparison, canonical projected bytes, and diagnostic preview bytes.
+Repeated assertions spend these totals even when their source blob is cached: caching avoids a
+second Git read, but it does not make the projection comparison free. Preview bytes are charged
+before they are copied into a finding; rows omitted by the fixed preview bound cost no report
+memory and are represented by their exact omitted count.
+
 <!-- amiss-doc-contract:limits:start -->
 | Report resource | Limit |
 | --- | ---: |
@@ -50,6 +57,11 @@ judged: its anchors stay unsupported rather than becoming missing.
 | `aggregate-ignore-declaration-bytes-per-snapshot` | 16,777,216 |
 | `aggregate-line-fragment-evaluation-bytes-per-snapshot` | 536,870,912 |
 | `aggregate-heading-anchor-evaluation-bytes-per-snapshot` | 536,870,912 |
+| `projection-assertions-per-snapshot` | 10,000 |
+| `aggregate-projection-selected-bytes-per-snapshot` | 67,108,864 |
+| `projection-records-compared-per-snapshot` | 200,000 |
+| `aggregate-projection-projected-bytes-per-snapshot` | 67,108,864 |
+| `aggregate-projection-preview-bytes-per-snapshot` | 16,777,216 |
 | `aggregate-document-bytes-per-snapshot` | 536,870,912 |
 | `raw-link-destination-bytes` | 16,384 |
 | `parser-nesting` | 256 |

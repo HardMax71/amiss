@@ -111,6 +111,19 @@ fn resource_limit(resource: ResourceName) -> u64 {
         ResourceName::AggregateHeadingAnchorEvaluationBytesPerSnapshot => {
             scan.aggregate_heading_anchor_evaluation_bytes_per_snapshot
         }
+        ResourceName::ProjectionAssertionsPerSnapshot => scan.projection_assertions_per_snapshot,
+        ResourceName::AggregateProjectionSelectedBytesPerSnapshot => {
+            scan.aggregate_projection_selected_bytes_per_snapshot
+        }
+        ResourceName::ProjectionRecordsComparedPerSnapshot => {
+            scan.projection_records_compared_per_snapshot
+        }
+        ResourceName::AggregateProjectionProjectedBytesPerSnapshot => {
+            scan.aggregate_projection_projected_bytes_per_snapshot
+        }
+        ResourceName::AggregateProjectionPreviewBytesPerSnapshot => {
+            scan.aggregate_projection_preview_bytes_per_snapshot
+        }
         ResourceName::AggregateDocumentBytesPerSnapshot => {
             scan.aggregate_document_bytes_per_snapshot
         }
