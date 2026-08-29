@@ -57,12 +57,13 @@ cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnin
 The first pair checks every crate, engine and provider alike, from one lockfile. The second
 checks the scanner's standalone fuzz package, which keeps its own lockfile because coverage-guided
 runs need nightly. The trust boundary is a dependency boundary rather than a workspace boundary:
-HTTP, provider API, Git acquisition, credential, storage, and service-runtime dependencies belong
-to the unpublished crates under `controller/`, and `deny-engine.toml` drops those crates from the
-graph and then bans the network and async stack, so what an `amiss` user downloads cannot acquire
-it. The prek hooks run the first pair and Linux CI runs both. The macOS and Windows jobs also run the controller
-tests, including the cross-process file stores, provider authentication, worker, and
-supervised-process cases. The supported service deployments are documented in
+the compiler-output specialist under `api/` and the HTTP, provider API, Git acquisition,
+credential, storage, and service-runtime crates under `controller/` are unpublished.
+`deny-engine.toml` drops them from the graph and then bans the network and async stack, so what an
+`amiss` user downloads cannot acquire it. The prek hooks run the first pair and Linux CI runs both.
+The macOS and Windows jobs also run the controller tests, including the cross-process file stores,
+provider authentication, worker, and supervised-process cases. The supported service deployments
+are documented in
 [Provider-verified controls](provider-controls.md).
 
 Tests answer to a house rule called the teeth check: important tests are exercised against

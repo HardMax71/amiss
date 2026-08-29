@@ -9,6 +9,7 @@ name = "amiss"
 changelog_update = true
 changelog_path = "CHANGELOG.md"
 changelog_include = [
+  "amiss-api",
   "amiss-git",
   "amiss-scan",
   "amiss-md",

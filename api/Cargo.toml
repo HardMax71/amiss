@@ -1,0 +1,26 @@
+[package]
+name = "amiss-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Bounded Rust public-API record producer for Amiss semantic evidence"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "amiss-rust-public-api"
+path = "src/main.rs"
+
+[dependencies]
+amiss-controller-files = { path = "../controller/files" }
+amiss-wire = { path = "../crates/amiss-wire" }
+rustdoc-types = "=0.61.0"
+serde.workspace = true
+serde_json = { workspace = true, features = ["unbounded_depth"] }
+thiserror.workspace = true
+trustfall.workspace = true
+trustfall-rustdoc-adapter.workspace = true
+
+[lints]
+workspace = true
