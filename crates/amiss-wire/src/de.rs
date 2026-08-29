@@ -146,6 +146,21 @@ pub fn string(path: &str, value: Value) -> Result<String, Error> {
     Ok(string.into())
 }
 
+/// Decodes one nonempty bounded string without control characters.
+///
+/// # Errors
+///
+/// Fails with `InvalidValue` when the text is empty, exceeds `limit` bytes, or contains a control
+/// character, and with `WrongType` when the value is not a string.
+pub(crate) fn bounded_text(path: &str, value: Value, limit: usize) -> Result<String, Error> {
+    let value = string(path, value)?;
+    if !value.is_empty() && value.len() <= limit && !value.chars().any(char::is_control) {
+        Ok(value)
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
+}
+
 /// # Errors
 ///
 /// Fails with `InvalidValue` when the value is not the canonical SHA-256 wire form.

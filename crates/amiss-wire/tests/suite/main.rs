@@ -4,6 +4,7 @@ mod external;
 mod extraction;
 mod human;
 mod json;
+mod locale;
 mod manifest;
 mod model;
 mod paths;
