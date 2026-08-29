@@ -33,9 +33,10 @@ pub use artifacts::{
 };
 pub use bootstrap_job::{
     AcquiredControl, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,
-    BoundSemanticEvidence, CheckBinding, CheckPlan, ExternalPolicy, PolicyControls,
+    BoundSemanticEvidence, CheckBinding, CheckPlan, ExternalPolicy,
+    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, PolicyControls,
     SEMANTIC_INPUT_ARTIFACT_BYTES, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
-    bind_semantic_evidence, bootstrap_job, check_binding, check_plan,
+    WorkflowArtifactExpectation, bind_semantic_evidence, bootstrap_job, check_binding, check_plan,
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BootstrapRun, run_bootstrap};

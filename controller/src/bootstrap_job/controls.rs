@@ -27,6 +27,7 @@ pub struct PolicyControls {
     pub waiver_bundle: Option<AcquiredControl>,
     pub semantic_evidence: Vec<super::SemanticEvidenceTemplate>,
     pub semantic_acquisitions: Vec<super::SemanticEvidenceExpectation>,
+    pub workflow_artifacts: Vec<super::WorkflowArtifactExpectation>,
 }
 
 #[derive(Clone, Copy)]
