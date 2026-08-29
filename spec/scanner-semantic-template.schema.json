@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-semantic-template",
+  "title": "Amiss semantic evidence template",
+  "description": "One self-asserted producer's bounded candidate-independent observations. The scanner binds the template to the exact candidate identity during evaluation; the template has no subject field and authenticates nothing by itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["complete", "observations", "producer", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/semantic-evidence-template"
+    },
+    "producer": {
+      "$ref": "#/$defs/Producer"
+    },
+    "complete": {
+      "description": "Whether the producer completed the exact input its input digest names. A consumer may use absence only when its own kind contract requires a complete set and this value is true.",
+      "type": "boolean"
+    },
+    "observations": {
+      "description": "Canonical-JSON-sorted unique facts. Each compiled consumer owns the closed grammar and judgment of the kinds it recognizes; unknown kinds remain inert data.",
+      "type": "array",
+      "maxItems": 100000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/Observation"
+      }
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "Producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "input_digest", "kind", "version"],
+      "properties": {
+        "kind": {
+          "description": "The bounded producer class selected by a compiled consumer.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "identity": {
+          "description": "The stable producer implementation identity within that class.",
+          "$ref": "#/$defs/Identifier"
+        },
+        "version": {
+          "description": "The producer implementation version.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+        },
+        "context_digest": {
+          "description": "The producer-kind-defined semantic context selected by this self-asserted input.",
+          "$ref": "#/$defs/Digest"
+        },
+        "input_digest": {
+          "description": "The producer-kind-defined digest of every inventory or completed runtime input needed to interpret completeness and observations.",
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Observation": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    }
+  }
+}

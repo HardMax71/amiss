@@ -63,6 +63,20 @@ pub(super) fn command(
     let adoption = record(&mut codes, classify_adoption(gathered));
     let identity = record(&mut codes, classify_identity(gathered));
     let forge = record(&mut codes, classify_forge(gathered, &identity));
+    let semantic_template = record(
+        &mut codes,
+        match gathered.semantic_template.occurrences {
+            0 => Ok(None),
+            1 => gathered
+                .semantic_template
+                .unique_value()
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+                .map(Some)
+                .ok_or(Code::InvalidInvocation),
+            _ => Err(Code::InvalidInvocation),
+        },
+    );
 
     if !codes.is_empty() {
         return Err(codes);
@@ -76,6 +90,7 @@ pub(super) fn command(
         Ok(adoption),
         Ok(identity),
         Ok(forge),
+        Ok(semantic_template),
     ) = (
         gathered.verb,
         target,
@@ -85,6 +100,7 @@ pub(super) fn command(
         adoption,
         identity,
         forge,
+        semantic_template,
     )
     else {
         return Err(BTreeSet::from([Code::InvalidInvocation]));
@@ -102,6 +118,7 @@ pub(super) fn command(
         profile,
         explain_scope: gathered.explain_scope == 1,
         format,
+        semantic_template,
     })))
 }
 
@@ -167,6 +184,9 @@ fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
             codes.insert(Code::InvalidInvocation);
         }
     } else if gathered.profile.occurrences == 0 {
+        codes.insert(Code::InvalidInvocation);
+    }
+    if gathered.semantic_template.occurrences > 0 && gathered.verb != Some(Verb::Check) {
         codes.insert(Code::InvalidInvocation);
     }
     let adoption_slots = [

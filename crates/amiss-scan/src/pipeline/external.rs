@@ -76,7 +76,7 @@ pub(super) fn external_gate(
         .as_ref()
         .map(|input| (input.descriptor.clone(), input.trust_source));
     let semantic = crate::semantic::bind(&setup_shell.semantic, identity)
-        .map_err(|row| ("control-binding-mismatch", row))?;
+        .map_err(|row| (external_reason(&row), row))?;
     let Some(tree) = candidate_tree else {
         // Debt and waiver values are tree-bound and legal only for a
         // complete Git candidate snapshot; the staged mode rejects them.

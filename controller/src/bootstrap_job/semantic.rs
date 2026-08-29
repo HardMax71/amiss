@@ -32,18 +32,8 @@ pub fn bind_semantic_evidence(
     }
     let mut expected = BTreeSet::from_iter(normalized_expectations(expectations)?);
     let templates = templates.iter().map(|template| {
-        let value = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
-            candidate_identity_digest,
-            source_report_payload_digest: None,
-            producer_kind: template.producer_kind.clone(),
-            producer_identity: template.producer_identity.clone(),
-            producer_version: template.producer_version.clone(),
-            context_digest: template.context_digest,
-            input_digest: template.input_digest,
-            complete: template.complete,
-            observations: template.observations.as_ref().to_vec(),
-        })
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        let value = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         checked_evidence(

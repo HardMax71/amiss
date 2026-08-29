@@ -209,7 +209,13 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
                 return failure;
             }
         };
-    let forge = sealed_forge(&evaluation);
+    let forge = forge_context(
+        evaluation.repository.as_ref(),
+        evaluation.forge,
+        evaluation.object_format,
+        evaluation.candidate_ref.as_ref(),
+        evaluation.default_branch_ref.as_ref(),
+    );
     let requests = amiss_scan::report::RequestDigests {
         evaluation: Some(hb(EVALUATION_REQUEST_SCHEMA, &streams.evaluation)),
         snapshot: Some(hb(SNAPSHOT_REQUEST_SCHEMA, &streams.snapshot)),
@@ -237,7 +243,7 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         waiver: inputs.waiver,
         time: inputs.time,
         constraint: inputs.constraint,
-        semantic: inputs.semantic,
+        semantic: amiss_scan::semantic::Input::Bound(inputs.semantic),
         requests,
         external_defect: external_defect.map(|detail| ("invalid-external-control", detail)),
         errors_retained: 64,
@@ -253,23 +259,25 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
     exit_class(built.exit_code)
 }
 
-fn sealed_forge(evaluation: &EvaluationRequest) -> Option<amiss_scan::resolve::ForgeContext> {
-    let (Some(identity), Some(dialect)) = (&evaluation.repository, evaluation.forge) else {
+fn forge_context(
+    repository: Option<&amiss_wire::model::RepositoryIdentity>,
+    dialect: Option<amiss_wire::model::ForgeDialect>,
+    object_format: amiss_wire::model::ObjectFormat,
+    candidate_ref: Option<&amiss_wire::model::BranchRef>,
+    default_branch_ref: Option<&amiss_wire::model::BranchRef>,
+) -> Option<amiss_scan::resolve::ForgeContext> {
+    let (Some(repository), Some(dialect)) = (repository, dialect) else {
         return None;
     };
     Some(amiss_scan::resolve::ForgeContext {
-        host: identity.host().to_owned(),
+        host: repository.host().to_owned(),
         dialect,
-        object_format: evaluation.object_format,
-        owner: identity.owner().to_owned(),
-        repository: identity.name().to_owned(),
-        candidate_ref: evaluation
-            .candidate_ref
-            .as_ref()
+        object_format,
+        owner: repository.owner().to_owned(),
+        repository: repository.name().to_owned(),
+        candidate_ref: candidate_ref
             .map_or_else(String::new, |reference| reference.as_str().to_owned()),
-        default_ref: evaluation
-            .default_branch_ref
-            .as_ref()
+        default_ref: default_branch_ref
             .map_or_else(String::new, |reference| reference.as_str().to_owned()),
     })
 }
@@ -292,12 +300,15 @@ fn evaluate_snapshots(
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     use amiss_scan::pipeline::SetupShell;
-    use amiss_scan::resolve::ForgeContext;
 
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
         eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_ref());
         return failure;
+    };
+    let semantic = match semantic_input(invocation.semantic_template.as_deref()) {
+        Ok(input) => input,
+        Err(detail) => return fatal(invocation, &engine, &[detail], reserve),
     };
     let repo = match amiss_git::Repository::open(&invocation.repo, invocation.object_format) {
         Ok(repo) => repo,
@@ -317,18 +328,13 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     };
 
     let identity = invocation.identity.as_ref();
-    let forge = match (identity, invocation.forge) {
-        (Some(identity), Some(dialect)) => Some(ForgeContext {
-            host: identity.repository.host().to_owned(),
-            dialect,
-            object_format: invocation.object_format,
-            owner: identity.repository.owner().to_owned(),
-            repository: identity.repository.name().to_owned(),
-            candidate_ref: identity.ref_name.as_str().to_owned(),
-            default_ref: identity.default_branch_ref.as_str().to_owned(),
-        }),
-        (None | Some(_), None) | (None, Some(_)) => None,
-    };
+    let forge = forge_context(
+        identity.map(|identity| &identity.repository),
+        invocation.forge,
+        invocation.object_format,
+        identity.map(|identity| &identity.ref_name),
+        identity.map(|identity| &identity.default_branch_ref),
+    );
     let staged_snapshot = pinned_index(invocation, &repo);
     let shell = SetupShell {
         engine,
@@ -339,13 +345,13 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         target_ref: None,
         default_branch_ref: identity
             .map(|identity| identity.default_branch_ref.as_str().to_owned()),
-        // The public invocation grammar has no external-input surface.
+        // Public semantic templates remain self-asserted inputs.
         floor: None,
         debt: None,
         waiver: None,
         time: None,
         constraint: None,
-        semantic: amiss_scan::semantic::Inputs::default(),
+        semantic,
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,
@@ -375,6 +381,25 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         reserve,
     );
     exit_class(built.exit_code)
+}
+
+fn semantic_input(
+    path: Option<&std::path::Path>,
+) -> Result<amiss_scan::semantic::Input, ErrorDetail> {
+    let Some(path) = path else {
+        return Ok(amiss_scan::semantic::Input::None);
+    };
+    let bytes = input::bounded_bytes(path, amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES).map_err(
+        |_error| ErrorDetail {
+            code: AnalysisErrorCode::ConfigurationInvalid,
+            path: None,
+            path_bytes: None,
+            resource: None,
+        },
+    )?;
+    amiss_wire::semantic::parse_template(&bytes)
+        .map(amiss_scan::semantic::Input::Template)
+        .map_err(|error| amiss_scan::request::configuration_detail(&error))
 }
 
 /// The repair verb pins the index before the evaluation reads it, so the

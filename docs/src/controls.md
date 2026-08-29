@@ -133,9 +133,11 @@ organization floor (tightens ceilings and dispositions across many repositories)
 adoption debt snapshot (a recorded list of known failures being worked off, mintable
 from a real evaluation by [`amiss adopt`](invocation.md)), a waiver
 bundle (time-limited permission to pass despite a named failure), trusted time, and an
-execution constraint. The same request also carries a bounded set of
+execution constraint. The sealed request also carries a bounded set of
 [semantic-evidence envelopes](semantic-evidence.md), each paired with an independently planned
-context digest, candidate-bound, and interpreted only by a compiled consumer.
+context digest, candidate-bound, and interpreted only by a compiled consumer. An ordinary
+`amiss check` may instead bind one caller-selected candidate-free template after resolving its
+exact candidate; that convenience input remains self-asserted and is not an external control.
 
 Every control identity, and the release manifest's, uses one open repository grammar: a
 caller-canonical host, a slash-joined owner when the forge supports nested groups, and a
@@ -213,8 +215,9 @@ The machine-facing evaluation and controls requests are closed by the
 intentional: before 1.0 the shipped schema, parser, examples, and report form one rolling
 contract and move together.
 
-In the public command and GitHub composite Action, all five external controls are absent, semantic
-evidence is empty, and no protected target ref is authenticated. The report records
+In the public command and GitHub composite Action, all five external controls are absent and no
+protected target ref is authenticated. The Action supplies no semantic evidence; a direct public
+`check` may carry one self-asserted template. The report records
 `status: "none"` separately for
 organization floor, debt snapshot, waiver bundle, execution constraint, and trusted time; its
 sandbox assurance is `self-asserted`. There is no aggregate `provider_verified` field. The
@@ -230,7 +233,8 @@ statement semantics; every semantic envelope's payload and producer/input identi
 planned context matches; and the
 candidate identity and honest sandbox projection. The public
 [CLI shell](https://github.com/HardMax71/amiss/blob/main/crates/amiss/src/main.rs) still supplies
-each nullable value as `None` and the evidence set as empty. A report control row with
+each nullable external control as `None`; its optional template is bound only inside the candidate
+evaluation and leaves sandbox assurance self-asserted. A report control row with
 `status: "verified"` means the engine verified
 the supplied value's digest and identity relationships. It does not prove that a provider
 authenticated or supplied the value: neither the report nor its enum authenticates its own

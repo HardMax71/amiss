@@ -1,0 +1,23 @@
+{
+  "schema": "amiss/semantic-evidence-template",
+  "producer": {
+    "kind": "record-set",
+    "identity": "cargo-public-api",
+    "version": "1",
+    "context_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "complete": true,
+  "observations": [
+    {
+      "kind": "record-set",
+      "name": "rust/public-api",
+      "records": [
+        {
+          "key": "amiss::check",
+          "value": "pub fn check() -> Result<Report, Error>"
+        }
+      ]
+    }
+  ]
+}

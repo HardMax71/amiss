@@ -29,6 +29,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
+            [--semantic-template <path>]
             [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --index
@@ -76,6 +77,7 @@ trust them when the short form reads ambiguous.
 | `--default-branch-ref` | `refs/heads/<name>` | which branch counts as default when resolving URLs |
 | `--forge` | `github`, `gitlab`, `gitea`, `bitbucket-cloud`, or `bitbucket-data-center` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
+| `--semantic-template` | path | one strict, bounded, candidate-free semantic template for `check`; the scanner binds it to the exact commit or staged-index identity and the run remains self-asserted |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--full` | none | prints every feedback item when replaying a report as human output; foreign to every other form and format |
 | `--format` | `human`, `json`, `sarif`, `codequality`, or render-only `junit` | grouped human items, the exact report in [The report](report.md), or one of its CI projections; human output is bounded unless replayed with `--full` |
@@ -136,6 +138,17 @@ refused as `INVALID_EVENT` until the flag names its dialect, since accepting it 
 silently leave every same-repository link external. An explicit flag beats the table;
 that's how a self-hosted instance gets its grammar. Recognizing a dialect authenticates
 nothing about how the run was invoked.
+
+`--semantic-template` gives `check` one candidate-independent semantic producer result, such as a
+complete `record-set@1` inventory. The file follows the
+[semantic-template schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-template.schema.json),
+is capped at 16 MiB, and cannot name a candidate or source report. The scanner waits until it has
+resolved the exact commit tree or pinned staged-index projection, binds the template to that
+candidate identity, and then applies the same compiled consumers and limits as sealed evidence.
+Malformed, oversized, or consumer-invalid input ends the run incomplete. The path is admitted only
+by `check`: `fix`, `adopt`, authoring, and report-only commands refuse it. Because the caller chose
+the file, the report still says `sandbox.assurance: self-asserted`; this flag never enters the
+provider-authenticated controls lane.
 
 `--format json` prints the exact report in [The report](report.md), one line plus a
 trailing newline. `sarif` and `codequality` project the same report for code-scanning

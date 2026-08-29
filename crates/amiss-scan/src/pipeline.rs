@@ -620,7 +620,7 @@ pub struct SetupShell {
     pub waiver: Option<crate::policy::WaiverInput>,
     pub time: Option<crate::policy::TimeInput>,
     pub constraint: Option<crate::policy::ConstraintInput>,
-    pub semantic: crate::semantic::Inputs,
+    pub semantic: crate::semantic::Input,
     /// The wrapper lane's diagnostic request digests; none for the CLI.
     pub requests: crate::report::RequestDigests,
     /// A wrapper-established external-control defect, settled against the

@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::sync::Arc;
 
 use crate::controls::value::{object, text};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
@@ -8,6 +9,7 @@ use crate::model::ArtifactId;
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/semantic-evidence-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/semantic-evidence-payload";
+pub const TEMPLATE_SCHEMA: &str = "amiss/semantic-evidence-template";
 pub const SEMANTIC_EVIDENCE_BYTES: u64 = 16_777_216;
 pub const SEMANTIC_OBSERVATIONS_LIMIT: usize = 100_000;
 pub const PRODUCER_VERSION_BYTES: usize = 128;
@@ -31,6 +33,25 @@ pub struct SemanticEvidence {
 pub struct SemanticEvidenceEnvelope {
     pub payload: SemanticEvidence,
     pub payload_digest: Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticEvidenceTemplate {
+    pub producer_kind: ArtifactId,
+    pub producer_identity: ArtifactId,
+    pub producer_version: String,
+    pub context_digest: Digest,
+    pub input_digest: Digest,
+    pub complete: bool,
+    pub observations: Arc<[Value]>,
+}
+
+struct Producer {
+    kind: ArtifactId,
+    identity: ArtifactId,
+    version: String,
+    context_digest: Digest,
+    input_digest: Digest,
 }
 
 /// Parses one complete, digest-bound semantic evidence envelope.
@@ -57,6 +78,64 @@ pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
     Ok(SemanticEvidenceEnvelope {
         payload: decode_payload("$.payload", payload)?,
         payload_digest,
+    })
+}
+
+/// Parses one candidate-independent semantic evidence template.
+///
+/// # Errors
+///
+/// Fails on an oversized stream, strict-JSON or shape defects, invalid producer identity, or
+/// observations that are not bounded sorted objects with kinds.
+pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate, Error> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let value = json::parse(bytes).map_err(|error| Error::new("$", ErrorKind::Json(error)))?;
+    let mut template = Obj::new("$", value)?;
+    template.required("schema", |path, value| {
+        de::const_str(path, value, TEMPLATE_SCHEMA)
+    })?;
+    let producer = decode_producer(&mut template)?;
+    let complete_path = template.field("complete");
+    let Value::Bool(complete) = template.take("complete")? else {
+        return fail(&complete_path, ErrorKind::WrongType);
+    };
+    let observations_path = template.field("observations");
+    let observations = de::array(&observations_path, template.take("observations")?)?;
+    template.finish()?;
+    validate_observations(&observations_path, &observations)?;
+    Ok(SemanticEvidenceTemplate {
+        producer_kind: producer.kind,
+        producer_identity: producer.identity,
+        producer_version: producer.version,
+        context_digest: producer.context_digest,
+        input_digest: producer.input_digest,
+        complete,
+        observations: Arc::from(observations),
+    })
+}
+
+/// Binds a candidate-independent template to one exact scanner candidate.
+///
+/// # Errors
+///
+/// Fails when the template violates the same bounds [`envelope`] enforces or the resulting
+/// envelope exceeds the byte ceiling.
+pub fn bind_template(
+    template: &SemanticEvidenceTemplate,
+    candidate_identity_digest: Digest,
+) -> Result<Value, Error> {
+    envelope(SemanticEvidence {
+        candidate_identity_digest,
+        source_report_payload_digest: None,
+        producer_kind: template.producer_kind.clone(),
+        producer_identity: template.producer_identity.clone(),
+        producer_version: template.producer_version.clone(),
+        context_digest: template.context_digest,
+        input_digest: template.input_digest,
+        complete: template.complete,
+        observations: template.observations.as_ref().to_vec(),
     })
 }
 
@@ -99,14 +178,7 @@ fn decode_payload(path: &str, value: Value) -> Result<SemanticEvidence, Error> {
         .map(|value| de::digest(&source_path, value))
         .transpose()?;
     subject.finish()?;
-    let producer_path = payload.field("producer");
-    let mut producer = Obj::new(&producer_path, payload.take("producer")?)?;
-    let producer_kind = producer.required("kind", decode_id)?;
-    let producer_identity = producer.required("identity", decode_id)?;
-    let producer_version = producer.required("version", decode_version)?;
-    let context_digest = producer.required("context_digest", de::digest)?;
-    let input_digest = producer.required("input_digest", de::digest)?;
-    producer.finish()?;
+    let producer = decode_producer(&mut payload)?;
     let complete_path = payload.field("complete");
     let Value::Bool(complete) = payload.take("complete")? else {
         return fail(&complete_path, ErrorKind::WrongType);
@@ -118,14 +190,28 @@ fn decode_payload(path: &str, value: Value) -> Result<SemanticEvidence, Error> {
     Ok(SemanticEvidence {
         candidate_identity_digest,
         source_report_payload_digest,
-        producer_kind,
-        producer_identity,
-        producer_version,
-        context_digest,
-        input_digest,
+        producer_kind: producer.kind,
+        producer_identity: producer.identity,
+        producer_version: producer.version,
+        context_digest: producer.context_digest,
+        input_digest: producer.input_digest,
         complete,
         observations,
     })
+}
+
+fn decode_producer(parent: &mut Obj) -> Result<Producer, Error> {
+    let producer_path = parent.field("producer");
+    let mut producer = Obj::new(&producer_path, parent.take("producer")?)?;
+    let decoded = Producer {
+        kind: producer.required("kind", decode_id)?,
+        identity: producer.required("identity", decode_id)?,
+        version: producer.required("version", decode_version)?,
+        context_digest: producer.required("context_digest", de::digest)?,
+        input_digest: producer.required("input_digest", de::digest)?,
+    };
+    producer.finish()?;
+    Ok(decoded)
 }
 
 fn decode_id(path: &str, value: Value) -> Result<ArtifactId, Error> {

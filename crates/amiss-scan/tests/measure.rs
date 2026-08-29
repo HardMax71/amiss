@@ -46,7 +46,7 @@ fn representative_repository_latency_and_memory() {
         waiver: None,
         time: None,
         constraint: None,
-        semantic: amiss_scan::semantic::Inputs::default(),
+        semantic: amiss_scan::semantic::Input::None,
         requests: RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,

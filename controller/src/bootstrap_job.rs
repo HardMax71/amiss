@@ -2,8 +2,6 @@ mod controls;
 mod plan;
 mod semantic;
 
-use std::sync::Arc;
-
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
 };
@@ -17,6 +15,7 @@ use amiss_wire::requests::{
 
 use crate::RunRequest;
 
+pub use amiss_wire::semantic::SemanticEvidenceTemplate;
 pub use controls::{AcquiredControl, PolicyControls};
 pub use plan::{check_binding, check_plan};
 pub use semantic::bind_semantic_evidence;
@@ -65,17 +64,6 @@ pub enum BootstrapJobError {
     SemanticEvidence,
     #[error("the sealed requests cannot be encoded within the stream ceiling")]
     RequestEncoding,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SemanticEvidenceTemplate {
-    pub(crate) producer_kind: ArtifactId,
-    pub(crate) producer_identity: ArtifactId,
-    pub(crate) producer_version: String,
-    pub(crate) context_digest: Digest,
-    pub(crate) input_digest: Digest,
-    pub(crate) complete: bool,
-    pub(crate) observations: Arc<[Value]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

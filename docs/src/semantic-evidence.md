@@ -80,16 +80,24 @@ route, and all named sources must remain beneath the declared root. Only then do
 nor reachable. Without this observation the engine makes no navigation claim. The base side never
 consumes candidate build output.
 
-Only the sealed controls request has this intake. The public command supplies an empty set. A
-controller plan may hold candidate-independent templates such as an Intersphinx inventory set. A
-trusted acquisition may instead return already-formed pre-scan envelopes beside the exact
-repository and action roots. The frozen plan names each acquired producer kind, identity, version,
-and expected context exactly once. While building the sealed job, the controller strictly parses
-both sets, requires every acquired envelope to match one planned producer and context, names the
-exact candidate and no source report, applies their one combined count limit, orders them by
-payload digest, and rejects collisions. The engine repeats the context comparison from the sealed
-pair before consuming the evidence. A missing, extra, malformed, stale, wrong-context, post-scan,
-duplicate, or oversized acquired set is runtime tampering, not absent evidence.
+The public `check` command may read one candidate-independent
+[semantic template](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-template.schema.json).
+It has the producer, completeness, and observation fields above but no subject field. After the
+scanner resolves the exact commit tree or pins the staged-index projection, it binds the template
+to that candidate and passes the resulting envelope through the same compiled consumers. The file
+is repository-user-selected and its context is not independently planned, so the report remains
+`self-asserted`; this local convenience path cannot become provider authority.
+
+The sealed controls request remains the provider-authenticated intake. A controller plan may hold
+candidate-independent templates such as an Intersphinx inventory set. A trusted acquisition may
+instead return already-formed pre-scan envelopes beside the exact repository and action roots. The
+frozen plan names each acquired producer kind, identity, version, and expected context exactly
+once. While building the sealed job, the controller strictly parses both sets, requires every
+acquired envelope to match one planned producer and context, names the exact candidate and no
+source report, applies their one combined count limit, orders them by payload digest, and rejects
+collisions. The engine repeats the context comparison from the sealed pair before consuming the
+evidence. A missing, extra, malformed, stale, wrong-context, post-scan, duplicate, or oversized
+acquired set is runtime tampering, not absent evidence.
 
 A successful report projects the accepted envelopes' payload and producer/input identities under
 `controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
@@ -138,8 +146,12 @@ controller neither starts mdBook nor treats repository output or cache state as 
 acquisition boundary keeps candidate output out of a startup plan and keeps the scanner from
 searching the repository for evidence.
 
-The schema and checked example are
+The bound-envelope schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and
 [`scanner-semantic-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-evidence.json).
+The candidate-free input has its own
+[`scanner-semantic-template.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-template.schema.json)
+and
+[`scanner-semantic-template.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-template.json).
 The engine still executes no producer and treats no repository-controlled evidence as authority.

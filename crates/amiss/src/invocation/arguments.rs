@@ -52,6 +52,7 @@ pub(super) struct Gathered {
     pub(super) report: Slot,
     pub(super) plan: Slot,
     pub(super) evidence: Slot,
+    pub(super) semantic_template: Slot,
     pub(super) target: Slot,
     pub(super) target_bytes_hex: Slot,
     pub(super) index: usize,
@@ -130,6 +131,7 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> Option<&'a mut Slot
         "--report" => Some(&mut gathered.report),
         "--plan" => Some(&mut gathered.plan),
         "--evidence" => Some(&mut gathered.evidence),
+        "--semantic-template" => Some(&mut gathered.semantic_template),
         "--target" => Some(&mut gathered.target),
         "--target-bytes-hex" => Some(&mut gathered.target_bytes_hex),
         _ => None,
@@ -172,6 +174,7 @@ pub(super) fn duplicated(gathered: &Gathered) -> bool {
             &gathered.report,
             &gathered.plan,
             &gathered.evidence,
+            &gathered.semantic_template,
             &gathered.target,
             &gathered.target_bytes_hex,
         ]

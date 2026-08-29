@@ -116,12 +116,12 @@ fn run(
         waiver: None,
         time: None,
         constraint: None,
-        semantic: semantic_inputs(
+        semantic: semantic::Input::Bound(semantic_inputs(
             amiss_scan::report::candidate_identity_digest(&setup),
             complete,
             set,
             records,
-        ),
+        )),
         requests: RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,

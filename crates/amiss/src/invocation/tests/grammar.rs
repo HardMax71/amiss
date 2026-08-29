@@ -78,6 +78,84 @@ fn accepts_the_commit_pair_grammar() {
     assert_eq!(invocation.format, OutputFormat::Human);
     assert!(!invocation.explain_scope);
     assert!(invocation.identity.is_none());
+    assert!(invocation.semantic_template.is_none());
+}
+
+#[test]
+fn semantic_templates_are_check_only_and_singular() {
+    let accepted = scan_of(parse_tokens(&with(
+        &valid_pair(),
+        &["--semantic-template", "public-api.json"],
+    )));
+    assert_eq!(
+        accepted.semantic_template.as_deref(),
+        Some(std::path::Path::new("public-api.json"))
+    );
+
+    let mut fix = replace_value(&valid_pair(), "check", "fix");
+    fix = without_option(&fix, "--candidate");
+    fix.push("--index".to_owned());
+    for rejected in [
+        with(&fix, &["--semantic-template", "public-api.json"]),
+        with(
+            &valid_pair(),
+            &[
+                "--semantic-template",
+                "a.json",
+                "--semantic-template",
+                "b.json",
+            ],
+        ),
+        with(&valid_pair(), &["--semantic-template"]),
+        with(&valid_pair(), &["--semantic-template", ""]),
+    ] {
+        assert_eq!(
+            rejected_codes(parse_tokens(&rejected)),
+            vec![Code::InvalidInvocation],
+            "tokens {rejected:?}"
+        );
+    }
+
+    for rejected in [
+        argv(&[
+            "claim",
+            "--repo",
+            ".",
+            "--path",
+            "docs.md",
+            "--line",
+            "1",
+            "--name",
+            "api",
+            "--semantic-template",
+            "public-api.json",
+        ]),
+        argv(&[
+            "policy-include",
+            "--path",
+            "docs",
+            "--suffix",
+            ".md",
+            "--adapter",
+            "markdown",
+            "--semantic-template",
+            "public-api.json",
+        ]),
+        argv(&[
+            "render",
+            "--report",
+            "report.json",
+            "--format",
+            "human",
+            "--semantic-template",
+            "public-api.json",
+        ]),
+    ] {
+        assert_eq!(
+            rejected_codes(parse(&rejected)),
+            vec![Code::InvalidInvocation]
+        );
+    }
 }
 
 #[test]
