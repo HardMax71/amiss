@@ -1,0 +1,39 @@
+{
+  "schema": "amiss/locale-coverage-plan-envelope",
+  "payload": {
+    "schema": "amiss/locale-coverage-plan-payload",
+    "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "docs": {
+      "repository": {
+        "host": "github.com",
+        "owner": "acme",
+        "name": "widget"
+      },
+      "object_format": "sha1",
+      "commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "candidate_identity_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "scope": {
+      "site": "widget-docs",
+      "source_locale": "en",
+      "target_locale": "de-DE",
+      "channel": "stable",
+      "version": "1.2"
+    },
+    "producer": {
+      "identity": "sphinx-locale-manifest",
+      "version": "1.0.0",
+      "context_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "policy": {
+      "identity": "product-docs-coverage",
+      "context_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "required": {
+        "mode": "named",
+        "keys": ["guide/getting-started", "reference/api"]
+      }
+    }
+  },
+  "payload_digest": "sha256:6a6637488c31cf39cdb56fa2ebbe627f9ec9d4e553537902d1254f0de1aa1cb7"
+}

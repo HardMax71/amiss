@@ -109,10 +109,10 @@ fn decode_records(path: &str, value: Value) -> Result<BTreeMap<String, String>, 
         let row_path = format!("{path}[{index}]");
         let mut row = Obj::new(&row_path, value)?;
         let key = row.required("key", |path, value| {
-            bounded_text(path, value, super::RECORD_KEY_BYTES)
+            de::bounded_text(path, value, super::RECORD_KEY_BYTES)
         })?;
         let value = row.required("value", |path, value| {
-            bounded_text(path, value, super::RECORD_VALUE_BYTES)
+            de::bounded_text(path, value, super::RECORD_VALUE_BYTES)
         })?;
         row.finish()?;
         match records
@@ -127,15 +127,6 @@ fn decode_records(path: &str, value: Value) -> Result<BTreeMap<String, String>, 
         }
     }
     Ok(records)
-}
-
-fn bounded_text(path: &str, value: Value, limit: usize) -> Result<String, Error> {
-    let value = de::string(path, value)?;
-    if !value.is_empty() && value.len() <= limit && !value.chars().any(char::is_control) {
-        Ok(value)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
 }
 
 fn observation_value(observation: Observation) -> Value {

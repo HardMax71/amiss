@@ -7,6 +7,7 @@ pub mod external;
 pub mod extraction;
 pub mod human;
 pub mod json;
+pub mod locale;
 pub mod manifest;
 pub mod model;
 pub mod publication;

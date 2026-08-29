@@ -24,6 +24,7 @@
 - [The external assessment](external-assessment.md)
 - [Trusted semantic evidence](semantic-evidence.md)
 - [Publication audits](publication.md)
+- [Locale coverage audits](locale-coverage.md)
 - [Limits and refusals](limits.md)
 
 # Trust

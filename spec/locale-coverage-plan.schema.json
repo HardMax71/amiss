@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:locale-coverage-plan",
+  "title": "Amiss locale coverage plan",
+  "description": "One operator-owned, report-bound plan for comparing complete source and target page-key inventories. It selects coverage policy; it does not assert that inventories exist, pages are translated, or fallback and lineage are valid.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/locale-coverage-plan-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/PlanPayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the locale-coverage-plan payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "OpenIdentity": {
+      "description": "An opaque producer-owned locale, version, or producer-version label. Amiss compares it exactly and assigns it no ordering or BCP 47 meaning.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "PageKey": {
+      "description": "One opaque stable page identity emitted by the selected producer, not a route inferred by Amiss. Named keys are byte-sorted and unique.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\p{Cc}]+$"
+    },
+    "Repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "name", "owner"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$",
+          "not": {
+            "enum": [".", ".."]
+          }
+        }
+      }
+    },
+    "DocsCandidate": {
+      "description": "The exact committed docs source and scanner candidate identity whose report selected this audit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_identity_digest",
+        "commit_oid",
+        "object_format",
+        "repository",
+        "tree_oid"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/Repository"
+        },
+        "object_format": {
+          "enum": ["sha1", "sha256"]
+        },
+        "commit_oid": {
+          "type": "string"
+        },
+        "tree_oid": {
+          "type": "string"
+        },
+        "candidate_identity_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha256"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Scope": {
+      "description": "The independently selected site, locale pair, channel, and optional version. Source and target locale must differ.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "site", "source_locale", "target_locale", "version"],
+      "properties": {
+        "site": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "source_locale": {
+          "$ref": "#/$defs/OpenIdentity"
+        },
+        "target_locale": {
+          "$ref": "#/$defs/OpenIdentity"
+        },
+        "channel": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/OpenIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Producer": {
+      "description": "The independently selected page-inventory producer and exact context it must later reproduce.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "version"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "$ref": "#/$defs/OpenIdentity"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Requirement": {
+      "description": "All-source requires every source page key. Named requires only the listed source keys; other source keys are optional. Neither mode authorizes fallback.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "const": "all-source"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["keys", "mode"],
+          "properties": {
+            "mode": {
+              "const": "named"
+            },
+            "keys": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/PageKey"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Policy": {
+      "description": "The operator-owned coverage rule. The context digest binds rule bytes interpreted outside Amiss.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "required"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "required": {
+          "$ref": "#/$defs/Requirement"
+        }
+      }
+    },
+    "PlanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "docs",
+        "policy",
+        "producer",
+        "report_payload_digest",
+        "schema",
+        "scope"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/locale-coverage-plan-payload"
+        },
+        "report_payload_digest": {
+          "description": "The verified scanner report whose exact docs candidate selected this later coverage audit.",
+          "$ref": "#/$defs/Digest"
+        },
+        "docs": {
+          "$ref": "#/$defs/DocsCandidate"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "producer": {
+          "$ref": "#/$defs/Producer"
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      }
+    }
+  }
+}

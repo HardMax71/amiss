@@ -169,7 +169,7 @@ fn decode_assessment(path: &str, value: Value) -> Result<PublicationAssessment, 
     })?;
     let (engine_version, engine_digest) = assessment.required("engine", |path, value| {
         let mut engine = Obj::new(path, value)?;
-        let version = engine.required("engine_version", super::decode_producer_version)?;
+        let version = engine.required("engine_version", crate::semantic::decode_open_identity)?;
         let digest = engine.required("engine_digest", de::digest)?;
         engine.finish()?;
         Ok((version, digest))

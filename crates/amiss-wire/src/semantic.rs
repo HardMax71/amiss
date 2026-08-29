@@ -238,7 +238,7 @@ fn decode_producer(parent: &mut Obj) -> Result<Producer, Error> {
     let decoded = Producer {
         kind: producer.required("kind", decode_id)?,
         identity: producer.required("identity", decode_id)?,
-        version: producer.required("version", decode_version)?,
+        version: producer.required("version", decode_open_identity)?,
         context_digest: producer.required("context_digest", de::digest)?,
         input_digest: producer.required("input_digest", de::digest)?,
     };
@@ -251,7 +251,7 @@ fn decode_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
-fn decode_version(path: &str, value: Value) -> Result<String, Error> {
+pub(crate) fn decode_open_identity(path: &str, value: Value) -> Result<String, Error> {
     let version = de::string(path, value)?;
     if producer_version_valid(&version) {
         Ok(version)

@@ -164,7 +164,7 @@ fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
         let environment = target.required("environment", decode_identity)?;
         let channel = target.required("channel", decode_identity)?;
         let canonical_url = target.required("canonical_url", |path, value| {
-            let raw = decode_bounded_text(path, value, PUBLICATION_URI_BYTES)?;
+            let raw = de::bounded_text(path, value, PUBLICATION_URI_BYTES)?;
             if canonical_url_valid(&raw) {
                 Ok(raw)
             } else {
@@ -191,18 +191,7 @@ fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
         })
     })?;
     let product = parent.required("product", decode_resource)?;
-    let producer = parent.required("producer", |path, value| {
-        let mut producer = Obj::new(path, value)?;
-        let identity = producer.required("identity", decode_identity)?;
-        let version = producer.required("version", decode_producer_version)?;
-        let context_digest = producer.required("context_digest", de::digest)?;
-        producer.finish()?;
-        Ok(PublicationProducer {
-            identity,
-            version,
-            context_digest,
-        })
-    })?;
+    let producer = parent.required("producer", decode_producer)?;
     Ok(PublicationFacts {
         producer,
         docs,
@@ -246,27 +235,22 @@ fn decode_resource(path: &str, value: Value) -> Result<PublicationResource, Erro
     Ok(PublicationResource { uri, digest })
 }
 
-fn decode_identity(path: &str, value: Value) -> Result<ArtifactId, Error> {
+pub(crate) fn decode_identity(path: &str, value: Value) -> Result<ArtifactId, Error> {
     let raw = de::string(path, value)?;
     ArtifactId::new(raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
-fn decode_producer_version(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    if crate::semantic::producer_version_valid(&raw) {
-        Ok(raw)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
-}
-
-fn decode_bounded_text(path: &str, value: Value, limit: usize) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    if raw.is_empty() || raw.len() > limit || raw.chars().any(char::is_control) {
-        fail(path, ErrorKind::InvalidValue)
-    } else {
-        Ok(raw)
-    }
+pub(crate) fn decode_producer(path: &str, value: Value) -> Result<PublicationProducer, Error> {
+    let mut producer = Obj::new(path, value)?;
+    let identity = producer.required("identity", decode_identity)?;
+    let version = producer.required("version", crate::semantic::decode_open_identity)?;
+    let context_digest = producer.required("context_digest", de::digest)?;
+    producer.finish()?;
+    Ok(PublicationProducer {
+        identity,
+        version,
+        context_digest,
+    })
 }
 
 fn canonical_url_valid(raw: &str) -> bool {
@@ -295,7 +279,7 @@ fn canonical_url_valid(raw: &str) -> bool {
 }
 
 fn decode_resource_uri(path: &str, value: Value) -> Result<String, Error> {
-    let raw = decode_bounded_text(path, value, PUBLICATION_URI_BYTES)?;
+    let raw = de::bounded_text(path, value, PUBLICATION_URI_BYTES)?;
     let (without_query, query) = raw
         .split_once('?')
         .map_or((raw.as_str(), None), |(path, query)| (path, Some(query)));
@@ -368,7 +352,7 @@ fn resource_value(resource: &PublicationResource) -> Value {
     ])
 }
 
-fn producer_value(producer: &PublicationProducer) -> Value {
+pub(crate) fn producer_value(producer: &PublicationProducer) -> Value {
     object(vec![
         ("identity", text(producer.identity.as_str())),
         ("version", text(&producer.version)),
