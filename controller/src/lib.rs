@@ -20,6 +20,7 @@ mod mdbook;
 mod orchestration;
 mod plans;
 mod provider;
+mod publication_audit;
 mod spelling;
 mod webhook;
 
@@ -77,6 +78,9 @@ pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan,
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ForgeFact, ForgeNegative, OperationDeadline,
     ProviderAdapter, ProviderError, RegistryError,
+};
+pub use publication_audit::{
+    PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,
 };
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{

@@ -56,10 +56,12 @@ never becomes a typed successful receipt; callers retain that acquisition failur
 plan as unproven instead of manufacturing a negative fact.
 
 The outer payload digests are integrity checks, not signatures or authority claims. Repository
-content must not choose the plan, producer context, relation rule, or credentials. A future
-controller lane will retain the operator-selected plan beside its provider-authenticated evidence
-and offline assessment. No scanner command or engine report consumes these publication documents
-yet, and a plan alone never says a deployment happened.
+content must not choose the plan, producer context, relation rule, or credentials. The controller
+can validate a complete audit before retention: the plan's report digest and docs repository,
+commit, tree, and candidate identity must describe the supplied complete scanner report, and the
+assessment must replay exactly from the supplied plan and optional evidence. No controller lane
+acquires, stores, or publishes this chain yet, no scanner command consumes it, and a plan alone
+never says a deployment happened.
 
 The checked public contracts are
 [`publication-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/publication-plan.schema.json),
