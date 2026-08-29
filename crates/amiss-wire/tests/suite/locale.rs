@@ -15,6 +15,8 @@ use amiss_wire::locale::{
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{DocsCandidate, PublicationProducer};
 
+mod evidence;
+
 fn digest(digit: char) -> Digest {
     Digest::from_wire(&format!("sha256:{}", digit.to_string().repeat(64))).unwrap()
 }

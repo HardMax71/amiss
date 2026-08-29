@@ -36,14 +36,31 @@ mixed Git object formats, repeated or unsorted named keys, oversized text, or a 
 refuse the whole document. The outer digest establishes integrity, not authority: repository
 content must not choose the producer context or operator policy.
 
-Only the plan contract exists today. No inventory evidence, assessment, command, or controller lane
-consumes it yet, so the plan alone cannot report a missing or orphan page. Those later contracts
-must require independently complete source and target inventories before absence can become a
-fact.
+The matching evidence contract repeats the plan digest, docs candidate, locale scope, and producer
+context, then carries separate source and target inventories. Each inventory has its own input
+digest, completeness bit, and byte-sorted map from page key to exact resource digest. The producer
+context defines which normalized bytes those digests identify. Matching keys prove only structural
+presence; different page digests do not prove either drift or translation.
 
-The checked public contract is
+Completeness belongs to each side independently. A false value preserves the pages the producer
+did observe, but absence from that inventory is not evidence that a page is absent from the locale.
+The two inventories may carry at most 100,000 page rows combined inside one 16 MiB document. Page
+keys are unique within each side; malformed digests, duplicate or unsorted keys, unknown fields,
+and a changed payload refuse the whole receipt.
+
+The engine reader establishes shape and integrity, not producer authority. Repeating a plan digest
+does not establish that the independently repeated facts match that plan. The plan and inventory
+evidence contracts exist today; the offline assessment, command, and controller intake do not. No
+missing or orphan verdict exists until that assessment applies the plan policy while respecting
+both completeness bits.
+
+The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),
 with the matching
 [`locale-coverage-plan.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/locale-coverage-plan.json)
-example. Its strict reader and writer live in `amiss-wire`; generator-specific parsing and
+example, and
+[`locale-coverage-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-evidence.schema.json),
+with its
+[`locale-coverage-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/locale-coverage-evidence.json)
+example. Their strict readers and writers live in `amiss-wire`; generator-specific parsing and
 authentication stay outside the engine crates.

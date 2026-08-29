@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+
 use crate::digest::Digest;
 use crate::json::{self, Value};
 
@@ -146,6 +149,20 @@ pub fn string(path: &str, value: Value) -> Result<String, Error> {
     Ok(string.into())
 }
 
+/// # Errors
+///
+/// Fails with `WrongType` when the value is not a boolean.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "uniform consuming decoder signature"
+)]
+pub fn boolean(path: &str, value: Value) -> Result<bool, Error> {
+    let Value::Bool(boolean) = value else {
+        return fail(path, ErrorKind::WrongType);
+    };
+    Ok(boolean)
+}
+
 /// Decodes one nonempty bounded string without control characters.
 ///
 /// # Errors
@@ -159,6 +176,33 @@ pub(crate) fn bounded_text(path: &str, value: Value, limit: usize) -> Result<Str
     } else {
         fail(path, ErrorKind::InvalidValue)
     }
+}
+
+pub(crate) fn sorted_map<T>(
+    path: &str,
+    value: Value,
+    limit: usize,
+    mut decode: impl FnMut(&str, Value) -> Result<(String, T), Error>,
+) -> Result<BTreeMap<String, T>, Error> {
+    let values = array(path, value)?;
+    if values.len() > limit {
+        return fail(path, ErrorKind::LimitExceeded);
+    }
+    let mut rows: BTreeMap<String, T> = BTreeMap::new();
+    for (index, value) in values.into_iter().enumerate() {
+        let (key, value) = decode(&format!("{path}[{index}]"), value)?;
+        match rows
+            .last_key_value()
+            .map(|(previous, _value)| previous.cmp(&key))
+        {
+            Some(Ordering::Equal) => return fail(path, ErrorKind::DuplicateMember),
+            Some(Ordering::Greater) => return fail(path, ErrorKind::UnsortedSet),
+            None | Some(Ordering::Less) => {
+                rows.insert(key, value);
+            }
+        }
+    }
+    Ok(rows)
 }
 
 /// # Errors

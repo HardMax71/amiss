@@ -10,10 +10,18 @@ use crate::publication::{
     producer_value,
 };
 
+mod evidence;
+
+pub use evidence::{
+    EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
+    LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope, LocalePageInventory, PAGE_ITEMS_LIMIT,
+    evidence, parse_evidence,
+};
+
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-plan-payload";
 pub const LOCALE_DOCUMENT_BYTES: u64 = 65_536;
-pub const PAGE_KEY_BYTES: usize = 4_096;
+pub const PAGE_KEY_BYTES: usize = crate::semantic::RECORD_KEY_BYTES;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocaleCoveragePlanEnvelope {
@@ -50,6 +58,12 @@ pub struct LocaleCoveragePolicy {
 pub enum LocalePageRequirement {
     AllSource,
     Named(Vec<String>),
+}
+
+struct LocaleCoverageFacts {
+    docs: DocsCandidate,
+    scope: LocaleCoverageScope,
+    producer: PublicationProducer,
 }
 
 /// Parses one closed, report-bound locale coverage plan.
@@ -95,84 +109,94 @@ fn decode_plan(path: &str, value: Value) -> Result<LocaleCoveragePlan, Error> {
         de::const_str(path, value, PLAN_PAYLOAD_SCHEMA)
     })?;
     let report_payload_digest = plan.required("report_payload_digest", de::digest)?;
-    let docs = plan.required("docs", decode_docs)?;
-    let scope = plan.required("scope", |path, value| {
-        let mut scope = Obj::new(path, value)?;
-        let site = scope.required("site", decode_identity)?;
-        let source_locale =
-            scope.required("source_locale", crate::semantic::decode_open_identity)?;
-        let target_locale =
-            scope.required("target_locale", crate::semantic::decode_open_identity)?;
-        let channel = scope.required("channel", decode_identity)?;
-        let version_path = scope.field("version");
-        let version = de::nullable(scope.take("version")?)
-            .map(|value| crate::semantic::decode_open_identity(&version_path, value))
-            .transpose()?;
-        scope.finish()?;
-        if source_locale == target_locale {
-            return fail(path, ErrorKind::Inconsistent);
-        }
-        Ok(LocaleCoverageScope {
-            site,
-            source_locale,
-            target_locale,
-            channel,
-            version,
-        })
-    })?;
-    let producer = plan.required("producer", decode_producer)?;
-    let policy = plan.required("policy", |path, value| {
-        let mut policy = Obj::new(path, value)?;
-        let identity = policy.required("identity", decode_identity)?;
-        let context_digest = policy.required("context_digest", de::digest)?;
-        let required = policy.required("required", decode_requirement)?;
-        policy.finish()?;
-        Ok(LocaleCoveragePolicy {
-            identity,
-            context_digest,
-            required,
-        })
-    })?;
+    let facts = decode_facts(&mut plan)?;
+    let policy = plan.required("policy", decode_policy)?;
     plan.finish()?;
     Ok(LocaleCoveragePlan {
         report_payload_digest,
-        docs,
-        scope,
-        producer,
+        docs: facts.docs,
+        scope: facts.scope,
+        producer: facts.producer,
         policy,
     })
 }
 
-fn decode_requirement(path: &str, value: Value) -> Result<LocalePageRequirement, Error> {
-    let mut requirement = Obj::new(path, value)?;
-    let mode_path = requirement.field("mode");
-    let mode = de::string(&mode_path, requirement.take("mode")?)?;
-    match mode.as_str() {
-        "all-source" => {
-            requirement.finish()?;
-            Ok(LocalePageRequirement::AllSource)
-        }
-        "named" => {
-            let keys_path = requirement.field("keys");
-            let values = de::array(&keys_path, requirement.take("keys")?)?;
-            if values.is_empty() {
-                return fail(&keys_path, ErrorKind::InvalidValue);
+fn decode_policy(path: &str, value: Value) -> Result<LocaleCoveragePolicy, Error> {
+    let mut policy = Obj::new(path, value)?;
+    let identity = policy.required("identity", decode_identity)?;
+    let context_digest = policy.required("context_digest", de::digest)?;
+    let required = policy.required("required", |path, value| {
+        let mut requirement = Obj::new(path, value)?;
+        let mode_path = requirement.field("mode");
+        let mode = de::string(&mode_path, requirement.take("mode")?)?;
+        match mode.as_str() {
+            "all-source" => {
+                requirement.finish()?;
+                Ok(LocalePageRequirement::AllSource)
             }
-            let mut keys = Vec::with_capacity(values.len());
-            for (index, value) in values.into_iter().enumerate() {
-                let key =
-                    de::bounded_text(&format!("{keys_path}[{index}]"), value, PAGE_KEY_BYTES)?;
-                match keys.last().map(|previous: &String| previous.cmp(&key)) {
-                    Some(Ordering::Equal) => return fail(&keys_path, ErrorKind::DuplicateMember),
-                    Some(Ordering::Greater) => return fail(&keys_path, ErrorKind::UnsortedSet),
-                    None | Some(Ordering::Less) => keys.push(key),
+            "named" => {
+                let keys_path = requirement.field("keys");
+                let values = de::array(&keys_path, requirement.take("keys")?)?;
+                if values.is_empty() {
+                    return fail(&keys_path, ErrorKind::InvalidValue);
                 }
+                let mut keys = Vec::with_capacity(values.len());
+                for (index, value) in values.into_iter().enumerate() {
+                    let key =
+                        de::bounded_text(&format!("{keys_path}[{index}]"), value, PAGE_KEY_BYTES)?;
+                    match keys.last().map(|previous: &String| previous.cmp(&key)) {
+                        Some(Ordering::Equal) => {
+                            return fail(&keys_path, ErrorKind::DuplicateMember);
+                        }
+                        Some(Ordering::Greater) => {
+                            return fail(&keys_path, ErrorKind::UnsortedSet);
+                        }
+                        None | Some(Ordering::Less) => keys.push(key),
+                    }
+                }
+                requirement.finish()?;
+                Ok(LocalePageRequirement::Named(keys))
             }
-            requirement.finish()?;
-            Ok(LocalePageRequirement::Named(keys))
+            _ => fail(&mode_path, ErrorKind::InvalidValue),
         }
-        _ => fail(&mode_path, ErrorKind::InvalidValue),
-    }
+    })?;
+    policy.finish()?;
+    Ok(LocaleCoveragePolicy {
+        identity,
+        context_digest,
+        required,
+    })
+}
+
+fn decode_facts(parent: &mut Obj) -> Result<LocaleCoverageFacts, Error> {
+    Ok(LocaleCoverageFacts {
+        docs: parent.required("docs", decode_docs)?,
+        scope: parent.required("scope", |path, value| {
+            let mut scope = Obj::new(path, value)?;
+            let site = scope.required("site", decode_identity)?;
+            let source_locale =
+                scope.required("source_locale", crate::semantic::decode_open_identity)?;
+            let target_locale =
+                scope.required("target_locale", crate::semantic::decode_open_identity)?;
+            let channel = scope.required("channel", decode_identity)?;
+            let version_path = scope.field("version");
+            let version = de::nullable(scope.take("version")?)
+                .map(|value| crate::semantic::decode_open_identity(&version_path, value))
+                .transpose()?;
+            scope.finish()?;
+            if source_locale == target_locale {
+                return fail(path, ErrorKind::Inconsistent);
+            }
+            Ok(LocaleCoverageScope {
+                site,
+                source_locale,
+                target_locale,
+                channel,
+                version,
+            })
+        })?,
+        producer: parent.required("producer", decode_producer)?,
+    })
 }
 
 fn plan_value(plan: &LocaleCoveragePlan) -> Value {
