@@ -79,6 +79,7 @@ repository permissions:
 | Metadata | Read | Read repository identity and effective rules. |
 | Contents | Read | Fetch the exact repository and pinned action objects. |
 | Pull requests | Read | Refresh the authenticated pull request. |
+| Actions | Read | Read configured workflow runs and their semantic-evidence artifacts. |
 | Checks | Read and write | Read and create the App-owned Check Run. |
 | Commit statuses | Read and write | Make the App available as the selected source when configuring the required status. |
 
@@ -195,7 +196,24 @@ execution constraint.
     "execution_constraint_file": "/etc/amiss/execution-constraint.json",
     "organization_floor_file": "/etc/amiss/organization-floor.json",
     "debt_snapshot_file": null,
-    "waiver_bundle_file": null
+    "waiver_bundle_file": null,
+    "workflow_artifacts": [
+      {
+        "workflow_identity": "docs-evidence.yml",
+        "event": "pull_request",
+        "artifact_name": "amiss-semantic-evidence",
+        "payload_file": "amiss/semantic-template.json",
+        "archive_byte_limit": 33554432,
+        "file_byte_limit": 16777216,
+        "semantic": {
+          "acquisition_identity": "github-docs-evidence",
+          "producer_kind": "site-build",
+          "producer_identity": "docs-site",
+          "producer_version": "0.5.1",
+          "context_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      }
+    ]
   },
   "paths": {
     "bootstrap": "/opt/amiss/amiss-bootstrap",
@@ -215,12 +233,22 @@ Repository owner and name are lowercase. `target_branch` is one branch name such
 full `refs/heads/...` value. It binds admission, the plan route, effective-rules lookup, and the
 protected target of every run.
 
+`workflow_artifacts` defaults to an empty list. Each row becomes part of the plan digest and uses
+the configured provider and repository; neither is accepted again inside the row. The workflow
+identity is a workflow file name or numeric GitHub workflow ID. The event, case-sensitive artifact
+name, sole ZIP member, acquisition identity, producer contract, context digest, and both byte
+limits must reproduce the producer exactly. Archive and payload limits are positive and capped at
+32 MiB and 16 MiB respectively. Acquisition requires exactly one completed successful run for the
+authenticated candidate SHA and exactly one unexpired artifact whose linked run and repository
+metadata, declared size, and SHA-256 digest all agree. The signed download URL receives no App
+credential and may redirect no further.
+
 `instance` is `github.com` for GitHub.com. For GHES, use its lowercase host as `instance` and its
 REST root, normally `https://github.example/api/v3`, as `api_base`. The server must support the
-App, rules-for-branch, pull-request, commit, and Check Run APIs used by this lane under the pinned
-GitHub API version. Its HTTPS certificate must chain to a CA trusted by the service's Rust TLS
-clients; there is no insecure-TLS switch. The API URL must use HTTPS and the provider host;
-credentials, ports, query strings, and fragments are rejected.
+App, Actions workflow-run and artifact, rules-for-branch, pull-request, commit, and Check Run APIs
+used by this lane under the pinned GitHub API version. Its HTTPS certificate must chain to a CA
+trusted by the service's Rust TLS clients; there is no insecure-TLS switch. The API URL must use
+HTTPS and the provider host; credentials, ports, query strings, and fragments are rejected.
 
 This lane accepts exact SHA-1 object IDs and Git protocol v2. A GHES deployment must support both.
 The execution constraint's action repository must name that same GHES instance.

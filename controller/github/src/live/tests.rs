@@ -354,7 +354,7 @@ fn a_token_answers_only_for_its_own_installation() {
     use amiss_controller_fixtures::rsa_keys;
 
     use super::{GitHubApp, GitHubTimeouts};
-    use crate::{GitHubApi as _, GitHubTokenSource as _};
+    use crate::{GitHubAcquisitionSource as _, GitHubApi as _};
 
     let app = GitHubApp::new(
         ProviderIdentity {

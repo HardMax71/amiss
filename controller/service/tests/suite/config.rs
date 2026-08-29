@@ -2,12 +2,13 @@ use std::fs;
 use std::io::Write as _;
 use std::time::Duration;
 
-use amiss_controller::ExternalPolicy;
+use amiss_controller::{ExternalPolicy, ProviderIdentity};
 use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
     load_execution_limits, load_limits, load_plan, read_regular,
 };
 use amiss_wire::controls::Profile;
+use amiss_wire::model::RepositoryIdentity;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use flate2::Compression;
@@ -43,7 +44,7 @@ fn load_intersphinx_plan(
             "file": inventory_path,
         }],
     }))?;
-    load_plan(&files).map_err(Into::into)
+    load_plan(&files, None).map_err(Into::into)
 }
 
 #[test]
@@ -434,7 +435,7 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
         }
         serde_json::from_value(value).unwrap()
     };
-    let observed = load_plan(&files("observe", true, None)).unwrap();
+    let observed = load_plan(&files("observe", true, None), None).unwrap();
     assert_eq!(observed.profile, Profile::Observe);
     assert_eq!(observed.policy.external_policy, ExternalPolicy::Advisory);
     let floor = observed
@@ -443,27 +444,26 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
         .as_ref()
         .expect("the named floor file lands in the plan");
     assert_eq!(floor.bytes, floor_bytes);
-    let advisory = load_plan(&files("enforce", false, None)).unwrap();
+    let advisory = load_plan(&files("enforce", false, None), None).unwrap();
     assert_eq!(advisory.profile, Profile::Enforce);
     assert_eq!(advisory.policy.external_policy, ExternalPolicy::Advisory);
     let with_inventory = load_intersphinx_plan(&dir, &constraint_path).unwrap();
     assert_eq!(with_inventory.policy.semantic_evidence.len(), 1);
     assert_ne!(with_inventory.digest, advisory.digest);
-    let off = load_plan(&files("enforce", false, Some("off"))).unwrap();
+    let off = load_plan(&files("enforce", false, Some("off")), None).unwrap();
     assert_eq!(off.policy.external_policy, ExternalPolicy::Off);
     assert_ne!(off.digest, advisory.digest);
-    let blocking = load_plan(&files(
-        "enforce",
-        false,
-        Some("block-confirmed-refutations"),
-    ))
+    let blocking = load_plan(
+        &files("enforce", false, Some("block-confirmed-refutations")),
+        None,
+    )
     .unwrap();
     assert_eq!(
         blocking.policy.external_policy,
         ExternalPolicy::BlockConfirmedRefutations
     );
     assert_ne!(blocking.digest, advisory.digest);
-    assert!(load_plan(&files("Observe", false, None)).is_err());
+    assert!(load_plan(&files("Observe", false, None), None).is_err());
     assert!(
         serde_json::from_value::<amiss_controller_service::CheckPlanFiles>(json!({
             "profile": "enforce",
@@ -471,6 +471,67 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
             "execution_constraint_file": constraint_path,
         }))
         .is_err()
+    );
+}
+
+#[test]
+fn workflow_artifacts_require_and_reproduce_the_provider_scope() {
+    let directory = TempDir::new().unwrap();
+    let constraint = directory.path().join("constraint.json");
+    fs::write(
+        &constraint,
+        include_bytes!("../../../../spec/examples/scanner-execution-constraint.json"),
+    )
+    .unwrap();
+    let raw = json!({
+        "profile": "enforce",
+        "execution_constraint_file": constraint,
+        "workflow_artifacts": [{
+            "workflow_identity": "docs-evidence.yml",
+            "event": "pull_request",
+            "artifact_name": "amiss-semantic-evidence",
+            "payload_file": "amiss/semantic-template.json",
+            "archive_byte_limit": 33_554_432,
+            "file_byte_limit": 16_777_216,
+            "semantic": {
+                "acquisition_identity": "github-docs-evidence",
+                "producer_kind": "site-build",
+                "producer_identity": "docs-site",
+                "producer_version": "0.5.1",
+                "context_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            }
+        }]
+    });
+    let files: amiss_controller_service::CheckPlanFiles =
+        serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(
+        load_plan(&files, None).unwrap_err().to_string(),
+        "workflow artifacts are unsupported by this provider lane"
+    );
+
+    let provider = ProviderIdentity::new("github".to_owned(), "github.com".to_owned()).unwrap();
+    let repository = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();
+    let plan = load_plan(&files, Some((&provider, &repository))).unwrap();
+    let [artifact] = plan.policy.workflow_artifacts.as_slice() else {
+        panic!("one configured artifact")
+    };
+    assert_eq!(artifact.provider, provider);
+    assert_eq!(artifact.repository, repository);
+    assert_eq!(artifact.workflow_identity.as_str(), "docs-evidence.yml");
+    assert_eq!(
+        artifact.semantic.acquisition_identity.as_str(),
+        "github-docs-evidence"
+    );
+
+    let without_artifacts: amiss_controller_service::CheckPlanFiles =
+        serde_json::from_value(json!({
+            "profile": "enforce",
+            "execution_constraint_file": raw["execution_constraint_file"]
+        }))
+        .unwrap();
+    assert_ne!(
+        load_plan(&without_artifacts, None).unwrap().digest,
+        plan.digest
     );
 }
 

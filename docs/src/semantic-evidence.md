@@ -170,10 +170,11 @@ are therefore observed in their finished bytes without running any of them insid
 
 A trusted candidate acquisition may call this producer after an operator-owned build and return
 the exact candidate-independent template bytes under its planned acquisition identity. The
-controller, not the producer, binds the candidate. The built-in provider acquisitions still return
-none: the controller neither starts mdBook nor treats repository output or cache state as
-authority. The acquisition boundary keeps candidate output out of a startup plan and keeps the
-scanner from searching the repository for evidence.
+controller, not the producer, binds the candidate. The GitHub provider lane can read an explicitly
+configured workflow artifact through the App installation API; the Gitea-family and GitLab lanes
+still expose no such source. The controller neither starts mdBook nor treats repository output or
+cache state as authority. The acquisition boundary keeps candidate output out of a startup plan
+and keeps the scanner from searching the repository for evidence.
 
 The bound-envelope schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
