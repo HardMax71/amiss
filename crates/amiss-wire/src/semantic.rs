@@ -63,11 +63,7 @@ struct Producer {
 /// Fails on an oversized stream, strict-JSON or shape defects, a payload digest mismatch,
 /// invalid producer identity, or observations that are not bounded sorted objects with kinds.
 pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let value = json::parse(bytes).map_err(|error| Error::new("$", ErrorKind::Json(error)))?;
-    let mut envelope = Obj::new("$", value)?;
+    let mut envelope = parse_document(bytes)?;
     envelope.required("schema", |path, value| {
         de::const_str(path, value, ENVELOPE_SCHEMA)
     })?;
@@ -90,19 +86,12 @@ pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
 /// Fails on an oversized stream, strict-JSON or shape defects, invalid producer identity, or
 /// observations that are not bounded sorted objects with kinds.
 pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let value = json::parse(bytes).map_err(|error| Error::new("$", ErrorKind::Json(error)))?;
-    let mut template = Obj::new("$", value)?;
+    let mut template = parse_document(bytes)?;
     template.required("schema", |path, value| {
         de::const_str(path, value, TEMPLATE_SCHEMA)
     })?;
     let producer = decode_producer(&mut template)?;
-    let complete_path = template.field("complete");
-    let Value::Bool(complete) = template.take("complete")? else {
-        return fail(&complete_path, ErrorKind::WrongType);
-    };
+    let complete = template.required("complete", de::boolean)?;
     let observations_path = template.field("observations");
     let observations = de::array(&observations_path, template.take("observations")?)?;
     template.finish()?;
@@ -116,6 +105,14 @@ pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate, Error> {
         complete,
         observations: Arc::from(observations),
     })
+}
+
+fn parse_document(bytes: &[u8]) -> Result<Obj, Error> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let value = json::parse(bytes).map_err(|error| Error::new("$", ErrorKind::Json(error)))?;
+    Obj::new("$", value)
 }
 
 /// Binds a candidate-independent template to one exact scanner candidate.
@@ -211,10 +208,7 @@ fn decode_payload(path: &str, value: Value) -> Result<SemanticEvidence, Error> {
         .transpose()?;
     subject.finish()?;
     let producer = decode_producer(&mut payload)?;
-    let complete_path = payload.field("complete");
-    let Value::Bool(complete) = payload.take("complete")? else {
-        return fail(&complete_path, ErrorKind::WrongType);
-    };
+    let complete = payload.required("complete", de::boolean)?;
     let observations_path = payload.field("observations");
     let observations = de::array(&observations_path, payload.take("observations")?)?;
     payload.finish()?;

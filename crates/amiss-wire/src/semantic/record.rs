@@ -1,13 +1,12 @@
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::de::{self, Error, ErrorKind, Obj};
 use crate::digest::Digest;
-use crate::json::{self, Value};
+use crate::json::Value;
 use crate::model::ArtifactId;
 
-use super::{SEMANTIC_EVIDENCE_BYTES, SEMANTIC_OBSERVATIONS_LIMIT, SemanticEvidenceTemplate};
+use super::{SEMANTIC_OBSERVATIONS_LIMIT, SemanticEvidenceTemplate};
 
 pub const INPUT_SCHEMA: &str = "amiss/record-set-input";
 pub const PRODUCER_KIND: &str = "record-set";
@@ -35,21 +34,14 @@ pub struct Observation {
 /// Fails on oversized or malformed strict JSON, unknown fields, invalid identities or digests,
 /// and records that are not bounded, control-free, sorted, and unique by key.
 pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let value = json::parse(bytes).map_err(|error| Error::new("$", ErrorKind::Json(error)))?;
-    let mut input = Obj::new("$", value)?;
+    let mut input = super::parse_document(bytes)?;
     input.required("schema", |path, value| {
         de::const_str(path, value, INPUT_SCHEMA)
     })?;
     let producer_identity = input.required("producer_identity", super::decode_id)?;
     let context_digest = input.required("context_digest", de::digest)?;
     let input_digest = input.required("input_digest", de::digest)?;
-    let complete_path = input.field("complete");
-    let Value::Bool(complete) = input.take("complete")? else {
-        return fail(&complete_path, ErrorKind::WrongType);
-    };
+    let complete = input.required("complete", de::boolean)?;
     let name = input.required("name", super::decode_id)?;
     let records = input.required("records", decode_records)?;
     input.finish()?;
@@ -100,14 +92,8 @@ pub fn decode_observation(path: &str, value: Value) -> Result<Observation, Error
 }
 
 fn decode_records(path: &str, value: Value) -> Result<BTreeMap<String, String>, Error> {
-    let values = de::array(path, value)?;
-    if values.len() > SEMANTIC_OBSERVATIONS_LIMIT {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    let mut records: BTreeMap<String, String> = BTreeMap::new();
-    for (index, value) in values.into_iter().enumerate() {
-        let row_path = format!("{path}[{index}]");
-        let mut row = Obj::new(&row_path, value)?;
+    de::sorted_map(path, value, SEMANTIC_OBSERVATIONS_LIMIT, |path, value| {
+        let mut row = Obj::new(path, value)?;
         let key = row.required("key", |path, value| {
             de::bounded_text(path, value, super::RECORD_KEY_BYTES)
         })?;
@@ -115,18 +101,8 @@ fn decode_records(path: &str, value: Value) -> Result<BTreeMap<String, String>, 
             de::bounded_text(path, value, super::RECORD_VALUE_BYTES)
         })?;
         row.finish()?;
-        match records
-            .last_key_value()
-            .map(|(previous, _value)| previous.cmp(&key))
-        {
-            Some(Ordering::Equal) => return fail(path, ErrorKind::DuplicateMember),
-            Some(Ordering::Greater) => return fail(path, ErrorKind::UnsortedSet),
-            None | Some(Ordering::Less) => {
-                records.insert(key, value);
-            }
-        }
-    }
-    Ok(records)
+        Ok((key, value))
+    })
 }
 
 fn observation_value(observation: Observation) -> Value {

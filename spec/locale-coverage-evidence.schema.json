@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:locale-coverage-evidence",
+  "title": "Amiss locale coverage evidence",
+  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each inventory reports its own completeness and immutable inputs; equal keys prove structural presence only, never translation, fallback, or freshness.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/locale-coverage-evidence-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/EvidencePayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the locale-coverage-evidence payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "OpenIdentity": {
+      "description": "An opaque producer-owned locale, version, or producer-version label compared exactly by Amiss.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "PageKey": {
+      "description": "One opaque stable page identity emitted by the selected producer, not a route inferred by Amiss.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\p{Cc}]+$"
+    },
+    "Repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "name", "owner"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$",
+          "not": {
+            "enum": [".", ".."]
+          }
+        }
+      }
+    },
+    "DocsCandidate": {
+      "description": "The exact committed docs source and scanner candidate identity repeated independently by the evidence producer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_identity_digest",
+        "commit_oid",
+        "object_format",
+        "repository",
+        "tree_oid"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/Repository"
+        },
+        "object_format": {
+          "enum": ["sha1", "sha256"]
+        },
+        "commit_oid": {
+          "type": "string"
+        },
+        "tree_oid": {
+          "type": "string"
+        },
+        "candidate_identity_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha256"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Scope": {
+      "description": "The independently observed site, locale pair, channel, and optional version. Source and target locale must differ.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "site", "source_locale", "target_locale", "version"],
+      "properties": {
+        "site": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "source_locale": {
+          "$ref": "#/$defs/OpenIdentity"
+        },
+        "target_locale": {
+          "$ref": "#/$defs/OpenIdentity"
+        },
+        "channel": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/OpenIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Producer": {
+      "description": "The authenticated inventory producer and exact context that determines page-key and digest meaning.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "version"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "$ref": "#/$defs/OpenIdentity"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "resource_digest"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/PageKey"
+        },
+        "resource_digest": {
+          "description": "The exact producer-defined page resource bytes. This digest establishes identity, not translation quality or source lineage.",
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Inventory": {
+      "description": "One independently bounded inventory. False completeness retains observed pages but cannot prove that an absent page is absent from this locale.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "input_digest", "pages"],
+      "properties": {
+        "input_digest": {
+          "description": "The digest of the exact producer input from which this locale inventory was normalized.",
+          "$ref": "#/$defs/Digest"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "pages": {
+          "description": "A byte-sorted set unique by page key. The strict reader additionally limits source and target to 100,000 rows combined.",
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/Page"
+          }
+        }
+      }
+    },
+    "EvidencePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "docs",
+        "plan_payload_digest",
+        "producer",
+        "schema",
+        "scope",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/locale-coverage-evidence-payload"
+        },
+        "plan_payload_digest": {
+          "description": "The payload digest of the exact operator-owned locale coverage plan this evidence answers.",
+          "$ref": "#/$defs/Digest"
+        },
+        "docs": {
+          "$ref": "#/$defs/DocsCandidate"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "producer": {
+          "$ref": "#/$defs/Producer"
+        },
+        "source": {
+          "$ref": "#/$defs/Inventory"
+        },
+        "target": {
+          "$ref": "#/$defs/Inventory"
+        }
+      }
+    }
+  }
+}
