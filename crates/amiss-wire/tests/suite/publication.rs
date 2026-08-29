@@ -14,6 +14,8 @@ use amiss_wire::publication::{
     PublicationRelation, PublicationResource, PublicationTarget, parse_plan, plan,
 };
 
+mod evidence;
+
 fn digest(digit: char) -> Digest {
     Digest::from_wire(&format!("sha256:{}", digit.to_string().repeat(64))).unwrap()
 }
