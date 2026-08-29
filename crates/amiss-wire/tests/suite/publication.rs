@@ -1,0 +1,160 @@
+#![expect(
+    clippy::unwrap_used,
+    reason = "tests build known-valid publication identities and inspect exact refusals"
+)]
+
+use std::{fs, path::Path};
+
+use amiss_wire::de::ErrorKind;
+use amiss_wire::digest::{Digest, hj};
+use amiss_wire::json;
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::publication::{
+    CompletedSite, DocsCandidate, PLAN_PAYLOAD_SCHEMA, PublicationPlan, PublicationProducer,
+    PublicationRelation, PublicationResource, PublicationTarget, parse_plan, plan,
+};
+
+fn digest(digit: char) -> Digest {
+    Digest::from_wire(&format!("sha256:{}", digit.to_string().repeat(64))).unwrap()
+}
+
+fn oid(digit: char, format: ObjectFormat) -> Oid {
+    let length = match format {
+        ObjectFormat::Sha1 => 40,
+        ObjectFormat::Sha256 => 64,
+    };
+    Oid::new(format, digit.to_string().repeat(length)).unwrap()
+}
+
+fn identity(value: &str) -> ArtifactId {
+    ArtifactId::new(value.to_owned()).unwrap()
+}
+
+fn publication_plan() -> PublicationPlan {
+    PublicationPlan {
+        report_payload_digest: digest('1'),
+        docs: DocsCandidate {
+            repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
+            commit: oid('a', ObjectFormat::Sha1),
+            tree: oid('b', ObjectFormat::Sha1),
+            candidate_identity_digest: digest('2'),
+        },
+        target: PublicationTarget {
+            provider: identity("github-pages"),
+            instance: identity("github.com"),
+            environment: identity("github-pages"),
+            channel: identity("stable"),
+            canonical_url: "https://docs.example.com/widget/".to_owned(),
+        },
+        site: CompletedSite {
+            artifact: PublicationResource {
+                uri: "https://api.github.com/repos/acme/widget/actions/artifacts/123".to_owned(),
+                digest: digest('3'),
+            },
+            input_digest: digest('4'),
+        },
+        product: PublicationResource {
+            uri: "pkg:oci/registry.example.com/widget@1.2.3".to_owned(),
+            digest: digest('5'),
+        },
+        producer: PublicationProducer {
+            identity: identity("github-pages-deployment"),
+            version: "1".to_owned(),
+            context_digest: digest('6'),
+        },
+        relation: PublicationRelation {
+            identity: identity("stable-docs-release"),
+            context_digest: digest('7'),
+        },
+    }
+}
+
+#[test]
+fn publication_plan_round_trips_with_its_payload_digest() {
+    let expected = publication_plan();
+    let value = plan(&expected).unwrap();
+    let bytes = json::canonical(&value);
+    let parsed = parse_plan(&bytes).unwrap();
+
+    assert_eq!(parsed.payload, expected);
+    assert_eq!(
+        parsed.payload_digest,
+        hj(PLAN_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+    );
+    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
+
+    let example_bytes = fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/publication-plan.json"),
+    )
+    .unwrap();
+    let example = parse_plan(&example_bytes).unwrap();
+    let written = plan(&example.payload).unwrap();
+    assert_eq!(
+        json::canonical(&written),
+        json::canonical(&json::parse(&example_bytes).unwrap())
+    );
+}
+
+#[test]
+fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
+    let mut mismatched_git = publication_plan();
+    mismatched_git.docs.tree = oid('b', ObjectFormat::Sha256);
+    let error = plan(&mismatched_git).unwrap_err();
+    assert_eq!(error.path, "$.payload.docs.tree_oid");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+
+    let mut fragment = publication_plan();
+    fragment.target.canonical_url = "https://docs.example.com/#candidate".to_owned();
+    let error = plan(&fragment).unwrap_err();
+    assert_eq!(error.path, "$.payload.target.canonical_url");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+
+    for invalid in [
+        "https://user@docs.example.com/",
+        "https://docs.example.com:/",
+        "https://docs.example.com:port/",
+    ] {
+        let mut invalid_authority = publication_plan();
+        invalid_authority.target.canonical_url = invalid.to_owned();
+        let error = plan(&invalid_authority).unwrap_err();
+        assert_eq!(error.path, "$.payload.target.canonical_url");
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+    }
+
+    let mut relative_resource = publication_plan();
+    relative_resource.product.uri = "registry.example.com/widget:latest".to_owned();
+    let error = plan(&relative_resource).unwrap_err();
+    assert_eq!(error.path, "$.payload.product.uri");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+}
+
+#[test]
+fn publication_plan_refuses_tampering_and_open_shapes() {
+    let value = plan(&publication_plan()).unwrap();
+    let bytes = json::canonical(&value);
+    let parsed = parse_plan(&bytes).unwrap();
+    let tampered = String::from_utf8(bytes)
+        .unwrap()
+        .replace(&parsed.payload_digest.to_string(), &digest('f').to_string());
+    let error = parse_plan(tampered.as_bytes()).unwrap_err();
+    assert_eq!(error.path, "$.payload_digest");
+    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+
+    let value = plan(&publication_plan()).unwrap();
+    let recorded = value.text("payload_digest").unwrap();
+    let open = String::from_utf8(json::canonical(&value))
+        .unwrap()
+        .replacen(
+            "\"report_payload_digest\":",
+            "\"unknown\":true,\"report_payload_digest\":",
+            1,
+        );
+    let open_value = json::parse(open.as_bytes()).unwrap();
+    let rebound = open.replace(
+        recorded,
+        &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
+    );
+    let error = parse_plan(rebound.as_bytes()).unwrap_err();
+    assert_eq!(error.path, "$.payload.unknown");
+    assert_eq!(error.kind, ErrorKind::UnknownField);
+}

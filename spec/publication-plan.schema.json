@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:publication-plan",
+  "title": "Amiss publication plan",
+  "description": "One operator-owned, digest-bound relation between a successful scanner report, an exact docs candidate, a completed-site artifact, a publication target, and an immutable product resource. It plans an audit; it is neither deployment evidence nor an attestation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/publication-plan-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/PlanPayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the publication-plan payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "ProducerVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "ResourceUri": {
+      "description": "An exact absolute resource URI. The accompanying digest, not the URI spelling, establishes immutable bytes.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 16384,
+      "pattern": "^[a-z][a-z0-9+.-]*:[^#\\s]+$"
+    },
+    "CanonicalUrl": {
+      "description": "The exact public HTTPS address of the planned channel, without query or fragment.",
+      "type": "string",
+      "minLength": 9,
+      "maxLength": 16384,
+      "pattern": "^https://[^/?#@\\s]+(?:/[^?#\\s]*)?$"
+    },
+    "Repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "name", "owner"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$",
+          "not": {
+            "enum": [".", ".."]
+          }
+        }
+      }
+    },
+    "DocsCandidate": {
+      "description": "The exact committed docs source and the scanner candidate identity that includes its acquisition context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_identity_digest",
+        "commit_oid",
+        "object_format",
+        "repository",
+        "tree_oid"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/Repository"
+        },
+        "object_format": {
+          "enum": ["sha1", "sha256"]
+        },
+        "commit_oid": {
+          "type": "string"
+        },
+        "tree_oid": {
+          "type": "string"
+        },
+        "candidate_identity_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha256"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Target": {
+      "description": "The operator-selected publication destination. Channel and environment are labels, never inferred ordering rules.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_url", "channel", "environment", "instance", "provider"],
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "instance": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "environment": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "channel": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "canonical_url": {
+          "$ref": "#/$defs/CanonicalUrl"
+        }
+      }
+    },
+    "Resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "uri"],
+      "properties": {
+        "uri": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "CompletedSite": {
+      "description": "The immutable artifact actually analyzed as a completed site and the site producer input identity derived from it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "input_digest"],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/Resource"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Producer": {
+      "description": "The independently selected deployment evidence producer and exact context it must later reproduce.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "version"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "$ref": "#/$defs/ProducerVersion"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Relation": {
+      "description": "The operator-owned rule naming why this docs channel is expected to describe this exact product resource; Amiss binds the rule bytes but does not invent them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "PlanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "docs",
+        "producer",
+        "product",
+        "relation",
+        "report_payload_digest",
+        "schema",
+        "site",
+        "target"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/publication-plan-payload"
+        },
+        "report_payload_digest": {
+          "description": "The verified scanner report whose successful result approved these docs inputs.",
+          "$ref": "#/$defs/Digest"
+        },
+        "docs": {
+          "$ref": "#/$defs/DocsCandidate"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "site": {
+          "$ref": "#/$defs/CompletedSite"
+        },
+        "product": {
+          "$ref": "#/$defs/Resource"
+        },
+        "producer": {
+          "$ref": "#/$defs/Producer"
+        },
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        }
+      }
+    }
+  }
+}
