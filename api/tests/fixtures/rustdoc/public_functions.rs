@@ -1,7 +1,10 @@
-#![crate_name = "symbol_fixture"]
-
-#[cfg(unrelated)]
+#[cfg(feature = "unrelated")]
 const UNRELATED: u64 = 1;
+
+#[cfg(feature = "api")]
+pub fn feature_only(value: usize) -> usize {
+    value
+}
 
 macro_rules! public_function {
     ($name:ident) => {

@@ -7,13 +7,15 @@ use super::super::{Normalized, function_declarations};
 
 #[test]
 #[ignore = "requires the separately pinned format-61 Rustdoc toolchain"]
-fn rustdoc_keeps_public_records_stable_across_unrelated_items() {
-    let baseline = normalize(None);
-    let repeated = normalize(None);
-    let shifted = normalize(Some("unrelated"));
+fn cargo_features_preserve_configuration_boundaries() {
+    let target = tempfile::tempdir().unwrap();
+    let baseline = normalize(&[], target.path());
+    let repeated = normalize(&[], target.path());
+    let unrelated = normalize(&["unrelated"], target.path());
+    let featured = normalize(&["api"], target.path());
 
     assert_eq!(baseline.records, repeated.records);
-    assert_eq!(baseline.records, shifted.records);
+    assert_eq!(baseline.records, unrelated.records);
     assert_eq!(
         baseline.records,
         BTreeMap::from([
@@ -39,42 +41,40 @@ fn rustdoc_keeps_public_records_stable_across_unrelated_items() {
             ),
         ])
     );
+    let mut expected_featured = baseline.records;
+    expected_featured.insert(
+        "fn/symbol_fixture::feature_only".to_owned(),
+        "pub fn symbol_fixture::feature_only(value: usize) -> usize".to_owned(),
+    );
+    assert_eq!(featured.records, expected_featured);
 }
 
-fn normalize(configuration: Option<&str>) -> Normalized {
-    let output = tempfile::tempdir().unwrap();
+fn normalize(features: &[&str], target: &std::path::Path) -> Normalized {
     let toolchain = std::env::var("AMISS_RUSTDOC_TOOLCHAIN").unwrap();
-    let mut rustdoc = Command::new("rustup");
-    rustdoc.args([
-        "run",
-        &toolchain,
-        "rustdoc",
-        "--edition",
-        "2024",
-        "--crate-type",
-        "lib",
+    let manifest =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rustdoc/Cargo.toml");
+    let mut cargo = Command::new("rustup");
+    cargo.args(["run", &toolchain, "cargo", "rustdoc", "--manifest-path"]);
+    cargo.arg(manifest).args(["--frozen", "--target-dir"]);
+    cargo.arg(target).arg("--lib");
+    if !features.is_empty() {
+        cargo.args(["--features", &features.join(",")]);
+    }
+    cargo.args([
+        "--",
         "--document-private-items",
         "-Z",
         "unstable-options",
         "--output-format",
         "json",
-        "-o",
     ]);
-    rustdoc.arg(output.path());
-    if let Some(configuration) = configuration {
-        rustdoc.args(["--cfg", configuration]);
-    }
-    rustdoc.arg(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/rustdoc/public_functions.rs"),
-    );
-    let executed = rustdoc.output().unwrap();
+    let executed = cargo.output().unwrap();
     assert!(
         executed.status.success(),
         "{}",
         String::from_utf8_lossy(&executed.stderr)
     );
-    let bytes = std::fs::read(output.path().join("symbol_fixture.json")).unwrap();
+    let bytes = std::fs::read(target.join("doc/symbol_fixture.json")).unwrap();
     let crate_: Crate = serde_json::from_slice(&bytes).unwrap();
     function_declarations(
         &bytes,

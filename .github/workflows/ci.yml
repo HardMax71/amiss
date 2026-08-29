@@ -92,7 +92,7 @@ jobs:
       - run: rustup toolchain install nightly-2026-08-28 --profile minimal
       - run: >-
           cargo test -p amiss-api
-          normalize::tests::real::rustdoc_keeps_public_records_stable_across_unrelated_items
+          normalize::tests::real::cargo_features_preserve_configuration_boundaries
           --locked -- --ignored --exact
         env:
           AMISS_RUSTDOC_TOOLCHAIN: nightly-2026-08-28
