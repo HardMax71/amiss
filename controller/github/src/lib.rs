@@ -2,6 +2,7 @@
 
 mod acquisition;
 mod live;
+mod workflow_artifact;
 
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ pub use acquisition::{
     github_fetch_plan,
 };
 pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
+pub use workflow_artifact::{GitHubArtifactError, decode_workflow_artifact};
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
 const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronize"];
