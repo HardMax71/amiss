@@ -628,6 +628,55 @@ fn limited(resources: &str, extra: &str) -> String {
     )
 }
 
+#[test]
+fn every_projection_meter_is_floor_tightenable() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "base\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    fs::create_dir_all(root.join(".amiss")).unwrap();
+    fs::create_dir_all(root.join("inventory")).unwrap();
+    fs::write(root.join("inventory/a.txt"), "a\n").unwrap();
+    fs::write(
+        root.join("docs.md"),
+        "```text\nstale\n```\n[amiss:inventory]: <amiss:projection>\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join(".amiss/scanner-policy.json"),
+        r#"{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[{"document":"docs.md","name":"inventory","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"tree-paths","root":"inventory","suffix":".txt","maximum_depth":1}}],"protected_inventory":[],"finding_dispositions":[]}"#,
+    )
+    .unwrap();
+    let (repo, base, candidate) = two_commits(root);
+
+    for resource in [
+        "projection-assertions-per-snapshot",
+        "aggregate-projection-selected-bytes-per-snapshot",
+        "projection-records-compared-per-snapshot",
+        "aggregate-projection-projected-bytes-per-snapshot",
+        "aggregate-projection-preview-bytes-per-snapshot",
+    ] {
+        let limit = format!(r#"{{ "resource": "{resource}", "maximum": 0 }}"#);
+        let report = payload(
+            &shell(Some(floor_input(&limited(&limit, "")))),
+            &repo,
+            &base,
+            &candidate,
+        );
+        assert_eq!(report["result"]["complete"], false, "{resource}: {report}");
+        assert!(
+            report["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|error| error["resource"] == resource),
+            "{resource}: {report}"
+        );
+    }
+}
+
 /// A tightened error ceiling has to reach the fatal projections too, since
 /// those are where a failing run states its errors.
 #[test]

@@ -13,6 +13,11 @@ fn limits() -> ScanLimits {
         references_per_document: 2,
         references_per_snapshot: 3,
         aggregate_heading_anchor_evaluation_bytes_per_snapshot: 16,
+        projection_assertions_per_snapshot: 2,
+        aggregate_projection_selected_bytes_per_snapshot: 5,
+        projection_records_compared_per_snapshot: 3,
+        aggregate_projection_projected_bytes_per_snapshot: 7,
+        aggregate_projection_preview_bytes_per_snapshot: 4,
         ..ScanLimits::CONTRACT
     }
 }
@@ -101,4 +106,40 @@ fn the_heading_anchor_allowance_is_what_remains() {
     assert_eq!(scan.heading_anchor_allowance(), 10);
     scan.charge(Aggregate::HeadingAnchorBytes, 10).unwrap();
     assert_eq!(scan.heading_anchor_allowance(), 0);
+}
+
+#[test]
+fn projection_totals_cross_independently() {
+    for (aggregate, ceiling, resource) in [
+        (
+            Aggregate::ProjectionAssertions,
+            2,
+            ResourceName::ProjectionAssertionsPerSnapshot,
+        ),
+        (
+            Aggregate::ProjectionSelectedBytes,
+            5,
+            ResourceName::AggregateProjectionSelectedBytesPerSnapshot,
+        ),
+        (
+            Aggregate::ProjectionComparedRecords,
+            3,
+            ResourceName::ProjectionRecordsComparedPerSnapshot,
+        ),
+        (
+            Aggregate::ProjectionProjectedBytes,
+            7,
+            ResourceName::AggregateProjectionProjectedBytesPerSnapshot,
+        ),
+        (
+            Aggregate::ProjectionPreviewBytes,
+            4,
+            ResourceName::AggregateProjectionPreviewBytesPerSnapshot,
+        ),
+    ] {
+        let mut scan = ScanResources::new(limits());
+        assert!(scan.charge(aggregate, ceiling).is_ok(), "{resource:?}");
+        let crossing = scan.charge(aggregate, 1).unwrap_err();
+        assert_eq!(resource_of(&crossing), Some(resource));
+    }
 }

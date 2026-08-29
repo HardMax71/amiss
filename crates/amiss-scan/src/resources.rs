@@ -28,6 +28,11 @@ pub struct ScanLimits {
     pub aggregate_ignore_declaration_bytes_per_snapshot: u64,
     pub aggregate_line_fragment_evaluation_bytes_per_snapshot: u64,
     pub aggregate_heading_anchor_evaluation_bytes_per_snapshot: u64,
+    pub projection_assertions_per_snapshot: u64,
+    pub aggregate_projection_selected_bytes_per_snapshot: u64,
+    pub projection_records_compared_per_snapshot: u64,
+    pub aggregate_projection_projected_bytes_per_snapshot: u64,
+    pub aggregate_projection_preview_bytes_per_snapshot: u64,
     pub selected_control_blob_bytes: u64,
     pub aggregate_selected_control_bytes_per_snapshot: u64,
     pub control_input_bytes: u64,
@@ -57,6 +62,11 @@ impl ScanLimits {
         aggregate_ignore_declaration_bytes_per_snapshot: 16_777_216,
         aggregate_line_fragment_evaluation_bytes_per_snapshot: 536_870_912,
         aggregate_heading_anchor_evaluation_bytes_per_snapshot: 536_870_912,
+        projection_assertions_per_snapshot: 10_000,
+        aggregate_projection_selected_bytes_per_snapshot: 67_108_864,
+        projection_records_compared_per_snapshot: 200_000,
+        aggregate_projection_projected_bytes_per_snapshot: 67_108_864,
+        aggregate_projection_preview_bytes_per_snapshot: 16_777_216,
         selected_control_blob_bytes: 16_777_216,
         aggregate_selected_control_bytes_per_snapshot: 67_108_864,
         control_input_bytes: 16_777_216,
@@ -68,7 +78,7 @@ impl ScanLimits {
     };
 }
 
-/// The snapshot aggregates a caller charges by declared bytes.
+/// The snapshot aggregates a caller charges by declared units.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Aggregate {
     SelectedControlBytes,
@@ -76,6 +86,11 @@ pub enum Aggregate {
     IgnoreDeclarationBytes,
     LineFragmentBytes,
     HeadingAnchorBytes,
+    ProjectionAssertions,
+    ProjectionSelectedBytes,
+    ProjectionComparedRecords,
+    ProjectionProjectedBytes,
+    ProjectionPreviewBytes,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -105,6 +120,11 @@ pub struct ScanResources {
     ignore_declaration_bytes: u64,
     line_fragment_bytes: u64,
     heading_anchor_bytes: u64,
+    projection_assertions: u64,
+    projection_selected_bytes: u64,
+    projection_compared_records: u64,
+    projection_projected_bytes: u64,
+    projection_preview_bytes: u64,
     control_bytes: u64,
     historical_tree_entries: u64,
 }
@@ -125,6 +145,11 @@ impl Clone for ScanResources {
             target_bytes: self.target_bytes,
             line_fragment_bytes: self.line_fragment_bytes,
             heading_anchor_bytes: self.heading_anchor_bytes,
+            projection_assertions: self.projection_assertions,
+            projection_selected_bytes: self.projection_selected_bytes,
+            projection_compared_records: self.projection_compared_records,
+            projection_projected_bytes: self.projection_projected_bytes,
+            projection_preview_bytes: self.projection_preview_bytes,
             control_bytes: self.control_bytes,
             historical_tree_entries: self.historical_tree_entries,
         }
@@ -175,6 +200,11 @@ impl ScanResources {
             ignore_declaration_bytes: 0,
             line_fragment_bytes: 0,
             heading_anchor_bytes: 0,
+            projection_assertions: 0,
+            projection_selected_bytes: 0,
+            projection_compared_records: 0,
+            projection_projected_bytes: 0,
+            projection_preview_bytes: 0,
             control_bytes: 0,
             historical_tree_entries: 0,
         }
@@ -186,9 +216,9 @@ impl ScanResources {
         total: &mut u64,
         limit: u64,
         resource: ResourceName,
-        declared_bytes: u64,
+        amount: u64,
     ) -> Result<(), Error> {
-        let charged = total.saturating_add(declared_bytes);
+        let charged = total.saturating_add(amount);
         within_limit(charged, limit, resource, charged)?;
         *total = charged;
         Ok(())
@@ -309,7 +339,7 @@ impl ScanResources {
     /// # Errors
     ///
     /// The aggregate crossing, observing the prior total plus this member.
-    pub fn charge(&mut self, aggregate: Aggregate, declared_bytes: u64) -> Result<(), Error> {
+    pub fn charge(&mut self, aggregate: Aggregate, amount: u64) -> Result<(), Error> {
         let limits = self.limits;
         let (total, limit, resource) = match aggregate {
             Aggregate::SelectedControlBytes => (
@@ -337,8 +367,33 @@ impl ScanResources {
                 limits.aggregate_heading_anchor_evaluation_bytes_per_snapshot,
                 ResourceName::AggregateHeadingAnchorEvaluationBytesPerSnapshot,
             ),
+            Aggregate::ProjectionAssertions => (
+                &mut self.projection_assertions,
+                limits.projection_assertions_per_snapshot,
+                ResourceName::ProjectionAssertionsPerSnapshot,
+            ),
+            Aggregate::ProjectionSelectedBytes => (
+                &mut self.projection_selected_bytes,
+                limits.aggregate_projection_selected_bytes_per_snapshot,
+                ResourceName::AggregateProjectionSelectedBytesPerSnapshot,
+            ),
+            Aggregate::ProjectionComparedRecords => (
+                &mut self.projection_compared_records,
+                limits.projection_records_compared_per_snapshot,
+                ResourceName::ProjectionRecordsComparedPerSnapshot,
+            ),
+            Aggregate::ProjectionProjectedBytes => (
+                &mut self.projection_projected_bytes,
+                limits.aggregate_projection_projected_bytes_per_snapshot,
+                ResourceName::AggregateProjectionProjectedBytesPerSnapshot,
+            ),
+            Aggregate::ProjectionPreviewBytes => (
+                &mut self.projection_preview_bytes,
+                limits.aggregate_projection_preview_bytes_per_snapshot,
+                ResourceName::AggregateProjectionPreviewBytesPerSnapshot,
+            ),
         };
-        Self::charge_aggregate(total, limit, resource, declared_bytes)
+        Self::charge_aggregate(total, limit, resource, amount)
     }
 
     /// Admits one selected document of `declared_bytes`.

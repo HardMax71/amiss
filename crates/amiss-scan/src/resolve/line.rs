@@ -173,11 +173,19 @@ impl Resolver<'_> {
             Ok(selected) => selected,
             Err(reason) => return Ok(unavailable(reason, sink)),
         };
+        self.scan.charge(
+            Aggregate::ProjectionSelectedBytes,
+            u64::try_from(selected.len()).unwrap_or(u64::MAX),
+        )?;
         let normalized = normalized_line_endings(selected);
         let expected = normalized
             .as_ref()
             .strip_suffix(b"\n")
             .unwrap_or(normalized.as_ref());
+        self.scan.charge(
+            Aggregate::ProjectionProjectedBytes,
+            u64::try_from(expected.len()).unwrap_or(u64::MAX),
+        )?;
         if expected == sink.value.as_bytes() {
             return Ok(Verdict::Attested);
         }

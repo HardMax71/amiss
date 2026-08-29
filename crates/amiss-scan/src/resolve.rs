@@ -101,7 +101,7 @@ impl TargetCache {
 pub struct Resolver<'a> {
     repo: &'a Repository,
     git: &'a mut GitResources,
-    scan: &'a mut ScanResources,
+    pub(crate) scan: &'a mut ScanResources,
     cache: &'a mut TargetCache,
     snapshot: &'a SnapshotDiscovery,
     commit_oid: Option<Oid>,
