@@ -27,15 +27,35 @@ exact lowercase absolute scheme and carry no fragment. Provider, channel, enviro
 and relation identities use the bounded artifact-identity grammar. Unknown fields, invalid values,
 mixed Git formats, oversized input, or a changed payload refuse the whole document.
 
-The outer payload digest is an integrity check, not a signature or authority claim. Repository
-content must not choose the plan, producer context, relation rule, or credentials. A future
-controller lane will retain the operator-selected plan beside the report and acquire
-provider-authenticated deployment evidence. No scanner command or engine report consumes the plan
-yet, and the plan alone never says a deployment happened.
+The matching publication evidence is a provider-normalized receipt for one successful terminal
+deployment. It binds the exact plan payload digest and independently repeats the observed docs
+candidate, target, completed-site artifact, and product resource. It also records:
 
-The checked public contract is
+- the selected evidence producer identity, version, and context digest;
+- the provider deployment record as an immutable URI-and-digest resource;
+- the exact workflow or deployment definition as another immutable resource; and
+- the one-based provider run attempt that distinguishes reruns.
+
+Only `succeeded` is a receipt outcome. A failed, cancelled, pending, partial, or unauthenticated
+provider response cannot be encoded as successful publication evidence. Repeating the publication
+facts is intentional: the later offline assessment compares independently acquired facts with the
+plan rather than trusting a producer that merely echoes a plan digest. The provider adapter must
+authenticate its API, attestation, or receipt before normalization; engine crates perform no
+network or signature work.
+
+The outer payload digests are integrity checks, not signatures or authority claims. Repository
+content must not choose the plan, producer context, relation rule, or credentials. A future
+controller lane will retain the operator-selected plan beside its provider-authenticated evidence
+and offline assessment. No scanner command or engine report consumes either publication document
+yet, and a plan alone never says a deployment happened.
+
+The checked public contracts are
 [`publication-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/publication-plan.schema.json),
 with a matching
 [`publication-plan.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/publication-plan.json)
-example. The strict reader and writer live in `amiss-wire`; later evidence and assessment layers
-reuse these typed values instead of reparsing provider-specific payloads inside the engine.
+example, and
+[`publication-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/publication-evidence.schema.json),
+with its
+[`publication-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/publication-evidence.json)
+example. The strict readers and writers live in `amiss-wire`; the later assessment layer reuses
+these typed values instead of reparsing provider-specific payloads inside the engine.

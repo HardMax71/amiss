@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:publication-evidence",
+  "title": "Amiss publication evidence",
+  "description": "One provider-normalized, digest-bound receipt for a successful deployment. It reports authenticated facts against an operator-owned publication plan; it does not choose the intended docs-to-product relation or establish provider authority by itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/publication-evidence-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/EvidencePayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the publication-evidence payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "ProducerVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "ResourceUri": {
+      "description": "An exact absolute resource URI. The accompanying digest, not the URI spelling, establishes immutable bytes.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 16384,
+      "pattern": "^[a-z][a-z0-9+.-]*:[^#\\s]+$"
+    },
+    "CanonicalUrl": {
+      "description": "The exact public HTTPS address observed for the deployed channel, without query or fragment.",
+      "type": "string",
+      "minLength": 9,
+      "maxLength": 16384,
+      "pattern": "^https://[^/?#@\\s]+(?:/[^?#\\s]*)?$"
+    },
+    "Repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "name", "owner"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$",
+          "not": {
+            "enum": [".", ".."]
+          }
+        }
+      }
+    },
+    "DocsCandidate": {
+      "description": "The exact committed docs source and scanner candidate identity independently observed by the evidence producer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_identity_digest",
+        "commit_oid",
+        "object_format",
+        "repository",
+        "tree_oid"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/Repository"
+        },
+        "object_format": {
+          "enum": ["sha1", "sha256"]
+        },
+        "commit_oid": {
+          "type": "string"
+        },
+        "tree_oid": {
+          "type": "string"
+        },
+        "candidate_identity_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha256"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "commit_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "tree_oid": {
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Target": {
+      "description": "The provider destination independently observed for the successful deployment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_url", "channel", "environment", "instance", "provider"],
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "instance": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "environment": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "channel": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "canonical_url": {
+          "$ref": "#/$defs/CanonicalUrl"
+        }
+      }
+    },
+    "Resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "uri"],
+      "properties": {
+        "uri": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "CompletedSite": {
+      "description": "The immutable site artifact associated with the deployment and the completed-site producer input identity derived from it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "input_digest"],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/Resource"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Producer": {
+      "description": "The independently selected evidence producer and exact operator context under which it authenticated and normalized the provider facts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "version"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "$ref": "#/$defs/ProducerVersion"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Deployment": {
+      "description": "One provider-authenticated successful terminal deployment. The record and workflow digests freeze the exact normalized provider object and build instructions; the attempt distinguishes reruns of the same provider run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "provider_run_attempt", "record", "workflow"],
+      "properties": {
+        "outcome": {
+          "const": "succeeded"
+        },
+        "record": {
+          "description": "The provider deployment object as one exact normalized resource.",
+          "$ref": "#/$defs/Resource"
+        },
+        "workflow": {
+          "description": "The exact workflow or deployment definition the provider says produced this deployment.",
+          "$ref": "#/$defs/Resource"
+        },
+        "provider_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "EvidencePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deployment",
+        "docs",
+        "plan_payload_digest",
+        "producer",
+        "product",
+        "schema",
+        "site",
+        "target"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/publication-evidence-payload"
+        },
+        "plan_payload_digest": {
+          "description": "The payload digest of the exact operator-owned publication plan this receipt answers.",
+          "$ref": "#/$defs/Digest"
+        },
+        "producer": {
+          "$ref": "#/$defs/Producer"
+        },
+        "deployment": {
+          "$ref": "#/$defs/Deployment"
+        },
+        "docs": {
+          "$ref": "#/$defs/DocsCandidate"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "site": {
+          "$ref": "#/$defs/CompletedSite"
+        },
+        "product": {
+          "$ref": "#/$defs/Resource"
+        }
+      }
+    }
+  }
+}

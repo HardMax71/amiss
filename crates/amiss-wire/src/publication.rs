@@ -5,6 +5,13 @@ use crate::digest::{Digest, hj};
 use crate::json::{self, Value, canonical_length};
 use crate::model::{ArtifactId, Oid, RepositoryIdentity};
 
+mod evidence;
+
+pub use evidence::{
+    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, PublicationDeployment, PublicationEvidence,
+    PublicationEvidenceEnvelope, evidence, parse_evidence,
+};
+
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/publication-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/publication-plan-payload";
 pub const PUBLICATION_DOCUMENT_BYTES: u64 = 65_536;
@@ -69,6 +76,14 @@ pub struct PublicationRelation {
     pub context_digest: Digest,
 }
 
+struct PublicationFacts {
+    producer: PublicationProducer,
+    docs: DocsCandidate,
+    target: PublicationTarget,
+    site: CompletedSite,
+    product: PublicationResource,
+}
+
 /// Parses one closed, digest-bound publication plan.
 ///
 /// # Errors
@@ -76,22 +91,14 @@ pub struct PublicationRelation {
 /// Fails on oversized or malformed strict JSON, an unknown field, an invalid
 /// identity or URI, inconsistent Git object formats, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let value = json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let mut envelope = Obj::new("$", value)?;
-    envelope.required("schema", |path, value| {
-        de::const_str(path, value, PLAN_ENVELOPE_SCHEMA)
-    })?;
-    let payload_value = envelope.take("payload")?;
-    let payload_digest = envelope.required("payload_digest", de::digest)?;
-    envelope.finish()?;
-    if hj(PLAN_PAYLOAD_SCHEMA, &payload_value) != payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
-    }
+    let (payload, payload_digest) = parse_envelope(
+        bytes,
+        PLAN_ENVELOPE_SCHEMA,
+        PLAN_PAYLOAD_SCHEMA,
+        decode_plan,
+    )?;
     Ok(PublicationPlanEnvelope {
-        payload: decode_plan("$.payload", payload_value)?,
+        payload,
         payload_digest,
     })
 }
@@ -105,9 +112,36 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
 pub fn plan(input: &PublicationPlan) -> Result<Value, Error> {
     let payload = plan_value(input);
     let _validated = decode_plan("$.payload", payload.clone())?;
-    let payload_digest = hj(PLAN_PAYLOAD_SCHEMA, &payload);
+    envelope(payload, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA)
+}
+
+fn parse_envelope<T>(
+    bytes: &[u8],
+    envelope_schema: &str,
+    payload_schema: &str,
+    decode: impl FnOnce(&str, Value) -> Result<T, Error>,
+) -> Result<(T, Digest), Error> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let value = json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let mut envelope = Obj::new("$", value)?;
+    envelope.required("schema", |path, value| {
+        de::const_str(path, value, envelope_schema)
+    })?;
+    let payload = envelope.take("payload")?;
+    let payload_digest = envelope.required("payload_digest", de::digest)?;
+    envelope.finish()?;
+    if hj(payload_schema, &payload) != payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
+    Ok((decode("$.payload", payload)?, payload_digest))
+}
+
+fn envelope(payload: Value, envelope_schema: &str, payload_schema: &str) -> Result<Value, Error> {
+    let payload_digest = hj(payload_schema, &payload);
     let value = object(vec![
-        ("schema", text(PLAN_ENVELOPE_SCHEMA)),
+        ("schema", text(envelope_schema)),
         ("payload", payload),
         ("payload_digest", text(&payload_digest.to_string())),
     ]);
@@ -124,7 +158,31 @@ fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
         de::const_str(path, value, PLAN_PAYLOAD_SCHEMA)
     })?;
     let report_payload_digest = plan.required("report_payload_digest", de::digest)?;
-    let docs = plan.required("docs", |path, value| {
+    let facts = decode_facts(&mut plan)?;
+    let relation = plan.required("relation", |path, value| {
+        let mut relation = Obj::new(path, value)?;
+        let identity = relation.required("identity", decode_identity)?;
+        let context_digest = relation.required("context_digest", de::digest)?;
+        relation.finish()?;
+        Ok(PublicationRelation {
+            identity,
+            context_digest,
+        })
+    })?;
+    plan.finish()?;
+    Ok(PublicationPlan {
+        report_payload_digest,
+        docs: facts.docs,
+        target: facts.target,
+        site: facts.site,
+        product: facts.product,
+        producer: facts.producer,
+        relation,
+    })
+}
+
+fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
+    let docs = parent.required("docs", |path, value| {
         let mut docs = Obj::new(path, value)?;
         let repository = docs.required("repository", decode_repository)?;
         let object_format = docs.required("object_format", decode_enum)?;
@@ -149,7 +207,7 @@ fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
             candidate_identity_digest,
         })
     })?;
-    let target = plan.required("target", |path, value| {
+    let target = parent.required("target", |path, value| {
         let mut target = Obj::new(path, value)?;
         let provider = target.required("provider", decode_identity)?;
         let instance = target.required("instance", decode_identity)?;
@@ -172,7 +230,7 @@ fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
             canonical_url,
         })
     })?;
-    let site = plan.required("site", |path, value| {
+    let site = parent.required("site", |path, value| {
         let mut site = Obj::new(path, value)?;
         let artifact = site.required("artifact", decode_resource)?;
         let input_digest = site.required("input_digest", de::digest)?;
@@ -182,8 +240,8 @@ fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
             input_digest,
         })
     })?;
-    let product = plan.required("product", decode_resource)?;
-    let producer = plan.required("producer", |path, value| {
+    let product = parent.required("product", decode_resource)?;
+    let producer = parent.required("producer", |path, value| {
         let mut producer = Obj::new(path, value)?;
         let identity = producer.required("identity", decode_identity)?;
         let version = producer.required("version", decode_producer_version)?;
@@ -195,25 +253,12 @@ fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
             context_digest,
         })
     })?;
-    let relation = plan.required("relation", |path, value| {
-        let mut relation = Obj::new(path, value)?;
-        let identity = relation.required("identity", decode_identity)?;
-        let context_digest = relation.required("context_digest", de::digest)?;
-        relation.finish()?;
-        Ok(PublicationRelation {
-            identity,
-            context_digest,
-        })
-    })?;
-    plan.finish()?;
-    Ok(PublicationPlan {
-        report_payload_digest,
+    Ok(PublicationFacts {
+        producer,
         docs,
         target,
         site,
         product,
-        producer,
-        relation,
     })
 }
 

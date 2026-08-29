@@ -1,0 +1,54 @@
+{
+  "schema": "amiss/publication-evidence-envelope",
+  "payload": {
+    "schema": "amiss/publication-evidence-payload",
+    "plan_payload_digest": "sha256:a855fba8f21015abe9564dad9fcacc8592f7649e99ed3a5e39c4e514725f3f36",
+    "producer": {
+      "identity": "github-pages-deployment",
+      "version": "1",
+      "context_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    },
+    "deployment": {
+      "outcome": "succeeded",
+      "record": {
+        "uri": "https://api.github.com/repos/acme/widget/pages/deployments/987",
+        "digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      "workflow": {
+        "uri": "https://github.com/acme/widget/blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/.github/workflows/docs.yml",
+        "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "provider_run_attempt": 2
+    },
+    "docs": {
+      "repository": {
+        "host": "github.com",
+        "owner": "acme",
+        "name": "widget"
+      },
+      "object_format": "sha1",
+      "commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "candidate_identity_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "target": {
+      "provider": "github-pages",
+      "instance": "github.com",
+      "environment": "github-pages",
+      "channel": "stable",
+      "canonical_url": "https://docs.example.com/widget/"
+    },
+    "site": {
+      "artifact": {
+        "uri": "https://api.github.com/repos/acme/widget/actions/artifacts/123",
+        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "input_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "product": {
+      "uri": "pkg:oci/registry.example.com/widget@1.2.3",
+      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  },
+  "payload_digest": "sha256:ec7facfdde2ebd11ec3a034d1f73d9995af352b98056dcb419549c0dd273c1b1"
+}
