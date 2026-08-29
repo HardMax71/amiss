@@ -74,20 +74,28 @@ impl StoredPublication {
         }
         let artifact = match &self.artifact {
             Some(stored) => {
-                let assessment_digest = match stored.assessment_digest.as_deref() {
-                    Some(raw) => Some(Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt)?),
-                    None => None,
-                };
+                let assessment_digest = stored
+                    .assessment_digest
+                    .as_deref()
+                    .map(|raw| Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt))
+                    .transpose()?;
+                let semantic_digest = stored
+                    .semantic_digest
+                    .as_deref()
+                    .map(|raw| Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt))
+                    .transpose()?;
                 Some(
-                    crate::artifacts::checked_reference(
-                        stored.id.clone(),
-                        stored.locator.clone(),
-                        stored.expires_at_unix_millis,
-                        Digest::from_wire(&stored.report_digest).ok_or(FileLedgerError::Corrupt)?,
+                    crate::artifacts::checked_reference(ArtifactReference {
+                        id: stored.id.clone(),
+                        locator: stored.locator.clone(),
+                        expires_at_unix_millis: stored.expires_at_unix_millis,
+                        report_digest: Digest::from_wire(&stored.report_digest)
+                            .ok_or(FileLedgerError::Corrupt)?,
+                        semantic_digest,
                         assessment_digest,
-                        stored.external_tally,
-                        stored.external_incomplete,
-                    )
+                        external_tally: stored.external_tally,
+                        external_incomplete: stored.external_incomplete,
+                    })
                     .ok_or(FileLedgerError::Corrupt)?,
                 )
             }
@@ -178,6 +186,8 @@ struct StoredArtifact {
     external_tally: Option<ExternalTally>,
     #[serde(default)]
     external_incomplete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    semantic_digest: Option<String>,
 }
 
 impl StoredArtifact {
@@ -190,6 +200,7 @@ impl StoredArtifact {
             assessment_digest: reference.assessment_digest.map(|digest| digest.to_string()),
             external_tally: reference.external_tally,
             external_incomplete: reference.external_incomplete,
+            semantic_digest: reference.semantic_digest.map(|digest| digest.to_string()),
         }
     }
 }

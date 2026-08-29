@@ -22,12 +22,13 @@ pub fn classify_bootstrap_result(
     termination: BootstrapTermination,
     result: Option<Vec<u8>>,
     report: Vec<u8>,
+    semantic_artifact: Option<Vec<u8>>,
 ) -> RunnerOutcome {
     exit_code(termination)
         .and_then(|exit_code| result_record(result).map(|result| (exit_code, result)))
         .and_then(verify_exit_code)
         .and_then(classify_record)
-        .and_then(|evaluation| complete(request, evaluation, report))
+        .and_then(|evaluation| complete(request, evaluation, report, semantic_artifact))
         .unwrap_or_else(std::convert::identity)
 }
 
@@ -70,6 +71,7 @@ fn complete(
     request: &RunRequest,
     evaluation: Evaluation,
     report: Vec<u8>,
+    semantic_artifact: Option<Vec<u8>>,
 ) -> Classification<RunnerOutcome> {
     bounded_nonempty(
         Some(report),
@@ -80,6 +82,7 @@ fn complete(
         identity: Box::new(request.run.clone()),
         evaluation,
         report,
+        semantic_artifact,
     })
 }
 

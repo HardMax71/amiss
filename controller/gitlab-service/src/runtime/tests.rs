@@ -67,6 +67,7 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
             locator: locator.clone(),
             expires_at_unix_millis: 1_800_000_000_000,
             report_digest,
+            semantic_digest: None,
             assessment_digest: Some(assessment_digest),
             external_tally: Some(ExternalTally {
                 refuted: 1,

@@ -112,7 +112,11 @@ fn either_snapshot_alone_settles_the_conclusion() {
     let request = request();
     let active = snapshot(ChangeState::Active);
     let conclude = |initial: &ChangeSnapshot, fresh: &ChangeSnapshot| {
-        let built = finalize_publication(initial, fresh, publication(&request, initial, None));
+        let built = finalize_publication(
+            initial,
+            fresh,
+            publication(&request, initial, None).publication,
+        );
         assert!(built.report.is_none());
         built.conclusion
     };
@@ -171,6 +175,7 @@ fn a_report_may_fill_the_wire_and_not_pass_it() {
         identity: Box::new(run_identity('b')),
         evaluation: Evaluation::Pass,
         report,
+        semantic_artifact: None,
     };
 
     assert_eq!(
@@ -196,4 +201,28 @@ fn a_report_may_fill_the_wire_and_not_pass_it() {
         ),
         "one byte past the wire is not a report the check can carry"
     );
+}
+
+#[test]
+fn only_an_accepted_report_keeps_its_semantic_inputs() {
+    let request = request();
+    let initial = snapshot(ChangeState::Active);
+    let prepare = |report| {
+        publication(
+            &request,
+            &initial,
+            Some(RunnerOutcome::Complete {
+                identity: Box::new(initial.run.clone()),
+                evaluation: Evaluation::Pass,
+                report,
+                semantic_artifact: Some(b"semantic".to_vec()),
+            }),
+        )
+    };
+
+    assert_eq!(
+        prepare(b"report".to_vec()).semantic_artifact,
+        Some(b"semantic".to_vec())
+    );
+    assert_eq!(prepare(Vec::new()).semantic_artifact, None);
 }

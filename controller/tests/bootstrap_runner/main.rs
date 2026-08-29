@@ -297,6 +297,7 @@ fn pass_and_block_preserve_the_authenticated_identity() {
                 identity: Box::new(harness.request.run.clone()),
                 evaluation,
                 report: report.to_vec(),
+                semantic_artifact: None,
             }
         );
         assert!(harness.started());
@@ -458,6 +459,7 @@ fn leader_exit_stops_descendants_before_accepting_the_report() {
             identity: Box::new(harness.request.run.clone()),
             evaluation: Evaluation::Pass,
             report: PASS_REPORT.to_vec(),
+            semantic_artifact: None,
         }
     );
     assert_eq!(heartbeat.calls, 1);

@@ -32,6 +32,7 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
         identity: Box::new(run.clone()),
         evaluation: Evaluation::Pass,
         report: amiss_fixtures::external_report(&[DESTINATION]),
+        semantic_artifact: None,
     }
 }
 

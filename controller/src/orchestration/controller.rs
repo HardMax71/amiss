@@ -218,7 +218,8 @@ where
             }
         };
         lease = renew_lease(&mut self.ledger, &accepted, &lease)?;
-        let mut publication = publication(&request, &initial, runner_outcome);
+        let prepared = publication(&request, &initial, runner_outcome);
+        let mut publication = prepared.publication;
         if publication.report.is_some()
             && let Some(store) = self.artifacts.as_deref()
         {
@@ -229,6 +230,7 @@ where
                 request.plan.policy.external_policy,
                 self.clock.as_ref(),
                 publication,
+                prepared.semantic_artifact.as_deref(),
             )
             .map_err(ControllerError::Artifact)?;
             lease = renew_lease(&mut self.ledger, &accepted, &lease)?;

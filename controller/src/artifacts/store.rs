@@ -285,8 +285,12 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
     if !valid {
         return Err(ArtifactError::Corrupt);
     }
+    if let Some(semantic) = bundle.semantic {
+        super::semantic::validate(bundle.report, semantic)?;
+    }
     Ok(RecordInput {
         report: Blob::new(bundle.report)?,
+        semantic: bundle.semantic.map(Blob::new).transpose()?,
         plan: bundle.plan.map(Blob::new).transpose()?,
         evidence: bundle.evidence.map(Blob::new).transpose()?,
         assessment: bundle.assessment.map(Blob::new).transpose()?,
@@ -295,9 +299,10 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
     })
 }
 
-fn bundle_payloads(bundle: ArtifactBundle<'_>) -> [(ArtifactComponent, Option<&[u8]>); 4] {
+fn bundle_payloads(bundle: ArtifactBundle<'_>) -> [(ArtifactComponent, Option<&[u8]>); 5] {
     [
         (ArtifactComponent::Report, Some(bundle.report)),
+        (ArtifactComponent::Semantic, bundle.semantic),
         (ArtifactComponent::Plan, bundle.plan),
         (ArtifactComponent::Evidence, bundle.evidence),
         (ArtifactComponent::Assessment, bundle.assessment),

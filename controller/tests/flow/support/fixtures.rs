@@ -124,6 +124,7 @@ pub(crate) fn complete(run: &RunIdentity) -> RunnerOutcome {
         identity: Box::new(run.clone()),
         evaluation: amiss_controller::Evaluation::Pass,
         report: br#"{"schema":"amiss/report"}"#.to_vec(),
+        semantic_artifact: None,
     }
 }
 

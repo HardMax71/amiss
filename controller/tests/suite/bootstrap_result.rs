@@ -97,6 +97,7 @@ fn classify(
         BootstrapTermination::Exited(exit_code),
         result.map(<[u8]>::to_vec),
         report.to_vec(),
+        None,
     )
 }
 
@@ -116,6 +117,7 @@ fn pass_and_block_preserve_the_authenticated_run_and_report() {
                 identity: Box::new(request.run.clone()),
                 evaluation,
                 report: report.to_vec(),
+                semantic_artifact: None,
             }
         );
     }
@@ -217,11 +219,18 @@ fn timeout_dominates_every_process_observation() {
             BootstrapTermination::TimedOut,
             Some(result_bytes(BootstrapResult::Pass).to_vec()),
             b"report".to_vec(),
+            None,
         ),
         RunnerOutcome::TimedOut
     );
     assert_eq!(
-        classify_bootstrap_result(&request, BootstrapTermination::TimedOut, None, Vec::new(),),
+        classify_bootstrap_result(
+            &request,
+            BootstrapTermination::TimedOut,
+            None,
+            Vec::new(),
+            None,
+        ),
         RunnerOutcome::TimedOut
     );
 }
@@ -242,6 +251,7 @@ fn stopped_signalled_and_unspawned_processes_are_unavailable() {
                 termination,
                 Some(result_bytes(BootstrapResult::Pass).to_vec()),
                 b"report".to_vec(),
+                None,
             ),
             RunnerOutcome::Unavailable
         );

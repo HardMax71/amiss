@@ -1,5 +1,57 @@
 use amiss_wire::json::Value;
 
+/// Builds a digest-true passing report over the supplied semantic payloads.
+#[must_use]
+pub fn semantic_report(payload_digests: &[amiss_wire::digest::Digest]) -> Vec<u8> {
+    let semantic_evidence = payload_digests
+        .iter()
+        .map(|digest| {
+            Value::object(vec![(
+                "payload_digest".to_owned(),
+                Value::string(digest.to_string()),
+            )])
+        })
+        .collect();
+    let payload = Value::object(vec![
+        (
+            "compatibility".to_owned(),
+            Value::string(amiss_wire::report::COMPATIBILITY.to_owned()),
+        ),
+        (
+            "controls".to_owned(),
+            Value::object(vec![(
+                "semantic_evidence".to_owned(),
+                Value::array(semantic_evidence),
+            )]),
+        ),
+        (
+            "result".to_owned(),
+            Value::object(vec![
+                ("complete".to_owned(), Value::Bool(true)),
+                ("exit_code".to_owned(), Value::Integer(0)),
+                ("status".to_owned(), Value::string("pass".to_owned())),
+            ]),
+        ),
+        (
+            "schema".to_owned(),
+            Value::string(amiss_wire::report::PAYLOAD_SCHEMA.to_owned()),
+        ),
+    ]);
+    amiss_wire::json::canonical(&Value::object(vec![
+        ("payload".to_owned(), payload.clone()),
+        (
+            "payload_digest".to_owned(),
+            Value::string(
+                amiss_wire::digest::hj(amiss_wire::report::PAYLOAD_SCHEMA, &payload).to_string(),
+            ),
+        ),
+        (
+            "schema".to_owned(),
+            Value::string(amiss_wire::report::ENVELOPE_SCHEMA.to_owned()),
+        ),
+    ]))
+}
+
 /// Builds one record-set semantic observation.
 #[must_use]
 pub fn record_set(name: &str, records: &[(&str, &str)]) -> Value {

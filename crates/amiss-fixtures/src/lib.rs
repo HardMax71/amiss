@@ -4,7 +4,9 @@ mod semantic;
 pub mod requests;
 
 pub use external::{external_facts, external_plan, external_report};
-pub use semantic::{SiteObservation, record_set, site_navigation, site_observation};
+pub use semantic::{
+    SiteObservation, record_set, semantic_report, site_navigation, site_observation,
+};
 
 use std::collections::BTreeMap;
 use std::io::Write as _;

@@ -315,7 +315,8 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     assert!(payload_digests.contains(&evidence_digest));
     assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
 
-    let artifact = json::parse(job.semantic_artifact.as_deref().unwrap()).unwrap();
+    let artifact_bytes = job.semantic_artifact.as_deref().unwrap();
+    let artifact = json::parse(artifact_bytes).unwrap();
     let Value::Array(inputs) = artifact.member("inputs").unwrap() else {
         panic!("the semantic artifact contains its input rows")
     };

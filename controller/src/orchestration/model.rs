@@ -117,6 +117,7 @@ pub enum RunnerOutcome {
         identity: Box<RunIdentity>,
         evaluation: Evaluation,
         report: Vec<u8>,
+        semantic_artifact: Option<Vec<u8>>,
     },
     MissingOutput,
     OversizedOutput,
