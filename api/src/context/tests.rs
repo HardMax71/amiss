@@ -12,7 +12,9 @@ fn context(features: &str) -> Vec<u8> {
 #[test]
 fn context_binds_the_complete_normalization_configuration() {
     let parsed = parse(&context(r#"["default","serde"]"#)).unwrap();
+    let differently_featured = parse(&context(r#"["default"]"#)).unwrap();
 
+    assert_ne!(parsed.digest, differently_featured.digest);
     assert_eq!(
         parsed.name.as_str(),
         "rust/example/local-function-declarations"

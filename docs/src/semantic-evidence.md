@@ -145,6 +145,11 @@ Package and crate target names are intentionally separate because Cargo permits 
 Rustdoc carries no Cargo package identity, so `package` is context-bound while the independently
 declared target is the artifact-side check. The active producer accepts only the one Rustdoc format
 represented by its pinned maintained adapter. It does not start Cargo, rustdoc, or another process.
+Completeness applies only to that exact feature, cfg, target, and dependency context. Two
+configurations are independent record sets and need distinct names when supplied to one scan;
+neither the producer nor the scanner silently unions or intersects them. A matrix-wide API requires
+a separately named producer contract that declares union or intersection and resolves keys whose
+values differ between configurations.
 
 The complete set contains public free functions defined by the root crate, public functions from
 inherent implementations of its public structs, enums, and unions, and functions declared by its
