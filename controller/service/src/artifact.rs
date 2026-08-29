@@ -205,6 +205,7 @@ fn artifact_response(bytes: Vec<u8>) -> Response {
 fn artifact_component(raw: &str) -> Option<ArtifactComponent> {
     match raw {
         "report" => Some(ArtifactComponent::Report),
+        "semantic" => Some(ArtifactComponent::Semantic),
         "plan" => Some(ArtifactComponent::Plan),
         "evidence" => Some(ArtifactComponent::Evidence),
         "assessment" => Some(ArtifactComponent::Assessment),

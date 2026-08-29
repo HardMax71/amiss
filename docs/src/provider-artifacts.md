@@ -15,30 +15,34 @@ never suppress or approve a later finding.
 Every report-bearing provider publication binds all of the following:
 
 - the canonical report digest;
+- when semantic evidence was accepted, the canonical semantic-input audit digest;
 - an HTTPS report locator;
 - the authorization scheme, `bearer`;
 - the exclusive expiry instant in Unix milliseconds; and
 - when external verification completed, the canonical assessment digest.
 
 GitHub Check Runs and Gitea-family reviews carry these as `report`, `artifact`,
-`artifact-auth`, `artifact-expires-unix-millis`, and optional `assessment` lines. GitHub leaves the
-Check Run's native details URL unset because that browser link cannot supply the required bearer
-header; authorized clients use the locator in the summary. A completed external assessment adds
-its direct `assessment-artifact` locator and its refuted, unproven, and reachable counts; an
-incomplete one is named as incomplete instead of inventing counts. GitLab returns the report
-locator as `Link: <...>; rel="amiss-report"` and, when present, the assessment sibling as
-`rel="amiss-assessment"`. It returns authorization, expiry, assessment state, and completed counts
-as `X-Amiss-*` headers. The report and optional assessment digests remain
-`X-Amiss-Report-Digest` and `X-Amiss-Assessment-Digest`. The report URL always ends in
-`/<artifact-id>/report`. When present, the exact external inputs are sibling URLs ending in
-`/plan`, `/evidence`, and `/assessment`.
+`artifact-auth`, `artifact-expires-unix-millis`, and optional `semantic-input`,
+`semantic-input-artifact`, and `assessment` lines. GitHub leaves the Check Run's native details URL
+unset because that browser link cannot supply the required bearer header; authorized clients use
+the locator in the summary. A completed external assessment adds its direct `assessment-artifact`
+locator and its refuted, unproven, and reachable counts; an incomplete one is named as incomplete
+instead of inventing counts. GitLab returns the report locator as
+`Link: <...>; rel="amiss-report"`, the semantic-input sibling as `rel="amiss-semantic-input"`, and
+the assessment sibling as `rel="amiss-assessment"` when each exists. It returns authorization,
+expiry, assessment state, and completed counts as `X-Amiss-*` headers. The component digests are
+`X-Amiss-Report-Digest`, `X-Amiss-Semantic-Input-Digest`, and
+`X-Amiss-Assessment-Digest`. The report URL always ends in `/<artifact-id>/report`; retained
+semantic inputs use the sibling `/semantic`, and exact external inputs use `/plan`, `/evidence`,
+and `/assessment`.
 
-The controller writes the exact report and optional external chain before its final provider
-refresh and publication stage. The artifact identity binds the evaluation ID, every component
-digest, and the external outcome. A retry first verifies the saved reference and every retained
-component, then republishes the already staged value. It never reruns the scanner or external
-verifier. A changed head or gate after verification stages a superseded result with the retained
-chain, not the old pass or block. Rebinding one evaluation ID to different bytes is an error.
+The controller writes the exact report, accepted semantic-input audit value, and optional external
+chain before its final provider refresh and publication stage. The artifact identity binds the
+evaluation ID, every component digest, and the external outcome. A retry first verifies the saved
+reference and every retained component, then republishes the already staged value. It never reruns
+the scanner, semantic producer, or external verifier. A changed head or gate after verification
+stages a superseded result with the retained chain, not the old pass or block. Rebinding one
+evaluation ID to different bytes is an error.
 
 If retention, validation, or retrieval cannot be trusted, a new publication fails closed. A
 summary without a retained locator says extra findings are “not displayed”; it never claims that
@@ -64,6 +68,11 @@ curl --fail --silent --show-error \
   'https://amiss.example/amiss/artifacts/<artifact-id>/report' \
   --output report.json
 ```
+
+When the publication advertises a semantic-input component, retrieve its exact source templates
+and candidate-bound envelopes with the same token from
+`https://amiss.example/amiss/artifacts/<artifact-id>/semantic`. Recompute the advertised digest
+before using any component as audit evidence.
 
 Token files are exact bytes and cannot contain whitespace, including a trailing newline. Changing
 the token requires a service restart but not a new artifact root. If consumers must keep access to
@@ -103,6 +112,6 @@ inaccessible. Startup and store operations remove expired records, and a persist
 mark prevents already removed bytes from returning after clock rollback.
 
 The base URL, retention, and capacity limits are recorded with a root. Changing any of them
-requires a new empty artifact root. Size the record limit for the largest report and external
-chain the lane is allowed to publish, and size total bytes plus record count for the expected
-publication rate over the retention period.
+requires a new empty artifact root. Size the record limit for the largest report, semantic-input
+audit value, and external chain the lane is allowed to publish, and size total bytes plus record
+count for the expected publication rate over the retention period.

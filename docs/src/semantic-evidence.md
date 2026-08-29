@@ -115,6 +115,10 @@ acquired, and SHA-256 and semantic payload digests. Reconstructing candidate bin
 not depend on mutable producer output. The bootstrap job exposes this value separately from the
 frozen engine report.
 
+Provider lanes retain that value beside an accepted report and publish its digest and
+[authenticated locator](provider-artifacts.md), so audit does not depend on a producer workflow's
+shorter artifact lifetime.
+
 A successful report projects the accepted envelopes' payload and producer/input identities under
 `controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
 inventory-backed external destination is already resolved evidence, so the external-probe plan does

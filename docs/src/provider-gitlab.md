@@ -376,11 +376,12 @@ The endpoint returns:
 
 A completed result with a still-live artifact also returns `Link: <...>; rel="amiss-report"`,
 `X-Amiss-Artifact-Auth: bearer`, and `X-Amiss-Artifact-Expires-Unix-Millis: <instant>`. A completed
-external assessment adds an `amiss-assessment` Link target, its digest, and refuted, unproven, and
-reachable count headers; an incomplete one carries only the incomplete state. These headers appear
-with `X-Amiss-Report-Digest` on both `204` and completed `412` responses; only the status decides
-the policy job. Retrieve either Link target with the separately configured artifact bearer token
-and recompute its SHA-256 digest.
+result with retained semantic inputs adds an `amiss-semantic-input` Link target and
+`X-Amiss-Semantic-Input-Digest`. A completed external assessment adds an `amiss-assessment` Link
+target, its digest, and refuted, unproven, and reachable count headers; an incomplete one carries
+only the incomplete state. These headers appear with `X-Amiss-Report-Digest` on both `204` and
+completed `412` responses; only the status decides the policy job. Retrieve each advertised Link
+target with the separately configured artifact bearer token and recompute its SHA-256 digest.
 
 The service checks bounds, OIDC, and the configured plan before creating an owner session, touching
 a delivery row, or starting API, Git, or runner work. The policy job must treat only `204` as
