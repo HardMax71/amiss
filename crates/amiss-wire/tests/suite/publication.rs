@@ -14,6 +14,7 @@ use amiss_wire::publication::{
     PublicationRelation, PublicationResource, PublicationTarget, parse_plan, plan,
 };
 
+mod assessment;
 mod evidence;
 
 fn digest(digit: char) -> Digest {

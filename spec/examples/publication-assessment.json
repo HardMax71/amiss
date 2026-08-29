@@ -1,0 +1,18 @@
+{
+  "schema": "amiss/publication-assessment-envelope",
+  "payload": {
+    "schema": "amiss/publication-assessment-payload",
+    "engine": {
+      "engine_version": "0.26.0",
+      "engine_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "subject": {
+      "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "plan_payload_digest": "sha256:a855fba8f21015abe9564dad9fcacc8592f7649e99ed3a5e39c4e514725f3f36",
+      "evidence_payload_digest": "sha256:ec7facfdde2ebd11ec3a034d1f73d9995af352b98056dcb419549c0dd273c1b1"
+    },
+    "verdict": "matched",
+    "reasons": []
+  },
+  "payload_digest": "sha256:9777a22fd19d7829f0eda71aeda583bdd0dbfe80e9550d8c32049651d91b84bd"
+}

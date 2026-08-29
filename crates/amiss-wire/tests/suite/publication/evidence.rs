@@ -10,7 +10,7 @@ use amiss_wire::publication::{
     evidence, parse_evidence, parse_plan, plan,
 };
 
-fn publication_evidence() -> PublicationEvidence {
+pub(super) fn publication_evidence() -> PublicationEvidence {
     let planned = publication_plan();
     let planned_value = plan(&planned).unwrap();
     let plan_payload_digest =

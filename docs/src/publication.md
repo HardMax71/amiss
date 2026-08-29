@@ -43,10 +43,22 @@ plan rather than trusting a producer that merely echoes a plan digest. The provi
 authenticate its API, attestation, or receipt before normalization; engine crates perform no
 network or signature work.
 
+The offline assessment has three outcomes. `matched` means the bound receipt came from the planned
+producer context and its docs, target, site, and product facts all equal the plan. `refuted` means
+that trusted receipt disagrees with at least one of those four fact groups, each named in a sorted
+reason set. `unproven` means there was no receipt, it answered another plan, or it came from another
+producer context. Foreign or absent evidence can never refute a plan.
+
+The assessment binds the accepted report, plan, optional evidence, and exact evaluator binary by
+digest. A missing receipt is represented by a null evidence digest and the single
+`evidence-absent` reason. Malformed, failed, pending, partial, or mutable-only provider material
+never becomes a typed successful receipt; callers retain that acquisition failure and assess the
+plan as unproven instead of manufacturing a negative fact.
+
 The outer payload digests are integrity checks, not signatures or authority claims. Repository
 content must not choose the plan, producer context, relation rule, or credentials. A future
 controller lane will retain the operator-selected plan beside its provider-authenticated evidence
-and offline assessment. No scanner command or engine report consumes either publication document
+and offline assessment. No scanner command or engine report consumes these publication documents
 yet, and a plan alone never says a deployment happened.
 
 The checked public contracts are
@@ -57,5 +69,9 @@ example, and
 [`publication-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/publication-evidence.schema.json),
 with its
 [`publication-evidence.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/publication-evidence.json)
-example. The strict readers and writers live in `amiss-wire`; the later assessment layer reuses
-these typed values instead of reparsing provider-specific payloads inside the engine.
+example, and
+[`publication-assessment.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/publication-assessment.schema.json),
+with its replayed
+[`publication-assessment.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/publication-assessment.json)
+example. The strict readers, writers, and pure assessment live in `amiss-wire`; provider-specific
+payloads never enter the engine contract.
