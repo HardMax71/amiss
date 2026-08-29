@@ -88,7 +88,7 @@ validate_manifest() {
       function endpoint(value, fields, count) {
         count = split(value, fields, /\|/)
         return count == 6 && (fields[1] == "same" || fields[1] == "provider") &&
-          fields[2] ~ /^(crates|controller)\// && fields[4] ~ /^(function|method)$/ &&
+          fields[2] ~ /^(api|crates|controller)\// && fields[4] ~ /^(function|method)$/ &&
           fields[5] ~ /^[A-Za-z_][A-Za-z0-9_]*$/ && fields[6] ~ /^occurrence=[1-9][0-9]*$/
       }
       NR == 1 { if ($0 != schema) exit 1; next }
@@ -161,7 +161,7 @@ canonicalize() {
         sub(/^\.\//, "", path[side])
         local_start[side] = start_line[side]
         local_end[side] = end_line[side]
-        if (path[side] !~ /^(crates|controller)\//) {
+        if (path[side] !~ /^(api|crates|controller)\//) {
           fail("source escaped the scan roots: " raw_path[side])
         }
       } else {
@@ -344,10 +344,14 @@ scan_root() {
   local raw_provider="$WORK_DIR/provider.$RANDOM" maps="$WORK_DIR/maps.$RANDOM"
   local provider_edges="$WORK_DIR/provider-edges.$RANDOM"
   local edges="$WORK_DIR/edges.$RANDOM" sorted="$WORK_DIR/sorted.$RANDOM"
+  local -a scan_roots=(crates controller)
   mkdir -p "$stage"
   : > "$maps"
 
-  (cd "$root" && similarity-rs crates controller --threshold "$THRESHOLD" \
+  if [[ -d "$root/api" ]]; then
+    scan_roots=(api crates controller)
+  fi
+  (cd "$root" && similarity-rs "${scan_roots[@]}" --threshold "$THRESHOLD" \
     --min-lines "$MIN_LINES") > "$raw_same"
   canonicalize same "$raw_same" "$maps" "$edges"
 
@@ -424,7 +428,7 @@ build_renames() {
         fi
         ;;
     esac
-  done < <(git -C "$REPOSITORY_ROOT" diff --name-status -z -M "$revision" -- crates controller)
+  done < <(git -C "$REPOSITORY_ROOT" diff --name-status -z -M "$revision" -- api crates controller)
   LC_ALL=C sort -o "$destination" "$destination"
 }
 
@@ -506,7 +510,11 @@ else
     exit 1
   fi
   mkdir -p "$WORK_DIR/base"
-  git -C "$REPOSITORY_ROOT" archive "$base_revision" crates controller |
+  archive_paths=(crates controller)
+  if git -C "$REPOSITORY_ROOT" cat-file -e "$base_revision:api" 2>/dev/null; then
+    archive_paths=(api crates controller)
+  fi
+  git -C "$REPOSITORY_ROOT" archive "$base_revision" "${archive_paths[@]}" |
     tar -x -C "$WORK_DIR/base"
   scan_root "$WORK_DIR/base" "$base_tree" "$base_manifest" 0 "$renames"
   if [[ ! -s "$renames" ]]; then

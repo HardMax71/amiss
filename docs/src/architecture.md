@@ -57,9 +57,11 @@ published convenience Action; [Project status](status.md) keeps that distinction
 A seventh crate, `amiss-fixtures`, exists only for tests: it writes hostile Git bytes
 straight into test repositories so the same fixtures exist on every platform.
 
-The [`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) crates sit outside
-that graph. They are unpublished, nothing above depends on them, and they keep provider, HTTP,
-storage, credential, Git acquisition, and runtime dependencies out of the scanner.
+The root [`api/`](https://github.com/HardMax71/amiss/tree/main/api) specialist and
+[`controller/`](https://github.com/HardMax71/amiss/tree/main/controller) crates sit outside that
+graph. They are unpublished and nothing above depends on them. `amiss-api` normalizes bounded
+Rustdoc JSON into semantic records without entering provider binaries. The controller crates keep
+provider, HTTP, storage, credential, Git acquisition, and runtime dependencies out of the scanner.
 `amiss-controller` owns the provider-neutral orchestration and supervised bootstrap contracts;
 `amiss-controller-git` owns bounded protocol-v2 acquisition; and `amiss-controller-service` owns
 the bounded webhook, synchronous evaluation, and authenticated artifact endpoints, durable raw

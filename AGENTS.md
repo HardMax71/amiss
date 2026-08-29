@@ -1,9 +1,10 @@
 # AGENTS.md
 
 Amiss is one Rust workspace. The engine crates under `crates/` check documentation against
-the repository tree it describes and take no network or async dependency; the unpublished
-provider crates under `controller/` carry that stack and nothing in the engine depends on
-them. The book under `docs/` is the reference;
+the repository tree it describes and take no network or async dependency. The unpublished
+specialist under `api/` normalizes compiler output, while the provider crates under `controller/`
+carry the network and async stack; nothing in the engine depends on either. The book under `docs/`
+is the reference;
 `CONTRIBUTING.md` states the acceptance bar.
 
 ## Build and test
@@ -42,7 +43,7 @@ runs the same stages, so local green and remote green are the same thing.
   indirection names, and it spawns nothing. Its
   private sealed entry additionally reads only the closed request frame from stdin. Shared
   test scaffolding goes in `amiss-fixtures`.
-- The `controller/` crates are unpublished members of the one workspace. The trust
+- The `api/` and `controller/` crates are unpublished members of the one workspace. The trust
   boundary is a dependency boundary, not a workspace boundary: provider transport,
   storage, credential, and runtime dependencies stay in their graphs, no engine crate
   may depend on them, and `deny-engine.toml` checks the engine graph without them.

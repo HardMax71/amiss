@@ -97,6 +97,67 @@ both supplied digests, and whether the set is complete. Amiss neither executes a
 recomputes or authenticates those claims; the command only validates and canonicalizes their
 transport. Its output therefore remains self-asserted when supplied to `check`.
 
+The separate unpublished `amiss-rust-public-api` producer is one such specialist, but it writes the
+checked template directly so the same bytes can be a planned workflow artifact. It accepts exactly
+one bounded producer context and one bounded Rustdoc JSON file:
+
+```console
+amiss-rust-public-api --context rust-public-api-context.json \
+  --rustdoc target/doc/example.json > amiss/semantic-template.json
+```
+
+The producer currently consumes format 61. The example was measured with
+`nightly-2026-08-28`; the workspace's pinned Rustdoc emits format 60 and is deliberately refused.
+Generate the input with the exact separately pinned toolchain named by the producer context, for
+example:
+
+```console
+cargo +nightly-2026-08-28 rustdoc -p example --lib -- \
+  -Z unstable-options --output-format json
+```
+
+Do not edit the format number in an artifact.
+
+The context is strict JSON with this closed shape:
+
+```json
+{
+  "cfg": [],
+  "compiler": "rustc 1.100.0-nightly (e457a7b0d 2026-08-27)",
+  "dependencies_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "features": ["default"],
+  "name": "rust/example/local-free-functions",
+  "package": "example",
+  "rustdoc_format": 61,
+  "schema": "amiss/rust-public-api-context",
+  "target": "example",
+  "target_triple": "x86_64-unknown-linux-gnu"
+}
+```
+
+The feature and cfg sets are byte-sorted and unique. The set name ends in
+`/local-free-functions`, so its completeness cannot be mistaken for the entire Rust item surface
+or dependency-owned re-exports. Compiler, package, target, features, cfg, and the operator-computed
+dependency/configuration digest all enter the context digest. `target` is the Rust crate target name
+recorded on the root module, after Cargo's crate-name normalization or any explicit target rename;
+it and the target triple are checked exactly against the parsed input. Package and crate target
+names are intentionally separate because Cargo permits them to differ. Rustdoc carries no Cargo
+package identity, so `package` is context-bound while the independently declared target is the
+artifact-side check. The active producer accepts only the one Rustdoc format represented by its
+pinned maintained adapter. It does not start Cargo, rustdoc, or another process.
+
+Each record key is `fn/` plus one public import path to a function defined by the root crate. Its
+value is a one-line canonical comparison string made from the adapter signature and that exact
+path; a local re-export owns its alias rather than the definition's private path. It is not Rust
+source or downstream call syntax. Rustdoc removes raw-identifier markers from canonical paths, and
+the adapter may retain crate-relative type paths and crate-authored parameter names. ASCII
+whitespace is collapsed so ordinary multiline `where` predicates remain representable. Associated
+functions, methods, and functions defined by a dependency are outside this explicitly scoped set.
+The latter require dependency Rustdoc inputs before they can be called complete. Malformed input,
+an unsupported format, a crate-target or target-triple mismatch, an ambiguous path, a duplicate
+row, more than 100,000 rows, a context above 64 KiB, or Rustdoc JSON above 32 MiB refuses the output
+instead of weakening completeness. Raw Rustdoc numeric IDs appear in neither keys nor values.
+
 The sealed controls request remains the provider-authenticated intake. A controller plan may hold
 candidate-independent templates such as an Intersphinx inventory set. A trusted acquisition may
 instead return exact candidate-independent template bytes beside the repository and action roots.

@@ -1,6 +1,7 @@
 [graph]
 all-features = true
 exclude = [
+  "amiss-api",
   "amiss-controller",
   "amiss-controller-constraint",
   "amiss-controller-files",
