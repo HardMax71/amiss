@@ -90,9 +90,10 @@ jobs:
           AMISS_SIMILARITY_POLICY: ${{ steps.similarity.outputs.policy }}
           SKIP: nextest
       - run: rustup toolchain install nightly-2026-08-28 --profile minimal
+      - run: rustup target add --toolchain nightly-2026-08-28 wasm32-unknown-unknown
       - run: >-
           cargo test -p amiss-api
-          normalize::tests::real::cargo_features_preserve_configuration_boundaries
+          normalize::tests::real::cargo_configurations_preserve_record_boundaries
           --locked -- --ignored --exact
         env:
           AMISS_RUSTDOC_TOOLCHAIN: nightly-2026-08-28
