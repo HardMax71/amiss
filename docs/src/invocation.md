@@ -41,6 +41,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss policy-include --path <repo-path> --suffix <suffix> --adapter <adapter>
                      [--repo <path> --object-format <sha1|sha256> --index]
+amiss record-set --evidence <path>
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
             --repository <host>/<owner>/<name>
@@ -94,7 +95,7 @@ trust them when the short form reads ambiguous.
 | `--debt-output` | path | where the minted snapshot is written; must not exist |
 | `--report` | path | the report file the plan, render, or refs form reads; foreign to every other form |
 | `--plan` | path | the plan file the assessment form judges; foreign to every other form |
-| `--evidence` | path | the producer observations the assessment form judges; foreign to every other form |
+| `--evidence` | path | the external observations `external-assess` judges, or the normalized specialist input `record-set` turns into a semantic template; foreign to every other form |
 | `--target` | repo-relative path | the text path whose candidate references `refs` returns |
 | `--target-bytes-hex` | lowercase even-length hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
 | `--help` | none | prints the canonical closed grammar; stands alone, with no verb or other flag |
@@ -234,6 +235,17 @@ wins its adapter, and a later scan can still reject an unavailable object or uns
 kind. The three preview flags are one group; partial groups and every unrelated option are invalid
 invocations. Exit 0 wrote the row or complete preview, exit 1 means the repository, index, or output
 was unavailable, and exit 2 means the closed invocation or selector grammar was invalid.
+
+`amiss record-set` turns one strict
+[record-set input](https://github.com/HardMax71/amiss/blob/main/spec/scanner-record-set-input.schema.json)
+into the candidate-free [semantic template](semantic-evidence.md) accepted by `amiss check`. The
+input names the specialist producer, its producer-defined context and input digests, completeness,
+one stable set name, and key-sorted unique rows. Amiss applies the scanner's exact key/value bounds,
+fixes the semantic producer contract to `record-set@1`, runs the result through the checked template
+writer, and prints canonical JSON plus one LF. It does not run the specialist, inspect a repository,
+recompute or authenticate the specialist-defined digests, or elevate the output above
+self-asserted evidence. Exit 0 wrote the template, exit 1 means the input or output was unavailable
+or invalid, and exit 2 means the closed invocation was invalid.
 
 `amiss adopt` onboards a repository that already has drift. It runs the evaluation under
 enforce, accepting no `--profile`, and mints a [debt snapshot](controls.md) from every

@@ -7,6 +7,7 @@ mod json;
 mod manifest;
 mod model;
 mod paths;
+mod record;
 mod report;
 mod requests;
 mod resolution;

@@ -3,7 +3,9 @@
     reason = "integration assertions over self-created repositories and JSON"
 )]
 
-use std::fs;
+use std::{fs, process::Command};
+
+use tempfile::TempDir;
 
 use crate::support::{amiss, payload};
 
@@ -37,28 +39,35 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
         ],
     )
     .unwrap();
-    let path = fixture.root().join("public-api.json");
-    let template = serde_json::json!({
-        "schema": "amiss/semantic-evidence-template",
-        "producer": {
-            "kind": "record-set",
-            "identity": "test-public-api",
-            "version": "1",
-            "context_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        },
+    let input_path = fixture.root().join("public-api-records.json");
+    let input = serde_json::json!({
+        "schema": "amiss/record-set-input",
+        "producer_identity": "test-public-api",
+        "context_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "complete": true,
-        "observations": [{
-            "kind": "record-set",
-            "name": "rust/public-api",
-            "records": [{
-                "key": "amiss::check",
-                "value": "pub fn check()",
-            }],
+        "name": "rust/public-api",
+        "records": [{
+            "key": "amiss::check",
+            "value": "pub fn check()",
         }],
     });
-    fs::write(&path, serde_json::to_vec(&template).unwrap()).unwrap();
-    (fixture, amiss_fixtures::path_arg(&path))
+    fs::write(&input_path, serde_json::to_vec(&input).unwrap()).unwrap();
+    let input_path = amiss_fixtures::path_arg(&input_path);
+    let (code, stdout, stderr) = amiss(&["record-set", "--evidence", &input_path]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let parsed = amiss_wire::json::parse(&stdout).unwrap();
+    let mut canonical = amiss_wire::json::canonical(&parsed);
+    canonical.push(b'\n');
+    assert_eq!(
+        stdout, canonical,
+        "record-set output is canonical JSON plus LF"
+    );
+    amiss_wire::semantic::parse_template(&stdout).unwrap();
+
+    let template_path = fixture.root().join("public-api.json");
+    fs::write(&template_path, stdout).unwrap();
+    (fixture, amiss_fixtures::path_arg(&template_path))
 }
 
 #[test]
@@ -145,4 +154,35 @@ fn a_template_cannot_choose_its_candidate() {
     let body = payload(&stdout);
     assert_eq!(body["result"]["complete"], false);
     assert_eq!(body["errors"][0]["code"], "UNKNOWN_FIELD");
+}
+
+#[test]
+fn record_set_authoring_refuses_noncanonical_specialist_rows_without_a_repository() {
+    let directory = TempDir::new().unwrap();
+    let path = directory.path().join("records.json");
+    let input = serde_json::json!({
+        "schema": "amiss/record-set-input",
+        "producer_identity": "test-public-api",
+        "context_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "complete": true,
+        "name": "rust/public-api",
+        "records": [
+            {"key": "z", "value": "Z"},
+            {"key": "a", "value": "A"},
+        ],
+    });
+    fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
+        .current_dir(directory.path())
+        .args(["record-set", "--evidence"])
+        .arg(path)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "amiss record-set: set is not sorted at $.records\n"
+    );
 }

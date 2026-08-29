@@ -14,7 +14,7 @@ use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::{AnalysisErrorCode, ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA};
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
-use amiss_wire::semantic::RECORD_KEY_BYTES;
+use amiss_wire::semantic::{RECORD_KEY_BYTES, RECORD_VALUE_BYTES};
 
 use crate::support::{report_schema, repository_root};
 
@@ -70,6 +70,9 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         | "scanner-external-evidence"
         | "scanner-external-plan"
         | "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
+        "scanner-record-set-input" => {
+            parse_defect(amiss_wire::semantic::record::parse_input(bytes))
+        }
         "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
         "scanner-semantic-template" => parse_defect(amiss_wire::semantic::parse_template(bytes)),
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
@@ -310,6 +313,36 @@ fn the_semantic_evidence_schema_tracks_the_reader_contract() {
         u64::try_from(amiss_wire::semantic::PRODUCER_VERSION_BYTES).ok()
     );
 
+    let record_path = repository_root().join("spec/scanner-record-set-input.schema.json");
+    let record: serde_json::Value = serde_json::from_slice(
+        &fs::read(record_path).expect("record-set input schema is readable"),
+    )
+    .expect("record-set input schema is JSON");
+    assert_eq!(
+        record
+            .pointer("/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(amiss_wire::semantic::record::INPUT_SCHEMA)
+    );
+    assert_eq!(
+        record
+            .pointer("/properties/records/maxItems")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT).ok()
+    );
+    assert_eq!(
+        record
+            .pointer("/$defs/RecordKey/maxLength")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(RECORD_KEY_BYTES).ok()
+    );
+    assert_eq!(
+        record
+            .pointer("/$defs/RecordValue/maxLength")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(RECORD_VALUE_BYTES).ok()
+    );
+
     let request_path = repository_root().join("spec/scanner-controls-request.schema.json");
     let request: serde_json::Value = serde_json::from_slice(
         &fs::read(request_path).expect("controls request schema is readable"),
@@ -540,6 +573,26 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
         amiss_wire::json::canonical(&written),
         amiss_wire::json::canonical(&example),
         "the semantic evidence example drifted from its writer"
+    );
+}
+
+#[test]
+fn the_record_set_input_example_produces_the_semantic_template_example() {
+    let root = repository_root();
+    let input = fs::read(root.join("spec/examples/scanner-record-set-input.json"))
+        .expect("the record-set input example is readable");
+    let input = amiss_wire::semantic::record::parse_input(&input)
+        .expect("the record-set input example clears the strict reader");
+    let written = amiss_wire::semantic::record::template(input)
+        .expect("the record-set input example clears the checked writer");
+    let template = fs::read(root.join("spec/examples/scanner-semantic-template.json"))
+        .expect("the semantic template example is readable");
+    let template =
+        amiss_wire::json::parse(&template).expect("the semantic template example is strict JSON");
+    assert_eq!(
+        amiss_wire::json::canonical(&written),
+        amiss_wire::json::canonical(&template),
+        "the record-set input and semantic template examples drifted"
     );
 }
 

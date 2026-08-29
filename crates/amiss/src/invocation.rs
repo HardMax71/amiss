@@ -37,6 +37,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss policy-include --path <repo-path> --suffix <suffix> --adapter <adapter>
                      [--repo <path> --object-format <sha1|sha256> --index]
+amiss record-set --evidence <path>
 amiss adopt --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --candidate <full-oid>
             --repository <host>/<owner>/<name>
@@ -71,6 +72,7 @@ pub(crate) enum Verb {
     Render,
     Refs,
     PolicyInclude,
+    RecordSet,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
@@ -148,6 +150,11 @@ pub(crate) struct PolicyIncludeInvocation {
     pub(crate) preview: Option<PolicyIncludePreview>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RecordSetInvocation {
+    pub(crate) input: PathBuf,
+}
+
 /// One accepted command line: a scan-shaped verb, the authoring form, or a
 /// report-bound pure form.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -159,6 +166,7 @@ pub(crate) enum Command {
     Render(RenderInvocation),
     Refs(RefsInvocation),
     PolicyInclude(PolicyIncludeInvocation),
+    RecordSet(RecordSetInvocation),
 }
 
 /// The adoption metadata the engine cannot know: who owns the recorded

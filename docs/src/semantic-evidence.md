@@ -88,6 +88,15 @@ to that candidate and passes the resulting envelope through the same compiled co
 is repository-user-selected and its context is not independently planned, so the report remains
 `self-asserted`; this local convenience path cannot become provider authority.
 
+The offline `amiss record-set` authoring form accepts one closed
+[normalized record-set input](https://github.com/HardMax71/amiss/blob/main/spec/scanner-record-set-input.schema.json)
+and emits that template shape with the fixed `record-set@1` producer contract. Its rows pass the
+same decoder the scanner uses: keys are sorted and unique, and keys and display values are
+nonempty, control-free, and bounded. The specialist still owns extraction, its stable identity,
+both supplied digests, and whether the set is complete. Amiss neither executes a language tool nor
+recomputes or authenticates those claims; the command only validates and canonicalizes their
+transport. Its output therefore remains self-asserted when supplied to `check`.
+
 The sealed controls request remains the provider-authenticated intake. A controller plan may hold
 candidate-independent templates such as an Intersphinx inventory set. A trusted acquisition may
 instead return already-formed pre-scan envelopes beside the exact repository and action roots. The
@@ -154,4 +163,9 @@ The candidate-free input has its own
 [`scanner-semantic-template.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-template.schema.json)
 and
 [`scanner-semantic-template.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-semantic-template.json).
+The record-set authoring input is checked by
+[`scanner-record-set-input.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-record-set-input.schema.json)
+and its
+[`scanner-record-set-input.json`](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-record-set-input.json)
+example is required to reproduce the semantic-template example through the real writer.
 The engine still executes no producer and treats no repository-controlled evidence as authority.

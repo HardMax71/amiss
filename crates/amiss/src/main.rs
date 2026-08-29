@@ -9,6 +9,7 @@ mod junit;
 mod output;
 mod payload;
 mod policy_include;
+mod record_set;
 mod references;
 mod render;
 mod repair;
@@ -133,6 +134,7 @@ fn main() -> ExitCode {
             invocation::Command::Render(render) => render::run(&render, &mut reserve),
             invocation::Command::Refs(refs) => references::run(&refs),
             invocation::Command::PolicyInclude(include) => policy_include::run(&include),
+            invocation::Command::RecordSet(record_set) => record_set::run(&record_set),
         },
     }
 }

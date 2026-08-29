@@ -31,7 +31,9 @@ pub(super) fn command(
         Some(Verb::PolicyInclude) => {
             return classify_policy_include(codes, gathered).map(Command::PolicyInclude);
         }
-        Some(Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render | Verb::Refs) => {
+        Some(
+            Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render | Verb::Refs | Verb::RecordSet,
+        ) => {
             return classify_report_command(codes, gathered, format);
         }
         Some(Verb::Check | Verb::Fix | Verb::Adopt) | None => {}
