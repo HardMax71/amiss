@@ -10,8 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use amiss_controller::{Acquisition, AcquisitionTarget, RunRequest};
-use amiss_wire::json::Value;
+use amiss_controller::{AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, RunRequest};
 use amiss_wire::model::Oid;
 use secrecy::SecretString;
 
@@ -107,7 +106,7 @@ where
         &mut self,
         request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<Vec<Value>, Self::Error> {
+    ) -> Result<Vec<AcquiredSemanticTemplate>, Self::Error> {
         active(target.cancelled.as_ref())?;
         let plan = (self.plan)(request)
             .map_err(|_defect| GitFetchError("the Git fetch plan is invalid"))?;

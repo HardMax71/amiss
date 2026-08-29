@@ -3,9 +3,12 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
-use amiss_controller::{AcquiringRunner, Acquisition, AcquisitionTarget, ControllerClock, Runner};
+use amiss_controller::{
+    AcquiredSemanticTemplate, AcquiringRunner, Acquisition, AcquisitionTarget, ControllerClock,
+    Runner,
+};
 use amiss_fixtures::path_arg;
-use amiss_wire::json::Value;
+use amiss_wire::model::ArtifactId;
 
 use super::*;
 
@@ -17,7 +20,7 @@ enum AcquisitionFixture {
         repository: PathBuf,
         action: PathBuf,
         paths: Arc<AcquiredPaths>,
-        semantic_evidence: Vec<Value>,
+        semantic_templates: Vec<AcquiredSemanticTemplate>,
     },
     Reject,
     IgnoreCancellation {
@@ -34,13 +37,13 @@ impl Acquisition for AcquisitionFixture {
         &mut self,
         _request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<Vec<Value>, Self::Error> {
+    ) -> Result<Vec<AcquiredSemanticTemplate>, Self::Error> {
         match self {
             Self::Clone {
                 repository,
                 action,
                 paths,
-                semantic_evidence,
+                semantic_templates,
             } => {
                 paths
                     .0
@@ -49,7 +52,7 @@ impl Acquisition for AcquisitionFixture {
                     .extend([target.repository.to_path_buf(), target.action.to_path_buf()]);
                 clone_repository(repository, target.repository, &target.cancelled)?;
                 clone_repository(action, target.action, &target.cancelled)?;
-                Ok(semantic_evidence.clone())
+                Ok(semantic_templates.clone())
             }
             Self::Reject => Err(std::io::Error::other("acquisition rejected")),
             Self::IgnoreCancellation {
@@ -101,7 +104,7 @@ fn uses_private_exact_roots_and_controller_time() {
         repository: harness.repository.root().to_path_buf(),
         action: harness.action.root().to_path_buf(),
         paths: Arc::clone(&paths),
-        semantic_evidence: Vec::new(),
+        semantic_templates: Vec::new(),
     };
     let mut runner = acquiring_runner(&harness, acquisition, Some(1_753_219_200_000));
     let mut heartbeat = Heartbeat::renewing();
@@ -136,7 +139,7 @@ fn acquisition_and_clock_defects_are_unavailable() {
         repository: harness.repository.root().to_path_buf(),
         action: harness.action.root().to_path_buf(),
         paths: Arc::new(AcquiredPaths::default()),
-        semantic_evidence: Vec::new(),
+        semantic_templates: Vec::new(),
     };
     let mut no_time = acquiring_runner(&harness, acquisition, None);
     assert_eq!(
@@ -146,13 +149,16 @@ fn acquisition_and_clock_defects_are_unavailable() {
 }
 
 #[test]
-fn malformed_acquired_semantic_evidence_is_a_tampered_runtime() {
+fn malformed_acquired_semantic_template_is_a_tampered_runtime() {
     let harness = Harness::new("runner-pass", None);
     let acquisition = AcquisitionFixture::Clone {
         repository: harness.repository.root().to_path_buf(),
         action: harness.action.root().to_path_buf(),
         paths: Arc::new(AcquiredPaths::default()),
-        semantic_evidence: vec![Value::Null],
+        semantic_templates: vec![AcquiredSemanticTemplate {
+            acquisition_identity: ArtifactId::new("test-artifact".to_owned()).unwrap(),
+            bytes: Arc::from(*b"null"),
+        }],
     };
     let mut runner = acquiring_runner(&harness, acquisition, Some(1_753_219_200_000));
 

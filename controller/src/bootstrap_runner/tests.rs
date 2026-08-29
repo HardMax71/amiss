@@ -165,7 +165,7 @@ fn run<'a>(
         scratch: directory,
         evaluation_instant,
         valid_until,
-        semantic_evidence: &[],
+        semantic_templates: &[],
         wall_timeout,
     }
 }

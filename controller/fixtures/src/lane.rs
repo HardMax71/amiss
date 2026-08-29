@@ -3,11 +3,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use amiss_controller::{Acquisition, AcquisitionTarget, OidPair, RunRequest};
+use amiss_controller::{
+    AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, OidPair, RunRequest,
+};
 use amiss_fixtures::{CommitPair, commit_pair};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::Value;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 /// The checked repository and the action repository a provider lane acquires,
@@ -102,7 +103,7 @@ impl Acquisition for CopyAcquisition {
         &mut self,
         _request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<Vec<Value>, Self::Error> {
+    ) -> Result<Vec<AcquiredSemanticTemplate>, Self::Error> {
         copy_tree(&self.repository, target.repository, &target.cancelled)?;
         copy_tree(&self.action, target.action, &target.cancelled).map(|()| Vec::new())
     }

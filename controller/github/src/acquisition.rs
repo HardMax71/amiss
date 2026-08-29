@@ -2,13 +2,14 @@ mod tests;
 
 use std::sync::atomic::Ordering;
 
-use amiss_controller::{Acquisition, AcquisitionTarget, ProviderError, RunRequest};
+use amiss_controller::{
+    AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, ProviderError, RunRequest,
+};
 pub use amiss_controller_git::GitFetchBounds;
 use amiss_controller_git::{
     ACTION_COMMIT_REF, ExactFetch, ExactWant, GitCredential, REPOSITORY_CANDIDATE_REF,
     REPOSITORY_TARGET_REF, fetch_exact,
 };
-use amiss_wire::json::Value;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use secrecy::SecretString;
 
@@ -139,7 +140,7 @@ impl<T: GitHubTokenSource> Acquisition for GitHubAcquisition<T> {
         &mut self,
         request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<Vec<Value>, Self::Error> {
+    ) -> Result<Vec<AcquiredSemanticTemplate>, Self::Error> {
         active(&target)?;
         let plan = github_fetch_plan(request)?;
         let token = self

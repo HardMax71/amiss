@@ -8,7 +8,7 @@ use super::{
     SemanticEvidenceExpectation, SemanticEvidenceTemplate,
 };
 
-const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v4";
+const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v5";
 
 /// Freezes the controller-owned policy and required-check target reused by
 /// every claim for one authenticated delivery.
@@ -167,6 +167,10 @@ fn plan_value(
 fn expectation_value(expectation: &SemanticEvidenceExpectation) -> Value {
     Value::object(vec![
         (
+            "acquisition_identity".to_owned(),
+            Value::string(expectation.acquisition_identity.as_str().to_owned()),
+        ),
+        (
             "producer_kind".to_owned(),
             Value::string(expectation.producer_kind.as_str().to_owned()),
         ),
@@ -195,9 +199,9 @@ pub(super) fn normalized_expectations(
     }
     let mut normalized = expectations.to_vec();
     normalized.sort();
-    if normalized
-        .windows(2)
-        .any(|pair| matches!(pair, [left, right] if left == right))
+    if normalized.windows(2).any(|pair| {
+        matches!(pair, [left, right] if left.acquisition_identity == right.acquisition_identity)
+    })
     {
         return Err(BootstrapJobError::SemanticEvidence);
     }

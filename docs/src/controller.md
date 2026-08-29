@@ -299,10 +299,12 @@ and size. It does not authenticate the engine report itself.
 trees have been acquired. It first reopens both repositories and verifies the requested commits
 and trees. It derives the sealed bootstrap job from the `RunRequest` and trusted instants rather
 than accepting a separately assembled job, so a caller cannot pair one run with another run's
-control files. Trusted acquisition may return pre-scan semantic-evidence envelopes with the roots;
-job construction matches them one-to-one with plan-frozen producer and context identities, requires
-the exact candidate and no source-report binding, combines their limits and ordering with plan
-templates, and fails closed on any defect. It also reads the
+control files. Trusted acquisition may return candidate-independent semantic-template bytes with
+the roots. Each result names one plan-frozen acquisition identity; job construction matches its
+producer and context, binds the exact candidate itself, combines its limits and ordering with plan
+templates, and fails closed on any defect. The job also carries one bounded canonical audit value
+with the exact acquired bytes, derived envelope bytes, acquisition identities, and digests for the
+artifact-retention layer. It also reads the
 selected bootstrap under a fixed byte ceiling and matches its digest to the frozen execution plan
 before copying it into a fresh private scratch directory.
 
@@ -340,8 +342,9 @@ mdBook semantic-evidence producers, and supervised bootstrap runner. Focused tes
 limits and tampering, replay, rotation and revocation, file
 corruption, cross-process ownership, reclaim, exact publication retry across restart, full roots,
 artifact expiry, clock rollback, runner timeout, process descendants, and output replacement.
-The acquisition result can also carry candidate-specific pre-scan semantic evidence into the
-sealed controls request. A trusted caller can derive source-bound routes, decoded anchors, and
+The acquisition result can also carry candidate-independent pre-scan semantic templates into the
+sealed controls request; candidate binding remains inside job construction. A trusted caller can
+derive source-bound routes, decoded anchors, and
 rendered navigation reachability from a completed mdBook build without executing mdBook in the
 controller; the built-in provider acquisitions currently leave that set empty.
 
