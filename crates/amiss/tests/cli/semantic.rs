@@ -13,17 +13,29 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
     let policy = serde_json::json!({
         "schema": "amiss/scanner-policy",
         "document_includes": [],
-        "projection_assertions": [{
-            "document": "docs.md",
-            "name": "public-api",
-            "projection": "code-text-v1",
-            "sink": "previous-code",
-            "source": {
-                "kind": "record-value",
-                "set": "rust/public-api",
-                "key": "amiss::check",
+        "projection_assertions": [
+            {
+                "document": "api.md",
+                "name": "public-api",
+                "projection": "sorted-rows-v1",
+                "sink": "previous-code",
+                "source": {
+                    "kind": "record-set",
+                    "set": "rust/example/local-function-declarations",
+                },
             },
-        }],
+            {
+                "document": "function.md",
+                "name": "check-signature",
+                "projection": "code-text-v1",
+                "sink": "previous-code",
+                "source": {
+                    "kind": "record-value",
+                    "set": "rust/example/local-function-declarations",
+                    "key": "fn/example::check",
+                },
+            },
+        ],
         "protected_inventory": [],
         "finding_dispositions": [],
     });
@@ -32,8 +44,12 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
         &[("README.md", "# Base\n")],
         &[
             (
-                "docs.md",
-                "```text\npub fn check()\n```\n[amiss:public-api]: <amiss:projection>\n",
+                "api.md",
+                "```text\npub fn example::check() -> bool\npub fn example::render() -> String\n```\n[amiss:public-api]: <amiss:projection>\n",
+            ),
+            (
+                "function.md",
+                "```text\npub fn example::check() -> bool\n```\n[amiss:check-signature]: <amiss:projection>\n",
             ),
             (".amiss/scanner-policy.json", &policy),
         ],
@@ -42,15 +58,21 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
     let input_path = fixture.root().join("public-api-records.json");
     let input = serde_json::json!({
         "schema": "amiss/record-set-input",
-        "producer_identity": "test-public-api",
+        "producer_identity": "amiss-rust-public-api",
         "context_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "complete": true,
-        "name": "rust/public-api",
-        "records": [{
-            "key": "amiss::check",
-            "value": "pub fn check()",
-        }],
+        "name": "rust/example/local-function-declarations",
+        "records": [
+            {
+                "key": "fn/example::check",
+                "value": "pub fn example::check() -> bool",
+            },
+            {
+                "key": "fn/example::render",
+                "value": "pub fn example::render() -> String",
+            },
+        ],
     });
     fs::write(&input_path, serde_json::to_vec(&input).unwrap()).unwrap();
     let input_path = amiss_fixtures::path_arg(&input_path);
@@ -71,7 +93,7 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
 }
 
 #[test]
-fn one_self_asserted_template_binds_to_commit_and_index_candidates() {
+fn rust_api_template_projects_one_declaration_and_the_complete_set() {
     let (fixture, template) = fixture();
     let commit_selector = ["--candidate", fixture.candidate.as_str()];
     let index_selector = ["--index"];
@@ -100,16 +122,13 @@ fn one_self_asserted_template_binds_to_commit_and_index_candidates() {
         let (code, stdout, stderr) = amiss(&args);
         assert_eq!((code, stderr.as_str()), (0, ""));
         let body = payload(&stdout);
-        assert!(
-            body["findings"]
-                .as_array()
-                .is_some_and(|rows| rows.iter().all(|row| row["kind"] != "projection-drift")),
-            "the bound record proves the visible projection: {body}"
-        );
+        assert_eq!(body["result"]["complete"], true);
+        assert_eq!(body["errors"], serde_json::json!([]));
+        assert_eq!(body["findings"], serde_json::json!([]));
         assert_eq!(body["controls"]["sandbox"]["assurance"], "self-asserted");
         assert_eq!(
             body["controls"]["semantic_evidence"][0]["producer"]["identity"],
-            "test-public-api"
+            "amiss-rust-public-api"
         );
     }
 }
