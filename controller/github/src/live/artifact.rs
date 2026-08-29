@@ -5,8 +5,6 @@ use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
-use crate::{GitHubApp, GitHubWorkflowArtifactSource};
-
 use super::model::OwnerRecord;
 use super::{Config, refresh};
 
@@ -185,16 +183,4 @@ pub(super) fn finish_workflow_artifact(
         .ok_or(ProviderError::InvalidResponse)?;
     crate::decode_workflow_artifact(expectation, archive)
         .map_err(|_defect| ProviderError::InvalidResponse)
-}
-
-impl GitHubWorkflowArtifactSource for GitHubApp {
-    fn workflow_artifact(
-        &self,
-        expectation: &WorkflowArtifactExpectation,
-        candidate: &Oid,
-    ) -> Result<AcquiredSemanticTemplate, ProviderError> {
-        self.client
-            .rest
-            .workflow_artifact(&self.client.config, expectation, candidate)
-    }
 }

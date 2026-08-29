@@ -82,7 +82,10 @@ impl RawConfig {
             ConfigError::caused_by("listen must be one socket address", defect)
         })?;
         let scope = checked_scope(&self.github, self.repository)?;
-        let plan = Arc::new(load_plan(&self.plan)?);
+        let plan = Arc::new(load_plan(
+            &self.plan,
+            Some((&scope.provider, &scope.repository)),
+        )?);
         validate_action(&scope.provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let trust_set = TrustSetId::new("github-webhook-keys".to_owned())

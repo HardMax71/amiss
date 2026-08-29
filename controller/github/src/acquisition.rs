@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, ProviderError, RunRequest,
+    WorkflowArtifactExpectation,
 };
 pub use amiss_controller_git::GitFetchBounds;
 use amiss_controller_git::{
@@ -15,7 +16,7 @@ use secrecy::SecretString;
 
 const GITHUB_GIT_USERNAME: &str = "x-access-token";
 
-pub trait GitHubTokenSource: Send + Sync {
+pub trait GitHubAcquisitionSource: Send + Sync {
     /// Returns the short-lived credential for the exact installation named by
     /// the authenticated delivery.
     ///
@@ -23,16 +24,28 @@ pub trait GitHubTokenSource: Send + Sync {
     ///
     /// The installation does not match or GitHub cannot issue a credential.
     fn installation_token(&self, installation_id: u64) -> Result<SecretString, ProviderError>;
+
+    /// Reads one planned workflow artifact bound to the candidate commit.
+    ///
+    /// # Errors
+    ///
+    /// GitHub cannot prove one exact successful run and artifact, or its bytes do not match the
+    /// provider metadata and planned semantic producer.
+    fn workflow_artifact(
+        &self,
+        expectation: &WorkflowArtifactExpectation,
+        candidate: &Oid,
+    ) -> Result<AcquiredSemanticTemplate, ProviderError>;
 }
 
 pub struct GitHubAcquisition<T> {
-    tokens: T,
+    source: T,
     bounds: GitFetchBounds,
 }
 
 impl<T> GitHubAcquisition<T> {
-    pub const fn new(tokens: T, bounds: GitFetchBounds) -> Self {
-        Self { tokens, bounds }
+    pub const fn new(source: T, bounds: GitFetchBounds) -> Self {
+        Self { source, bounds }
     }
 }
 
@@ -46,6 +59,8 @@ pub enum GitHubAcquireError {
     Repository,
     #[error("the pinned action objects could not be acquired")]
     Action,
+    #[error("the planned GitHub workflow artifact could not be acquired")]
+    Artifact,
     #[error("GitHub acquisition was cancelled")]
     Cancelled,
 }
@@ -118,7 +133,18 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
     ]
     .into_iter()
     .all(|reference| reference.starts_with("refs/heads/"));
-    if !identity_valid || !format_valid || !binding_valid || !refs_valid {
+    let workflow_artifacts_valid = request
+        .plan
+        .policy
+        .workflow_artifacts
+        .iter()
+        .all(|artifact| artifact.provider == *provider && artifact.repository == *repository);
+    if !identity_valid
+        || !format_valid
+        || !binding_valid
+        || !refs_valid
+        || !workflow_artifacts_valid
+    {
         return Err(GitHubAcquireError::InvalidRequest);
     }
 
@@ -133,7 +159,7 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
     })
 }
 
-impl<T: GitHubTokenSource> Acquisition for GitHubAcquisition<T> {
+impl<T: GitHubAcquisitionSource> Acquisition for GitHubAcquisition<T> {
     type Error = GitHubAcquireError;
 
     fn acquire(
@@ -143,8 +169,21 @@ impl<T: GitHubTokenSource> Acquisition for GitHubAcquisition<T> {
     ) -> Result<Vec<AcquiredSemanticTemplate>, Self::Error> {
         active(&target)?;
         let plan = github_fetch_plan(request)?;
+        let mut semantic_templates =
+            Vec::with_capacity(request.plan.policy.workflow_artifacts.len());
+        for expectation in &request.plan.policy.workflow_artifacts {
+            active(&target)?;
+            semantic_templates.push(
+                self.source
+                    .workflow_artifact(expectation, &request.run.commits.candidate)
+                    .map_err(|_defect| {
+                        fetch_error(target.cancelled.as_ref(), GitHubAcquireError::Artifact)
+                    })?,
+            );
+        }
+        active(&target)?;
         let token = self
-            .tokens
+            .source
             .installation_token(plan.installation_id)
             .map_err(|_defect| GitHubAcquireError::Credentials)?;
         active(&target)?;
@@ -187,7 +226,7 @@ impl<T: GitHubTokenSource> Acquisition for GitHubAcquisition<T> {
             cancelled: target.cancelled.as_ref(),
         })
         .map_err(|_defect| fetch_error(target.cancelled.as_ref(), GitHubAcquireError::Action))?;
-        active(&target).map(|()| Vec::new())
+        active(&target).map(|()| semantic_templates)
     }
 }
 

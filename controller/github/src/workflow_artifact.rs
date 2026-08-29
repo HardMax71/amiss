@@ -5,10 +5,8 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
-    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, ProviderError, SemanticEvidenceExpectation,
-    WorkflowArtifactExpectation,
+    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, SemanticEvidenceExpectation, WorkflowArtifactExpectation,
 };
-use amiss_wire::model::Oid;
 use zip::ZipArchive;
 use zip::read::{ArchiveOffset, Config};
 
@@ -26,20 +24,6 @@ pub enum GitHubArtifactError {
     PayloadBytes,
     #[error("the workflow artifact payload does not match its planned semantic producer")]
     Semantic,
-}
-
-pub trait GitHubWorkflowArtifactSource: Send + Sync {
-    /// Reads the one planned workflow artifact bound to the candidate commit.
-    ///
-    /// # Errors
-    ///
-    /// GitHub cannot prove one exact successful run and artifact, or its bytes do not match the
-    /// provider metadata and planned semantic producer.
-    fn workflow_artifact(
-        &self,
-        expectation: &WorkflowArtifactExpectation,
-        candidate: &Oid,
-    ) -> Result<AcquiredSemanticTemplate, ProviderError>;
 }
 
 /// Decodes one strict GitHub workflow artifact without extracting it to the filesystem.

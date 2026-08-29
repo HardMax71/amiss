@@ -8,17 +8,22 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use amiss_controller::{
-    Acquisition as _, AcquisitionTarget, ChangeId, ChangeLocator, ControllerEvaluationId,
-    DeliveryId, DeliveryIdentity, IntegrationId, OidPair, PolicyControls, ProviderError,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
-    ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, check_binding, check_plan,
+    AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, ChangeId, ChangeLocator,
+    ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
+    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, OpaqueId,
+    PolicyControls, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
+    SemanticEvidenceExpectation, WorkflowArtifactExpectation, check_binding, check_plan,
 };
 use amiss_controller_github::{
-    GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubTokenSource, github_fetch_plan,
+    GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
+    github_fetch_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
 use amiss_wire::digest::hb;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{
+    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
+};
 use secrecy::SecretString;
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
@@ -115,19 +120,42 @@ fn tree_claims_do_not_change_acquisition_or_steal_runtime_classification() {
 }
 
 #[test]
-fn cancellation_after_token_issue_stops_before_network_without_leaking_it() {
+fn workflow_artifacts_stay_on_the_authenticated_repository() {
+    let mut exact = request();
+    let artifact = workflow_artifact(&exact);
+    set_workflow_artifacts(&mut exact, vec![artifact.clone()]);
+    assert!(github_fetch_plan(&exact).is_ok());
+
+    let mut foreign = artifact;
+    foreign.repository =
+        RepositoryIdentity::github("other".to_owned(), "widget".to_owned()).unwrap();
+    set_workflow_artifacts(&mut exact, vec![foreign]);
+    assert_eq!(
+        github_fetch_plan(&exact),
+        Err(GitHubAcquireError::InvalidRequest)
+    );
+}
+
+#[test]
+fn planned_artifacts_precede_git_and_cancellation_stops_before_network() {
     let cancelled = Arc::new(AtomicBool::new(false));
-    let calls = Arc::new(AtomicUsize::new(0));
-    let source = CancellingToken {
+    let token_calls = Arc::new(AtomicUsize::new(0));
+    let artifact_calls = Arc::new(AtomicUsize::new(0));
+    let mut request = request();
+    let expectation = workflow_artifact(&request);
+    set_workflow_artifacts(&mut request, vec![expectation.clone()]);
+    let source = CancellingSource {
         cancelled: Arc::clone(&cancelled),
-        calls: Arc::clone(&calls),
+        token_calls: Arc::clone(&token_calls),
+        artifact_calls: Arc::clone(&artifact_calls),
+        expectation,
     };
     let mut acquisition = GitHubAcquisition::new(source, GitFetchBounds::default());
     let repository = tempfile::tempdir().unwrap();
     let action = tempfile::tempdir().unwrap();
     let error = acquisition
         .acquire(
-            &request(),
+            &request,
             AcquisitionTarget {
                 repository: repository.path(),
                 action: action.path(),
@@ -137,7 +165,8 @@ fn cancellation_after_token_issue_stops_before_network_without_leaking_it() {
         .unwrap_err();
 
     assert_eq!(error, GitHubAcquireError::Cancelled);
-    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    assert_eq!(artifact_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(token_calls.load(Ordering::Relaxed), 1);
     assert!(!error.to_string().contains(TOKEN));
     assert!(!format!("{error:?}").contains(TOKEN));
     assert!(repository.path().read_dir().unwrap().next().is_none());
@@ -156,18 +185,71 @@ fn fetch_bounds_reject_zero_fractional_and_unbounded_values() {
     }
 }
 
-struct CancellingToken {
+struct CancellingSource {
     cancelled: Arc<AtomicBool>,
-    calls: Arc<AtomicUsize>,
+    token_calls: Arc<AtomicUsize>,
+    artifact_calls: Arc<AtomicUsize>,
+    expectation: WorkflowArtifactExpectation,
 }
 
-impl GitHubTokenSource for CancellingToken {
+impl GitHubAcquisitionSource for CancellingSource {
     fn installation_token(&self, installation_id: u64) -> Result<SecretString, ProviderError> {
         assert_eq!(installation_id, 7);
-        self.calls.fetch_add(1, Ordering::Relaxed);
+        self.token_calls.fetch_add(1, Ordering::Relaxed);
         self.cancelled.store(true, Ordering::Release);
         Ok(SecretString::from(TOKEN.to_owned()))
     }
+
+    fn workflow_artifact(
+        &self,
+        expectation: &WorkflowArtifactExpectation,
+        candidate: &Oid,
+    ) -> Result<AcquiredSemanticTemplate, ProviderError> {
+        assert_eq!(expectation, &self.expectation);
+        assert_eq!(candidate, &oid('b'));
+        self.artifact_calls.fetch_add(1, Ordering::Relaxed);
+        Ok(AcquiredSemanticTemplate {
+            acquisition_identity: expectation.semantic.acquisition_identity.clone(),
+            bytes: Arc::from(b"semantic template".as_slice()),
+        })
+    }
+}
+
+fn workflow_artifact(request: &RunRequest) -> WorkflowArtifactExpectation {
+    WorkflowArtifactExpectation {
+        provider: request.delivery.provider.clone(),
+        repository: request.run.change.repository.clone(),
+        workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
+        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        artifact_name: "amiss-semantic-evidence".to_owned(),
+        payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
+        archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
+        file_byte_limit: MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
+        semantic: SemanticEvidenceExpectation {
+            acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
+            producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            producer_identity: ArtifactId::new("docs-site".to_owned()).unwrap(),
+            producer_version: "0.5.1".to_owned(),
+            context_digest: hb("amiss/test-workflow-context", b"docs-site"),
+        },
+    }
+}
+
+fn set_workflow_artifacts(
+    request: &mut RunRequest,
+    workflow_artifacts: Vec<WorkflowArtifactExpectation>,
+) {
+    let plan = check_plan(
+        Profile::Enforce,
+        PolicyControls {
+            workflow_artifacts,
+            ..PolicyControls::default()
+        },
+        execution(),
+    )
+    .unwrap();
+    request.check = check_binding(&plan).unwrap();
+    request.plan = Arc::new(plan);
 }
 
 fn request() -> RunRequest {

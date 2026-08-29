@@ -10,11 +10,15 @@ mod verify;
 use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_controller::{ChangeSnapshot, ProviderError, ProviderIdentity, Publication};
+use amiss_controller::{
+    AcquiredSemanticTemplate, ChangeSnapshot, ProviderError, ProviderIdentity, Publication,
+    WorkflowArtifactExpectation,
+};
 use amiss_wire::controls::valid_required_status_name;
+use amiss_wire::model::Oid;
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 
-use crate::{GitHubApi, GitHubPullRequest, GitHubTokenSource};
+use crate::{GitHubAcquisitionSource, GitHubApi, GitHubPullRequest};
 
 use self::publication::{
     PublicationDecision, publication_decision, validate_created, validate_publication,
@@ -162,12 +166,22 @@ impl GitHubApi for GitHubApp {
     }
 }
 
-impl GitHubTokenSource for GitHubApp {
+impl GitHubAcquisitionSource for GitHubApp {
     fn installation_token(&self, installation_id: u64) -> Result<SecretString, ProviderError> {
         (installation_id == self.client.config.installation_id)
             .then_some(())
             .ok_or(ProviderError::Authentication)?;
         self.installation_access_token()
+    }
+
+    fn workflow_artifact(
+        &self,
+        expectation: &WorkflowArtifactExpectation,
+        candidate: &Oid,
+    ) -> Result<AcquiredSemanticTemplate, ProviderError> {
+        self.client
+            .rest
+            .workflow_artifact(&self.client.config, expectation, candidate)
     }
 }
 

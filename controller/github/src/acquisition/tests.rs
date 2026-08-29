@@ -19,6 +19,10 @@ fn every_refusal_names_itself() {
         GitHubAcquireError::Credentials.to_string(),
         "the GitHub installation credential is unavailable"
     );
+    assert_eq!(
+        GitHubAcquireError::Artifact.to_string(),
+        "the planned GitHub workflow artifact could not be acquired"
+    );
 }
 
 #[test]

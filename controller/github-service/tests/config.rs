@@ -106,6 +106,24 @@ impl Fixture {
     }
 }
 
+fn workflow_artifact() -> Value {
+    json!({
+        "workflow_identity": "docs-evidence.yml",
+        "event": "pull_request",
+        "artifact_name": "amiss-semantic-evidence",
+        "payload_file": "amiss/semantic-template.json",
+        "archive_byte_limit": 33_554_432,
+        "file_byte_limit": 16_777_216,
+        "semantic": {
+            "acquisition_identity": "github-docs-evidence",
+            "producer_kind": "site-build",
+            "producer_identity": "docs-site",
+            "producer_version": "0.5.1",
+            "context_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+        }
+    })
+}
+
 #[test]
 fn one_closed_configuration_loads_every_trust_input() {
     let fixture = Fixture::new();
@@ -124,6 +142,27 @@ fn one_closed_configuration_loads_every_trust_input() {
         "amiss-controller-github: configuration valid\n"
     );
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn workflow_artifacts_are_github_plan_inputs() {
+    let mut fixture = Fixture::new();
+    fixture.field("/plan").as_object_mut().unwrap().insert(
+        "workflow_artifacts".to_owned(),
+        json!([workflow_artifact()]),
+    );
+    fixture.save();
+    ServiceConfig::load(&fixture.config).unwrap();
+
+    *fixture.field("/plan/workflow_artifacts/0/semantic/context_digest") = json!("not-a-digest");
+    fixture.save();
+    assert_eq!(
+        ServiceConfig::load(&fixture.config)
+            .err()
+            .unwrap()
+            .to_string(),
+        "workflow artifact configuration is invalid"
+    );
 }
 
 #[test]

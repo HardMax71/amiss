@@ -17,13 +17,11 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryId
 use serde::Deserialize;
 
 pub use acquisition::{
-    GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubFetchPlan, GitHubTokenSource,
-    github_fetch_plan,
+    GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
+    GitHubFetchPlan, github_fetch_plan,
 };
 pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
-pub use workflow_artifact::{
-    GitHubArtifactError, GitHubWorkflowArtifactSource, decode_workflow_artifact,
-};
+pub use workflow_artifact::{GitHubArtifactError, decode_workflow_artifact};
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
 const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronize"];
