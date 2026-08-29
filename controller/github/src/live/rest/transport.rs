@@ -1,11 +1,15 @@
 mod tests;
 
+use std::io::Read as _;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
+use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue, RETRY_AFTER};
+use reqwest::header::{
+    ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue, LOCATION, RETRY_AFTER,
+};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -18,6 +22,7 @@ use super::OperationDeadline;
 
 const MAX_API_BASE_BYTES: usize = 2_048;
 const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
+const MAX_ARTIFACT_LOCATION_BYTES: usize = 8 * 1_024;
 const GITHUB_API_VERSION: &str = "2022-11-28";
 const GITHUB_JSON: &str = "application/vnd.github+json";
 const USER_AGENT: &str = "amiss-controller-github";
@@ -108,6 +113,45 @@ impl Transport {
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
         self.execute(self.client.get(self.url(route)?), deadline)
+    }
+
+    pub(super) fn download_artifact(
+        &self,
+        route: &str,
+        maximum_bytes: u64,
+        deadline: OperationDeadline,
+    ) -> Result<Vec<u8>, ProviderError> {
+        let token = self.token(deadline)?;
+        let request = self.client.get(self.url(route)?);
+        let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
+            .timeout(deadline.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))?;
+        if response.status() == StatusCode::GONE {
+            return Err(ProviderError::Unavailable);
+        }
+        if response.status() != StatusCode::FOUND {
+            settled(
+                response.status().as_u16(),
+                response.headers(),
+                ProviderError::AuthorizationRevoked,
+            )?;
+            return Err(ProviderError::InvalidResponse);
+        }
+        let location = artifact_location(response.headers())?;
+        let response = self
+            .client
+            .get(location)
+            .timeout(deadline.remaining()?)
+            .send()
+            .map_err(|error| map_error(&error))?;
+        settled(
+            response.status().as_u16(),
+            response.headers(),
+            ProviderError::Unavailable,
+        )?;
+        let declared = response.content_length();
+        read_artifact_body(response, declared, maximum_bytes)
     }
 
     pub(super) fn post<T: DeserializeOwned>(
@@ -250,6 +294,56 @@ fn github_headers(
 fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
     let declared = response.content_length();
     decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
+}
+
+fn artifact_location(headers: &HeaderMap) -> Result<Url, ProviderError> {
+    let mut locations = headers.get_all(LOCATION).iter();
+    let raw = locations
+        .next()
+        .and_then(|value| value.to_str().ok())
+        .ok_or(ProviderError::InvalidResponse)?;
+    if locations.next().is_some() || raw.is_empty() || raw.len() > MAX_ARTIFACT_LOCATION_BYTES {
+        return Err(ProviderError::InvalidResponse);
+    }
+    let url = Url::parse(raw).map_err(|_defect| ProviderError::InvalidResponse)?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || explicit_port(raw)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(url)
+}
+
+fn read_artifact_body(
+    reader: impl std::io::Read,
+    declared_bytes: Option<u64>,
+    maximum_bytes: u64,
+) -> Result<Vec<u8>, ProviderError> {
+    if maximum_bytes == 0 || declared_bytes.is_some_and(|declared| declared > maximum_bytes) {
+        return Err(ProviderError::InvalidResponse);
+    }
+    let limit = maximum_bytes
+        .checked_add(1)
+        .ok_or(ProviderError::InvalidResponse)?;
+    let mut bytes = Vec::new();
+    if let Some(declared) = declared_bytes {
+        let capacity =
+            usize::try_from(declared).map_err(|_defect| ProviderError::InvalidResponse)?;
+        bytes
+            .try_reserve_exact(capacity)
+            .map_err(|_defect| ProviderError::Unavailable)?;
+    }
+    reader
+        .take(limit)
+        .read_to_end(&mut bytes)
+        .map_err(|_defect| ProviderError::Unavailable)?;
+    (u64::try_from(bytes.len()).is_ok_and(|length| length <= maximum_bytes))
+        .then_some(bytes)
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GitHubClientError> {

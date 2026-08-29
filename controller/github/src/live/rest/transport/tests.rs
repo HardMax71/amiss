@@ -7,13 +7,14 @@ use amiss_controller::{ForgeNegative, ProviderError};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use reqwest::blocking::Client;
+use reqwest::header::{HeaderMap, LOCATION};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::Deserialize;
 
 use super::{
-    AppCredential, MAX_API_BASE_BYTES, MAX_RESPONSE_BYTES, MintedToken, OperationDeadline,
-    Transport, app_jwt, classified, map_error, map_status, rate_limited, settled,
-    validate_api_base,
+    AppCredential, MAX_API_BASE_BYTES, MAX_ARTIFACT_LOCATION_BYTES, MAX_RESPONSE_BYTES,
+    MintedToken, OperationDeadline, Transport, app_jwt, artifact_location, classified, map_error,
+    map_status, rate_limited, read_artifact_body, settled, validate_api_base,
 };
 use crate::{GitHubClientError, GitHubTimeouts};
 
@@ -97,7 +98,7 @@ fn provider_statuses_have_stable_failure_classes() {
 /// that within a window, while a false revocation would publish and stand.
 #[test]
 fn a_rate_limited_403_is_unavailable_not_revoked() {
-    let mut spent = reqwest::header::HeaderMap::new();
+    let mut spent = HeaderMap::new();
     spent.insert("x-ratelimit-remaining", "0".parse().unwrap());
     assert_eq!(
         settled(403, &spent, ProviderError::AuthorizationRevoked),
@@ -123,16 +124,16 @@ fn a_rate_limited_403_is_unavailable_not_revoked() {
 
 #[test]
 fn the_rate_limit_signature_is_retry_after_or_a_spent_quota() {
-    let mut spent = reqwest::header::HeaderMap::new();
+    let mut spent = HeaderMap::new();
     spent.insert("x-ratelimit-remaining", "0".parse().unwrap());
-    let mut live = reqwest::header::HeaderMap::new();
+    let mut live = HeaderMap::new();
     live.insert("x-ratelimit-remaining", "4999".parse().unwrap());
-    let mut asked = reqwest::header::HeaderMap::new();
+    let mut asked = HeaderMap::new();
     asked.insert(reqwest::header::RETRY_AFTER, "60".parse().unwrap());
     assert!(rate_limited(&spent));
     assert!(rate_limited(&asked));
     assert!(!rate_limited(&live));
-    assert!(!rate_limited(&reqwest::header::HeaderMap::new()));
+    assert!(!rate_limited(&HeaderMap::new()));
 }
 
 #[test]
@@ -201,11 +202,73 @@ fn offline_transport(minted: Option<MintedToken>) -> Transport {
 fn the_ceilings_are_the_documented_values() {
     assert_eq!(MAX_RESPONSE_BYTES, 8_388_608);
     assert_eq!(MAX_API_BASE_BYTES, 2_048);
+    assert_eq!(MAX_ARTIFACT_LOCATION_BYTES, 8_192);
+}
+
+#[test]
+fn one_bounded_credential_free_https_location_is_required() {
+    let mut valid = HeaderMap::new();
+    valid.insert(
+        LOCATION,
+        "https://objects.example/archive.zip?signature=opaque"
+            .parse()
+            .unwrap(),
+    );
+    assert!(artifact_location(&valid).is_ok_and(|url| {
+        url.as_str() == "https://objects.example/archive.zip?signature=opaque"
+    }));
+
+    for raw in [
+        "http://objects.example/archive.zip",
+        "https://user@objects.example/archive.zip",
+        "https://objects.example:8443/archive.zip",
+        "https://objects.example/archive.zip#fragment",
+        "not a URL",
+    ] {
+        let mut headers = HeaderMap::new();
+        headers.insert(LOCATION, raw.parse().unwrap());
+        assert_eq!(
+            artifact_location(&headers).err(),
+            Some(ProviderError::InvalidResponse)
+        );
+    }
+    let mut repeated = HeaderMap::new();
+    repeated.append(LOCATION, "https://one.example/archive".parse().unwrap());
+    repeated.append(LOCATION, "https://two.example/archive".parse().unwrap());
+    assert_eq!(
+        artifact_location(&repeated).err(),
+        Some(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        artifact_location(&HeaderMap::new()).err(),
+        Some(ProviderError::InvalidResponse)
+    );
+}
+
+#[test]
+fn artifact_bytes_stop_at_the_independent_transport_ceiling() {
+    let bytes = b"archive";
+    assert_eq!(
+        read_artifact_body(std::io::Cursor::new(bytes), Some(7), 7),
+        Ok(bytes.to_vec())
+    );
+    assert_eq!(
+        read_artifact_body(std::io::Cursor::new(bytes), Some(8), 7),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        read_artifact_body(std::io::Cursor::new(bytes), None, 6),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert_eq!(
+        read_artifact_body(std::io::Cursor::new(bytes), None, 0),
+        Err(ProviderError::InvalidResponse)
+    );
 }
 
 #[test]
 fn only_the_success_range_settles() {
-    let none = reqwest::header::HeaderMap::new();
+    let none = HeaderMap::new();
     assert_eq!(
         settled(200, &none, ProviderError::AuthorizationRevoked),
         Ok(())
@@ -305,12 +368,12 @@ fn the_api_base_length_bounds_are_exact() {
 
 #[test]
 fn verification_statuses_classify_facts_apart_from_failures() {
-    let plain = reqwest::header::HeaderMap::new();
+    let plain = HeaderMap::new();
     assert_eq!(classified(200, &plain), Ok(Ok(())));
     assert_eq!(classified(404, &plain), Ok(Err(ForgeNegative::Missing)));
     assert_eq!(classified(422, &plain), Ok(Err(ForgeNegative::Missing)));
     assert_eq!(classified(403, &plain), Ok(Err(ForgeNegative::Denied)));
-    let mut limited = reqwest::header::HeaderMap::new();
+    let mut limited = HeaderMap::new();
     limited.insert("retry-after", "30".parse().expect("a header value"));
     assert_eq!(classified(403, &limited), Err(ProviderError::Unavailable));
     assert_eq!(classified(429, &plain), Err(ProviderError::Unavailable));

@@ -5,8 +5,10 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
-    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, SemanticEvidenceExpectation, WorkflowArtifactExpectation,
+    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, ProviderError, SemanticEvidenceExpectation,
+    WorkflowArtifactExpectation,
 };
+use amiss_wire::model::Oid;
 use zip::ZipArchive;
 use zip::read::{ArchiveOffset, Config};
 
@@ -26,6 +28,20 @@ pub enum GitHubArtifactError {
     Semantic,
 }
 
+pub trait GitHubWorkflowArtifactSource: Send + Sync {
+    /// Reads the one planned workflow artifact bound to the candidate commit.
+    ///
+    /// # Errors
+    ///
+    /// GitHub cannot prove one exact successful run and artifact, or its bytes do not match the
+    /// provider metadata and planned semantic producer.
+    fn workflow_artifact(
+        &self,
+        expectation: &WorkflowArtifactExpectation,
+        candidate: &Oid,
+    ) -> Result<AcquiredSemanticTemplate, ProviderError>;
+}
+
 /// Decodes one strict GitHub workflow artifact without extracting it to the filesystem.
 ///
 /// # Errors
@@ -36,11 +52,7 @@ pub fn decode_workflow_artifact(
     expectation: &WorkflowArtifactExpectation,
     archive_bytes: &[u8],
 ) -> Result<AcquiredSemanticTemplate, GitHubArtifactError> {
-    if expectation.provider.namespace.as_str() != "github"
-        || expectation.repository.host() != expectation.provider.instance.as_str()
-        || !(1..=MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES).contains(&expectation.archive_byte_limit)
-        || !(1..=MAX_WORKFLOW_ARTIFACT_FILE_BYTES).contains(&expectation.file_byte_limit)
-    {
+    if !valid_github_expectation(expectation) {
         return Err(GitHubArtifactError::Expectation);
     }
     let archive_length = u64::try_from(archive_bytes.len()).unwrap_or(u64::MAX);
@@ -114,6 +126,23 @@ pub fn decode_workflow_artifact(
         acquisition_identity: expectation.semantic.acquisition_identity.clone(),
         bytes: Arc::from(payload),
     })
+}
+
+pub(crate) fn valid_github_expectation(expectation: &WorkflowArtifactExpectation) -> bool {
+    expectation.provider.namespace.as_str() == "github"
+        && expectation.repository.host() == expectation.provider.instance.as_str()
+        && crate::acquisition::canonical_github_repository(&expectation.repository)
+        && !expectation.artifact_name.is_empty()
+        && expectation.artifact_name.len() <= 256
+        && !expectation.artifact_name.chars().any(char::is_control)
+        && !(expectation.payload_file.as_str().is_empty()
+            || expectation
+                .payload_file
+                .as_str()
+                .bytes()
+                .any(|byte| byte.is_ascii_control()))
+        && (1..=MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES).contains(&expectation.archive_byte_limit)
+        && (1..=MAX_WORKFLOW_ARTIFACT_FILE_BYTES).contains(&expectation.file_byte_limit)
 }
 
 fn single_entry_eocd(bytes: &[u8]) -> bool {

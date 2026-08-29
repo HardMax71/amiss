@@ -5,7 +5,9 @@ use secrecy::{SecretSlice, SecretString};
 use serde::Serialize;
 
 pub(super) use amiss_controller::OperationDeadline;
-use amiss_controller::{ForgeNegative, ProviderError};
+use amiss_controller::{
+    AcquiredSemanticTemplate, ForgeNegative, ProviderError, WorkflowArtifactExpectation,
+};
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
@@ -13,6 +15,12 @@ use amiss_wire::model::Oid;
 
 use crate::GitHubPullRequest;
 
+use super::Config;
+use super::artifact::{
+    EXACT_PAGE_SIZE, WorkflowArtifactPage, WorkflowArtifactQuery, WorkflowRunPage,
+    WorkflowRunQuery, finish_workflow_artifact, select_workflow_artifact, select_workflow_run,
+    validate_workflow_request,
+};
 use super::model::{
     BranchRule, CheckRunPage, CheckRunRecord, CommitRecord, CreateCheckRun, GateCommitRecord,
     GitCommitRecord, PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord,
@@ -131,6 +139,54 @@ impl HttpRest {
 
     pub(super) fn installation_access_token(&self) -> Result<SecretString, ProviderError> {
         self.transport.installation_access_token()
+    }
+
+    pub(super) fn workflow_artifact(
+        &self,
+        config: &Config,
+        expectation: &WorkflowArtifactExpectation,
+        candidate: &Oid,
+    ) -> Result<AcquiredSemanticTemplate, ProviderError> {
+        validate_workflow_request(config, expectation, candidate)?;
+        let deadline = self.transport.deadline()?;
+        let owner = path_segment(expectation.repository.owner());
+        let name = path_segment(expectation.repository.name());
+        let workflow = path_segment(expectation.workflow_identity.as_str());
+        let run_route = format!("/repos/{owner}/{name}/actions/workflows/{workflow}/runs");
+        let run_query = WorkflowRunQuery {
+            event: expectation.event.as_str(),
+            head_sha: candidate.as_str(),
+            status: "success",
+            exclude_pull_requests: true,
+            per_page: EXACT_PAGE_SIZE,
+            page: 1,
+        };
+        let run_page: WorkflowRunPage = self
+            .transport
+            .get(&query_route(&run_route, &run_query)?, deadline)?;
+        let run = select_workflow_run(config, expectation, candidate, run_page)?;
+
+        let artifact_route = format!("/repos/{owner}/{name}/actions/runs/{}/artifacts", run.id);
+        let artifact_query = WorkflowArtifactQuery {
+            name: &expectation.artifact_name,
+            per_page: EXACT_PAGE_SIZE,
+            page: 1,
+        };
+        let artifact_page: WorkflowArtifactPage = self
+            .transport
+            .get(&query_route(&artifact_route, &artifact_query)?, deadline)?;
+        let artifact = select_workflow_artifact(expectation, &run, artifact_page)?;
+
+        let archive_route = format!(
+            "/repos/{owner}/{name}/actions/artifacts/{}/zip",
+            artifact.id
+        );
+        let archive = self.transport.download_artifact(
+            &archive_route,
+            expectation.archive_byte_limit,
+            deadline,
+        )?;
+        finish_workflow_artifact(expectation, artifact, &archive)
     }
 
     fn branch_rules(
