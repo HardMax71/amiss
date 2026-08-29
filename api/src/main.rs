@@ -102,7 +102,7 @@ fn invocation(mut arguments: impl Iterator<Item = OsString>) -> Result<Invocatio
 
 fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Value, Failure> {
     let context = context::parse(context_bytes)?;
-    let normalized = normalize::free_functions(
+    let normalized = normalize::function_declarations(
         rustdoc_bytes,
         context.rustdoc_format,
         &context.target,

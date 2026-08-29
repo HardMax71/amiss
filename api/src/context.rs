@@ -43,7 +43,7 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Context, Error> {
         .required("name", |path, value| {
             let raw = bounded_text(path, value)?;
             ArtifactId::new(raw)
-                .filter(|identity| identity.as_str().ends_with("/local-free-functions"))
+                .filter(|identity| identity.as_str().ends_with("/local-function-declarations"))
                 .ok_or_else(|| de::Error::new(path, ErrorKind::InvalidValue))
         })
         .map_err(Error::Shape)?;
