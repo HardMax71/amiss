@@ -171,6 +171,40 @@ an ambiguous path, a duplicate row, more than 100,000 rows, a context above 64 K
 above 32 MiB refuses the output instead of weakening completeness. Raw Rustdoc numeric IDs appear
 in neither keys nor values.
 
+The scanner needs no Rust-specific control to attach one of those values to visible documentation.
+This projection assertion selects the producer row for `example::check`:
+
+```json
+{
+  "document": "docs/api.md",
+  "name": "check-signature",
+  "projection": "code-text-v1",
+  "sink": "previous-code",
+  "source": {
+    "kind": "record-value",
+    "set": "rust/example/local-function-declarations",
+    "key": "fn/example::check"
+  }
+}
+```
+
+The named document owns the ordinary projection sink immediately after the visible value:
+
+````markdown
+```text
+pub fn example::check() -> bool
+```
+[amiss:check-signature]: <amiss:projection>
+````
+
+The `set` is the exact context name and the `key` is a producer-owned stable record identity. A
+changed declaration becomes `projection-drift`; a missing row is proven absent only when the
+producer says this scoped set is complete. To show the whole scoped API instead, use a
+`record-set` source with the same `set` and `sorted-rows-v1`. That projection compares every
+display value in byte-sorted order and refuses a partial set before judging visible rows. These are
+the same generic projection controls used by any record producer; the scanner does not parse Rust
+syntax or introduce a symbol-specific finding.
+
 The sealed controls request remains the provider-authenticated intake. A controller plan may hold
 candidate-independent templates such as an Intersphinx inventory set. A trusted acquisition may
 instead return exact candidate-independent template bytes beside the repository and action roots.
