@@ -100,12 +100,12 @@ impl Resolver<'_> {
         selection: &ProjectionSource,
         sink: &SemanticCodeSink,
     ) -> Result<Verdict, Error> {
+        use ProjectionSource::{BlobLines, NamedRegion, RecordSet, RecordValue, TreePaths};
+
         let path = match selection {
-            ProjectionSource::BlobLines(source) => RepoPath::from(&source.path),
-            ProjectionSource::NamedRegion(source) => RepoPath::from(&source.path),
-            ProjectionSource::TreePaths(_) | ProjectionSource::RecordValue(_) => {
-                return Err(Error::Internal);
-            }
+            BlobLines(source) => RepoPath::from(&source.path),
+            NamedRegion(source) => RepoPath::from(&source.path),
+            TreePaths(_) | RecordValue(_) | RecordSet(_) => return Err(Error::Internal),
         };
         let observed_bytes = u64::try_from(sink.value.len()).unwrap_or(u64::MAX);
         let Some((mode, oid)) = self
@@ -139,7 +139,7 @@ impl Resolver<'_> {
             return Err(Error::Internal);
         };
         let selected = match selection {
-            ProjectionSource::BlobLines(selection) => {
+            BlobLines(selection) => {
                 let range = LineRange {
                     first: selection.first_line,
                     last: selection.last_line,
@@ -161,16 +161,14 @@ impl Resolver<'_> {
                 }
                 selected_line_bytes(body, range).ok_or(DriftReason::SourceLinesOutOfRange)
             }
-            ProjectionSource::NamedRegion(selection) => {
+            NamedRegion(selection) => {
                 self.scan.charge(
                     Aggregate::LineFragmentBytes,
                     u64::try_from(body.len()).unwrap_or(u64::MAX),
                 )?;
                 named_region_bytes(body, selection)
             }
-            ProjectionSource::TreePaths(_) | ProjectionSource::RecordValue(_) => {
-                return Err(Error::Internal);
-            }
+            TreePaths(_) | RecordValue(_) | RecordSet(_) => return Err(Error::Internal),
         };
         let selected = match selected {
             Ok(selected) => selected,

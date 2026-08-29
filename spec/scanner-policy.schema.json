@@ -243,6 +243,22 @@
     }
    }
   },
+  "RecordSetSelection": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "set"
+   ],
+   "properties": {
+    "kind": {
+     "const": "record-set"
+    },
+    "set": {
+     "$ref": "#/$defs/RecordSetName"
+    }
+   }
+  },
   "CodeTextSource": {
    "oneOf": [
     {
@@ -269,6 +285,19 @@
     },
     {
      "$ref": "#/$defs/RecordValueSelection"
+    },
+    {
+     "$ref": "#/$defs/RecordSetSelection"
+    }
+   ]
+  },
+  "InventorySource": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/TreePathSelection"
+    },
+    {
+     "$ref": "#/$defs/RecordSetSelection"
     }
    ]
   },
@@ -337,7 +366,7 @@
      "then": {
       "properties": {
        "source": {
-        "$ref": "#/$defs/TreePathSelection"
+        "$ref": "#/$defs/InventorySource"
        }
       }
      }

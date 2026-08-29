@@ -4245,6 +4245,22 @@
         }
       }
     },
+    "ProjectionRecordSetSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "set"
+      ],
+      "properties": {
+        "kind": {
+          "const": "record-set"
+        },
+        "set": {
+          "$ref": "#/$defs/ArtifactId"
+        }
+      }
+    },
     "ProjectionCodeTextSource": {
       "oneOf": [
         {
@@ -4255,6 +4271,16 @@
         },
         {
           "$ref": "#/$defs/ProjectionRecordValueSource"
+        }
+      ]
+    },
+    "ProjectionInventorySource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProjectionTreePathSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionRecordSetSource"
         }
       ]
     },
@@ -4271,6 +4297,9 @@
         },
         {
           "$ref": "#/$defs/ProjectionRecordValueSource"
+        },
+        {
+          "$ref": "#/$defs/ProjectionRecordSetSource"
         }
       ]
     },
@@ -4419,6 +4448,7 @@
             "source-tree-path-not-utf8",
             "source-tree-path-not-a-row",
             "source-record-set-absent",
+            "source-record-set-incomplete",
             "source-record-absent",
             "source-record-unproven",
             "content-differs"
@@ -4510,7 +4540,7 @@
           "then": {
             "properties": {
               "source": {
-                "$ref": "#/$defs/ProjectionTreePathSource"
+                "$ref": "#/$defs/ProjectionInventorySource"
               }
             }
           }
