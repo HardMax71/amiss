@@ -89,6 +89,13 @@ jobs:
           AMISS_SIMILARITY_CURRENT_TREE: ${{ steps.similarity.outputs.current_tree }}
           AMISS_SIMILARITY_POLICY: ${{ steps.similarity.outputs.policy }}
           SKIP: nextest
+      - run: rustup toolchain install nightly-2026-08-28 --profile minimal
+      - run: >-
+          cargo test -p amiss-api
+          normalize::tests::real::rustdoc_keeps_public_records_stable_across_unrelated_items
+          --locked -- --ignored --exact
+        env:
+          AMISS_RUSTDOC_TOOLCHAIN: nightly-2026-08-28
       - id: current-similarity-cache
         name: Find the current similarity manifest
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

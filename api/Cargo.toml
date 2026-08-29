@@ -22,5 +22,8 @@ thiserror.workspace = true
 trustfall.workspace = true
 trustfall-rustdoc-adapter.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

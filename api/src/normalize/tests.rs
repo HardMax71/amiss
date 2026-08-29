@@ -9,6 +9,8 @@ use rustdoc_types::{
 
 use super::{Error, FunctionRow, function_declarations, record};
 
+mod real;
+
 fn rustdoc(root_id: u32, function_id: u32, unrelated_id: Option<u32>) -> Vec<u8> {
     let root = Id(root_id);
     let function_item = Id(function_id);
