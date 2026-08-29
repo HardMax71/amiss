@@ -63,6 +63,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
     match contract_name {
         "debt-snapshot" => parse_defect(DebtSnapshot::parse(bytes)),
         "organization-floor" => parse_defect(OrganizationFloor::parse(bytes)),
+        "publication-assessment" => parse_defect(amiss_wire::publication::parse_assessment(bytes)),
         "publication-evidence" => parse_defect(amiss_wire::publication::parse_evidence(bytes)),
         "publication-plan" => parse_defect(amiss_wire::publication::parse_plan(bytes)),
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
