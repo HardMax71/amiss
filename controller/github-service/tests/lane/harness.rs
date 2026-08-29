@@ -245,7 +245,11 @@ fn provider_setup(
 ) -> ProviderSetup {
     let provider = provider();
     let route = route(&provider);
-    let source = Arc::new(GitHubPullRequestSource::new(provider.clone(), webhook()));
+    let source = Arc::new(GitHubPullRequestSource::new(
+        provider.clone(),
+        webhook(),
+        &plan.policy.workflow_artifacts,
+    ));
     let event = SignedEvent::new(&repositories.commits.candidate, SECRET);
     let delivery = event.delivery(&route, ingress, &source);
     let mut current = snapshot(

@@ -13,15 +13,18 @@ use amiss_controller::{
     ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook, IngressCheck,
     IngressLimits, IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError,
     ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, Publication,
-    ReplayWindow, RunIdentity, RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey,
-    WebhookKeyring,
+    ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
+    UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{
+    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
+};
 use hmac::{Hmac, KeyInit as _, Mac as _};
+use serde_json::json;
 use sha2::Sha256;
 
 const NOW: i64 = 1_800_000_000_000;
@@ -252,6 +255,101 @@ fn signed_target_must_belong_to_the_configured_lane() {
         authenticate_target(&source, BODY, &release),
         Err(ProviderError::AuthorizationRevoked)
     );
+}
+
+#[test]
+fn configured_workflow_completion_reproduces_the_pull_request_run() {
+    let completion_source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let pull_request = authenticate_target(&source(), BODY, &target)
+        .unwrap()
+        .unwrap();
+    let body = serde_json::to_vec(&workflow_payload()).unwrap();
+    let completion = authenticate_target(&completion_source, &body, &target)
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(completion.delivery().change, pull_request.delivery().change);
+    assert_eq!(
+        completion.delivery().provider_run,
+        pull_request.delivery().provider_run
+    );
+    assert_eq!(
+        authenticate_target(&completion_source, BODY, &target),
+        Ok(None)
+    );
+
+    let numeric = GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]);
+    assert!(matches!(
+        authenticate_target(&numeric, &body, &target),
+        Ok(Some(_))
+    ));
+}
+
+#[test]
+fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
+    let source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    for (pointer, value) in [
+        ("/action", json!("in_progress")),
+        ("/workflow/path", json!(".github/workflows/other.yml")),
+        ("/workflow_run/conclusion", json!("failure")),
+        ("/workflow_run/pull_requests", json!([])),
+    ] {
+        let mut payload = workflow_payload();
+        *payload.pointer_mut(pointer).unwrap() = value;
+        let body = serde_json::to_vec(&payload).unwrap();
+        assert_eq!(
+            authenticate_target(&source, &body, &target),
+            Ok(None),
+            "{pointer}"
+        );
+    }
+    let check_run =
+        br#"{"action":"completed","check_run":{"id":89721586894},"installation":{"id":7}}"#;
+    assert_eq!(authenticate_target(&source, check_run, &target), Ok(None));
+
+    let other_target = BranchRef::new("refs/heads/release".to_owned()).unwrap();
+    let body = serde_json::to_vec(&workflow_payload()).unwrap();
+    assert_eq!(
+        authenticate_target(&source, &body, &other_target),
+        Err(ProviderError::AuthorizationRevoked)
+    );
+}
+
+#[test]
+fn contradictory_configured_completion_fields_fail_authentication() {
+    let source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    for (pointer, value) in [
+        ("/workflow/id", json!(999)),
+        ("/workflow_run/status", json!("in_progress")),
+        ("/workflow_run/run_attempt", json!(0)),
+        ("/workflow_run/head_sha", json!("f".repeat(40))),
+        ("/workflow_run/repository/full_name", json!("other/widget")),
+        ("/workflow_run/pull_requests/0/head/repo/id", json!(999)),
+    ] {
+        let mut payload = workflow_payload();
+        *payload.pointer_mut(pointer).unwrap() = value;
+        let body = serde_json::to_vec(&payload).unwrap();
+        assert_eq!(
+            authenticate_target(&source, &body, &target),
+            Err(ProviderError::Authentication),
+            "{pointer}"
+        );
+    }
 }
 
 #[test]
@@ -606,7 +704,88 @@ fn adapter(api: FakeApi) -> GitHubPullRequestAdapter<FakeApi> {
 }
 
 fn source() -> GitHubPullRequestSource {
-    GitHubPullRequestSource::new(provider(), webhook())
+    GitHubPullRequestSource::new(provider(), webhook(), &[])
+}
+
+fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
+    WorkflowArtifactExpectation {
+        provider: provider(),
+        repository: RepositoryIdentity::new(
+            "github.com".to_owned(),
+            "hardmax71".to_owned(),
+            "widget".to_owned(),
+        )
+        .unwrap(),
+        workflow_identity: OpaqueId::new(workflow_identity.to_owned()).unwrap(),
+        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        artifact_name: "amiss-semantic-evidence".to_owned(),
+        payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
+        archive_byte_limit: 1_048_576,
+        file_byte_limit: 524_288,
+        semantic: SemanticEvidenceExpectation {
+            acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
+            producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            producer_identity: ArtifactId::new("docs-site".to_owned()).unwrap(),
+            producer_version: "0.5.1".to_owned(),
+            context_digest: hb("amiss/test-workflow-completion", b"context"),
+        },
+    }
+}
+
+fn workflow_payload() -> serde_json::Value {
+    let repository = json!({
+        "id": 101,
+        "name": "widget",
+        "full_name": "HardMax71/widget",
+        "owner": {"login": "HardMax71"}
+    });
+    json!({
+        "action": "completed",
+        "installation": {"id": 7},
+        "repository": repository,
+        "workflow": {
+            "id": 321,
+            "path": ".github/workflows/docs-evidence.yml"
+        },
+        "workflow_run": {
+            "id": 9001,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
+            "workflow_id": 321,
+            "run_attempt": 2,
+            "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "repository": repository,
+            "head_repository": {
+                "id": 202,
+                "name": "widget",
+                "full_name": "Contributor/widget",
+                "owner": {"login": "Contributor"}
+            },
+            "pull_requests": [{
+                "id": 4201,
+                "number": 42,
+                "head": {
+                    "ref": "topic",
+                    "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "repo": {
+                        "id": 202,
+                        "name": "widget",
+                        "url": "https://api.github.com/repos/Contributor/widget"
+                    }
+                },
+                "base": {
+                    "ref": "main",
+                    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "repo": {
+                        "id": 101,
+                        "name": "widget",
+                        "url": "https://api.github.com/repos/HardMax71/widget"
+                    }
+                }
+            }]
+        }
+    })
 }
 
 fn webhook() -> GitHubWebhook {

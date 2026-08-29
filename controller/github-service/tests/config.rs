@@ -166,6 +166,53 @@ fn workflow_artifacts_are_github_plan_inputs() {
 }
 
 #[test]
+fn workflow_artifacts_share_one_completion_trigger() {
+    for (pointer, value) in [
+        ("/workflow_identity", json!("other.yml")),
+        ("/event", json!("workflow_dispatch")),
+    ] {
+        let mut fixture = Fixture::new();
+        let first = workflow_artifact();
+        let mut second = workflow_artifact();
+        *second.pointer_mut("/artifact_name").unwrap() = json!("other-evidence");
+        *second
+            .pointer_mut("/semantic/acquisition_identity")
+            .unwrap() = json!("other-docs-evidence");
+        *second.pointer_mut(pointer).unwrap() = value;
+        fixture
+            .field("/plan")
+            .as_object_mut()
+            .unwrap()
+            .insert("workflow_artifacts".to_owned(), json!([first, second]));
+        fixture.save();
+
+        assert_eq!(
+            ServiceConfig::load(&fixture.config)
+                .err()
+                .unwrap()
+                .to_string(),
+            "workflow artifacts must use one completion trigger",
+            "{pointer}"
+        );
+    }
+
+    let mut fixture = Fixture::new();
+    let first = workflow_artifact();
+    let mut second = workflow_artifact();
+    *second.pointer_mut("/artifact_name").unwrap() = json!("other-evidence");
+    *second
+        .pointer_mut("/semantic/acquisition_identity")
+        .unwrap() = json!("other-docs-evidence");
+    fixture
+        .field("/plan")
+        .as_object_mut()
+        .unwrap()
+        .insert("workflow_artifacts".to_owned(), json!([first, second]));
+    fixture.save();
+    ServiceConfig::load(&fixture.config).unwrap();
+}
+
+#[test]
 fn execution_constraint_must_target_the_host() {
     let fixture = Fixture::new();
     fixture.save();

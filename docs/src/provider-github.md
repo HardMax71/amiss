@@ -83,17 +83,19 @@ repository permissions:
 | Checks | Read and write | Read and create the App-owned Check Run. |
 | Commit statuses | Read and write | Make the App available as the selected source when configuring the required status. |
 
-Subscribe the App to the `pull_request` webhook event, set a strong webhook secret, and grant
-the installation access to the configured repository. The pinned action repository must be on
-the same provider instance. If it is another private repository, that installation must be able
-to read it too. GHES operators must therefore mirror and pin the action on their GHES instance;
-the lane will not cross from GHES to `github.com` for runtime code. The service does not need
-repository Administration permission: it reads the effective rule and refuses when the expected
-rule is absent.
+Subscribe the App to the `pull_request` and
+[`workflow_run`](https://docs.github.com/en/webhooks/webhook-events-and-payloads#workflow_run)
+webhook events, set a strong webhook secret, and grant the installation access to the configured
+repository. The pinned action repository must be on the same provider instance. If it is another
+private repository, that installation must be able to read it too. GHES operators must therefore
+mirror and pin the action on their GHES instance; the lane will not cross from GHES to `github.com`
+for runtime code. The service does not need repository Administration permission: it reads the
+effective rule and refuses when the expected rule is absent.
 
 GitHub automatically subscribes Apps with Checks write access to [`check_run` and `check_suite`
 events](https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_run). The lane
-authenticates those deliveries and returns `202` without queueing work.
+authenticates those deliveries and returns `202` without queueing work. It also returns no work
+for workflow runs outside the configured producer and for configured runs that did not succeed.
 
 Create an active branch ruleset for the configured target branch. Enable strict required checks,
 so GitHub requires the pull request to be up to date with that branch. Add a required status check
@@ -235,10 +237,16 @@ protected target of every run.
 
 `workflow_artifacts` defaults to an empty list. Each row becomes part of the plan digest and uses
 the configured provider and repository; neither is accepted again inside the row. The workflow
-identity is a workflow file name or numeric GitHub workflow ID. The event, case-sensitive artifact
-name, sole ZIP member, acquisition identity, producer contract, context digest, and both byte
-limits must reproduce the producer exactly. Archive and payload limits are positive and capped at
-32 MiB and 16 MiB respectively. Acquisition requires exactly one completed successful run for the
+identity is a workflow file name or numeric GitHub workflow ID. All rows use the same workflow and
+event, so one successful completion proves that every planned artifact can exist before evaluation
+starts. While this list is nonempty, the earlier pull-request webhook is authenticated no-work
+rather than an acquisition that races the build. The completion's signed payload must name exactly
+one pull request and reproduce the configured base repository, installation, target branch,
+candidate SHA and ref. Exact redelivery is deduplicated; unrelated checks and workflows never enter
+the inbox. The case-sensitive artifact name, sole ZIP member, acquisition identity, producer
+contract, context digest, and both byte limits must reproduce the producer exactly. Archive and
+payload limits are positive and capped at 32 MiB and 16 MiB respectively. Acquisition requires
+exactly one completed successful run for the
 authenticated candidate SHA and exactly one unexpired artifact whose linked run and repository
 metadata, declared size, and SHA-256 digest all agree. The signed download URL receives no App
 credential and may redirect no further.
