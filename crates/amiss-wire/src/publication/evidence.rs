@@ -4,9 +4,9 @@ use crate::digest::Digest;
 use crate::json::Value;
 
 use super::{
-    CompletedSite, DocsCandidate, PublicationProducer, PublicationResource, PublicationTarget,
-    decode_facts, decode_resource, docs_value, envelope, parse_envelope, producer_value,
-    resource_value, site_value, target_value,
+    CompletedSite, DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationProducer,
+    PublicationResource, PublicationTarget, decode_facts, decode_resource, docs_value,
+    producer_value, resource_value, site_value, target_value,
 };
 
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/publication-evidence-envelope";
@@ -44,10 +44,11 @@ pub struct PublicationDeployment {
 /// identity or resource, a non-success outcome, an unsafe run attempt, or a
 /// payload digest mismatch.
 pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error> {
-    let (payload, payload_digest) = parse_envelope(
+    let (payload, payload_digest) = crate::bounded_envelope::parse(
         bytes,
         EVIDENCE_ENVELOPE_SCHEMA,
         EVIDENCE_PAYLOAD_SCHEMA,
+        PUBLICATION_DOCUMENT_BYTES,
         decode_evidence,
     )?;
     Ok(PublicationEvidenceEnvelope {
@@ -65,7 +66,12 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
 pub fn evidence(input: &PublicationEvidence) -> Result<Value, Error> {
     let payload = evidence_value(input)?;
     let _validated = decode_evidence("$.payload", payload.clone())?;
-    envelope(payload, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA)
+    crate::bounded_envelope::build(
+        payload,
+        EVIDENCE_ENVELOPE_SCHEMA,
+        EVIDENCE_PAYLOAD_SCHEMA,
+        PUBLICATION_DOCUMENT_BYTES,
+    )
 }
 
 fn decode_evidence(path: &str, value: Value) -> Result<PublicationEvidence, Error> {

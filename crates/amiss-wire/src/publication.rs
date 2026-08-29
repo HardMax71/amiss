@@ -1,8 +1,8 @@
 use crate::controls::value::{object, repository, text};
 use crate::controls::{decode_enum, decode_repository};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
-use crate::json::{self, Value, canonical_length};
+use crate::digest::Digest;
+use crate::json::Value;
 use crate::model::{ArtifactId, Oid, RepositoryIdentity};
 
 mod assessment;
@@ -96,10 +96,11 @@ struct PublicationFacts {
 /// Fails on oversized or malformed strict JSON, an unknown field, an invalid
 /// identity or URI, inconsistent Git object formats, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
-    let (payload, payload_digest) = parse_envelope(
+    let (payload, payload_digest) = crate::bounded_envelope::parse(
         bytes,
         PLAN_ENVELOPE_SCHEMA,
         PLAN_PAYLOAD_SCHEMA,
+        PUBLICATION_DOCUMENT_BYTES,
         decode_plan,
     )?;
     Ok(PublicationPlanEnvelope {
@@ -117,44 +118,12 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
 pub fn plan(input: &PublicationPlan) -> Result<Value, Error> {
     let payload = plan_value(input);
     let _validated = decode_plan("$.payload", payload.clone())?;
-    envelope(payload, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA)
-}
-
-fn parse_envelope<T>(
-    bytes: &[u8],
-    envelope_schema: &str,
-    payload_schema: &str,
-    decode: impl FnOnce(&str, Value) -> Result<T, Error>,
-) -> Result<(T, Digest), Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let value = json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let mut envelope = Obj::new("$", value)?;
-    envelope.required("schema", |path, value| {
-        de::const_str(path, value, envelope_schema)
-    })?;
-    let payload = envelope.take("payload")?;
-    let payload_digest = envelope.required("payload_digest", de::digest)?;
-    envelope.finish()?;
-    if hj(payload_schema, &payload) != payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
-    }
-    Ok((decode("$.payload", payload)?, payload_digest))
-}
-
-fn envelope(payload: Value, envelope_schema: &str, payload_schema: &str) -> Result<Value, Error> {
-    let payload_digest = hj(payload_schema, &payload);
-    let value = object(vec![
-        ("schema", text(envelope_schema)),
-        ("payload", payload),
-        ("payload_digest", text(&payload_digest.to_string())),
-    ]);
-    if canonical_length(&value) > PUBLICATION_DOCUMENT_BYTES {
-        fail("$", ErrorKind::LimitExceeded)
-    } else {
-        Ok(value)
-    }
+    crate::bounded_envelope::build(
+        payload,
+        PLAN_ENVELOPE_SCHEMA,
+        PLAN_PAYLOAD_SCHEMA,
+        PUBLICATION_DOCUMENT_BYTES,
+    )
 }
 
 fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
@@ -187,31 +156,7 @@ fn decode_plan(path: &str, value: Value) -> Result<PublicationPlan, Error> {
 }
 
 fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
-    let docs = parent.required("docs", |path, value| {
-        let mut docs = Obj::new(path, value)?;
-        let repository = docs.required("repository", decode_repository)?;
-        let object_format = docs.required("object_format", decode_enum)?;
-        let commit_path = docs.field("commit_oid");
-        let commit = Oid::new(
-            object_format,
-            de::string(&commit_path, docs.take("commit_oid")?)?,
-        )
-        .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
-        let tree_path = docs.field("tree_oid");
-        let tree = Oid::new(
-            object_format,
-            de::string(&tree_path, docs.take("tree_oid")?)?,
-        )
-        .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
-        let candidate_identity_digest = docs.required("candidate_identity_digest", de::digest)?;
-        docs.finish()?;
-        Ok(DocsCandidate {
-            repository,
-            commit,
-            tree,
-            candidate_identity_digest,
-        })
-    })?;
+    let docs = parent.required("docs", decode_docs)?;
     let target = parent.required("target", |path, value| {
         let mut target = Obj::new(path, value)?;
         let provider = target.required("provider", decode_identity)?;
@@ -264,6 +209,32 @@ fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
         target,
         site,
         product,
+    })
+}
+
+pub(crate) fn decode_docs(path: &str, value: Value) -> Result<DocsCandidate, Error> {
+    let mut docs = Obj::new(path, value)?;
+    let repository = docs.required("repository", decode_repository)?;
+    let object_format = docs.required("object_format", decode_enum)?;
+    let commit_path = docs.field("commit_oid");
+    let commit = Oid::new(
+        object_format,
+        de::string(&commit_path, docs.take("commit_oid")?)?,
+    )
+    .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
+    let tree_path = docs.field("tree_oid");
+    let tree = Oid::new(
+        object_format,
+        de::string(&tree_path, docs.take("tree_oid")?)?,
+    )
+    .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
+    let candidate_identity_digest = docs.required("candidate_identity_digest", de::digest)?;
+    docs.finish()?;
+    Ok(DocsCandidate {
+        repository,
+        commit,
+        tree,
+        candidate_identity_digest,
     })
 }
 
@@ -360,7 +331,7 @@ fn plan_value(plan: &PublicationPlan) -> Value {
     ])
 }
 
-fn docs_value(docs: &DocsCandidate) -> Value {
+pub(crate) fn docs_value(docs: &DocsCandidate) -> Value {
     object(vec![
         ("repository", repository(&docs.repository)),
         ("object_format", text(docs.commit.object_format().as_ref())),

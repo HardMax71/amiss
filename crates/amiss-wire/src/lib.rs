@@ -1,4 +1,5 @@
 pub mod action;
+mod bounded_envelope;
 pub mod controls;
 pub mod de;
 pub mod digest;

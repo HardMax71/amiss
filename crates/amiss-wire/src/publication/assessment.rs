@@ -9,7 +9,7 @@ use crate::digest::Digest;
 use crate::json::Value;
 
 use super::evidence::{PublicationEvidenceEnvelope, evidence as build_evidence};
-use super::{PublicationPlanEnvelope, envelope, parse_envelope, plan as build_plan};
+use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan as build_plan};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/publication-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/publication-assessment-payload";
@@ -59,10 +59,11 @@ pub struct PublicationAssessment {
 /// engine identity, unsorted reasons, an inconsistent verdict, or a payload
 /// digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, Error> {
-    let (payload, payload_digest) = parse_envelope(
+    let (payload, payload_digest) = crate::bounded_envelope::parse(
         bytes,
         ASSESSMENT_ENVELOPE_SCHEMA,
         ASSESSMENT_PAYLOAD_SCHEMA,
+        PUBLICATION_DOCUMENT_BYTES,
         decode_assessment,
     )?;
     Ok(PublicationAssessmentEnvelope {
@@ -153,10 +154,11 @@ pub fn assess(
     };
     let payload = assessment_value(&assessment);
     let _validated = decode_assessment("$.payload", payload.clone())?;
-    envelope(
+    crate::bounded_envelope::build(
         payload,
         ASSESSMENT_ENVELOPE_SCHEMA,
         ASSESSMENT_PAYLOAD_SCHEMA,
+        PUBLICATION_DOCUMENT_BYTES,
     )
 }
 
