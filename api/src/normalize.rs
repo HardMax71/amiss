@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, btree_map::Entry};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::Deserialize as _;
@@ -7,17 +7,67 @@ use trustfall_rustdoc_adapter::{PackageIndex, RustdocAdapter};
 
 pub(crate) const RUSTDOC_BYTES: u64 = 33_554_432;
 
-const PATH_QUERY: &str = r#"
+const FREE_FUNCTION_QUERY: &str = r#"
 {
     Crate {
         item {
             ... on Function {
                 crate_id @filter(op: "=", value: ["$local_crate"])
+                visibility_limit @filter(op: "=", value: ["$public"])
                 name @output
                 signature @output
                 importable_path {
                     path @output
                     public_api @filter(op: "=", value: ["$true"])
+                }
+            }
+        }
+    }
+}
+"#;
+
+const INHERENT_FUNCTION_QUERY: &str = r#"
+{
+    Crate {
+        item {
+            ... on ImplOwner {
+                crate_id @filter(op: "=", value: ["$local_crate"])
+                visibility_limit @filter(op: "=", value: ["$public"])
+                importable_path {
+                    path @output
+                    public_api @filter(op: "=", value: ["$true"])
+                }
+                inherent_impl {
+                    method {
+                        crate_id @filter(op: "=", value: ["$local_crate"])
+                        visibility_limit @filter(op: "=", value: ["$public"])
+                        public_api_eligible @filter(op: "=", value: ["$true"])
+                        name @output
+                        signature @output
+                    }
+                }
+            }
+        }
+    }
+}
+"#;
+
+const TRAIT_FUNCTION_QUERY: &str = r#"
+{
+    Crate {
+        item {
+            ... on Trait {
+                crate_id @filter(op: "=", value: ["$local_crate"])
+                visibility_limit @filter(op: "=", value: ["$public"])
+                importable_path {
+                    path @output
+                    public_api @filter(op: "=", value: ["$true"])
+                }
+                method {
+                    crate_id @filter(op: "=", value: ["$local_crate"])
+                    public_api_eligible @filter(op: "=", value: ["$true"])
+                    name @output
+                    signature @output
                 }
             }
         }
@@ -38,9 +88,9 @@ pub(crate) enum Error {
     Format,
     #[error("the Rustdoc target does not match the producer context")]
     Target,
-    #[error("the public free-function records cannot be queried: {0}")]
+    #[error("the public function records cannot be queried: {0}")]
     Query(String),
-    #[error("a public free function has no unique canonical path/signature pair")]
+    #[error("a public function cannot be assigned a unique canonical record")]
     Ambiguous,
     #[error("the normalized record set exceeds the semantic evidence contract")]
     Evidence,
@@ -53,7 +103,7 @@ struct FunctionRow {
     signature: String,
 }
 
-pub(crate) fn free_functions(
+pub(crate) fn function_declarations(
     bytes: &[u8],
     expected_format: u32,
     expected_target: &str,
@@ -77,32 +127,38 @@ pub(crate) fn free_functions(
 
     let index = PackageIndex::from_crate(&crate_);
     let adapter = RustdocAdapter::new(&index, None);
-    let rows = trustfall::execute_query(
-        RustdocAdapter::schema(),
-        Arc::new(&adapter),
-        PATH_QUERY,
-        BTreeMap::from([
-            ("local_crate", FieldValue::Uint64(local_crate)),
-            ("true", FieldValue::Boolean(true)),
-        ]),
-    )
-    .map_err(|error| Error::Query(error.to_string()))?
-    .map(|row| {
-        row.try_into_struct::<FunctionRow>()
-            .map_err(|error| Error::Query(error.to_string()))
-    });
+    let adapter = Arc::new(&adapter);
     let mut records = BTreeMap::new();
-    for row in rows {
-        let row = row?;
-        let (key, value) = record(&row)?;
-        match records.entry(key) {
-            Entry::Occupied(_entry) => return Err(Error::Ambiguous),
-            Entry::Vacant(entry) => {
-                entry.insert(value);
+    for (prefix, query, append_name) in [
+        ("fn", FREE_FUNCTION_QUERY, false),
+        ("inherent-fn", INHERENT_FUNCTION_QUERY, true),
+        ("trait-fn", TRAIT_FUNCTION_QUERY, true),
+    ] {
+        let rows = trustfall::execute_query(
+            RustdocAdapter::schema(),
+            adapter.clone(),
+            query,
+            BTreeMap::from([
+                ("local_crate", FieldValue::Uint64(local_crate)),
+                ("public", FieldValue::String("public".into())),
+                ("true", FieldValue::Boolean(true)),
+            ]),
+        )
+        .map_err(|error| Error::Query(error.to_string()))?;
+        for row in rows {
+            let mut row = row
+                .try_into_struct::<FunctionRow>()
+                .map_err(|error| Error::Query(error.to_string()))?;
+            if append_name {
+                row.path.push(row.name.clone());
             }
-        }
-        if records.len() > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
-            return Err(Error::Evidence);
+            let (key, value) = record(&row, prefix)?;
+            if records.insert(key, value).is_some() {
+                return Err(Error::Ambiguous);
+            }
+            if records.len() > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
+                return Err(Error::Evidence);
+            }
         }
     }
     Ok(Normalized {
@@ -111,7 +167,7 @@ pub(crate) fn free_functions(
     })
 }
 
-fn record(row: &FunctionRow) -> Result<(String, String), Error> {
+fn record(row: &FunctionRow, prefix: &str) -> Result<(String, String), Error> {
     if row.path.is_empty()
         || row
             .path
@@ -135,7 +191,7 @@ fn record(row: &FunctionRow) -> Result<(String, String), Error> {
     if qualifiers.contains("fn ") || signature.starts_with("pub ") {
         return Err(Error::Ambiguous);
     }
-    let key = format!("fn/{path}");
+    let key = format!("{prefix}/{path}");
     let value = format!("pub {qualifiers}fn {path}{suffix}");
     if key.len() > amiss_wire::semantic::RECORD_KEY_BYTES
         || value.len() > amiss_wire::semantic::RECORD_VALUE_BYTES
