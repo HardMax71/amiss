@@ -113,6 +113,16 @@ fn fixture(with_governed: bool) -> amiss_fixtures::CommitPair {
 fn every_command_leaves_the_repository_byte_identical() {
     let fx = fixture(true);
     let root = fx.root();
+    let record_input_path = root.join("record-set.json");
+    assert!(
+        fs::write(
+            &record_input_path,
+            r#"{"schema":"amiss/record-set-input","producer_identity":"test","context_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","input_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","complete":true,"name":"test/records","records":[]}"#,
+        )
+        .is_ok(),
+        "write record-set input"
+    );
+    let record_input = amiss_fixtures::path_arg(&record_input_path);
     let before = snapshot(root);
 
     let runs: Vec<Vec<&str>> = vec![
@@ -187,6 +197,7 @@ fn every_command_leaves_the_repository_byte_identical() {
             "sha1",
             "--index",
         ],
+        vec!["record-set", "--evidence", &record_input],
     ];
     for args in runs {
         let (code, _stdout) = amiss(&args);

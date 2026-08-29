@@ -159,6 +159,38 @@ fn semantic_templates_are_check_only_and_singular() {
 }
 
 #[test]
+fn record_set_authoring_accepts_only_one_evidence_path() {
+    let Outcome::Accepted(command) = parse(&argv(&["record-set", "--evidence", "public-api.json"]))
+    else {
+        panic!("expected record-set acceptance");
+    };
+    let crate::invocation::Command::RecordSet(invocation) = *command else {
+        panic!("expected a record-set command");
+    };
+    assert_eq!(invocation.input, std::path::Path::new("public-api.json"));
+
+    for rejected in [
+        argv(&["record-set"]),
+        argv(&["record-set", "--evidence", ""]),
+        argv(&["record-set", "--evidence", "a.json", "--evidence", "b.json"]),
+        argv(&[
+            "record-set",
+            "--evidence",
+            "public-api.json",
+            "--format",
+            "human",
+        ]),
+        argv(&["record-set", "--evidence", "public-api.json", "--repo", "."]),
+    ] {
+        assert_eq!(
+            rejected_codes(parse(&rejected)),
+            vec![Code::InvalidInvocation],
+            "tokens {rejected:?}"
+        );
+    }
+}
+
+#[test]
 fn accepts_index_mode_with_identity_and_flags() {
     let mut tokens = valid_pair();
     let candidate_at = tokens

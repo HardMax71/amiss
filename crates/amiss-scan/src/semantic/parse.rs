@@ -17,8 +17,6 @@ const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
 const SITE_BUILD_VERSION: &str = "0.5.1";
-const RECORD_SET_PRODUCER: &str = "record-set";
-const RECORD_SET_VERSION: &str = "1";
 
 pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
@@ -94,8 +92,8 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
                 inputs.site =
                     site_build_inputs(&mut inputs.routes, &path, observations, &mut site_items)?;
             }
-            RECORD_SET_PRODUCER => {
-                if producer_version != RECORD_SET_VERSION {
+            amiss_wire::semantic::record::PRODUCER_KIND => {
+                if producer_version != amiss_wire::semantic::record::PRODUCER_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
                         ErrorKind::InvalidValue,

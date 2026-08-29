@@ -7,6 +7,8 @@ use crate::digest::{Digest, hj};
 use crate::json::{self, Value, canonical, canonical_length};
 use crate::model::ArtifactId;
 
+pub mod record;
+
 pub const ENVELOPE_SCHEMA: &str = "amiss/semantic-evidence-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/semantic-evidence-payload";
 pub const TEMPLATE_SCHEMA: &str = "amiss/semantic-evidence-template";
@@ -139,6 +141,36 @@ pub fn bind_template(
     })
 }
 
+/// Builds the unique candidate-independent value for one semantic evidence template.
+/// Observation order is canonicalized before the value is emitted.
+///
+/// # Errors
+///
+/// Fails when producer metadata or an observation violates the same bounds [`parse_template`]
+/// enforces, when observations repeat, or when the resulting template exceeds the byte ceiling.
+pub fn template(input: SemanticEvidenceTemplate) -> Result<Value, Error> {
+    if !producer_version_valid(&input.producer_version) {
+        return fail("$.producer.version", ErrorKind::InvalidValue);
+    }
+    let observations =
+        ordered_observations("$.observations", input.observations.as_ref().to_vec())?;
+    let producer = Producer {
+        kind: input.producer_kind,
+        identity: input.producer_identity,
+        version: input.producer_version,
+        context_digest: input.context_digest,
+        input_digest: input.input_digest,
+    };
+    let mut members = vec![("schema", text(TEMPLATE_SCHEMA))];
+    members.extend(semantic_body(&producer, input.complete, observations));
+    let value = object(members);
+    if canonical_length(&value) > SEMANTIC_EVIDENCE_BYTES {
+        fail("$", ErrorKind::LimitExceeded)
+    } else {
+        Ok(value)
+    }
+}
+
 /// Builds the unique digest-bound value for one semantic evidence payload.
 /// Observation order is canonicalized, so traversal order cannot change its identity.
 ///
@@ -150,7 +182,7 @@ pub fn envelope(mut evidence: SemanticEvidence) -> Result<Value, Error> {
     if !producer_version_valid(&evidence.producer_version) {
         return fail("$.payload.producer.version", ErrorKind::InvalidValue);
     }
-    evidence.observations = ordered_observations(evidence.observations)?;
+    evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
     let payload = payload_value(evidence);
     let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
     let value = object(vec![
@@ -270,17 +302,17 @@ fn validate_observation(path: &str, observation: &Value) -> Result<(), Error> {
     Ok(())
 }
 
-fn ordered_observations(observations: Vec<Value>) -> Result<Vec<Value>, Error> {
+fn ordered_observations(path: &str, observations: Vec<Value>) -> Result<Vec<Value>, Error> {
     if observations.len() > SEMANTIC_OBSERVATIONS_LIMIT {
-        return fail("$.payload.observations", ErrorKind::LimitExceeded);
+        return fail(path, ErrorKind::LimitExceeded);
     }
     let mut keyed = Vec::with_capacity(observations.len());
     for (index, observation) in observations.into_iter().enumerate() {
-        let path = format!("$.payload.observations[{index}]");
+        let item_path = format!("{path}[{index}]");
         let encoded = canonical(&observation);
-        let observation =
-            json::parse(&encoded).map_err(|error| Error::new(&path, ErrorKind::Json(error)))?;
-        validate_observation(&path, &observation)?;
+        let observation = json::parse(&encoded)
+            .map_err(|error| Error::new(&item_path, ErrorKind::Json(error)))?;
+        validate_observation(&item_path, &observation)?;
         keyed.push((encoded, observation));
     }
     keyed.sort_by(|left, right| left.0.cmp(&right.0));
@@ -288,7 +320,7 @@ fn ordered_observations(observations: Vec<Value>) -> Result<Vec<Value>, Error> {
         .windows(2)
         .any(|pair| matches!(pair, [left, right] if left.0 == right.0))
     {
-        return fail("$.payload.observations", ErrorKind::DuplicateMember);
+        return fail(path, ErrorKind::DuplicateMember);
     }
     Ok(keyed.into_iter().map(|(_, value)| value).collect())
 }
@@ -305,7 +337,14 @@ fn payload_value(evidence: SemanticEvidence) -> Value {
         complete,
         observations,
     } = evidence;
-    object(vec![
+    let producer = Producer {
+        kind: producer_kind,
+        identity: producer_identity,
+        version: producer_version,
+        context_digest,
+        input_digest,
+    };
+    let mut members = vec![
         ("schema", text(PAYLOAD_SCHEMA)),
         (
             "subject",
@@ -321,14 +360,25 @@ fn payload_value(evidence: SemanticEvidence) -> Value {
                 ),
             ]),
         ),
+    ];
+    members.extend(semantic_body(&producer, complete, observations));
+    object(members)
+}
+
+fn semantic_body(
+    producer: &Producer,
+    complete: bool,
+    observations: Vec<Value>,
+) -> Vec<(&'static str, Value)> {
+    vec![
         (
             "producer",
             object(vec![
-                ("kind", text(producer_kind.as_str())),
-                ("identity", text(producer_identity.as_str())),
-                ("version", text(&producer_version)),
-                ("context_digest", text(&context_digest.to_string())),
-                ("input_digest", text(&input_digest.to_string())),
+                ("kind", text(producer.kind.as_str())),
+                ("identity", text(producer.identity.as_str())),
+                ("version", text(&producer.version)),
+                ("context_digest", text(&producer.context_digest.to_string())),
+                ("input_digest", text(&producer.input_digest.to_string())),
             ]),
         ),
         ("complete", Value::Bool(complete)),
@@ -336,5 +386,5 @@ fn payload_value(evidence: SemanticEvidence) -> Value {
             "observations",
             Value::Array(observations.into_boxed_slice()),
         ),
-    ])
+    ]
 }

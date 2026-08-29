@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:scanner-record-set-input",
+  "title": "Amiss record-set input",
+  "description": "One specialist-produced normalized record set from which the offline CLI emits a self-asserted semantic template. Producer-defined digests are validated for shape but are not recomputed or authenticated by Amiss.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "complete",
+    "context_digest",
+    "input_digest",
+    "name",
+    "producer_identity",
+    "records",
+    "schema"
+  ],
+  "properties": {
+    "schema": {
+      "const": "amiss/record-set-input"
+    },
+    "producer_identity": {
+      "description": "The stable identity of the specialist that normalized the records.",
+      "$ref": "#/$defs/Identifier"
+    },
+    "context_digest": {
+      "description": "The specialist-defined semantic context digest, including every toolchain, target, feature, or configuration input needed to interpret the rows.",
+      "$ref": "#/$defs/Digest"
+    },
+    "input_digest": {
+      "description": "The specialist-defined digest of every source input needed to justify the records and completeness assertion.",
+      "$ref": "#/$defs/Digest"
+    },
+    "complete": {
+      "description": "Whether the rows form the complete named set for the declared context and input.",
+      "type": "boolean"
+    },
+    "name": {
+      "description": "The stable record-set identity selected by repository projection policy.",
+      "$ref": "#/$defs/Identifier"
+    },
+    "records": {
+      "description": "Rows in strictly increasing key order. Duplicate display values are allowed because keys own identity.",
+      "type": "array",
+      "maxItems": 100000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/Record"
+      }
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "Record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/RecordKey"
+        },
+        "value": {
+          "$ref": "#/$defs/RecordValue"
+        }
+      }
+    },
+    "RecordKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "RecordValue": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 65536,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    }
+  }
+}

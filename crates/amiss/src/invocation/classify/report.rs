@@ -5,8 +5,8 @@ use amiss_wire::model::RepoPath;
 
 use super::super::arguments::{Gathered, Slot};
 use super::super::{
-    AssessInvocation, Code, Command, OutputFormat, PlanInvocation, RefsInvocation,
-    RenderInvocation, Verb,
+    AssessInvocation, Code, Command, OutputFormat, PlanInvocation, RecordSetInvocation,
+    RefsInvocation, RenderInvocation, Verb,
 };
 
 pub(super) fn classify_report_command(
@@ -106,11 +106,36 @@ pub(super) fn classify_report_command(
                 format,
             }))
         }
+        Some(Verb::RecordSet) => classify_record_set(codes, gathered, format),
         Some(Verb::Check | Verb::Fix | Verb::Adopt | Verb::Claim | Verb::PolicyInclude) | None => {
             codes.insert(Code::InvalidInvocation);
             Err(codes)
         }
     }
+}
+
+fn classify_record_set(
+    mut codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<Command, BTreeSet<Code>> {
+    if gathered.format.occurrences > 0 {
+        codes.insert(Code::InvalidInvocation);
+    }
+    let [input] = classify_pure(
+        codes,
+        gathered,
+        format,
+        &[OutputFormat::Human],
+        [&gathered.evidence],
+        &[
+            &gathered.report,
+            &gathered.plan,
+            &gathered.target,
+            &gathered.target_bytes_hex,
+        ],
+    )?;
+    Ok(Command::RecordSet(RecordSetInvocation { input }))
 }
 
 /// The pure-form gate: a report-bound verb reads its own path flags and

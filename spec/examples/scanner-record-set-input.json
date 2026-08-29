@@ -1,0 +1,14 @@
+{
+  "schema": "amiss/record-set-input",
+  "producer_identity": "cargo-public-api",
+  "context_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "input_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "complete": true,
+  "name": "rust/public-api",
+  "records": [
+    {
+      "key": "amiss::check",
+      "value": "pub fn check() -> Result<Report, Error>"
+    }
+  ]
+}
