@@ -149,6 +149,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         locator: format!("https://amiss.example/artifacts/{id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
         report_digest: amiss_wire::digest::sha256(&bytes),
+        semantic_digest: None,
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,

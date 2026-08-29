@@ -265,13 +265,18 @@ pub(super) fn retain_publication(
     policy: crate::ExternalPolicy,
     clock: &dyn ControllerClock,
     mut publication: Publication,
+    semantic_artifact: Option<&[u8]>,
 ) -> Result<Publication, ArtifactError> {
     let report = publication
         .report
         .as_deref()
         .ok_or(ArtifactError::Corrupt)?;
     let artifact = if let Some(reference) = store.find(&publication.evaluation_id)? {
-        if reference.report_digest != amiss_wire::digest::sha256(report) {
+        if reference.report_digest != amiss_wire::digest::sha256(report)
+            || reference.semantic_digest.is_some_and(|digest| {
+                Some(digest) != semantic_artifact.map(amiss_wire::digest::sha256)
+            })
+        {
             return Err(ArtifactError::Conflict);
         }
         store.verify(&reference)?;
@@ -286,6 +291,7 @@ pub(super) fn retain_publication(
             &publication.evaluation_id,
             ArtifactBundle {
                 report,
+                semantic: semantic_artifact,
                 plan: external.plan.as_deref(),
                 evidence: external.evidence.as_deref(),
                 assessment: external.assessment.as_deref(),

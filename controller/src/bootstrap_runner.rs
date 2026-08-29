@@ -113,7 +113,7 @@ pub fn run_bootstrap(
         | BootstrapTermination::Signalled
         | BootstrapTermination::SpawnUnavailable => (None, Vec::new()),
     };
-    classify_bootstrap_result(request, termination, result, report)
+    classify_bootstrap_result(request, termination, result, report, job.semantic_artifact)
 }
 
 fn valid_run(run: &BootstrapRun<'_>) -> bool {

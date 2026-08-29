@@ -115,6 +115,7 @@ fn uses_private_exact_roots_and_controller_time() {
             identity: Box::new(harness.request.run.clone()),
             evaluation: Evaluation::Pass,
             report: PASS_REPORT.to_vec(),
+            semantic_artifact: None,
         }
     );
     assert!(heartbeat.calls >= 2);

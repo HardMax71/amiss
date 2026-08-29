@@ -47,6 +47,7 @@ impl Runner for TestRunner {
             identity: Box::new((self.transform)(request.run.clone())),
             evaluation: Evaluation::Pass,
             report: br#"{"schema":"test-report"}"#.to_vec(),
+            semantic_artifact: None,
         }
     }
 }

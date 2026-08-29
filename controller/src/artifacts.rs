@@ -1,4 +1,5 @@
 mod format;
+mod semantic;
 mod store;
 
 use std::time::Duration;
@@ -27,6 +28,7 @@ pub struct ArtifactStoreConfig {
 #[derive(Clone, Copy)]
 pub struct ArtifactBundle<'a> {
     pub report: &'a [u8],
+    pub semantic: Option<&'a [u8]>,
     pub plan: Option<&'a [u8]>,
     pub evidence: Option<&'a [u8]>,
     pub assessment: Option<&'a [u8]>,
@@ -40,6 +42,7 @@ pub struct ArtifactReference {
     pub locator: String,
     pub expires_at_unix_millis: i64,
     pub report_digest: Digest,
+    pub semantic_digest: Option<Digest>,
     pub assessment_digest: Option<Digest>,
     pub external_tally: Option<ExternalTally>,
     pub external_incomplete: bool,
@@ -48,6 +51,7 @@ pub struct ArtifactReference {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ArtifactComponent {
     Report,
+    Semantic,
     Plan,
     Evidence,
     Assessment,
@@ -108,24 +112,7 @@ const fn route_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~')
 }
 
-pub(crate) fn checked_reference(
-    id: String,
-    locator: String,
-    expires_at_unix_millis: i64,
-    report_digest: Digest,
-    assessment_digest: Option<Digest>,
-    external_tally: Option<ExternalTally>,
-    external_incomplete: bool,
-) -> Option<ArtifactReference> {
-    let reference = ArtifactReference {
-        id,
-        locator,
-        expires_at_unix_millis,
-        report_digest,
-        assessment_digest,
-        external_tally,
-        external_incomplete,
-    };
+pub(crate) fn checked_reference(reference: ArtifactReference) -> Option<ArtifactReference> {
     let suffix = format!("/{}/report", reference.id);
     (format::valid_id(&reference.id)
         && reference

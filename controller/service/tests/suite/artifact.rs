@@ -103,6 +103,7 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
         &ControllerEvaluationId::new("evaluation/http".to_owned()).unwrap(),
         ArtifactBundle {
             report: &report,
+            semantic: None,
             plan: None,
             evidence: None,
             assessment: None,

@@ -38,6 +38,7 @@ fn review_bodies_carry_the_report_feedback_lines() {
         locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
         report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
+        semantic_digest: None,
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,

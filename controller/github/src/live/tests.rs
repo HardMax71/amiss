@@ -966,6 +966,7 @@ fn artifact_reference(report: &[u8]) -> ArtifactReference {
         locator: format!("https://amiss.example/artifacts/{id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
         report_digest: sha256(report),
+        semantic_digest: None,
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,

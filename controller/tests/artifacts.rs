@@ -3,9 +3,13 @@ use std::time::Duration;
 
 use amiss_controller::{
     ArtifactBundle, ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock,
-    ControllerEvaluationId, ExternalTally, FileArtifactStore,
+    ControllerEvaluationId, ExternalTally, FileArtifactStore, SemanticEvidenceTemplate,
+    bind_semantic_evidence,
 };
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_wire::digest::{hb, sha256};
+use amiss_wire::json;
+use amiss_wire::model::ArtifactId;
 
 fn config() -> ArtifactStoreConfig {
     ArtifactStoreConfig {
@@ -32,6 +36,7 @@ fn exact_components_survive_restart_under_one_stable_locator() {
     let assessment = br#"{"schema":"amiss/external-assessment-envelope"}"#;
     let bundle = ArtifactBundle {
         report,
+        semantic: None,
         plan: Some(plan),
         evidence: Some(evidence),
         assessment: Some(assessment),
@@ -76,6 +81,70 @@ fn exact_components_survive_restart_under_one_stable_locator() {
 }
 
 #[test]
+fn semantic_inputs_survive_restart_under_the_report_binding() {
+    let bound = bind_semantic_evidence(
+        &[SemanticEvidenceTemplate {
+            producer_kind: ArtifactId::new("record-set".to_owned()).unwrap(),
+            producer_identity: ArtifactId::new("test-records".to_owned()).unwrap(),
+            producer_version: "1".to_owned(),
+            context_digest: hb("amiss/test-context", b"context"),
+            input_digest: hb("amiss/test-input", b"input"),
+            complete: true,
+            observations: Arc::from([]),
+        }],
+        &[],
+        &[],
+        hb("amiss/test-candidate", b"candidate"),
+    )
+    .unwrap();
+    let payload_digests = bound
+        .supplied
+        .iter()
+        .map(|supplied| {
+            amiss_wire::semantic::parse(&json::canonical(&supplied.value))
+                .unwrap()
+                .payload_digest
+        })
+        .collect::<Vec<_>>();
+    let report = amiss_fixtures::semantic_report(&payload_digests);
+    let semantic = bound.artifact.unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let clock = TestClock::at(1_000);
+    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
+    let store =
+        FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
+            .unwrap();
+    let evaluation = ControllerEvaluationId::new("evaluation/semantic".to_owned()).unwrap();
+    let reference = store
+        .retain(
+            &evaluation,
+            ArtifactBundle {
+                report: &report,
+                semantic: Some(&semantic),
+                plan: None,
+                evidence: None,
+                assessment: None,
+                external_tally: None,
+                external_incomplete: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(reference.semantic_digest, Some(sha256(&semantic)));
+    assert_eq!(
+        store
+            .read(&reference.id, ArtifactComponent::Semantic)
+            .unwrap(),
+        semantic
+    );
+    drop(store);
+
+    let reopened =
+        FileArtifactStore::open_with_clock(root.path(), config(), controller_clock).unwrap();
+    reopened.verify(&reference).unwrap();
+    assert_eq!(reopened.find(&evaluation).unwrap(), Some(reference));
+}
+
+#[test]
 fn expiry_removes_bytes_and_clock_rollback_cannot_restore_them() {
     let root = tempfile::tempdir().unwrap();
     let clock = TestClock::at(1_000);
@@ -89,6 +158,7 @@ fn expiry_removes_bytes_and_clock_rollback_cannot_restore_them() {
             &evaluation,
             ArtifactBundle {
                 report: br#"{"schema":"amiss/report"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,
@@ -124,6 +194,7 @@ fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
             &evaluation,
             ArtifactBundle {
                 report: br#"{"result":"first"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,
@@ -138,6 +209,7 @@ fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
             &evaluation,
             ArtifactBundle {
                 report: br#"{"result":"second"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,
@@ -166,6 +238,7 @@ fn capacity_is_strict_without_eviction() {
             &first,
             ArtifactBundle {
                 report: br#"{"result":"first"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,
@@ -180,6 +253,7 @@ fn capacity_is_strict_without_eviction() {
             &second,
             ArtifactBundle {
                 report: br#"{"result":"second"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,
@@ -206,6 +280,7 @@ fn corrupted_payload_prevents_reopening_the_store() {
             &ControllerEvaluationId::new("evaluation/corrupt".to_owned()).unwrap(),
             ArtifactBundle {
                 report: br#"{"result":"exact"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,
@@ -238,6 +313,7 @@ fn one_oversized_record_is_not_misreported_as_recoverable_capacity() {
             &ControllerEvaluationId::new("evaluation/oversized".to_owned()).unwrap(),
             ArtifactBundle {
                 report: br#"{"result":"too-large-for-this-record"}"#,
+                semantic: None,
                 plan: None,
                 evidence: None,
                 assessment: None,

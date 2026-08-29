@@ -76,6 +76,8 @@ pub(super) struct Record {
     pub(super) assessment: Option<Blob>,
     external_tally: Option<ExternalTally>,
     pub(super) external_incomplete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) semantic: Option<Blob>,
 }
 
 pub(super) struct RecordInput {
@@ -85,6 +87,7 @@ pub(super) struct RecordInput {
     pub(super) assessment: Option<Blob>,
     pub(super) external_tally: Option<ExternalTally>,
     pub(super) external_incomplete: bool,
+    pub(super) semantic: Option<Blob>,
 }
 
 impl Record {
@@ -111,6 +114,7 @@ impl Record {
             assessment: input.assessment,
             external_tally: input.external_tally,
             external_incomplete: input.external_incomplete,
+            semantic: input.semantic,
         };
         record.id = record.expected_id()?;
         record.validate(retention)?;
@@ -136,6 +140,9 @@ impl Record {
             || self.plan.as_ref().is_some_and(|blob| !blob.valid())
             || self.evidence.as_ref().is_some_and(|blob| !blob.valid())
             || self.assessment.as_ref().is_some_and(|blob| !blob.valid())
+            || self.semantic.as_ref().is_some_and(|blob| {
+                !blob.valid() || blob.length > crate::SEMANTIC_INPUT_ARTIFACT_BYTES
+            })
             || !valid_chain
             || !self.expected_id().is_ok_and(|expected| expected == self.id)
         {
@@ -148,18 +155,24 @@ impl Record {
         &self,
         config: &ArtifactStoreConfig,
     ) -> Result<ArtifactReference, ArtifactError> {
-        super::checked_reference(
-            self.id.clone(),
-            format!("{}/{}/report", config.base_url, self.id),
-            self.expires_at_unix_millis,
-            self.report.parsed_digest()?,
-            self.assessment
+        super::checked_reference(ArtifactReference {
+            id: self.id.clone(),
+            locator: format!("{}/{}/report", config.base_url, self.id),
+            expires_at_unix_millis: self.expires_at_unix_millis,
+            report_digest: self.report.parsed_digest()?,
+            semantic_digest: self
+                .semantic
                 .as_ref()
                 .map(Blob::parsed_digest)
                 .transpose()?,
-            self.external_tally,
-            self.external_incomplete,
-        )
+            assessment_digest: self
+                .assessment
+                .as_ref()
+                .map(Blob::parsed_digest)
+                .transpose()?,
+            external_tally: self.external_tally,
+            external_incomplete: self.external_incomplete,
+        })
         .ok_or(ArtifactError::Corrupt)
     }
 
@@ -172,6 +185,7 @@ impl Record {
                 super::ArtifactComponent::Assessment,
                 self.assessment.as_ref(),
             ),
+            (super::ArtifactComponent::Semantic, self.semantic.as_ref()),
         ]
         .into_iter()
         .filter_map(|(component, blob)| blob.map(|blob| (component, blob)))
@@ -187,6 +201,8 @@ impl Record {
             assessment: &'a Option<Blob>,
             external_tally: &'a Option<ExternalTally>,
             external_incomplete: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            semantic: &'a Option<Blob>,
         }
         let identity = Identity {
             evaluation_id: &self.evaluation_id,
@@ -196,6 +212,7 @@ impl Record {
             assessment: &self.assessment,
             external_tally: &self.external_tally,
             external_incomplete: self.external_incomplete,
+            semantic: &self.semantic,
         };
         let bytes = serde_json::to_vec(&identity).map_err(|_defect| ArtifactError::Corrupt)?;
         Ok(hex::encode(hb(ID_DOMAIN, &bytes).as_bytes()))

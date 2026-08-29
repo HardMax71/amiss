@@ -74,7 +74,7 @@ pub(super) fn write_record(
     root: &Path,
     record: &Record,
     metadata: &[u8],
-    payloads: [(ArtifactComponent, Option<&[u8]>); 4],
+    payloads: [(ArtifactComponent, Option<&[u8]>); 5],
 ) -> Result<(), ArtifactError> {
     let mut written = Vec::new();
     for (component, bytes) in payloads {
@@ -104,7 +104,7 @@ fn scan(
     let mut temporary = Vec::new();
     let maximum_entries = config
         .max_records
-        .checked_mul(5)
+        .checked_mul(6)
         .and_then(|count| count.checked_add(3))
         .ok_or(ArtifactError::Configuration)?;
     for (position, entry) in fs::read_dir(root)?.enumerate() {
@@ -366,6 +366,7 @@ pub(super) fn component_path(root: &Path, id: &str, component: ArtifactComponent
 const fn component_suffix(component: ArtifactComponent) -> &'static str {
     match component {
         ArtifactComponent::Report => "report",
+        ArtifactComponent::Semantic => "semantic",
         ArtifactComponent::Plan => "plan",
         ArtifactComponent::Evidence => "evidence",
         ArtifactComponent::Assessment => "assessment",
@@ -380,6 +381,7 @@ fn metadata_id(name: &str) -> Option<&str> {
 fn component_id(name: &str) -> Option<(&str, ArtifactComponent)> {
     [
         ArtifactComponent::Report,
+        ArtifactComponent::Semantic,
         ArtifactComponent::Plan,
         ArtifactComponent::Evidence,
         ArtifactComponent::Assessment,

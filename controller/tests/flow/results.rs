@@ -96,6 +96,7 @@ fn oversized_report_is_not_accepted_for_publication() {
         identity: Box::new(run.clone()),
         evaluation: Evaluation::Pass,
         report: vec![b'x'; oversized],
+        semantic_artifact: None,
     };
     let adapter = Arc::new(FakeAdapter::new(
         delivery(&provider, change, 'b'),
