@@ -77,12 +77,17 @@ and posts or reuses one exact review.
 
 The review body binds the evaluation, conclusion, provider, repository, pull request, provider
 run, refs, commits, trees, plan, execution constraint, report digest, authenticated artifact
-locator, and exclusive expiry. Completed external verification adds the assessment locator and
-its three verdict counts; incomplete verification says so without counts. Below those bindings it
-lists the report's grouped feedback the way the GitHub summary does: counts, then up to ten items
-with atom-rendered targets; the locator provides every row. The `required_status_name` from the
-execution constraint is a readable review label and retry binding; the provider gate itself is the
-dedicated reviewer identity.
+locator, and exclusive expiry. Accepted semantic evidence adds the audit artifact's digest and
+sibling locator. Completed external verification adds the assessment locator and its three verdict
+counts; incomplete verification says so without counts. Below those bindings it lists the report's
+grouped feedback the way the GitHub summary does: counts, then up to ten items with atom-rendered
+targets; the locator provides every row. The `required_status_name` from the execution constraint
+is a readable review label and retry binding; the provider gate itself is the dedicated reviewer
+identity.
+
+Crash recovery across artifact-feedback upgrades admits the same older additive projections as the
+GitHub lane, but only for an existing review whose stable fields still match. A newly created
+review must echo the complete current body exactly.
 
 ## Dedicated reviewer
 
@@ -323,8 +328,8 @@ and uses the fixed pack limits described in the [GitHub lane](provider-github.md
 The inbox, ledger, and artifact store use bounded checksummed files, not SQL or an embedded
 database. One process owns each inbox and artifact root. The worker removes raw bytes only after
 controller completion; the ledger retains the exact result and permanent body-replay marker, and
-the artifact store retains the exact report and optional external chain until the published
-expiry.
+the artifact store retains the exact report, optional semantic-input audit value, and optional
+external chain until the published expiry.
 
 The hard 100,000-row ceiling gives one webhook-secret trust period a finite delivery lifetime.
 Before it fills, stop the old route, replace the provider webhook secret, remove the old secret

@@ -6,6 +6,13 @@ use amiss_wire::json::{self, Value};
 use crate::ArtifactReference;
 
 const DISPLAYED_ITEMS: usize = 10;
+const SEMANTIC_PROJECTION_PREFIXES: [&str; 2] = ["semantic-input: ", "semantic-input-artifact: "];
+const OPTIONAL_PROJECTION_PREFIXES: [&str; 4] = [
+    "semantic-input: ",
+    "semantic-input-artifact: ",
+    "assessment-artifact: ",
+    "external-assessment: ",
+];
 
 /// Every repository-derived value passes the human-atom law before it
 /// reaches provider markdown.
@@ -21,6 +28,7 @@ pub fn with_feedback(
         if report.is_none() || artifact.report_digest != report_digest {
             return None;
         }
+        let component_root = artifact.locator.strip_suffix("/report")?;
         lines.extend([
             format!("artifact: {}", artifact.locator),
             "artifact-auth: bearer".to_owned(),
@@ -29,12 +37,15 @@ pub fn with_feedback(
                 artifact.expires_at_unix_millis
             ),
         ]);
+        if let Some(digest) = artifact.semantic_digest {
+            lines.push(format!("semantic-input: {digest}"));
+            lines.push(format!(
+                "semantic-input-artifact: {component_root}/semantic"
+            ));
+        }
         if let Some(digest) = artifact.assessment_digest {
             lines.push(format!("assessment: {digest}"));
-            lines.push(format!(
-                "assessment-artifact: {}/assessment",
-                artifact.locator.strip_suffix("/report")?
-            ));
+            lines.push(format!("assessment-artifact: {component_root}/assessment"));
         }
         if artifact.external_incomplete {
             lines.push("external-assessment: incomplete".to_owned());
@@ -47,6 +58,20 @@ pub fn with_feedback(
     }
     lines.extend(feedback_lines(report, artifact.is_some()));
     Some(format!("{text}\n{}", lines.join("\n")))
+}
+
+/// Matches the current provider projection or its admitted pre-metadata form.
+#[must_use]
+pub fn compatible_provider_feedback(actual: &str, expected: &str) -> bool {
+    let omitting = |prefixes: &[&str]| {
+        expected
+            .lines()
+            .filter(|line| !prefixes.iter().any(|prefix| line.starts_with(prefix)))
+            .eq(actual.lines())
+    };
+    actual == expected
+        || omitting(&SEMANTIC_PROJECTION_PREFIXES)
+        || omitting(&OPTIONAL_PROJECTION_PREFIXES)
 }
 
 fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {

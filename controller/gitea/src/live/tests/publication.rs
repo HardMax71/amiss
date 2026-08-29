@@ -38,7 +38,7 @@ fn review_bodies_carry_the_report_feedback_lines() {
         locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
         report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
-        semantic_digest: None,
+        semantic_digest: Some(sha256(b"semantic input")),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
@@ -47,7 +47,7 @@ fn review_bodies_carry_the_report_feedback_lines() {
         fixture.client.publish(fixture.pull_request(), &publication),
         Ok(())
     );
-    let state = fixture.rest.state.lock().unwrap();
+    let mut state = fixture.rest.state.lock().unwrap();
     let body = &state.created[0].body;
     assert!(
         body.contains("\nfindings: fix 0, check 1, existing 0\n"),
@@ -62,6 +62,25 @@ fn review_bodies_carry_the_report_feedback_lines() {
         body.contains(publication.artifact.as_ref().unwrap().locator.as_str()),
         "{body}"
     );
+    assert!(
+        body.contains(&format!("semantic-input: {}", sha256(b"semantic input"))),
+        "{body}"
+    );
+    assert!(body.contains("/semantic"), "{body}");
+
+    state.data.reviews.last_mut().unwrap().body = body
+        .lines()
+        .filter(|line| {
+            !line.starts_with("semantic-input: ") && !line.starts_with("semantic-input-artifact: ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    drop(state);
+    assert_eq!(
+        fixture.client.publish(fixture.pull_request(), &publication),
+        Ok(())
+    );
+    assert_eq!(fixture.rest.state.lock().unwrap().created.len(), 1);
 }
 
 #[test]

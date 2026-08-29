@@ -84,7 +84,8 @@ pub(super) fn validate_created(
     expected: &CreateReview,
     created: &ReviewRecord,
 ) -> Result<(), ProviderError> {
-    (matches_expected(created, expected, config)
+    (created.body == expected.body
+        && matches_expected(created, expected, config)
         && created.id > 0
         && !created.stale
         && !created.dismissed)
@@ -172,6 +173,6 @@ fn matches_expected(review: &ReviewRecord, expected: &CreateReview, config: &Con
     review.user.as_ref().is_some_and(|user| {
         user.id == config.reviewer.id && user.login.eq_ignore_ascii_case(&config.reviewer.login)
     }) && review.state == expected.event
-        && review.body == expected.body
+        && amiss_controller::feedback::compatible_provider_feedback(&review.body, &expected.body)
         && review.commit_id == expected.commit_id
 }

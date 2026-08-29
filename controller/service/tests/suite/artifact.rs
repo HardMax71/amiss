@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use amiss_controller::{ArtifactBundle, ControllerClock, ControllerEvaluationId};
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_controller_fixtures::semantic::semantic_input_artifact;
 use amiss_controller_service::{
     ArtifactFiles, ArtifactLimits, EndpointConfig, artifact_routes, load_artifact_service,
     open_artifact_service,
@@ -174,6 +175,84 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
                 .body(Body::empty())?,
         )
         .await?;
+    assert_eq!(expired.status(), StatusCode::NOT_FOUND);
+    Ok(())
+}
+
+#[tokio::test]
+async fn semantic_inputs_survive_authenticated_service_restart()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture = semantic_input_artifact()?;
+    let report = fixture.report;
+    let semantic = fixture.artifact;
+    let root = tempfile::tempdir()?;
+    let artifact_root = root.path().join("artifacts");
+    std::fs::create_dir(&artifact_root)?;
+    let token_file = root.path().join("artifact.token");
+    std::fs::write(&token_file, TOKEN)?;
+    let files: ArtifactFiles = serde_json::from_value(json!({
+        "base_url": "https://amiss.example/private/artifacts",
+        "bearer_token_file": token_file
+    }))?;
+    let endpoint = EndpointConfig {
+        path: "/provider/evaluate".to_owned(),
+        max_body_bytes: 1_024,
+        max_headers: 16,
+        max_header_bytes: 4_096,
+        max_concurrent_requests: 2,
+    };
+    let clock = TestClock::at(1_000);
+    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
+    let service_config =
+        || load_artifact_service(&files, artifact_root.clone(), ARTIFACT_LIMITS, &endpoint);
+    let service = open_artifact_service(service_config()?, Arc::clone(&controller_clock))?;
+    let retained = service.store.retain(
+        &ControllerEvaluationId::new("evaluation/semantic-http".to_owned())
+            .ok_or_else(|| std::io::Error::other("invalid fixture evaluation"))?,
+        ArtifactBundle {
+            report: &report,
+            semantic: Some(&semantic),
+            plan: None,
+            evidence: None,
+            assessment: None,
+            external_tally: None,
+            external_incomplete: false,
+        },
+    )?;
+    let path = format!("/private/artifacts/{}/semantic", retained.id);
+    let authorized = || {
+        Request::builder()
+            .uri(&path)
+            .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+    };
+    let app = artifact_routes(Router::new(), &service);
+
+    let unauthenticated = app
+        .clone()
+        .oneshot(Request::builder().uri(&path).body(Body::empty())?)
+        .await?;
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+    let response = app.clone().oneshot(authorized()?).await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        to_bytes(response.into_body(), 1_048_576).await?,
+        semantic.as_slice()
+    );
+    drop(app);
+    drop(service);
+
+    let reopened = open_artifact_service(service_config()?, controller_clock)?;
+    let app = artifact_routes(Router::new(), &reopened);
+    let response = app.clone().oneshot(authorized()?).await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        to_bytes(response.into_body(), 1_048_576).await?,
+        semantic.as_slice()
+    );
+
+    clock.set(retained.expires_at_unix_millis);
+    let expired = app.oneshot(authorized()?).await?;
     assert_eq!(expired.status(), StatusCode::NOT_FOUND);
     Ok(())
 }

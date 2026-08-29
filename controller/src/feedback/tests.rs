@@ -149,7 +149,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         locator: format!("https://amiss.example/artifacts/{id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
         report_digest: amiss_wire::digest::sha256(&bytes),
-        semantic_digest: None,
+        semantic_digest: Some(amiss_wire::digest::sha256(b"semantic input")),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
@@ -158,6 +158,13 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
     assert!(projected.contains(&format!("artifact: {}", artifact.locator)));
     assert!(projected.contains("artifact-auth: bearer"));
     assert!(projected.contains("artifact-expires-unix-millis: 1800000000000"));
+    assert!(projected.contains(&format!(
+        "semantic-input: {}",
+        amiss_wire::digest::sha256(b"semantic input")
+    )));
+    assert!(projected.contains(&format!(
+        "semantic-input-artifact: https://amiss.example/artifacts/{id}/semantic"
+    )));
 
     let mut assessed = artifact.clone();
     assessed.assessment_digest = Some(amiss_wire::digest::sha256(b"assessment"));
@@ -192,4 +199,28 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         with_feedback("summary", Some(&bytes), Some(&mismatched)),
         None
     );
+}
+
+#[test]
+fn provider_feedback_accepts_only_the_previous_additive_projection() {
+    let expected = "binding: exact\nsemantic-input: sha256:aaaa\n\
+                    semantic-input-artifact: https://amiss.example/a/semantic\n\
+                    assessment: sha256:bbbb\n\
+                    assessment-artifact: https://amiss.example/a/assessment\n\
+                    external-assessment: incomplete\nfindings: none";
+    let retention_only = "binding: exact\nassessment: sha256:bbbb\n\
+                          assessment-artifact: https://amiss.example/a/assessment\n\
+                          external-assessment: incomplete\nfindings: none";
+    let previous = "binding: exact\nassessment: sha256:bbbb\nfindings: none";
+
+    assert!(super::compatible_provider_feedback(expected, expected));
+    assert!(super::compatible_provider_feedback(
+        retention_only,
+        expected
+    ));
+    assert!(super::compatible_provider_feedback(previous, expected));
+    assert!(!super::compatible_provider_feedback(
+        "binding: changed\nassessment: sha256:bbbb\nfindings: none",
+        expected
+    ));
 }

@@ -274,7 +274,7 @@ fn publication_reuses_only_one_exact_owned_check() {
 }
 
 #[test]
-fn previous_assessment_projections_are_compatible_summaries() {
+fn previous_artifact_metadata_projections_are_compatible_summaries() {
     let fixture = Fixture::new();
     let mut publication = fixture.publication(CheckConclusion::Pass);
     let mut completed = artifact_reference(publication.report.as_deref().unwrap_or_default());
@@ -291,8 +291,26 @@ fn previous_assessment_projections_are_compatible_summaries() {
     });
     let mut incomplete = artifact_reference(publication.report.as_deref().unwrap_or_default());
     incomplete.external_incomplete = true;
+    let mut semantic = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    semantic.semantic_digest = Some(sha256(b"semantic input"));
+    let mut retained_assessment = completed.clone();
+    retained_assessment.semantic_digest = Some(sha256(b"semantic input"));
 
     for (artifact, omitted) in [
+        (
+            retained_assessment,
+            vec![
+                format!("semantic-input: {}", sha256(b"semantic input")),
+                format!("semantic-input-artifact: {artifact_root}/semantic"),
+            ],
+        ),
+        (
+            semantic,
+            vec![
+                format!("semantic-input: {}", sha256(b"semantic input")),
+                format!("semantic-input-artifact: {artifact_root}/semantic"),
+            ],
+        ),
         (
             completed,
             vec![
@@ -475,6 +493,7 @@ fn publication_summary_carries_the_report_feedback_lines() {
     publication.artifact = Some(artifact_reference(
         publication.report.as_deref().unwrap_or_default(),
     ));
+    publication.artifact.as_mut().unwrap().semantic_digest = Some(sha256(b"semantic input"));
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let summary = &expected.output.summary;
@@ -503,6 +522,11 @@ fn publication_summary_carries_the_report_feedback_lines() {
         summary.contains(publication.artifact.as_ref().unwrap().locator.as_str()),
         "{summary}"
     );
+    assert!(
+        summary.contains(&format!("semantic-input: {}", sha256(b"semantic input"))),
+        "{summary}"
+    );
+    assert!(summary.contains("/semantic"), "{summary}");
 }
 
 #[test]

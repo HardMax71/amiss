@@ -3,13 +3,11 @@ use std::time::Duration;
 
 use amiss_controller::{
     ArtifactBundle, ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock,
-    ControllerEvaluationId, ExternalTally, FileArtifactStore, SemanticEvidenceTemplate,
-    bind_semantic_evidence,
+    ControllerEvaluationId, ExternalTally, FileArtifactStore,
 };
 use amiss_controller_fixtures::clock::TestClock;
-use amiss_wire::digest::{hb, sha256};
-use amiss_wire::json;
-use amiss_wire::model::ArtifactId;
+use amiss_controller_fixtures::semantic::semantic_input_artifact;
+use amiss_wire::digest::sha256;
 
 fn config() -> ArtifactStoreConfig {
     ArtifactStoreConfig {
@@ -82,32 +80,9 @@ fn exact_components_survive_restart_under_one_stable_locator() {
 
 #[test]
 fn semantic_inputs_survive_restart_under_the_report_binding() {
-    let bound = bind_semantic_evidence(
-        &[SemanticEvidenceTemplate {
-            producer_kind: ArtifactId::new("record-set".to_owned()).unwrap(),
-            producer_identity: ArtifactId::new("test-records".to_owned()).unwrap(),
-            producer_version: "1".to_owned(),
-            context_digest: hb("amiss/test-context", b"context"),
-            input_digest: hb("amiss/test-input", b"input"),
-            complete: true,
-            observations: Arc::from([]),
-        }],
-        &[],
-        &[],
-        hb("amiss/test-candidate", b"candidate"),
-    )
-    .unwrap();
-    let payload_digests = bound
-        .supplied
-        .iter()
-        .map(|supplied| {
-            amiss_wire::semantic::parse(&json::canonical(&supplied.value))
-                .unwrap()
-                .payload_digest
-        })
-        .collect::<Vec<_>>();
-    let report = amiss_fixtures::semantic_report(&payload_digests);
-    let semantic = bound.artifact.unwrap();
+    let fixture = semantic_input_artifact().unwrap();
+    let report = fixture.report;
+    let semantic = fixture.artifact;
     let root = tempfile::tempdir().unwrap();
     let clock = TestClock::at(1_000);
     let controller_clock: Arc<dyn ControllerClock> = clock.clone();

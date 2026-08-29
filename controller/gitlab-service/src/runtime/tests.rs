@@ -12,8 +12,9 @@ use amiss_controller::{
     ControllerClock, DeliveryRoute, ExternalTally, FileArtifactStore, FileLedgerConfig,
     FileLedgerRoot, HandleOutcome, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
     ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    Publication, ReplayWindow, RunFailure, SignedTimePolicy, SystemClock, VerifiedDelivery,
+    Publication, ReplayWindow, RunFailure, SignedTimePolicy, VerifiedDelivery,
 };
+use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest, Operations};
 use axum::http::{StatusCode, header};
@@ -59,6 +60,7 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
     let id = "c".repeat(64);
     let locator = format!("https://amiss.example/artifacts/{id}/report");
     let report_digest = amiss_wire::digest::sha256(b"report");
+    let semantic_digest = amiss_wire::digest::sha256(b"semantic input");
     let assessment_digest = amiss_wire::digest::sha256(b"assessment");
     let response = result_response::<ServiceError>(Ok(HandleOutcome::Published {
         conclusion: CheckConclusion::Pass,
@@ -67,7 +69,7 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
             locator: locator.clone(),
             expires_at_unix_millis: 1_800_000_000_000,
             report_digest,
-            semantic_digest: None,
+            semantic_digest: Some(semantic_digest),
             assessment_digest: Some(assessment_digest),
             external_tally: Some(ExternalTally {
                 refuted: 1,
@@ -82,7 +84,8 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
     assert_eq!(
         response.headers()[header::LINK],
         format!(
-            "<{locator}>; rel=\"amiss-report\", <{}/assessment>; rel=\"amiss-assessment\"",
+            "<{locator}>; rel=\"amiss-report\", <{}/semantic>; rel=\"amiss-semantic-input\", <{}/assessment>; rel=\"amiss-assessment\"",
+            locator.strip_suffix("/report").unwrap(),
             locator.strip_suffix("/report").unwrap()
         )
     );
@@ -94,6 +97,10 @@ fn a_completed_result_exposes_the_authenticated_artifact_locator() {
     assert_eq!(
         response.headers()["x-amiss-report-digest"],
         report_digest.to_string()
+    );
+    assert_eq!(
+        response.headers()["x-amiss-semantic-input-digest"],
+        semantic_digest.to_string()
     );
     assert_eq!(
         response.headers()["x-amiss-assessment-digest"],
@@ -132,7 +139,9 @@ fn failed_authentication_never_touches_the_delivery_record() {
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(RejectingAdapter {
         namespace: route.provider.namespace.clone(),
     });
-    let clock: Arc<dyn ControllerClock> = Arc::new(SystemClock);
+    let test_clock = TestClock::new();
+    let received_at_unix_millis = test_clock.now();
+    let clock: Arc<dyn ControllerClock> = test_clock;
     let ledger = FileLedgerRoot::open_with_clock(
         &ledger_root,
         FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
@@ -183,7 +192,7 @@ fn failed_authentication_never_touches_the_delivery_record() {
         evaluate(
             &lane,
             EvaluationRequest {
-                received_at_unix_millis: SystemClock.now_unix_millis().unwrap(),
+                received_at_unix_millis,
                 headers: &headers,
                 body: br#"{"merge_request_iid":42}"#,
             },
@@ -199,9 +208,10 @@ async fn periodic_maintenance_cleans_without_stopping_the_lane() {
     let state = tempfile::TempDir::new().unwrap();
     let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
     let ledger = Arc::new(
-        FileLedgerRoot::open(
+        FileLedgerRoot::open_with_clock(
             state.path(),
             FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+            TestClock::new(),
         )
         .unwrap(),
     );
@@ -270,9 +280,10 @@ async fn periodic_maintenance_failure_stops_the_lane() {
     let state = tempfile::TempDir::new().unwrap();
     let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
     let ledger = Arc::new(
-        FileLedgerRoot::open(
+        FileLedgerRoot::open_with_clock(
             state.path(),
             FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+            TestClock::new(),
         )
         .unwrap(),
     );
@@ -361,9 +372,10 @@ async fn ledger_maintenance_binds_cleanup_to_the_interval() {
     let state = tempfile::TempDir::new().unwrap();
     let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
     let ledger = Arc::new(
-        FileLedgerRoot::open(
+        FileLedgerRoot::open_with_clock(
             state.path(),
             FileLedgerConfig::new(Duration::from_secs(2), 32, replay).unwrap(),
+            TestClock::new(),
         )
         .unwrap(),
     );

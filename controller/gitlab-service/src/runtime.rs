@@ -341,18 +341,21 @@ fn result_response<E>(result: Result<amiss_controller::HandleOutcome, E>) -> Res
 
 fn artifact_headers(status: StatusCode, artifact: &ArtifactReference) -> Option<Response> {
     let mut response = status.into_response();
-    let link = if artifact.assessment_digest.is_some() {
-        format!(
-            "<{}>; rel=\"amiss-report\", <{}/assessment>; rel=\"amiss-assessment\"",
-            artifact.locator,
-            artifact.locator.strip_suffix("/report")?
-        )
-    } else {
-        format!("<{}>; rel=\"amiss-report\"", artifact.locator)
-    };
+    let component_root = artifact.locator.strip_suffix("/report")?;
+    let mut links = vec![format!("<{}>; rel=\"amiss-report\"", artifact.locator)];
+    if artifact.semantic_digest.is_some() {
+        links.push(format!(
+            "<{component_root}/semantic>; rel=\"amiss-semantic-input\""
+        ));
+    }
+    if artifact.assessment_digest.is_some() {
+        links.push(format!(
+            "<{component_root}/assessment>; rel=\"amiss-assessment\""
+        ));
+    }
     response
         .headers_mut()
-        .insert(header::LINK, HeaderValue::from_str(&link).ok()?);
+        .insert(header::LINK, HeaderValue::from_str(&links.join(", ")).ok()?);
     response
         .headers_mut()
         .insert("x-amiss-artifact-auth", HeaderValue::from_static("bearer"));
@@ -364,6 +367,12 @@ fn artifact_headers(status: StatusCode, artifact: &ArtifactReference) -> Option<
         "x-amiss-report-digest",
         HeaderValue::from_str(&artifact.report_digest.to_string()).ok()?,
     );
+    if let Some(digest) = artifact.semantic_digest {
+        response.headers_mut().insert(
+            "x-amiss-semantic-input-digest",
+            HeaderValue::from_str(&digest.to_string()).ok()?,
+        );
+    }
     if let Some(digest) = artifact.assessment_digest {
         response.headers_mut().insert(
             "x-amiss-assessment-digest",
