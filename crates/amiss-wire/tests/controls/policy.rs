@@ -126,6 +126,17 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
     };
     assert_eq!(source.set.as_str(), "rust/public-api");
     assert_eq!(source.key, "amiss::check");
+
+    let records = policy_with_assertions(
+        r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-set","set":"rust/public-api"}}"#,
+    );
+    let parsed = ScannerPolicy::parse(records.as_bytes()).unwrap();
+    let ProjectionSource::RecordSet(source) = &parsed.projection_assertions()[0].source else {
+        panic!("record-set source survives the policy reader");
+    };
+    assert_eq!(source.set.as_str(), "rust/public-api");
+    let count = records.replace("sorted-rows-v1", "decimal-count-v1");
+    assert!(ScannerPolicy::parse(count.as_bytes()).is_ok());
 }
 
 #[test]
@@ -156,6 +167,7 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
         r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-value","set":"rust/public-api","key":"amiss::check"}}"#.to_owned(),
         r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-value","set":"Rust","key":"amiss::check"}}"#.to_owned(),
         r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-value","set":"rust","key":"line\nbreak"}}"#.to_owned(),
+        r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-set","set":"rust/public-api"}}"#.to_owned(),
     ] {
         assert!(
             ScannerPolicy::parse(policy_with_assertions(&invalid).as_bytes()).is_err(),

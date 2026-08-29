@@ -81,6 +81,12 @@ present can attest its value even when the envelope says the set is partial. A m
 `source-record-unproven`, and a missing named set is `source-record-set-absent`. Evidence derived
 from an earlier scanner report is not admitted as a projection source.
 
+For a complete envelope, a `record-set` source applies `sorted-rows-v1` to every display value in
+UTF-8 byte order, or applies `decimal-count-v1` to the exact number of records. Duplicate display
+values remain distinct records because keys, not values, own identity. A partial set produces
+`source-record-set-incomplete` for both projections before any equality, count, extra-row, or
+absence conclusion is attempted. Row-difference previews remain byte-sorted and bounded.
+
 The `sorted-rows-v1` projection pairs the same sink with a `tree-paths` source: one existing tree
 root, an optional exact suffix, and a positive maximum relative depth. It filters the complete
 ordered snapshot map without another Git walk or object read, excludes directory entries, and

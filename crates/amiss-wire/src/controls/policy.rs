@@ -17,6 +17,7 @@ pub const BLOB_LINES_SOURCE: &str = "blob-lines";
 pub const NAMED_REGION_SOURCE: &str = "named-region";
 pub const TREE_PATHS_SOURCE: &str = "tree-paths";
 pub const RECORD_VALUE_SOURCE: &str = "record-value";
+pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
@@ -126,11 +127,17 @@ pub struct RecordValueSelection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordSetSelection {
+    pub set: ArtifactId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectionSource {
     BlobLines(BlobLineSelection),
     NamedRegion(NamedRegionSelection),
     TreePaths(TreePathSelection),
     RecordValue(RecordValueSelection),
+    RecordSet(RecordSetSelection),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -215,6 +222,13 @@ fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource
                 Ok(key)
             })?,
         })
+    } else if kind == RECORD_SET_SOURCE {
+        ProjectionSource::RecordSet(RecordSetSelection {
+            set: obj.required("set", |path, value| {
+                ArtifactId::new(de::string(path, value)?)
+                    .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+            })?,
+        })
     } else {
         return fail(&kind_path, ErrorKind::InvalidValue);
     };
@@ -238,7 +252,7 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
         | ProjectionSource::RecordValue(_) => projection == ProjectionKind::CodeTextV1,
-        ProjectionSource::TreePaths(_) => matches!(
+        ProjectionSource::TreePaths(_) | ProjectionSource::RecordSet(_) => matches!(
             projection,
             ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
         ),
@@ -303,6 +317,13 @@ pub fn projection_source_value(source: &ProjectionSource) -> Value {
                 Value::String(selection.set.as_str().to_owned().into()),
             ),
             ("key".into(), Value::String(selection.key.clone().into())),
+        ])),
+        ProjectionSource::RecordSet(selection) => Value::Object(Box::new([
+            ("kind".into(), Value::String(RECORD_SET_SOURCE.into())),
+            (
+                "set".into(),
+                Value::String(selection.set.as_str().to_owned().into()),
+            ),
         ])),
     }
 }

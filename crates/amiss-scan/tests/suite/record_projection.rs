@@ -17,29 +17,28 @@ use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::{ControlsRequest, SuppliedSemanticEvidence};
 use amiss_wire::semantic::SemanticEvidence;
 
-const POLICY: &str = r#"{
-  "schema": "amiss/scanner-policy",
-  "document_includes": [],
-  "projection_assertions": [{
-    "document": "docs.md",
-    "name": "public-api",
-    "projection": "code-text-v1",
-    "sink": "previous-code",
-    "source": {
-      "kind": "record-value",
-      "set": "rust/public-api",
-      "key": "amiss::check"
-    }
-  }],
-  "protected_inventory": [],
-  "finding_dispositions": []
-}"#;
-
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
         digest: hb("amiss/scanner-engine", b"test engine"),
     }
+}
+
+fn policy(projection: &str, source: &serde_json::Value) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "schema": "amiss/scanner-policy",
+        "document_includes": [],
+        "projection_assertions": [{
+            "document": "docs.md",
+            "name": "public-api",
+            "projection": projection,
+            "sink": "previous-code",
+            "source": source,
+        }],
+        "protected_inventory": [],
+        "finding_dispositions": [],
+    }))
+    .unwrap()
 }
 
 fn snapshot(commit: &str, tree: &str) -> SnapshotIdentity {
@@ -150,6 +149,14 @@ fn observed(payload: &serde_json::Value) -> Option<&str> {
 
 #[test]
 fn exact_record_values_preserve_partial_evidence_laws() {
+    let policy = policy(
+        "code-text-v1",
+        &serde_json::json!({
+            "kind": "record-value",
+            "set": "rust/public-api",
+            "key": "amiss::check",
+        }),
+    );
     let pair = amiss_fixtures::commit_pair(
         &[("README.md", "# Base\n")],
         &[
@@ -157,7 +164,7 @@ fn exact_record_values_preserve_partial_evidence_laws() {
                 "docs.md",
                 "```text\npub fn check()\n```\n[amiss:public-api]: <amiss:projection>\n",
             ),
-            (".amiss/scanner-policy.json", POLICY),
+            (".amiss/scanner-policy.json", &policy),
         ],
     )
     .unwrap();
@@ -213,4 +220,118 @@ fn exact_record_values_preserve_partial_evidence_laws() {
             })
         );
     }
+}
+
+#[test]
+fn complete_record_sets_project_byte_sorted_values() {
+    let policy = policy(
+        "sorted-rows-v1",
+        &serde_json::json!({"kind": "record-set", "set": "rust/public-api"}),
+    );
+    let pair = amiss_fixtures::commit_pair(
+        &[("README.md", "# Base\n")],
+        &[
+            (
+                "docs.md",
+                "```text\nAlpha\nAlpha\nZulu\n```\n[amiss:public-api]: <amiss:projection>\n",
+            ),
+            (".amiss/scanner-policy.json", &policy),
+        ],
+    )
+    .unwrap();
+
+    let exact = run(
+        &pair,
+        true,
+        "rust/public-api",
+        &[("a", "Zulu"), ("b", "Alpha"), ("c", "Alpha")],
+    );
+    assert_eq!(observed(&exact), None, "{exact}");
+
+    let reversed_sink = amiss_fixtures::commit_pair(
+        &[("README.md", "# Base\n")],
+        &[
+            (
+                "docs.md",
+                "```text\nZulu\nAlpha\nAlpha\n```\n[amiss:public-api]: <amiss:projection>\n",
+            ),
+            (".amiss/scanner-policy.json", &policy),
+        ],
+    )
+    .unwrap();
+    let reordered = run(
+        &reversed_sink,
+        true,
+        "rust/public-api",
+        &[("a", "Zulu"), ("b", "Alpha"), ("c", "Alpha")],
+    );
+    assert_eq!(observed(&reordered), Some("content-differs"));
+    let evidence = &reordered["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["kind"] == "projection-drift")
+        .expect("the order-only mismatch is reported")["candidate_fact"]["evidence"];
+    assert_eq!(
+        evidence["source"],
+        serde_json::json!({"kind": "record-set", "set": "rust/public-api"})
+    );
+    assert_eq!(evidence["difference"]["ordering_only"], true, "{reordered}");
+
+    let partial = run(
+        &pair,
+        false,
+        "rust/public-api",
+        &[("a", "Zulu"), ("b", "Alpha"), ("c", "Alpha")],
+    );
+    assert_eq!(
+        observed(&partial),
+        Some("source-record-set-incomplete"),
+        "{partial}"
+    );
+
+    let missing = run(&pair, true, "rust/other", &[("a", "Alpha")]);
+    assert_eq!(
+        observed(&missing),
+        Some("source-record-set-absent"),
+        "{missing}"
+    );
+}
+
+#[test]
+fn complete_record_sets_project_their_exact_count() {
+    let policy = policy(
+        "decimal-count-v1",
+        &serde_json::json!({"kind": "record-set", "set": "rust/public-api"}),
+    );
+    let pair = amiss_fixtures::commit_pair(
+        &[("README.md", "# Base\n")],
+        &[
+            (
+                "docs.md",
+                "```text\n2\n```\n[amiss:public-api]: <amiss:projection>\n",
+            ),
+            (".amiss/scanner-policy.json", &policy),
+        ],
+    )
+    .unwrap();
+
+    let exact = run(
+        &pair,
+        true,
+        "rust/public-api",
+        &[("a", "same"), ("b", "same")],
+    );
+    assert_eq!(observed(&exact), None, "{exact}");
+    let partial = run(
+        &pair,
+        false,
+        "rust/public-api",
+        &[("a", "same"), ("b", "same")],
+    );
+    assert_eq!(
+        observed(&partial),
+        Some("source-record-set-incomplete"),
+        "{partial}"
+    );
 }

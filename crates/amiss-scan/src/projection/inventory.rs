@@ -246,27 +246,7 @@ pub(super) fn evaluate(
                 }
                 rows.push(row);
             }
-            let expected_records = u64::try_from(rows.len()).unwrap_or(u64::MAX);
-            let observed_records = if sink.value.is_empty() {
-                0
-            } else {
-                u64::try_from(sink.value.split('\n').count()).unwrap_or(u64::MAX)
-            };
-            resources.charge(
-                Aggregate::ProjectionComparedRecords,
-                expected_records.saturating_add(observed_records),
-            )?;
-            let expected_bytes = projected_bytes(&rows);
-            resources.charge(Aggregate::ProjectionProjectedBytes, expected_bytes)?;
-            if rows_match(&rows, &sink.value) {
-                return Ok(Verdict::Attested);
-            }
-            Ok(mismatch(
-                sink,
-                projected_digest(&rows),
-                expected_bytes,
-                Difference::Rows(Box::new(difference(&rows, &sink.value, resources)?)),
-            ))
+            compare_rows(&rows, sink, resources)
         }
         ProjectionKind::DecimalCountV1 => {
             let mut expected_count = 0_u64;
@@ -277,25 +257,61 @@ pub(super) fn evaluate(
                 )?;
                 expected_count = expected_count.saturating_add(1);
             }
-            resources.charge(Aggregate::ProjectionComparedRecords, expected_count)?;
-            let expected = expected_count.to_string();
-            resources.charge(
-                Aggregate::ProjectionProjectedBytes,
-                u64::try_from(expected.len()).unwrap_or(u64::MAX),
-            )?;
-            if expected == sink.value {
-                return Ok(Verdict::Attested);
-            }
-            Ok(mismatch(
-                sink,
-                hb(COUNT_SOURCE_DOMAIN, expected.as_bytes()),
-                u64::try_from(expected.len()).unwrap_or(u64::MAX),
-                Difference::Count {
-                    expected_count,
-                    observed_count: canonical_count(&sink.value),
-                },
-            ))
+            compare_count(expected_count, sink, resources)
         }
         ProjectionKind::CodeTextV1 => Err(Error::Internal),
     }
+}
+
+pub(super) fn compare_rows(
+    rows: &[&str],
+    sink: &SemanticCodeSink,
+    resources: &mut ScanResources,
+) -> Result<Verdict, Error> {
+    let expected_records = u64::try_from(rows.len()).unwrap_or(u64::MAX);
+    let observed_records = if sink.value.is_empty() {
+        0
+    } else {
+        u64::try_from(sink.value.split('\n').count()).unwrap_or(u64::MAX)
+    };
+    resources.charge(
+        Aggregate::ProjectionComparedRecords,
+        expected_records.saturating_add(observed_records),
+    )?;
+    let expected_bytes = projected_bytes(rows);
+    resources.charge(Aggregate::ProjectionProjectedBytes, expected_bytes)?;
+    if rows_match(rows, &sink.value) {
+        return Ok(Verdict::Attested);
+    }
+    Ok(mismatch(
+        sink,
+        projected_digest(rows),
+        expected_bytes,
+        Difference::Rows(Box::new(difference(rows, &sink.value, resources)?)),
+    ))
+}
+
+pub(super) fn compare_count(
+    expected_count: u64,
+    sink: &SemanticCodeSink,
+    resources: &mut ScanResources,
+) -> Result<Verdict, Error> {
+    resources.charge(Aggregate::ProjectionComparedRecords, expected_count)?;
+    let expected = expected_count.to_string();
+    resources.charge(
+        Aggregate::ProjectionProjectedBytes,
+        u64::try_from(expected.len()).unwrap_or(u64::MAX),
+    )?;
+    if expected == sink.value {
+        return Ok(Verdict::Attested);
+    }
+    Ok(mismatch(
+        sink,
+        hb(COUNT_SOURCE_DOMAIN, expected.as_bytes()),
+        u64::try_from(expected.len()).unwrap_or(u64::MAX),
+        Difference::Count {
+            expected_count,
+            observed_count: canonical_count(&sink.value),
+        },
+    ))
 }

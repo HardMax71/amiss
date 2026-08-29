@@ -37,9 +37,9 @@ pub use floor::{
 pub use policy::{
     BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
     FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
-    ProjectionAssertion, ProjectionKind, ProjectionSource, RECORD_VALUE_SOURCE,
-    RecordValueSelection, SOURCE_MARKER_BYTES, ScannerPolicy, TREE_PATHS_SOURCE, TreePathSelection,
-    document_include_value, projection_source_value,
+    ProjectionAssertion, ProjectionKind, ProjectionSource, RECORD_SET_SOURCE, RECORD_VALUE_SOURCE,
+    RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES, ScannerPolicy,
+    TREE_PATHS_SOURCE, TreePathSelection, document_include_value, projection_source_value,
 };
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
