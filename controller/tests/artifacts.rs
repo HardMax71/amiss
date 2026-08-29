@@ -3,10 +3,12 @@ use std::time::Duration;
 
 use amiss_controller::{
     ArtifactBundle, ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock,
-    ControllerEvaluationId, ExternalTally, FileArtifactStore,
+    ControllerEvaluationId, ExternalTally, FileArtifactStore, PublicationAuditBundle,
+    validate_publication_audit,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::semantic::semantic_input_artifact;
+use amiss_fixtures::publication_audit;
 use amiss_wire::digest::sha256;
 
 fn config() -> ArtifactStoreConfig {
@@ -117,6 +119,107 @@ fn semantic_inputs_survive_restart_under_the_report_binding() {
         FileArtifactStore::open_with_clock(root.path(), config(), controller_clock).unwrap();
     reopened.verify(&reference).unwrap();
     assert_eq!(reopened.find(&evaluation).unwrap(), Some(reference));
+}
+
+#[test]
+fn publication_audits_survive_restart_with_optional_evidence_exact() {
+    let root = tempfile::tempdir().unwrap();
+    let clock = TestClock::at(1_000);
+    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
+    let store =
+        FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
+            .unwrap();
+    let mut retained = Vec::new();
+
+    for (name, with_evidence) in [("matched", true), ("unproven", false)] {
+        let fixture = publication_audit(with_evidence).unwrap();
+        let bundle = PublicationAuditBundle {
+            report: &fixture.report,
+            plan: &fixture.plan,
+            evidence: fixture.evidence.as_deref(),
+            assessment: &fixture.assessment,
+        };
+        let evaluation =
+            ControllerEvaluationId::new(format!("evaluation/publication/{name}")).unwrap();
+        let expected = validate_publication_audit(bundle).unwrap();
+        let reference = store.retain_publication_audit(&evaluation, bundle).unwrap();
+
+        assert_eq!(reference.audit, expected);
+        assert_eq!(
+            store.retain_publication_audit(&evaluation, bundle).unwrap(),
+            reference
+        );
+        assert_eq!(
+            store
+                .read(&reference.artifact.id, ArtifactComponent::PublicationPlan)
+                .unwrap(),
+            fixture.plan
+        );
+        assert_eq!(
+            store
+                .read(
+                    &reference.artifact.id,
+                    ArtifactComponent::PublicationAssessment,
+                )
+                .unwrap(),
+            fixture.assessment
+        );
+        match fixture.evidence {
+            Some(evidence) => assert_eq!(
+                store
+                    .read(
+                        &reference.artifact.id,
+                        ArtifactComponent::PublicationEvidence,
+                    )
+                    .unwrap(),
+                evidence
+            ),
+            None => assert!(matches!(
+                store.read(
+                    &reference.artifact.id,
+                    ArtifactComponent::PublicationEvidence,
+                ),
+                Err(ArtifactError::NotFound)
+            )),
+        }
+        retained.push((evaluation, reference));
+    }
+    drop(store);
+
+    let reopened =
+        FileArtifactStore::open_with_clock(root.path(), config(), controller_clock).unwrap();
+    for (evaluation, reference) in retained {
+        reopened.verify(&reference.artifact).unwrap();
+        assert_eq!(
+            reopened.find(&evaluation).unwrap(),
+            Some(reference.artifact)
+        );
+    }
+}
+
+#[test]
+fn an_invalid_publication_audit_creates_no_evaluation_binding() {
+    let root = tempfile::tempdir().unwrap();
+    let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
+    let store = FileArtifactStore::open_with_clock(root.path(), config(), clock).unwrap();
+    let evaluation =
+        ControllerEvaluationId::new("evaluation/publication/invalid".to_owned()).unwrap();
+    let mut fixture = publication_audit(true).unwrap();
+    fixture.plan.push(b'x');
+
+    assert!(matches!(
+        store.retain_publication_audit(
+            &evaluation,
+            PublicationAuditBundle {
+                report: &fixture.report,
+                plan: &fixture.plan,
+                evidence: fixture.evidence.as_deref(),
+                assessment: &fixture.assessment,
+            }
+        ),
+        Err(ArtifactError::Corrupt)
+    ));
+    assert_eq!(store.find(&evaluation).unwrap(), None);
 }
 
 #[test]
