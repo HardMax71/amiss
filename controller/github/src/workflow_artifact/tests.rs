@@ -129,6 +129,24 @@ fn an_unchecked_non_github_or_unbounded_expectation_is_refused() {
         Err(GitHubArtifactError::Expectation)
     );
     expectation.provider = provider();
+    expectation.repository = RepositoryIdentity::new(
+        "github.com".to_owned(),
+        "acme/tools".to_owned(),
+        "widget".to_owned(),
+    )
+    .unwrap();
+    assert_eq!(
+        decode_workflow_artifact(&expectation, &archive),
+        Err(GitHubArtifactError::Expectation)
+    );
+    expectation.repository =
+        RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();
+    expectation.artifact_name.clear();
+    assert_eq!(
+        decode_workflow_artifact(&expectation, &archive),
+        Err(GitHubArtifactError::Expectation)
+    );
+    expectation.artifact_name = "amiss-semantic-evidence".to_owned();
     expectation.file_byte_limit = MAX_WORKFLOW_ARTIFACT_FILE_BYTES.saturating_add(1);
     assert_eq!(
         decode_workflow_artifact(&expectation, &archive),

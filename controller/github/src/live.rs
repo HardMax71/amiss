@@ -1,5 +1,6 @@
 mod tests;
 
+mod artifact;
 mod model;
 mod publication;
 mod refresh;

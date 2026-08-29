@@ -208,16 +208,18 @@ fn fetch_error(
     }
 }
 
-fn canonical_github_repository(repository: &RepositoryIdentity) -> bool {
-    RepositoryIdentity::new(
+pub(crate) fn canonical_github_repository(repository: &RepositoryIdentity) -> bool {
+    let Some(rebuilt) = RepositoryIdentity::new(
         repository.host().to_owned(),
         repository.owner().to_owned(),
         repository.name().to_owned(),
-    )
-    .as_ref()
-        == Some(repository)
-        && !repository.owner().contains('/')
-        && github_host(repository.host())
+    ) else {
+        return false;
+    };
+    if &rebuilt != repository || repository.owner().contains('/') {
+        return false;
+    }
+    github_host(repository.host())
 }
 
 pub(crate) fn github_host(host: &str) -> bool {
@@ -232,7 +234,7 @@ pub(crate) fn github_host(host: &str) -> bool {
         })
 }
 
-fn exact_sha1(oid: &Oid) -> bool {
+pub(crate) fn exact_sha1(oid: &Oid) -> bool {
     Oid::new(ObjectFormat::Sha1, oid.as_str().to_owned()).as_ref() == Some(oid)
 }
 

@@ -251,7 +251,7 @@ fn rules_authorize(config: &Config, rules: &[BranchRule]) -> Result<bool, Provid
     Ok(found && bound)
 }
 
-fn repository_identity(
+pub(super) fn repository_identity(
     config: &Config,
     owner: &str,
     name: &str,
