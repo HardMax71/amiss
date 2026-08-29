@@ -1,0 +1,46 @@
+{
+  "schema": "amiss/publication-plan-envelope",
+  "payload": {
+    "schema": "amiss/publication-plan-payload",
+    "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "docs": {
+      "repository": {
+        "host": "github.com",
+        "owner": "acme",
+        "name": "widget"
+      },
+      "object_format": "sha1",
+      "commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "candidate_identity_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "target": {
+      "provider": "github-pages",
+      "instance": "github.com",
+      "environment": "github-pages",
+      "channel": "stable",
+      "canonical_url": "https://docs.example.com/widget/"
+    },
+    "site": {
+      "artifact": {
+        "uri": "https://api.github.com/repos/acme/widget/actions/artifacts/123",
+        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "input_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "product": {
+      "uri": "pkg:oci/registry.example.com/widget@1.2.3",
+      "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    "producer": {
+      "identity": "github-pages-deployment",
+      "version": "1",
+      "context_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+    },
+    "relation": {
+      "identity": "stable-docs-release",
+      "context_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+    }
+  },
+  "payload_digest": "sha256:a855fba8f21015abe9564dad9fcacc8592f7649e99ed3a5e39c4e514725f3f36"
+}

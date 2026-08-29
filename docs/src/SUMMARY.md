@@ -23,6 +23,7 @@
 - [The external plan](external-plan.md)
 - [The external assessment](external-assessment.md)
 - [Trusted semantic evidence](semantic-evidence.md)
+- [Publication audits](publication.md)
 - [Limits and refusals](limits.md)
 
 # Trust
