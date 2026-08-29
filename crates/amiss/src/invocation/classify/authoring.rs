@@ -32,6 +32,7 @@ pub(super) fn classify_claim(
         &gathered.report,
         &gathered.plan,
         &gathered.evidence,
+        &gathered.semantic_template,
         &gathered.target,
         &gathered.target_bytes_hex,
         &gathered.suffix,
@@ -110,6 +111,7 @@ pub(super) fn classify_policy_include(
         &gathered.report,
         &gathered.plan,
         &gathered.evidence,
+        &gathered.semantic_template,
         &gathered.target,
         &gathered.target_bytes_hex,
     ];

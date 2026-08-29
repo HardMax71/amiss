@@ -71,6 +71,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         | "scanner-external-plan"
         | "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
         "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
+        "scanner-semantic-template" => parse_defect(amiss_wire::semantic::parse_template(bytes)),
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
@@ -280,6 +281,30 @@ fn the_semantic_evidence_schema_tracks_the_reader_contract() {
     );
     assert_eq!(
         schema
+            .pointer("/$defs/Producer/properties/version/maxLength")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(amiss_wire::semantic::PRODUCER_VERSION_BYTES).ok()
+    );
+
+    let template_path = repository_root().join("spec/scanner-semantic-template.schema.json");
+    let template: serde_json::Value = serde_json::from_slice(
+        &fs::read(template_path).expect("semantic template schema is readable"),
+    )
+    .expect("semantic template schema is JSON");
+    assert_eq!(
+        template
+            .pointer("/properties/schema/const")
+            .and_then(serde_json::Value::as_str),
+        Some(amiss_wire::semantic::TEMPLATE_SCHEMA)
+    );
+    assert_eq!(
+        template
+            .pointer("/properties/observations/maxItems")
+            .and_then(serde_json::Value::as_u64),
+        u64::try_from(amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT).ok()
+    );
+    assert_eq!(
+        template
             .pointer("/$defs/Producer/properties/version/maxLength")
             .and_then(serde_json::Value::as_u64),
         u64::try_from(amiss_wire::semantic::PRODUCER_VERSION_BYTES).ok()

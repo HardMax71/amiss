@@ -10,7 +10,8 @@ use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{ErrorKind as JsonErrorKind, Value, canonical};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{
-    PAYLOAD_SCHEMA, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence, envelope, parse,
+    PAYLOAD_SCHEMA, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence, SemanticEvidenceTemplate,
+    TEMPLATE_SCHEMA, bind_template, envelope, parse, parse_template,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -106,6 +107,109 @@ fn construction_sorts_observations_and_binds_the_payload() {
 }
 
 #[test]
+fn candidate_free_templates_bind_only_when_the_candidate_is_known() {
+    let row = observation(vec![
+        ("kind", Value::string("record-set")),
+        ("name", Value::string("rust/public-api")),
+        ("records", Value::array(Vec::new())),
+    ]);
+    let input = SemanticEvidenceTemplate {
+        producer_kind: id("record-set"),
+        producer_identity: id("test-public-api"),
+        producer_version: "1".to_owned(),
+        context_digest: digest(B),
+        input_digest: digest(C),
+        complete: true,
+        observations: vec![row.clone()].into(),
+    };
+    let value = bind_template(&input, digest(A)).unwrap();
+    let parsed = parse(&canonical(&value)).unwrap();
+    assert_eq!(parsed.payload.candidate_identity_digest, digest(A));
+    assert_eq!(parsed.payload.source_report_payload_digest, None);
+    assert_eq!(parsed.payload.observations, vec![row]);
+}
+
+#[test]
+fn strict_templates_have_no_candidate_or_report_binding_surface() {
+    let valid = Value::object(vec![
+        ("schema".to_owned(), Value::string(TEMPLATE_SCHEMA)),
+        (
+            "producer".to_owned(),
+            Value::object(vec![
+                ("kind".to_owned(), Value::string("record-set")),
+                ("identity".to_owned(), Value::string("test-public-api")),
+                ("version".to_owned(), Value::string("1")),
+                ("context_digest".to_owned(), Value::string(B)),
+                ("input_digest".to_owned(), Value::string(C)),
+            ]),
+        ),
+        ("complete".to_owned(), Value::Bool(true)),
+        ("observations".to_owned(), Value::array(Vec::new())),
+    ]);
+    assert_eq!(
+        parse_template(&canonical(&valid)).unwrap(),
+        SemanticEvidenceTemplate {
+            producer_kind: id("record-set"),
+            producer_identity: id("test-public-api"),
+            producer_version: "1".to_owned(),
+            context_digest: digest(B),
+            input_digest: digest(C),
+            complete: true,
+            observations: Vec::new().into(),
+        }
+    );
+
+    for field in ["candidate_identity_digest", "source_report_payload_digest"] {
+        let Value::Object(members) = &valid else {
+            panic!("the fixture is an object")
+        };
+        let mut members = members.as_ref().to_vec();
+        members.push((field.to_owned(), Value::string(A)));
+        let invalid = Value::object(members);
+        let error = parse_template(&canonical(&invalid)).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnknownField);
+    }
+}
+
+#[test]
+fn template_observations_must_already_be_canonical_sets() {
+    let a = observation(vec![
+        ("kind", Value::string("site-route")),
+        ("route", Value::string("/a")),
+    ]);
+    let z = observation(vec![
+        ("kind", Value::string("site-route")),
+        ("route", Value::string("/z")),
+    ]);
+    let input = SemanticEvidenceTemplate {
+        producer_kind: id("record-set"),
+        producer_identity: id("test-public-api"),
+        producer_version: "1".to_owned(),
+        context_digest: digest(B),
+        input_digest: digest(C),
+        complete: true,
+        observations: vec![a, z].into(),
+    };
+    let mut value = bind_template(&input, digest(A)).unwrap();
+    let payload = member_mut(&mut value, "payload");
+    let observations = member_mut(payload, "observations").clone();
+    let producer = member_mut(payload, "producer").clone();
+    let template_value = Value::object(vec![
+        ("schema".to_owned(), Value::string(TEMPLATE_SCHEMA)),
+        ("producer".to_owned(), producer),
+        ("complete".to_owned(), Value::Bool(true)),
+        ("observations".to_owned(), observations),
+    ]);
+    let mut reversed = template_value.clone();
+    reverse_template_observations(&mut reversed);
+    assert_eq!(
+        parse_template(&canonical(&reversed)).unwrap_err().kind,
+        ErrorKind::UnsortedSet
+    );
+    assert!(parse_template(&canonical(&template_value)).is_ok());
+}
+
+#[test]
 fn duplicate_observations_are_refused() {
     let row = observation(vec![("kind", Value::string("site-route"))]);
     let error = envelope(evidence(vec![row.clone(), row])).unwrap_err();
@@ -160,6 +264,10 @@ fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
         parse(&oversized).unwrap_err().kind,
         ErrorKind::LimitExceeded
     );
+    assert_eq!(
+        parse_template(&oversized).unwrap_err().kind,
+        ErrorKind::LimitExceeded
+    );
 }
 
 #[test]
@@ -202,6 +310,13 @@ fn tampered_and_unsorted_payloads_are_refused() {
 fn reverse_observations(value: &mut Value) {
     let Value::Array(observations) = member_mut(member_mut(value, "payload"), "observations")
     else {
+        panic!("observations are an array")
+    };
+    observations.reverse();
+}
+
+fn reverse_template_observations(value: &mut Value) {
+    let Value::Array(observations) = member_mut(value, "observations") else {
         panic!("observations are an array")
     };
     observations.reverse();

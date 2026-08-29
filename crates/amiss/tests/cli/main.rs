@@ -16,6 +16,7 @@ mod refs;
 mod render;
 mod rst;
 mod sarif;
+mod semantic;
 mod support;
 mod verdicts;
 mod worktree;

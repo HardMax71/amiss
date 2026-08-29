@@ -40,7 +40,7 @@ fn bare_shell() -> SetupShell {
         waiver: None,
         time: None,
         constraint: None,
-        semantic: amiss_scan::semantic::Inputs::default(),
+        semantic: amiss_scan::semantic::Input::None,
         requests: RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,

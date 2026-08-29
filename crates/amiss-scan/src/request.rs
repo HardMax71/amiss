@@ -74,7 +74,8 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .as_ref()
         .map(|supplied| {
             let bytes = canonical(&supplied.value);
-            let statement = TrustedTimeStatement::parse(&bytes).map_err(|error| detail(&error))?;
+            let statement = TrustedTimeStatement::parse(&bytes)
+                .map_err(|error| configuration_detail(&error))?;
             if statement.digest() != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
@@ -101,8 +102,8 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
             })
         })
         .transpose()?;
-    let semantic =
-        crate::semantic::parse(&request.semantic_evidence).map_err(|error| detail(&error))?;
+    let semantic = crate::semantic::parse(&request.semantic_evidence)
+        .map_err(|error| configuration_detail(&error))?;
     Ok(ControlInputs {
         floor,
         debt,
@@ -115,7 +116,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
 
 fn floor_detail(error: FloorDefect) -> ErrorDetail {
     match error {
-        FloorDefect::Schema(error) => detail(&error),
+        FloorDefect::Schema(error) => configuration_detail(&error),
         FloorDefect::Entries {
             configured_limit,
             observed_lower_bound,
@@ -138,14 +139,16 @@ fn typed<T>(
     digest: impl FnOnce(&T) -> Digest,
 ) -> Result<(T, RequestTrust), ErrorDetail> {
     let bytes = canonical(&supplied.value);
-    let value = parse(&bytes).map_err(|error| detail(&error))?;
+    let value = parse(&bytes).map_err(|error| configuration_detail(&error))?;
     if digest(&value) != supplied.expected_digest {
         return Err(code(AnalysisErrorCode::DigestMismatch));
     }
     Ok((value, supplied.trust_source))
 }
 
-fn detail(error: &Error) -> ErrorDetail {
+/// Maps one strict external-input defect into the scanner's public analysis taxonomy.
+#[must_use]
+pub fn configuration_detail(error: &Error) -> ErrorDetail {
     let analysis = match error.kind {
         ErrorKind::Json(json) => match json.kind {
             JsonErrorKind::InvalidUtf8 => AnalysisErrorCode::InvalidUtf8,

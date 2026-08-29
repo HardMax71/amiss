@@ -146,6 +146,7 @@ fn classify_pure<const N: usize>(
         &gathered.claim_name,
         &gathered.suffix,
         &gathered.adapter,
+        &gathered.semantic_template,
     ];
     if foreign
         .iter()

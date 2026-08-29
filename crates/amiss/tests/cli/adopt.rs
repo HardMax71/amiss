@@ -223,7 +223,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
             provider_run_attempt: 2,
         }),
         constraint: None,
-        semantic: amiss_scan::semantic::Inputs::default(),
+        semantic: amiss_scan::semantic::Input::None,
         requests: amiss_scan::report::RequestDigests::default(),
         external_defect: None,
         errors_retained: 64,

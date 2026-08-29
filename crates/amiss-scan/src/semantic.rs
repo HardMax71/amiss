@@ -24,6 +24,14 @@ pub struct Inputs {
     pub(crate) provenance: Vec<Provenance>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Input {
+    #[default]
+    None,
+    Bound(Inputs),
+    Template(amiss_wire::semantic::SemanticEvidenceTemplate),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RecordSet {
     pub(crate) complete: bool,
@@ -116,7 +124,23 @@ pub(crate) struct View<'a> {
     pub(crate) routes: Option<&'a BTreeMap<String, SiteRoute>>,
 }
 
-pub(crate) fn bind(inputs: &Inputs, candidate: Digest) -> Result<Context, ErrorDetail> {
+pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDetail> {
+    let parsed;
+    let inputs = match input {
+        Input::None => return Ok(Context::default()),
+        Input::Bound(inputs) => inputs,
+        Input::Template(template) => {
+            let value = amiss_wire::semantic::bind_template(template, candidate)
+                .map_err(|error| crate::request::configuration_detail(&error))?;
+            let supplied = [amiss_wire::requests::SuppliedSemanticEvidence {
+                value,
+                expected_context_digest: template.context_digest,
+            }];
+            parsed =
+                parse(&supplied).map_err(|error| crate::request::configuration_detail(&error))?;
+            &parsed
+        }
+    };
     if inputs
         .candidate_bindings
         .iter()
