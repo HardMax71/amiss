@@ -78,6 +78,7 @@ pub(super) fn site_build_context(
         .ok_or(MdBookEvidenceError::Evidence)?;
     Ok((
         crate::SemanticEvidenceExpectation {
+            acquisition_identity: producer_identity.clone(),
             producer_kind,
             producer_identity,
             producer_version: SITE_BUILD_VERSION.to_owned(),

@@ -4,13 +4,13 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use amiss_wire::controls::STATEMENT_TTL_MAX_SECONDS;
-use amiss_wire::json::Value;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::WATCHDOG_MILLISECONDS;
 
 use crate::bootstrap_runner::renewal_wait;
 use crate::{
-    BootstrapRun, ControllerClock, RunHeartbeat, RunRequest, Runner, RunnerOutcome, run_bootstrap,
+    AcquiredSemanticTemplate, BootstrapRun, ControllerClock, RunHeartbeat, RunRequest, Runner,
+    RunnerOutcome, run_bootstrap,
 };
 
 pub struct AcquisitionTarget<'a> {
@@ -32,7 +32,7 @@ pub trait Acquisition: Send {
         &mut self,
         request: &RunRequest,
         target: AcquisitionTarget<'_>,
-    ) -> Result<Vec<Value>, Self::Error>;
+    ) -> Result<Vec<AcquiredSemanticTemplate>, Self::Error>;
 }
 
 pub struct AcquiringRunner<A> {
@@ -101,7 +101,7 @@ impl<A: Acquisition + 'static> Runner for AcquiringRunner<A> {
                 scratch: &self.scratch,
                 evaluation_instant: &evaluation_instant,
                 valid_until: &valid_until,
-                semantic_evidence: &acquired.semantic_evidence,
+                semantic_templates: &acquired.semantic_templates,
                 wall_timeout: self.wall_timeout,
             },
             heartbeat,
@@ -112,7 +112,7 @@ impl<A: Acquisition + 'static> Runner for AcquiringRunner<A> {
 struct AcquiredRun {
     repository: tempfile::TempDir,
     action: tempfile::TempDir,
-    semantic_evidence: Vec<Value>,
+    semantic_templates: Vec<AcquiredSemanticTemplate>,
 }
 
 impl AcquiredRun {
@@ -126,7 +126,7 @@ impl AcquiredRun {
         Ok(Self {
             repository,
             action,
-            semantic_evidence: Vec::new(),
+            semantic_templates: Vec::new(),
         })
     }
 }
@@ -159,7 +159,7 @@ fn run_acquisition<A: Acquisition>(
     request: &RunRequest,
     roots: &AcquiredRun,
     cancelled: Arc<AtomicBool>,
-) -> Option<Vec<Value>> {
+) -> Option<Vec<AcquiredSemanticTemplate>> {
     let mut acquisition = slot.lock().ok().and_then(|mut slot| slot.take())?;
     let target = AcquisitionTarget {
         repository: roots.repository.path(),
@@ -174,7 +174,7 @@ fn run_acquisition<A: Acquisition>(
 }
 
 fn await_acquisition(
-    receiver: &mpsc::Receiver<(Option<Vec<Value>>, AcquiredRun)>,
+    receiver: &mpsc::Receiver<(Option<Vec<AcquiredSemanticTemplate>>, AcquiredRun)>,
     cancelled: &AtomicBool,
     heartbeat: &mut dyn RunHeartbeat,
     mut renew_after: Duration,
@@ -182,7 +182,7 @@ fn await_acquisition(
     loop {
         match receiver.recv_timeout(renew_after) {
             Ok((Some(evidence), mut roots)) => {
-                roots.semantic_evidence = evidence;
+                roots.semantic_templates = evidence;
                 return Ok(roots);
             }
             Ok((None, _roots)) => return Err(()),

@@ -9,7 +9,6 @@ use std::time::Duration;
 use amiss_bootstrap::result::RESULT_BYTES;
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, BOOTSTRAP_EXECUTABLE_BYTES};
 use amiss_wire::digest::hb;
-use amiss_wire::json::Value;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::{MACHINE_JSON_BYTES, WATCHDOG_MILLISECONDS};
 use processkit::{
@@ -17,9 +16,9 @@ use processkit::{
 };
 
 use crate::{
-    AcquiredRoots, BootstrapJob, BootstrapJobInput, BootstrapTermination, HeartbeatOutcome,
-    RunHeartbeat, RunRequest, RunnerOutcome, bootstrap_job, classify_bootstrap_result,
-    verify_acquired,
+    AcquiredRoots, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobInput, BootstrapTermination,
+    HeartbeatOutcome, RunHeartbeat, RunRequest, RunnerOutcome, bootstrap_job,
+    classify_bootstrap_result, verify_acquired,
 };
 
 const MAX_HEARTBEAT_WAIT: Duration = Duration::from_secs(5);
@@ -34,7 +33,7 @@ pub struct BootstrapRun<'a> {
     pub scratch: &'a Path,
     pub evaluation_instant: &'a UtcInstant,
     pub valid_until: &'a UtcInstant,
-    pub semantic_evidence: &'a [Value],
+    pub semantic_templates: &'a [AcquiredSemanticTemplate],
     pub wall_timeout: Duration,
 }
 
@@ -87,7 +86,7 @@ pub fn run_bootstrap(
         run: request,
         evaluation_instant: run.evaluation_instant.clone(),
         valid_until: run.valid_until.clone(),
-        acquired_semantic_evidence: run.semantic_evidence,
+        acquired_semantic_templates: run.semantic_templates,
     }) else {
         return RunnerOutcome::TamperedRuntime;
     };

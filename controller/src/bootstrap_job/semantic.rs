@@ -1,25 +1,61 @@
-use std::collections::BTreeSet;
+mod tests;
 
-use amiss_wire::digest::Digest;
-use amiss_wire::json::{self, Value};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::json;
+use amiss_wire::model::ArtifactId;
 use amiss_wire::requests::SuppliedSemanticEvidence;
+use base64::Engine as _;
 
 use super::plan::normalized_expectations;
-use super::{BootstrapJobError, SemanticEvidenceExpectation, SemanticEvidenceTemplate};
+use super::{
+    AcquiredSemanticTemplate, BootstrapJobError, BoundSemanticEvidence,
+    SEMANTIC_INPUT_ARTIFACT_BYTES, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
+};
 
-/// Binds controller-produced templates and acquired envelopes to one exact
-/// candidate and orders the resulting set by payload identity.
+const INPUT_ARTIFACT_SCHEMA: &str = "amiss/controller-semantic-input-artifact-v1";
+
+struct BoundInput {
+    payload_digest: Digest,
+    supplied: SuppliedSemanticEvidence,
+    acquisition_identity: Option<ArtifactId>,
+    template_bytes: Arc<[u8]>,
+    template_digest: Digest,
+    envelope_bytes: Vec<u8>,
+    envelope_digest: Digest,
+}
+
+#[derive(serde::Serialize)]
+struct InputArtifact<'a> {
+    inputs: Vec<InputArtifactRow<'a>>,
+    schema: &'static str,
+}
+
+#[derive(serde::Serialize)]
+struct InputArtifactRow<'a> {
+    acquisition_identity: Option<&'a str>,
+    envelope_bytes_base64: String,
+    envelope_digest: String,
+    payload_digest: String,
+    template_bytes_base64: String,
+    template_digest: String,
+}
+
+/// Binds controller-produced and independently acquired templates to one exact candidate.
+/// The returned audit artifact retains every source byte and derived envelope in payload order.
 ///
 /// # Errors
 ///
-/// An envelope is malformed, exceeds a limit, names another subject, or
-/// collides with another envelope.
+/// A template is malformed, exceeds a limit, disagrees with its planned acquisition identity,
+/// or collides with another derived envelope.
 pub fn bind_semantic_evidence(
     templates: &[SemanticEvidenceTemplate],
     expectations: &[SemanticEvidenceExpectation],
-    acquired: &[Value],
+    acquired: &[AcquiredSemanticTemplate],
     candidate_identity_digest: Digest,
-) -> Result<Vec<SuppliedSemanticEvidence>, BootstrapJobError> {
+) -> Result<BoundSemanticEvidence, BootstrapJobError> {
     if expectations.len() != acquired.len() {
         return Err(BootstrapJobError::SemanticEvidence);
     }
@@ -30,70 +66,134 @@ pub fn bind_semantic_evidence(
     if count > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT {
         return Err(BootstrapJobError::SemanticEvidence);
     }
-    let mut expected = BTreeSet::from_iter(normalized_expectations(expectations)?);
-    let templates = templates.iter().map(|template| {
-        let value = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
+
+    let mut expected = normalized_expectations(expectations)?
+        .into_iter()
+        .map(|expectation| (expectation.acquisition_identity.clone(), expectation))
+        .collect::<BTreeMap<_, _>>();
+    let mut bound = Vec::with_capacity(count);
+    for template in templates {
+        let template_value = amiss_wire::semantic::template(template.clone())
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        checked_evidence(
-            value,
-            &envelope,
-            template.context_digest,
+        bound.push(bind_input(
+            template,
+            None,
+            Arc::from(json::canonical(&template_value)),
             candidate_identity_digest,
-        )
-    });
-    let acquired = acquired.iter().cloned().map(|value| {
-        let envelope = amiss_wire::semantic::parse(&json::canonical(&value))
+        )?);
+    }
+    for source in acquired {
+        let template = amiss_wire::semantic::parse_template(&source.bytes)
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        let expectation = SemanticEvidenceExpectation {
-            producer_kind: envelope.payload.producer_kind.clone(),
-            producer_identity: envelope.payload.producer_identity.clone(),
-            producer_version: envelope.payload.producer_version.clone(),
-            context_digest: envelope.payload.context_digest,
+        let actual = SemanticEvidenceExpectation {
+            acquisition_identity: source.acquisition_identity.clone(),
+            producer_kind: template.producer_kind.clone(),
+            producer_identity: template.producer_identity.clone(),
+            producer_version: template.producer_version.clone(),
+            context_digest: template.context_digest,
         };
-        expected
-            .remove(&expectation)
-            .then_some(())
-            .ok_or(BootstrapJobError::SemanticEvidence)?;
-        checked_evidence(
-            value,
-            &envelope,
-            expectation.context_digest,
+        if expected.remove(&source.acquisition_identity).as_ref() != Some(&actual) {
+            return Err(BootstrapJobError::SemanticEvidence);
+        }
+        bound.push(bind_input(
+            &template,
+            Some(source.acquisition_identity.clone()),
+            Arc::clone(&source.bytes),
             candidate_identity_digest,
+        )?);
+    }
+
+    bound.sort_by_key(|input| input.payload_digest);
+    if !expected.is_empty()
+        || bound.windows(2).any(
+            |pair| matches!(pair, [left, right] if left.payload_digest == right.payload_digest),
         )
-    });
-    let mut envelopes = templates
-        .chain(acquired)
-        .collect::<Result<Vec<_>, BootstrapJobError>>()?;
-    envelopes.sort_by_key(|(digest, _evidence)| *digest);
-    if envelopes
-        .windows(2)
-        .any(|pair| matches!(pair, [left, right] if left.0 == right.0))
     {
         return Err(BootstrapJobError::SemanticEvidence);
     }
-    Ok(envelopes
-        .into_iter()
-        .map(|(_digest, evidence)| evidence)
-        .collect())
+    let artifact = if bound.is_empty() {
+        None
+    } else {
+        Some(input_artifact(&bound, SEMANTIC_INPUT_ARTIFACT_BYTES)?)
+    };
+    Ok(BoundSemanticEvidence {
+        supplied: bound.into_iter().map(|input| input.supplied).collect(),
+        artifact,
+    })
 }
 
-fn checked_evidence(
-    value: Value,
-    envelope: &amiss_wire::semantic::SemanticEvidenceEnvelope,
-    expected_context_digest: Digest,
+fn bind_input(
+    template: &SemanticEvidenceTemplate,
+    acquisition_identity: Option<ArtifactId>,
+    template_bytes: Arc<[u8]>,
     candidate_identity_digest: Digest,
-) -> Result<(Digest, SuppliedSemanticEvidence), BootstrapJobError> {
-    (envelope.payload.candidate_identity_digest == candidate_identity_digest
-        && envelope.payload.source_report_payload_digest.is_none()
-        && envelope.payload.context_digest == expected_context_digest)
-        .then_some((
-            envelope.payload_digest,
-            SuppliedSemanticEvidence {
-                value,
-                expected_context_digest,
-            },
-        ))
+) -> Result<BoundInput, BootstrapJobError> {
+    let value = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let envelope_bytes = json::canonical(&value);
+    let envelope = amiss_wire::semantic::parse(&envelope_bytes)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    if envelope.payload.candidate_identity_digest != candidate_identity_digest
+        || envelope.payload.source_report_payload_digest.is_some()
+        || envelope.payload.context_digest != template.context_digest
+    {
+        return Err(BootstrapJobError::SemanticEvidence);
+    }
+    Ok(BoundInput {
+        payload_digest: envelope.payload_digest,
+        supplied: SuppliedSemanticEvidence {
+            value,
+            expected_context_digest: template.context_digest,
+        },
+        acquisition_identity,
+        template_digest: sha256(&template_bytes),
+        template_bytes,
+        envelope_digest: sha256(&envelope_bytes),
+        envelope_bytes,
+    })
+}
+
+fn input_artifact(inputs: &[BoundInput], limit: u64) -> Result<Vec<u8>, BootstrapJobError> {
+    let mut artifact = InputArtifact {
+        inputs: inputs
+            .iter()
+            .map(|input| InputArtifactRow {
+                acquisition_identity: input.acquisition_identity.as_ref().map(ArtifactId::as_str),
+                envelope_bytes_base64: String::new(),
+                envelope_digest: input.envelope_digest.to_string(),
+                payload_digest: input.payload_digest.to_string(),
+                template_bytes_base64: String::new(),
+                template_digest: input.template_digest.to_string(),
+            })
+            .collect(),
+        schema: INPUT_ARTIFACT_SCHEMA,
+    };
+    let metadata =
+        serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let mut projected_length =
+        u64::try_from(metadata.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    for input in inputs {
+        let template_length = base64::encoded_len(input.template_bytes.len(), true)
+            .and_then(|length| u64::try_from(length).ok())
+            .ok_or(BootstrapJobError::SemanticEvidence)?;
+        let envelope_length = base64::encoded_len(input.envelope_bytes.len(), true)
+            .and_then(|length| u64::try_from(length).ok())
+            .ok_or(BootstrapJobError::SemanticEvidence)?;
+        projected_length = projected_length
+            .checked_add(template_length)
+            .and_then(|length| length.checked_add(envelope_length))
+            .filter(|length| *length <= limit)
+            .ok_or(BootstrapJobError::SemanticEvidence)?;
+    }
+    for (row, input) in artifact.inputs.iter_mut().zip(inputs) {
+        row.template_bytes_base64 =
+            base64::engine::general_purpose::STANDARD.encode(&input.template_bytes);
+        row.envelope_bytes_base64 =
+            base64::engine::general_purpose::STANDARD.encode(&input.envelope_bytes);
+    }
+    let bytes =
+        serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    (u64::try_from(bytes.len()).ok() == Some(projected_length))
+        .then_some(bytes)
         .ok_or(BootstrapJobError::SemanticEvidence)
 }

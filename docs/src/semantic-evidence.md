@@ -99,14 +99,21 @@ transport. Its output therefore remains self-asserted when supplied to `check`.
 
 The sealed controls request remains the provider-authenticated intake. A controller plan may hold
 candidate-independent templates such as an Intersphinx inventory set. A trusted acquisition may
-instead return already-formed pre-scan envelopes beside the exact repository and action roots. The
-frozen plan names each acquired producer kind, identity, version, and expected context exactly
-once. While building the sealed job, the controller strictly parses both sets, requires every
-acquired envelope to match one planned producer and context, names the exact candidate and no
-source report, applies their one combined count limit, orders them by payload digest, and rejects
-collisions. The engine repeats the context comparison from the sealed pair before consuming the
-evidence. A missing, extra, malformed, stale, wrong-context, post-scan, duplicate, or oversized
-acquired set is runtime tampering, not absent evidence.
+instead return exact candidate-independent template bytes beside the repository and action roots.
+The frozen plan names each acquisition identity, producer kind, producer identity, version, and
+expected context exactly once. While building the sealed job, the controller strictly parses both
+sets, requires every acquired template to match its planned identity and producer context, binds
+the exact candidate and no source report itself, applies their one combined count limit, orders
+them by payload digest, and rejects collisions. The engine repeats the context comparison from the
+sealed pair before consuming the evidence. A missing, extra, malformed, stale, wrong-context,
+duplicate, or oversized acquired set is runtime tampering, not absent evidence.
+
+Job construction also produces one canonical semantic-input audit value, capped by
+`SEMANTIC_INPUT_ARTIFACT_BYTES` before base64 allocation. In payload-digest order it holds each
+exact template byte stream, the exact canonical bound envelope, its acquisition identity when
+acquired, and SHA-256 and semantic payload digests. Reconstructing candidate binding therefore does
+not depend on mutable producer output. The bootstrap job exposes this value separately from the
+frozen engine report.
 
 A successful report projects the accepted envelopes' payload and producer/input identities under
 `controls.semantic_evidence`; the sealed bootstrap checks that projection against the request. An
@@ -150,10 +157,11 @@ becomes an explicitly unattributed generated route. Theme, preprocessor, and con
 are therefore observed in their finished bytes without running any of them inside Amiss.
 
 A trusted candidate acquisition may call this producer after an operator-owned build and return
-the already candidate-bound envelope. The built-in provider acquisitions still return none: the
-controller neither starts mdBook nor treats repository output or cache state as authority. The
-acquisition boundary keeps candidate output out of a startup plan and keeps the scanner from
-searching the repository for evidence.
+the exact candidate-independent template bytes under its planned acquisition identity. The
+controller, not the producer, binds the candidate. The built-in provider acquisitions still return
+none: the controller neither starts mdBook nor treats repository output or cache state as
+authority. The acquisition boundary keeps candidate output out of a startup plan and keeps the
+scanner from searching the repository for evidence.
 
 The bound-envelope schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)

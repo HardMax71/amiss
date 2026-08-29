@@ -147,7 +147,8 @@ pub(super) fn validate_request_size(
             &[],
             &[],
             execution.digest(),
-        )?,
+        )?
+        .supplied,
     };
     canonical_request(&request).map(|_bytes| ())
 }

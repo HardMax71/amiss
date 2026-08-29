@@ -2,6 +2,8 @@ mod controls;
 mod plan;
 mod semantic;
 
+use std::sync::Arc;
+
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
 };
@@ -10,7 +12,7 @@ use amiss_wire::json::{self, Value};
 use amiss_wire::model::{ArtifactId, UtcInstant};
 use amiss_wire::requests::{
     EvaluationRequest, RequestStreams, RequestTrust, SnapshotRequest, SuppliedControl,
-    SuppliedTime, commit_candidate_identity_digest,
+    SuppliedSemanticEvidence, SuppliedTime, commit_candidate_identity_digest,
 };
 
 use crate::RunRequest;
@@ -66,8 +68,23 @@ pub enum BootstrapJobError {
     RequestEncoding,
 }
 
+pub const SEMANTIC_INPUT_ARTIFACT_BYTES: u64 = 50_331_648;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcquiredSemanticTemplate {
+    pub acquisition_identity: ArtifactId,
+    pub bytes: Arc<[u8]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoundSemanticEvidence {
+    pub supplied: Vec<SuppliedSemanticEvidence>,
+    pub artifact: Option<Vec<u8>>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SemanticEvidenceExpectation {
+    pub acquisition_identity: ArtifactId,
     pub producer_kind: ArtifactId,
     pub producer_identity: ArtifactId,
     pub producer_version: String,
@@ -93,13 +110,14 @@ pub struct BootstrapJobInput<'a> {
     pub run: &'a RunRequest,
     pub evaluation_instant: UtcInstant,
     pub valid_until: UtcInstant,
-    pub acquired_semantic_evidence: &'a [Value],
+    pub acquired_semantic_templates: &'a [AcquiredSemanticTemplate],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BootstrapJob {
     pub streams: RequestStreams,
     pub constraint: Vec<u8>,
+    pub semantic_artifact: Option<Vec<u8>>,
 }
 
 /// Joins one authenticated run to its exact canonical bootstrap inputs. The
@@ -160,6 +178,12 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let constraint_value =
         json::parse(&constraint).map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let semantic = bind_semantic_evidence(
+        &checked_plan.policy.semantic_evidence,
+        &checked_plan.policy.semantic_acquisitions,
+        input.acquired_semantic_templates,
+        candidate_identity,
+    )?;
     let controls = controls::request(
         &checked_plan.policy,
         run,
@@ -169,12 +193,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             expected_digest: checked_plan.execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
-        bind_semantic_evidence(
-            &checked_plan.policy.semantic_evidence,
-            &checked_plan.policy.semantic_acquisitions,
-            input.acquired_semantic_evidence,
-            candidate_identity,
-        )?,
+        semantic.supplied,
     )?;
     let streams = RequestStreams {
         evaluation: evaluation
@@ -188,6 +207,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     Ok(BootstrapJob {
         streams,
         constraint,
+        semantic_artifact: semantic.artifact,
     })
 }
 

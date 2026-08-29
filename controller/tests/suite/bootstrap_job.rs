@@ -8,11 +8,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    AcquiredControl, BootstrapJob, BootstrapJobError, BootstrapJobInput, ChangeId, ChangeLocator,
-    CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy, IntegrationId,
-    OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
-    SemanticEvidenceExpectation, bootstrap_job, check_binding, check_plan,
+    AcquiredControl, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,
+    ChangeId, ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity,
+    ExternalPolicy, IntegrationId, OidPair, PolicyControls, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity,
+    RunRefs, RunRequest, SemanticEvidenceExpectation, SemanticEvidenceTemplate, bootstrap_job,
+    check_binding, check_plan,
 };
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
@@ -26,6 +27,7 @@ use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestTrust, SnapshotRequest,
     commit_candidate_identity_digest,
 };
+use base64::Engine as _;
 
 const LARGE_INVENTORY_ENTRIES: usize = 4_093;
 const MAX_PATH_BYTES: usize = 4_096;
@@ -169,13 +171,13 @@ fn plan(policy: PolicyControls) -> CheckPlan {
 
 fn bootstrap(
     run: &RunRequest,
-    acquired_semantic_evidence: &[Value],
+    acquired_semantic_templates: &[AcquiredSemanticTemplate],
 ) -> Result<BootstrapJob, BootstrapJobError> {
     bootstrap_job(BootstrapJobInput {
         run,
         evaluation_instant: instant("2026-07-12T10:00:00Z"),
         valid_until: instant("2026-07-12T10:05:00Z"),
-        acquired_semantic_evidence,
+        acquired_semantic_templates,
     })
 }
 
@@ -188,31 +190,41 @@ fn candidate_identity(run: &RunRequest) -> Digest {
         .candidate_identity_digest()
 }
 
-fn semantic_evidence(
-    candidate_identity_digest: Digest,
-    source_report_payload_digest: Option<Digest>,
-    context_digest: Digest,
-) -> Value {
-    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
-        candidate_identity_digest,
-        source_report_payload_digest,
+fn semantic_template(context_digest: Digest) -> Vec<u8> {
+    let template = amiss_wire::semantic::template(SemanticEvidenceTemplate {
         producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
         producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
         producer_version: "0.5.1".to_owned(),
         context_digest,
         input_digest: hb("amiss/test-site-build", b"output"),
         complete: true,
-        observations: Vec::new(),
+        observations: Arc::from([]),
     })
-    .unwrap()
+    .unwrap();
+    json::canonical(&template)
 }
 
-fn site_expectation(context_digest: Digest) -> SemanticEvidenceExpectation {
-    SemanticEvidenceExpectation {
-        producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
-        producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
-        producer_version: "0.5.1".to_owned(),
-        context_digest,
+struct SiteAcquisition {
+    expectation: SemanticEvidenceExpectation,
+    template: AcquiredSemanticTemplate,
+}
+
+fn site_acquisition(context_digest: Digest) -> SiteAcquisition {
+    let acquisition_identity = ArtifactId::new("test-site-artifact".to_owned()).unwrap();
+    let mut bytes = semantic_template(context_digest);
+    bytes.push(b'\n');
+    SiteAcquisition {
+        expectation: SemanticEvidenceExpectation {
+            acquisition_identity: acquisition_identity.clone(),
+            producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
+            producer_version: "0.5.1".to_owned(),
+            context_digest,
+        },
+        template: AcquiredSemanticTemplate {
+            acquisition_identity,
+            bytes: bytes.into(),
+        },
     }
 }
 
@@ -223,7 +235,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
         run: &run,
         evaluation_instant: instant("2026-07-12T10:00:00Z"),
         valid_until: instant("2026-07-12T10:05:00Z"),
-        acquired_semantic_evidence: &[],
+        acquired_semantic_templates: &[],
     })
     .unwrap();
 
@@ -272,17 +284,22 @@ fn job_construction_binds_the_complete_authenticated_run() {
 }
 
 #[test]
-fn acquired_semantic_evidence_joins_the_exact_candidate() {
+fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes() {
     let candidate = candidate_identity(&run_request(policy()));
     let context = hb("amiss/test-site-context", b"english/current");
     let mut policy = policy();
-    policy.semantic_acquisitions = vec![site_expectation(context)];
+    let acquisition = site_acquisition(context);
+    policy.semantic_acquisitions = vec![acquisition.expectation];
     let run = run_request(policy);
-    let evidence = semantic_evidence(candidate, None, context);
+    let source = acquisition.template;
+    let template = amiss_wire::semantic::parse_template(&source.bytes).unwrap();
+    let evidence = amiss_wire::semantic::bind_template(&template, candidate).unwrap();
     let evidence_digest = amiss_wire::semantic::parse(&json::canonical(&evidence))
         .unwrap()
         .payload_digest;
-    let job = bootstrap(&run, std::slice::from_ref(&evidence)).unwrap();
+    let job = bootstrap(&run, std::slice::from_ref(&source)).unwrap();
+    let replayed = bootstrap(&run, std::slice::from_ref(&source)).unwrap();
+    assert_eq!(job.semantic_artifact, replayed.semantic_artifact);
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let payload_digests = controls
         .semantic_evidence
@@ -297,25 +314,58 @@ fn acquired_semantic_evidence_joins_the_exact_candidate() {
     assert_eq!(controls.semantic_evidence.len(), 2);
     assert!(payload_digests.contains(&evidence_digest));
     assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
+
+    let artifact = json::parse(job.semantic_artifact.as_deref().unwrap()).unwrap();
+    let Value::Array(inputs) = artifact.member("inputs").unwrap() else {
+        panic!("the semantic artifact contains its input rows")
+    };
+    let acquired = inputs
+        .iter()
+        .find(|input| input.text("acquisition_identity") == Some("test-site-artifact"))
+        .unwrap();
+    let retained_template = base64::engine::general_purpose::STANDARD
+        .decode(acquired.text("template_bytes_base64").unwrap())
+        .unwrap();
+    let retained_envelope = base64::engine::general_purpose::STANDARD
+        .decode(acquired.text("envelope_bytes_base64").unwrap())
+        .unwrap();
+    let template_digest = amiss_wire::digest::sha256(&source.bytes).to_string();
+    let envelope_digest = amiss_wire::digest::sha256(&retained_envelope).to_string();
+    let payload_digest = evidence_digest.to_string();
+    assert_eq!(retained_template, source.bytes.as_ref());
+    assert_eq!(retained_envelope, json::canonical(&evidence));
+    assert_eq!(
+        acquired.text("template_digest"),
+        Some(template_digest.as_str())
+    );
+    assert_eq!(
+        acquired.text("envelope_digest"),
+        Some(envelope_digest.as_str())
+    );
+    assert_eq!(
+        acquired.text("payload_digest"),
+        Some(payload_digest.as_str())
+    );
 }
 
 #[test]
-fn acquired_semantic_evidence_must_be_pre_scan_candidate_and_context_bound() {
-    let candidate = candidate_identity(&run_request(PolicyControls::default()));
+fn acquired_semantic_templates_must_match_the_planned_identity_and_context() {
     let context = hb("amiss/test-site-context", b"english/current");
+    let acquisition = site_acquisition(context);
     let run = run_request(PolicyControls {
-        semantic_acquisitions: vec![site_expectation(context)],
+        semantic_acquisitions: vec![acquisition.expectation],
         ..PolicyControls::default()
     });
     let defects = [
-        Value::Null,
-        semantic_evidence(hb("amiss/test-candidate", b"other"), None, context),
-        semantic_evidence(candidate, Some(hb("amiss/test-report", b"report")), context),
-        semantic_evidence(
-            candidate,
-            None,
-            hb("amiss/test-site-context", b"french/current"),
-        ),
+        AcquiredSemanticTemplate {
+            acquisition_identity: ArtifactId::new("test-site-artifact".to_owned()).unwrap(),
+            bytes: Arc::from(*b"null"),
+        },
+        AcquiredSemanticTemplate {
+            acquisition_identity: ArtifactId::new("other-site-artifact".to_owned()).unwrap(),
+            bytes: semantic_template(context).into(),
+        },
+        site_acquisition(hb("amiss/test-site-context", b"french/current")).template,
     ];
 
     for defect in defects {
@@ -325,16 +375,29 @@ fn acquired_semantic_evidence_must_be_pre_scan_candidate_and_context_bound() {
         );
     }
 
-    let duplicate = semantic_evidence(candidate, None, context);
+    let duplicate = acquisition.template;
     assert_eq!(
         bootstrap(&run, &[duplicate.clone(), duplicate]).unwrap_err(),
         BootstrapJobError::SemanticEvidence
     );
 
-    let over_limit =
-        vec![Value::Null; amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)];
+    let over_limit = vec![
+        site_acquisition(context).template;
+        amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)
+    ];
     assert_eq!(
         bootstrap(&run, &over_limit).unwrap_err(),
+        BootstrapJobError::SemanticEvidence
+    );
+
+    let mut repeated_identity = site_acquisition(context).expectation;
+    repeated_identity.context_digest = hb("amiss/test-site-context", b"other");
+    let duplicate_plan = PolicyControls {
+        semantic_acquisitions: vec![site_acquisition(context).expectation, repeated_identity],
+        ..PolicyControls::default()
+    };
+    assert_eq!(
+        check_plan(Profile::Enforce, duplicate_plan, execution()).unwrap_err(),
         BootstrapJobError::SemanticEvidence
     );
 }
@@ -348,7 +411,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
-            acquired_semantic_evidence: &[],
+            acquired_semantic_templates: &[],
         })
         .unwrap_err(),
         BootstrapJobError::RunIdentity
@@ -375,7 +438,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
-            acquired_semantic_evidence: &[],
+            acquired_semantic_templates: &[],
         })
         .unwrap_err(),
         BootstrapJobError::ControlBinding
@@ -387,7 +450,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:20:00Z"),
-            acquired_semantic_evidence: &[],
+            acquired_semantic_templates: &[],
         })
         .unwrap_err(),
         BootstrapJobError::TrustedTime
@@ -433,7 +496,7 @@ fn a_validated_plan_cannot_be_changed_in_place() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
-            acquired_semantic_evidence: &[],
+            acquired_semantic_templates: &[],
         })
         .unwrap_err(),
         BootstrapJobError::CheckPlan
@@ -450,7 +513,7 @@ fn a_job_cannot_escape_the_ledger_frozen_plan_binding() {
             run: &run,
             evaluation_instant: instant("2026-07-12T10:00:00Z"),
             valid_until: instant("2026-07-12T10:05:00Z"),
-            acquired_semantic_evidence: &[],
+            acquired_semantic_templates: &[],
         })
         .unwrap_err(),
         BootstrapJobError::CheckPlan
