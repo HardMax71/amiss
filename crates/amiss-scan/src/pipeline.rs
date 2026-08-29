@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
+
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::{ArtifactId, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
 use amiss_wire::resolution::{Missing, Resolution};
 
@@ -10,6 +12,7 @@ use crate::observe::{ObservationIdentity, observation_digest};
 use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
+use crate::semantic::RecordSet;
 
 mod commit;
 /// Verification and packaging of wrapper-supplied external controls shared
@@ -38,6 +41,7 @@ pub(crate) struct CandidateOutcomes {
 
 pub(crate) struct CandidateEvaluation<'a> {
     policy: Option<&'a amiss_wire::controls::ScannerPolicy>,
+    record_sets: &'a BTreeMap<ArtifactId, RecordSet>,
     outcomes: &'a mut CandidateOutcomes,
 }
 
@@ -100,7 +104,7 @@ pub(crate) fn side_observations(
         })
         .fold(0_usize, usize::saturating_add);
     let mut observations: Vec<Observation> = Vec::with_capacity(observation_count);
-    let mut documents = std::collections::BTreeMap::new();
+    let mut documents = BTreeMap::new();
     for record in &discovery.documents {
         if let Some(raw) = record.raw_digest {
             documents.insert(record.path.clone(), (record.mode, raw));
@@ -183,14 +187,18 @@ fn evaluate_projections(
     discovery: &SnapshotDiscovery,
     candidate: CandidateEvaluation<'_>,
 ) -> Result<(), ErrorDetail> {
-    let CandidateEvaluation { policy, outcomes } = candidate;
+    let CandidateEvaluation {
+        policy,
+        record_sets,
+        outcomes,
+    } = candidate;
     let assertions = policy.map_or(
         &[][..],
         amiss_wire::controls::ScannerPolicy::projection_assertions,
     );
     for assertion in assertions {
         let document = RepoPath::from(&assertion.document);
-        let outcome = crate::projection::evaluate(resolver, discovery, assertion)
+        let outcome = crate::projection::evaluate(resolver, discovery, record_sets, assertion)
             .map_err(|defect| detail(&defect, Some(&document)))?;
         outcomes.projections.push(outcome);
     }

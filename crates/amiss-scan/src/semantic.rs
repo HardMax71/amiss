@@ -1,5 +1,6 @@
 mod decode;
 mod parse;
+mod record;
 mod site;
 
 use std::collections::BTreeMap;
@@ -17,9 +18,16 @@ pub(crate) use site::{fragment_target, navigation_contains};
 pub struct Inputs {
     pub(crate) candidate_bindings: Vec<Digest>,
     pub(crate) labels: Arc<BTreeMap<String, InventoryLabel>>,
+    pub(crate) record_sets: Arc<BTreeMap<ArtifactId, RecordSet>>,
     pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
     pub(crate) site: SiteEvaluation,
     pub(crate) provenance: Vec<Provenance>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RecordSet {
+    pub(crate) complete: bool,
+    pub(crate) records: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +104,7 @@ pub struct Provenance {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Context {
     pub(crate) labels: Arc<BTreeMap<String, InventoryLabel>>,
+    pub(crate) record_sets: Arc<BTreeMap<ArtifactId, RecordSet>>,
     pub(crate) routes: Arc<BTreeMap<String, SiteRoute>>,
     pub(crate) site: SiteEvaluation,
     pub(crate) provenance: Vec<Provenance>,
@@ -122,6 +131,7 @@ pub(crate) fn bind(inputs: &Inputs, candidate: Digest) -> Result<Context, ErrorD
     }
     Ok(Context {
         labels: inputs.labels.clone(),
+        record_sets: inputs.record_sets.clone(),
         routes: inputs.routes.clone(),
         site: inputs.site.clone(),
         provenance: inputs.provenance.clone(),

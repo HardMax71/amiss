@@ -11,6 +11,8 @@ pub const PAYLOAD_SCHEMA: &str = "amiss/semantic-evidence-payload";
 pub const SEMANTIC_EVIDENCE_BYTES: u64 = 16_777_216;
 pub const SEMANTIC_OBSERVATIONS_LIMIT: usize = 100_000;
 pub const PRODUCER_VERSION_BYTES: usize = 128;
+pub const RECORD_KEY_BYTES: usize = 4_096;
+pub const RECORD_VALUE_BYTES: usize = 65_536;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SemanticEvidence {

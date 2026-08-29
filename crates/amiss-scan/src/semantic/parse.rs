@@ -8,6 +8,7 @@ use amiss_wire::json::{Value, canonical};
 use amiss_wire::requests::SuppliedSemanticEvidence;
 
 use super::decode::{DESTINATION_BYTES, LABEL_BYTES, bounded_text, decode_id, observation_row};
+use super::record::insert_record_set;
 use super::site::site_build_inputs;
 use super::{Inputs, InventoryLabel, Provenance};
 
@@ -16,6 +17,8 @@ const INTERSPHINX_VERSION: &str = "1";
 const SPHINX_LABEL: &str = "sphinx-label";
 const SITE_BUILD_PRODUCER: &str = "site-build";
 const SITE_BUILD_VERSION: &str = "0.5.1";
+const RECORD_SET_PRODUCER: &str = "record-set";
+const RECORD_SET_VERSION: &str = "1";
 
 pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
@@ -90,6 +93,21 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
                 site_build = true;
                 inputs.site =
                     site_build_inputs(&mut inputs.routes, &path, observations, &mut site_items)?;
+            }
+            RECORD_SET_PRODUCER => {
+                if producer_version != RECORD_SET_VERSION {
+                    return fail(
+                        &format!("{path}.payload.producer.version"),
+                        ErrorKind::InvalidValue,
+                    );
+                }
+                insert_record_set(
+                    Arc::make_mut(&mut inputs.record_sets),
+                    &path,
+                    source_report_payload_digest,
+                    complete,
+                    observations,
+                )?;
             }
             _ => {}
         }

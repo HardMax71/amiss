@@ -3,7 +3,7 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
-use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
+use amiss_fixtures::{SiteObservation, record_set, site_navigation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, parse};
@@ -218,6 +218,105 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
         let error = controls(&request).expect_err("the inventory consumer fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
+}
+
+#[test]
+fn record_sets_accept_complete_empty_and_partial_typed_rows() {
+    for (complete, records) in [
+        (true, Vec::new()),
+        (true, vec![("amiss::check", "pub fn check()")]),
+        (false, vec![("amiss::check", "pub fn check()")]),
+    ] {
+        let mut evidence = semantic_evidence(
+            "record-set",
+            "1",
+            hb("test/records", b"rust public api"),
+            None,
+            vec![record_set("rust/public-api", &records)],
+        );
+        evidence.complete = complete;
+        let mut request = empty();
+        request.semantic_evidence = vec![supplied_semantic(evidence)];
+        controls(&request).expect("one typed record set reaches the projection context");
+    }
+}
+
+#[test]
+fn malformed_record_sets_fail_closed() {
+    let valid = semantic_evidence(
+        "record-set",
+        "1",
+        hb("test/records", b"rust public api"),
+        None,
+        vec![record_set(
+            "rust/public-api",
+            &[("amiss::check", "pub fn check()")],
+        )],
+    );
+    let mut wrong_version = valid.clone();
+    wrong_version.producer_version = "2".to_owned();
+    let mut report_derived = valid.clone();
+    report_derived.source_report_payload_digest = Some(hb("test/report", b"report"));
+    let mut multiple_sets = valid.clone();
+    multiple_sets
+        .observations
+        .push(record_set("rust/other", &[]));
+    let mut unsorted = valid.clone();
+    unsorted.observations = vec![record_set("rust/public-api", &[("b", "B"), ("a", "A")])];
+    let mut duplicate = valid.clone();
+    duplicate.observations = vec![record_set("rust/public-api", &[("a", "A"), ("a", "B")])];
+    let mut control_value = valid.clone();
+    control_value.observations = vec![record_set("rust/public-api", &[("a", "line\nbreak")])];
+    let mut empty_value = valid;
+    empty_value.observations = vec![record_set("rust/public-api", &[("a", "")])];
+
+    for evidence in [
+        wrong_version,
+        report_derived,
+        multiple_sets,
+        unsorted,
+        duplicate,
+        control_value,
+        empty_value,
+    ] {
+        let mut request = empty();
+        request.semantic_evidence = vec![supplied_semantic(evidence)];
+        let error = controls(&request).expect_err("malformed record evidence stays unavailable");
+        assert!(matches!(
+            error.code,
+            AnalysisErrorCode::ConfigurationInvalid | AnalysisErrorCode::NoncanonicalArray
+        ));
+    }
+}
+
+#[test]
+fn two_envelopes_cannot_claim_the_same_record_set() {
+    let mut left = semantic_evidence(
+        "record-set",
+        "1",
+        hb("test/records", b"left"),
+        None,
+        vec![record_set("rust/public-api", &[("a", "A")])],
+    );
+    left.context_digest = hb("test/record-context", b"left");
+    let mut right = semantic_evidence(
+        "record-set",
+        "1",
+        hb("test/records", b"right"),
+        None,
+        vec![record_set("rust/public-api", &[("b", "B")])],
+    );
+    right.context_digest = hb("test/record-context", b"right");
+    let mut supplied = vec![supplied_semantic(left), supplied_semantic(right)];
+    supplied.sort_by_key(|item| {
+        amiss_wire::semantic::parse(&amiss_wire::json::canonical(&item.value))
+            .expect("the generic envelopes are valid")
+            .payload_digest
+    });
+    let mut request = empty();
+    request.semantic_evidence = supplied;
+    let error = controls(&request).expect_err("one set name has one evidence authority");
+    assert_eq!(error.code, AnalysisErrorCode::NoncanonicalArray);
 }
 
 #[test]

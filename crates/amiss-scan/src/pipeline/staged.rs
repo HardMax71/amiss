@@ -387,7 +387,7 @@ fn staged_index_result(
         scan_limits,
         initial,
         index,
-        skip_worktree_paths,
+        skip_worktree_paths: skip_count,
         base_placeholder,
         base_tree,
     } = staged_open(repo, setup_shell, base_oid, floor_mismatch, verified_floor)?;
@@ -399,7 +399,7 @@ fn staged_index_result(
         base_oid,
         &base_tree,
         &index,
-        skip_worktree_paths,
+        skip_count,
     )?;
     let mut base_scan = ScanResources::new(scan_limits);
     let mut candidate_scan = ScanResources::new(scan_limits);
@@ -429,7 +429,6 @@ fn staged_index_result(
     )
     .map_err(|detail| not_evaluated(setup_shell, &base_placeholder, detail))?;
     candidate_scan.scans = std::mem::take(&mut base_scan.scans);
-
     let mut outcomes = CandidateOutcomes::default();
     let (candidate_discovery, candidate_side, mut failures) = staged_candidate(
         repo,
@@ -448,6 +447,7 @@ fn staged_index_result(
         base_failures,
         CandidateEvaluation {
             policy: candidate_policy.policy.as_ref(),
+            record_sets: external.semantic.record_sets.as_ref(),
             outcomes: &mut outcomes,
         },
     )?;
@@ -462,9 +462,8 @@ fn staged_index_result(
         (&candidate_discovery, &mut candidate_scan),
         &mut failures,
     );
-    let candidate_block =
-        resolved_candidate_block(repo, base_oid, &index, skip_worktree_paths, &mut failures);
-    let mut setup = setup_shell.with(base_evaluated.identity.clone(), candidate_block);
+    let block = resolved_candidate_block(repo, base_oid, &index, skip_count, &mut failures);
+    let mut setup = setup_shell.with(base_evaluated.identity.clone(), block);
     setup.policy = effects;
     setup.policy.errors_retained = setup_shell.errors_retained;
     setup.policy.complete_findings = scan_limits.complete_findings;

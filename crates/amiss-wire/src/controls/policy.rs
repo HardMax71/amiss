@@ -2,7 +2,7 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::extraction::governed_name_valid;
 use crate::json::{self, Value};
-use crate::model::{Adapter, RepoPathText};
+use crate::model::{Adapter, ArtifactId, RepoPathText};
 
 use super::{
     Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA,
@@ -16,6 +16,7 @@ pub const PREVIOUS_CODE_SINK: &str = "previous-code";
 pub const BLOB_LINES_SOURCE: &str = "blob-lines";
 pub const NAMED_REGION_SOURCE: &str = "named-region";
 pub const TREE_PATHS_SOURCE: &str = "tree-paths";
+pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const SOURCE_MARKER_BYTES: usize = 256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
@@ -119,10 +120,17 @@ pub struct TreePathSelection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordValueSelection {
+    pub set: ArtifactId,
+    pub key: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectionSource {
     BlobLines(BlobLineSelection),
     NamedRegion(NamedRegionSelection),
     TreePaths(TreePathSelection),
+    RecordValue(RecordValueSelection),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -190,6 +198,23 @@ fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource
                 .transpose()?,
             maximum_depth: obj.required("maximum_depth", safe_line)?,
         })
+    } else if kind == RECORD_VALUE_SOURCE {
+        ProjectionSource::RecordValue(RecordValueSelection {
+            set: obj.required("set", |path, value| {
+                ArtifactId::new(de::string(path, value)?)
+                    .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+            })?,
+            key: obj.required("key", |path, value| {
+                let key = de::string(path, value)?;
+                if key.is_empty()
+                    || key.len() > crate::semantic::RECORD_KEY_BYTES
+                    || key.chars().any(char::is_control)
+                {
+                    return fail(path, ErrorKind::InvalidValue);
+                }
+                Ok(key)
+            })?,
+        })
     } else {
         return fail(&kind_path, ErrorKind::InvalidValue);
     };
@@ -209,20 +234,17 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
         de::const_str(path, value, PREVIOUS_CODE_SINK)
     })?;
     let source = obj.required("source", decode_projection_source)?;
-    match (projection, &source) {
-        (
-            ProjectionKind::CodeTextV1,
-            ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
-        )
-        | (
-            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1,
-            ProjectionSource::TreePaths(_),
-        ) => {}
-        (ProjectionKind::CodeTextV1, ProjectionSource::TreePaths(_))
-        | (
-            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1,
-            ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_),
-        ) => return fail(path, ErrorKind::Inconsistent),
+    let compatible = match &source {
+        ProjectionSource::BlobLines(_)
+        | ProjectionSource::NamedRegion(_)
+        | ProjectionSource::RecordValue(_) => projection == ProjectionKind::CodeTextV1,
+        ProjectionSource::TreePaths(_) => matches!(
+            projection,
+            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
+        ),
+    };
+    if !compatible {
+        return fail(path, ErrorKind::Inconsistent);
     }
     obj.finish()?;
     Ok(ProjectionAssertion {
@@ -274,6 +296,14 @@ pub fn projection_source_value(source: &ProjectionSource) -> Value {
             }
             Value::Object(fields.into_boxed_slice())
         }
+        ProjectionSource::RecordValue(selection) => Value::Object(Box::new([
+            ("kind".into(), Value::String(RECORD_VALUE_SOURCE.into())),
+            (
+                "set".into(),
+                Value::String(selection.set.as_str().to_owned().into()),
+            ),
+            ("key".into(), Value::String(selection.key.clone().into())),
+        ])),
     }
 }
 

@@ -14,7 +14,6 @@ use super::content::{Content, content_cache, read_target, target_projection};
 use super::{RAW_EVIDENCE_DOMAIN, Resolution, Resolver, TARGET_LINE_PROJECTION_DOMAIN};
 
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
-const PROJECTION_SOURCE_DOMAIN: &str = "amiss/scanner-code-text-source";
 
 impl Resolver<'_> {
     /// Answers one value claim against the snapshot: the target must be a
@@ -104,7 +103,9 @@ impl Resolver<'_> {
         let path = match selection {
             ProjectionSource::BlobLines(source) => RepoPath::from(&source.path),
             ProjectionSource::NamedRegion(source) => RepoPath::from(&source.path),
-            ProjectionSource::TreePaths(_) => return Err(Error::Internal),
+            ProjectionSource::TreePaths(_) | ProjectionSource::RecordValue(_) => {
+                return Err(Error::Internal);
+            }
         };
         let observed_bytes = u64::try_from(sink.value.len()).unwrap_or(u64::MAX);
         let Some((mode, oid)) = self
@@ -167,7 +168,9 @@ impl Resolver<'_> {
                 )?;
                 named_region_bytes(body, selection)
             }
-            ProjectionSource::TreePaths(_) => return Err(Error::Internal),
+            ProjectionSource::TreePaths(_) | ProjectionSource::RecordValue(_) => {
+                return Err(Error::Internal);
+            }
         };
         let selected = match selected {
             Ok(selected) => selected,
@@ -191,7 +194,7 @@ impl Resolver<'_> {
         }
         Ok(Verdict::Drift {
             reason: DriftReason::ContentDiffers,
-            expected_digest: Some(hb(PROJECTION_SOURCE_DOMAIN, expected)),
+            expected_digest: Some(hb(crate::projection::CODE_TEXT_SOURCE_DOMAIN, expected)),
             observed_digest: Some(sink.digest),
             expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
             observed_bytes: Some(observed_bytes),

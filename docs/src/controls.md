@@ -71,6 +71,16 @@ marker with no matching policy row remains an unsupported reserved capability an
 incomplete. Removing the marker while the policy row survives therefore cannot disable the
 relation, while removing the policy row is `policy-weakened` even when the marker is removed too.
 
+A `record-value` source applies `code-text-v1` to one key in a named `record-set@1` semantic
+envelope. Each such envelope carries exactly one `record-set` object, including empty complete
+sets, and its `records` are strictly ordered and unique by key. Keys are nonempty, control-free
+UTF-8 of at most 4,096 bytes; display values have the same character law and a 65,536-byte cap.
+The producer's strings remain inert data: Amiss runs no formatter or template. A row that is
+present can attest its value even when the envelope says the set is partial. A missing key means
+`source-record-absent` only for a complete set; in a partial set it is
+`source-record-unproven`, and a missing named set is `source-record-set-absent`. Evidence derived
+from an earlier scanner report is not admitted as a projection source.
+
 The `sorted-rows-v1` projection pairs the same sink with a `tree-paths` source: one existing tree
 root, an optional exact suffix, and a positive maximum relative depth. It filters the complete
 ordered snapshot map without another Git walk or object read, excludes directory entries, and
