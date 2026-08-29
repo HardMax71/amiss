@@ -48,6 +48,7 @@ fn prepare(config: ServiceConfig) -> Result<QueuedService<WorkerContext>, Servic
     let source = Arc::new(GitHubPullRequestSource::new(
         config.provider.clone(),
         config.webhook,
+        &config.lane.plan.policy.workflow_artifacts,
     ));
     let admission_source = Arc::clone(&source);
     let target = config.target;

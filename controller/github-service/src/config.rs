@@ -86,7 +86,7 @@ impl RawConfig {
             &self.plan,
             Some((&scope.provider, &scope.repository)),
         )?);
-        validate_action(&scope.provider, &plan)?;
+        validate_github_plan(&scope.provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let trust_set = TrustSetId::new("github-webhook-keys".to_owned())
             .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
@@ -248,13 +248,26 @@ fn github_branch(branch: &str) -> Result<BranchRef, ConfigError> {
         .ok_or(ConfigError::invalid("GitHub target branch is invalid"))
 }
 
-fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
+fn validate_github_plan(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
     (plan.execution.action_repository().host() == provider.instance.as_str()
         && !plan.execution.action_repository().owner().contains('/')
         && plan.execution.action_object_format() == ObjectFormat::Sha1)
         .then_some(())
         .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 GitHub instance",
+        ))?;
+    plan.policy
+        .workflow_artifacts
+        .first()
+        .is_none_or(|first| {
+            plan.policy.workflow_artifacts.iter().all(|artifact| {
+                artifact.workflow_identity == first.workflow_identity
+                    && artifact.event == first.event
+            })
+        })
+        .then_some(())
+        .ok_or(ConfigError::invalid(
+            "workflow artifacts must use one completion trigger",
         ))
 }
 

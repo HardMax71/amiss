@@ -122,6 +122,7 @@ pub fn provider_webhooks(data: &[u8]) {
         let source = GitHubPullRequestSource::new(
             provider.clone(),
             GitHubWebhook::new(keyring(trust_set.clone())),
+            &[],
         );
         let signature = format!("sha256={}", signature(&exercise.body));
         authenticate_webhook(
