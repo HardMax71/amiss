@@ -31,9 +31,10 @@ pub use acquiring_runner::{AcquiringRunner, Acquisition, AcquisitionTarget};
 pub use acquisition::{AcquireError, AcquiredRoots, verify_acquired};
 pub use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 pub use artifacts::{
-    ArtifactBundle, ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference,
-    ArtifactStoreConfig, FileArtifactStore, MAX_ARTIFACT_BYTES, MAX_ARTIFACT_RECORD_BYTES,
-    MAX_ARTIFACT_RECORDS, MAX_ARTIFACT_RETENTION, PublicationAuditReference, artifact_route,
+    ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
+    ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference, ArtifactStoreConfig,
+    FileArtifactStore, MAX_ARTIFACT_BYTES, MAX_ARTIFACT_RECORD_BYTES, MAX_ARTIFACT_RECORDS,
+    MAX_ARTIFACT_RETENTION, artifact_route,
 };
 pub use bootstrap_job::{
     AcquiredControl, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,

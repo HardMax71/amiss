@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::publication::{PUBLICATION_DOCUMENT_BYTES, PublicationVerdict};
+use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -84,12 +85,14 @@ pub(super) struct Record {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) semantic: Option<Blob>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) publication_audit: Option<PublicationAudit>,
+    pub(super) publication_audit: Option<SidecarAudit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) relation_audit: Option<SidecarAudit>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct PublicationAudit {
+pub(super) struct SidecarAudit {
     pub(super) plan: Blob,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) evidence: Option<Blob>,
@@ -105,7 +108,8 @@ pub(super) struct RecordInput {
     pub(super) external_tally: Option<ExternalTally>,
     pub(super) external_incomplete: bool,
     pub(super) semantic: Option<Blob>,
-    pub(super) publication_audit: Option<PublicationAudit>,
+    pub(super) publication_audit: Option<SidecarAudit>,
+    pub(super) relation_audit: Option<SidecarAudit>,
 }
 
 impl Record {
@@ -134,6 +138,7 @@ impl Record {
             external_incomplete: input.external_incomplete,
             semantic: input.semantic,
             publication_audit: input.publication_audit,
+            relation_audit: input.relation_audit,
         };
         record.id = record.expected_id()?;
         record.validate(retention)?;
@@ -149,28 +154,22 @@ impl Record {
                 .assessment
                 .as_ref()
                 .is_none_or(|_assessment| self.plan.is_some() && self.evidence.is_some());
-        let publication_valid = self.publication_audit.as_ref().is_none_or(|audit| {
-            audit.plan.valid()
-                && audit.plan.length <= PUBLICATION_DOCUMENT_BYTES
-                && audit
-                    .evidence
-                    .as_ref()
-                    .is_none_or(|blob| blob.valid() && blob.length <= PUBLICATION_DOCUMENT_BYTES)
-                && audit.assessment.valid()
-                && audit.assessment.length <= PUBLICATION_DOCUMENT_BYTES
-                && audit
-                    .verdict
-                    .parse::<PublicationVerdict>()
-                    .is_ok_and(|verdict| {
-                        verdict == PublicationVerdict::Unproven || audit.evidence.is_some()
-                    })
-                && self.semantic.is_none()
+        let sidecar_valid = match (&self.publication_audit, &self.relation_audit) {
+            (None, None) => true,
+            (Some(audit), None) => {
+                valid_sidecar::<PublicationVerdict>(audit, PUBLICATION_DOCUMENT_BYTES)
+            }
+            (None, Some(audit)) => valid_sidecar::<RelationVerdict>(audit, RELATION_DOCUMENT_BYTES),
+            (Some(_publication), Some(_relation)) => false,
+        };
+        let has_sidecar = self.publication_audit.is_some() || self.relation_audit.is_some();
+        let sidecar_isolated = !has_sidecar
+            || self.semantic.is_none()
                 && self.plan.is_none()
                 && self.evidence.is_none()
                 && self.assessment.is_none()
                 && self.external_tally.is_none()
-                && !self.external_incomplete
-        });
+                && !self.external_incomplete;
         if self.schema != RECORD_SCHEMA
             || !valid_id(&self.id)
             || super::evaluation_id(&self.evaluation_id).is_err()
@@ -185,7 +184,8 @@ impl Record {
                 !blob.valid() || blob.length > crate::SEMANTIC_INPUT_ARTIFACT_BYTES
             })
             || !valid_chain
-            || !publication_valid
+            || !sidecar_valid
+            || !sidecar_isolated
             || !self.expected_id().is_ok_and(|expected| expected == self.id)
         {
             return Err(ArtifactError::Corrupt);
@@ -244,6 +244,20 @@ impl Record {
                     .as_ref()
                     .map(|audit| &audit.assessment),
             ),
+            (
+                super::ArtifactComponent::RelationPlan,
+                self.relation_audit.as_ref().map(|audit| &audit.plan),
+            ),
+            (
+                super::ArtifactComponent::RelationEvidence,
+                self.relation_audit
+                    .as_ref()
+                    .and_then(|audit| audit.evidence.as_ref()),
+            ),
+            (
+                super::ArtifactComponent::RelationAssessment,
+                self.relation_audit.as_ref().map(|audit| &audit.assessment),
+            ),
         ]
         .into_iter()
         .filter_map(|(component, blob)| blob.map(|blob| (component, blob)))
@@ -262,7 +276,9 @@ impl Record {
             #[serde(skip_serializing_if = "Option::is_none")]
             semantic: &'a Option<Blob>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            publication_audit: &'a Option<PublicationAudit>,
+            publication_audit: &'a Option<SidecarAudit>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            relation_audit: &'a Option<SidecarAudit>,
         }
         let identity = Identity {
             evaluation_id: &self.evaluation_id,
@@ -274,10 +290,27 @@ impl Record {
             external_incomplete: self.external_incomplete,
             semantic: &self.semantic,
             publication_audit: &self.publication_audit,
+            relation_audit: &self.relation_audit,
         };
         let bytes = serde_json::to_vec(&identity).map_err(|_defect| ArtifactError::Corrupt)?;
         Ok(hex::encode(hb(ID_DOMAIN, &bytes).as_bytes()))
     }
+}
+
+fn valid_sidecar<V>(audit: &SidecarAudit, maximum: u64) -> bool
+where
+    V: std::str::FromStr,
+{
+    audit.plan.valid()
+        && audit.plan.length <= maximum
+        && audit
+            .evidence
+            .as_ref()
+            .is_none_or(|blob| blob.valid() && blob.length <= maximum)
+        && audit.assessment.valid()
+        && audit.assessment.length <= maximum
+        && audit.verdict.parse::<V>().is_ok()
+        && (audit.verdict == "unproven" || audit.evidence.is_some())
 }
 
 #[derive(Serialize, Deserialize)]
