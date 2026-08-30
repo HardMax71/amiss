@@ -217,6 +217,9 @@ name = "amiss-controller-git"
 version = "0.26.0"
 dependencies = [
  "amiss-controller",
+ "amiss-fixtures",
+ "amiss-git",
+ "amiss-scan",
  "amiss-wire",
  "flate2",
  "gix",

@@ -1,3 +1,4 @@
+mod projection;
 mod tests;
 
 use std::path::Path;
@@ -12,6 +13,10 @@ use amiss_wire::model::{ArtifactId, ObjectFormat};
 use crate::{
     ExactFetch, ExactWant, GitCredential, GitFetchBounds, GitFetchLimits, GitFetchUsage,
     REPOSITORY_CANDIDATE_REF, REPOSITORY_TARGET_REF, fetch_exact,
+};
+
+pub use projection::{
+    RelationProjectionError, RelationProjectionRequest, project_relation_evidence,
 };
 
 #[derive(Clone, Copy)]

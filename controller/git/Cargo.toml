@@ -10,6 +10,8 @@ publish = false
 
 [dependencies]
 amiss-controller = { path = ".." }
+amiss-git = { path = "../../crates/amiss-git" }
+amiss-scan = { path = "../../crates/amiss-scan" }
 amiss-wire = { path = "../../crates/amiss-wire" }
 flate2.workspace = true
 gix = { version = "0.87", default-features = false, features = [
@@ -25,4 +27,5 @@ thiserror.workspace = true
 workspace = true
 
 [dev-dependencies]
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 reqwest.workspace = true
