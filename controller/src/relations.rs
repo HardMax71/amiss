@@ -1,5 +1,6 @@
 mod acquisition;
 mod schedule;
+mod store;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -18,6 +19,9 @@ pub use acquisition::{
     relation_transition, verify_relation_acquired,
 };
 pub use schedule::{PendingRelation, RelationAdmission, RelationScheduleError, schedule_relation};
+pub use store::{
+    FileRelationScheduleStore, RELATION_SCHEDULE_BINDING_LIMIT, RelationScheduleStoreError,
+};
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 
