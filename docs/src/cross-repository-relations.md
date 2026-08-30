@@ -8,8 +8,10 @@ credential, selector, limit, or publication target.
 
 This is not yet a complete cross-repository checking lane. No service loads this configuration or
 resolves foreign provider heads and credentials yet. Closed plan, evidence, and assessment
-contracts can represent the exact comparison selected after acquisition, but the controller does
-not yet project either subject, retain a complete audit chain, or publish a status.
+contracts represent the exact comparison selected after acquisition. The provider-neutral Git
+layer can project repository-backed sources from all four acquired snapshots, but no trusted
+record producer is admitted yet, and the controller does not retain a complete audit chain or
+publish a status.
 
 ## One closed relation
 
@@ -132,6 +134,16 @@ with one LF and no trailing LF. `decimal-count-v1` uses the canonical ASCII deci
 without leading zeroes. The compact receipt does not copy potentially multi-megabyte values merely
 to compare them twice.
 
+After acquisition, the Git projector rebuilds the plan, binds every repository, selector, commit,
+and tree back to the frozen operator relation, and reopens the two physically independent roots.
+It visits roles in canonical order and each role's base before its candidate. Each snapshot receives
+the smaller of the subject budget and aggregate budget that remains. Blob-line and named-region
+sources count one selected record and charge the larger of the source blob or canonical projected
+value. Tree-path sources count every selected path and charge the larger of their combined path
+bytes or canonical output. A crossed budget or untrusted Git object refuses the complete operation;
+a missing, unsupported, or incomplete repository source records a null slot. Record-value and
+record-set slots also remain null until a separately authenticated, snapshot-bound producer exists.
+
 The evidence reader establishes shape and payload integrity only. Repeating a plan digest is not
 producer authority, and matching role spellings are not checked until the plan and evidence are
 assessed together. Unknown fields, malformed digests or roles, reordered or repeated rows, unsafe
@@ -162,9 +174,10 @@ transition carries a null reason, while `unproven` carries exactly one of `evide
 `evidence-unbound`, `role-mismatch`, or `projection-unproven`. Inconsistent verdict/reason/evidence
 combinations and a changed payload refuse the assessment instead of being normalized.
 
-The assessment is replayable over the exact bound documents, but it does not authenticate how
-projection evidence was produced. The future controller lane must create or admit that evidence
-under the operator-owned relation and resource limits before retaining the chain.
+The assessment is replayable over the exact bound documents, but the portable evidence document
+does not authenticate its producer by itself. The acquisition projector establishes repository
+slots under the operator-owned relation and resource limits; a future controller lane must invoke
+that boundary, admit any non-repository evidence, and retain the complete chain.
 
 ## Trust boundary
 
@@ -176,20 +189,20 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. produce the four selected projection slots under the registered resource limits;
-2. bind the accepted report and retain the plan, optional evidence, and replayed assessment as one
-   immutable sidecar;
+1. admit snapshot-bound record values and sets from an authenticated producer;
+2. bind the accepted report and retain the plan, repository or admitted evidence, and replayed
+   assessment as one immutable sidecar;
 3. model coordinated release or paired-change intent without timestamp inference; and
 4. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
-Until those stages exist, these primitives prove only that trusted configuration, authenticated
-delivery selection, exact revision binding, bounded acquisition, and the resulting plan/evidence
-and assessment shapes have a closed representation. They do not yet claim that any
-cross-repository content has been compared or approved by a provider lane.
+Until those stages exist, the projector can prove an exact bounded repository comparison when its
+caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet
+claims that it performed or approved that comparison.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
 the [exact relation transport](https://github.com/HardMax71/amiss/blob/main/controller/git/src/relation.rs),
+the [repository projector](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/projection/repository.rs),
 and the [relation laws](https://github.com/HardMax71/amiss/blob/main/controller/tests/suite/relations.rs)
 exercise bidirectional selection, stable ordering, four-revision binding, independent roots,
 projection compatibility, joint budgets, and exact destinations.

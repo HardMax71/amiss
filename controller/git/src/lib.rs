@@ -16,7 +16,8 @@ use amiss_wire::model::Oid;
 use secrecy::SecretString;
 
 pub use relation::{
-    RelationGitFetch, RelationGitSubject, RelationSubjectUsage, fetch_relation_exact,
+    RelationGitFetch, RelationGitSubject, RelationProjectionError, RelationProjectionRequest,
+    RelationSubjectUsage, fetch_relation_exact, project_relation_evidence,
 };
 
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_mins(1);
