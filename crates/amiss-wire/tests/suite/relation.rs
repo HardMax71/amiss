@@ -20,6 +20,8 @@ use amiss_wire::relation::{
     RelationSnapshot, RelationSubject, evidence, parse_evidence, parse_plan, plan,
 };
 
+mod assessment;
+
 fn digest(digit: char) -> Digest {
     Digest::from_wire(&format!("sha256:{}", digit.to_string().repeat(64))).unwrap()
 }
