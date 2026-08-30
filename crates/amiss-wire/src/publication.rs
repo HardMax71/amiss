@@ -8,9 +8,10 @@ use crate::model::{ArtifactId, Oid, RepositoryIdentity};
 mod assessment;
 mod evidence;
 
+pub use crate::assessment::AssessmentVerdict as PublicationVerdict;
 pub use assessment::{
     ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, PublicationAssessment,
-    PublicationAssessmentEnvelope, PublicationReason, PublicationVerdict, assess, parse_assessment,
+    PublicationAssessmentEnvelope, PublicationReason, assess, parse_assessment,
 };
 pub use evidence::{
     EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, PublicationDeployment, PublicationEvidence,

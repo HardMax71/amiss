@@ -62,6 +62,7 @@ fn parse_defect<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<String> {
 fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
     match contract_name {
         "debt-snapshot" => parse_defect(DebtSnapshot::parse(bytes)),
+        "locale-coverage-assessment" => parse_defect(amiss_wire::locale::parse_assessment(bytes)),
         "locale-coverage-evidence" => parse_defect(amiss_wire::locale::parse_evidence(bytes)),
         "locale-coverage-plan" => parse_defect(amiss_wire::locale::parse_plan(bytes)),
         "organization-floor" => parse_defect(OrganizationFloor::parse(bytes)),

@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use crate::controls::value::{object, text};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
@@ -10,8 +8,15 @@ use crate::publication::{
     producer_value,
 };
 
+mod assessment;
 mod evidence;
 
+pub use crate::assessment::AssessmentVerdict as LocaleCoverageVerdict;
+pub use assessment::{
+    ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
+    ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope,
+    LocaleCoverageReason, LocaleCoverageResult, assess, parse_assessment,
+};
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
     LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope, LocalePageInventory, PAGE_ITEMS_LIMIT,
@@ -136,23 +141,15 @@ fn decode_policy(path: &str, value: Value) -> Result<LocaleCoveragePolicy, Error
             }
             "named" => {
                 let keys_path = requirement.field("keys");
-                let values = de::array(&keys_path, requirement.take("keys")?)?;
-                if values.is_empty() {
+                let keys = de::sorted_items(
+                    &keys_path,
+                    requirement.take("keys")?,
+                    PAGE_ITEMS_LIMIT,
+                    |path, value| de::bounded_text(path, value, PAGE_KEY_BYTES),
+                    |key| key,
+                )?;
+                if keys.is_empty() {
                     return fail(&keys_path, ErrorKind::InvalidValue);
-                }
-                let mut keys = Vec::with_capacity(values.len());
-                for (index, value) in values.into_iter().enumerate() {
-                    let key =
-                        de::bounded_text(&format!("{keys_path}[{index}]"), value, PAGE_KEY_BYTES)?;
-                    match keys.last().map(|previous: &String| previous.cmp(&key)) {
-                        Some(Ordering::Equal) => {
-                            return fail(&keys_path, ErrorKind::DuplicateMember);
-                        }
-                        Some(Ordering::Greater) => {
-                            return fail(&keys_path, ErrorKind::UnsortedSet);
-                        }
-                        None | Some(Ordering::Less) => keys.push(key),
-                    }
                 }
                 requirement.finish()?;
                 Ok(LocalePageRequirement::Named(keys))

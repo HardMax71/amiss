@@ -184,25 +184,38 @@ pub(crate) fn sorted_map<T>(
     limit: usize,
     mut decode: impl FnMut(&str, Value) -> Result<(String, T), Error>,
 ) -> Result<BTreeMap<String, T>, Error> {
+    Ok(sorted_items(
+        path,
+        value,
+        limit,
+        |path, value| decode(path, value),
+        |row| &row.0,
+    )?
+    .into_iter()
+    .collect())
+}
+
+pub(crate) fn sorted_items<T, K: Ord>(
+    path: &str,
+    value: Value,
+    limit: usize,
+    mut decode: impl FnMut(&str, Value) -> Result<T, Error>,
+    key: impl Fn(&T) -> &K,
+) -> Result<Vec<T>, Error> {
     let values = array(path, value)?;
     if values.len() > limit {
         return fail(path, ErrorKind::LimitExceeded);
     }
-    let mut rows: BTreeMap<String, T> = BTreeMap::new();
+    let mut items: Vec<T> = Vec::with_capacity(values.len());
     for (index, value) in values.into_iter().enumerate() {
-        let (key, value) = decode(&format!("{path}[{index}]"), value)?;
-        match rows
-            .last_key_value()
-            .map(|(previous, _value)| previous.cmp(&key))
-        {
+        let item = decode(&format!("{path}[{index}]"), value)?;
+        match items.last().map(|previous| key(previous).cmp(key(&item))) {
             Some(Ordering::Equal) => return fail(path, ErrorKind::DuplicateMember),
             Some(Ordering::Greater) => return fail(path, ErrorKind::UnsortedSet),
-            None | Some(Ordering::Less) => {
-                rows.insert(key, value);
-            }
+            None | Some(Ordering::Less) => items.push(item),
         }
     }
-    Ok(rows)
+    Ok(items)
 }
 
 /// # Errors

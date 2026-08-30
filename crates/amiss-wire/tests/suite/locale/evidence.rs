@@ -16,7 +16,7 @@ use amiss_wire::locale::{
 
 use super::{digest, locale_plan};
 
-fn inventory(input_digit: char, pages: &[(&str, char)]) -> LocalePageInventory {
+pub(super) fn inventory(input_digit: char, pages: &[(&str, char)]) -> LocalePageInventory {
     LocalePageInventory {
         input_digest: digest(input_digit),
         complete: true,
@@ -27,7 +27,7 @@ fn inventory(input_digit: char, pages: &[(&str, char)]) -> LocalePageInventory {
     }
 }
 
-fn locale_evidence() -> LocaleCoverageEvidence {
+pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
     let planned = locale_plan();
     let plan_value = plan(&planned).unwrap();
     LocaleCoverageEvidence {
