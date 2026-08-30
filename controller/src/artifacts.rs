@@ -70,6 +70,14 @@ pub struct ArtifactAuditReference {
     pub audit: ArtifactAuditDigests,
 }
 
+pub(crate) struct RetainedRelationAudit {
+    pub(crate) artifact: ArtifactReference,
+    pub(crate) report: Vec<u8>,
+    pub(crate) plan: Vec<u8>,
+    pub(crate) evidence: Option<Vec<u8>>,
+    pub(crate) assessment: Vec<u8>,
+}
+
 #[derive(
     Clone,
     Copy,

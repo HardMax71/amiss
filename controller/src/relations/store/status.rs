@@ -1,9 +1,16 @@
 use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::ArtifactId;
+use amiss_wire::relation::parse_plan;
 use serde::{Deserialize, Serialize};
 
 use super::RelationScheduleStoreError;
 use crate::artifacts::valid_artifact_id;
-use crate::{ArtifactAuditDigests, RelationStatusRecord, RelationStatusTarget};
+use crate::{
+    ArtifactAuditDigests, ArtifactAuditReference, FileArtifactStore, LeaseFence, OidPair,
+    PendingRelation, RelationAuditBundle, RelationRegistry, RelationStatusRecord,
+    RelationStatusTarget, RelationSubjectHead, RelationSubjectTransition, TriggeredRelation,
+    relation_transition, stage_relation_status, validate_relation_audit,
+};
 
 const STATUS_BINDING_DOMAIN: &str = "amiss/controller-relation-status-binding-v1";
 
@@ -82,16 +89,113 @@ pub(super) fn store_status(
 pub(super) fn validate_stored_status(
     stored: &StoredStatus,
 ) -> Result<(), RelationScheduleStoreError> {
-    if amiss_wire::model::ArtifactId::new(stored.relation.clone()).is_none()
-        || amiss_wire::model::ArtifactId::new(stored.coordination.clone()).is_none()
-        || amiss_wire::model::ArtifactId::new(stored.trigger_role.clone()).is_none()
-        || crate::LeaseFence::new(stored.fence).is_none()
+    if ArtifactId::new(stored.relation.clone()).is_none()
+        || ArtifactId::new(stored.coordination.clone()).is_none()
+        || ArtifactId::new(stored.trigger_role.clone()).is_none()
+        || LeaseFence::new(stored.fence).is_none()
         || Digest::from_wire(&stored.status_binding).is_none()
         || !valid_artifact_id(&stored.artifact_id)
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
     Ok(())
+}
+
+pub(super) fn reopen_status(
+    stored: &StoredStatus,
+    registry: &RelationRegistry,
+    artifacts: &FileArtifactStore,
+) -> Result<RelationStatusRecord, RelationScheduleStoreError> {
+    validate_stored_status(stored)?;
+    let relation =
+        ArtifactId::new(stored.relation.clone()).ok_or(RelationScheduleStoreError::Corrupt)?;
+    let plan = registry
+        .plans
+        .get(&relation)
+        .ok_or(RelationScheduleStoreError::Configuration)?;
+    let retained = artifacts
+        .reopen_relation_audit(&stored.artifact_id)
+        .map_err(RelationScheduleStoreError::Artifact)?;
+    let parsed =
+        parse_plan(&retained.plan).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let trigger_role =
+        ArtifactId::new(stored.trigger_role.clone()).ok_or(RelationScheduleStoreError::Corrupt)?;
+    if parsed.payload.relation.identity != relation
+        || parsed.payload.coordination.as_str() != stored.coordination
+        || parsed.payload.trigger_role != trigger_role
+    {
+        return Err(RelationScheduleStoreError::Corrupt);
+    }
+    let subjects = parsed
+        .payload
+        .subjects
+        .each_ref()
+        .map(|subject| RelationSubjectTransition {
+            role: subject.role.clone(),
+            commits: OidPair {
+                base: subject.base.commit.clone(),
+                candidate: subject.candidate.commit.clone(),
+            },
+            trees: OidPair {
+                base: subject.base.tree.clone(),
+                candidate: subject.candidate.tree.clone(),
+            },
+        });
+    let transition = relation_transition(
+        TriggeredRelation {
+            plan: std::sync::Arc::clone(plan),
+            trigger_role,
+        },
+        parsed.payload.coordination,
+        subjects,
+    )
+    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let pending = PendingRelation {
+        transition,
+        fence: LeaseFence::new(stored.fence).ok_or(RelationScheduleStoreError::Corrupt)?,
+    };
+    let heads = pending.transition.subjects.each_ref().map(|frozen| {
+        pending
+            .transition
+            .relation
+            .plan
+            .subjects
+            .iter()
+            .find(|subject| subject.role == frozen.role)
+            .map(|subject| RelationSubjectHead {
+                subject: subject.clone(),
+                candidate_commit: frozen.commits.candidate.clone(),
+            })
+            .ok_or(RelationScheduleStoreError::Corrupt)
+    });
+    let [documentation, source] = heads;
+    let heads = [documentation?, source?];
+    let bundle = RelationAuditBundle {
+        transition: &pending.transition,
+        report: &retained.report,
+        plan: &retained.plan,
+        evidence: retained.evidence.as_deref(),
+        assessment: &retained.assessment,
+    };
+    let audit =
+        validate_relation_audit(bundle).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let record = stage_relation_status(
+        &pending,
+        Some(&pending),
+        heads,
+        None,
+        ArtifactAuditReference {
+            artifact: retained.artifact,
+            audit: ArtifactAuditDigests::Relation(audit),
+        },
+        bundle,
+    )
+    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?
+    .ok_or(RelationScheduleStoreError::Corrupt)?;
+    if store_status(&record)? != *stored {
+        return Err(RelationScheduleStoreError::Corrupt);
+    }
+    Ok(record)
 }
 
 fn record_binding(record: &RelationStatusRecord) -> Result<String, RelationScheduleStoreError> {
