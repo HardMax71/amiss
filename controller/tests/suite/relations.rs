@@ -3,13 +3,16 @@
     reason = "integration fixtures construct known-valid relation identities"
 )]
 
+use std::sync::Arc;
+
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
-    OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RELATION_REGISTRY_LIMIT,
-    RelationAcquiredRoot, RelationAcquisitionError, RelationLimits, RelationPlan,
-    RelationRegistryError, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
-    RelationTransition, relation_registry, relation_transition, relations_for_delivery,
+    LeaseFence, OidPair, OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
+    RelationLimits, RelationPlan, RelationRegistryError, RelationScheduleError,
+    RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
+    relation_registry, relation_transition, relations_for_delivery, schedule_relation,
     verify_relation_acquired,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
@@ -372,5 +375,81 @@ fn identical_object_ids_still_require_independent_subject_roots() {
         )
         .err(),
         Some(RelationAcquisitionError::Unproven)
+    );
+}
+
+#[test]
+fn exact_relation_work_is_pending_once_and_duplicate_from_either_trigger() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let transition = frozen_transition(&source, &documentation);
+    let RelationAdmission::Scheduled(first) = schedule_relation(None, transition.clone()).unwrap()
+    else {
+        panic!("first exact work schedules");
+    };
+    assert_eq!(first.fence.get(), 1);
+
+    let mut opposite_trigger = transition;
+    opposite_trigger.relation.trigger_role = artifact("documentation");
+    let RelationAdmission::Duplicate(repeated) =
+        schedule_relation(Some(first.clone()), opposite_trigger).unwrap()
+    else {
+        panic!("the other authenticated trigger deduplicates exact work");
+    };
+    assert_eq!(repeated, first);
+}
+
+#[test]
+fn a_coordination_identity_cannot_be_rebound_but_a_new_one_supersedes() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let transition = frozen_transition(&source, &documentation);
+    let RelationAdmission::Scheduled(first) = schedule_relation(None, transition.clone()).unwrap()
+    else {
+        panic!("first exact work schedules");
+    };
+
+    let mut rebound = transition.clone();
+    rebound.subjects[1].trees.candidate = rebound.subjects[1].trees.base.clone();
+    assert_eq!(
+        schedule_relation(Some(first.clone()), rebound).unwrap_err(),
+        RelationScheduleError::CoordinationConflict
+    );
+
+    let mut next = transition;
+    next.coordination = artifact("workflow/release-43");
+    let RelationAdmission::Scheduled(next) = schedule_relation(Some(first), next).unwrap() else {
+        panic!("a different declared coordination schedules new work");
+    };
+    assert_eq!(next.fence.get(), 2);
+}
+
+#[test]
+fn scheduling_refuses_configuration_rebinding_and_fence_overflow() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let transition = frozen_transition(&source, &documentation);
+    let previous = PendingRelation {
+        transition: transition.clone(),
+        fence: LeaseFence::new(1).unwrap(),
+    };
+    let mut rebound = transition.clone();
+    let mut plan = rebound.relation.plan.as_ref().clone();
+    plan.context_digest = sha256(b"another operator relation context");
+    rebound.relation.plan = Arc::new(plan);
+    assert_eq!(
+        schedule_relation(Some(previous), rebound).unwrap_err(),
+        RelationScheduleError::BindingConflict
+    );
+
+    let exhausted = PendingRelation {
+        transition: transition.clone(),
+        fence: LeaseFence::new(u64::MAX).unwrap(),
+    };
+    let mut next = transition;
+    next.coordination = artifact("workflow/release-43");
+    assert_eq!(
+        schedule_relation(Some(exhausted), next).unwrap_err(),
+        RelationScheduleError::GenerationExhausted
     );
 }

@@ -1,4 +1,5 @@
 mod acquisition;
+mod schedule;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub use acquisition::{
     RelationAcquiredRoot, RelationAcquisitionError, RelationSubjectTransition, RelationTransition,
     relation_transition, verify_relation_acquired,
 };
+pub use schedule::{PendingRelation, RelationAdmission, RelationScheduleError, schedule_relation};
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 

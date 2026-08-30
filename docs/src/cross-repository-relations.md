@@ -66,6 +66,21 @@ occurrence. The relation configuration and its context digest define what that i
 Amiss treats the spelling as opaque. Commit timestamps, nearby branch heads, URL versions, and
 repository prose are not pairing evidence.
 
+## Pending and supersession law
+
+The provider-neutral scheduler is a pure transition over an optional pending value and one newly
+frozen relation transition. The first exact value receives fence 1. Repeating the same operator
+plan, coordination identity, and four subject snapshots is a duplicate and preserves the original
+pending value, even when the other authenticated role triggered the repeat. A coordination identity
+cannot be rebound to different snapshots, and a relation identity cannot be rebound to different
+operator configuration.
+
+A different coordination identity under the same relation advances the fence and becomes the new
+pending value. A worker holding the earlier fence is therefore superseded, while an audit it already
+retained remains immutable under its own artifact identity. Fence overflow fails closed. This model
+contains no clock and gives no lexical meaning to coordination identities; durable atomic storage
+and provider finality checks remain separate stages.
+
 ## Exact Git acquisition
 
 The existing strict HTTPS protocol-v2 shallow fetch now accepts a positive object and pack-byte
@@ -199,8 +214,7 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. durably schedule coordination identities and fence superseded work without timestamp inference;
-   and
+2. persist the pending/supersession law atomically across restart; and
 3. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
