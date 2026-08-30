@@ -12,6 +12,7 @@ use crate::{
     RelationAuditBundle, RelationAuditDigests,
 };
 
+pub(crate) use format::valid_id as valid_artifact_id;
 pub use store::FileArtifactStore;
 
 pub const MAX_ARTIFACT_RECORDS: u64 = 100_000;

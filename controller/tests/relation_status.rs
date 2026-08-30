@@ -7,17 +7,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactAuditBundle, ArtifactAuditReference, ArtifactStoreConfig, ControllerClock,
-    ControllerEvaluationId, FileArtifactStore, LeaseFence, PendingRelation, RelationAuditBundle,
-    RelationStatusError, RelationStatusRecord, RelationSubjectHead, complete_relation_status,
-    stage_relation_status,
+    ArtifactAuditBundle, ArtifactAuditReference, ArtifactError, ArtifactStoreConfig,
+    ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
+    LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle,
+    RelationScheduleStoreError, RelationStatusError, RelationStatusRecord, RelationSubjectHead,
+    complete_relation_status, stage_relation_status,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::model::ArtifactId;
 
-fn store(root: &tempfile::TempDir) -> FileArtifactStore {
-    let clock: Arc<dyn ControllerClock> = TestClock::new();
+fn store(root: &tempfile::TempDir, clock: Arc<dyn ControllerClock>) -> FileArtifactStore {
     FileArtifactStore::open_with_clock(
         root.path(),
         ArtifactStoreConfig {
@@ -76,7 +76,7 @@ fn retain(
 fn exact_status_stage_replays_and_completes_idempotently() {
     let fixture = relation_audit(true).unwrap();
     let root = tempfile::tempdir().unwrap();
-    let store = store(&root);
+    let store = store(&root, TestClock::new());
     let retained = retain(&store, "evaluation/relation/status", &fixture);
     let pending = PendingRelation {
         transition: fixture.transition.clone(),
@@ -134,7 +134,7 @@ fn exact_status_stage_replays_and_completes_idempotently() {
 fn stale_foreign_and_conflicting_status_state_fails_closed() {
     let fixture = relation_audit(true).unwrap();
     let root = tempfile::tempdir().unwrap();
-    let store = store(&root);
+    let store = store(&root, TestClock::new());
     let retained = retain(&store, "evaluation/relation/exact", &fixture);
     let pending = PendingRelation {
         transition: fixture.transition.clone(),
@@ -227,4 +227,248 @@ fn stale_foreign_and_conflicting_status_state_fails_closed() {
         .unwrap_err(),
         RelationStatusError::InvalidAudit
     );
+}
+
+#[test]
+fn durable_status_replays_and_completes_exactly_across_restart() {
+    let fixture = relation_audit(true).unwrap();
+    let artifact_root = tempfile::tempdir().unwrap();
+    let artifacts = store(&artifact_root, TestClock::new());
+    let retained = retain(&artifacts, "evaluation/relation/durable", &fixture);
+    let relation_root = tempfile::tempdir().unwrap();
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
+    let RelationAdmission::Scheduled(pending) =
+        relations.schedule(fixture.transition.clone()).unwrap()
+    else {
+        panic!("the exact relation schedules");
+    };
+
+    let staged = relations
+        .stage_status(
+            &artifacts,
+            &pending,
+            heads(&fixture),
+            retained.clone(),
+            bundle(&fixture),
+        )
+        .unwrap()
+        .unwrap();
+    let journal = std::fs::read(
+        relation_root
+            .path()
+            .join(".amiss-relation-schedules.journal"),
+    )
+    .unwrap();
+    assert!(
+        fixture
+            .transition
+            .relation
+            .plan
+            .subjects
+            .iter()
+            .all(|subject| !journal
+                .windows(subject.credential.as_str().len())
+                .any(|window| window == subject.credential.as_str().as_bytes()))
+    );
+    drop(relations);
+
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
+    assert_eq!(
+        relations
+            .stage_status(
+                &artifacts,
+                &pending,
+                heads(&fixture),
+                retained.clone(),
+                bundle(&fixture),
+            )
+            .unwrap(),
+        Some(staged.clone())
+    );
+    let completed = relations.complete_status(&staged).unwrap();
+    assert!(completed.completed);
+    drop(relations);
+
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
+    assert_eq!(relations.complete_status(&staged).unwrap(), completed);
+    assert_eq!(
+        relations
+            .stage_status(
+                &artifacts,
+                &pending,
+                heads(&fixture),
+                retained,
+                bundle(&fixture),
+            )
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn status_rebinding_and_superseded_staging_do_not_change_the_journal() {
+    let fixture = relation_audit(true).unwrap();
+    let artifact_root = tempfile::tempdir().unwrap();
+    let artifacts = store(&artifact_root, TestClock::new());
+    let retained = retain(&artifacts, "evaluation/relation/exact-status", &fixture);
+    let relation_root = tempfile::tempdir().unwrap();
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 2).unwrap();
+    let RelationAdmission::Scheduled(pending) =
+        relations.schedule(fixture.transition.clone()).unwrap()
+    else {
+        panic!("the exact relation schedules");
+    };
+    let staged = relations
+        .stage_status(
+            &artifacts,
+            &pending,
+            heads(&fixture),
+            retained,
+            bundle(&fixture),
+        )
+        .unwrap()
+        .unwrap();
+
+    let foreign_fixture = relation_audit(false).unwrap();
+    let foreign = retain(
+        &artifacts,
+        "evaluation/relation/foreign-status",
+        &foreign_fixture,
+    );
+    let journal = relation_root
+        .path()
+        .join(".amiss-relation-schedules.journal");
+    let before_conflict = std::fs::metadata(&journal).unwrap().len();
+    assert!(matches!(
+        relations.stage_status(
+            &artifacts,
+            &pending,
+            heads(&foreign_fixture),
+            foreign,
+            bundle(&foreign_fixture),
+        ),
+        Err(RelationScheduleStoreError::Status(
+            RelationStatusError::BindingConflict
+        ))
+    ));
+    assert_eq!(std::fs::metadata(&journal).unwrap().len(), before_conflict);
+
+    let mut next = fixture.transition.clone();
+    next.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    let RelationAdmission::Scheduled(next) = relations.schedule(next).unwrap() else {
+        panic!("the next coordination schedules");
+    };
+    let before_stale = std::fs::metadata(&journal).unwrap().len();
+    assert!(matches!(
+        relations.stage_status(
+            &artifacts,
+            &pending,
+            heads(&fixture),
+            staged.audit.clone(),
+            bundle(&fixture),
+        ),
+        Err(RelationScheduleStoreError::Status(
+            RelationStatusError::Superseded
+        ))
+    ));
+    assert_eq!(std::fs::metadata(&journal).unwrap().len(), before_stale);
+    assert!(relations.is_current(&next).unwrap());
+    assert!(relations.complete_status(&staged).unwrap().completed);
+}
+
+#[test]
+fn an_expired_audit_cannot_create_a_status_stage() {
+    let fixture = relation_audit(true).unwrap();
+    let artifact_root = tempfile::tempdir().unwrap();
+    let clock = TestClock::new();
+    let artifacts = store(&artifact_root, clock.clone());
+    let retained = retain(&artifacts, "evaluation/relation/expired-status", &fixture);
+    let relation_root = tempfile::tempdir().unwrap();
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
+    let RelationAdmission::Scheduled(pending) =
+        relations.schedule(fixture.transition.clone()).unwrap()
+    else {
+        panic!("the exact relation schedules");
+    };
+    let journal = relation_root
+        .path()
+        .join(".amiss-relation-schedules.journal");
+    let scheduled_bytes = std::fs::metadata(&journal).unwrap().len();
+
+    clock.advance(60_000);
+    assert!(matches!(
+        relations.stage_status(
+            &artifacts,
+            &pending,
+            heads(&fixture),
+            retained,
+            bundle(&fixture),
+        ),
+        Err(RelationScheduleStoreError::Artifact(
+            ArtifactError::NotFound
+        ))
+    ));
+    assert_eq!(std::fs::metadata(journal).unwrap().len(), scheduled_bytes);
+}
+
+#[test]
+fn concurrent_supersession_and_status_staging_commit_in_one_order() {
+    let fixture = relation_audit(true).unwrap();
+    let artifact_root = tempfile::tempdir().unwrap();
+    let artifacts = Arc::new(store(&artifact_root, TestClock::new()));
+    let retained = retain(
+        artifacts.as_ref(),
+        "evaluation/relation/concurrent-status",
+        &fixture,
+    );
+    let relation_root = tempfile::tempdir().unwrap();
+    let stores = [
+        FileRelationScheduleStore::open(relation_root.path(), 2).unwrap(),
+        FileRelationScheduleStore::open(relation_root.path(), 2).unwrap(),
+    ];
+    let RelationAdmission::Scheduled(pending) =
+        stores[0].schedule(fixture.transition.clone()).unwrap()
+    else {
+        panic!("the exact relation schedules");
+    };
+    let mut next = fixture.transition.clone();
+    next.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    let barrier = Arc::new(std::sync::Barrier::new(3));
+
+    let stage_barrier = Arc::clone(&barrier);
+    let stage_artifacts = Arc::clone(&artifacts);
+    let stage_store = stores[0].clone();
+    let stage_worker = std::thread::spawn(move || {
+        stage_barrier.wait();
+        stage_store.stage_status(
+            stage_artifacts.as_ref(),
+            &pending,
+            heads(&fixture),
+            retained,
+            bundle(&fixture),
+        )
+    });
+    let schedule_barrier = Arc::clone(&barrier);
+    let schedule_store = stores[1].clone();
+    let schedule_worker = std::thread::spawn(move || {
+        schedule_barrier.wait();
+        schedule_store.schedule(next)
+    });
+    barrier.wait();
+
+    let RelationAdmission::Scheduled(current) = schedule_worker.join().unwrap().unwrap() else {
+        panic!("distinct work schedules");
+    };
+    let stage = stage_worker.join().unwrap();
+    if let Ok(Some(staged)) = &stage {
+        assert!(stores[0].complete_status(staged).unwrap().completed);
+    }
+    assert!(matches!(
+        stage,
+        Ok(Some(_))
+            | Err(RelationScheduleStoreError::Status(
+                RelationStatusError::Superseded
+            ))
+    ));
+    assert!(stores[0].is_current(&current).unwrap());
 }

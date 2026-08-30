@@ -2,8 +2,8 @@ use amiss_wire::model::{ArtifactId, Oid};
 
 use crate::artifacts::checked_reference;
 use crate::{
-    ArtifactAuditDigests, ArtifactAuditReference, LeaseFence, RelationAuditBundle,
-    validate_relation_audit,
+    ArtifactAuditDigests, ArtifactAuditReference, LeaseFence, OpaqueId, PlanScope,
+    RelationAuditBundle, validate_relation_audit,
 };
 
 use super::{PendingRelation, RelationSubject, relation_transition};
@@ -16,7 +16,9 @@ pub struct RelationSubjectHead {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationStatusTarget {
-    pub subject: RelationSubject,
+    pub role: ArtifactId,
+    pub scope: PlanScope,
+    pub credential: OpaqueId,
     pub candidate_commit: Oid,
     pub required_status_name: String,
 }
@@ -111,13 +113,15 @@ pub fn relation_status_targets(
                 .find(|frozen| frozen.role == destination.subject_role)
                 .ok_or(RelationStatusError::InvalidTransition)?;
             Ok(RelationStatusTarget {
-                subject: subject.clone(),
+                role: subject.role.clone(),
+                scope: subject.scope.clone(),
+                credential: subject.credential.clone(),
                 candidate_commit: frozen.commits.candidate.clone(),
                 required_status_name: destination.required_status_name.clone(),
             })
         })
         .collect::<Result<Vec<_>, RelationStatusError>>()?;
-    destinations.sort_by(|left, right| left.subject.role.cmp(&right.subject.role));
+    destinations.sort_by(|left, right| left.role.cmp(&right.role));
     Ok(RelationStatusTargets {
         relation: plan.identity.clone(),
         coordination: transition.coordination,

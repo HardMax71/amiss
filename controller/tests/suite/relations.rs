@@ -454,11 +454,9 @@ fn current_subject_heads_freeze_only_operator_status_destinations() {
     let [destination] = targets.destinations.as_slice() else {
         panic!("only the configured documentation role receives a status");
     };
-    assert_eq!(destination.subject.role.as_str(), "documentation");
-    assert_eq!(destination.subject.scope, scope("handbook"));
-    assert_eq!(destination.subject.target.as_str(), "refs/heads/main");
-    assert_eq!(destination.subject.object_format, ObjectFormat::Sha1);
-    assert_eq!(destination.subject.credential.as_str(), "git/handbook");
+    assert_eq!(destination.role.as_str(), "documentation");
+    assert_eq!(destination.scope, scope("handbook"));
+    assert_eq!(destination.credential.as_str(), "git/handbook");
     assert_eq!(
         destination.candidate_commit.as_str(),
         documentation.candidate
