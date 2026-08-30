@@ -11,9 +11,9 @@ use amiss_controller::{
     ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
     RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
     RelationLimits, RelationPlan, RelationRegistryError, RelationScheduleError,
-    RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
-    relation_registry, relation_transition, relations_for_delivery, schedule_relation,
-    verify_relation_acquired,
+    RelationStatusDestination, RelationStatusError, RelationSubject, RelationSubjectHead,
+    RelationSubjectTransition, RelationTransition, relation_registry, relation_status_targets,
+    relation_transition, relations_for_delivery, schedule_relation, verify_relation_acquired,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{
@@ -151,6 +151,21 @@ fn frozen_transition(source: &CommitPair, documentation: &CommitPair) -> Relatio
         ],
     )
     .unwrap()
+}
+
+fn current_heads(transition: &RelationTransition) -> [RelationSubjectHead; 2] {
+    let plan = transition.relation.plan.as_ref();
+    transition.subjects.each_ref().map(|frozen| {
+        let subject = plan
+            .subjects
+            .iter()
+            .find(|subject| subject.role == frozen.role)
+            .unwrap();
+        RelationSubjectHead {
+            subject: subject.clone(),
+            candidate_commit: frozen.commits.candidate.clone(),
+        }
+    })
 }
 
 #[test]
@@ -397,6 +412,81 @@ fn exact_relation_work_is_pending_once_and_duplicate_from_either_trigger() {
         panic!("the other authenticated trigger deduplicates exact work");
     };
     assert_eq!(repeated, first);
+}
+
+#[test]
+fn current_subject_heads_freeze_only_operator_status_destinations() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let mut transition = frozen_transition(&source, &documentation);
+    transition.relation.trigger_role = artifact("documentation");
+    let RelationAdmission::Scheduled(pending) = schedule_relation(None, transition).unwrap() else {
+        panic!("exact work schedules");
+    };
+    let mut heads = current_heads(&pending.transition);
+    heads.swap(0, 1);
+
+    let targets = relation_status_targets(&pending, heads).unwrap();
+    assert_eq!(targets.relation.as_str(), "relation/api");
+    assert_eq!(targets.coordination.as_str(), "workflow/release-42");
+    assert_eq!(targets.trigger_role.as_str(), "documentation");
+    assert_eq!(targets.fence, pending.fence);
+    let [destination] = targets.destinations.as_slice() else {
+        panic!("only the configured documentation role receives a status");
+    };
+    assert_eq!(destination.subject.role.as_str(), "documentation");
+    assert_eq!(destination.subject.scope, scope("handbook"));
+    assert_eq!(destination.subject.target.as_str(), "refs/heads/main");
+    assert_eq!(destination.subject.object_format, ObjectFormat::Sha1);
+    assert_eq!(destination.subject.credential.as_str(), "git/handbook");
+    assert_eq!(
+        destination.candidate_commit.as_str(),
+        documentation.candidate
+    );
+    assert_eq!(destination.required_status_name, "Amiss cross-repository");
+}
+
+#[test]
+fn status_targets_fail_closed_on_moved_or_malformed_finality() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let transition = frozen_transition(&source, &documentation);
+    let RelationAdmission::Scheduled(pending) = schedule_relation(None, transition).unwrap() else {
+        panic!("exact work schedules");
+    };
+    let heads = current_heads(&pending.transition);
+
+    let mut moved = heads.clone();
+    let source = moved
+        .iter_mut()
+        .find(|head| head.subject.role.as_str() == "source")
+        .unwrap();
+    source.candidate_commit = Oid::new(ObjectFormat::Sha1, "9".repeat(40)).unwrap();
+    assert_eq!(
+        relation_status_targets(&pending, moved).unwrap_err(),
+        RelationStatusError::Superseded
+    );
+
+    let mut repeated = heads.clone();
+    repeated[1].subject = repeated[0].subject.clone();
+    assert_eq!(
+        relation_status_targets(&pending, repeated).unwrap_err(),
+        RelationStatusError::InvalidHeads
+    );
+
+    let mut rebound = heads.clone();
+    rebound[0].subject.credential = OpaqueId::new("git/other".to_owned()).unwrap();
+    assert_eq!(
+        relation_status_targets(&pending, rebound).unwrap_err(),
+        RelationStatusError::InvalidHeads
+    );
+
+    let mut invalid = pending;
+    invalid.transition.relation.trigger_role = artifact("unknown");
+    assert_eq!(
+        relation_status_targets(&invalid, heads).unwrap_err(),
+        RelationStatusError::InvalidTransition
+    );
 }
 
 #[test]

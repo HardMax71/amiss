@@ -1,5 +1,6 @@
 mod acquisition;
 mod schedule;
+mod status;
 mod store;
 
 use std::collections::BTreeMap;
@@ -19,6 +20,10 @@ pub use acquisition::{
     relation_transition, verify_relation_acquired,
 };
 pub use schedule::{PendingRelation, RelationAdmission, RelationScheduleError, schedule_relation};
+pub use status::{
+    RelationStatusError, RelationStatusTarget, RelationStatusTargets, RelationSubjectHead,
+    relation_status_targets,
+};
 pub use store::{
     FileRelationScheduleStore, RELATION_SCHEDULE_BINDING_LIMIT, RelationScheduleStoreError,
 };
