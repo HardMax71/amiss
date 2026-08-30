@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:relation-assessment",
+  "title": "Amiss cross-repository relation assessment",
+  "description": "The deterministic offline equality transition over one relation plan and optional projection evidence. It never assigns either role authority or claims which subject should change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/relation-assessment-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/AssessmentPayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the relation-assessment payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "NullableDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ProducerVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "UnprovenReason": {
+      "enum": [
+        "evidence-absent",
+        "evidence-unbound",
+        "role-mismatch",
+        "projection-unproven"
+      ]
+    },
+    "NullableReason": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/UnprovenReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "AssessmentPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "reason", "schema", "subject", "verdict"],
+      "properties": {
+        "schema": {
+          "const": "amiss/relation-assessment-payload"
+        },
+        "engine": {
+          "description": "The exact offline evaluator that made this judgment.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine_digest", "engine_version"],
+          "properties": {
+            "engine_version": {
+              "$ref": "#/$defs/ProducerVersion"
+            },
+            "engine_digest": {
+              "$ref": "#/$defs/Digest"
+            }
+          }
+        },
+        "subject": {
+          "description": "The accepted report, plan, and optional evidence payloads this judgment binds.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "evidence_payload_digest",
+            "plan_payload_digest",
+            "report_payload_digest"
+          ],
+          "properties": {
+            "report_payload_digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "plan_payload_digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "evidence_payload_digest": {
+              "$ref": "#/$defs/NullableDigest"
+            }
+          }
+        },
+        "verdict": {
+          "description": "The equality transition from the two base projections to the two candidate projections. Unproven means no complete bound four-slot comparison exists.",
+          "enum": [
+            "aligned",
+            "introduced-drift",
+            "pre-existing-drift",
+            "resolved-drift",
+            "unproven"
+          ]
+        },
+        "reason": {
+          "description": "The single trust or completeness boundary for an unproven result; every proved transition carries null.",
+          "$ref": "#/$defs/NullableReason"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "unproven"
+              }
+            }
+          },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "reason": {
+                    "const": "evidence-absent"
+                  },
+                  "subject": {
+                    "properties": {
+                      "evidence_payload_digest": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "evidence-unbound",
+                      "role-mismatch",
+                      "projection-unproven"
+                    ]
+                  },
+                  "subject": {
+                    "properties": {
+                      "evidence_payload_digest": {
+                        "$ref": "#/$defs/Digest"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "aligned",
+                  "introduced-drift",
+                  "pre-existing-drift",
+                  "resolved-drift"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "type": "null"
+              },
+              "subject": {
+                "properties": {
+                  "evidence_payload_digest": {
+                    "$ref": "#/$defs/Digest"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

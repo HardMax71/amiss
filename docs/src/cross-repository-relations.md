@@ -7,9 +7,9 @@ and materialize those relations without letting repository content choose anothe
 credential, selector, limit, or publication target.
 
 This is not yet a complete cross-repository checking lane. No service loads this configuration or
-resolves foreign provider heads and credentials yet. A closed audit plan can now retain the exact
-comparison selected after acquisition, but the controller does not yet project either subject,
-assess or retain a complete audit chain, or publish a status.
+resolves foreign provider heads and credentials yet. Closed plan, evidence, and assessment
+contracts can represent the exact comparison selected after acquisition, but the controller does
+not yet project either subject, retain a complete audit chain, or publish a status.
 
 ## One closed relation
 
@@ -138,6 +138,34 @@ assessed together. Unknown fields, malformed digests or roles, reordered or repe
 byte counts, and a changed payload refuse the whole receipt. The evidence contract carries no
 verdict and never identifies which subject should change.
 
+## Equality transition
+
+A third closed 64 KiB document records the deterministic offline assessment. It binds the accepted
+report, exact plan, optional evidence, and evaluator version and digest. Before comparing values,
+the evaluator rebuilds both supplied envelopes, requires the evidence to name the exact plan, and
+requires its two role rows to match the plan. Any absent evidence, foreign plan digest, mismatched
+role, or null projection slot yields `unproven` with one corresponding reason.
+
+For four complete slots, projected values are equal only when both their digest and byte length are
+equal. The two booleans map to exactly one transition:
+
+| Base equal | Candidate equal | Verdict |
+| --- | --- | --- |
+| yes | yes | `aligned` |
+| yes | no | `introduced-drift` |
+| no | no | `pre-existing-drift` |
+| no | yes | `resolved-drift` |
+
+These names describe equality over time, not correctness. Both roles participate symmetrically;
+the assessment neither chooses an authority nor says which repository should change. A proved
+transition carries a null reason, while `unproven` carries exactly one of `evidence-absent`,
+`evidence-unbound`, `role-mismatch`, or `projection-unproven`. Inconsistent verdict/reason/evidence
+combinations and a changed payload refuse the assessment instead of being normalized.
+
+The assessment is replayable over the exact bound documents, but it does not authenticate how
+projection evidence was produced. The future controller lane must create or admit that evidence
+under the operator-owned relation and resource limits before retaining the chain.
+
 ## Trust boundary
 
 The registry lives only in the unpublished controller layer. The offline engine still has one
@@ -148,8 +176,7 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. produce the four selected projection slots under the registered resource limits and assess their
-   equality transition without assigning either side as the authority;
+1. produce the four selected projection slots under the registered resource limits;
 2. bind the accepted report and retain the plan, optional evidence, and replayed assessment as one
    immutable sidecar;
 3. model coordinated release or paired-change intent without timestamp inference; and
@@ -157,8 +184,8 @@ The remaining stages are deliberately separate:
 
 Until those stages exist, these primitives prove only that trusted configuration, authenticated
 delivery selection, exact revision binding, bounded acquisition, and the resulting plan/evidence
-shapes have a closed representation. They do not yet claim that any cross-repository content has
-been compared or approved.
+and assessment shapes have a closed representation. They do not yet claim that any
+cross-repository content has been compared or approved by a provider lane.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
