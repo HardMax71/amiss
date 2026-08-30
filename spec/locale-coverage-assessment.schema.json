@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-assessment",
   "title": "Amiss locale coverage assessment",
-  "description": "The deterministic offline judgment over one locale coverage plan and optional producer-normalized inventories. Every reported page, fallback status, and lineage status follows exact evidence; incomplete results are explicit lower bounds and can never match.",
+  "description": "The deterministic offline judgment over one locale coverage plan and optional producer-normalized inventories. Every reported page, fallback status, lineage status, and per-locale product verdict follows exact evidence; incomplete results are explicit lower bounds and can never match.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -45,6 +45,9 @@
       "maxLength": 128,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
     },
+    "Verdict": {
+      "enum": ["matched", "refuted", "unproven"]
+    },
     "PageKey": {
       "description": "One opaque stable page identity emitted by the selected producer, not a route inferred by Amiss.",
       "type": "string",
@@ -63,12 +66,16 @@
         "target-incomplete",
         "fallback-unproven",
         "lineage-unproven",
+        "source-product-unproven",
+        "target-product-unproven",
         "source-missing",
         "target-missing",
         "target-orphaned",
         "fallback-unauthorized",
         "fallback-source-mismatch",
-        "lineage-stale"
+        "lineage-stale",
+        "source-product-mismatch",
+        "target-product-mismatch"
       ]
     },
     "FallbackStatus": {
@@ -105,6 +112,20 @@
         },
         "status": {
           "$ref": "#/$defs/LineageStatus"
+        }
+      }
+    },
+    "Product": {
+      "description": "The independent exact-product comparison for the source and target locale inventories. Matched means URI and digest equal the planned resource; refuted means a different exact resource was observed; unproven means no authenticated resource identity was supplied.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target"],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "target": {
+          "$ref": "#/$defs/Verdict"
         }
       }
     },
@@ -172,7 +193,15 @@
     "AssessmentPayload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coverage", "engine", "reasons", "schema", "subject", "verdict"],
+      "required": [
+        "coverage",
+        "engine",
+        "product",
+        "reasons",
+        "schema",
+        "subject",
+        "verdict"
+      ],
       "properties": {
         "schema": {
           "const": "amiss/locale-coverage-assessment-payload"
@@ -214,12 +243,12 @@
         },
         "verdict": {
           "description": "Matched means the policy-scoped comparison is exhaustive and clean; refuted means at least one trusted mismatch or page defect is proved; unproven means no exhaustive clean result or exact refutation is available.",
-          "enum": ["matched", "refuted", "unproven"]
+          "$ref": "#/$defs/Verdict"
         },
         "reasons": {
           "description": "A canonical enum-order set. The strict reader also requires page reasons to correspond exactly to nonempty page sets.",
           "type": "array",
-          "maxItems": 6,
+          "maxItems": 8,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/Reason"
@@ -227,6 +256,17 @@
         },
         "coverage": {
           "$ref": "#/$defs/Coverage"
+        },
+        "product": {
+          "description": "The per-locale comparison with the plan-selected product, or null when product alignment was not selected or the evidence was not eligible for comparison.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Product"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "allOf": [
@@ -283,6 +323,24 @@
                     }
                   }
                 }
+              },
+              "product": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "const": "matched"
+                      },
+                      "target": {
+                        "const": "matched"
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
@@ -308,7 +366,9 @@
                     "target-orphaned",
                     "fallback-unauthorized",
                     "fallback-source-mismatch",
-                    "lineage-stale"
+                    "lineage-stale",
+                    "source-product-mismatch",
+                    "target-product-mismatch"
                   ]
                 }
               },
@@ -334,9 +394,6 @@
             "properties": {
               "coverage": {
                 "properties": {
-                  "complete": {
-                    "const": false
-                  },
                   "source_missing": {
                     "maxItems": 0
                   },
@@ -357,6 +414,9 @@
                   },
                   "coverage": {
                     "properties": {
+                      "complete": {
+                        "const": false
+                      },
                       "fallbacks": {
                         "maxItems": 0
                       },
@@ -364,6 +424,9 @@
                         "maxItems": 0
                       }
                     }
+                  },
+                  "product": {
+                    "type": "null"
                   },
                   "subject": {
                     "properties": {
@@ -394,6 +457,9 @@
                 "properties": {
                   "coverage": {
                     "properties": {
+                      "complete": {
+                        "const": false
+                      },
                       "fallbacks": {
                         "maxItems": 0
                       },
@@ -401,6 +467,9 @@
                         "maxItems": 0
                       }
                     }
+                  },
+                  "product": {
+                    "type": "null"
                   },
                   "subject": {
                     "properties": {
@@ -415,13 +484,15 @@
                 "properties": {
                   "reasons": {
                     "minItems": 1,
-                    "maxItems": 4,
+                    "maxItems": 6,
                     "items": {
                       "enum": [
                         "source-incomplete",
                         "target-incomplete",
                         "fallback-unproven",
-                        "lineage-unproven"
+                        "lineage-unproven",
+                        "source-product-unproven",
+                        "target-product-unproven"
                       ]
                     }
                   },
@@ -446,6 +517,24 @@
                         }
                       }
                     }
+                  },
+                  "product": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "enum": ["matched", "unproven"]
+                          },
+                          "target": {
+                            "enum": ["matched", "unproven"]
+                          }
+                        }
+                      }
+                    ]
                   },
                   "subject": {
                     "properties": {

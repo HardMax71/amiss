@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-evidence",
   "title": "Amiss locale coverage evidence",
-  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each target page declares whether it is target-owned or a source fallback; a target-owned page may bind the exact source resource it was based on. No row proves translation quality or semantic equivalence.",
+  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each side independently identifies the immutable product it describes or records that the identity is unavailable. Each target page declares whether it is target-owned or a source fallback; a target-owned page may bind the exact source resource it was based on. No row proves translation quality or semantic equivalence.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -22,6 +22,26 @@
     "Digest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ResourceUri": {
+      "description": "An exact absolute resource URI. The accompanying digest, not the URI spelling, establishes immutable bytes.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 16384,
+      "pattern": "^[a-z][a-z0-9+.-]*:[^#\\s]+$"
+    },
+    "Resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "uri"],
+      "properties": {
+        "uri": {
+          "$ref": "#/$defs/ResourceUri"
+        },
+        "digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
     },
     "ArtifactId": {
       "type": "string",
@@ -264,11 +284,22 @@
       "description": "The independently bounded source inventory. False completeness retains observed pages but cannot prove that an absent page is absent.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["complete", "input_digest", "pages"],
+      "required": ["complete", "input_digest", "pages", "product"],
       "properties": {
         "input_digest": {
           "description": "The digest of the exact producer input from which this locale inventory was normalized.",
           "$ref": "#/$defs/Digest"
+        },
+        "product": {
+          "description": "The exact immutable product this source locale inventory describes, or null when the authenticated producer cannot establish it.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Resource"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "complete": {
           "type": "boolean"
@@ -287,11 +318,22 @@
       "description": "The independently bounded target inventory. Every observed target page declares its origin; false completeness cannot prove that an absent page is absent.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["complete", "input_digest", "pages"],
+      "required": ["complete", "input_digest", "pages", "product"],
       "properties": {
         "input_digest": {
           "description": "The digest of the exact producer input from which this target inventory was normalized.",
           "$ref": "#/$defs/Digest"
+        },
+        "product": {
+          "description": "The exact immutable product this target locale inventory describes, or null when the authenticated producer cannot establish it.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Resource"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "complete": {
           "type": "boolean"

@@ -14,7 +14,7 @@ use amiss_wire::locale::{
     LocaleTargetOrigin, LocaleTargetPage, evidence, parse_evidence, parse_plan, plan,
 };
 
-use super::{digest, locale_plan};
+use super::{digest, locale_plan, product_resource};
 
 pub(super) fn page_map<T>(
     pages: &[(&str, char)],
@@ -65,6 +65,7 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
         producer: planned.producer,
         source: LocalePageInventory {
             input_digest: digest('5'),
+            product: None,
             complete: true,
             pages: page_map(
                 &[("guide/getting-started", '6'), ("reference/api", '7')],
@@ -73,6 +74,7 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
         },
         target: LocaleTargetInventory {
             input_digest: digest('8'),
+            product: None,
             complete: true,
             pages: page_map(&[("guide/getting-started", '9')], |digit| {
                 target_page(digit, None)
@@ -130,6 +132,17 @@ fn source_and_target_completeness_remain_independent() {
     assert!(!parsed.payload.source.complete);
     assert!(parsed.payload.target.complete);
     assert!(parsed.payload.source.pages.is_empty());
+}
+
+#[test]
+fn source_and_target_product_receipts_remain_independent() {
+    let mut input = locale_evidence();
+    input.source.product = Some(product_resource('b'));
+    input.target.product = Some(product_resource('c'));
+
+    let parsed = parse_evidence(&json::canonical(&evidence(&input).unwrap())).unwrap();
+    assert_eq!(parsed.payload.source.product, input.source.product);
+    assert_eq!(parsed.payload.target.product, input.target.product);
 }
 
 #[test]

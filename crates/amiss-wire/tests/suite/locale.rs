@@ -14,7 +14,7 @@ use amiss_wire::locale::{
     plan,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::publication::{DocsCandidate, PublicationProducer};
+use amiss_wire::publication::{DocsCandidate, PublicationProducer, PublicationResource};
 
 mod assessment;
 mod evidence;
@@ -29,6 +29,13 @@ fn oid(digit: char) -> Oid {
 
 fn identity(value: &str) -> ArtifactId {
     ArtifactId::new(value.to_owned()).unwrap()
+}
+
+fn product_resource(digit: char) -> PublicationResource {
+    PublicationResource {
+        uri: format!("pkg:oci/registry.example.com/widget@release-{digit}"),
+        digest: digest(digit),
+    }
 }
 
 fn locale_plan() -> LocaleCoveragePlan {
@@ -47,6 +54,7 @@ fn locale_plan() -> LocaleCoveragePlan {
             channel: identity("stable"),
             version: Some("1.2".to_owned()),
         },
+        product: None,
         producer: PublicationProducer {
             identity: identity("sphinx-locale-manifest"),
             version: "1.0.0".to_owned(),
@@ -112,6 +120,15 @@ fn locale_plan_keeps_all_source_and_named_policies_distinct() {
 
     let parsed = parse_plan(&json::canonical(&plan(&all_source).unwrap())).unwrap();
     assert_eq!(parsed.payload, all_source);
+}
+
+#[test]
+fn product_alignment_uses_the_existing_exact_publication_resource() {
+    let mut aligned = locale_plan();
+    aligned.product = Some(product_resource('c'));
+
+    let parsed = parse_plan(&json::canonical(&plan(&aligned).unwrap())).unwrap();
+    assert_eq!(parsed.payload, aligned);
 }
 
 #[test]

@@ -228,7 +228,7 @@ pub(crate) fn decode_docs(path: &str, value: Value) -> Result<DocsCandidate, Err
     })
 }
 
-fn decode_resource(path: &str, value: Value) -> Result<PublicationResource, Error> {
+pub(crate) fn decode_resource(path: &str, value: Value) -> Result<PublicationResource, Error> {
     let mut resource = Obj::new(path, value)?;
     let uri = resource.required("uri", decode_resource_uri)?;
     let digest = resource.required("digest", de::digest)?;
@@ -346,7 +346,7 @@ fn site_value(site: &CompletedSite) -> Value {
     ])
 }
 
-fn resource_value(resource: &PublicationResource) -> Value {
+pub(crate) fn resource_value(resource: &PublicationResource) -> Value {
     object(vec![
         ("uri", text(&resource.uri)),
         ("digest", text(&resource.digest.to_string())),

@@ -7,7 +7,7 @@
 use std::{fs, path::Path};
 
 use super::evidence::{fallback_page, locale_evidence, page_map, target_page};
-use super::{digest, locale_plan, oid};
+use super::{digest, locale_plan, oid, product_resource};
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json::{self, Value};
@@ -419,6 +419,83 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
 }
 
 #[test]
+fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
+    let mut input_plan = locale_plan();
+    input_plan.product = Some(product_resource('c'));
+    let value = plan(&input_plan).unwrap();
+    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let mut aligned = locale_evidence();
+    aligned.plan_payload_digest = plan.payload_digest;
+    aligned.source.product = Some(product_resource('c'));
+    aligned.target.product = Some(product_resource('c'));
+    aligned.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+
+    let evidence = evidence_envelope(&aligned);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    let product = assessment.payload.product.unwrap();
+    assert_eq!(product.source, LocaleCoverageVerdict::Matched);
+    assert_eq!(product.target, LocaleCoverageVerdict::Matched);
+
+    let mut missing = aligned.clone();
+    missing.source.product = None;
+    let evidence = evidence_envelope(&missing);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::SourceProductUnproven]
+    );
+    assert!(assessment.payload.coverage.complete);
+
+    let mut mismatched = missing;
+    mismatched.source.product = Some(product_resource('d'));
+    mismatched.target.product = None;
+    let evidence = evidence_envelope(&mismatched);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::SourceProductMismatch]
+    );
+    assert_eq!(
+        assessment.payload.product.unwrap().target,
+        LocaleCoverageVerdict::Unproven
+    );
+
+    mismatched.target.product = Some(product_resource('e'));
+    let evidence = evidence_envelope(&mismatched);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![
+            LocaleCoverageReason::SourceProductMismatch,
+            LocaleCoverageReason::TargetProductMismatch,
+        ]
+    );
+}
+
+#[test]
+fn coverage_only_policy_ignores_unselected_product_receipts() {
+    let plan = plan_envelope();
+    let mut input = locale_evidence();
+    input.source.product = Some(product_resource('c'));
+    input.target.product = Some(product_resource('d'));
+    input.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    let evidence = evidence_envelope(&input);
+    let assessment = assessed(&plan, Some(&evidence));
+
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert!(assessment.payload.product.is_none());
+}
+
+#[test]
 fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
     all_source_plan.policy.required = LocalePageRequirement::AllSource;
@@ -544,6 +621,15 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
         .to_string(),
     );
     let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    assert_eq!(error.path, "$.payload");
+    assert_eq!(error.kind, ErrorKind::Inconsistent);
+
+    let mut inconsistent_product = value.clone();
+    *member_mut(member_mut(&mut inconsistent_product, "payload"), "product") = Value::object(vec![
+        ("source".to_owned(), Value::string("refuted")),
+        ("target".to_owned(), Value::string("matched")),
+    ]);
+    let error = parse_assessment(&sealed(inconsistent_product)).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
