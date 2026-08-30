@@ -10,6 +10,7 @@ use amiss_controller::{
     relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
+use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use secrecy::SecretString;
 
@@ -74,6 +75,7 @@ fn transition() -> amiss_controller::RelationTransition {
     let source = subject("source", "service");
     let plan = Arc::new(RelationPlan {
         identity: artifact("relation/api"),
+        context_digest: sha256(b"operator relation context"),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [documentation, source],
         aggregate_limits: RelationLimits {

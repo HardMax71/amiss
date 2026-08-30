@@ -16,6 +16,7 @@ use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{
     ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection,
 };
+use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 fn artifact(raw: &str) -> ArtifactId {
@@ -65,6 +66,7 @@ fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
 fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
     RelationPlan {
         identity: artifact(identity),
+        context_digest: sha256(identity.as_bytes()),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [
             subject("source", source, "rust/public-api"),
