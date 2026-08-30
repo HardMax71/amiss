@@ -3,7 +3,7 @@ mod schedule;
 mod status;
 mod store;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_wire::controls::{
@@ -126,6 +126,8 @@ pub enum RelationRegistryError {
     TooManyRelations,
     #[error("a relation identity is registered more than once")]
     DuplicateRelation,
+    #[error("a provider repository status destination is owned by more than one relation")]
+    DuplicateDestination,
     #[error("a relation does not name two distinct repository subjects and roles")]
     InvalidSubjects,
     #[error("a relation resource budget is invalid")]
@@ -152,8 +154,8 @@ pub struct RelationRegistry {
 ///
 /// # Errors
 ///
-/// The registry is too large, repeats an identity, or contains an invalid
-/// subject, selector, budget, or status destination.
+/// The registry is too large, repeats a relation identity or external status
+/// destination, or contains an invalid subject, selector, budget, or destination.
 pub fn relation_registry(
     mut plans: Vec<RelationPlan>,
 ) -> Result<RelationRegistry, RelationRegistryError> {
@@ -173,6 +175,23 @@ pub fn relation_registry(
         .any(|pair| matches!(pair, [left, right] if left.identity == right.identity))
     {
         return Err(RelationRegistryError::DuplicateRelation);
+    }
+    let mut destinations = BTreeSet::new();
+    for plan in &plans {
+        for destination in &plan.status_destinations {
+            let subject = plan
+                .subjects
+                .iter()
+                .find(|subject| subject.role == destination.subject_role)
+                .ok_or(RelationRegistryError::InvalidDestination)?;
+            if !destinations.insert((
+                subject.scope.provider.clone(),
+                subject.scope.repository.clone(),
+                destination.required_status_name.clone(),
+            )) {
+                return Err(RelationRegistryError::DuplicateDestination);
+            }
+        }
     }
 
     let mut triggers: BTreeMap<TriggerScope, Vec<TriggeredRelation>> = BTreeMap::new();

@@ -40,8 +40,9 @@ Construction is atomic. It rejects more than 1,024 relations, repeated relation 
 subject roles, equal repository identities, malformed or projection-incompatible sources, zero or
 overflowing limits, aggregate limits that cannot admit either subject or exceed both subject
 ceilings together, missing or repeated destinations, foreign destination roles, and malformed
-status names. Subject, destination, and relation order is canonicalized before the private trigger
-index is exposed.
+status names. Two relations also cannot own the same provider-instance, repository, and status-name
+key, even through different integrations or credentials. Subject, destination, and relation order
+is canonicalized before the private trigger index is exposed.
 
 There is no mutation API. A successful construction owns immutable relation plans behind shared
 references; changing operator configuration requires building and installing another complete
