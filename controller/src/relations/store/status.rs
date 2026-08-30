@@ -4,12 +4,13 @@ use amiss_wire::relation::parse_plan;
 use serde::{Deserialize, Serialize};
 
 use super::RelationScheduleStoreError;
+use super::binding::plan_binding;
 use crate::artifacts::valid_artifact_id;
 use crate::{
     ArtifactAuditDigests, ArtifactAuditReference, FileArtifactStore, LeaseFence, OidPair,
-    PendingRelation, RelationAuditBundle, RelationRegistry, RelationStatusRecord,
-    RelationStatusTarget, RelationSubjectHead, RelationSubjectTransition, TriggeredRelation,
-    relation_transition, stage_relation_status, validate_relation_audit,
+    PendingRelation, RelationAuditBundle, RelationRegistry, RelationScheduleError,
+    RelationStatusRecord, RelationStatusTarget, RelationSubjectHead, RelationSubjectTransition,
+    TriggeredRelation, relation_transition, stage_relation_status, validate_relation_audit,
 };
 
 const STATUS_BINDING_DOMAIN: &str = "amiss/controller-relation-status-binding-v1";
@@ -103,6 +104,7 @@ pub(super) fn validate_stored_status(
 
 pub(super) fn reopen_status(
     stored: &StoredStatus,
+    committed_plan_binding: &str,
     registry: &RelationRegistry,
     artifacts: &FileArtifactStore,
 ) -> Result<RelationStatusRecord, RelationScheduleStoreError> {
@@ -113,6 +115,11 @@ pub(super) fn reopen_status(
         .plans
         .get(&relation)
         .ok_or(RelationScheduleStoreError::Configuration)?;
+    if plan_binding(plan.as_ref())?.to_string() != committed_plan_binding {
+        return Err(RelationScheduleStoreError::Schedule(
+            RelationScheduleError::BindingConflict,
+        ));
+    }
     let retained = artifacts
         .reopen_relation_audit(&stored.artifact_id)
         .map_err(RelationScheduleStoreError::Artifact)?;

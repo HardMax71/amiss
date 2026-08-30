@@ -145,7 +145,7 @@ pub(super) fn pending_from_binding(
     })
 }
 
-fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationScheduleStoreError> {
+pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationScheduleStoreError> {
     let limits = |limits: RelationLimits| BoundLimits {
         acquisition_objects: limits.acquisition_objects,
         acquisition_bytes: limits.acquisition_bytes,
