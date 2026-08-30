@@ -1,5 +1,5 @@
 mod format;
-mod frame;
+pub(crate) mod frame;
 mod store;
 mod transitions;
 

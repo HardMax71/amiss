@@ -78,8 +78,17 @@ operator configuration.
 A different coordination identity under the same relation advances the fence and becomes the new
 pending value. A worker holding the earlier fence is therefore superseded, while an audit it already
 retained remains immutable under its own artifact identity. Fence overflow fails closed. This model
-contains no clock and gives no lexical meaning to coordination identities; durable atomic storage
-and provider finality checks remain separate stages.
+contains no clock and gives no lexical meaning to coordination identities.
+
+The file-backed admission store applies that law under one cross-process lock. An atomically
+replaced committed head bounds a hash-chained append-only journal, so restart either observes the
+whole new binding or discards its uncommitted suffix. Every admitted coordination remains bound to
+its first exact work and fence: a delayed retry returns that historical fence but cannot become
+current again. New work appends one bounded record instead of rewriting all history, the immutable
+capacity applies only to new bindings, and a missing, shortened, reordered, rebound, or malformed
+committed record fails closed. The journal retains full configuration and work digests rather than
+credential references or complete operator configuration. Provider finality checks and invoking
+this store from a live relation lane remain separate stages.
 
 ## Exact Git acquisition
 
@@ -214,8 +223,7 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. persist the pending/supersession law atomically across restart; and
-3. deduplicate triggers from either provider route and publish only to the configured subject roles.
+2. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet
@@ -225,6 +233,9 @@ The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
 the [exact relation transport](https://github.com/HardMax71/amiss/blob/main/controller/git/src/relation.rs),
 the [repository projector](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/projection/repository.rs),
-and the [relation laws](https://github.com/HardMax71/amiss/blob/main/controller/tests/suite/relations.rs)
+the [durable scheduler](https://github.com/HardMax71/amiss/blob/main/controller/src/relations/store.rs),
+the [relation laws](https://github.com/HardMax71/amiss/blob/main/controller/tests/suite/relations.rs),
+and the [durable scheduling laws](https://github.com/HardMax71/amiss/blob/main/controller/tests/relation_schedule_store.rs)
 exercise bidirectional selection, stable ordering, four-revision binding, independent roots,
-projection compatibility, joint budgets, and exact destinations.
+projection compatibility, joint budgets, exact destinations, restart recovery, delayed retries,
+capacity, corruption, and concurrent admission.

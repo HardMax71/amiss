@@ -9,13 +9,13 @@ const LENGTH_BYTES: usize = 8;
 const DIGEST_BYTES: usize = 32;
 
 #[derive(Clone, Copy)]
-pub(super) struct FrameFormat {
+pub(crate) struct FrameFormat {
     magic: &'static [u8],
     domain: &'static str,
     maximum: u64,
 }
 
-pub(super) const fn define(
+pub(crate) const fn define(
     magic: &'static [u8],
     domain: &'static str,
     maximum: u64,
@@ -27,7 +27,7 @@ pub(super) const fn define(
     }
 }
 
-pub(super) fn encode<T: Serialize>(
+pub(crate) fn encode<T: Serialize>(
     format: FrameFormat,
     value: &T,
     validate: impl FnOnce(&T) -> Result<(), FileLedgerError>,
@@ -56,7 +56,7 @@ pub(super) fn encode<T: Serialize>(
     Ok(frame)
 }
 
-pub(super) fn decode<T: DeserializeOwned + Serialize>(
+pub(crate) fn decode<T: DeserializeOwned + Serialize>(
     format: FrameFormat,
     frame: &[u8],
     validate: impl FnOnce(&T) -> Result<(), FileLedgerError>,
