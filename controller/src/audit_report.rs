@@ -1,6 +1,6 @@
 use amiss_wire::digest::{Digest, hj, sha256};
 use amiss_wire::json::{self, Value};
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::ArtifactError;
 
@@ -8,6 +8,8 @@ pub(crate) struct AcceptedReport {
     pub(crate) report_digest: Digest,
     pub(crate) payload_digest: Digest,
     pub(crate) repository: RepositoryIdentity,
+    pub(crate) target_ref: Option<BranchRef>,
+    pub(crate) base: AcceptedSnapshot,
     pub(crate) candidate: AcceptedSnapshot,
     pub(crate) candidate_identity_digest: Digest,
 }
@@ -64,7 +66,7 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
             )
         })
         .ok_or(ArtifactError::Corrupt)?;
-    let (base_format, _base) = snapshot(evaluation.member("base").ok_or(ArtifactError::Corrupt)?)
+    let (base_format, base) = snapshot(evaluation.member("base").ok_or(ArtifactError::Corrupt)?)
         .ok_or(ArtifactError::Corrupt)?;
     let (candidate_format, candidate) = snapshot(
         evaluation
@@ -75,6 +77,15 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     if base_format != candidate_format {
         return Err(ArtifactError::Corrupt);
     }
+    let target_ref = match evaluation.member("target_ref") {
+        Some(Value::String(value)) => {
+            Some(BranchRef::new(value.to_string()).ok_or(ArtifactError::Corrupt)?)
+        }
+        Some(Value::Null) => None,
+        Some(Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_)) | None => {
+            return Err(ArtifactError::Corrupt);
+        }
+    };
     let Value::Object(members) = evaluation else {
         return Err(ArtifactError::Corrupt);
     };
@@ -93,6 +104,8 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         report_digest: sha256(bytes),
         payload_digest,
         repository,
+        target_ref,
+        base,
         candidate,
         candidate_identity_digest: hj(amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN, &identity),
     })
