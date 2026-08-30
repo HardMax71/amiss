@@ -2,6 +2,7 @@ use amiss_controller::{ArtifactError, RelationAuditBundle, validate_relation_aud
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{hj, sha256};
 use amiss_wire::json::{self, Value};
+use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan, plan};
 
 #[test]
@@ -39,6 +40,14 @@ fn changed_transition_report_and_assessment_bindings_are_refused() -> Result<(),
         changed_transition.transition.subjects[1].trees.base.clone();
     assert!(matches!(
         validate_relation_audit(bundle(&changed_transition)),
+        Err(ArtifactError::Corrupt)
+    ));
+
+    let mut changed_coordination = relation_audit(true).ok_or(ArtifactError::Corrupt)?;
+    changed_coordination.transition.coordination =
+        ArtifactId::new("workflow/release-43".to_owned()).ok_or(ArtifactError::Corrupt)?;
+    assert!(matches!(
+        validate_relation_audit(bundle(&changed_coordination)),
         Err(ArtifactError::Corrupt)
     ));
 

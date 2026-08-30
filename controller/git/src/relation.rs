@@ -56,6 +56,7 @@ pub fn fetch_relation_exact(
 ) -> Result<[RelationSubjectUsage; 2], RelationAcquisitionError> {
     let checked = relation_transition(
         fetch.transition.relation.clone(),
+        fetch.transition.coordination.clone(),
         fetch.transition.subjects.clone(),
     )?;
     let mut inputs = fetch.subjects;

@@ -39,6 +39,7 @@ pub fn project_relation_evidence(
 ) -> Result<Value, RelationProjectionError> {
     let transition = relation_transition(
         request.transition.relation.clone(),
+        request.transition.coordination.clone(),
         request.transition.subjects.clone(),
     )
     .map_err(|_defect| RelationProjectionError::InvalidPlan)?;

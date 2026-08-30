@@ -60,8 +60,11 @@ relation in stable relation-identity order together with the role that triggered
 
 The configured target branch is not treated as an immutable revision. A provider resolver must
 refresh it and supply exact base/candidate commit and tree IDs for each role. The controller freezes
-all four revisions against the registered roles and object formats before acquisition. Commit
-timestamps, nearby branch heads, URL versions, and repository prose are not pairing evidence.
+all four revisions against the registered roles and object formats before acquisition. The same
+trusted call supplies one bounded coordination identity naming the exact pair, release, or workflow
+occurrence. The relation configuration and its context digest define what that identity means;
+Amiss treats the spelling as opaque. Commit timestamps, nearby branch heads, URL versions, and
+repository prose are not pairing evidence.
 
 ## Exact Git acquisition
 
@@ -89,15 +92,17 @@ later evidence must reproduce. It contains:
 
 - the accepted scanner report payload digest and the role whose authenticated change selected it;
 - the relation identity and a context digest for the complete operator-owned configuration;
+- the exact operator-supplied coordination identity;
 - one shared projection kind; and
 - exactly two role-sorted subjects, each with its canonical repository, selected target branch,
   compatible source selector, object format, and exact base/candidate commit and tree IDs.
 
-The target branch remains explanatory selection context; only the four object pairs identify the
-comparison. Base and candidate may be identical for an unchanged subject, and the two subjects may
-use different object formats. Repository identities and roles must differ, and the trigger role
-must name one subject. Credentials, raw provider tokens, and transport budgets are deliberately not
-copied into the portable document.
+The coordination identity records intent and the four object pairs identify its exact comparison;
+neither is derived from the other. It does not impose an order, deadline, or lifecycle by itself.
+The target branch remains explanatory selection context. Base and candidate may be identical for
+an unchanged subject, and the two subjects may use different object formats. Repository identities
+and roles must differ, and the trigger role must name one subject. Credentials, raw provider tokens,
+and transport budgets are deliberately not copied into the portable document.
 
 The checked writer and strict reader share the scanner's existing projection-source grammar. A
 `code-text-v1` plan therefore accepts blob lines, a named region, or one record value;
@@ -194,7 +199,8 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. model coordinated release or paired-change intent without timestamp inference; and
+2. durably schedule coordination identities and fence superseded work without timestamp inference;
+   and
 3. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its

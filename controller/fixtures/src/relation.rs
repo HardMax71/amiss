@@ -64,6 +64,7 @@ pub fn relation_audit(with_evidence: bool) -> Option<RelationAuditFixture> {
                 identity: registered.identity.clone(),
                 context_digest: registered.context_digest,
             },
+            coordination: transition.coordination.clone(),
             trigger_role: transition.relation.trigger_role.clone(),
             projection: registered.projection,
             subjects: [documentation, source],
@@ -100,6 +101,7 @@ fn transition() -> Option<RelationTransition> {
             plan: Arc::clone(&registered),
             trigger_role: ArtifactId::new("source".to_owned())?,
         },
+        ArtifactId::new("workflow/release-42".to_owned())?,
         [
             frozen(
                 "documentation",

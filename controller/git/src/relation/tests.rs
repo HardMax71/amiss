@@ -94,6 +94,7 @@ fn transition() -> amiss_controller::RelationTransition {
             plan,
             trigger_role: artifact("source"),
         },
+        artifact("workflow/release-42"),
         [revisions("source", 'a'), revisions("documentation", 'b')],
     )
     .expect("frozen transition")

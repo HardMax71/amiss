@@ -15,6 +15,7 @@ pub struct RelationSubjectTransition {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationTransition {
     pub relation: TriggeredRelation,
+    pub coordination: ArtifactId,
     pub subjects: [RelationSubjectTransition; 2],
 }
 
@@ -33,7 +34,9 @@ pub enum RelationAcquisitionError {
 }
 
 /// Freezes two independently resolved base/candidate pairs against one
-/// operator-owned relation selected by an authenticated trigger.
+/// operator-owned relation selected by an authenticated trigger. `coordination`
+/// is the trusted operator's opaque identity for the exact pair, release, or
+/// workflow occurrence; this function never derives one from revisions or time.
 ///
 /// # Errors
 ///
@@ -41,6 +44,7 @@ pub enum RelationAcquisitionError {
 /// reproduce the registered plan.
 pub fn relation_transition(
     relation: TriggeredRelation,
+    coordination: ArtifactId,
     mut subjects: [RelationSubjectTransition; 2],
 ) -> Result<RelationTransition, RelationAcquisitionError> {
     subjects.sort_by(|left, right| left.role.cmp(&right.role));
@@ -69,7 +73,11 @@ pub fn relation_transition(
     if !relation_valid || !subjects_valid {
         return Err(RelationAcquisitionError::InvalidTransition);
     }
-    Ok(RelationTransition { relation, subjects })
+    Ok(RelationTransition {
+        relation,
+        coordination,
+        subjects,
+    })
 }
 
 /// Rechecks the frozen transition and proves every acquired commit names its
@@ -83,7 +91,11 @@ pub fn verify_relation_acquired<'a>(
     transition: &RelationTransition,
     mut roots: [RelationAcquiredRoot<'a>; 2],
 ) -> Result<[RelationAcquiredRoot<'a>; 2], RelationAcquisitionError> {
-    let checked = relation_transition(transition.relation.clone(), transition.subjects.clone())?;
+    let checked = relation_transition(
+        transition.relation.clone(),
+        transition.coordination.clone(),
+        transition.subjects.clone(),
+    )?;
     roots.sort_by(|left, right| left.role.cmp(right.role));
     if !same_file::is_same_file(roots[0].repository, roots[1].repository).is_ok_and(|same| !same)
         || roots
