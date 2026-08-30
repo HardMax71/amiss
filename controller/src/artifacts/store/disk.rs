@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use atomicwrites::{AllowOverwrite, AtomicFile, DisallowOverwrite};
+use strum::IntoEnumIterator as _;
 
 use super::super::format::{self, Blob, Record, Root};
 use super::super::{ArtifactComponent, ArtifactError, ArtifactStoreConfig};
@@ -360,20 +361,7 @@ fn metadata_path(root: &Path, id: &str) -> PathBuf {
 }
 
 pub(super) fn component_path(root: &Path, id: &str, component: ArtifactComponent) -> PathBuf {
-    root.join(format!("{id}.{}", component_suffix(component)))
-}
-
-const fn component_suffix(component: ArtifactComponent) -> &'static str {
-    match component {
-        ArtifactComponent::Report => "report",
-        ArtifactComponent::Semantic => "semantic",
-        ArtifactComponent::Plan => "plan",
-        ArtifactComponent::Evidence => "evidence",
-        ArtifactComponent::Assessment => "assessment",
-        ArtifactComponent::PublicationPlan => "publication-plan",
-        ArtifactComponent::PublicationEvidence => "publication-evidence",
-        ArtifactComponent::PublicationAssessment => "publication-assessment",
-    }
+    root.join(format!("{id}.{}", component.as_ref()))
 }
 
 fn metadata_id(name: &str) -> Option<&str> {
@@ -382,19 +370,8 @@ fn metadata_id(name: &str) -> Option<&str> {
 }
 
 fn component_id(name: &str) -> Option<(&str, ArtifactComponent)> {
-    [
-        ArtifactComponent::Report,
-        ArtifactComponent::Semantic,
-        ArtifactComponent::Plan,
-        ArtifactComponent::Evidence,
-        ArtifactComponent::Assessment,
-        ArtifactComponent::PublicationPlan,
-        ArtifactComponent::PublicationEvidence,
-        ArtifactComponent::PublicationAssessment,
-    ]
-    .into_iter()
-    .find_map(|component| {
-        name.strip_suffix(&format!(".{}", component_suffix(component)))
+    ArtifactComponent::iter().find_map(|component| {
+        name.strip_suffix(&format!(".{}", component.as_ref()))
             .filter(|id| format::valid_id(id))
             .map(|id| (id, component))
     })
