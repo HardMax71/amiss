@@ -15,8 +15,8 @@ pub use crate::assessment::AssessmentVerdict as LocaleCoverageVerdict;
 pub use assessment::{
     ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope,
-    LocaleCoverageReason, LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus, assess,
-    parse_assessment,
+    LocaleCoverageReason, LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus,
+    LocaleLineageResult, LocaleLineageStatus, assess, parse_assessment,
 };
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
@@ -60,6 +60,7 @@ pub struct LocaleCoveragePolicy {
     pub context_digest: Digest,
     pub required: LocalePageRequirement,
     pub fallbacks: Vec<LocaleFallbackRule>,
+    pub require_target_lineage: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -156,6 +157,7 @@ fn decode_plan(path: &str, value: Value) -> Result<LocaleCoveragePlan, Error> {
         let identity = policy.required("identity", decode_identity)?;
         let context_digest = policy.required("context_digest", de::digest)?;
         let required = policy.required("required", decode_requirement)?;
+        let require_target_lineage = policy.required("require_target_lineage", de::boolean)?;
         let fallbacks_path = policy.field("fallbacks");
         let fallbacks = de::sorted_items(
             &fallbacks_path,
@@ -176,6 +178,7 @@ fn decode_plan(path: &str, value: Value) -> Result<LocaleCoveragePlan, Error> {
             context_digest,
             required,
             fallbacks,
+            require_target_lineage,
         })
     })?;
     plan.finish()?;
@@ -254,6 +257,10 @@ fn policy_value(policy: &LocaleCoveragePolicy) -> Value {
         ("identity", text(policy.identity.as_str())),
         ("context_digest", text(&policy.context_digest.to_string())),
         ("required", requirement_value(&policy.required)),
+        (
+            "require_target_lineage",
+            Value::Bool(policy.require_target_lineage),
+        ),
         (
             "fallbacks",
             Value::array(

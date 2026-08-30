@@ -8,8 +8,8 @@
     },
     "subject": {
       "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "plan_payload_digest": "sha256:7587497b1d804ead43c59ad4c89592850365c4399b39a01a8cf8008923cd09d5",
-      "evidence_payload_digest": "sha256:d436fb3bee48e524561f9f613f59b80ca8d02780192888363b0a6059f3ca9b8e"
+      "plan_payload_digest": "sha256:6045397e266f979cf660adc4a8ecdcee7c612bbe25858f42754712b2851a6c4f",
+      "evidence_payload_digest": "sha256:98cc1cbce225c86a79926a589fea69d16ebbf893e27ad0d180e683637d01c305"
     },
     "verdict": "matched",
     "reasons": [],
@@ -24,8 +24,14 @@
           "class": "source-copy",
           "status": "allowed"
         }
+      ],
+      "lineage": [
+        {
+          "key": "guide/getting-started",
+          "status": "current"
+        }
       ]
     }
   },
-  "payload_digest": "sha256:d315530ac4ff9fda9227a805125fdd8211dd7470620fb21bf11df21c439956bb"
+  "payload_digest": "sha256:dda4e3058ad041a364cee229dc613a824eab44513ba4498b6ccc98889244d589"
 }

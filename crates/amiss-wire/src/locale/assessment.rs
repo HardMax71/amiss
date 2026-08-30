@@ -33,11 +33,13 @@ pub enum LocaleCoverageReason {
     SourceIncomplete,
     TargetIncomplete,
     FallbackUnproven,
+    LineageUnproven,
     SourceMissing,
     TargetMissing,
     TargetOrphaned,
     FallbackUnauthorized,
     FallbackSourceMismatch,
+    LineageStale,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
@@ -47,6 +49,14 @@ pub enum LocaleFallbackStatus {
     Unauthorized,
     SourceMismatch,
     SourceUnproven,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub enum LocaleLineageStatus {
+    Current,
+    Stale,
+    Unproven,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,6 +84,7 @@ pub struct LocaleCoverageResult {
     pub target_missing: Vec<String>,
     pub target_orphaned: Vec<String>,
     pub fallbacks: Vec<LocaleFallbackResult>,
+    pub lineage: Vec<LocaleLineageResult>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,6 +92,12 @@ pub struct LocaleFallbackResult {
     pub key: String,
     pub class: ArtifactId,
     pub status: LocaleFallbackStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocaleLineageResult {
+    pub key: String,
+    pub status: LocaleLineageStatus,
 }
 
 struct CoverageOutcome {
@@ -114,7 +131,9 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
 /// Every reported page is proved by explicit presence on one side and complete absence on the
 /// other. A partial inventory can therefore refute a plan, but it cannot manufacture an absence.
 /// Every fallback also binds its exact source resource and must match one plan-owned class/page
-/// rule. A matched result is emitted only when the policy-scoped comparison is exhaustive.
+/// rule. Required target lineage compares only an explicit based-on digest with the observed
+/// current source resource. A matched result is emitted only when the policy-scoped comparison is
+/// exhaustive.
 ///
 /// # Errors
 ///
@@ -143,6 +162,7 @@ pub fn assess(
         target_missing: Vec::new(),
         target_orphaned: Vec::new(),
         fallbacks: Vec::new(),
+        lineage: Vec::new(),
     };
     let outcome = match evidence {
         None => CoverageOutcome {
@@ -251,7 +271,7 @@ fn compare_coverage(
     } else {
         Vec::new()
     };
-    let fallbacks = compare_fallbacks(plan, evidence);
+    let TargetRelations { fallbacks, lineage } = compare_target_relations(plan, evidence);
 
     let requirement_complete = match &plan.policy.required {
         LocalePageRequirement::AllSource => evidence.source.complete,
@@ -271,16 +291,21 @@ fn compare_coverage(
     let fallback_complete = fallbacks
         .iter()
         .all(|fallback| fallback.status != LocaleFallbackStatus::SourceUnproven);
+    let lineage_complete = lineage
+        .iter()
+        .all(|lineage| lineage.status != LocaleLineageStatus::Unproven);
     let complete = evidence.target.complete
         && requirement_complete
         && source_resolution_complete
-        && fallback_complete;
+        && fallback_complete
+        && lineage_complete;
     let coverage = LocaleCoverageResult {
         complete,
         source_missing,
         target_missing,
         target_orphaned,
         fallbacks,
+        lineage,
     };
     classify_coverage(
         coverage,
@@ -289,48 +314,69 @@ fn compare_coverage(
     )
 }
 
-fn compare_fallbacks(
+struct TargetRelations {
+    fallbacks: Vec<LocaleFallbackResult>,
+    lineage: Vec<LocaleLineageResult>,
+}
+
+fn compare_target_relations(
     plan: &LocaleCoveragePlan,
     evidence: &LocaleCoverageEvidence,
-) -> Vec<LocaleFallbackResult> {
-    evidence
-        .target
-        .pages
-        .iter()
-        .filter_map(|(key, page)| {
-            let LocaleTargetOrigin::Fallback {
+) -> TargetRelations {
+    let mut fallbacks = Vec::new();
+    let mut lineage = Vec::new();
+    for (key, page) in &evidence.target.pages {
+        match &page.origin {
+            LocaleTargetOrigin::Fallback {
                 class,
                 source_resource_digest,
-            } = &page.origin
-            else {
-                return None;
-            };
-            let authorized = plan.policy.fallbacks.iter().any(|rule| {
-                rule.class == *class
-                    && match &rule.pages {
-                        LocalePageRequirement::AllSource => true,
-                        LocalePageRequirement::Named(keys) => keys.binary_search(key).is_ok(),
+            } => {
+                let authorized = plan.policy.fallbacks.iter().any(|rule| {
+                    rule.class == *class
+                        && match &rule.pages {
+                            LocalePageRequirement::AllSource => true,
+                            LocalePageRequirement::Named(keys) => keys.binary_search(key).is_ok(),
+                        }
+                });
+                let status = if authorized {
+                    match evidence.source.pages.get(key) {
+                        Some(current) if current == source_resource_digest => {
+                            LocaleFallbackStatus::Allowed
+                        }
+                        Some(_) => LocaleFallbackStatus::SourceMismatch,
+                        None if evidence.source.complete => LocaleFallbackStatus::SourceMismatch,
+                        None => LocaleFallbackStatus::SourceUnproven,
                     }
-            });
-            let status = if authorized {
-                match evidence.source.pages.get(key) {
-                    Some(current) if current == source_resource_digest => {
-                        LocaleFallbackStatus::Allowed
-                    }
-                    Some(_) => LocaleFallbackStatus::SourceMismatch,
-                    None if evidence.source.complete => LocaleFallbackStatus::SourceMismatch,
-                    None => LocaleFallbackStatus::SourceUnproven,
+                } else {
+                    LocaleFallbackStatus::Unauthorized
+                };
+                fallbacks.push(LocaleFallbackResult {
+                    key: key.clone(),
+                    class: class.clone(),
+                    status,
+                });
+            }
+            LocaleTargetOrigin::TargetResource {
+                based_on_source_digest,
+            } if plan.policy.require_target_lineage => {
+                if let Some(current_source) = evidence.source.pages.get(key) {
+                    let status = match based_on_source_digest {
+                        Some(based_on) if based_on == current_source => {
+                            LocaleLineageStatus::Current
+                        }
+                        Some(_) => LocaleLineageStatus::Stale,
+                        None => LocaleLineageStatus::Unproven,
+                    };
+                    lineage.push(LocaleLineageResult {
+                        key: key.clone(),
+                        status,
+                    });
                 }
-            } else {
-                LocaleFallbackStatus::Unauthorized
-            };
-            Some(LocaleFallbackResult {
-                key: key.clone(),
-                class: class.clone(),
-                status,
-            })
-        })
-        .collect()
+            }
+            LocaleTargetOrigin::TargetResource { .. } => {}
+        }
+    }
+    TargetRelations { fallbacks, lineage }
 }
 
 fn classify_coverage(
@@ -365,6 +411,13 @@ fn classify_coverage(
                 .any(|fallback| fallback.status == LocaleFallbackStatus::SourceMismatch),
             LocaleCoverageReason::FallbackSourceMismatch,
         ),
+        (
+            coverage
+                .lineage
+                .iter()
+                .any(|lineage| lineage.status == LocaleLineageStatus::Stale),
+            LocaleCoverageReason::LineageStale,
+        ),
     ]
     .into_iter()
     .filter_map(|(present, reason)| present.then_some(reason))
@@ -394,6 +447,13 @@ fn classify_coverage(
                         .any(|fallback| fallback.status == LocaleFallbackStatus::SourceUnproven),
                     LocaleCoverageReason::FallbackUnproven,
                 ),
+                (
+                    coverage
+                        .lineage
+                        .iter()
+                        .any(|lineage| lineage.status == LocaleLineageStatus::Unproven),
+                    LocaleCoverageReason::LineageUnproven,
+                ),
             ]
             .into_iter()
             .filter_map(|(incomplete, reason)| incomplete.then_some(reason))
@@ -414,7 +474,7 @@ fn decode_assessment(path: &str, input: Value) -> Result<LocaleCoverageAssessmen
     let reasons = de::sorted_items(
         &reasons_path,
         assessment.take("reasons")?,
-        13,
+        15,
         decode_enum,
         |reason| reason,
     )?;
@@ -441,12 +501,29 @@ fn decode_assessment(path: &str, input: Value) -> Result<LocaleCoverageAssessmen
             },
             |fallback| fallback.key.as_str(),
         )?;
+        let lineage_path = coverage.field("lineage");
+        let lineage = de::sorted_items(
+            &lineage_path,
+            coverage.take("lineage")?,
+            PAGE_ITEMS_LIMIT,
+            |path, value| {
+                let mut lineage = Obj::new(path, value)?;
+                let key = lineage.required("key", |path, value| {
+                    de::bounded_text(path, value, PAGE_KEY_BYTES)
+                })?;
+                let status = lineage.required("status", decode_enum)?;
+                lineage.finish()?;
+                Ok(LocaleLineageResult { key, status })
+            },
+            |lineage| lineage.key.as_str(),
+        )?;
         coverage.finish()?;
         source_missing
             .len()
             .checked_add(target_missing.len())
             .and_then(|total| total.checked_add(target_orphaned.len()))
             .and_then(|total| total.checked_add(fallbacks.len()))
+            .and_then(|total| total.checked_add(lineage.len()))
             .filter(|total| *total <= ASSESSMENT_PAGE_ITEMS_LIMIT)
             .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;
         Ok(LocaleCoverageResult {
@@ -455,6 +532,7 @@ fn decode_assessment(path: &str, input: Value) -> Result<LocaleCoverageAssessmen
             target_missing,
             target_orphaned,
             fallbacks,
+            lineage,
         })
     })?;
     assessment.finish()?;
@@ -497,7 +575,15 @@ fn valid_shape(
     let no_structural_pages = coverage.source_missing.is_empty()
         && coverage.target_missing.is_empty()
         && coverage.target_orphaned.is_empty();
-    let no_pages = no_structural_pages && coverage.fallbacks.is_empty();
+    let no_pages =
+        no_structural_pages && coverage.fallbacks.is_empty() && coverage.lineage.is_empty();
+    let fallback_has = |status| coverage.fallbacks.iter().any(|row| row.status == status);
+    let lineage_has = |status| coverage.lineage.iter().any(|row| row.status == status);
+    let fallback_unproven = fallback_has(LocaleFallbackStatus::SourceUnproven);
+    let fallback_unauthorized = fallback_has(LocaleFallbackStatus::Unauthorized);
+    let fallback_source_mismatch = fallback_has(LocaleFallbackStatus::SourceMismatch);
+    let lineage_unproven = lineage_has(LocaleLineageStatus::Unproven);
+    let lineage_stale = lineage_has(LocaleLineageStatus::Stale);
     let matched = verdict == AssessmentVerdict::Matched
         && evidence_payload_digest.is_some()
         && reasons.is_empty()
@@ -506,7 +592,11 @@ fn valid_shape(
         && coverage
             .fallbacks
             .iter()
-            .all(|fallback| fallback.status == LocaleFallbackStatus::Allowed);
+            .all(|fallback| fallback.status == LocaleFallbackStatus::Allowed)
+        && coverage
+            .lineage
+            .iter()
+            .all(|lineage| lineage.status == LocaleLineageStatus::Current);
     let unavailable = verdict == AssessmentVerdict::Unproven
         && !coverage.complete
         && no_pages
@@ -530,17 +620,21 @@ fn valid_shape(
                 LocaleCoverageReason::SourceIncomplete
                     | LocaleCoverageReason::TargetIncomplete
                     | LocaleCoverageReason::FallbackUnproven
+                    | LocaleCoverageReason::LineageUnproven
             )
         })
-        && reasons.contains(&LocaleCoverageReason::FallbackUnproven)
-            == coverage
-                .fallbacks
-                .iter()
-                .any(|fallback| fallback.status == LocaleFallbackStatus::SourceUnproven)
+        && reasons.contains(&LocaleCoverageReason::FallbackUnproven) == fallback_unproven
         && coverage.fallbacks.iter().all(|fallback| {
             matches!(
                 fallback.status,
                 LocaleFallbackStatus::Allowed | LocaleFallbackStatus::SourceUnproven
+            )
+        })
+        && reasons.contains(&LocaleCoverageReason::LineageUnproven) == lineage_unproven
+        && coverage.lineage.iter().all(|lineage| {
+            matches!(
+                lineage.status,
+                LocaleLineageStatus::Current | LocaleLineageStatus::Unproven
             )
         });
     let binding_refuted = verdict == AssessmentVerdict::Refuted
@@ -556,13 +650,11 @@ fn valid_shape(
         });
     let page_refuted = verdict == AssessmentVerdict::Refuted
         && evidence_payload_digest.is_some()
+        && (!coverage.complete || (!fallback_unproven && !lineage_unproven))
         && (!no_structural_pages
-            || coverage.fallbacks.iter().any(|fallback| {
-                matches!(
-                    fallback.status,
-                    LocaleFallbackStatus::Unauthorized | LocaleFallbackStatus::SourceMismatch
-                )
-            }))
+            || fallback_unauthorized
+            || fallback_source_mismatch
+            || lineage_stale)
         && reasons
             == [
                 (!coverage.source_missing.is_empty())
@@ -571,16 +663,9 @@ fn valid_shape(
                     .then_some(LocaleCoverageReason::TargetMissing),
                 (!coverage.target_orphaned.is_empty())
                     .then_some(LocaleCoverageReason::TargetOrphaned),
-                coverage
-                    .fallbacks
-                    .iter()
-                    .any(|fallback| fallback.status == LocaleFallbackStatus::Unauthorized)
-                    .then_some(LocaleCoverageReason::FallbackUnauthorized),
-                coverage
-                    .fallbacks
-                    .iter()
-                    .any(|fallback| fallback.status == LocaleFallbackStatus::SourceMismatch)
-                    .then_some(LocaleCoverageReason::FallbackSourceMismatch),
+                fallback_unauthorized.then_some(LocaleCoverageReason::FallbackUnauthorized),
+                fallback_source_mismatch.then_some(LocaleCoverageReason::FallbackSourceMismatch),
+                lineage_stale.then_some(LocaleCoverageReason::LineageStale),
             ]
             .into_iter()
             .flatten()
@@ -641,6 +726,22 @@ fn assessment_value(assessment: &LocaleCoverageAssessment) -> Value {
                                     ("key", value::text(&fallback.key)),
                                     ("class", value::text(fallback.class.as_str())),
                                     ("status", value::text(fallback.status.as_ref())),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
+                (
+                    "lineage",
+                    Value::array(
+                        assessment
+                            .coverage
+                            .lineage
+                            .iter()
+                            .map(|lineage| {
+                                value::object(vec![
+                                    ("key", value::text(&lineage.key)),
+                                    ("status", value::text(lineage.status.as_ref())),
                                 ])
                             })
                             .collect(),

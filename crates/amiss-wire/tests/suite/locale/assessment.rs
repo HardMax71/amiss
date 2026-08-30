@@ -14,8 +14,8 @@ use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessmentEnvelope, LocaleCoverageEvidence,
     LocaleCoverageEvidenceEnvelope, LocaleCoverageReason, LocaleCoverageVerdict,
-    LocaleFallbackStatus, LocalePageRequirement, assess, evidence, parse_assessment,
-    parse_evidence, parse_plan, plan,
+    LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement, assess, evidence,
+    parse_assessment, parse_evidence, parse_plan, plan,
 };
 
 fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
@@ -43,7 +43,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
     input
         .target
         .pages
-        .insert("legacy/removed".to_owned(), target_page('b'));
+        .insert("legacy/removed".to_owned(), target_page('b', None));
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
@@ -102,7 +102,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     partial_target
         .target
         .pages
-        .insert("legacy/removed".to_owned(), target_page('b'));
+        .insert("legacy/removed".to_owned(), target_page('b', None));
     let evidence = evidence_envelope(&partial_target);
     let assessment = assessed(&plan, Some(&evidence));
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
@@ -136,7 +136,7 @@ fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
     input.source.complete = false;
     input.target.pages = page_map(
         &[("guide/getting-started", 'f'), ("reference/api", 'e')],
-        target_page,
+        |digit| target_page(digit, None),
     );
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
@@ -274,6 +274,151 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
 }
 
 #[test]
+fn required_target_lineage_distinguishes_current_stale_and_unproven() {
+    let mut input_plan = locale_plan();
+    input_plan.policy.require_target_lineage = true;
+    let value = plan(&input_plan).unwrap();
+    let plan = parse_plan(&json::canonical(&value)).unwrap();
+
+    let mut current = locale_evidence();
+    current.plan_payload_digest = plan.payload_digest;
+    current.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        target_page('9', Some('6')),
+    );
+    current.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    let evidence = evidence_envelope(&current);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.coverage.lineage.len(), 1);
+    assert_eq!(
+        assessment.payload.coverage.lineage[0].status,
+        LocaleLineageStatus::Current
+    );
+
+    let mut stale = current.clone();
+    stale.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        target_page('9', Some('5')),
+    );
+    let evidence = evidence_envelope(&stale);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::LineageStale]
+    );
+    assert!(assessment.payload.coverage.complete);
+    assert_eq!(
+        assessment.payload.coverage.lineage[0].status,
+        LocaleLineageStatus::Stale
+    );
+
+    let mut unproven = current;
+    unproven
+        .target
+        .pages
+        .insert("guide/getting-started".to_owned(), target_page('9', None));
+    let evidence = evidence_envelope(&unproven);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::LineageUnproven]
+    );
+    assert!(!assessment.payload.coverage.complete);
+    assert_eq!(
+        assessment.payload.coverage.lineage[0].status,
+        LocaleLineageStatus::Unproven
+    );
+}
+
+#[test]
+fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
+    let coverage_plan = plan_envelope();
+    let mut ignored = locale_evidence();
+    ignored.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    ignored.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        target_page('9', Some('5')),
+    );
+    let evidence = evidence_envelope(&ignored);
+    let assessment = assessed(&coverage_plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert!(assessment.payload.coverage.lineage.is_empty());
+
+    let mut input_plan = locale_plan();
+    input_plan.policy.require_target_lineage = true;
+    let value = plan(&input_plan).unwrap();
+    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let mut input = locale_evidence();
+    input.plan_payload_digest = plan.payload_digest;
+    input
+        .source
+        .pages
+        .insert("optional/overview".to_owned(), digest('c'));
+    input.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    input.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        target_page('9', Some('6')),
+    );
+    input
+        .target
+        .pages
+        .insert("optional/overview".to_owned(), target_page('d', Some('e')));
+    let evidence = evidence_envelope(&input);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::LineageStale]
+    );
+    assert_eq!(assessment.payload.coverage.lineage.len(), 2);
+}
+
+#[test]
+fn lineage_is_not_inferred_without_an_observed_current_source() {
+    let mut input_plan = locale_plan();
+    input_plan.policy.require_target_lineage = true;
+    let value = plan(&input_plan).unwrap();
+    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let mut input = locale_evidence();
+    input.plan_payload_digest = plan.payload_digest;
+    input.source.complete = false;
+    input.source.pages.remove("reference/api");
+    input.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        target_page('9', Some('6')),
+    );
+    input
+        .target
+        .pages
+        .insert("reference/api".to_owned(), target_page('b', Some('7')));
+    let evidence = evidence_envelope(&input);
+    let assessment = assessed(&plan, Some(&evidence));
+
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::SourceIncomplete]
+    );
+    assert_eq!(assessment.payload.coverage.lineage.len(), 1);
+    assert_eq!(
+        assessment.payload.coverage.lineage[0].status,
+        LocaleLineageStatus::Current
+    );
+}
+
+#[test]
 fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
     all_source_plan.policy.required = LocalePageRequirement::AllSource;
@@ -283,7 +428,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
     all_source_evidence.plan_payload_digest = all_source_plan.payload_digest;
     all_source_evidence.target.pages = page_map(
         &[("guide/getting-started", '9'), ("legacy/removed", 'a')],
-        target_page,
+        |digit| target_page(digit, None),
     );
     let evidence = evidence_envelope(&all_source_evidence);
     let assessment = assessed(&all_source_plan, Some(&evidence));
@@ -299,7 +444,9 @@ fn all_source_and_named_source_absence_remain_distinct() {
     let plan = plan_envelope();
     let mut source_missing = locale_evidence();
     source_missing.source.pages.remove("reference/api");
-    source_missing.target.pages = page_map(&[("guide/getting-started", '9')], target_page);
+    source_missing.target.pages = page_map(&[("guide/getting-started", '9')], |digit| {
+        target_page(digit, None)
+    });
     let evidence = evidence_envelope(&source_missing);
     let assessment = assessed(&plan, Some(&evidence));
     assert_eq!(

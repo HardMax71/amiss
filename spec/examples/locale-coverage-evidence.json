@@ -2,7 +2,7 @@
   "schema": "amiss/locale-coverage-evidence-envelope",
   "payload": {
     "schema": "amiss/locale-coverage-evidence-payload",
-    "plan_payload_digest": "sha256:7587497b1d804ead43c59ad4c89592850365c4399b39a01a8cf8008923cd09d5",
+    "plan_payload_digest": "sha256:6045397e266f979cf660adc4a8ecdcee7c612bbe25858f42754712b2851a6c4f",
     "docs": {
       "repository": {
         "host": "github.com",
@@ -48,7 +48,8 @@
           "key": "guide/getting-started",
           "resource_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
           "origin": {
-            "kind": "target-resource"
+            "kind": "target-resource",
+            "based_on_source_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
           }
         },
         {
@@ -63,5 +64,5 @@
       ]
     }
   },
-  "payload_digest": "sha256:d436fb3bee48e524561f9f613f59b80ca8d02780192888363b0a6059f3ca9b8e"
+  "payload_digest": "sha256:98cc1cbce225c86a79926a589fea69d16ebbf893e27ad0d180e683637d01c305"
 }

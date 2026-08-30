@@ -54,7 +54,9 @@ pub struct LocaleTargetPage {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocaleTargetOrigin {
-    TargetResource,
+    TargetResource {
+        based_on_source_digest: Option<Digest>,
+    },
     Fallback {
         class: ArtifactId,
         source_resource_digest: Digest,
@@ -186,8 +188,14 @@ fn decode_origin(path: &str, value: Value) -> Result<LocaleTargetOrigin, Error> 
     let kind = de::string(&kind_path, origin.take("kind")?)?;
     match kind.as_str() {
         "target-resource" => {
+            let based_on_path = origin.field("based_on_source_digest");
+            let based_on_source_digest = de::nullable(origin.take("based_on_source_digest")?)
+                .map(|value| de::digest(&based_on_path, value))
+                .transpose()?;
             origin.finish()?;
-            Ok(LocaleTargetOrigin::TargetResource)
+            Ok(LocaleTargetOrigin::TargetResource {
+                based_on_source_digest,
+            })
         }
         "fallback" => {
             let class = origin.required("class", decode_identity)?;
@@ -236,7 +244,33 @@ fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
                     object(vec![
                         ("key", text(key)),
                         ("resource_digest", text(&page.resource_digest.to_string())),
-                        ("origin", origin_value(&page.origin)),
+                        (
+                            "origin",
+                            match &page.origin {
+                                LocaleTargetOrigin::TargetResource {
+                                    based_on_source_digest,
+                                } => object(vec![
+                                    ("kind", text("target-resource")),
+                                    (
+                                        "based_on_source_digest",
+                                        based_on_source_digest.map_or(Value::Null, |digest| {
+                                            text(&digest.to_string())
+                                        }),
+                                    ),
+                                ]),
+                                LocaleTargetOrigin::Fallback {
+                                    class,
+                                    source_resource_digest,
+                                } => object(vec![
+                                    ("kind", text("fallback")),
+                                    ("class", text(class.as_str())),
+                                    (
+                                        "source_resource_digest",
+                                        text(&source_resource_digest.to_string()),
+                                    ),
+                                ]),
+                            },
+                        ),
                     ])
                 },
             ),
@@ -259,21 +293,4 @@ fn inventory_value<T>(
         ("complete", Value::Bool(complete)),
         ("pages", Value::array(pages)),
     ])
-}
-
-fn origin_value(origin: &LocaleTargetOrigin) -> Value {
-    match origin {
-        LocaleTargetOrigin::TargetResource => object(vec![("kind", text("target-resource"))]),
-        LocaleTargetOrigin::Fallback {
-            class,
-            source_resource_digest,
-        } => object(vec![
-            ("kind", text("fallback")),
-            ("class", text(class.as_str())),
-            (
-                "source_resource_digest",
-                text(&source_resource_digest.to_string()),
-            ),
-        ]),
-    }
 }

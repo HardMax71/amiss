@@ -33,6 +33,7 @@
         "mode": "named",
         "keys": ["guide/getting-started", "reference/api"]
       },
+      "require_target_lineage": true,
       "fallbacks": [
         {
           "class": "source-copy",
@@ -44,5 +45,5 @@
       ]
     }
   },
-  "payload_digest": "sha256:7587497b1d804ead43c59ad4c89592850365c4399b39a01a8cf8008923cd09d5"
+  "payload_digest": "sha256:6045397e266f979cf660adc4a8ecdcee7c612bbe25858f42754712b2851a6c4f"
 }

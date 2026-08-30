@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-evidence",
   "title": "Amiss locale coverage evidence",
-  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each target page declares whether it is target-owned or a source fallback with exact provenance; no row proves translation quality or freshness.",
+  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each target page declares whether it is target-owned or a source fallback; a target-owned page may bind the exact source resource it was based on. No row proves translation quality or semantic equivalence.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -202,15 +202,26 @@
       }
     },
     "TargetOrigin": {
-      "description": "Producer-declared provenance for one observed target page. Authority is established outside this reader. Target-resource makes no translation claim; fallback names its policy class and exact source resource.",
+      "description": "Producer-declared provenance for one observed target page. Authority is established outside this reader. Target-resource optionally names its exact source resource lineage; fallback names its policy class and exact source resource.",
       "oneOf": [
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind"],
+          "required": ["based_on_source_digest", "kind"],
           "properties": {
             "kind": {
               "const": "target-resource"
+            },
+            "based_on_source_digest": {
+              "description": "The exact producer-defined source resource this target resource was based on, or null when the producer has no exact lineage assertion. Equality proves currency of that identity only, not translation quality.",
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Digest"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         },
