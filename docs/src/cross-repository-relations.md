@@ -72,7 +72,9 @@ delivery triggered the audit. Each fact must reproduce the complete registered s
 its provider scope, target, credential identity, selector, and limits. A changed subject binding or
 object format is invalid; a changed candidate commit is superseded. Only then does the controller
 freeze the configured destination roles into a stable batch carrying the relation, coordination,
-trigger role, pending fence, complete subject, exact candidate commit, and required status name.
+trigger role, pending fence, exact provider scope and credential identity, candidate commit, and
+required status name. Selector, target-branch, and resource-limit fields have already served their
+finality proof and are not copied into the provider outbox.
 An unconfigured role never appears in that batch.
 
 ## Pending and supersession law
@@ -107,9 +109,19 @@ against the pending transition, and binds its retained artifact reference and ve
 destination batch. A first stage returns one direct record. An unfinished exact retry returns that
 same record, a completed exact retry returns no work, and substituting any target or audit field is
 a binding conflict. Completion changes only the terminal bit and is idempotent for the exact staged
-value. The model does not prove that referenced bytes remain live or make a provider call; the
-durable outbox must perform those checks and persist the transition atomically with the current
-scheduling fence.
+value. The file-backed relation journal applies that transition under the same cross-process lock
+as scheduling, so current-fence verification and the committed stage cannot race. The stage action
+first verifies the live retained artifact, then stores the relation identity, coordination, trigger
+role, fence, artifact identity, and one domain-separated binding over the complete typed target and
+audit record. It does not duplicate provider configuration or credential identities in the journal.
+Completion is a separate hash-chained action; an exact retry is idempotent, while a missing or
+rebound record fails closed. Completed in-memory state keeps only the status binding digest. A
+delivery boundary must reopen the immutable registry and artifact record, reproduce that binding,
+and only then expose provider fields.
+
+This outbox still makes no provider call and its returned record is not delivery authority. A later
+publisher must serialize external writes for each stable destination and recheck the retained
+artifact immediately before using it.
 
 ## Exact Git acquisition
 
@@ -245,7 +257,7 @@ The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
 2. resolve both current heads through their independently configured provider credentials;
-3. retain the modeled status transition atomically and publish only to the prepared subject roles.
+3. serialize each stable destination and publish only the retained prepared subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet

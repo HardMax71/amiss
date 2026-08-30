@@ -380,7 +380,7 @@ pub(super) fn millis(duration: Duration) -> Result<u64, ArtifactError> {
     u64::try_from(duration.as_millis()).map_err(|_defect| ArtifactError::Configuration)
 }
 
-pub(super) fn valid_id(id: &str) -> bool {
+pub(crate) fn valid_id(id: &str) -> bool {
     id.len() == 64
         && id
             .bytes()

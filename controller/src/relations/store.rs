@@ -1,4 +1,6 @@
 mod binding;
+mod outbox;
+mod status;
 
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -12,9 +14,10 @@ use atomicwrites::{AllowOverwrite, AtomicFile};
 use serde::{Deserialize, Serialize};
 
 use self::binding::{checked_work, pending_from_binding};
+use self::status::{StoredStatus, validate_stored_status};
 use super::{
-    PendingRelation, RelationAdmission, RelationScheduleError, RelationTransition,
-    schedule_relation,
+    PendingRelation, RelationAdmission, RelationScheduleError, RelationStatusError,
+    RelationTransition, schedule_relation,
 };
 use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory};
 use crate::file_ledger::{FileLedgerError, frame};
@@ -26,7 +29,8 @@ const ROOT_SCHEMA: &str = "amiss/controller-relation-journal-root-v2";
 const ENTRY_SCHEMA: &str = "amiss/controller-relation-journal-entry-v2";
 const JOURNAL_CHAIN_DOMAIN: &str = "amiss/controller-relation-journal-chain-v2";
 const MAX_ROOT_BYTES: u64 = 4_096;
-const MAX_ENTRY_BYTES: u64 = 4_096;
+const MAX_ENTRY_BYTES: u64 = 16_384;
+const MAX_SMALL_ENTRY_BYTES: u64 = 4_096;
 const ENTRY_LENGTH_BYTES: u64 = 8;
 const MAX_ROOT_ENTRIES: usize = 16;
 
@@ -42,8 +46,9 @@ const ENTRY_FRAME: frame::FrameFormat = frame::define(
 );
 
 pub const RELATION_SCHEDULE_BINDING_LIMIT: u64 = 16_384;
-const MAX_JOURNAL_BYTES: u64 =
-    RELATION_SCHEDULE_BINDING_LIMIT * (MAX_ENTRY_BYTES + ENTRY_LENGTH_BYTES);
+const MAX_JOURNAL_BYTES_PER_BINDING: u64 =
+    MAX_ENTRY_BYTES + (2 * MAX_SMALL_ENTRY_BYTES) + (3 * ENTRY_LENGTH_BYTES);
+const MAX_ACTIONS_PER_BINDING: u64 = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RelationScheduleStoreError {
@@ -55,6 +60,10 @@ pub enum RelationScheduleStoreError {
     Corrupt,
     #[error("relation scheduling was refused: {0}")]
     Schedule(#[source] RelationScheduleError),
+    #[error("relation status staging was refused: {0}")]
+    Status(#[source] RelationStatusError),
+    #[error("the retained relation audit is unavailable: {0}")]
+    Artifact(#[source] crate::ArtifactError),
     #[error("relation schedule storage I/O failed: {0}")]
     Io(#[source] io::Error),
 }
@@ -93,6 +102,16 @@ enum JournalAction {
         plan_binding: String,
         binding: StoredBinding,
     },
+    Stage {
+        plan_binding: String,
+        work_binding: String,
+        status: Box<StoredStatus>,
+    },
+    Complete {
+        relation: String,
+        coordination: String,
+        status_binding: String,
+    },
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -107,10 +126,21 @@ pub(super) struct StoredBinding {
 #[derive(Default)]
 struct State {
     relations: BTreeMap<String, StoredRelation>,
+    statuses: BTreeMap<(String, String), StoredStatusState>,
     binding_count: u64,
     entry_count: u64,
     journal_bytes: u64,
     tail_digest: Option<String>,
+}
+
+enum StoredStatusState {
+    Staged {
+        binding: String,
+        status: Box<StoredStatus>,
+    },
+    Completed {
+        binding: String,
+    },
 }
 
 struct StoredRelation {
@@ -251,21 +281,7 @@ impl FileRelationScheduleStore {
         let mut journal = self.open_committed_journal(&metadata)?;
         let mut state = self.state()?;
         synchronize(&mut state, &mut journal, &metadata, self.max_bindings)?;
-        let Some(stored) = state.relations.get(&checked.relation) else {
-            return Ok(false);
-        };
-        if stored.plan_binding != checked.plan_binding {
-            return Ok(false);
-        }
-        Ok(stored
-            .bindings
-            .get(&stored.current_coordination)
-            .is_some_and(|current| {
-                current.coordination == checked.binding.coordination
-                    && current.work_binding == checked.binding.work_binding
-                    && current.trigger_role == checked.binding.trigger_role
-                    && current.fence == pending.fence.get()
-            }))
+        Ok(is_current_work(&state, &checked, pending))
     }
 
     fn append(
@@ -281,17 +297,24 @@ impl FileRelationScheduleStore {
         let next_bytes = metadata
             .journal_bytes
             .checked_add(chunk_length)
-            .filter(|bytes| *bytes <= MAX_JOURNAL_BYTES)
+            .filter(|bytes| {
+                journal_byte_limit(self.max_bindings).is_some_and(|limit| *bytes <= limit)
+            })
             .ok_or(RelationScheduleStoreError::Full)?;
+        let binding_increment = u64::from(matches!(&entry.action, JournalAction::Schedule { .. }));
         let next_count = metadata
             .binding_count
-            .checked_add(1)
+            .checked_add(binding_increment)
             .filter(|count| *count <= self.max_bindings)
             .ok_or(RelationScheduleStoreError::Full)?;
+        let max_entries = self
+            .max_bindings
+            .checked_mul(MAX_ACTIONS_PER_BINDING)
+            .ok_or(RelationScheduleStoreError::Configuration)?;
         let next_entry_count = metadata
             .entry_count
             .checked_add(1)
-            .filter(|count| *count <= self.max_bindings)
+            .filter(|count| *count <= max_entries)
             .ok_or(RelationScheduleStoreError::Full)?;
         let tail_digest = hb(JOURNAL_CHAIN_DOMAIN, &chunk).to_string();
         validate_append(state, &entry, chunk_length, self.max_bindings)?;
@@ -425,6 +448,24 @@ impl State {
     }
 }
 
+fn is_current_work(
+    state: &State,
+    checked: &binding::CheckedWork,
+    pending: &PendingRelation,
+) -> bool {
+    state
+        .relations
+        .get(&checked.relation)
+        .filter(|stored| stored.plan_binding == checked.plan_binding)
+        .and_then(|stored| stored.bindings.get(&stored.current_coordination))
+        .is_some_and(|current| {
+            current.coordination == checked.binding.coordination
+                && current.work_binding == checked.binding.work_binding
+                && current.trigger_role == checked.binding.trigger_role
+                && current.fence == pending.fence.get()
+        })
+}
+
 fn synchronize(
     state: &mut State,
     journal: &mut File,
@@ -507,34 +548,81 @@ fn validate_append(
     chunk_length: u64,
     max_bindings: u64,
 ) -> Result<(), RelationScheduleStoreError> {
+    let max_entries = max_bindings
+        .checked_mul(MAX_ACTIONS_PER_BINDING)
+        .ok_or(RelationScheduleStoreError::Corrupt)?;
+    let journal_byte_limit =
+        journal_byte_limit(max_bindings).ok_or(RelationScheduleStoreError::Corrupt)?;
     if entry.previous_tail != state.tail_digest
-        || state.binding_count >= max_bindings
+        || state.entry_count >= max_entries
         || state
             .journal_bytes
             .checked_add(chunk_length)
-            .is_none_or(|bytes| bytes > MAX_JOURNAL_BYTES)
+            .is_none_or(|bytes| bytes > journal_byte_limit)
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
-    let JournalAction::Schedule {
-        relation,
-        plan_binding,
-        binding,
-    } = &entry.action;
-    match state.relations.get(relation) {
-        None if binding.fence == 1 => Ok(()),
-        Some(relation)
-            if relation.plan_binding == *plan_binding
-                && !relation.bindings.contains_key(&binding.coordination)
-                && relation
-                    .bindings
-                    .get(&relation.current_coordination)
-                    .and_then(|binding| binding.fence.checked_add(1))
-                    == Some(binding.fence) =>
-        {
-            Ok(())
+    match &entry.action {
+        JournalAction::Schedule {
+            relation,
+            plan_binding,
+            binding,
+        } => match state.relations.get(relation) {
+            None if binding.fence == 1 && state.binding_count < max_bindings => Ok(()),
+            Some(relation)
+                if state.binding_count < max_bindings
+                    && relation.plan_binding == *plan_binding
+                    && !relation.bindings.contains_key(&binding.coordination)
+                    && relation
+                        .bindings
+                        .get(&relation.current_coordination)
+                        .and_then(|binding| binding.fence.checked_add(1))
+                        == Some(binding.fence) =>
+            {
+                Ok(())
+            }
+            None | Some(_) => Err(RelationScheduleStoreError::Corrupt),
+        },
+        JournalAction::Stage {
+            plan_binding,
+            work_binding,
+            status,
+        } => {
+            validate_stored_status(status)?;
+            let key = (status.relation.clone(), status.coordination.clone());
+            let current = state
+                .relations
+                .get(&status.relation)
+                .filter(|relation| {
+                    relation.plan_binding == *plan_binding
+                        && relation.current_coordination == status.coordination
+                })
+                .and_then(|relation| relation.bindings.get(&status.coordination));
+            if state.statuses.contains_key(&key)
+                || current.is_none_or(|binding| {
+                    binding.work_binding != *work_binding
+                        || binding.trigger_role != status.trigger_role
+                        || binding.fence != status.fence
+                })
+            {
+                Err(RelationScheduleStoreError::Corrupt)
+            } else {
+                Ok(())
+            }
         }
-        _ => Err(RelationScheduleStoreError::Corrupt),
+        JournalAction::Complete {
+            relation,
+            coordination,
+            status_binding,
+        } => match state
+            .statuses
+            .get(&(relation.clone(), coordination.clone()))
+        {
+            Some(StoredStatusState::Staged { binding, .. }) if binding == status_binding => Ok(()),
+            Some(StoredStatusState::Staged { .. } | StoredStatusState::Completed { .. }) | None => {
+                Err(RelationScheduleStoreError::Corrupt)
+            }
+        },
     }
 }
 
@@ -548,7 +636,10 @@ fn apply_entry(
     validate_append(state, &entry, chunk_length, max_bindings)?;
     let binding_count = state
         .binding_count
-        .checked_add(1)
+        .checked_add(u64::from(matches!(
+            &entry.action,
+            JournalAction::Schedule { .. }
+        )))
         .ok_or(RelationScheduleStoreError::Corrupt)?;
     let entry_count = state
         .entry_count
@@ -558,24 +649,44 @@ fn apply_entry(
         .journal_bytes
         .checked_add(chunk_length)
         .ok_or(RelationScheduleStoreError::Corrupt)?;
-    let JournalAction::Schedule {
-        relation,
-        plan_binding,
-        binding,
-    } = entry.action;
-    let coordination = binding.coordination.clone();
-    match state.relations.entry(relation) {
-        std::collections::btree_map::Entry::Vacant(slot) => {
-            slot.insert(StoredRelation {
-                plan_binding,
-                bindings: BTreeMap::from([(coordination.clone(), binding)]),
-                current_coordination: coordination,
-            });
+    match entry.action {
+        JournalAction::Schedule {
+            relation,
+            plan_binding,
+            binding,
+        } => {
+            let coordination = binding.coordination.clone();
+            match state.relations.entry(relation) {
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    slot.insert(StoredRelation {
+                        plan_binding,
+                        bindings: BTreeMap::from([(coordination.clone(), binding)]),
+                        current_coordination: coordination,
+                    });
+                }
+                std::collections::btree_map::Entry::Occupied(mut slot) => {
+                    let relation = slot.get_mut();
+                    relation.bindings.insert(coordination.clone(), binding);
+                    relation.current_coordination = coordination;
+                }
+            }
         }
-        std::collections::btree_map::Entry::Occupied(mut slot) => {
-            let relation = slot.get_mut();
-            relation.bindings.insert(coordination.clone(), binding);
-            relation.current_coordination = coordination;
+        JournalAction::Stage { status, .. } => {
+            let key = (status.relation.clone(), status.coordination.clone());
+            let binding = status.status_binding.clone();
+            state
+                .statuses
+                .insert(key, StoredStatusState::Staged { binding, status });
+        }
+        JournalAction::Complete {
+            relation,
+            coordination,
+            status_binding: binding,
+        } => {
+            state.statuses.insert(
+                (relation, coordination),
+                StoredStatusState::Completed { binding },
+            );
         }
     }
     state.binding_count = binding_count;
@@ -598,11 +709,23 @@ fn empty_metadata(max_bindings: u64) -> RootMetadata {
 
 fn validate_metadata(metadata: &RootMetadata) -> Result<(), RelationScheduleStoreError> {
     let empty = metadata.entry_count == 0;
+    let max_entries = metadata
+        .max_bindings
+        .checked_mul(MAX_ACTIONS_PER_BINDING)
+        .ok_or(RelationScheduleStoreError::Corrupt)?;
+    let admitted_entries = metadata
+        .binding_count
+        .checked_mul(MAX_ACTIONS_PER_BINDING)
+        .ok_or(RelationScheduleStoreError::Corrupt)?;
+    let journal_byte_limit =
+        journal_byte_limit(metadata.max_bindings).ok_or(RelationScheduleStoreError::Corrupt)?;
     if metadata.schema != ROOT_SCHEMA
         || !(1..=RELATION_SCHEDULE_BINDING_LIMIT).contains(&metadata.max_bindings)
         || metadata.binding_count > metadata.max_bindings
-        || metadata.entry_count != metadata.binding_count
-        || metadata.journal_bytes > MAX_JOURNAL_BYTES
+        || metadata.entry_count < metadata.binding_count
+        || metadata.entry_count > max_entries
+        || metadata.entry_count > admitted_entries
+        || metadata.journal_bytes > journal_byte_limit
         || (metadata.journal_bytes == 0) != empty
         || metadata.tail_digest.is_none() != empty
         || metadata
@@ -615,6 +738,10 @@ fn validate_metadata(metadata: &RootMetadata) -> Result<(), RelationScheduleStor
     Ok(())
 }
 
+const fn journal_byte_limit(max_bindings: u64) -> Option<u64> {
+    max_bindings.checked_mul(MAX_JOURNAL_BYTES_PER_BINDING)
+}
+
 fn validate_entry(entry: &JournalEntry) -> Result<(), RelationScheduleStoreError> {
     if entry.schema != ENTRY_SCHEMA
         || entry
@@ -624,17 +751,39 @@ fn validate_entry(entry: &JournalEntry) -> Result<(), RelationScheduleStoreError
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
-    let JournalAction::Schedule {
-        relation,
-        plan_binding,
-        binding,
-    } = &entry.action;
-    (ArtifactId::new(relation.clone()).is_some()
-        && Digest::from_wire(plan_binding).is_some()
-        && ArtifactId::new(binding.coordination.clone()).is_some()
-        && Digest::from_wire(&binding.work_binding).is_some()
-        && ArtifactId::new(binding.trigger_role.clone()).is_some()
-        && binding.fence != 0)
+    let valid = match &entry.action {
+        JournalAction::Schedule {
+            relation,
+            plan_binding,
+            binding,
+        } => {
+            ArtifactId::new(relation.clone()).is_some()
+                && Digest::from_wire(plan_binding).is_some()
+                && ArtifactId::new(binding.coordination.clone()).is_some()
+                && Digest::from_wire(&binding.work_binding).is_some()
+                && ArtifactId::new(binding.trigger_role.clone()).is_some()
+                && binding.fence != 0
+        }
+        JournalAction::Stage {
+            plan_binding,
+            work_binding,
+            status,
+        } => {
+            Digest::from_wire(plan_binding).is_some()
+                && Digest::from_wire(work_binding).is_some()
+                && validate_stored_status(status).is_ok()
+        }
+        JournalAction::Complete {
+            relation,
+            coordination,
+            status_binding,
+        } => {
+            ArtifactId::new(relation.clone()).is_some()
+                && ArtifactId::new(coordination.clone()).is_some()
+                && Digest::from_wire(status_binding).is_some()
+        }
+    };
+    valid
         .then_some(())
         .ok_or(RelationScheduleStoreError::Corrupt)
 }
@@ -646,6 +795,9 @@ fn encode_entry(entry: &JournalEntry) -> Result<Vec<u8>, RelationScheduleStoreEr
     .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     let length =
         u64::try_from(frame.len()).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    if length > entry_byte_limit(&entry.action) {
+        return Err(RelationScheduleStoreError::Corrupt);
+    }
     let mut chunk = Vec::with_capacity(
         frame
             .len()
@@ -658,10 +810,22 @@ fn encode_entry(entry: &JournalEntry) -> Result<Vec<u8>, RelationScheduleStoreEr
 }
 
 fn decode_entry(bytes: &[u8]) -> Result<JournalEntry, RelationScheduleStoreError> {
-    frame::decode(ENTRY_FRAME, bytes, |entry| {
+    let entry = frame::decode(ENTRY_FRAME, bytes, |entry| {
         validate_entry(entry).map_err(|_defect| FileLedgerError::Corrupt)
     })
-    .map_err(|_defect| RelationScheduleStoreError::Corrupt)
+    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let length =
+        u64::try_from(bytes.len()).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    (length <= entry_byte_limit(&entry.action))
+        .then_some(entry)
+        .ok_or(RelationScheduleStoreError::Corrupt)
+}
+
+const fn entry_byte_limit(action: &JournalAction) -> u64 {
+    match action {
+        JournalAction::Stage { .. } => MAX_ENTRY_BYTES,
+        JournalAction::Schedule { .. } | JournalAction::Complete { .. } => MAX_SMALL_ENTRY_BYTES,
+    }
 }
 
 fn save_metadata(root: &Path, metadata: &RootMetadata) -> Result<(), RelationScheduleStoreError> {
