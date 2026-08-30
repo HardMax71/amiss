@@ -71,6 +71,7 @@ pub fn verify_relation_plan(
     (rebuilt.text("payload_digest") == Some(&plan.payload_digest.to_string())
         && plan.payload.relation.identity == registered.identity
         && plan.payload.relation.context_digest == registered.context_digest
+        && plan.payload.coordination == transition.coordination
         && plan.payload.trigger_role == transition.relation.trigger_role
         && plan.payload.projection == registered.projection
         && plan.payload.subjects.iter().all(|planned| {

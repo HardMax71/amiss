@@ -141,6 +141,7 @@ fn frozen_transition(source: &CommitPair, documentation: &CommitPair) -> Relatio
         .unwrap();
     relation_transition(
         relation,
+        artifact("workflow/release-42"),
         [
             transition_subject("source", source),
             transition_subject("documentation", documentation),
@@ -296,6 +297,7 @@ fn freezes_all_four_exact_revisions_in_stable_role_order() {
     let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
     let transition = frozen_transition(&source, &documentation);
 
+    assert_eq!(transition.coordination.as_str(), "workflow/release-42");
     assert_eq!(transition.subjects[0].role.as_str(), "documentation");
     assert_eq!(transition.subjects[1].role.as_str(), "source");
     assert_eq!(

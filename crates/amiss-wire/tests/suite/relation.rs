@@ -68,6 +68,7 @@ fn relation_plan() -> RelationPlan {
             identity: identity("relation/public-api"),
             context_digest: digest('2'),
         },
+        coordination: identity("workflow/release-42"),
         trigger_role: identity("source"),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [

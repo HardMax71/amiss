@@ -354,6 +354,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "coordination",
         "projection",
         "relation",
         "report_payload_digest",
@@ -368,6 +369,10 @@
         "report_payload_digest": {
           "description": "The verified scanner report whose exact triggering candidate selected this later relation audit.",
           "$ref": "#/$defs/Digest"
+        },
+        "coordination": {
+          "description": "The operator-supplied identity of the exact pair, release, or workflow occurrence whose revisions are compared. It carries no inferred time ordering.",
+          "$ref": "#/$defs/ArtifactId"
         },
         "relation": {
           "$ref": "#/$defs/RelationIdentity"

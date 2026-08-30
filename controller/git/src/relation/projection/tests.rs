@@ -117,6 +117,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             plan: Arc::clone(&registered),
             trigger_role: artifact("source"),
         },
+        artifact("workflow/release-42"),
         [
             frozen("source", &source),
             frozen("documentation", &documentation),
@@ -150,6 +151,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             identity: registered.identity.clone(),
             context_digest: registered.context_digest,
         },
+        coordination: transition.coordination.clone(),
         trigger_role: transition.relation.trigger_role.clone(),
         projection: registered.projection,
         subjects,

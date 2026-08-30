@@ -3,6 +3,7 @@
   "payload": {
     "schema": "amiss/relation-plan-payload",
     "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "coordination": "workflow/release-42",
     "relation": {
       "identity": "relation/public-api",
       "context_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
@@ -56,5 +57,5 @@
       }
     ]
   },
-  "payload_digest": "sha256:2b71efd44feb67db471ab34ec88d0bf0b0b605f69804d9066749272297bb6c2e"
+  "payload_digest": "sha256:d3528d783d748398c0517631996bcabcebbad4e37f8b1b8fc9e9ebdadc8dc4a8"
 }

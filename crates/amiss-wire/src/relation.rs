@@ -35,6 +35,7 @@ pub struct RelationPlanEnvelope {
 pub struct RelationPlan {
     pub report_payload_digest: Digest,
     pub relation: RelationIdentity,
+    pub coordination: ArtifactId,
     pub trigger_role: ArtifactId,
     pub projection: ProjectionKind,
     pub subjects: [RelationSubject; 2],
@@ -119,6 +120,10 @@ fn decode_plan(path: &str, value: Value) -> Result<RelationPlan, Error> {
             context_digest,
         })
     })?;
+    let coordination = plan.required("coordination", |path, value| {
+        ArtifactId::new(de::string(path, value)?)
+            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+    })?;
     let trigger_role = plan.required("trigger_role", |path, value| {
         ArtifactId::new(de::string(path, value)?)
             .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
@@ -157,6 +162,7 @@ fn decode_plan(path: &str, value: Value) -> Result<RelationPlan, Error> {
     Ok(RelationPlan {
         report_payload_digest,
         relation,
+        coordination,
         trigger_role,
         projection,
         subjects,
@@ -238,6 +244,7 @@ fn plan_value(plan: &RelationPlan) -> Value {
                 ),
             ]),
         ),
+        ("coordination", text(plan.coordination.as_str())),
         ("trigger_role", text(plan.trigger_role.as_str())),
         ("projection", text(plan.projection.as_ref())),
         (
