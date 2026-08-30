@@ -4,7 +4,10 @@ use crate::controls::value::{object, text};
 use crate::de::{self, Error, ErrorKind, Obj};
 use crate::digest::Digest;
 use crate::json::Value;
-use crate::publication::{DocsCandidate, PublicationProducer, docs_value, producer_value};
+use crate::model::ArtifactId;
+use crate::publication::{
+    DocsCandidate, PublicationProducer, decode_identity, docs_value, producer_value,
+};
 
 use super::{LocaleCoverageScope, PAGE_KEY_BYTES, decode_facts, scope_value};
 
@@ -26,7 +29,7 @@ pub struct LocaleCoverageEvidence {
     pub scope: LocaleCoverageScope,
     pub producer: PublicationProducer,
     pub source: LocalePageInventory,
-    pub target: LocalePageInventory,
+    pub target: LocaleTargetInventory,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +37,34 @@ pub struct LocalePageInventory {
     pub input_digest: Digest,
     pub complete: bool,
     pub pages: BTreeMap<String, Digest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocaleTargetInventory {
+    pub input_digest: Digest,
+    pub complete: bool,
+    pub pages: BTreeMap<String, LocaleTargetPage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocaleTargetPage {
+    pub resource_digest: Digest,
+    pub origin: LocaleTargetOrigin,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LocaleTargetOrigin {
+    TargetResource,
+    Fallback {
+        class: ArtifactId,
+        source_resource_digest: Digest,
+    },
+}
+
+struct Inventory<T> {
+    input_digest: Digest,
+    complete: bool,
+    pages: BTreeMap<String, T>,
 }
 
 /// Parses one closed, digest-bound pair of locale page inventories.
@@ -80,8 +111,31 @@ fn decode_evidence(path: &str, value: Value) -> Result<LocaleCoverageEvidence, E
     })?;
     let plan_payload_digest = evidence.required("plan_payload_digest", de::digest)?;
     let facts = decode_facts(&mut evidence)?;
-    let source = evidence.required("source", decode_inventory)?;
-    let target = evidence.required("target", decode_inventory)?;
+    let source = evidence.required("source", |path, value| {
+        let inventory = decode_inventory(path, value, |page| {
+            page.required("resource_digest", de::digest)
+        })?;
+        Ok(LocalePageInventory {
+            input_digest: inventory.input_digest,
+            complete: inventory.complete,
+            pages: inventory.pages,
+        })
+    })?;
+    let target = evidence.required("target", |path, value| {
+        let inventory = decode_inventory(path, value, |page| {
+            let resource_digest = page.required("resource_digest", de::digest)?;
+            let origin = page.required("origin", decode_origin)?;
+            Ok(LocaleTargetPage {
+                resource_digest,
+                origin,
+            })
+        })?;
+        Ok(LocaleTargetInventory {
+            input_digest: inventory.input_digest,
+            complete: inventory.complete,
+            pages: inventory.pages,
+        })
+    })?;
     evidence.finish()?;
     source
         .pages
@@ -99,7 +153,11 @@ fn decode_evidence(path: &str, value: Value) -> Result<LocaleCoverageEvidence, E
     })
 }
 
-fn decode_inventory(path: &str, value: Value) -> Result<LocalePageInventory, Error> {
+fn decode_inventory<T>(
+    path: &str,
+    value: Value,
+    mut decode_page: impl FnMut(&mut Obj) -> Result<T, Error>,
+) -> Result<Inventory<T>, Error> {
     let mut inventory = Obj::new(path, value)?;
     let input_digest = inventory.required("input_digest", de::digest)?;
     let complete = inventory.required("complete", de::boolean)?;
@@ -109,17 +167,39 @@ fn decode_inventory(path: &str, value: Value) -> Result<LocalePageInventory, Err
             let key = page.required("key", |path, value| {
                 de::bounded_text(path, value, PAGE_KEY_BYTES)
             })?;
-            let resource_digest = page.required("resource_digest", de::digest)?;
+            let item = decode_page(&mut page)?;
             page.finish()?;
-            Ok((key, resource_digest))
+            Ok((key, item))
         })
     })?;
     inventory.finish()?;
-    Ok(LocalePageInventory {
+    Ok(Inventory {
         input_digest,
         complete,
         pages,
     })
+}
+
+fn decode_origin(path: &str, value: Value) -> Result<LocaleTargetOrigin, Error> {
+    let mut origin = Obj::new(path, value)?;
+    let kind_path = origin.field("kind");
+    let kind = de::string(&kind_path, origin.take("kind")?)?;
+    match kind.as_str() {
+        "target-resource" => {
+            origin.finish()?;
+            Ok(LocaleTargetOrigin::TargetResource)
+        }
+        "fallback" => {
+            let class = origin.required("class", decode_identity)?;
+            let source_resource_digest = origin.required("source_resource_digest", de::digest)?;
+            origin.finish()?;
+            Ok(LocaleTargetOrigin::Fallback {
+                class,
+                source_resource_digest,
+            })
+        }
+        _ => de::fail(&kind_path, ErrorKind::InvalidValue),
+    }
 }
 
 fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
@@ -132,25 +212,68 @@ fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
         ("docs", docs_value(&evidence.docs)),
         ("scope", scope_value(&evidence.scope)),
         ("producer", producer_value(&evidence.producer)),
-        ("source", inventory_value(&evidence.source)),
-        ("target", inventory_value(&evidence.target)),
+        (
+            "source",
+            inventory_value(
+                evidence.source.input_digest,
+                evidence.source.complete,
+                &evidence.source.pages,
+                |key, resource_digest| {
+                    object(vec![
+                        ("key", text(key)),
+                        ("resource_digest", text(&resource_digest.to_string())),
+                    ])
+                },
+            ),
+        ),
+        (
+            "target",
+            inventory_value(
+                evidence.target.input_digest,
+                evidence.target.complete,
+                &evidence.target.pages,
+                |key, page| {
+                    object(vec![
+                        ("key", text(key)),
+                        ("resource_digest", text(&page.resource_digest.to_string())),
+                        ("origin", origin_value(&page.origin)),
+                    ])
+                },
+            ),
+        ),
     ])
 }
 
-fn inventory_value(inventory: &LocalePageInventory) -> Value {
-    let pages = inventory
-        .pages
+fn inventory_value<T>(
+    input_digest: Digest,
+    complete: bool,
+    pages: &BTreeMap<String, T>,
+    encode_page: impl Fn(&str, &T) -> Value,
+) -> Value {
+    let pages = pages
         .iter()
-        .map(|(key, resource_digest)| {
-            object(vec![
-                ("key", text(key)),
-                ("resource_digest", text(&resource_digest.to_string())),
-            ])
-        })
+        .map(|(key, page)| encode_page(key, page))
         .collect();
     object(vec![
-        ("input_digest", text(&inventory.input_digest.to_string())),
-        ("complete", Value::Bool(inventory.complete)),
+        ("input_digest", text(&input_digest.to_string())),
+        ("complete", Value::Bool(complete)),
         ("pages", Value::array(pages)),
     ])
+}
+
+fn origin_value(origin: &LocaleTargetOrigin) -> Value {
+    match origin {
+        LocaleTargetOrigin::TargetResource => object(vec![("kind", text("target-resource"))]),
+        LocaleTargetOrigin::Fallback {
+            class,
+            source_resource_digest,
+        } => object(vec![
+            ("kind", text("fallback")),
+            ("class", text(class.as_str())),
+            (
+                "source_resource_digest",
+                text(&source_resource_digest.to_string()),
+            ),
+        ]),
+    }
 }

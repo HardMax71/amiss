@@ -195,7 +195,7 @@ pub(crate) fn sorted_map<T>(
     .collect())
 }
 
-pub(crate) fn sorted_items<T, K: Ord>(
+pub(crate) fn sorted_items<T, K: Ord + ?Sized>(
     path: &str,
     value: Value,
     limit: usize,

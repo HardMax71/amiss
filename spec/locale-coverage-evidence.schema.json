@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-evidence",
   "title": "Amiss locale coverage evidence",
-  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each inventory reports its own completeness and immutable inputs; equal keys prove structural presence only, never translation, fallback, or freshness.",
+  "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each target page declares whether it is target-owned or a source fallback with exact provenance; no row proves translation quality or freshness.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -187,7 +187,7 @@
         }
       }
     },
-    "Page": {
+    "SourcePage": {
       "type": "object",
       "additionalProperties": false,
       "required": ["key", "resource_digest"],
@@ -196,13 +196,61 @@
           "$ref": "#/$defs/PageKey"
         },
         "resource_digest": {
-          "description": "The exact producer-defined page resource bytes. This digest establishes identity, not translation quality or source lineage.",
+          "description": "The exact producer-defined source page resource bytes.",
           "$ref": "#/$defs/Digest"
         }
       }
     },
-    "Inventory": {
-      "description": "One independently bounded inventory. False completeness retains observed pages but cannot prove that an absent page is absent from this locale.",
+    "TargetOrigin": {
+      "description": "Producer-declared provenance for one observed target page. Authority is established outside this reader. Target-resource makes no translation claim; fallback names its policy class and exact source resource.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "target-resource"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class", "kind", "source_resource_digest"],
+          "properties": {
+            "kind": {
+              "const": "fallback"
+            },
+            "class": {
+              "$ref": "#/$defs/ArtifactId"
+            },
+            "source_resource_digest": {
+              "$ref": "#/$defs/Digest"
+            }
+          }
+        }
+      ]
+    },
+    "TargetPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "origin", "resource_digest"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/PageKey"
+        },
+        "resource_digest": {
+          "description": "The exact producer-defined bytes served for this target page.",
+          "$ref": "#/$defs/Digest"
+        },
+        "origin": {
+          "$ref": "#/$defs/TargetOrigin"
+        }
+      }
+    },
+    "SourceInventory": {
+      "description": "The independently bounded source inventory. False completeness retains observed pages but cannot prove that an absent page is absent.",
       "type": "object",
       "additionalProperties": false,
       "required": ["complete", "input_digest", "pages"],
@@ -215,11 +263,34 @@
           "type": "boolean"
         },
         "pages": {
-          "description": "A byte-sorted set unique by page key. The strict reader additionally limits source and target to 100,000 rows combined.",
+          "description": "A byte-sorted set unique by page key. The strict reader limits source and target to 100,000 rows combined.",
           "type": "array",
           "maxItems": 100000,
           "items": {
-            "$ref": "#/$defs/Page"
+            "$ref": "#/$defs/SourcePage"
+          }
+        }
+      }
+    },
+    "TargetInventory": {
+      "description": "The independently bounded target inventory. Every observed target page declares its origin; false completeness cannot prove that an absent page is absent.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "input_digest", "pages"],
+      "properties": {
+        "input_digest": {
+          "description": "The digest of the exact producer input from which this target inventory was normalized.",
+          "$ref": "#/$defs/Digest"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "pages": {
+          "description": "A byte-sorted set unique by page key. The strict reader limits source and target to 100,000 rows combined.",
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/TargetPage"
           }
         }
       }
@@ -254,10 +325,10 @@
           "$ref": "#/$defs/Producer"
         },
         "source": {
-          "$ref": "#/$defs/Inventory"
+          "$ref": "#/$defs/SourceInventory"
         },
         "target": {
-          "$ref": "#/$defs/Inventory"
+          "$ref": "#/$defs/TargetInventory"
         }
       }
     }

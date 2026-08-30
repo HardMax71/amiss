@@ -2,7 +2,7 @@
   "schema": "amiss/locale-coverage-evidence-envelope",
   "payload": {
     "schema": "amiss/locale-coverage-evidence-payload",
-    "plan_payload_digest": "sha256:6a6637488c31cf39cdb56fa2ebbe627f9ec9d4e553537902d1254f0de1aa1cb7",
+    "plan_payload_digest": "sha256:7587497b1d804ead43c59ad4c89592850365c4399b39a01a8cf8008923cd09d5",
     "docs": {
       "repository": {
         "host": "github.com",
@@ -46,10 +46,22 @@
       "pages": [
         {
           "key": "guide/getting-started",
-          "resource_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+          "resource_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+          "origin": {
+            "kind": "target-resource"
+          }
+        },
+        {
+          "key": "reference/api",
+          "resource_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "origin": {
+            "kind": "fallback",
+            "class": "source-copy",
+            "source_resource_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+          }
         }
       ]
     }
   },
-  "payload_digest": "sha256:2916aa4cd69af5f8903c1b48bf3015440ec65cc0067ffdf8a05d101fecaba35d"
+  "payload_digest": "sha256:d436fb3bee48e524561f9f613f59b80ca8d02780192888363b0a6059f3ca9b8e"
 }

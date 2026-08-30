@@ -10,7 +10,8 @@ use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json;
 use amiss_wire::locale::{
     LOCALE_DOCUMENT_BYTES, LocaleCoveragePlan, LocaleCoveragePolicy, LocaleCoverageScope,
-    LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA, parse_plan, plan,
+    LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA, parse_plan,
+    plan,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{DocsCandidate, PublicationProducer};
@@ -58,6 +59,10 @@ fn locale_plan() -> LocaleCoveragePlan {
                 "guide/getting-started".to_owned(),
                 "reference/api".to_owned(),
             ]),
+            fallbacks: vec![LocaleFallbackRule {
+                class: identity("source-copy"),
+                pages: LocalePageRequirement::Named(vec!["reference/api".to_owned()]),
+            }],
         },
     }
 }
@@ -105,6 +110,32 @@ fn locale_plan_keeps_all_source_and_named_policies_distinct() {
 
     let parsed = parse_plan(&json::canonical(&plan(&all_source).unwrap())).unwrap();
     assert_eq!(parsed.payload, all_source);
+}
+
+#[test]
+fn fallback_authorizations_are_class_sorted_and_page_scoped() {
+    let mut valid = locale_plan();
+    valid.policy.fallbacks.push(LocaleFallbackRule {
+        class: identity("vendor-copy"),
+        pages: LocalePageRequirement::AllSource,
+    });
+    let parsed = parse_plan(&json::canonical(&plan(&valid).unwrap())).unwrap();
+    assert_eq!(parsed.payload, valid);
+
+    let mut unsorted = valid.clone();
+    unsorted.policy.fallbacks.reverse();
+    let error = plan(&unsorted).unwrap_err();
+    assert_eq!(error.path, "$.payload.policy.fallbacks");
+    assert_eq!(error.kind, ErrorKind::UnsortedSet);
+
+    let mut duplicate = locale_plan();
+    duplicate.policy.fallbacks.push(LocaleFallbackRule {
+        class: identity("source-copy"),
+        pages: LocalePageRequirement::AllSource,
+    });
+    let error = plan(&duplicate).unwrap_err();
+    assert_eq!(error.path, "$.payload.policy.fallbacks");
+    assert_eq!(error.kind, ErrorKind::DuplicateMember);
 }
 
 #[test]

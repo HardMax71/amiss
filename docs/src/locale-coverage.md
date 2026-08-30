@@ -11,25 +11,31 @@ The plan binds:
 - the docs repository, commit, tree, and full candidate identity;
 - one site, source locale, target locale, channel, and optional version;
 - the inventory producer identity, version, and plan-owned context digest; and
-- the operator's coverage-policy identity, context digest, and required-page rule.
+- the operator's coverage-policy identity, context digest, required-page rule, and authorized
+  fallback classes and page scopes.
 
 Site and channel use the artifact-identity grammar. Locale and version labels use a broader bounded
 identity grammar so a producer can retain spellings such as `de-DE`; Amiss compares them exactly.
 It does not validate BCP 47, order versions, or infer fallback from a locale hierarchy. Source and
 target locale must differ.
 
-The required-page rule has two closed forms. `all-source` means that every key in the future
-complete source inventory is required in the target inventory. `named` carries one nonempty,
-byte-sorted, duplicate-free set and makes only those source keys required. Other source keys remain
-optional, while target keys outside the source inventory can still be reported as orphaned. A page
-key is nonempty, control-free, and at most 4,096 UTF-8 bytes. It is a generator-owned identity such
-as a canonical docname, never a path or route guessed by Amiss.
+Page selectors have two closed forms. The coverage rule uses one selector: `all-source` means that
+every key in the future complete source inventory is required in the target inventory; `named`
+carries one nonempty, byte-sorted, duplicate-free set and makes only those source keys required.
+Other source keys remain optional, while target keys outside the source inventory can still be
+reported as orphaned. A page key is nonempty, control-free, and at most 4,096 UTF-8 bytes. It is a
+generator-owned identity such as a canonical docname, never a path or route guessed by Amiss.
 
-This contract intentionally contains no fallback bit, translation verdict, timestamp, or source
-lineage. A target page with the same key can prove structural coverage only. It cannot prove that
-the page was translated, is current, or is semantically equivalent. Fallback requires separately
-authenticated provenance, and staleness requires an exact producer-owned `based_on` source digest
-or revision; neither can be manufactured from this plan.
+The policy also carries a byte-sorted set of fallback rules, unique by opaque class. Each class has
+an `all-source` or `named` page selector describing exactly where that producer-defined fallback
+mode is allowed. An empty set forbids all fallbacks. The plan chooses authorization; it does not
+prove that a target page really came from a source resource.
+
+The contract intentionally contains no translation verdict, timestamp, or current-source lineage
+for target-owned pages. A target page with the same key can prove structural coverage only. It
+cannot prove that the page was translated, is current, or is semantically equivalent. Staleness
+requires an exact producer-owned `based_on` source digest or revision and remains a separate
+contract.
 
 The plan is a closed, 64 KiB, digest-bound JSON document. Unknown fields, malformed identities,
 mixed Git object formats, repeated or unsorted named keys, oversized text, or a changed payload
@@ -39,8 +45,14 @@ content must not choose the producer context or operator policy.
 The matching evidence contract repeats the plan digest, docs candidate, locale scope, and producer
 context, then carries separate source and target inventories. Each inventory has its own input
 digest, completeness bit, and byte-sorted map from page key to exact resource digest. The producer
-context defines which normalized bytes those digests identify. Matching keys prove only structural
-presence; different page digests do not prove either drift or translation.
+context defines which normalized bytes those digests identify.
+
+Every observed target page also carries one closed origin. `target-resource` says the producer
+observed a target-owned resource; it still makes no translation or freshness claim. `fallback`
+names an opaque producer-declared class and the exact source resource digest from which the
+fallback was obtained. A separate fallback list would make omission indistinguishable from target
+ownership. Requiring an origin on every target instead forces one explicit producer claim;
+authority still comes from authenticated acquisition outside the engine.
 
 Completeness belongs to each side independently. A false value preserves the pages the producer
 did observe, but absence from that inventory is not evidence that a page is absent from the locale.
@@ -52,23 +64,32 @@ The engine reader establishes shape and integrity, not producer authority. Repea
 does not establish that the independently repeated facts match that plan. The pure offline
 assessment first requires the exact plan digest and selected producer. Foreign evidence remains
 unproven; correctly bound docs or scope disagreement refutes the plan without comparing the foreign
-inventories.
+inventories. Evidence acquisition outside the engine must therefore authenticate the selected
+producer, while the selected producer context defines the meaning of its origin classification.
 
 For matching facts, every page row in the assessment is proved by presence on one side and complete
 absence on the other. A complete target can therefore prove that an observed required source page
 is missing even when the source inventory is partial. A complete source can likewise prove that an
 observed target page is orphaned when the target inventory is partial. Such a refutation is valid,
 but `coverage.complete: false` says the reported rows may be only a lower bound. The assessment
-matches only when its policy-scoped missing, orphan, and named-source checks are exhaustive and
-empty. A named policy can be exhaustive without an unrelated full source inventory when every
-named requirement and every target key has explicit source presence; `all-source` always requires a
-complete source set. Page resource digest differences remain deliberately inert.
+matches only when its policy-scoped missing, orphan, named-source, and fallback checks are
+exhaustive and clean. A named policy can be exhaustive without an unrelated full source inventory
+when every named requirement and every target key has explicit source presence; `all-source`
+always requires a complete source set. Page resource digest differences remain deliberately inert.
+
+Every fallback assessment row retains its page key and class. `allowed` means one plan rule admits
+that class and page and the declared source digest equals the observed source resource.
+`unauthorized` and `source-mismatch` are exact refutations. If the source page is absent from a
+partial source inventory, `source-unproven` keeps the whole result unproven; absence cannot become a
+digest mismatch until the source inventory is complete. Allowed fallback is not a translation or
+freshness verdict: it proves only the exact policy and provenance relation named by the contracts.
 
 The assessment binds the exact evaluator, accepted report, plan, and optional evidence payload. Its
 three byte-sorted key sets name policy keys absent from source, required source keys absent from
-target, and target keys absent from source. The document is bounded to 16 MiB and 200,000 rows
-across those sets. Missing, unbound, wrong-producer, or insufficiently complete evidence is
-unproven rather than clean. The command and controller intake are not built yet.
+target, and target keys absent from source. A fourth byte-sorted set records every assessed
+fallback. The document is bounded to 16 MiB and 200,000 rows across those sets. Missing, unbound,
+wrong-producer, or insufficiently complete evidence is unproven rather than clean. The command and
+controller intake are not built yet.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),
