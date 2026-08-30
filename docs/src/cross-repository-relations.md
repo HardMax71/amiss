@@ -10,8 +10,9 @@ This is not yet a complete cross-repository checking lane. No service loads this
 resolves foreign provider heads and credentials yet. Closed plan, evidence, and assessment
 contracts represent the exact comparison selected after acquisition. The provider-neutral Git
 layer can project repository-backed sources from all four acquired snapshots, but no trusted
-record producer is admitted yet, and the controller does not retain a complete audit chain or
-publish a status.
+record producer is admitted yet, and no controller lane schedules the audit or publishes a status.
+When a caller supplies a complete chain, the controller binds it to the accepted trigger report
+and frozen operator transition, replays the assessment, and retains the exact bytes immutably.
 
 ## One closed relation
 
@@ -106,7 +107,7 @@ second selector language or let either repository change the operator-owned sele
 The context digest is an integrity binding for operator configuration interpreted outside the wire;
 it is not authority by itself. Likewise, the report digest and trigger role are closed facts, but
 the wire reader does not have the report and cannot prove they agree with it. Controller admission
-must perform that binding before retaining the future sidecar. The plan intentionally contains no
+performs that binding before retaining the sidecar. The plan intentionally contains no
 projected value, completeness claim, alignment verdict, blame assignment, or status policy.
 Malformed branches, selectors, identities, object IDs, subject ordering, unknown fields, and a
 changed payload refuse the whole document.
@@ -176,8 +177,11 @@ combinations and a changed payload refuse the assessment instead of being normal
 
 The assessment is replayable over the exact bound documents, but the portable evidence document
 does not authenticate its producer by itself. The acquisition projector establishes repository
-slots under the operator-owned relation and resource limits; a future controller lane must invoke
-that boundary, admit any non-repository evidence, and retain the complete chain.
+slots under the operator-owned relation and resource limits. Before storage, the controller
+reopens the accepted scanner report, binds its repository, target, and exact snapshots to the
+trigger role, rechecks the operator plan, and independently replays the evidence and assessment.
+The artifact store retains the report, plan, optional evidence, and assessment under one immutable,
+restart-safe identity; retries may reproduce the same bytes but cannot substitute any component.
 
 ## Trust boundary
 
@@ -190,10 +194,8 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. bind the accepted report and retain the plan, repository or admitted evidence, and replayed
-   assessment as one immutable sidecar;
-3. model coordinated release or paired-change intent without timestamp inference; and
-4. deduplicate triggers from either provider route and publish only to the configured subject roles.
+2. model coordinated release or paired-change intent without timestamp inference; and
+3. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet
