@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:locale-coverage-assessment",
+  "title": "Amiss locale coverage assessment",
+  "description": "The deterministic offline judgment over one locale coverage plan and optional producer-normalized inventories. Every reported page is proved; incomplete results are explicit lower bounds and can never match.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/locale-coverage-assessment-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/AssessmentPayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the locale-coverage-assessment payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "NullableDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ProducerVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "PageKey": {
+      "description": "One opaque stable page identity emitted by the selected producer, not a route inferred by Amiss.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\p{Cc}]+$"
+    },
+    "Reason": {
+      "enum": [
+        "evidence-absent",
+        "evidence-unbound",
+        "producer-mismatch",
+        "docs-mismatch",
+        "scope-mismatch",
+        "source-incomplete",
+        "target-incomplete",
+        "source-missing",
+        "target-missing",
+        "target-orphaned"
+      ]
+    },
+    "Coverage": {
+      "description": "Confirmed page defects in byte order. False completeness means the rows remain proved but may be a lower bound because at least one relevant inventory was partial.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "source_missing",
+        "target_missing",
+        "target_orphaned"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "source_missing": {
+          "description": "Named policy keys proved absent from a complete source inventory.",
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/PageKey"
+          }
+        },
+        "target_missing": {
+          "description": "Required source keys proved absent from a complete target inventory.",
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/PageKey"
+          }
+        },
+        "target_orphaned": {
+          "description": "Observed target keys proved absent from a complete source inventory.",
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/PageKey"
+          }
+        }
+      }
+    },
+    "AssessmentPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage", "engine", "reasons", "schema", "subject", "verdict"],
+      "properties": {
+        "schema": {
+          "const": "amiss/locale-coverage-assessment-payload"
+        },
+        "engine": {
+          "description": "The exact offline evaluator that made this judgment.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine_digest", "engine_version"],
+          "properties": {
+            "engine_version": {
+              "$ref": "#/$defs/ProducerVersion"
+            },
+            "engine_digest": {
+              "$ref": "#/$defs/Digest"
+            }
+          }
+        },
+        "subject": {
+          "description": "The accepted report, plan, and optional evidence payloads this judgment binds.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "evidence_payload_digest",
+            "plan_payload_digest",
+            "report_payload_digest"
+          ],
+          "properties": {
+            "report_payload_digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "plan_payload_digest": {
+              "$ref": "#/$defs/Digest"
+            },
+            "evidence_payload_digest": {
+              "$ref": "#/$defs/NullableDigest"
+            }
+          }
+        },
+        "verdict": {
+          "description": "Matched means the policy-scoped comparison is exhaustive and clean; refuted means at least one trusted mismatch or page defect is proved; unproven means no exhaustive clean result or exact refutation is available.",
+          "enum": ["matched", "refuted", "unproven"]
+        },
+        "reasons": {
+          "description": "A canonical enum-order set. The strict reader also requires page reasons to correspond exactly to nonempty page sets.",
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Reason"
+          }
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "matched"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "maxItems": 0
+              },
+              "subject": {
+                "properties": {
+                  "evidence_payload_digest": {
+                    "$ref": "#/$defs/Digest"
+                  }
+                }
+              },
+              "coverage": {
+                "properties": {
+                  "complete": {
+                    "const": true
+                  },
+                  "source_missing": {
+                    "maxItems": 0
+                  },
+                  "target_missing": {
+                    "maxItems": 0
+                  },
+                  "target_orphaned": {
+                    "maxItems": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "refuted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "minItems": 1,
+                "items": {
+                  "enum": [
+                    "docs-mismatch",
+                    "scope-mismatch",
+                    "source-missing",
+                    "target-missing",
+                    "target-orphaned"
+                  ]
+                }
+              },
+              "subject": {
+                "properties": {
+                  "evidence_payload_digest": {
+                    "$ref": "#/$defs/Digest"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": {
+                "const": "unproven"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "coverage": {
+                "properties": {
+                  "complete": {
+                    "const": false
+                  },
+                  "source_missing": {
+                    "maxItems": 0
+                  },
+                  "target_missing": {
+                    "maxItems": 0
+                  },
+                  "target_orphaned": {
+                    "maxItems": 0
+                  }
+                }
+              }
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "reasons": {
+                    "const": ["evidence-absent"]
+                  },
+                  "subject": {
+                    "properties": {
+                      "evidence_payload_digest": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "reasons": {
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": {
+                      "enum": [
+                        "evidence-unbound",
+                        "producer-mismatch",
+                        "source-incomplete",
+                        "target-incomplete"
+                      ]
+                    }
+                  },
+                  "subject": {
+                    "properties": {
+                      "evidence_payload_digest": {
+                        "$ref": "#/$defs/Digest"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

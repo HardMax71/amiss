@@ -1,7 +1,6 @@
-use std::cmp::Ordering;
-
 use strum::{AsRefStr, EnumString};
 
+use crate::assessment::{AssessmentVerdict, bindings_value, decode_bindings};
 use crate::controls::decode_enum;
 use crate::controls::value::{object, text};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
@@ -13,14 +12,6 @@ use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan as build_p
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/publication-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/publication-assessment-payload";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
-#[strum(serialize_all = "lowercase")]
-pub enum PublicationVerdict {
-    Matched,
-    Refuted,
-    Unproven,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString)]
 #[strum(serialize_all = "kebab-case")]
@@ -47,7 +38,7 @@ pub struct PublicationAssessment {
     pub report_payload_digest: Digest,
     pub plan_payload_digest: Digest,
     pub evidence_payload_digest: Option<Digest>,
-    pub verdict: PublicationVerdict,
+    pub verdict: AssessmentVerdict,
     pub reasons: Vec<PublicationReason>,
 }
 
@@ -102,15 +93,15 @@ pub fn assess(
 
     let (verdict, reasons) = match evidence {
         None => (
-            PublicationVerdict::Unproven,
+            AssessmentVerdict::Unproven,
             vec![PublicationReason::EvidenceAbsent],
         ),
         Some(evidence) if evidence.payload.plan_payload_digest != plan.payload_digest => (
-            PublicationVerdict::Unproven,
+            AssessmentVerdict::Unproven,
             vec![PublicationReason::EvidenceUnbound],
         ),
         Some(evidence) if evidence.payload.producer != plan.payload.producer => (
-            PublicationVerdict::Unproven,
+            AssessmentVerdict::Unproven,
             vec![PublicationReason::ProducerMismatch],
         ),
         Some(evidence) => {
@@ -136,9 +127,9 @@ pub fn assess(
             .filter_map(|(different, reason)| different.then_some(reason))
             .collect();
             let verdict = if reasons.is_empty() {
-                PublicationVerdict::Matched
+                AssessmentVerdict::Matched
             } else {
-                PublicationVerdict::Refuted
+                AssessmentVerdict::Refuted
             };
             (verdict, reasons)
         }
@@ -167,58 +158,37 @@ fn decode_assessment(path: &str, value: Value) -> Result<PublicationAssessment, 
     assessment.required("schema", |path, value| {
         de::const_str(path, value, ASSESSMENT_PAYLOAD_SCHEMA)
     })?;
-    let (engine_version, engine_digest) = assessment.required("engine", |path, value| {
-        let mut engine = Obj::new(path, value)?;
-        let version = engine.required("engine_version", crate::semantic::decode_open_identity)?;
-        let digest = engine.required("engine_digest", de::digest)?;
-        engine.finish()?;
-        Ok((version, digest))
-    })?;
-    let (report_payload_digest, plan_payload_digest, evidence_payload_digest) = assessment
-        .required("subject", |path, value| {
-            let mut subject = Obj::new(path, value)?;
-            let report = subject.required("report_payload_digest", de::digest)?;
-            let plan = subject.required("plan_payload_digest", de::digest)?;
-            let evidence_path = subject.field("evidence_payload_digest");
-            let evidence = de::nullable(subject.take("evidence_payload_digest")?)
-                .map(|value| de::digest(&evidence_path, value))
-                .transpose()?;
-            subject.finish()?;
-            Ok((report, plan, evidence))
-        })?;
+    let bindings = decode_bindings(&mut assessment)?;
     let verdict = assessment.required("verdict", decode_enum)?;
     let reasons_path = assessment.field("reasons");
-    let reasons: Vec<PublicationReason> = de::array(&reasons_path, assessment.take("reasons")?)?
-        .into_iter()
-        .enumerate()
-        .map(|(index, value)| decode_enum(&format!("{reasons_path}[{index}]"), value))
-        .collect::<Result<Vec<_>, _>>()?;
-    for pair in reasons.windows(2) {
-        if let [left, right] = pair {
-            match left.cmp(right) {
-                Ordering::Less => {}
-                Ordering::Equal => return fail(&reasons_path, ErrorKind::DuplicateMember),
-                Ordering::Greater => return fail(&reasons_path, ErrorKind::UnsortedSet),
-            }
-        }
-    }
+    let reasons = de::sorted_items(
+        &reasons_path,
+        assessment.take("reasons")?,
+        7,
+        decode_enum,
+        |reason| reason,
+    )?;
     assessment.finish()?;
     let fixed_shape = matches!(
-        (verdict, evidence_payload_digest, reasons.as_slice()),
-        (PublicationVerdict::Matched, Some(_), [])
+        (
+            verdict,
+            bindings.evidence_payload_digest,
+            reasons.as_slice()
+        ),
+        (AssessmentVerdict::Matched, Some(_), [])
             | (
-                PublicationVerdict::Unproven,
+                AssessmentVerdict::Unproven,
                 None,
                 [PublicationReason::EvidenceAbsent]
             )
             | (
-                PublicationVerdict::Unproven,
+                AssessmentVerdict::Unproven,
                 Some(_),
                 [PublicationReason::EvidenceUnbound | PublicationReason::ProducerMismatch],
             )
     );
-    let refuted_shape = verdict == PublicationVerdict::Refuted
-        && evidence_payload_digest.is_some()
+    let refuted_shape = verdict == AssessmentVerdict::Refuted
+        && bindings.evidence_payload_digest.is_some()
         && !reasons.is_empty()
         && reasons.iter().all(|reason| {
             matches!(
@@ -234,45 +204,28 @@ fn decode_assessment(path: &str, value: Value) -> Result<PublicationAssessment, 
         return fail(path, ErrorKind::Inconsistent);
     }
     Ok(PublicationAssessment {
-        engine_version,
-        engine_digest,
-        report_payload_digest,
-        plan_payload_digest,
-        evidence_payload_digest,
+        engine_version: bindings.engine_version,
+        engine_digest: bindings.engine_digest,
+        report_payload_digest: bindings.report_payload_digest,
+        plan_payload_digest: bindings.plan_payload_digest,
+        evidence_payload_digest: bindings.evidence_payload_digest,
         verdict,
         reasons,
     })
 }
 
 fn assessment_value(assessment: &PublicationAssessment) -> Value {
+    let (engine, subject) = bindings_value(
+        &assessment.engine_version,
+        assessment.engine_digest,
+        assessment.report_payload_digest,
+        assessment.plan_payload_digest,
+        assessment.evidence_payload_digest,
+    );
     object(vec![
         ("schema", text(ASSESSMENT_PAYLOAD_SCHEMA)),
-        (
-            "engine",
-            object(vec![
-                ("engine_version", text(&assessment.engine_version)),
-                ("engine_digest", text(&assessment.engine_digest.to_string())),
-            ]),
-        ),
-        (
-            "subject",
-            object(vec![
-                (
-                    "report_payload_digest",
-                    text(&assessment.report_payload_digest.to_string()),
-                ),
-                (
-                    "plan_payload_digest",
-                    text(&assessment.plan_payload_digest.to_string()),
-                ),
-                (
-                    "evidence_payload_digest",
-                    assessment
-                        .evidence_payload_digest
-                        .map_or(Value::Null, |digest| text(&digest.to_string())),
-                ),
-            ]),
-        ),
+        ("engine", engine),
+        ("subject", subject),
         ("verdict", text(assessment.verdict.as_ref())),
         (
             "reasons",

@@ -1,0 +1,24 @@
+{
+  "schema": "amiss/locale-coverage-assessment-envelope",
+  "payload": {
+    "schema": "amiss/locale-coverage-assessment-payload",
+    "engine": {
+      "engine_version": "0.26.0",
+      "engine_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "subject": {
+      "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "plan_payload_digest": "sha256:6a6637488c31cf39cdb56fa2ebbe627f9ec9d4e553537902d1254f0de1aa1cb7",
+      "evidence_payload_digest": "sha256:2916aa4cd69af5f8903c1b48bf3015440ec65cc0067ffdf8a05d101fecaba35d"
+    },
+    "verdict": "refuted",
+    "reasons": ["target-missing"],
+    "coverage": {
+      "complete": true,
+      "source_missing": [],
+      "target_missing": ["reference/api"],
+      "target_orphaned": []
+    }
+  },
+  "payload_digest": "sha256:71769b13cc3125c68704fb39792fb3372734b451552fd53a5efc27e7d2527206"
+}
