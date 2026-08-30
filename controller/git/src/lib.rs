@@ -4,6 +4,7 @@ mod tests;
 
 mod pack;
 mod protocol;
+mod relation;
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,12 +15,33 @@ use amiss_controller::{AcquiredSemanticTemplate, Acquisition, AcquisitionTarget,
 use amiss_wire::model::Oid;
 use secrecy::SecretString;
 
+pub use relation::{
+    RelationGitFetch, RelationGitSubject, RelationSubjectUsage, fetch_relation_exact,
+};
+
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_mins(1);
 const MAX_REQUEST_TIMEOUT: Duration = Duration::from_mins(2);
 
 pub const REPOSITORY_TARGET_REF: &str = "refs/amiss/repository/target";
 pub const REPOSITORY_CANDIDATE_REF: &str = "refs/amiss/repository/candidate";
 pub const ACTION_COMMIT_REF: &str = "refs/amiss/action/commit";
+
+pub const DEFAULT_GIT_FETCH_LIMITS: GitFetchLimits = GitFetchLimits {
+    objects: 2_000_000,
+    bytes: 2_147_483_648,
+};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GitFetchLimits {
+    pub objects: u64,
+    pub bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GitFetchUsage {
+    pub objects: u64,
+    pub bytes: u64,
+}
 
 /// One deadline shared by transport, pack receipt, validation, and indexing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,6 +83,7 @@ pub struct ExactFetch<'a> {
     pub destination: &'a Path,
     pub credential: Option<GitCredential<'a>>,
     pub bounds: GitFetchBounds,
+    pub limits: GitFetchLimits,
     pub cancelled: &'a AtomicBool,
 }
 
@@ -92,7 +115,7 @@ pub struct GitFetchError(&'static str);
 ///
 /// The URL, credential, object identifiers, destination, transport, or pack is invalid,
 /// the deadline expires, or cancellation is requested.
-pub fn fetch_exact(fetch: ExactFetch<'_>) -> Result<(), GitFetchError> {
+pub fn fetch_exact(fetch: ExactFetch<'_>) -> Result<GitFetchUsage, GitFetchError> {
     protocol::fetch_exact(fetch)
 }
 
@@ -129,6 +152,7 @@ where
                 password: &plan.repository.password,
             }),
             bounds: self.bounds,
+            limits: DEFAULT_GIT_FETCH_LIMITS,
             cancelled: target.cancelled.as_ref(),
         })?;
         active(target.cancelled.as_ref())?;
@@ -144,6 +168,7 @@ where
                 password: &plan.action.password,
             }),
             bounds: self.bounds,
+            limits: DEFAULT_GIT_FETCH_LIMITS,
             cancelled: target.cancelled.as_ref(),
         })?;
         active(target.cancelled.as_ref()).map(|()| Vec::new())

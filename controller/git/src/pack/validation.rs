@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use flate2::bufread::ZlibDecoder;
 
 use super::{PackError, PackLimits, active};
+use crate::GitFetchUsage;
 
 const PACK_HEADER_BYTES: usize = 12;
 const PACK_TRAILER_BYTES: usize = 20;
@@ -18,7 +19,7 @@ pub(super) fn validate_and_spool(
     cancelled: &AtomicBool,
     started: Instant,
     timeout: Duration,
-) -> Result<(), PackError> {
+) -> Result<GitFetchUsage, PackError> {
     let tracked = BoundedRead {
         input,
         spool,
@@ -115,7 +116,11 @@ pub(super) fn validate_and_spool(
     {
         return Err(PackError("the pack has bytes after its checksum"));
     }
-    active(cancelled, started, timeout)
+    active(cancelled, started, timeout)?;
+    Ok(GitFetchUsage {
+        objects: u64::from(object_count),
+        bytes: cursor,
+    })
 }
 
 fn pack_header(input: &mut impl Read, cursor: &mut u64) -> Result<u32, PackError> {

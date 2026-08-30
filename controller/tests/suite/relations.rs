@@ -5,11 +5,14 @@
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
-    OpaqueId, PlanScope, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, RELATION_REGISTRY_LIMIT, RelationLimits, RelationPlan,
-    RelationRegistryError, RelationStatusDestination, RelationSubject, relation_registry,
-    relations_for_delivery,
+    OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RELATION_REGISTRY_LIMIT,
+    RelationAcquiredRoot, RelationAcquisitionError, RelationLimits, RelationPlan,
+    RelationRegistryError, RelationStatusDestination, RelationSubject, RelationSubjectTransition,
+    RelationTransition, relation_registry, relation_transition, relations_for_delivery,
+    verify_relation_acquired,
 };
+use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{
     ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection,
 };
@@ -100,6 +103,48 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
         )
         .unwrap(),
     }
+}
+
+fn tree(pair: &CommitPair, commit: &str) -> Oid {
+    let revision = format!("{commit}^{{tree}}");
+    Oid::new(
+        ObjectFormat::Sha1,
+        git(pair.root(), &["rev-parse", &revision])
+            .unwrap()
+            .trim()
+            .to_owned(),
+    )
+    .unwrap()
+}
+
+fn transition_subject(role: &str, pair: &CommitPair) -> RelationSubjectTransition {
+    RelationSubjectTransition {
+        role: artifact(role),
+        commits: OidPair {
+            base: Oid::new(ObjectFormat::Sha1, pair.base.clone()).unwrap(),
+            candidate: Oid::new(ObjectFormat::Sha1, pair.candidate.clone()).unwrap(),
+        },
+        trees: OidPair {
+            base: tree(pair, &pair.base),
+            candidate: tree(pair, &pair.candidate),
+        },
+    }
+}
+
+fn frozen_transition(source: &CommitPair, documentation: &CommitPair) -> RelationTransition {
+    let registry = relation_registry(vec![plan("relation/api", "service", "handbook")]).unwrap();
+    let relation = relations_for_delivery(&registry, &delivery("service", ObjectFormat::Sha1))
+        .unwrap()
+        .pop()
+        .unwrap();
+    relation_transition(
+        relation,
+        [
+            transition_subject("source", source),
+            transition_subject("documentation", documentation),
+        ],
+    )
+    .unwrap()
 }
 
 #[test]
@@ -241,4 +286,87 @@ fn status_destinations_are_exact_valid_subjects() {
     );
 
     assert!(relation_registry(Vec::new()).is_ok());
+}
+
+#[test]
+fn freezes_all_four_exact_revisions_in_stable_role_order() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let transition = frozen_transition(&source, &documentation);
+
+    assert_eq!(transition.subjects[0].role.as_str(), "documentation");
+    assert_eq!(transition.subjects[1].role.as_str(), "source");
+    assert_eq!(
+        transition.subjects[1].commits.candidate.as_str(),
+        source.candidate
+    );
+}
+
+#[test]
+fn acquired_relation_roots_prove_each_subjects_commits_and_trees() {
+    let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
+    let transition = frozen_transition(&source, &documentation);
+    let source_role = artifact("source");
+    let documentation_role = artifact("documentation");
+
+    assert!(
+        verify_relation_acquired(
+            &transition,
+            [
+                RelationAcquiredRoot {
+                    role: &source_role,
+                    repository: source.root(),
+                },
+                RelationAcquiredRoot {
+                    role: &documentation_role,
+                    repository: documentation.root(),
+                },
+            ],
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        verify_relation_acquired(
+            &transition,
+            [
+                RelationAcquiredRoot {
+                    role: &source_role,
+                    repository: documentation.root(),
+                },
+                RelationAcquiredRoot {
+                    role: &documentation_role,
+                    repository: source.root(),
+                },
+            ],
+        )
+        .err(),
+        Some(RelationAcquisitionError::Unproven)
+    );
+}
+
+#[test]
+fn identical_object_ids_still_require_independent_subject_roots() {
+    let shared = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
+    let transition = frozen_transition(&shared, &shared);
+    let source_role = artifact("source");
+    let documentation_role = artifact("documentation");
+
+    assert_eq!(
+        verify_relation_acquired(
+            &transition,
+            [
+                RelationAcquiredRoot {
+                    role: &source_role,
+                    repository: shared.root(),
+                },
+                RelationAcquiredRoot {
+                    role: &documentation_role,
+                    repository: shared.root(),
+                },
+            ],
+        )
+        .err(),
+        Some(RelationAcquisitionError::Unproven)
+    );
 }

@@ -14,15 +14,16 @@ use gix::protocol::transport::{Protocol, Service};
 use secrecy::ExposeSecret as _;
 
 use super::pack;
-use super::{ExactFetch, ExactWant, GitCredential, GitFetchBounds, GitFetchError, http_options};
+use super::{ExactFetch, ExactWant, GitCredential, GitFetchError, GitFetchUsage, http_options};
 
 const USER_AGENT: &str = "amiss-controller";
 type HttpTransport = http::Transport<http::reqwest::Remote>;
 type Wanted = (gix::ObjectId, String);
 
-pub(super) fn fetch_exact(fetch: ExactFetch<'_>) -> Result<(), GitFetchError> {
+pub(super) fn fetch_exact(fetch: ExactFetch<'_>) -> Result<GitFetchUsage, GitFetchError> {
     let started = Instant::now();
     active(&fetch, started)?;
+    let limits = pack::fetch_limits(fetch.limits).map_err(fetch_error)?;
     let parsed = exact_https_url(fetch.url)?;
     let wanted = exact_wants(fetch.wants)?;
     let repository = initialize(fetch.destination)?;
@@ -41,9 +42,9 @@ pub(super) fn fetch_exact(fetch: ExactFetch<'_>) -> Result<(), GitFetchError> {
         &wanted,
         &mut transport,
         &mut handshake,
-        fetch.bounds,
-        fetch.cancelled,
+        &fetch,
         started,
+        limits,
     )?;
     gix::protocol::indicate_end_of_interaction(&mut transport, false).map_err(fetch_error)?;
     active(&fetch, started)?;
@@ -51,7 +52,7 @@ pub(super) fn fetch_exact(fetch: ExactFetch<'_>) -> Result<(), GitFetchError> {
     if let Some(keep_path) = installed.keep_path {
         std::fs::remove_file(keep_path).map_err(fetch_error)?;
     }
-    Ok(())
+    Ok(installed.usage)
 }
 
 fn active(fetch: &ExactFetch<'_>, started: Instant) -> Result<(), GitFetchError> {
@@ -166,9 +167,9 @@ fn receive_pack(
     wanted: &[Wanted],
     transport: &mut HttpTransport,
     handshake: &mut gix::protocol::Handshake,
-    bounds: GitFetchBounds,
-    cancelled: &std::sync::atomic::AtomicBool,
+    fetch: &ExactFetch<'_>,
     started: Instant,
+    limits: pack::PackLimits,
 ) -> Result<pack::InstalledPack, GitFetchError> {
     let mut negotiate = ExactWants {
         wants: wanted.iter().map(|(oid, _reference)| *oid).collect(),
@@ -187,12 +188,13 @@ fn receive_pack(
                 progress,
                 interrupt,
                 started,
-                bounds.request,
+                fetch.bounds.request,
+                limits,
             )?);
             Ok(true)
         },
         gix::progress::Discard,
-        cancelled,
+        fetch.cancelled,
         gix::protocol::fetch::Context {
             handshake,
             transport,

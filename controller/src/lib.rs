@@ -84,9 +84,11 @@ pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,
 };
 pub use relations::{
-    RELATION_REGISTRY_LIMIT, RelationLimits, RelationLookupError, RelationPlan, RelationRegistry,
-    RelationRegistryError, RelationStatusDestination, RelationSubject, TriggeredRelation,
-    relation_registry, relations_for_delivery,
+    RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationLimits,
+    RelationLookupError, RelationPlan, RelationRegistry, RelationRegistryError,
+    RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
+    TriggeredRelation, relation_registry, relation_transition, relations_for_delivery,
+    verify_relation_acquired,
 };
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{

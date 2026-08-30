@@ -8,7 +8,11 @@ use std::time::{Duration, Instant};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
-use super::{DEFAULT_LIMITS, PackLimits, index_options, validate_and_spool, with_index_interrupt};
+use super::{
+    DEFAULT_LIMITS, PackLimits, fetch_limits, index_options, validate_and_spool,
+    with_index_interrupt,
+};
+use crate::{DEFAULT_GIT_FETCH_LIMITS, GitFetchLimits, GitFetchUsage};
 
 const SECOND: Duration = Duration::from_secs(1);
 
@@ -29,6 +33,57 @@ fn fixed_limits_and_indexing_are_advertised() {
         options.alloc_limit_bytes,
         Some(134_217_728),
         "the indexer allocates under the same object ceiling the stream enforces"
+    );
+}
+
+#[test]
+fn caller_limits_are_positive_and_never_widen_global_ceiling() {
+    assert!(
+        fetch_limits(GitFetchLimits {
+            objects: 0,
+            bytes: 1,
+        })
+        .is_err()
+    );
+    assert!(
+        fetch_limits(GitFetchLimits {
+            objects: 1,
+            bytes: 0,
+        })
+        .is_err()
+    );
+
+    let narrow = fetch_limits(GitFetchLimits {
+        objects: 7,
+        bytes: 4_096,
+    })
+    .expect("positive narrow limits");
+    assert_eq!(narrow.objects, 7);
+    assert_eq!(narrow.pack_bytes, 4_096);
+
+    let wide = fetch_limits(GitFetchLimits {
+        objects: u64::MAX,
+        bytes: u64::MAX,
+    })
+    .expect("wide caller limits remain globally bounded");
+    assert_eq!(
+        GitFetchLimits {
+            objects: u64::from(wide.objects),
+            bytes: wide.pack_bytes,
+        },
+        DEFAULT_GIT_FETCH_LIMITS
+    );
+}
+
+#[test]
+fn successful_validation_reports_exact_stream_usage() {
+    let bytes = pack([ordinary(3, b"hello"), ordinary(3, b"world")]);
+    assert_eq!(
+        validate(&bytes, limits()).expect("valid measured pack"),
+        GitFetchUsage {
+            objects: 2,
+            bytes: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
+        }
     );
 }
 
@@ -54,6 +109,7 @@ fn indexes_the_same_validated_pack_bytes() -> Result<(), Box<dyn std::error::Err
         &cancelled,
         Instant::now(),
         SECOND,
+        limits(),
     )?;
     let extensions = std::fs::read_dir(pack_directory)?
         .filter_map(Result::ok)
@@ -313,7 +369,7 @@ fn observe_interrupt(
     Ok(())
 }
 
-fn validate(bytes: &[u8], limits: PackLimits) -> Result<(), super::PackError> {
+fn validate(bytes: &[u8], limits: PackLimits) -> Result<GitFetchUsage, super::PackError> {
     validate_at(
         bytes,
         limits,
@@ -329,7 +385,7 @@ fn validate_at(
     cancelled: &AtomicBool,
     started: Instant,
     timeout: Duration,
-) -> Result<(), super::PackError> {
+) -> Result<GitFetchUsage, super::PackError> {
     let mut input = Cursor::new(bytes);
     let mut spool = tempfile::tempfile()
         .map_err(|_defect| super::PackError("the pack stream is unreadable"))?;

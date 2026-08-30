@@ -11,7 +11,7 @@ use super::{
     Action, Arguments, ExactWant, ExactWants, Negotiate, Protocol, active, create_refs,
     credential_username, exact_https_url, exact_wants, http, initialize, private_ref, v2_handshake,
 };
-use crate::{ExactFetch, GitCredential, GitFetchBounds, GitFetchError};
+use crate::{DEFAULT_GIT_FETCH_LIMITS, ExactFetch, GitCredential, GitFetchBounds, GitFetchError};
 
 #[test]
 fn exact_wants_are_sent_without_haves() -> Result<(), Box<dyn std::error::Error>> {
@@ -94,6 +94,7 @@ fn fetch_shell(cancelled: &AtomicBool, bounds: GitFetchBounds) -> ExactFetch<'_>
         destination: std::path::Path::new("unused"),
         credential: None,
         bounds,
+        limits: DEFAULT_GIT_FETCH_LIMITS,
         cancelled,
     }
 }

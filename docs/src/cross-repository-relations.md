@@ -2,11 +2,12 @@
 
 Documentation and the implementation it describes may live in different repositories. A change to
 either one can introduce drift while the other repository remains byte-for-byte unchanged. The
-controller now has the operator-owned registry needed to identify those relations without letting
-repository content choose another repository, credential, selector, limit, or publication target.
+controller has the operator-owned registry and exact Git acquisition boundary needed to identify
+and materialize those relations without letting repository content choose another repository,
+credential, selector, limit, or publication target.
 
-This is the registry boundary, not a complete cross-repository checking lane. No service loads this
-configuration yet, and the controller does not yet acquire the four Git snapshots, evaluate the
+This is not yet a complete cross-repository checking lane. No service loads this configuration or
+resolves foreign provider heads and credentials yet, and the controller does not yet evaluate the
 relation, retain evidence, or publish a status.
 
 ## One closed relation
@@ -53,10 +54,29 @@ format. Provider facts that disagree inside the delivery are an error. A coheren
 the registry is ordinary authenticated no-work. A matching delivery returns every affected
 relation in stable relation-identity order together with the role that triggered it.
 
-The configured target branch is not treated as an immutable revision. The next acquisition stage
-must refresh provider state, verify that target, and freeze exact base and candidate object IDs for
-both subjects before any comparison. Commit timestamps, nearby branch heads, URL versions, and
-repository prose are not pairing evidence.
+The configured target branch is not treated as an immutable revision. A provider resolver must
+refresh it and supply exact base/candidate commit and tree IDs for each role. The controller freezes
+all four revisions against the registered roles and object formats before acquisition. Commit
+timestamps, nearby branch heads, URL versions, and repository prose are not pairing evidence.
+
+## Exact Git acquisition
+
+The existing strict HTTPS protocol-v2 shallow fetch now accepts a positive object and pack-byte
+ceiling and returns its measured pack usage. Caller ceilings can only narrow Amiss's global
+2,000,000-object and 2 GiB pack ceilings. The streaming pack validator enforces the selected limits
+before indexing, so an oversized response is never accepted and counted afterward.
+
+Relation acquisition sorts inputs by role, binds each canonical HTTPS repository URL and opaque
+credential identity back to the operator plan, and fetches both exact commits for each subject into
+its own root. The first subject's measured usage is subtracted from the aggregate budget; the
+second receives the smaller of its own ceiling and what remains. Both roots are then reopened by
+the bounded repository reader, and every commit must name the independently resolved tree.
+
+Any missing object, transport failure, cancellation, exhausted budget, wrong tree, or aliased root
+makes the complete relation `unproven`; no partial relation result is returned. Roots must remain
+physically distinct even when two independent repositories happen to produce identical Git object
+IDs. SHA-256 subjects remain representable in the registry but are unproven through the current
+SHA-1-only provider transport.
 
 ## Trust boundary
 
@@ -68,18 +88,17 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. acquire exact base and candidate revisions for both subjects under their independent and
-   aggregate budgets;
-2. compare the two complete projections and retain exact human-readable subject identities;
-3. model coordinated release or paired-change intent without timestamp inference; and
-4. deduplicate triggers from either provider route and publish only to the configured subject roles.
+1. compare the two complete projections and retain exact human-readable subject identities;
+2. model coordinated release or paired-change intent without timestamp inference; and
+3. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
-Until those stages exist, the registry proves only that trusted configuration and authenticated
-delivery selection have a closed representation. It does not claim that any cross-repository
-content has been acquired, compared, or approved.
+Until those stages exist, these primitives prove only that trusted configuration, authenticated
+delivery selection, exact revision binding, and bounded acquisition have a closed representation.
+They do not claim that any cross-repository content has been compared or approved.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
-and the [registry laws](https://github.com/HardMax71/amiss/blob/main/controller/tests/suite/relations.rs)
-exercise bidirectional selection, stable ordering, invalid identities, projection compatibility,
-joint budgets, and exact destinations.
+the [exact relation transport](https://github.com/HardMax71/amiss/blob/main/controller/git/src/relation.rs),
+and the [relation laws](https://github.com/HardMax71/amiss/blob/main/controller/tests/suite/relations.rs)
+exercise bidirectional selection, stable ordering, four-revision binding, independent roots,
+projection compatibility, joint budgets, and exact destinations.

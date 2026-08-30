@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use validation::validate_and_spool;
 
+use crate::{GitFetchLimits, GitFetchUsage};
+
 const INDEX_INTERRUPT_POLL: Duration = Duration::from_millis(5);
 
 #[derive(Clone, Copy)]
@@ -22,7 +24,7 @@ pub(super) struct PackLimits {
 }
 
 const DEFAULT_LIMITS: PackLimits = PackLimits {
-    pack_bytes: 2_147_483_648,
+    pack_bytes: crate::DEFAULT_GIT_FETCH_LIMITS.bytes,
     objects: 2_000_000,
     object_bytes: 134_217_728,
     inflated_bytes: 4_294_967_296,
@@ -36,6 +38,19 @@ pub(super) struct PackError(&'static str);
 
 pub(super) struct InstalledPack {
     pub(super) keep_path: Option<PathBuf>,
+    pub(super) usage: GitFetchUsage,
+}
+
+pub(super) fn fetch_limits(requested: GitFetchLimits) -> Result<PackLimits, PackError> {
+    if requested.objects == 0 || requested.bytes == 0 {
+        return Err(PackError("the exact Git fetch resource limit is invalid"));
+    }
+    Ok(PackLimits {
+        pack_bytes: requested.bytes.min(DEFAULT_LIMITS.pack_bytes),
+        objects: u32::try_from(requested.objects.min(u64::from(DEFAULT_LIMITS.objects)))
+            .map_err(|_defect| PackError("the exact Git object limit is unsupported"))?,
+        ..DEFAULT_LIMITS
+    })
 }
 
 pub(super) fn validate_and_install(
@@ -45,17 +60,11 @@ pub(super) fn validate_and_install(
     cancelled: &AtomicBool,
     started: Instant,
     timeout: Duration,
+    limits: PackLimits,
 ) -> Result<InstalledPack, PackError> {
     let mut spool = tempfile::tempfile_in(pack_directory)
         .map_err(|_defect| PackError("the pack stream is unreadable"))?;
-    validate_and_spool(
-        input,
-        &mut spool,
-        DEFAULT_LIMITS,
-        cancelled,
-        started,
-        timeout,
-    )?;
+    let usage = validate_and_spool(input, &mut spool, limits, cancelled, started, timeout)?;
     active(cancelled, started, timeout)?;
     spool
         .seek(SeekFrom::Start(0))
@@ -68,12 +77,13 @@ pub(super) fn validate_and_install(
             interrupted,
             None::<gix::objs::find::Never>,
             gix::hash::Kind::Sha1,
-            index_options(DEFAULT_LIMITS),
+            index_options(limits),
         )
         .map_err(|_defect| PackError("the validated pack could not be indexed"))
     })?;
     Ok(InstalledPack {
         keep_path: outcome.keep_path,
+        usage,
     })
 }
 
