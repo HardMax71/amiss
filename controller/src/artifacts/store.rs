@@ -11,6 +11,7 @@ use super::format::{Blob, Record, RecordInput, Root, SidecarAudit};
 use super::{
     ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
     ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference, ArtifactStoreConfig,
+    RetainedRelationAudit,
 };
 use crate::{ControllerClock, ControllerEvaluationId};
 
@@ -286,6 +287,42 @@ impl FileArtifactStore {
                 blob,
             )
             .map(|_bytes| ())
+        })
+    }
+
+    pub(crate) fn reopen_relation_audit(
+        &self,
+        id: &str,
+    ) -> Result<RetainedRelationAudit, ArtifactError> {
+        if !super::format::valid_id(id) {
+            return Err(ArtifactError::NotFound);
+        }
+        let mut state = self.lock_state()?;
+        require_trusted(&state)?;
+        let now = self.effective_now(&state)?;
+        self.remove_expired(&mut state, now)?;
+        let record = &state
+            .records
+            .get(id)
+            .ok_or(ArtifactError::NotFound)?
+            .metadata;
+        let audit = record
+            .relation_audit
+            .as_ref()
+            .ok_or(ArtifactError::NotFound)?;
+        let read = |component, blob| {
+            disk::read_blob(&disk::component_path(&self.root, id, component), blob)
+        };
+        Ok(RetainedRelationAudit {
+            artifact: record.reference(&self.config)?,
+            report: read(ArtifactComponent::Report, &record.report)?,
+            plan: read(ArtifactComponent::RelationPlan, &audit.plan)?,
+            evidence: audit
+                .evidence
+                .as_ref()
+                .map(|blob| read(ArtifactComponent::RelationEvidence, blob))
+                .transpose()?,
+            assessment: read(ArtifactComponent::RelationAssessment, &audit.assessment)?,
         })
     }
 

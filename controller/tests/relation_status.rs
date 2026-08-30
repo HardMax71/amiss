@@ -11,7 +11,7 @@ use amiss_controller::{
     ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
     LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle,
     RelationScheduleStoreError, RelationStatusError, RelationStatusRecord, RelationSubjectHead,
-    complete_relation_status, stage_relation_status,
+    complete_relation_status, relation_registry, stage_relation_status,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
@@ -232,6 +232,8 @@ fn stale_foreign_and_conflicting_status_state_fails_closed() {
 #[test]
 fn durable_status_replays_and_completes_exactly_across_restart() {
     let fixture = relation_audit(true).unwrap();
+    let registry =
+        relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();
     let artifact_root = tempfile::tempdir().unwrap();
     let artifacts = store(&artifact_root, TestClock::new());
     let retained = retain(&artifacts, "evaluation/relation/durable", &fixture);
@@ -275,6 +277,17 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
     let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
     assert_eq!(
         relations
+            .reopen_staged_status(
+                &registry,
+                &artifacts,
+                &staged.targets.relation,
+                &staged.targets.coordination,
+            )
+            .unwrap(),
+        Some(staged.clone())
+    );
+    assert_eq!(
+        relations
             .stage_status(
                 &artifacts,
                 &pending,
@@ -293,6 +306,17 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
     assert_eq!(relations.complete_status(&staged).unwrap(), completed);
     assert_eq!(
         relations
+            .reopen_staged_status(
+                &registry,
+                &artifacts,
+                &staged.targets.relation,
+                &staged.targets.coordination,
+            )
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        relations
             .stage_status(
                 &artifacts,
                 &pending,
@@ -303,6 +327,72 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
             .unwrap(),
         None
     );
+}
+
+#[test]
+fn reopening_status_rejects_missing_rebound_and_expired_authorities() {
+    let fixture = relation_audit(true).unwrap();
+    let artifact_root = tempfile::tempdir().unwrap();
+    let clock = TestClock::new();
+    let artifacts = store(&artifact_root, clock.clone());
+    let retained = retain(&artifacts, "evaluation/relation/reopen", &fixture);
+    let relation_root = tempfile::tempdir().unwrap();
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
+    let RelationAdmission::Scheduled(pending) =
+        relations.schedule(fixture.transition.clone()).unwrap()
+    else {
+        panic!("the exact relation schedules");
+    };
+    let staged = relations
+        .stage_status(
+            &artifacts,
+            &pending,
+            heads(&fixture),
+            retained,
+            bundle(&fixture),
+        )
+        .unwrap()
+        .unwrap();
+
+    let empty = relation_registry(Vec::new()).unwrap();
+    assert!(matches!(
+        relations.reopen_staged_status(
+            &empty,
+            &artifacts,
+            &staged.targets.relation,
+            &staged.targets.coordination,
+        ),
+        Err(RelationScheduleStoreError::Configuration)
+    ));
+
+    let mut rebound = fixture.transition.relation.plan.as_ref().clone();
+    rebound.subjects[0].credential =
+        amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
+    let rebound = relation_registry(vec![rebound]).unwrap();
+    assert!(matches!(
+        relations.reopen_staged_status(
+            &rebound,
+            &artifacts,
+            &staged.targets.relation,
+            &staged.targets.coordination,
+        ),
+        Err(RelationScheduleStoreError::Corrupt)
+    ));
+
+    let registry =
+        relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();
+    clock.advance(60_000);
+    assert!(matches!(
+        relations.reopen_staged_status(
+            &registry,
+            &artifacts,
+            &staged.targets.relation,
+            &staged.targets.coordination,
+        ),
+        Err(RelationScheduleStoreError::Artifact(
+            ArtifactError::NotFound
+        ))
+    ));
 }
 
 #[test]

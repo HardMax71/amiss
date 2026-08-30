@@ -145,6 +145,7 @@ struct TriggerScope {
 }
 
 pub struct RelationRegistry {
+    plans: BTreeMap<ArtifactId, Arc<RelationPlan>>,
     triggers: BTreeMap<TriggerScope, Vec<TriggeredRelation>>,
 }
 
@@ -194,9 +195,12 @@ pub fn relation_registry(
         }
     }
 
+    let plans = plans
+        .into_iter()
+        .map(|plan| (plan.identity.clone(), Arc::new(plan)))
+        .collect::<BTreeMap<_, _>>();
     let mut triggers: BTreeMap<TriggerScope, Vec<TriggeredRelation>> = BTreeMap::new();
-    for plan in plans {
-        let plan = Arc::new(plan);
+    for plan in plans.values() {
         for subject in &plan.subjects {
             triggers
                 .entry(TriggerScope {
@@ -205,12 +209,12 @@ pub fn relation_registry(
                 })
                 .or_default()
                 .push(TriggeredRelation {
-                    plan: Arc::clone(&plan),
+                    plan: Arc::clone(plan),
                     trigger_role: subject.role.clone(),
                 });
         }
     }
-    Ok(RelationRegistry { triggers })
+    Ok(RelationRegistry { plans, triggers })
 }
 
 /// Selects every relation owned by one authenticated provider delivery.

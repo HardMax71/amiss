@@ -119,6 +119,12 @@ rebound record fails closed. Completed in-memory state keeps only the status bin
 delivery boundary must reopen the immutable registry and artifact record, reproduce that binding,
 and only then expose provider fields.
 
+Restart recovery now performs that reopening without persisting a second provider configuration.
+It reads the bounded retained relation audit by artifact identity, reconstructs the frozen transition
+from its exact snapshots and the immutable registry, replays the audit, and returns the staged batch
+only when the complete status binding is identical. A missing or rebound registry, expired artifact,
+or changed target remains a refusal. Reopening still grants no external delivery authority.
+
 This outbox still makes no provider call and its returned record is not delivery authority. A later
 publisher must serialize external writes for each stable destination and recheck the retained
 artifact immediately before using it.

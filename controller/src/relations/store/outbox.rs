@@ -1,16 +1,51 @@
 use crate::{
     ArtifactAuditReference, FileArtifactStore, PendingRelation, RelationAuditBundle,
-    RelationStatusError, RelationStatusRecord, RelationSubjectHead, complete_relation_status,
-    stage_relation_status,
+    RelationRegistry, RelationStatusError, RelationStatusRecord, RelationSubjectHead,
+    complete_relation_status, stage_relation_status,
 };
 
-use super::status::store_status;
+use super::status::{reopen_status, store_status};
 use super::{
     ENTRY_SCHEMA, FileRelationScheduleStore, JournalAction, JournalEntry,
     RelationScheduleStoreError, StoredStatusState, checked_work, is_current_work, synchronize,
 };
 
 impl FileRelationScheduleStore {
+    /// Reopens one unfinished exact batch from its immutable registry and
+    /// retained artifact after restart. The returned value is not external
+    /// delivery authority.
+    ///
+    /// # Errors
+    ///
+    /// The journal, registry, retained audit, or reproduced binding cannot be
+    /// trusted.
+    pub fn reopen_staged_status(
+        &self,
+        registry: &RelationRegistry,
+        artifacts: &FileArtifactStore,
+        relation: &amiss_wire::model::ArtifactId,
+        coordination: &amiss_wire::model::ArtifactId,
+    ) -> Result<Option<RelationStatusRecord>, RelationScheduleStoreError> {
+        let stored = {
+            let _lock = self.lock()?;
+            let metadata = self.load_metadata()?;
+            let mut journal = self.open_committed_journal(&metadata)?;
+            let mut state = self.state()?;
+            synchronize(&mut state, &mut journal, &metadata, self.max_bindings)?;
+            match state.statuses.get(&(
+                relation.as_str().to_owned(),
+                coordination.as_str().to_owned(),
+            )) {
+                Some(StoredStatusState::Staged { status, .. }) => Some(status.as_ref().clone()),
+                Some(StoredStatusState::Completed { .. }) | None => None,
+            }
+        };
+        stored
+            .as_ref()
+            .map(|status| reopen_status(status, registry, artifacts))
+            .transpose()
+    }
+
     /// Atomically retains one exact status batch only while its complete
     /// relation work remains current. An unfinished exact retry returns the
     /// retained record and an exact completed retry returns `None`.
