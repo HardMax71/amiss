@@ -8,8 +8,8 @@ use amiss_controller::{
 };
 pub use amiss_controller_git::GitFetchBounds;
 use amiss_controller_git::{
-    ACTION_COMMIT_REF, ExactFetch, ExactWant, GitCredential, REPOSITORY_CANDIDATE_REF,
-    REPOSITORY_TARGET_REF, fetch_exact,
+    ACTION_COMMIT_REF, DEFAULT_GIT_FETCH_LIMITS, ExactFetch, ExactWant, GitCredential,
+    REPOSITORY_CANDIDATE_REF, REPOSITORY_TARGET_REF, fetch_exact,
 };
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use secrecy::SecretString;
@@ -208,6 +208,7 @@ impl<T: GitHubAcquisitionSource> Acquisition for GitHubAcquisition<T> {
             destination: target.repository,
             credential: Some(credential),
             bounds: self.bounds,
+            limits: DEFAULT_GIT_FETCH_LIMITS,
             cancelled: target.cancelled.as_ref(),
         })
         .map_err(|_defect| {
@@ -223,6 +224,7 @@ impl<T: GitHubAcquisitionSource> Acquisition for GitHubAcquisition<T> {
             destination: target.action,
             credential: Some(credential),
             bounds: self.bounds,
+            limits: DEFAULT_GIT_FETCH_LIMITS,
             cancelled: target.cancelled.as_ref(),
         })
         .map_err(|_defect| fetch_error(target.cancelled.as_ref(), GitHubAcquireError::Action))?;

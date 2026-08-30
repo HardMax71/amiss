@@ -5,7 +5,9 @@ use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use amiss_controller::ProviderError;
-use amiss_controller_git::{ExactFetch, ExactWant, GitCredential, GitFetchBounds, fetch_exact};
+use amiss_controller_git::{
+    DEFAULT_GIT_FETCH_LIMITS, ExactFetch, ExactWant, GitCredential, GitFetchBounds, fetch_exact,
+};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{ObjectFormat, Oid};
 use secrecy::SecretString;
@@ -116,6 +118,7 @@ impl GitObjectSource {
                 password: &self.token,
             }),
             bounds,
+            limits: DEFAULT_GIT_FETCH_LIMITS,
             cancelled: &cancelled,
         })
         .map_err(|_defect| ProviderError::Unavailable)?;

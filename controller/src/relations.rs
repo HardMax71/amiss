@@ -1,3 +1,5 @@
+mod acquisition;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -7,6 +9,11 @@ use amiss_wire::controls::{
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
 
 use crate::{AuthenticatedDelivery, OpaqueId, PlanScope};
+
+pub use acquisition::{
+    RelationAcquiredRoot, RelationAcquisitionError, RelationSubjectTransition, RelationTransition,
+    relation_transition, verify_relation_acquired,
+};
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 

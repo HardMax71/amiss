@@ -1,7 +1,8 @@
 use std::sync::atomic::AtomicBool;
 
 use amiss_controller_git::{
-    ExactFetch, ExactWant, GitFetchBounds, REPOSITORY_TARGET_REF, fetch_exact,
+    DEFAULT_GIT_FETCH_LIMITS, ExactFetch, ExactWant, GitFetchBounds, REPOSITORY_TARGET_REF,
+    fetch_exact,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 
@@ -22,6 +23,7 @@ fn cancellation_prevents_destination_initialization() -> Result<(), Box<dyn std:
         destination: &destination,
         credential: None,
         bounds: GitFetchBounds::default(),
+        limits: DEFAULT_GIT_FETCH_LIMITS,
         cancelled: &cancelled,
     });
 
@@ -48,6 +50,7 @@ fn invalid_urls_fail_without_echoing_the_input() -> Result<(), Box<dyn std::erro
         destination: &destination,
         credential: None,
         bounds: GitFetchBounds::default(),
+        limits: DEFAULT_GIT_FETCH_LIMITS,
         cancelled: &cancelled,
     })
     .err()

@@ -63,13 +63,13 @@ pub fn verify_acquired(request: &RunRequest, roots: AcquiredRoots<'_>) -> Result
     )
 }
 
-fn verify_commits<const N: usize>(
+pub(crate) fn verify_commits<const N: usize, E: Copy>(
     root: &Path,
     object_format: ObjectFormat,
     expected: [(&Oid, &Oid); N],
-    object_error: AcquireError,
-    tree_error: AcquireError,
-) -> Result<(), AcquireError> {
+    object_error: E,
+    tree_error: E,
+) -> Result<(), E> {
     let repository = Repository::open(root, object_format).map_err(|_defect| object_error)?;
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     expected.into_iter().try_for_each(|(commit_oid, tree_oid)| {
