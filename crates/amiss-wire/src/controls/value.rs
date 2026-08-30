@@ -23,9 +23,16 @@ pub(crate) fn repository(identity: &RepositoryIdentity) -> Value {
 }
 
 pub(crate) fn positive_safe_integer(path: &str, raw: u64) -> Result<Value, Error> {
+    if raw == 0 {
+        return Err(Error::new(path, ErrorKind::InvalidValue));
+    }
+    nonnegative_safe_integer(path, raw)
+}
+
+pub(crate) fn nonnegative_safe_integer(path: &str, raw: u64) -> Result<Value, Error> {
     i64::try_from(raw)
         .ok()
-        .filter(|value| (1..=MAX_SAFE_INTEGER).contains(value))
+        .filter(|value| (0..=MAX_SAFE_INTEGER).contains(value))
         .map(Value::Integer)
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
