@@ -66,6 +66,14 @@ occurrence. The relation configuration and its context digest define what that i
 Amiss treats the spelling as opaque. Commit timestamps, nearby branch heads, URL versions, and
 repository prose are not pairing evidence.
 
+Status preparation requires a fresh head fact for both subjects, not only the repository whose
+delivery triggered the audit. Each fact must reproduce the complete registered subject, including
+its provider scope, target, credential identity, selector, and limits. A changed subject binding or
+object format is invalid; a changed candidate commit is superseded. Only then does the controller
+freeze the configured destination roles into a stable batch carrying the relation, coordination,
+trigger role, pending fence, complete subject, exact candidate commit, and required status name.
+An unconfigured role never appears in that batch.
+
 ## Pending and supersession law
 
 The provider-neutral scheduler is a pure transition over an optional pending value and one newly
@@ -87,8 +95,10 @@ its first exact work and fence: a delayed retry returns that historical fence bu
 current again. New work appends one bounded record instead of rewriting all history, the immutable
 capacity applies only to new bindings, and a missing, shortened, reordered, rebound, or malformed
 committed record fails closed. The journal retains full configuration and work digests rather than
-credential references or complete operator configuration. Provider finality checks and invoking
-this store from a live relation lane remain separate stages.
+credential references or complete operator configuration. Head-final status preparation is pure
+and does not authorize an external write: a later durable publisher must still stage the exact
+batch while proving its fence is current. Invoking either boundary from a live relation lane
+remains a separate stage.
 
 ## Exact Git acquisition
 
@@ -223,7 +233,8 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. deduplicate triggers from either provider route and publish only to the configured subject roles.
+2. resolve both current heads through their independently configured provider credentials;
+3. atomically stage the current fence and publish only to the prepared subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet
