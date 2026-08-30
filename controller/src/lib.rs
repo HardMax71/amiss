@@ -88,7 +88,7 @@ pub use relations::{
     RelationLookupError, RelationPlan, RelationRegistry, RelationRegistryError,
     RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
     TriggeredRelation, relation_registry, relation_transition, relations_for_delivery,
-    verify_relation_acquired,
+    verify_relation_acquired, verify_relation_plan,
 };
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{

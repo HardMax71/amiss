@@ -95,6 +95,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
         .expect("documentation repository");
     let registered = Arc::new(RelationPlan {
         identity: artifact("relation/api"),
+        context_digest: sha256(b"operator relation context"),
         projection: ProjectionKind::CodeTextV1,
         subjects: [
             subject("documentation", "handbook", "mirror.txt"),
@@ -147,7 +148,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
         report_payload_digest: sha256(b"accepted report payload"),
         relation: RelationIdentity {
             identity: registered.identity.clone(),
-            context_digest: sha256(b"operator relation context"),
+            context_digest: registered.context_digest,
         },
         trigger_role: transition.relation.trigger_role.clone(),
         projection: registered.projection,
@@ -222,6 +223,20 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
         first_line: 1,
         last_line: 1,
     });
+    let changed = plan(&changed).expect("rewritten plan");
+    let changed = parse_plan(&json::canonical(&changed)).expect("parsed rewritten plan");
+    assert_eq!(
+        project_relation_evidence(RelationProjectionRequest {
+            transition: &fixture.transition,
+            plan: &changed,
+            roots: roots(&fixture),
+        })
+        .unwrap_err(),
+        RelationProjectionError::InvalidPlan
+    );
+
+    let mut changed = fixture.plan.payload.clone();
+    changed.relation.context_digest = sha256(b"substituted operator relation context");
     let changed = plan(&changed).expect("rewritten plan");
     let changed = parse_plan(&json::canonical(&changed)).expect("parsed rewritten plan");
     assert_eq!(

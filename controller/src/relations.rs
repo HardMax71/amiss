@@ -6,7 +6,9 @@ use std::sync::Arc;
 use amiss_wire::controls::{
     ProjectionKind, ProjectionSource, check_projection_source, valid_required_status_name,
 };
+use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
+use amiss_wire::relation::RelationPlanEnvelope;
 
 use crate::{AuthenticatedDelivery, OpaqueId, PlanScope};
 
@@ -45,10 +47,55 @@ pub struct RelationStatusDestination {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationPlan {
     pub identity: ArtifactId,
+    pub context_digest: Digest,
     pub projection: ProjectionKind,
     pub subjects: [RelationSubject; 2],
     pub aggregate_limits: RelationLimits,
     pub status_destinations: Vec<RelationStatusDestination>,
+}
+
+/// Verifies that one digest-bound audit plan exactly reproduces its frozen
+/// operator relation and acquired snapshots.
+///
+/// # Errors
+///
+/// The envelope digest or any operator, trigger, subject, or snapshot field
+/// differs from the frozen transition.
+pub fn verify_relation_plan(
+    plan: &RelationPlanEnvelope,
+    transition: &RelationTransition,
+) -> Result<(), RelationAcquisitionError> {
+    let rebuilt = amiss_wire::relation::plan(&plan.payload)
+        .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
+    let registered = transition.relation.plan.as_ref();
+    (rebuilt.text("payload_digest") == Some(&plan.payload_digest.to_string())
+        && plan.payload.relation.identity == registered.identity
+        && plan.payload.relation.context_digest == registered.context_digest
+        && plan.payload.trigger_role == transition.relation.trigger_role
+        && plan.payload.projection == registered.projection
+        && plan.payload.subjects.iter().all(|planned| {
+            registered
+                .subjects
+                .iter()
+                .find(|subject| subject.role == planned.role)
+                .zip(
+                    transition
+                        .subjects
+                        .iter()
+                        .find(|subject| subject.role == planned.role),
+                )
+                .is_some_and(|(subject, frozen)| {
+                    planned.repository == subject.scope.repository
+                        && planned.target == subject.target
+                        && planned.source == subject.source
+                        && planned.base.commit == frozen.commits.base
+                        && planned.base.tree == frozen.trees.base
+                        && planned.candidate.commit == frozen.commits.candidate
+                        && planned.candidate.tree == frozen.trees.candidate
+                })
+        }))
+    .then_some(())
+    .ok_or(RelationAcquisitionError::InvalidTransition)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

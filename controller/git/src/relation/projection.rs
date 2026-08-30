@@ -2,12 +2,13 @@ mod tests;
 
 use amiss_controller::{
     RelationAcquiredRoot, RelationTransition, relation_transition, verify_relation_acquired,
+    verify_relation_plan,
 };
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{RepositoryProjectionLimits, RepositoryProjectionRequest, project_repository};
 use amiss_wire::json::Value;
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, evidence, plan,
+    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, evidence,
 };
 
 #[derive(Clone, Copy)]
@@ -36,19 +37,13 @@ pub enum RelationProjectionError {
 pub fn project_relation_evidence(
     request: RelationProjectionRequest<'_>,
 ) -> Result<Value, RelationProjectionError> {
-    let rebuilt =
-        plan(&request.plan.payload).map_err(|_defect| RelationProjectionError::InvalidPlan)?;
-    if rebuilt.text("payload_digest") != Some(&request.plan.payload_digest.to_string()) {
-        return Err(RelationProjectionError::InvalidPlan);
-    }
     let transition = relation_transition(
         request.transition.relation.clone(),
         request.transition.subjects.clone(),
     )
     .map_err(|_defect| RelationProjectionError::InvalidPlan)?;
-    if !plan_matches_transition(request.plan, &transition) {
-        return Err(RelationProjectionError::InvalidPlan);
-    }
+    verify_relation_plan(request.plan, &transition)
+        .map_err(|_defect| RelationProjectionError::InvalidPlan)?;
     let roots = verify_relation_acquired(&transition, request.roots)
         .map_err(|_defect| RelationProjectionError::Unproven)?;
     let registered = transition.relation.plan.as_ref();
@@ -118,32 +113,4 @@ pub fn project_relation_evidence(
             .map_err(|_subjects: Vec<_>| RelationProjectionError::InvalidPlan)?,
     })
     .map_err(|_defect| RelationProjectionError::Unproven)
-}
-
-fn plan_matches_transition(plan: &RelationPlanEnvelope, transition: &RelationTransition) -> bool {
-    let registered = transition.relation.plan.as_ref();
-    plan.payload.relation.identity == registered.identity
-        && plan.payload.trigger_role == transition.relation.trigger_role
-        && plan.payload.projection == registered.projection
-        && plan.payload.subjects.iter().all(|planned| {
-            registered
-                .subjects
-                .iter()
-                .find(|subject| subject.role == planned.role)
-                .zip(
-                    transition
-                        .subjects
-                        .iter()
-                        .find(|subject| subject.role == planned.role),
-                )
-                .is_some_and(|(subject, frozen)| {
-                    planned.repository == subject.scope.repository
-                        && planned.target == subject.target
-                        && planned.source == subject.source
-                        && planned.base.commit == frozen.commits.base
-                        && planned.base.tree == frozen.trees.base
-                        && planned.candidate.commit == frozen.commits.candidate
-                        && planned.candidate.tree == frozen.trees.candidate
-                })
-        })
 }
