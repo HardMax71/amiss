@@ -22,22 +22,22 @@ use crate::file_ledger::{FileLedgerError, frame};
 const LOCK_FILE: &str = ".amiss-relation-schedules.lock";
 const METADATA_FILE: &str = ".amiss-relation-schedules.root";
 const JOURNAL_FILE: &str = ".amiss-relation-schedules.journal";
-const ROOT_SCHEMA: &str = "amiss/controller-relation-schedule-root-v1";
-const ENTRY_SCHEMA: &str = "amiss/controller-relation-schedule-entry-v1";
-const JOURNAL_CHAIN_DOMAIN: &str = "amiss/controller-relation-schedule-chain-v1";
+const ROOT_SCHEMA: &str = "amiss/controller-relation-journal-root-v2";
+const ENTRY_SCHEMA: &str = "amiss/controller-relation-journal-entry-v2";
+const JOURNAL_CHAIN_DOMAIN: &str = "amiss/controller-relation-journal-chain-v2";
 const MAX_ROOT_BYTES: u64 = 4_096;
 const MAX_ENTRY_BYTES: u64 = 4_096;
 const ENTRY_LENGTH_BYTES: u64 = 8;
 const MAX_ROOT_ENTRIES: usize = 16;
 
 const ROOT_FRAME: frame::FrameFormat = frame::define(
-    b"AMISS-RELATION-SCHEDULE-ROOT",
-    "amiss/controller-relation-schedule-root-frame-v1",
+    b"AMISS-RELATION-JOURNAL-ROOT",
+    "amiss/controller-relation-journal-root-frame-v2",
     MAX_ROOT_BYTES,
 );
 const ENTRY_FRAME: frame::FrameFormat = frame::define(
-    b"AMISS-RELATION-SCHEDULE-ENTRY",
-    "amiss/controller-relation-schedule-entry-frame-v1",
+    b"AMISS-RELATION-JOURNAL-ENTRY",
+    "amiss/controller-relation-journal-entry-frame-v2",
     MAX_ENTRY_BYTES,
 );
 
@@ -72,6 +72,7 @@ struct RootMetadata {
     schema: String,
     max_bindings: u64,
     binding_count: u64,
+    entry_count: u64,
     journal_bytes: u64,
     tail_digest: Option<String>,
 }
@@ -81,9 +82,17 @@ struct RootMetadata {
 struct JournalEntry {
     schema: String,
     previous_tail: Option<String>,
-    relation: String,
-    plan_binding: String,
-    binding: StoredBinding,
+    action: JournalAction,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+enum JournalAction {
+    Schedule {
+        relation: String,
+        plan_binding: String,
+        binding: StoredBinding,
+    },
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -99,6 +108,7 @@ pub(super) struct StoredBinding {
 struct State {
     relations: BTreeMap<String, StoredRelation>,
     binding_count: u64,
+    entry_count: u64,
     journal_bytes: u64,
     tail_digest: Option<String>,
 }
@@ -216,9 +226,11 @@ impl FileRelationScheduleStore {
             JournalEntry {
                 schema: ENTRY_SCHEMA.to_owned(),
                 previous_tail,
-                relation: checked.relation,
-                plan_binding: checked.plan_binding,
-                binding,
+                action: JournalAction::Schedule {
+                    relation: checked.relation,
+                    plan_binding: checked.plan_binding,
+                    binding,
+                },
             },
         )?;
         Ok(RelationAdmission::Scheduled(pending))
@@ -276,6 +288,11 @@ impl FileRelationScheduleStore {
             .checked_add(1)
             .filter(|count| *count <= self.max_bindings)
             .ok_or(RelationScheduleStoreError::Full)?;
+        let next_entry_count = metadata
+            .entry_count
+            .checked_add(1)
+            .filter(|count| *count <= self.max_bindings)
+            .ok_or(RelationScheduleStoreError::Full)?;
         let tail_digest = hb(JOURNAL_CHAIN_DOMAIN, &chunk).to_string();
         validate_append(state, &entry, chunk_length, self.max_bindings)?;
         if journal
@@ -293,6 +310,7 @@ impl FileRelationScheduleStore {
             schema: ROOT_SCHEMA.to_owned(),
             max_bindings: self.max_bindings,
             binding_count: next_count,
+            entry_count: next_entry_count,
             journal_bytes: next_bytes,
             tail_digest: Some(tail_digest.clone()),
         };
@@ -401,6 +419,7 @@ impl FileRelationScheduleStore {
 impl State {
     fn matches(&self, metadata: &RootMetadata) -> bool {
         self.binding_count == metadata.binding_count
+            && self.entry_count == metadata.entry_count
             && self.journal_bytes == metadata.journal_bytes
             && self.tail_digest == metadata.tail_digest
     }
@@ -415,7 +434,9 @@ fn synchronize(
     if state.matches(metadata) {
         return Ok(());
     }
-    if state.journal_bytes > metadata.journal_bytes || state.binding_count > metadata.binding_count
+    if state.journal_bytes > metadata.journal_bytes
+        || state.binding_count > metadata.binding_count
+        || state.entry_count > metadata.entry_count
     {
         *state = State::default();
     }
@@ -495,16 +516,21 @@ fn validate_append(
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
-    match state.relations.get(&entry.relation) {
-        None if entry.binding.fence == 1 => Ok(()),
+    let JournalAction::Schedule {
+        relation,
+        plan_binding,
+        binding,
+    } = &entry.action;
+    match state.relations.get(relation) {
+        None if binding.fence == 1 => Ok(()),
         Some(relation)
-            if relation.plan_binding == entry.plan_binding
-                && !relation.bindings.contains_key(&entry.binding.coordination)
+            if relation.plan_binding == *plan_binding
+                && !relation.bindings.contains_key(&binding.coordination)
                 && relation
                     .bindings
                     .get(&relation.current_coordination)
                     .and_then(|binding| binding.fence.checked_add(1))
-                    == Some(entry.binding.fence) =>
+                    == Some(binding.fence) =>
         {
             Ok(())
         }
@@ -524,28 +550,36 @@ fn apply_entry(
         .binding_count
         .checked_add(1)
         .ok_or(RelationScheduleStoreError::Corrupt)?;
+    let entry_count = state
+        .entry_count
+        .checked_add(1)
+        .ok_or(RelationScheduleStoreError::Corrupt)?;
     let journal_bytes = state
         .journal_bytes
         .checked_add(chunk_length)
         .ok_or(RelationScheduleStoreError::Corrupt)?;
-    let coordination = entry.binding.coordination.clone();
-    match state.relations.entry(entry.relation) {
+    let JournalAction::Schedule {
+        relation,
+        plan_binding,
+        binding,
+    } = entry.action;
+    let coordination = binding.coordination.clone();
+    match state.relations.entry(relation) {
         std::collections::btree_map::Entry::Vacant(slot) => {
             slot.insert(StoredRelation {
-                plan_binding: entry.plan_binding,
-                bindings: BTreeMap::from([(coordination.clone(), entry.binding)]),
+                plan_binding,
+                bindings: BTreeMap::from([(coordination.clone(), binding)]),
                 current_coordination: coordination,
             });
         }
         std::collections::btree_map::Entry::Occupied(mut slot) => {
             let relation = slot.get_mut();
-            relation
-                .bindings
-                .insert(coordination.clone(), entry.binding);
+            relation.bindings.insert(coordination.clone(), binding);
             relation.current_coordination = coordination;
         }
     }
     state.binding_count = binding_count;
+    state.entry_count = entry_count;
     state.journal_bytes = journal_bytes;
     state.tail_digest = Some(tail_digest);
     Ok(())
@@ -556,16 +590,18 @@ fn empty_metadata(max_bindings: u64) -> RootMetadata {
         schema: ROOT_SCHEMA.to_owned(),
         max_bindings,
         binding_count: 0,
+        entry_count: 0,
         journal_bytes: 0,
         tail_digest: None,
     }
 }
 
 fn validate_metadata(metadata: &RootMetadata) -> Result<(), RelationScheduleStoreError> {
-    let empty = metadata.binding_count == 0;
+    let empty = metadata.entry_count == 0;
     if metadata.schema != ROOT_SCHEMA
         || !(1..=RELATION_SCHEDULE_BINDING_LIMIT).contains(&metadata.max_bindings)
         || metadata.binding_count > metadata.max_bindings
+        || metadata.entry_count != metadata.binding_count
         || metadata.journal_bytes > MAX_JOURNAL_BYTES
         || (metadata.journal_bytes == 0) != empty
         || metadata.tail_digest.is_none() != empty
@@ -585,16 +621,22 @@ fn validate_entry(entry: &JournalEntry) -> Result<(), RelationScheduleStoreError
             .previous_tail
             .as_deref()
             .is_some_and(|digest| Digest::from_wire(digest).is_none())
-        || ArtifactId::new(entry.relation.clone()).is_none()
-        || Digest::from_wire(&entry.plan_binding).is_none()
-        || ArtifactId::new(entry.binding.coordination.clone()).is_none()
-        || Digest::from_wire(&entry.binding.work_binding).is_none()
-        || ArtifactId::new(entry.binding.trigger_role.clone()).is_none()
-        || entry.binding.fence == 0
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
-    Ok(())
+    let JournalAction::Schedule {
+        relation,
+        plan_binding,
+        binding,
+    } = &entry.action;
+    (ArtifactId::new(relation.clone()).is_some()
+        && Digest::from_wire(plan_binding).is_some()
+        && ArtifactId::new(binding.coordination.clone()).is_some()
+        && Digest::from_wire(&binding.work_binding).is_some()
+        && ArtifactId::new(binding.trigger_role.clone()).is_some()
+        && binding.fence != 0)
+        .then_some(())
+        .ok_or(RelationScheduleStoreError::Corrupt)
 }
 
 fn encode_entry(entry: &JournalEntry) -> Result<Vec<u8>, RelationScheduleStoreError> {
