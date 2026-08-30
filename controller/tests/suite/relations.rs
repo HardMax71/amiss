@@ -170,11 +170,11 @@ fn current_heads(transition: &RelationTransition) -> [RelationSubjectHead; 2] {
 
 #[test]
 fn either_authenticated_subject_selects_every_owned_relation_in_identity_order() {
-    let registry = relation_registry(vec![
-        plan("relation/zeta", "sdk", "handbook"),
-        plan("relation/alpha", "service", "handbook"),
-    ])
-    .unwrap();
+    let mut zeta = plan("relation/zeta", "sdk", "handbook");
+    zeta.status_destinations[0].required_status_name = "Amiss zeta relation".to_owned();
+    let mut alpha = plan("relation/alpha", "service", "handbook");
+    alpha.status_destinations[0].required_status_name = "Amiss alpha relation".to_owned();
+    let registry = relation_registry(vec![zeta, alpha]).unwrap();
 
     let handbook =
         relations_for_delivery(&registry, &delivery("handbook", ObjectFormat::Sha1)).unwrap();
@@ -307,6 +307,26 @@ fn status_destinations_are_exact_valid_subjects() {
     );
 
     assert!(relation_registry(Vec::new()).is_ok());
+}
+
+#[test]
+fn one_provider_repository_status_key_has_one_relation_owner() {
+    let first = plan("relation/api", "service", "handbook");
+    let mut second = plan("relation/schema", "sdk", "handbook");
+    let documentation = second
+        .subjects
+        .iter_mut()
+        .find(|subject| subject.role.as_str() == "documentation")
+        .unwrap();
+    documentation.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
+    documentation.credential = OpaqueId::new("git/other".to_owned()).unwrap();
+    assert_eq!(
+        relation_registry(vec![first.clone(), second.clone()]).err(),
+        Some(RelationRegistryError::DuplicateDestination)
+    );
+
+    second.status_destinations[0].required_status_name = "Amiss schema relation".to_owned();
+    assert!(relation_registry(vec![first, second]).is_ok());
 }
 
 #[test]
