@@ -7,8 +7,9 @@ and materialize those relations without letting repository content choose anothe
 credential, selector, limit, or publication target.
 
 This is not yet a complete cross-repository checking lane. No service loads this configuration or
-resolves foreign provider heads and credentials yet, and the controller does not yet evaluate the
-relation, retain evidence, or publish a status.
+resolves foreign provider heads and credentials yet. A closed audit plan can now retain the exact
+comparison selected after acquisition, but the controller does not yet project either subject,
+assess or retain a complete audit chain, or publish a status.
 
 ## One closed relation
 
@@ -78,6 +79,36 @@ physically distinct even when two independent repositories happen to produce ide
 IDs. SHA-256 subjects remain representable in the registry but are unproven through the current
 SHA-1-only provider transport.
 
+## Report-bound audit plan
+
+After the four snapshots are frozen, a separate 64 KiB wire plan records the exact comparison that
+later evidence must reproduce. It contains:
+
+- the accepted scanner report payload digest and the role whose authenticated change selected it;
+- the relation identity and a context digest for the complete operator-owned configuration;
+- one shared projection kind; and
+- exactly two role-sorted subjects, each with its canonical repository, selected target branch,
+  compatible source selector, object format, and exact base/candidate commit and tree IDs.
+
+The target branch remains explanatory selection context; only the four object pairs identify the
+comparison. Base and candidate may be identical for an unchanged subject, and the two subjects may
+use different object formats. Repository identities and roles must differ, and the trigger role
+must name one subject. Credentials, raw provider tokens, and transport budgets are deliberately not
+copied into the portable document.
+
+The checked writer and strict reader share the scanner's existing projection-source grammar. A
+`code-text-v1` plan therefore accepts blob lines, a named region, or one record value;
+`sorted-rows-v1` and `decimal-count-v1` accept tree paths or one record set. The plan does not add a
+second selector language or let either repository change the operator-owned selector.
+
+The context digest is an integrity binding for operator configuration interpreted outside the wire;
+it is not authority by itself. Likewise, the report digest and trigger role are closed facts, but
+the wire reader does not have the report and cannot prove they agree with it. Controller admission
+must perform that binding before retaining the future sidecar. The plan intentionally contains no
+projected value, completeness claim, alignment verdict, blame assignment, or status policy.
+Malformed branches, selectors, identities, object IDs, subject ordering, unknown fields, and a
+changed payload refuse the whole document.
+
 ## Trust boundary
 
 The registry lives only in the unpublished controller layer. The offline engine still has one
@@ -88,13 +119,17 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. compare the two complete projections and retain exact human-readable subject identities;
-2. model coordinated release or paired-change intent without timestamp inference; and
-3. deduplicate triggers from either provider route and publish only to the configured subject roles.
+1. produce independently bound values for all four selected projections and assess their equality
+   transition without assigning either side as the authority;
+2. bind the accepted report and retain the plan, optional evidence, and replayed assessment as one
+   immutable sidecar;
+3. model coordinated release or paired-change intent without timestamp inference; and
+4. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
 Until those stages exist, these primitives prove only that trusted configuration, authenticated
-delivery selection, exact revision binding, and bounded acquisition have a closed representation.
-They do not claim that any cross-repository content has been compared or approved.
+delivery selection, exact revision binding, bounded acquisition, and the resulting comparison plan
+have a closed representation. They do not claim that any cross-repository content has been
+compared or approved.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),

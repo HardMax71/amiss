@@ -1,0 +1,60 @@
+{
+  "schema": "amiss/relation-plan-envelope",
+  "payload": {
+    "schema": "amiss/relation-plan-payload",
+    "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "relation": {
+      "identity": "relation/public-api",
+      "context_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "trigger_role": "source",
+    "projection": "sorted-rows-v1",
+    "subjects": [
+      {
+        "role": "documentation",
+        "repository": {
+          "host": "github.com",
+          "owner": "acme",
+          "name": "handbook"
+        },
+        "target": "refs/heads/main",
+        "object_format": "sha1",
+        "source": {
+          "kind": "record-set",
+          "set": "docs/public-api"
+        },
+        "base": {
+          "commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "candidate": {
+          "commit_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "tree_oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "role": "source",
+        "repository": {
+          "host": "github.com",
+          "owner": "acme",
+          "name": "service"
+        },
+        "target": "refs/heads/main",
+        "object_format": "sha256",
+        "source": {
+          "kind": "record-set",
+          "set": "rust/public-api"
+        },
+        "base": {
+          "commit_oid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "tree_oid": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "candidate": {
+          "commit_oid": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "tree_oid": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      }
+    ]
+  },
+  "payload_digest": "sha256:2b71efd44feb67db471ab34ec88d0bf0b0b605f69804d9066749272297bb6c2e"
+}

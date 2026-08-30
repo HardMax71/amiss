@@ -12,6 +12,7 @@ pub mod locale;
 pub mod manifest;
 pub mod model;
 pub mod publication;
+pub mod relation;
 pub mod report;
 pub mod requests;
 pub mod resolution;
