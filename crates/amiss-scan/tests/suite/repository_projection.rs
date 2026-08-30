@@ -129,6 +129,97 @@ fn complete_tree_paths_project_sorted_rows_or_their_decimal_count() {
 }
 
 #[test]
+fn exact_count_includes_selected_paths_that_cannot_form_rows() {
+    let mut pair = amiss_fixtures::commit_pair(&[("README.md", "base\n")], &[]).unwrap();
+    let blob = amiss_fixtures::loose_object(pair.root(), "blob", b"value").unwrap();
+    let docs = amiss_fixtures::tree_object(
+        pair.root(),
+        &[("100644", b"a.md", &blob), ("100644", b"bad\xff.md", &blob)],
+    )
+    .unwrap();
+    pair.candidate_tree = amiss_fixtures::tree_object(
+        pair.root(),
+        &[("40000", b"docs", &docs), ("100644", b"README.md", &blob)],
+    )
+    .unwrap();
+    let source = ProjectionSource::TreePaths(TreePathSelection {
+        root: path("docs"),
+        suffix: Some(".md".to_owned()),
+        maximum_depth: 1,
+    });
+
+    let count = project(
+        &pair,
+        ProjectionKind::DecimalCountV1,
+        &source,
+        limits(2, 1_024),
+    )
+    .unwrap();
+    assert_eq!(
+        count.value,
+        Some(amiss_wire::relation::RelationProjectedValue {
+            value_digest: sha256(b"2"),
+            value_bytes: 1,
+        })
+    );
+    assert_eq!(count.records, 2);
+    assert_eq!(
+        project(
+            &pair,
+            ProjectionKind::SortedRowsV1,
+            &source,
+            limits(2, 1_024),
+        )
+        .unwrap()
+        .value,
+        None
+    );
+}
+
+#[test]
+fn refused_paths_only_hide_values_selected_from_their_own_root() {
+    let mut pair = amiss_fixtures::commit_pair(&[("README.md", "base\n")], &[]).unwrap();
+    let blob = amiss_fixtures::loose_object(pair.root(), "blob", b"value").unwrap();
+    let docs = amiss_fixtures::tree_object(pair.root(), &[("100644", b"a.md", &blob)]).unwrap();
+    let oversized = vec![b'x'; 4_097];
+    pair.candidate_tree = amiss_fixtures::tree_object(
+        pair.root(),
+        &[("40000", b"docs", &docs), ("100644", &oversized, &blob)],
+    )
+    .unwrap();
+    let source = ProjectionSource::TreePaths(TreePathSelection {
+        root: path("docs"),
+        suffix: Some(".md".to_owned()),
+        maximum_depth: 1,
+    });
+
+    for projection in [ProjectionKind::SortedRowsV1, ProjectionKind::DecimalCountV1] {
+        assert!(
+            project(&pair, projection, &source, limits(1, 1_024))
+                .unwrap()
+                .value
+                .is_some()
+        );
+    }
+
+    let incomplete_docs = amiss_fixtures::tree_object(
+        pair.root(),
+        &[("100644", b"a.md", &blob), ("100644", &oversized, &blob)],
+    )
+    .unwrap();
+    pair.candidate_tree =
+        amiss_fixtures::tree_object(pair.root(), &[("40000", b"docs", &incomplete_docs)]).unwrap();
+    for projection in [ProjectionKind::SortedRowsV1, ProjectionKind::DecimalCountV1] {
+        assert_eq!(
+            project(&pair, projection, &source, limits(1, 1_024))
+                .unwrap()
+                .value,
+            None
+        );
+    }
+}
+
+#[test]
 fn unavailable_repository_sources_and_external_record_sets_stay_null() {
     let pair = amiss_fixtures::commit_pair(
         &[("README.md", "base\n")],

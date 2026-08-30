@@ -56,17 +56,27 @@ pub fn project_repository(
             bytes: 0,
         });
     }
+    let selected_root = if let ProjectionSource::TreePaths(selection) = request.source {
+        Some(selection.root.as_str().as_bytes())
+    } else {
+        None
+    };
+    let mut selection_complete = true;
     let discovery = discover_walk(
         request.repository,
         request.git,
         request.tree,
-        WalkMode::Entries,
+        WalkMode::Entries {
+            selection: selected_root.map(|root| (root, &mut selection_complete)),
+        },
     )?;
     match request.source {
         ProjectionSource::BlobLines(_) | ProjectionSource::NamedRegion(_) => {
             project_blob(&mut request, &discovery)
         }
-        ProjectionSource::TreePaths(selection) => project_tree(&request, &discovery, selection),
+        ProjectionSource::TreePaths(selection) => {
+            project_tree(&request, &discovery, selection, selection_complete)
+        }
         ProjectionSource::RecordValue(_) | ProjectionSource::RecordSet(_) => Err(Error::Internal),
     }
 }
@@ -155,9 +165,13 @@ fn project_tree(
     request: &RepositoryProjectionRequest<'_>,
     discovery: &SnapshotDiscovery,
     selection: &amiss_wire::controls::TreePathSelection,
+    selection_complete: bool,
 ) -> Result<RepositoryProjectionOutcome, Error> {
-    if selection_has_path_defect(discovery, selection) {
+    if !selection_complete {
         return Ok(unavailable(0, 0));
+    }
+    if request.projection == ProjectionKind::CodeTextV1 {
+        return Err(Error::Internal);
     }
     let paths = match inventory::selected_paths(discovery, selection) {
         Ok(paths) => paths,
@@ -165,7 +179,7 @@ fn project_tree(
     };
     let mut records = 0_u64;
     let mut selected_bytes = 0_u64;
-    let mut rows = Vec::new();
+    let mut rows = (request.projection == ProjectionKind::SortedRowsV1).then(Vec::new);
     for path in paths {
         records = records.saturating_add(1);
         within(
@@ -180,36 +194,34 @@ fn project_tree(
             request.limits.bytes,
             ResourceName::AggregateProjectionSelectedBytesPerSnapshot,
         )?;
-        let Ok(row) = std::str::from_utf8(path) else {
-            return Ok(unavailable(records, selected_bytes));
-        };
-        if row.chars().any(char::is_control) {
-            return Ok(unavailable(records, selected_bytes));
+        if let Some(rows) = &mut rows {
+            let Ok(row) = std::str::from_utf8(path) else {
+                return Ok(unavailable(records, selected_bytes));
+            };
+            if row.chars().any(char::is_control) {
+                return Ok(unavailable(records, selected_bytes));
+            }
+            rows.push(row);
         }
-        rows.push(row);
     }
 
-    let (digest, projected_bytes) = match request.projection {
-        ProjectionKind::SortedRowsV1 => {
-            let projected_bytes = inventory::projected_bytes(&rows);
-            let digest = sha256_stream(|write| {
-                for (index, row) in rows.iter().enumerate() {
-                    if index != 0 {
-                        write(b"\n");
-                    }
-                    write(row.as_bytes());
+    let (digest, projected_bytes) = if let Some(rows) = rows {
+        let projected_bytes = inventory::projected_bytes(&rows);
+        let digest = sha256_stream(|write| {
+            for (index, row) in rows.iter().enumerate() {
+                if index != 0 {
+                    write(b"\n");
                 }
-            });
-            (digest, projected_bytes)
-        }
-        ProjectionKind::DecimalCountV1 => {
-            let count = records.to_string();
-            (
-                sha256(count.as_bytes()),
-                u64::try_from(count.len()).unwrap_or(u64::MAX),
-            )
-        }
-        ProjectionKind::CodeTextV1 => return Err(Error::Internal),
+                write(row.as_bytes());
+            }
+        });
+        (digest, projected_bytes)
+    } else {
+        let count = records.to_string();
+        (
+            sha256(count.as_bytes()),
+            u64::try_from(count.len()).unwrap_or(u64::MAX),
+        )
     };
     within(
         projected_bytes,
@@ -223,22 +235,6 @@ fn project_tree(
         }),
         records,
         bytes: selected_bytes.max(projected_bytes),
-    })
-}
-
-fn selection_has_path_defect(
-    discovery: &SnapshotDiscovery,
-    selection: &amiss_wire::controls::TreePathSelection,
-) -> bool {
-    let root = selection.root.as_str().as_bytes();
-    discovery.path_defects.iter().any(|defect| {
-        let Some(raw) = &defect.raw else {
-            return true;
-        };
-        raw == root
-            || raw
-                .strip_prefix(root)
-                .is_some_and(|relative| relative.starts_with(b"/"))
     })
 }
 
