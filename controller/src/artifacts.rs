@@ -54,7 +54,19 @@ pub struct PublicationAuditReference {
     pub audit: PublicationAuditDigests,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    strum::AsRefStr,
+    strum::EnumIter,
+    strum::EnumString,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ArtifactComponent {
     Report,
     Semantic,

@@ -163,7 +163,7 @@ async fn read(
     let Ok(_permit) = Arc::clone(&endpoint.permits).try_acquire_owned() else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    let Some(component) = artifact_component(&component) else {
+    let Ok(component) = component.parse::<ArtifactComponent>() else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let store = Arc::clone(&endpoint.store);
@@ -200,20 +200,6 @@ fn artifact_response(bytes: Vec<u8>) -> Response {
         HeaderValue::from_static("nosniff"),
     );
     response
-}
-
-fn artifact_component(raw: &str) -> Option<ArtifactComponent> {
-    match raw {
-        "report" => Some(ArtifactComponent::Report),
-        "semantic" => Some(ArtifactComponent::Semantic),
-        "plan" => Some(ArtifactComponent::Plan),
-        "evidence" => Some(ArtifactComponent::Evidence),
-        "assessment" => Some(ArtifactComponent::Assessment),
-        "publication-plan" => Some(ArtifactComponent::PublicationPlan),
-        "publication-evidence" => Some(ArtifactComponent::PublicationEvidence),
-        "publication-assessment" => Some(ArtifactComponent::PublicationAssessment),
-        _ => None,
-    }
 }
 
 fn bounded_headers(headers: &HeaderMap, endpoint: &ArtifactEndpoint) -> bool {
