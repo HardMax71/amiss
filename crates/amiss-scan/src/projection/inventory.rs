@@ -45,7 +45,7 @@ fn preview_row(
     Ok(())
 }
 
-fn selected_paths<'a>(
+pub(super) fn selected_paths<'a>(
     discovery: &'a SnapshotDiscovery,
     selection: &'a TreePathSelection,
 ) -> Result<impl Iterator<Item = &'a [u8]> + 'a, DriftReason> {
@@ -89,7 +89,7 @@ fn selected_paths<'a>(
         }))
 }
 
-fn projected_bytes(rows: &[&str]) -> u64 {
+pub(super) fn projected_bytes(rows: &[&str]) -> u64 {
     let separators = rows.len().saturating_sub(1);
     rows.iter().fold(
         u64::try_from(separators).unwrap_or(u64::MAX),

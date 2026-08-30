@@ -1,6 +1,6 @@
 use amiss_wire::ExitClass;
 use amiss_wire::de::{self, Error as DecodeError, ErrorKind as DecodeErrorKind, Obj};
-use amiss_wire::digest::{hb, hb_stream, hj};
+use amiss_wire::digest::{hb, hb_stream, hj, sha256, sha256_stream};
 use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
 
 #[expect(clippy::unwrap_used, reason = "test helper on inputs that must fail")]
@@ -177,6 +177,14 @@ fn streamed_byte_digests_are_the_digest_of_the_concatenated_bytes() {
             write(b"two");
         }),
         hb("amiss/a", b"one\ntwo")
+    );
+    assert_eq!(
+        sha256_stream(|write| {
+            write(b"one");
+            write(b"\n");
+            write(b"two");
+        }),
+        sha256(b"one\ntwo")
     );
 }
 

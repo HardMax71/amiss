@@ -27,7 +27,7 @@ mod site;
 mod syntax;
 mod transclusion;
 
-pub(crate) use line::safe_line_number;
+pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_line_bytes};
 
 use anchor::fragment_resolution;
 use content::{CachedContent, read_target};

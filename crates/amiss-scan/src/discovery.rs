@@ -303,7 +303,16 @@ pub fn discover(
     includes: &Includes,
     root_tree: &Oid,
 ) -> Result<SnapshotDiscovery, Error> {
-    discover_walk(repo, git, scan, includes, root_tree, None)
+    discover_walk(
+        repo,
+        git,
+        root_tree,
+        WalkMode::Documents {
+            scan,
+            includes,
+            scope: None,
+        },
+    )
 }
 
 /// Discovery restricted to an exact document set: the full tree walk, entry
@@ -322,22 +331,33 @@ pub(crate) fn discover_scoped(
     root_tree: &Oid,
     scope: &BTreeSet<RepoPath>,
 ) -> Result<SnapshotDiscovery, Error> {
-    discover_walk(repo, git, scan, includes, root_tree, Some(scope))
+    discover_walk(
+        repo,
+        git,
+        root_tree,
+        WalkMode::Documents {
+            scan,
+            includes,
+            scope: Some(scope),
+        },
+    )
 }
 
-fn discover_walk(
+pub(crate) enum WalkMode<'a> {
+    Entries,
+    Documents {
+        scan: &'a mut ScanResources,
+        includes: &'a Includes,
+        scope: Option<&'a BTreeSet<RepoPath>>,
+    },
+}
+
+pub(crate) fn discover_walk(
     repo: &Repository,
     git: &mut GitResources,
-    scan: &mut ScanResources,
-    includes: &Includes,
     root_tree: &Oid,
-    scope: Option<&BTreeSet<RepoPath>>,
+    mut mode: WalkMode<'_>,
 ) -> Result<SnapshotDiscovery, Error> {
-    let context = DocumentContext {
-        repo,
-        includes,
-        scope,
-    };
     let mut discovery = empty_discovery();
     let root = repo.read_expected(git, root_tree, ObjectKind::Tree)?;
     let mut frames = vec![Frame {
@@ -383,7 +403,21 @@ fn discover_walk(
             continue;
         }
 
-        record_document(&context, git, scan, &mut discovery, path, &entry)?;
+        match &mut mode {
+            WalkMode::Entries => {}
+            WalkMode::Documents {
+                scan,
+                includes,
+                scope,
+            } => {
+                let context = DocumentContext {
+                    repo,
+                    includes,
+                    scope: *scope,
+                };
+                record_document(&context, git, scan, &mut discovery, path, &entry)?;
+            }
+        }
     }
     Ok(discovery)
 }

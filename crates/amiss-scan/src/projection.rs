@@ -13,6 +13,12 @@ use crate::scan::{SemanticCodeSink, SpanDisplay};
 use crate::semantic::RecordSet;
 
 mod inventory;
+mod repository;
+
+pub use repository::{
+    RepositoryProjectionLimits, RepositoryProjectionOutcome, RepositoryProjectionRequest,
+    project_repository,
+};
 
 pub(crate) const CODE_TEXT_SOURCE_DOMAIN: &str = "amiss/scanner-code-text-source";
 
