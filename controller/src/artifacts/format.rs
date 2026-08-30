@@ -156,10 +156,14 @@ impl Record {
                 .is_none_or(|_assessment| self.plan.is_some() && self.evidence.is_some());
         let sidecar_valid = match (&self.publication_audit, &self.relation_audit) {
             (None, None) => true,
-            (Some(audit), None) => {
-                valid_sidecar::<PublicationVerdict>(audit, PUBLICATION_DOCUMENT_BYTES)
+            (Some(audit), None) => valid_sidecar(
+                audit,
+                PUBLICATION_DOCUMENT_BYTES,
+                &PublicationVerdict::Unproven,
+            ),
+            (None, Some(audit)) => {
+                valid_sidecar(audit, RELATION_DOCUMENT_BYTES, &RelationVerdict::Unproven)
             }
-            (None, Some(audit)) => valid_sidecar::<RelationVerdict>(audit, RELATION_DOCUMENT_BYTES),
             (Some(_publication), Some(_relation)) => false,
         };
         let has_sidecar = self.publication_audit.is_some() || self.relation_audit.is_some();
@@ -297,9 +301,9 @@ impl Record {
     }
 }
 
-fn valid_sidecar<V>(audit: &SidecarAudit, maximum: u64) -> bool
+fn valid_sidecar<V>(audit: &SidecarAudit, maximum: u64, unproven: &V) -> bool
 where
-    V: std::str::FromStr,
+    V: std::str::FromStr + PartialEq,
 {
     audit.plan.valid()
         && audit.plan.length <= maximum
@@ -309,8 +313,10 @@ where
             .is_none_or(|blob| blob.valid() && blob.length <= maximum)
         && audit.assessment.valid()
         && audit.assessment.length <= maximum
-        && audit.verdict.parse::<V>().is_ok()
-        && (audit.verdict == "unproven" || audit.evidence.is_some())
+        && audit
+            .verdict
+            .parse::<V>()
+            .is_ok_and(|verdict| &verdict == unproven || audit.evidence.is_some())
 }
 
 #[derive(Serialize, Deserialize)]

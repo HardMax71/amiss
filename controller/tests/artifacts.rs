@@ -124,7 +124,7 @@ fn semantic_inputs_survive_restart_under_the_report_binding() {
 }
 
 #[test]
-fn publication_audits_survive_restart_with_optional_evidence_exact() {
+fn audits_survive_restart_with_optional_evidence_exact() {
     let root = tempfile::tempdir().unwrap();
     let clock = TestClock::at(1_000);
     let controller_clock: Arc<dyn ControllerClock> = clock.clone();
@@ -133,62 +133,85 @@ fn publication_audits_survive_restart_with_optional_evidence_exact() {
             .unwrap();
     let mut retained = Vec::new();
 
-    for (name, with_evidence) in [("matched", true), ("unproven", false)] {
-        let fixture = publication_audit(with_evidence).unwrap();
-        let bundle = PublicationAuditBundle {
-            report: &fixture.report,
-            plan: &fixture.plan,
-            evidence: fixture.evidence.as_deref(),
-            assessment: &fixture.assessment,
+    for (mode, with_evidence) in [("evidence", true), ("unproven", false)] {
+        let publication = publication_audit(with_evidence).unwrap();
+        let publication_bundle = PublicationAuditBundle {
+            report: &publication.report,
+            plan: &publication.plan,
+            evidence: publication.evidence.as_deref(),
+            assessment: &publication.assessment,
         };
-        let evaluation =
-            ControllerEvaluationId::new(format!("evaluation/publication/{name}")).unwrap();
-        let expected = validate_publication_audit(bundle).unwrap();
-        let reference = store
-            .retain_audit(&evaluation, ArtifactAuditBundle::Publication(bundle))
-            .unwrap();
+        let relation = relation_audit(with_evidence).unwrap();
+        let relation_bundle = RelationAuditBundle {
+            transition: &relation.transition,
+            report: &relation.report,
+            plan: &relation.plan,
+            evidence: relation.evidence.as_deref(),
+            assessment: &relation.assessment,
+        };
 
-        assert_eq!(reference.audit, ArtifactAuditDigests::Publication(expected));
-        assert_eq!(
-            store
-                .retain_audit(&evaluation, ArtifactAuditBundle::Publication(bundle))
-                .unwrap(),
-            reference
-        );
-        assert_eq!(
-            store
-                .read(&reference.artifact.id, ArtifactComponent::PublicationPlan)
-                .unwrap(),
-            fixture.plan
-        );
-        assert_eq!(
-            store
-                .read(
-                    &reference.artifact.id,
-                    ArtifactComponent::PublicationAssessment,
-                )
-                .unwrap(),
-            fixture.assessment
-        );
-        match fixture.evidence {
-            Some(evidence) => assert_eq!(
-                store
-                    .read(
-                        &reference.artifact.id,
-                        ArtifactComponent::PublicationEvidence,
-                    )
-                    .unwrap(),
-                evidence
-            ),
-            None => assert!(matches!(
-                store.read(
-                    &reference.artifact.id,
-                    ArtifactComponent::PublicationEvidence,
+        for (kind, bundle, expected, components) in [
+            (
+                "publication",
+                ArtifactAuditBundle::Publication(publication_bundle),
+                ArtifactAuditDigests::Publication(
+                    validate_publication_audit(publication_bundle).unwrap(),
                 ),
-                Err(ArtifactError::NotFound)
-            )),
+                [
+                    (
+                        ArtifactComponent::PublicationPlan,
+                        Some(publication.plan.as_slice()),
+                    ),
+                    (
+                        ArtifactComponent::PublicationEvidence,
+                        publication.evidence.as_deref(),
+                    ),
+                    (
+                        ArtifactComponent::PublicationAssessment,
+                        Some(publication.assessment.as_slice()),
+                    ),
+                ],
+            ),
+            (
+                "relation",
+                ArtifactAuditBundle::Relation(relation_bundle),
+                ArtifactAuditDigests::Relation(validate_relation_audit(relation_bundle).unwrap()),
+                [
+                    (
+                        ArtifactComponent::RelationPlan,
+                        Some(relation.plan.as_slice()),
+                    ),
+                    (
+                        ArtifactComponent::RelationEvidence,
+                        relation.evidence.as_deref(),
+                    ),
+                    (
+                        ArtifactComponent::RelationAssessment,
+                        Some(relation.assessment.as_slice()),
+                    ),
+                ],
+            ),
+        ] {
+            let evaluation =
+                ControllerEvaluationId::new(format!("evaluation/{kind}/{mode}")).unwrap();
+            let reference = store.retain_audit(&evaluation, bundle).unwrap();
+
+            assert_eq!(reference.audit, expected);
+            assert_eq!(store.retain_audit(&evaluation, bundle).unwrap(), reference);
+            for (component, expected) in components {
+                match expected {
+                    Some(expected) => assert_eq!(
+                        store.read(&reference.artifact.id, component).unwrap(),
+                        expected
+                    ),
+                    None => assert!(matches!(
+                        store.read(&reference.artifact.id, component),
+                        Err(ArtifactError::NotFound)
+                    )),
+                }
+            }
+            retained.push((evaluation, reference));
         }
-        retained.push((evaluation, reference));
     }
     drop(store);
 
@@ -204,84 +227,48 @@ fn publication_audits_survive_restart_with_optional_evidence_exact() {
 }
 
 #[test]
-fn a_relation_audit_survives_restart_under_its_transition_binding() {
-    let root = tempfile::tempdir().unwrap();
-    let clock = TestClock::at(1_000);
-    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
-    let store =
-        FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
-            .unwrap();
-    let fixture = relation_audit(true).unwrap();
-    let bundle = RelationAuditBundle {
-        transition: &fixture.transition,
-        report: &fixture.report,
-        plan: &fixture.plan,
-        evidence: fixture.evidence.as_deref(),
-        assessment: &fixture.assessment,
-    };
-    let evaluation = ControllerEvaluationId::new("evaluation/relation".to_owned()).unwrap();
-    let expected = validate_relation_audit(bundle).unwrap();
-    let reference = store
-        .retain_audit(&evaluation, ArtifactAuditBundle::Relation(bundle))
-        .unwrap();
-
-    assert_eq!(reference.audit, ArtifactAuditDigests::Relation(expected));
-    assert_eq!(
-        store
-            .retain_audit(&evaluation, ArtifactAuditBundle::Relation(bundle))
-            .unwrap(),
-        reference
-    );
-    for (component, expected) in [
-        (ArtifactComponent::RelationPlan, fixture.plan.as_slice()),
-        (
-            ArtifactComponent::RelationEvidence,
-            fixture.evidence.as_deref().unwrap(),
-        ),
-        (
-            ArtifactComponent::RelationAssessment,
-            fixture.assessment.as_slice(),
-        ),
-    ] {
-        assert_eq!(
-            store.read(&reference.artifact.id, component).unwrap(),
-            expected
-        );
-    }
-    drop(store);
-
-    let reopened =
-        FileArtifactStore::open_with_clock(root.path(), config(), controller_clock).unwrap();
-    reopened.verify(&reference.artifact).unwrap();
-    assert_eq!(
-        reopened.find(&evaluation).unwrap(),
-        Some(reference.artifact)
-    );
-}
-
-#[test]
-fn an_invalid_publication_audit_creates_no_evaluation_binding() {
+fn invalid_audits_create_no_evaluation_binding() {
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let store = FileArtifactStore::open_with_clock(root.path(), config(), clock).unwrap();
-    let evaluation =
+    let publication_evaluation =
         ControllerEvaluationId::new("evaluation/publication/invalid".to_owned()).unwrap();
-    let mut fixture = publication_audit(true).unwrap();
-    fixture.plan.push(b'x');
+    let mut publication = publication_audit(true).unwrap();
+    publication.plan.push(b'x');
 
     assert!(matches!(
         store.retain_audit(
-            &evaluation,
+            &publication_evaluation,
             ArtifactAuditBundle::Publication(PublicationAuditBundle {
-                report: &fixture.report,
-                plan: &fixture.plan,
-                evidence: fixture.evidence.as_deref(),
-                assessment: &fixture.assessment,
+                report: &publication.report,
+                plan: &publication.plan,
+                evidence: publication.evidence.as_deref(),
+                assessment: &publication.assessment,
             })
         ),
         Err(ArtifactError::Corrupt)
     ));
-    assert_eq!(store.find(&evaluation).unwrap(), None);
+
+    let relation_evaluation =
+        ControllerEvaluationId::new("evaluation/relation/invalid".to_owned()).unwrap();
+    let mut relation = relation_audit(true).unwrap();
+    relation.plan.push(b'x');
+    assert!(matches!(
+        store.retain_audit(
+            &relation_evaluation,
+            ArtifactAuditBundle::Relation(RelationAuditBundle {
+                transition: &relation.transition,
+                report: &relation.report,
+                plan: &relation.plan,
+                evidence: relation.evidence.as_deref(),
+                assessment: &relation.assessment,
+            })
+        ),
+        Err(ArtifactError::Corrupt)
+    ));
+
+    assert_eq!(store.find(&publication_evaluation).unwrap(), None);
+    assert_eq!(store.find(&relation_evaluation).unwrap(), None);
 }
 
 #[test]
