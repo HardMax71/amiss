@@ -236,6 +236,38 @@ fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource
     Ok(source)
 }
 
+fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionSource) -> bool {
+    match source {
+        ProjectionSource::BlobLines(_)
+        | ProjectionSource::NamedRegion(_)
+        | ProjectionSource::RecordValue(_) => projection == ProjectionKind::CodeTextV1,
+        ProjectionSource::TreePaths(_) | ProjectionSource::RecordSet(_) => matches!(
+            projection,
+            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
+        ),
+    }
+}
+
+/// Checks a directly constructed source through the same closed grammar and
+/// projection compatibility laws as a scanner-policy assertion.
+///
+/// # Errors
+///
+/// The source cannot reproduce itself through the canonical wire shape or is
+/// incompatible with the selected projection.
+pub fn check_projection_source(
+    projection: ProjectionKind,
+    source: &ProjectionSource,
+) -> Result<(), Error> {
+    let decoded = decode_projection_source("$", projection_source_value(source))?;
+    if decoded != *source {
+        return fail("$", ErrorKind::InvalidValue);
+    }
+    projection_source_compatible(projection, source)
+        .then_some(())
+        .ok_or_else(|| Error::new("$", ErrorKind::Inconsistent))
+}
+
 fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAssertion, Error> {
     let mut obj = Obj::new(path, value)?;
     let document = obj.required("document", decode_repo_path)?;
@@ -248,16 +280,7 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
         de::const_str(path, value, PREVIOUS_CODE_SINK)
     })?;
     let source = obj.required("source", decode_projection_source)?;
-    let compatible = match &source {
-        ProjectionSource::BlobLines(_)
-        | ProjectionSource::NamedRegion(_)
-        | ProjectionSource::RecordValue(_) => projection == ProjectionKind::CodeTextV1,
-        ProjectionSource::TreePaths(_) | ProjectionSource::RecordSet(_) => matches!(
-            projection,
-            ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
-        ),
-    };
-    if !compatible {
+    if !projection_source_compatible(projection, &source) {
         return fail(path, ErrorKind::Inconsistent);
     }
     obj.finish()?;

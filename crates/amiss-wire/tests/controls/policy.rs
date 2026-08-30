@@ -1,7 +1,9 @@
 use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource, SOURCE_MARKER_BYTES, ScannerPolicy,
+    BlobLineSelection, DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource,
+    SOURCE_MARKER_BYTES, ScannerPolicy, check_projection_source,
 };
 use amiss_wire::de::ErrorKind;
+use amiss_wire::model::RepoPathText;
 
 use crate::support::POLICY;
 
@@ -34,6 +36,31 @@ fn parses_the_policy_fixture() {
     assert_eq!(
         policy.digest(),
         ScannerPolicy::parse(POLICY).unwrap().digest()
+    );
+}
+
+#[test]
+fn directly_constructed_projection_sources_reuse_the_policy_grammar() {
+    let source = ProjectionSource::BlobLines(BlobLineSelection {
+        path: RepoPathText::new("src/lib.rs".to_owned()).unwrap(),
+        first_line: 0,
+        last_line: 1,
+    });
+    assert_eq!(
+        check_projection_source(ProjectionKind::CodeTextV1, &source)
+            .unwrap_err()
+            .kind,
+        ErrorKind::InvalidValue
+    );
+
+    let policy = ScannerPolicy::parse(POLICY).unwrap();
+    let source = &policy.projection_assertions()[0].source;
+    assert!(check_projection_source(ProjectionKind::CodeTextV1, source).is_ok());
+    assert_eq!(
+        check_projection_source(ProjectionKind::SortedRowsV1, source)
+            .unwrap_err()
+            .kind,
+        ErrorKind::Inconsistent
     );
 }
 

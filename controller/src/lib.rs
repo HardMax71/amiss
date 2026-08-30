@@ -21,6 +21,7 @@ mod orchestration;
 mod plans;
 mod provider;
 mod publication_audit;
+mod relations;
 mod spelling;
 mod webhook;
 
@@ -81,6 +82,11 @@ pub use provider::{
 };
 pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,
+};
+pub use relations::{
+    RELATION_REGISTRY_LIMIT, RelationLimits, RelationLookupError, RelationPlan, RelationRegistry,
+    RelationRegistryError, RelationStatusDestination, RelationSubject, TriggeredRelation,
+    relation_registry, relations_for_delivery,
 };
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{

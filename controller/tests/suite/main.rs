@@ -6,3 +6,4 @@ mod intersphinx;
 mod mdbook;
 mod naming;
 mod plans;
+mod relations;
