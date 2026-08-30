@@ -101,6 +101,16 @@ and does not authorize an external write: a later durable publisher must still s
 batch while proving its fence is current. Invoking either boundary from a live relation lane
 remains a separate stage.
 
+The pure staging transition models that next boundary without choosing its disk format. It accepts
+only the current pending fence and fresh two-subject head facts, replays the complete relation audit
+against the pending transition, and binds its retained artifact reference and verdict to the exact
+destination batch. A first stage returns one direct record. An unfinished exact retry returns that
+same record, a completed exact retry returns no work, and substituting any target or audit field is
+a binding conflict. Completion changes only the terminal bit and is idempotent for the exact staged
+value. The model does not prove that referenced bytes remain live or make a provider call; the
+durable outbox must perform those checks and persist the transition atomically with the current
+scheduling fence.
+
 ## Exact Git acquisition
 
 The existing strict HTTPS protocol-v2 shallow fetch now accepts a positive object and pack-byte
@@ -235,7 +245,7 @@ The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
 2. resolve both current heads through their independently configured provider credentials;
-3. atomically stage the current fence and publish only to the prepared subject roles.
+3. retain the modeled status transition atomically and publish only to the prepared subject roles.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet

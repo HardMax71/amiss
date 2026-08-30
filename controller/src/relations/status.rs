@@ -1,6 +1,10 @@
 use amiss_wire::model::{ArtifactId, Oid};
 
-use crate::LeaseFence;
+use crate::artifacts::checked_reference;
+use crate::{
+    ArtifactAuditDigests, ArtifactAuditReference, LeaseFence, RelationAuditBundle,
+    validate_relation_audit,
+};
 
 use super::{PendingRelation, RelationSubject, relation_transition};
 
@@ -26,6 +30,13 @@ pub struct RelationStatusTargets {
     pub destinations: Vec<RelationStatusTarget>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationStatusRecord {
+    pub targets: RelationStatusTargets,
+    pub audit: ArtifactAuditReference,
+    pub completed: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RelationStatusError {
     #[error("the pending relation transition is invalid")]
@@ -34,6 +45,10 @@ pub enum RelationStatusError {
     InvalidHeads,
     #[error("a selected relation subject head was superseded")]
     Superseded,
+    #[error("the relation audit does not bind the pending transition and retained artifact")]
+    InvalidAudit,
+    #[error("the relation status identity is already bound to different immutable data")]
+    BindingConflict,
 }
 
 /// Rechecks both independently refreshed subject heads and freezes only the
@@ -110,4 +125,76 @@ pub fn relation_status_targets(
         fence: pending.fence,
         destinations,
     })
+}
+
+/// Freezes one exact retained relation result before provider I/O. An exact
+/// unfinished retry returns the original record, while an exact completed
+/// retry returns `None`.
+///
+/// The current fence and independently refreshed heads are inputs because an
+/// artifact reference is not external-write authorization by itself.
+///
+/// # Errors
+///
+/// The pending fence is stale, finality changed, the full audit cannot be
+/// replayed against the pending transition and reference, or the same status
+/// identity was already staged with different immutable data.
+pub fn stage_relation_status(
+    pending: &PendingRelation,
+    current: Option<&PendingRelation>,
+    heads: [RelationSubjectHead; 2],
+    previous: Option<&RelationStatusRecord>,
+    audit: ArtifactAuditReference,
+    bundle: RelationAuditBundle<'_>,
+) -> Result<Option<RelationStatusRecord>, RelationStatusError> {
+    if current != Some(pending) {
+        return Err(RelationStatusError::Superseded);
+    }
+    let targets = relation_status_targets(pending, heads)?;
+    if bundle.transition != &pending.transition {
+        return Err(RelationStatusError::InvalidAudit);
+    }
+    let digests =
+        validate_relation_audit(bundle).map_err(|_defect| RelationStatusError::InvalidAudit)?;
+    if audit.audit != ArtifactAuditDigests::Relation(digests)
+        || checked_reference(audit.artifact.clone()).is_none()
+        || audit.artifact.report_digest != digests.report_digest
+        || audit.artifact.semantic_digest.is_some()
+        || audit.artifact.assessment_digest.is_some()
+        || audit.artifact.external_tally.is_some()
+        || audit.artifact.external_incomplete
+    {
+        return Err(RelationStatusError::InvalidAudit);
+    }
+    let requested = RelationStatusRecord {
+        targets,
+        audit,
+        completed: false,
+    };
+    let Some(previous) = previous else {
+        return Ok(Some(requested));
+    };
+    if previous.targets != requested.targets || previous.audit != requested.audit {
+        return Err(RelationStatusError::BindingConflict);
+    }
+    Ok((!previous.completed).then(|| previous.clone()))
+}
+
+/// Completes only the exact staged record and preserves an earlier successful
+/// completion across an ambiguous retry.
+///
+/// # Errors
+///
+/// The durable current record differs from the staged value supplied by the
+/// publisher.
+pub fn complete_relation_status(
+    current: &RelationStatusRecord,
+    staged: &RelationStatusRecord,
+) -> Result<RelationStatusRecord, RelationStatusError> {
+    if current.targets != staged.targets || current.audit != staged.audit {
+        return Err(RelationStatusError::BindingConflict);
+    }
+    let mut completed = current.clone();
+    completed.completed = true;
+    Ok(completed)
 }

@@ -92,10 +92,11 @@ pub use relations::{
     RELATION_SCHEDULE_BINDING_LIMIT, RelationAcquiredRoot, RelationAcquisitionError,
     RelationAdmission, RelationLimits, RelationLookupError, RelationPlan, RelationRegistry,
     RelationRegistryError, RelationScheduleError, RelationScheduleStoreError,
-    RelationStatusDestination, RelationStatusError, RelationStatusTarget, RelationStatusTargets,
-    RelationSubject, RelationSubjectHead, RelationSubjectTransition, RelationTransition,
-    TriggeredRelation, relation_registry, relation_status_targets, relation_transition,
-    relations_for_delivery, schedule_relation, verify_relation_acquired, verify_relation_plan,
+    RelationStatusDestination, RelationStatusError, RelationStatusRecord, RelationStatusTarget,
+    RelationStatusTargets, RelationSubject, RelationSubjectHead, RelationSubjectTransition,
+    RelationTransition, TriggeredRelation, complete_relation_status, relation_registry,
+    relation_status_targets, relation_transition, relations_for_delivery, schedule_relation,
+    stage_relation_status, verify_relation_acquired, verify_relation_plan,
 };
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{
