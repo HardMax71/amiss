@@ -5,12 +5,14 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use super::format::{Blob, PublicationAudit, Record, RecordInput, Root};
+use amiss_wire::digest::Digest;
+
+use super::format::{Blob, Record, RecordInput, Root, SidecarAudit};
 use super::{
-    ArtifactBundle, ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference,
-    ArtifactStoreConfig, PublicationAuditReference,
+    ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
+    ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference, ArtifactStoreConfig,
 };
-use crate::{ControllerClock, ControllerEvaluationId, PublicationAuditBundle};
+use crate::{ControllerClock, ControllerEvaluationId};
 
 pub struct FileArtifactStore {
     root: PathBuf,
@@ -31,6 +33,28 @@ struct State {
 struct StoredRecord {
     metadata: Record,
     bytes: u64,
+}
+
+#[derive(Clone, Copy)]
+struct AuditPayload<'a> {
+    report: &'a [u8],
+    plan: &'a [u8],
+    evidence: Option<&'a [u8]>,
+    assessment: &'a [u8],
+}
+
+#[derive(Clone, Copy)]
+struct AuditDigests {
+    report: Digest,
+    plan: Digest,
+    evidence: Option<Digest>,
+    assessment: Digest,
+}
+
+#[derive(Clone, Copy)]
+enum AuditKind {
+    Publication,
+    Relation,
 }
 
 impl FileArtifactStore {
@@ -56,51 +80,120 @@ impl FileArtifactStore {
         self.retain_record(evaluation_id, input, payloads)
     }
 
-    /// Retains one validated publication audit as exact immutable bytes.
+    /// Validates and retains one publication or relation audit as exact
+    /// immutable bytes.
     ///
     /// # Errors
     ///
     /// The audit is invalid, the evaluation was rebound, capacity is exhausted,
     /// or durable storage cannot be trusted.
-    pub fn retain_publication_audit(
+    pub fn retain_audit(
         &self,
         evaluation_id: &ControllerEvaluationId,
-        bundle: PublicationAuditBundle<'_>,
-    ) -> Result<PublicationAuditReference, ArtifactError> {
-        let digests = crate::validate_publication_audit(bundle)?;
+        bundle: ArtifactAuditBundle<'_>,
+    ) -> Result<ArtifactAuditReference, ArtifactError> {
+        let (payload, digests, verdict, kind, audit) = match bundle {
+            ArtifactAuditBundle::Publication(bundle) => {
+                let digests = crate::validate_publication_audit(bundle)?;
+                (
+                    AuditPayload {
+                        report: bundle.report,
+                        plan: bundle.plan,
+                        evidence: bundle.evidence,
+                        assessment: bundle.assessment,
+                    },
+                    AuditDigests {
+                        report: digests.report_digest,
+                        plan: digests.plan_digest,
+                        evidence: digests.evidence_digest,
+                        assessment: digests.assessment_digest,
+                    },
+                    digests.verdict.as_ref().to_owned(),
+                    AuditKind::Publication,
+                    ArtifactAuditDigests::Publication(digests),
+                )
+            }
+            ArtifactAuditBundle::Relation(bundle) => {
+                let digests = crate::validate_relation_audit(bundle)?;
+                (
+                    AuditPayload {
+                        report: bundle.report,
+                        plan: bundle.plan,
+                        evidence: bundle.evidence,
+                        assessment: bundle.assessment,
+                    },
+                    AuditDigests {
+                        report: digests.report_digest,
+                        plan: digests.plan_digest,
+                        evidence: digests.evidence_digest,
+                        assessment: digests.assessment_digest,
+                    },
+                    digests.verdict.as_ref().to_owned(),
+                    AuditKind::Relation,
+                    ArtifactAuditDigests::Relation(digests),
+                )
+            }
+        };
+        let artifact =
+            self.retain_validated_audit(evaluation_id, payload, digests, verdict, kind)?;
+        Ok(ArtifactAuditReference { artifact, audit })
+    }
+
+    fn retain_validated_audit(
+        &self,
+        evaluation_id: &ControllerEvaluationId,
+        payload: AuditPayload<'_>,
+        digests: AuditDigests,
+        verdict: String,
+        kind: AuditKind,
+    ) -> Result<ArtifactReference, ArtifactError> {
+        let audit = SidecarAudit {
+            plan: Blob::from_digest(payload.plan, digests.plan)?,
+            evidence: payload
+                .evidence
+                .zip(digests.evidence)
+                .map(|(bytes, digest)| Blob::from_digest(bytes, digest))
+                .transpose()?,
+            assessment: Blob::from_digest(payload.assessment, digests.assessment)?,
+            verdict,
+        };
+        let (publication_audit, relation_audit, plan, evidence, assessment) = match kind {
+            AuditKind::Publication => (
+                Some(audit),
+                None,
+                ArtifactComponent::PublicationPlan,
+                ArtifactComponent::PublicationEvidence,
+                ArtifactComponent::PublicationAssessment,
+            ),
+            AuditKind::Relation => (
+                None,
+                Some(audit),
+                ArtifactComponent::RelationPlan,
+                ArtifactComponent::RelationEvidence,
+                ArtifactComponent::RelationAssessment,
+            ),
+        };
         let input = RecordInput {
-            report: Blob::from_digest(bundle.report, digests.report_digest)?,
+            report: Blob::from_digest(payload.report, digests.report)?,
             semantic: None,
             plan: None,
             evidence: None,
             assessment: None,
             external_tally: None,
             external_incomplete: false,
-            publication_audit: Some(PublicationAudit {
-                plan: Blob::from_digest(bundle.plan, digests.plan_digest)?,
-                evidence: bundle
-                    .evidence
-                    .zip(digests.evidence_digest)
-                    .map(|(bytes, digest)| Blob::from_digest(bytes, digest))
-                    .transpose()?,
-                assessment: Blob::from_digest(bundle.assessment, digests.assessment_digest)?,
-                verdict: digests.verdict.as_ref().to_owned(),
-            }),
+            publication_audit,
+            relation_audit,
         };
-        let payloads = [
-            (ArtifactComponent::Report, Some(bundle.report)),
-            (ArtifactComponent::PublicationPlan, Some(bundle.plan)),
-            (ArtifactComponent::PublicationEvidence, bundle.evidence),
-            (
-                ArtifactComponent::PublicationAssessment,
-                Some(bundle.assessment),
-            ),
-        ];
-        let artifact = self.retain_record(evaluation_id, input, payloads)?;
-        Ok(PublicationAuditReference {
-            artifact,
-            audit: digests,
-        })
+        self.retain_record(
+            evaluation_id,
+            input,
+            [
+                (ArtifactComponent::Report, Some(payload.report)),
+                (plan, Some(payload.plan)),
+                (evidence, payload.evidence),
+                (assessment, Some(payload.assessment)),
+            ],
+        )
     }
 
     fn retain_record<const N: usize>(
@@ -359,5 +452,6 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
         external_tally: bundle.external_tally,
         external_incomplete: bundle.external_incomplete,
         publication_audit: None,
+        relation_audit: None,
     })
 }

@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactBundle, ControllerClock, ControllerEvaluationId, PublicationAuditBundle,
+    ArtifactAuditBundle, ArtifactBundle, ControllerClock, ControllerEvaluationId,
+    PublicationAuditBundle,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_service::{
@@ -207,15 +208,15 @@ async fn publication_audit_components_survive_authenticated_service_restart()
     let service = open_artifact_service(service_config()?, Arc::clone(&controller_clock))?;
     let publication = publication_audit(true)
         .ok_or_else(|| std::io::Error::other("invalid publication fixture"))?;
-    let publication_reference = service.store.retain_publication_audit(
+    let publication_reference = service.store.retain_audit(
         &ControllerEvaluationId::new("evaluation/publication-http".to_owned())
             .ok_or_else(|| std::io::Error::other("invalid fixture evaluation"))?,
-        PublicationAuditBundle {
+        ArtifactAuditBundle::Publication(PublicationAuditBundle {
             report: &publication.report,
             plan: &publication.plan,
             evidence: publication.evidence.as_deref(),
             assessment: &publication.assessment,
-        },
+        }),
     )?;
     let publication_components = [
         ("publication-plan", publication.plan.as_slice()),

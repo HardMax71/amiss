@@ -7,7 +7,10 @@ use std::time::Duration;
 use amiss_wire::digest::Digest;
 use url::Url;
 
-use crate::{ControllerEvaluationId, ExternalTally, PublicationAuditDigests};
+use crate::{
+    ControllerEvaluationId, ExternalTally, PublicationAuditBundle, PublicationAuditDigests,
+    RelationAuditBundle, RelationAuditDigests,
+};
 
 pub use store::FileArtifactStore;
 
@@ -48,10 +51,22 @@ pub struct ArtifactReference {
     pub external_incomplete: bool,
 }
 
+#[derive(Clone, Copy)]
+pub enum ArtifactAuditBundle<'a> {
+    Publication(PublicationAuditBundle<'a>),
+    Relation(RelationAuditBundle<'a>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArtifactAuditDigests {
+    Publication(PublicationAuditDigests),
+    Relation(RelationAuditDigests),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PublicationAuditReference {
+pub struct ArtifactAuditReference {
     pub artifact: ArtifactReference,
-    pub audit: PublicationAuditDigests,
+    pub audit: ArtifactAuditDigests,
 }
 
 #[derive(
@@ -76,6 +91,9 @@ pub enum ArtifactComponent {
     PublicationPlan,
     PublicationEvidence,
     PublicationAssessment,
+    RelationPlan,
+    RelationEvidence,
+    RelationAssessment,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

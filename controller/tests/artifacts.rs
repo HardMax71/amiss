@@ -2,11 +2,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactBundle, ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock,
-    ControllerEvaluationId, ExternalTally, FileArtifactStore, PublicationAuditBundle,
-    validate_publication_audit,
+    ArtifactAuditBundle, ArtifactAuditDigests, ArtifactBundle, ArtifactComponent, ArtifactError,
+    ArtifactStoreConfig, ControllerClock, ControllerEvaluationId, ExternalTally, FileArtifactStore,
+    PublicationAuditBundle, RelationAuditBundle, validate_publication_audit,
+    validate_relation_audit,
 };
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_controller_fixtures::relation::relation_audit;
 use amiss_controller_fixtures::semantic::semantic_input_artifact;
 use amiss_fixtures::publication_audit;
 use amiss_wire::digest::sha256;
@@ -142,11 +144,15 @@ fn publication_audits_survive_restart_with_optional_evidence_exact() {
         let evaluation =
             ControllerEvaluationId::new(format!("evaluation/publication/{name}")).unwrap();
         let expected = validate_publication_audit(bundle).unwrap();
-        let reference = store.retain_publication_audit(&evaluation, bundle).unwrap();
+        let reference = store
+            .retain_audit(&evaluation, ArtifactAuditBundle::Publication(bundle))
+            .unwrap();
 
-        assert_eq!(reference.audit, expected);
+        assert_eq!(reference.audit, ArtifactAuditDigests::Publication(expected));
         assert_eq!(
-            store.retain_publication_audit(&evaluation, bundle).unwrap(),
+            store
+                .retain_audit(&evaluation, ArtifactAuditBundle::Publication(bundle))
+                .unwrap(),
             reference
         );
         assert_eq!(
@@ -198,6 +204,62 @@ fn publication_audits_survive_restart_with_optional_evidence_exact() {
 }
 
 #[test]
+fn a_relation_audit_survives_restart_under_its_transition_binding() {
+    let root = tempfile::tempdir().unwrap();
+    let clock = TestClock::at(1_000);
+    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
+    let store =
+        FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
+            .unwrap();
+    let fixture = relation_audit(true).unwrap();
+    let bundle = RelationAuditBundle {
+        transition: &fixture.transition,
+        report: &fixture.report,
+        plan: &fixture.plan,
+        evidence: fixture.evidence.as_deref(),
+        assessment: &fixture.assessment,
+    };
+    let evaluation = ControllerEvaluationId::new("evaluation/relation".to_owned()).unwrap();
+    let expected = validate_relation_audit(bundle).unwrap();
+    let reference = store
+        .retain_audit(&evaluation, ArtifactAuditBundle::Relation(bundle))
+        .unwrap();
+
+    assert_eq!(reference.audit, ArtifactAuditDigests::Relation(expected));
+    assert_eq!(
+        store
+            .retain_audit(&evaluation, ArtifactAuditBundle::Relation(bundle))
+            .unwrap(),
+        reference
+    );
+    for (component, expected) in [
+        (ArtifactComponent::RelationPlan, fixture.plan.as_slice()),
+        (
+            ArtifactComponent::RelationEvidence,
+            fixture.evidence.as_deref().unwrap(),
+        ),
+        (
+            ArtifactComponent::RelationAssessment,
+            fixture.assessment.as_slice(),
+        ),
+    ] {
+        assert_eq!(
+            store.read(&reference.artifact.id, component).unwrap(),
+            expected
+        );
+    }
+    drop(store);
+
+    let reopened =
+        FileArtifactStore::open_with_clock(root.path(), config(), controller_clock).unwrap();
+    reopened.verify(&reference.artifact).unwrap();
+    assert_eq!(
+        reopened.find(&evaluation).unwrap(),
+        Some(reference.artifact)
+    );
+}
+
+#[test]
 fn an_invalid_publication_audit_creates_no_evaluation_binding() {
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
@@ -208,14 +270,14 @@ fn an_invalid_publication_audit_creates_no_evaluation_binding() {
     fixture.plan.push(b'x');
 
     assert!(matches!(
-        store.retain_publication_audit(
+        store.retain_audit(
             &evaluation,
-            PublicationAuditBundle {
+            ArtifactAuditBundle::Publication(PublicationAuditBundle {
                 report: &fixture.report,
                 plan: &fixture.plan,
                 evidence: fixture.evidence.as_deref(),
                 assessment: &fixture.assessment,
-            }
+            })
         ),
         Err(ArtifactError::Corrupt)
     ));
