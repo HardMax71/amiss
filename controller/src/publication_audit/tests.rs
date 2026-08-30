@@ -8,8 +8,9 @@ use amiss_wire::publication::{
     plan as write_plan,
 };
 
-use super::{PublicationAuditBundle, report_docs, validate_publication_audit};
+use super::{PublicationAuditBundle, validate_publication_audit};
 use crate::ArtifactError;
+use crate::audit_report::accepted_report;
 
 #[test]
 fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), ArtifactError> {
@@ -30,21 +31,24 @@ fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), Artif
 #[test]
 fn the_reported_candidate_identity_has_the_published_preimage() -> Result<(), ArtifactError> {
     let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
+    let report = accepted_report(&fixture.report)?;
     let parsed = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
     let payload = parsed.member("payload").ok_or(ArtifactError::Corrupt)?;
-    let docs = report_docs(payload.clone()).ok_or(ArtifactError::Corrupt)?;
     let evaluation = payload.member("evaluation").ok_or(ArtifactError::Corrupt)?;
     let candidate = evaluation
         .member("candidate")
         .ok_or(ArtifactError::Corrupt)?;
     assert_eq!(
-        docs.candidate_identity_digest,
+        report.candidate_identity_digest,
         Digest::from_wire(
             "sha256:8c8f4c8087edf216675ffbfc5a75a6c67dc48103be696b74174758a3e5db187a"
         )
         .ok_or(ArtifactError::Corrupt)?
     );
-    assert_eq!(candidate.text("commit_oid"), Some(docs.commit.as_str()));
+    assert_eq!(
+        candidate.text("commit_oid"),
+        Some(report.candidate.commit.as_str())
+    );
     Ok(())
 }
 

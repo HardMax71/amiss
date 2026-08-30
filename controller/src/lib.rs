@@ -5,6 +5,7 @@ mod acquisition;
 mod artifacts;
 #[doc(hidden)]
 pub mod atomic_write_recovery;
+mod audit_report;
 mod bootstrap_job;
 mod bootstrap_result;
 mod bootstrap_runner;
