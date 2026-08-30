@@ -10,6 +10,7 @@ mod model;
 mod paths;
 mod publication;
 mod record;
+mod relation;
 mod report;
 mod requests;
 mod resolution;

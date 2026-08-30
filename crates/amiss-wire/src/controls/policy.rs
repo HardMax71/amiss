@@ -259,13 +259,23 @@ pub fn check_projection_source(
     projection: ProjectionKind,
     source: &ProjectionSource,
 ) -> Result<(), Error> {
-    let decoded = decode_projection_source("$", projection_source_value(source))?;
+    let decoded =
+        decode_checked_projection_source("$", projection_source_value(source), projection)?;
     if decoded != *source {
         return fail("$", ErrorKind::InvalidValue);
     }
-    projection_source_compatible(projection, source)
-        .then_some(())
-        .ok_or_else(|| Error::new("$", ErrorKind::Inconsistent))
+    Ok(())
+}
+
+pub(crate) fn decode_checked_projection_source(
+    path: &str,
+    value: Value,
+    projection: ProjectionKind,
+) -> Result<ProjectionSource, Error> {
+    let source = decode_projection_source(path, value)?;
+    projection_source_compatible(projection, &source)
+        .then_some(source)
+        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
 }
 
 fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAssertion, Error> {

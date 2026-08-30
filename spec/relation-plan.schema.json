@@ -1,0 +1,442 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:relation-plan",
+  "title": "Amiss cross-repository relation plan",
+  "description": "One operator-owned, report-bound plan for comparing the same exact projection kind across two independently acquired repository subjects. It binds selection and four immutable Git snapshots; it does not assert that projection evidence exists or that either side is correct.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/relation-plan-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/PlanPayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the relation-plan payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "Repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "name", "owner"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/]+$"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?(?:/[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?$",
+          "not": {
+            "enum": [".", ".."]
+          }
+        }
+      }
+    },
+    "BranchRef": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 266,
+      "pattern": "^refs/heads/(?!/)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@\\{)(?![\\s\\S]*[~^:?*\\[\\\\\\u0000-\\u001f\\u007f ])(?!\\.)(?![\\s\\S]*/\\.)(?![^/]*\\.lock(?:/|$))(?![\\s\\S]*/[^/]*\\.lock(?:/|$))(?![\\s\\S]*//)(?![\\s\\S]*/$)(?![\\s\\S]*\\.$).+$"
+    },
+    "RepoPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![\\s\\S]*//)(?![\\s\\S]*(?:^|/)(?:\\.{1,2})(?:/|$))(?![\\s\\S]*[\\\\\\u0000])[^/]+(?:/[^/]+)*$"
+    },
+    "ExactSuffix": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^\\.[^/\\\\\\u0000]+$"
+    },
+    "PositiveSafeUInt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "RecordSetName": {
+      "$ref": "#/$defs/ArtifactId"
+    },
+    "RecordKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "BlobLineSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_line", "kind", "last_line", "path"],
+      "properties": {
+        "kind": {
+          "const": "blob-lines"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "first_line": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        },
+        "last_line": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        }
+      }
+    },
+    "SourceMarker": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[ -~]*[!-~][ -~]*$"
+    },
+    "NamedRegionSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["end_marker", "kind", "path", "start_marker"],
+      "properties": {
+        "kind": {
+          "const": "named-region"
+        },
+        "path": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "start_marker": {
+          "$ref": "#/$defs/SourceMarker"
+        },
+        "end_marker": {
+          "$ref": "#/$defs/SourceMarker"
+        }
+      }
+    },
+    "TreePathSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "maximum_depth", "root"],
+      "properties": {
+        "kind": {
+          "const": "tree-paths"
+        },
+        "root": {
+          "$ref": "#/$defs/RepoPath"
+        },
+        "suffix": {
+          "$ref": "#/$defs/ExactSuffix"
+        },
+        "maximum_depth": {
+          "$ref": "#/$defs/PositiveSafeUInt"
+        }
+      }
+    },
+    "RecordValueSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "kind", "set"],
+      "properties": {
+        "kind": {
+          "const": "record-value"
+        },
+        "set": {
+          "$ref": "#/$defs/RecordSetName"
+        },
+        "key": {
+          "$ref": "#/$defs/RecordKey"
+        }
+      }
+    },
+    "RecordSetSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "set"],
+      "properties": {
+        "kind": {
+          "const": "record-set"
+        },
+        "set": {
+          "$ref": "#/$defs/RecordSetName"
+        }
+      }
+    },
+    "CodeTextSource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/BlobLineSelection"
+        },
+        {
+          "$ref": "#/$defs/NamedRegionSelection"
+        },
+        {
+          "$ref": "#/$defs/RecordValueSelection"
+        }
+      ]
+    },
+    "InventorySource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TreePathSelection"
+        },
+        {
+          "$ref": "#/$defs/RecordSetSelection"
+        }
+      ]
+    },
+    "ProjectionSource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CodeTextSource"
+        },
+        {
+          "$ref": "#/$defs/InventorySource"
+        }
+      ]
+    },
+    "Snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit_oid", "tree_oid"],
+      "properties": {
+        "commit_oid": {
+          "type": "string"
+        },
+        "tree_oid": {
+          "type": "string"
+        }
+      }
+    },
+    "Sha1Snapshot": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Snapshot"
+        },
+        {
+          "properties": {
+            "commit_oid": {
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "tree_oid": {
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          }
+        }
+      ]
+    },
+    "Sha256Snapshot": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Snapshot"
+        },
+        {
+          "properties": {
+            "commit_oid": {
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "tree_oid": {
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "Subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "candidate",
+        "object_format",
+        "repository",
+        "role",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "repository": {
+          "$ref": "#/$defs/Repository"
+        },
+        "target": {
+          "$ref": "#/$defs/BranchRef"
+        },
+        "object_format": {
+          "enum": ["sha1", "sha256"]
+        },
+        "source": {
+          "$ref": "#/$defs/ProjectionSource"
+        },
+        "base": {
+          "$ref": "#/$defs/Snapshot"
+        },
+        "candidate": {
+          "$ref": "#/$defs/Snapshot"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "base": {
+                "$ref": "#/$defs/Sha1Snapshot"
+              },
+              "candidate": {
+                "$ref": "#/$defs/Sha1Snapshot"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_format": {
+                "const": "sha256"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "base": {
+                "$ref": "#/$defs/Sha256Snapshot"
+              },
+              "candidate": {
+                "$ref": "#/$defs/Sha256Snapshot"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "RelationIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity"],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "context_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "PlanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projection",
+        "relation",
+        "report_payload_digest",
+        "schema",
+        "subjects",
+        "trigger_role"
+      ],
+      "properties": {
+        "schema": {
+          "const": "amiss/relation-plan-payload"
+        },
+        "report_payload_digest": {
+          "description": "The verified scanner report whose exact triggering candidate selected this later relation audit.",
+          "$ref": "#/$defs/Digest"
+        },
+        "relation": {
+          "$ref": "#/$defs/RelationIdentity"
+        },
+        "trigger_role": {
+          "description": "The relation-local role of the report's authenticated repository subject.",
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "projection": {
+          "enum": ["code-text-v1", "decimal-count-v1", "sorted-rows-v1"]
+        },
+        "subjects": {
+          "description": "Exactly two subjects, byte-sorted and unique by role. Repository identities must differ, and trigger_role must name one row.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "x-amiss-order": ["role"],
+          "items": {
+            "$ref": "#/$defs/Subject"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "projection": {
+                "const": "code-text-v1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "subjects": {
+                "items": {
+                  "properties": {
+                    "source": {
+                      "$ref": "#/$defs/CodeTextSource"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "projection": {
+                "enum": ["decimal-count-v1", "sorted-rows-v1"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "subjects": {
+                "items": {
+                  "properties": {
+                    "source": {
+                      "$ref": "#/$defs/InventorySource"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
