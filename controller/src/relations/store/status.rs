@@ -14,6 +14,7 @@ use crate::{
 };
 
 const STATUS_BINDING_DOMAIN: &str = "amiss/controller-relation-status-binding-v1";
+const DESTINATION_BINDING_DOMAIN: &str = "amiss/controller-relation-destination-binding-v1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -23,6 +24,7 @@ pub(super) struct StoredStatus {
     pub(super) trigger_role: String,
     pub(super) fence: u64,
     pub(super) status_binding: String,
+    pub(super) destinations: Vec<String>,
     artifact_id: String,
 }
 
@@ -53,6 +55,16 @@ struct BoundDestination<'a> {
 }
 
 #[derive(Serialize)]
+struct BoundDeliveryDestination<'a> {
+    provider_namespace: &'a str,
+    provider_instance: &'a str,
+    repository_host: &'a str,
+    repository_owner: &'a str,
+    repository_name: &'a str,
+    required_status_name: &'a str,
+}
+
+#[derive(Serialize)]
 struct BoundArtifact<'a> {
     id: &'a str,
     locator: &'a str,
@@ -75,12 +87,20 @@ pub(super) fn store_status(
     if record.completed {
         return Err(RelationScheduleStoreError::Corrupt);
     }
+    let mut destinations = record
+        .targets
+        .destinations
+        .iter()
+        .map(destination_binding)
+        .collect::<Result<Vec<_>, _>>()?;
+    destinations.sort();
     let stored = StoredStatus {
         relation: record.targets.relation.as_str().to_owned(),
         coordination: record.targets.coordination.as_str().to_owned(),
         trigger_role: record.targets.trigger_role.as_str().to_owned(),
         fence: record.targets.fence.get(),
         status_binding: record_binding(record)?,
+        destinations,
         artifact_id: record.audit.artifact.id.clone(),
     };
     validate_stored_status(&stored)?;
@@ -95,11 +115,35 @@ pub(super) fn validate_stored_status(
         || ArtifactId::new(stored.trigger_role.clone()).is_none()
         || LeaseFence::new(stored.fence).is_none()
         || Digest::from_wire(&stored.status_binding).is_none()
+        || !(1..=2).contains(&stored.destinations.len())
+        || stored
+            .destinations
+            .iter()
+            .any(|destination| Digest::from_wire(destination).is_none())
+        || stored
+            .destinations
+            .windows(2)
+            .any(|pair| matches!(pair, [left, right] if left >= right))
         || !valid_artifact_id(&stored.artifact_id)
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
     Ok(())
+}
+
+pub(super) fn destination_binding(
+    target: &RelationStatusTarget,
+) -> Result<String, RelationScheduleStoreError> {
+    let bytes = serde_json::to_vec(&BoundDeliveryDestination {
+        provider_namespace: target.scope.provider.namespace.as_str(),
+        provider_instance: target.scope.provider.instance.as_str(),
+        repository_host: target.scope.repository.host(),
+        repository_owner: target.scope.repository.owner(),
+        repository_name: target.scope.repository.name(),
+        required_status_name: &target.required_status_name,
+    })
+    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    Ok(hb(DESTINATION_BINDING_DOMAIN, &bytes).to_string())
 }
 
 pub(super) fn reopen_status(
