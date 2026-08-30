@@ -139,6 +139,25 @@ impl Obj {
     }
 }
 
+pub(crate) fn closed_object<T>(
+    path: &str,
+    value: Value,
+    decode: impl FnOnce(&mut Obj) -> Result<T, Error>,
+) -> Result<T, Error> {
+    let mut object = Obj::new(path, value)?;
+    let decoded = decode(&mut object)?;
+    object.finish()?;
+    Ok(decoded)
+}
+
+pub(crate) fn decode_nullable<T>(
+    path: &str,
+    value: Value,
+    decode: impl FnOnce(&str, Value) -> Result<T, Error>,
+) -> Result<Option<T>, Error> {
+    nullable(value).map(|value| decode(path, value)).transpose()
+}
+
 /// # Errors
 ///
 /// Fails with `WrongType` when the value is not a string.

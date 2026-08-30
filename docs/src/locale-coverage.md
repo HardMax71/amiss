@@ -4,12 +4,15 @@ A repository scan can bind the exact docs candidate that approved a later locale
 cannot infer which pages a documentation generator considers equivalent across locales. Routes are
 publication outputs; they are not stable page identities. The locale coverage plan therefore names
 one independently selected inventory producer and treats every page key it will emit as opaque.
+It can also select the same immutable product-resource identity used by publication audits, without
+turning a locale version label into a release heuristic.
 
 The plan binds:
 
 - the accepted scanner report payload digest;
 - the docs repository, commit, tree, and full candidate identity;
 - one site, source locale, target locale, channel, and optional version;
+- an optional exact product resource URI and digest that both locale inventories must identify;
 - the inventory producer identity, version, and plan-owned context digest; and
 - the operator's coverage-policy identity, context digest, required-page rule, and authorized
   fallback classes and page scopes, plus whether exact target lineage is required.
@@ -17,7 +20,8 @@ The plan binds:
 Site and channel use the artifact-identity grammar. Locale and version labels use a broader bounded
 identity grammar so a producer can retain spellings such as `de-DE`; Amiss compares them exactly.
 It does not validate BCP 47, order versions, or infer fallback from a locale hierarchy. Source and
-target locale must differ.
+target locale must differ. The opaque version remains scope metadata and never substitutes for an
+immutable product resource.
 
 Page selectors have two closed forms. The coverage rule uses one selector: `all-source` means that
 every key in the future complete source inventory is required in the target inventory; `named`
@@ -37,6 +41,11 @@ target lineage. True makes missing lineage unproven and a mismatched lineage dig
 refutation. Fallback pages are excluded because their F02 origin already binds the exact current
 source resource.
 
+The optional plan product reuses publication's `PublicationResource` directly: one absolute URI
+identifies the resource and its SHA-256 digest identifies the exact bytes. Null selects no product
+alignment policy. Amiss does not derive this value from the channel, scope version, tag, timestamp,
+or similarly spelled URL.
+
 The contract intentionally contains no translation verdict or timestamp. A target page with the
 same key can prove structural coverage only. Exact lineage can prove which normalized source
 resource a target was based on; it cannot prove that the page was translated correctly, remains
@@ -51,8 +60,10 @@ content must not choose the producer context or operator policy.
 
 The matching evidence contract repeats the plan digest, docs candidate, locale scope, and producer
 context, then carries separate source and target inventories. Each inventory has its own input
-digest, completeness bit, and byte-sorted map from page key to exact resource digest. The producer
-context defines which normalized bytes those digests identify.
+digest, nullable independently observed product resource, completeness bit, and byte-sorted map
+from page key to exact resource digest. The producer context defines which normalized bytes those
+digests identify. A null product says the authenticated producer could not establish that side's
+release identity; it does not assert a mismatch.
 
 Every observed target page also carries one closed origin. `target-resource` says the producer
 observed a target-owned resource and carries either its exact `based_on_source_digest` or null when
@@ -64,6 +75,8 @@ outside the engine.
 
 Completeness belongs to each side independently. A false value preserves the pages the producer
 did observe, but absence from that inventory is not evidence that a page is absent from the locale.
+Product availability is independent of page completeness: a complete page set may still have an
+unproven product identity, and a partial page set may carry an exact product receipt.
 The two inventories may carry at most 100,000 page rows combined inside one 16 MiB document. Page
 keys are unique within each side; malformed digests, duplicate or unsorted keys, unknown fields,
 and a changed payload refuse the whole receipt.
@@ -100,12 +113,24 @@ source set is already orphaned. A target absent from a partial source set remain
 existing source-incomplete result, so the evaluator does not manufacture a lineage row without a
 current source value to compare.
 
+When the plan selects a product, the assessment compares each inventory's product independently
+with that exact planned URI and digest. The source and target fields reuse the ordinary
+`matched`/`refuted`/`unproven` verdict vocabulary. Matched means exact equality; refuted means a
+different immutable resource was observed; unproven means that inventory supplied null. A product
+mismatch is an exact refutation even if the other side is unavailable. If the plan product is null,
+both supplied product receipts are deliberately ignored and the assessment product result is null.
+This relation proves release identity only, not translation quality or deployment success; the
+producer or future publication lane must authenticate how each inventory acquired it.
+
 The assessment binds the exact evaluator, accepted report, plan, and optional evidence payload. Its
 three byte-sorted key sets name policy keys absent from source, required source keys absent from
 target, and target keys absent from source. A fourth byte-sorted set records every assessed
 fallback, and a fifth records every assessed target lineage. The document is bounded to 16 MiB and
-200,000 rows across those sets. Missing, unbound, wrong-producer, or insufficiently complete
-evidence is unproven rather than clean. The command and controller intake are not built yet.
+200,000 rows across those sets. A separate nullable product result records the source and target
+resource verdicts. `coverage.complete` remains strictly about the page comparison, so the overall
+assessment can be unproven solely because a product receipt is missing while coverage is complete.
+Missing, unbound, wrong-producer, or otherwise insufficient evidence is unproven rather than clean.
+The command and controller intake are not built yet.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),

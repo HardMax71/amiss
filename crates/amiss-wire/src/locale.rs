@@ -4,8 +4,8 @@ use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::ArtifactId;
 use crate::publication::{
-    DocsCandidate, PublicationProducer, decode_docs, decode_identity, decode_producer, docs_value,
-    producer_value,
+    DocsCandidate, PublicationProducer, PublicationResource, decode_docs, decode_identity,
+    decode_producer, decode_resource, docs_value, producer_value, resource_value,
 };
 
 mod assessment;
@@ -16,7 +16,7 @@ pub use assessment::{
     ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope,
     LocaleCoverageReason, LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus,
-    LocaleLineageResult, LocaleLineageStatus, assess, parse_assessment,
+    LocaleLineageResult, LocaleLineageStatus, LocaleProductResult, assess, parse_assessment,
 };
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
@@ -41,6 +41,7 @@ pub struct LocaleCoveragePlan {
     pub report_payload_digest: Digest,
     pub docs: DocsCandidate,
     pub scope: LocaleCoverageScope,
+    pub product: Option<PublicationResource>,
     pub producer: PublicationProducer,
     pub policy: LocaleCoveragePolicy,
 }
@@ -152,6 +153,8 @@ fn decode_plan(path: &str, value: Value) -> Result<LocaleCoveragePlan, Error> {
     })?;
     let report_payload_digest = plan.required("report_payload_digest", de::digest)?;
     let facts = decode_facts(&mut plan)?;
+    let product_path = plan.field("product");
+    let product = de::decode_nullable(&product_path, plan.take("product")?, decode_resource)?;
     let policy = plan.required("policy", |path, value| {
         let mut policy = Obj::new(path, value)?;
         let identity = policy.required("identity", decode_identity)?;
@@ -186,6 +189,7 @@ fn decode_plan(path: &str, value: Value) -> Result<LocaleCoveragePlan, Error> {
         report_payload_digest,
         docs: facts.docs,
         scope: facts.scope,
+        product,
         producer: facts.producer,
         policy,
     })
@@ -203,9 +207,11 @@ fn decode_facts(parent: &mut Obj) -> Result<LocaleCoverageFacts, Error> {
                 scope.required("target_locale", crate::semantic::decode_open_identity)?;
             let channel = scope.required("channel", decode_identity)?;
             let version_path = scope.field("version");
-            let version = de::nullable(scope.take("version")?)
-                .map(|value| crate::semantic::decode_open_identity(&version_path, value))
-                .transpose()?;
+            let version = de::decode_nullable(
+                &version_path,
+                scope.take("version")?,
+                crate::semantic::decode_open_identity,
+            )?;
             scope.finish()?;
             if source_locale == target_locale {
                 return fail(path, ErrorKind::Inconsistent);
@@ -231,6 +237,10 @@ fn plan_value(plan: &LocaleCoveragePlan) -> Value {
         ),
         ("docs", docs_value(&plan.docs)),
         ("scope", scope_value(&plan.scope)),
+        (
+            "product",
+            plan.product.as_ref().map_or(Value::Null, resource_value),
+        ),
         ("producer", producer_value(&plan.producer)),
         ("policy", policy_value(&plan.policy)),
     ])

@@ -8,8 +8,8 @@
     },
     "subject": {
       "report_payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "plan_payload_digest": "sha256:6045397e266f979cf660adc4a8ecdcee7c612bbe25858f42754712b2851a6c4f",
-      "evidence_payload_digest": "sha256:98cc1cbce225c86a79926a589fea69d16ebbf893e27ad0d180e683637d01c305"
+      "plan_payload_digest": "sha256:e45cf5a36ce67e2e4e6c857c9bb17bb728ed3a5c01c37240aafed516498f3528",
+      "evidence_payload_digest": "sha256:7e2e479231ab64adb9c11e9e05acc8cad7ec6ffeafec4d6df28e831ae54fa6f3"
     },
     "verdict": "matched",
     "reasons": [],
@@ -31,7 +31,11 @@
           "status": "current"
         }
       ]
+    },
+    "product": {
+      "source": "matched",
+      "target": "matched"
     }
   },
-  "payload_digest": "sha256:dda4e3058ad041a364cee229dc613a824eab44513ba4498b6ccc98889244d589"
+  "payload_digest": "sha256:5b6f25a7faff2cdc8394cb38e19fcc2322843f0e293008c6847b76c49cd1d0e5"
 }

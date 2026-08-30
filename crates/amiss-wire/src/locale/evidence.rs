@@ -6,7 +6,8 @@ use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::ArtifactId;
 use crate::publication::{
-    DocsCandidate, PublicationProducer, decode_identity, docs_value, producer_value,
+    DocsCandidate, PublicationProducer, PublicationResource, decode_identity, decode_resource,
+    docs_value, producer_value, resource_value,
 };
 
 use super::{LocaleCoverageScope, PAGE_KEY_BYTES, decode_facts, scope_value};
@@ -35,6 +36,7 @@ pub struct LocaleCoverageEvidence {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalePageInventory {
     pub input_digest: Digest,
+    pub product: Option<PublicationResource>,
     pub complete: bool,
     pub pages: BTreeMap<String, Digest>,
 }
@@ -42,6 +44,7 @@ pub struct LocalePageInventory {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocaleTargetInventory {
     pub input_digest: Digest,
+    pub product: Option<PublicationResource>,
     pub complete: bool,
     pub pages: BTreeMap<String, LocaleTargetPage>,
 }
@@ -65,6 +68,7 @@ pub enum LocaleTargetOrigin {
 
 struct Inventory<T> {
     input_digest: Digest,
+    product: Option<PublicationResource>,
     complete: bool,
     pages: BTreeMap<String, T>,
 }
@@ -119,6 +123,7 @@ fn decode_evidence(path: &str, value: Value) -> Result<LocaleCoverageEvidence, E
         })?;
         Ok(LocalePageInventory {
             input_digest: inventory.input_digest,
+            product: inventory.product,
             complete: inventory.complete,
             pages: inventory.pages,
         })
@@ -134,6 +139,7 @@ fn decode_evidence(path: &str, value: Value) -> Result<LocaleCoverageEvidence, E
         })?;
         Ok(LocaleTargetInventory {
             input_digest: inventory.input_digest,
+            product: inventory.product,
             complete: inventory.complete,
             pages: inventory.pages,
         })
@@ -162,6 +168,8 @@ fn decode_inventory<T>(
 ) -> Result<Inventory<T>, Error> {
     let mut inventory = Obj::new(path, value)?;
     let input_digest = inventory.required("input_digest", de::digest)?;
+    let product_path = inventory.field("product");
+    let product = de::decode_nullable(&product_path, inventory.take("product")?, decode_resource)?;
     let complete = inventory.required("complete", de::boolean)?;
     let pages = inventory.required("pages", |path, value| {
         de::sorted_map(path, value, PAGE_ITEMS_LIMIT, |path, value| {
@@ -177,6 +185,7 @@ fn decode_inventory<T>(
     inventory.finish()?;
     Ok(Inventory {
         input_digest,
+        product,
         complete,
         pages,
     })
@@ -189,9 +198,11 @@ fn decode_origin(path: &str, value: Value) -> Result<LocaleTargetOrigin, Error> 
     match kind.as_str() {
         "target-resource" => {
             let based_on_path = origin.field("based_on_source_digest");
-            let based_on_source_digest = de::nullable(origin.take("based_on_source_digest")?)
-                .map(|value| de::digest(&based_on_path, value))
-                .transpose()?;
+            let based_on_source_digest = de::decode_nullable(
+                &based_on_path,
+                origin.take("based_on_source_digest")?,
+                de::digest,
+            )?;
             origin.finish()?;
             Ok(LocaleTargetOrigin::TargetResource {
                 based_on_source_digest,
@@ -224,6 +235,7 @@ fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
             "source",
             inventory_value(
                 evidence.source.input_digest,
+                evidence.source.product.as_ref(),
                 evidence.source.complete,
                 &evidence.source.pages,
                 |key, resource_digest| {
@@ -238,6 +250,7 @@ fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
             "target",
             inventory_value(
                 evidence.target.input_digest,
+                evidence.target.product.as_ref(),
                 evidence.target.complete,
                 &evidence.target.pages,
                 |key, page| {
@@ -280,6 +293,7 @@ fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
 
 fn inventory_value<T>(
     input_digest: Digest,
+    product: Option<&PublicationResource>,
     complete: bool,
     pages: &BTreeMap<String, T>,
     encode_page: impl Fn(&str, &T) -> Value,
@@ -290,6 +304,7 @@ fn inventory_value<T>(
         .collect();
     object(vec![
         ("input_digest", text(&input_digest.to_string())),
+        ("product", product.map_or(Value::Null, resource_value)),
         ("complete", Value::Bool(complete)),
         ("pages", Value::array(pages)),
     ])

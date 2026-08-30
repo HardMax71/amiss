@@ -31,7 +31,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [The external assessment](https://hardmax71.github.io/amiss/external-assessment.html): the offline judgment of a plan against producer evidence, refuting only on proof
 - [Trusted semantic evidence](https://hardmax71.github.io/amiss/semantic-evidence.html): the bounded digest-bound envelope shared by external semantic producers without sharing their vocabularies
 - [Publication audits](https://hardmax71.github.io/amiss/publication.html): the operator-owned plan, provider-normalized receipt, and conservative offline judgment for exact docs/site/product resources
-- [Locale coverage audits](https://hardmax71.github.io/amiss/locale-coverage.html): operator-owned coverage, fallback, and optional exact target-lineage policy over independently complete page inventories, with conservative missing/orphan/provenance/current/stale/unproven assessment and no translation-quality claim
+- [Locale coverage audits](https://hardmax71.github.io/amiss/locale-coverage.html): operator-owned coverage, fallback, optional exact target lineage, and optional immutable product alignment over independent locale inventories, with conservative missing/orphan/provenance/current/stale/matched/refuted/unproven assessment and no translation-quality claim
 - [Limits and refusals](https://hardmax71.github.io/amiss/limits.html): every resource ceiling and every analysis error code with its meaning
 
 ## Trust
