@@ -8,6 +8,13 @@ use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
+mod evidence;
+
+pub use evidence::{
+    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, RelationEvidence, RelationEvidenceEnvelope,
+    RelationEvidenceSubject, RelationProjectedValue, evidence, parse_evidence,
+};
+
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/relation-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/relation-plan-payload";
 pub const RELATION_DOCUMENT_BYTES: u64 = 65_536;

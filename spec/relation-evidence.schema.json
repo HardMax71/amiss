@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:amiss:schema:relation-evidence",
+  "title": "Amiss cross-repository relation evidence",
+  "description": "One compact, plan-bound set of independently proven base and candidate projection values for two repository subjects. A null slot is explicitly unproven and carries no partial value. This document contains no relation verdict or claim that either subject is authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["payload", "payload_digest", "schema"],
+  "properties": {
+    "schema": {
+      "const": "amiss/relation-evidence-envelope"
+    },
+    "payload": {
+      "$ref": "#/$defs/EvidencePayload"
+    },
+    "payload_digest": {
+      "description": "The domain-separated digest of the canonical payload bytes under the relation-evidence payload schema identity.",
+      "$ref": "#/$defs/Digest"
+    }
+  },
+  "$defs": {
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "SafeUInt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "ProjectedValue": {
+      "description": "One complete canonical projection. value_digest is the plain SHA-256 of its exact canonical projected bytes; value_bytes is the length of those same bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_bytes", "value_digest"],
+      "properties": {
+        "value_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "value_bytes": {
+          "$ref": "#/$defs/SafeUInt"
+        }
+      }
+    },
+    "ProjectionSlot": {
+      "description": "A complete projected value, or null when this exact snapshot could not produce one. Null never proves an empty value, absence, or inequality.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ProjectedValue"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "SubjectEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "candidate", "role"],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "base": {
+          "$ref": "#/$defs/ProjectionSlot"
+        },
+        "candidate": {
+          "$ref": "#/$defs/ProjectionSlot"
+        }
+      }
+    },
+    "EvidencePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_payload_digest", "schema", "subjects"],
+      "properties": {
+        "schema": {
+          "const": "amiss/relation-evidence-payload"
+        },
+        "plan_payload_digest": {
+          "description": "The exact relation-plan payload this producer evaluated.",
+          "$ref": "#/$defs/Digest"
+        },
+        "subjects": {
+          "description": "Exactly two rows, byte-sorted and unique by role. Later assessment must bind these roles to the plan before comparing any value.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "x-amiss-order": ["role"],
+          "items": {
+            "$ref": "#/$defs/SubjectEvidence"
+          }
+        }
+      }
+    }
+  }
+}

@@ -109,6 +109,35 @@ projected value, completeness claim, alignment verdict, blame assignment, or sta
 Malformed branches, selectors, identities, object IDs, subject ordering, unknown fields, and a
 changed payload refuse the whole document.
 
+## Projection evidence
+
+A second closed 64 KiB document binds projection evidence to the exact plan payload digest. It has
+the same two byte-sorted role rows, each with independent `base` and `candidate` slots. A slot is
+either null or one complete projected value:
+
+- `value_digest` is the plain SHA-256 of the exact canonical projected bytes; and
+- `value_bytes` is the nonnegative safe-integer length of those same bytes.
+
+Null means that producer did not establish one complete value for that exact slot. It does not mean
+an empty value, a missing source, or a mismatch, and it cannot participate in an equality claim.
+There is no `complete` flag that can disagree with nullable digest fields and no partial projected
+value whose absence claims would be ambiguous. All four slots may independently remain null; a
+missing evidence document remains distinct from a present receipt that records four unproven
+attempts.
+
+The projection kind in the plan defines the canonical bytes. For `code-text-v1`, blob-line and
+named-region selections normalize CR and CRLF to LF and remove one terminal LF; record values use
+their exact UTF-8 value bytes. `sorted-rows-v1` byte-sorts the complete selected rows and joins them
+with one LF and no trailing LF. `decimal-count-v1` uses the canonical ASCII decimal item count
+without leading zeroes. The compact receipt does not copy potentially multi-megabyte values merely
+to compare them twice.
+
+The evidence reader establishes shape and payload integrity only. Repeating a plan digest is not
+producer authority, and matching role spellings are not checked until the plan and evidence are
+assessed together. Unknown fields, malformed digests or roles, reordered or repeated rows, unsafe
+byte counts, and a changed payload refuse the whole receipt. The evidence contract carries no
+verdict and never identifies which subject should change.
+
 ## Trust boundary
 
 The registry lives only in the unpublished controller layer. The offline engine still has one
@@ -119,17 +148,17 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. produce independently bound values for all four selected projections and assess their equality
-   transition without assigning either side as the authority;
+1. produce the four selected projection slots under the registered resource limits and assess their
+   equality transition without assigning either side as the authority;
 2. bind the accepted report and retain the plan, optional evidence, and replayed assessment as one
    immutable sidecar;
 3. model coordinated release or paired-change intent without timestamp inference; and
 4. deduplicate triggers from either provider route and publish only to the configured subject roles.
 
 Until those stages exist, these primitives prove only that trusted configuration, authenticated
-delivery selection, exact revision binding, bounded acquisition, and the resulting comparison plan
-have a closed representation. They do not claim that any cross-repository content has been
-compared or approved.
+delivery selection, exact revision binding, bounded acquisition, and the resulting plan/evidence
+shapes have a closed representation. They do not yet claim that any cross-repository content has
+been compared or approved.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
