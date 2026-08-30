@@ -2,7 +2,7 @@ mod binding;
 mod outbox;
 mod status;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
@@ -25,9 +25,9 @@ use crate::file_ledger::{FileLedgerError, frame};
 const LOCK_FILE: &str = ".amiss-relation-schedules.lock";
 const METADATA_FILE: &str = ".amiss-relation-schedules.root";
 const JOURNAL_FILE: &str = ".amiss-relation-schedules.journal";
-const ROOT_SCHEMA: &str = "amiss/controller-relation-journal-root-v2";
-const ENTRY_SCHEMA: &str = "amiss/controller-relation-journal-entry-v2";
-const JOURNAL_CHAIN_DOMAIN: &str = "amiss/controller-relation-journal-chain-v2";
+const ROOT_SCHEMA: &str = "amiss/controller-relation-journal-root-v3";
+const ENTRY_SCHEMA: &str = "amiss/controller-relation-journal-entry-v3";
+const JOURNAL_CHAIN_DOMAIN: &str = "amiss/controller-relation-journal-chain-v3";
 const MAX_ROOT_BYTES: u64 = 4_096;
 const MAX_ENTRY_BYTES: u64 = 16_384;
 const MAX_SMALL_ENTRY_BYTES: u64 = 4_096;
@@ -36,19 +36,19 @@ const MAX_ROOT_ENTRIES: usize = 16;
 
 const ROOT_FRAME: frame::FrameFormat = frame::define(
     b"AMISS-RELATION-JOURNAL-ROOT",
-    "amiss/controller-relation-journal-root-frame-v2",
+    "amiss/controller-relation-journal-root-frame-v3",
     MAX_ROOT_BYTES,
 );
 const ENTRY_FRAME: frame::FrameFormat = frame::define(
     b"AMISS-RELATION-JOURNAL-ENTRY",
-    "amiss/controller-relation-journal-entry-frame-v2",
+    "amiss/controller-relation-journal-entry-frame-v3",
     MAX_ENTRY_BYTES,
 );
 
 pub const RELATION_SCHEDULE_BINDING_LIMIT: u64 = 16_384;
 const MAX_JOURNAL_BYTES_PER_BINDING: u64 =
-    MAX_ENTRY_BYTES + (2 * MAX_SMALL_ENTRY_BYTES) + (3 * ENTRY_LENGTH_BYTES);
-const MAX_ACTIONS_PER_BINDING: u64 = 3;
+    MAX_ENTRY_BYTES + (4 * MAX_SMALL_ENTRY_BYTES) + (5 * ENTRY_LENGTH_BYTES);
+const MAX_ACTIONS_PER_BINDING: u64 = 5;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RelationScheduleStoreError {
@@ -64,6 +64,8 @@ pub enum RelationScheduleStoreError {
     Status(#[source] RelationStatusError),
     #[error("the retained relation audit is unavailable: {0}")]
     Artifact(#[source] crate::ArtifactError),
+    #[error("not every relation status destination has been acknowledged")]
+    DeliveryPending,
     #[error("relation schedule storage I/O failed: {0}")]
     Io(#[source] io::Error),
 }
@@ -107,6 +109,12 @@ enum JournalAction {
         work_binding: String,
         status: Box<StoredStatus>,
     },
+    Acknowledge {
+        relation: String,
+        coordination: String,
+        status_binding: String,
+        destination_binding: String,
+    },
     Complete {
         relation: String,
         coordination: String,
@@ -137,6 +145,7 @@ enum StoredStatusState {
     Staged {
         binding: String,
         status: Box<StoredStatus>,
+        acknowledged: BTreeSet<String>,
     },
     Completed {
         binding: String,
@@ -610,20 +619,65 @@ fn validate_append(
                 Ok(())
             }
         }
+        JournalAction::Acknowledge {
+            relation,
+            coordination,
+            status_binding,
+            destination_binding,
+        } => validate_status_progress(
+            state,
+            relation,
+            coordination,
+            status_binding,
+            Some(destination_binding),
+        ),
         JournalAction::Complete {
             relation,
             coordination,
             status_binding,
-        } => match state
-            .statuses
-            .get(&(relation.clone(), coordination.clone()))
-        {
-            Some(StoredStatusState::Staged { binding, .. }) if binding == status_binding => Ok(()),
-            Some(StoredStatusState::Staged { .. } | StoredStatusState::Completed { .. }) | None => {
-                Err(RelationScheduleStoreError::Corrupt)
-            }
-        },
+        } => validate_status_progress(state, relation, coordination, status_binding, None),
     }
+}
+
+fn validate_status_progress(
+    state: &State,
+    relation: &str,
+    coordination: &str,
+    status_binding: &str,
+    destination: Option<&str>,
+) -> Result<(), RelationScheduleStoreError> {
+    let Some(StoredStatusState::Staged {
+        binding,
+        status,
+        acknowledged,
+    }) = state
+        .statuses
+        .get(&(relation.to_owned(), coordination.to_owned()))
+    else {
+        return Err(RelationScheduleStoreError::Corrupt);
+    };
+    if binding != status_binding {
+        return Err(RelationScheduleStoreError::Corrupt);
+    }
+    let valid = match destination {
+        Some(destination) => {
+            status
+                .destinations
+                .binary_search_by(|stored| stored.as_str().cmp(destination))
+                .is_ok()
+                && !acknowledged.contains(destination)
+        }
+        None => {
+            status.destinations.len() == acknowledged.len()
+                && status
+                    .destinations
+                    .iter()
+                    .all(|destination| acknowledged.contains(destination))
+        }
+    };
+    valid
+        .then_some(())
+        .ok_or(RelationScheduleStoreError::Corrupt)
 }
 
 fn apply_entry(
@@ -674,9 +728,29 @@ fn apply_entry(
         JournalAction::Stage { status, .. } => {
             let key = (status.relation.clone(), status.coordination.clone());
             let binding = status.status_binding.clone();
-            state
-                .statuses
-                .insert(key, StoredStatusState::Staged { binding, status });
+            state.statuses.insert(
+                key,
+                StoredStatusState::Staged {
+                    binding,
+                    status,
+                    acknowledged: BTreeSet::new(),
+                },
+            );
+        }
+        JournalAction::Acknowledge {
+            relation,
+            coordination,
+            destination_binding,
+            ..
+        } => {
+            let Some(StoredStatusState::Staged { acknowledged, .. }) =
+                state.statuses.get_mut(&(relation, coordination))
+            else {
+                return Err(RelationScheduleStoreError::Corrupt);
+            };
+            if !acknowledged.insert(destination_binding) {
+                return Err(RelationScheduleStoreError::Corrupt);
+            }
         }
         JournalAction::Complete {
             relation,
@@ -773,6 +847,17 @@ fn validate_entry(entry: &JournalEntry) -> Result<(), RelationScheduleStoreError
                 && Digest::from_wire(work_binding).is_some()
                 && validate_stored_status(status).is_ok()
         }
+        JournalAction::Acknowledge {
+            relation,
+            coordination,
+            status_binding,
+            destination_binding,
+        } => {
+            ArtifactId::new(relation.clone()).is_some()
+                && ArtifactId::new(coordination.clone()).is_some()
+                && Digest::from_wire(status_binding).is_some()
+                && Digest::from_wire(destination_binding).is_some()
+        }
         JournalAction::Complete {
             relation,
             coordination,
@@ -824,7 +909,9 @@ fn decode_entry(bytes: &[u8]) -> Result<JournalEntry, RelationScheduleStoreError
 const fn entry_byte_limit(action: &JournalAction) -> u64 {
     match action {
         JournalAction::Stage { .. } => MAX_ENTRY_BYTES,
-        JournalAction::Schedule { .. } | JournalAction::Complete { .. } => MAX_SMALL_ENTRY_BYTES,
+        JournalAction::Schedule { .. }
+        | JournalAction::Acknowledge { .. }
+        | JournalAction::Complete { .. } => MAX_SMALL_ENTRY_BYTES,
     }
 }
 

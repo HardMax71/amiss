@@ -114,8 +114,13 @@ as scheduling, so current-fence verification and the committed stage cannot race
 first verifies the live retained artifact, then stores the relation identity, coordination, trigger
 role, fence, artifact identity, and one domain-separated binding over the complete typed target and
 audit record. It does not duplicate provider configuration or credential identities in the journal.
-Completion is a separate hash-chained action; an exact retry is idempotent, while a missing or
-rebound record fails closed. Completed in-memory state keeps only the status binding digest. A
+Each configured external destination is retained in the staged action as a domain-separated digest
+of its stable provider-instance, repository, and status-name identity. After a provider accepts or
+reconciles the exact staged value, a separate hash-chained action acknowledges that destination.
+The same acknowledgement is idempotent across restart, a foreign destination fails closed, and
+batch completion is refused until every staged destination has a durable acknowledgement.
+Completion is itself a separate hash-chained action; an exact retry is idempotent, while a missing
+or rebound record fails closed. Completed in-memory state keeps only the status binding digest. A
 delivery boundary must reopen the immutable registry and artifact record, reproduce that binding,
 and only then expose provider fields.
 
@@ -125,9 +130,9 @@ from its exact snapshots and the immutable registry, replays the audit, and retu
 only when the complete status binding is identical. A missing or rebound registry, expired artifact,
 or changed target remains a refusal. Reopening still grants no external delivery authority.
 
-This outbox still makes no provider call and its returned record is not delivery authority. A later
-publisher must serialize external writes for each stable destination and recheck the retained
-artifact immediately before using it.
+This outbox still makes no provider call, and neither its returned record nor its acknowledgement
+method is delivery authority. A later publisher must serialize external writes for each stable
+destination and recheck the retained artifact immediately before using it.
 
 ## Exact Git acquisition
 

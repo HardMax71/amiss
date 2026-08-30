@@ -1,10 +1,10 @@
 use crate::{
     ArtifactAuditReference, FileArtifactStore, PendingRelation, RelationAuditBundle,
-    RelationRegistry, RelationStatusError, RelationStatusRecord, RelationSubjectHead,
-    complete_relation_status, stage_relation_status,
+    RelationRegistry, RelationStatusError, RelationStatusRecord, RelationStatusTarget,
+    RelationSubjectHead, complete_relation_status, stage_relation_status,
 };
 
-use super::status::{reopen_status, store_status};
+use super::status::{destination_binding, reopen_status, store_status};
 use super::{
     ENTRY_SCHEMA, FileRelationScheduleStore, JournalAction, JournalEntry,
     RelationScheduleStoreError, StoredStatusState, checked_work, is_current_work, synchronize,
@@ -95,6 +95,7 @@ impl FileRelationScheduleStore {
             Some(StoredStatusState::Staged {
                 binding: existing,
                 status,
+                ..
             }) if existing == &binding => {
                 if status.as_ref() != &stored {
                     return Err(RelationScheduleStoreError::Corrupt);
@@ -135,8 +136,79 @@ impl FileRelationScheduleStore {
         Ok(Some(record))
     }
 
+    /// Atomically remembers that one exact staged destination was accepted or
+    /// reconciled by its provider. Repeating the same acknowledgement is
+    /// idempotent and records no second journal action.
+    ///
+    /// This transition grants no provider I/O authority. Its caller must
+    /// acquire that authority separately.
+    ///
+    /// # Errors
+    ///
+    /// The batch or target was rebound, was never staged, or durable state
+    /// cannot be trusted.
+    pub fn acknowledge_status_destination(
+        &self,
+        staged: &RelationStatusRecord,
+        target: &RelationStatusTarget,
+    ) -> Result<(), RelationScheduleStoreError> {
+        if !staged.targets.destinations.contains(target) {
+            return Err(RelationScheduleStoreError::Status(
+                RelationStatusError::BindingConflict,
+            ));
+        }
+        let stored = store_status(staged)?;
+        let binding = stored.status_binding.clone();
+        let destination = destination_binding(target)?;
+        let key = (stored.relation.clone(), stored.coordination.clone());
+        let _lock = self.lock()?;
+        let metadata = self.load_metadata()?;
+        let mut journal = self.open_committed_journal(&metadata)?;
+        let mut state = self.state()?;
+        synchronize(&mut state, &mut journal, &metadata, self.max_bindings)?;
+        match state.statuses.get(&key) {
+            Some(StoredStatusState::Staged {
+                binding: existing,
+                status,
+                acknowledged,
+            }) if existing == &binding => {
+                if status.as_ref() != &stored {
+                    return Err(RelationScheduleStoreError::Corrupt);
+                }
+                if acknowledged.contains(&destination) {
+                    return Ok(());
+                }
+            }
+            Some(StoredStatusState::Completed { binding: existing }) if existing == &binding => {
+                return Ok(());
+            }
+            Some(_) | None => {
+                return Err(RelationScheduleStoreError::Status(
+                    RelationStatusError::BindingConflict,
+                ));
+            }
+        }
+        let previous_tail = state.tail_digest.clone();
+        self.append(
+            &mut journal,
+            &metadata,
+            &mut state,
+            JournalEntry {
+                schema: ENTRY_SCHEMA.to_owned(),
+                previous_tail,
+                action: JournalAction::Acknowledge {
+                    relation: key.0,
+                    coordination: key.1,
+                    status_binding: binding,
+                    destination_binding: destination,
+                },
+            },
+        )
+    }
+
     /// Atomically marks the exact staged status batch complete. Repeating an
     /// acknowledged completion for the same immutable record is successful.
+    /// Every configured destination must first have a durable acknowledgement.
     ///
     /// # Errors
     ///
@@ -158,9 +230,17 @@ impl FileRelationScheduleStore {
             Some(StoredStatusState::Staged {
                 binding: existing,
                 status,
+                acknowledged,
             }) if existing == &binding => {
                 if status.as_ref() != &stored {
                     return Err(RelationScheduleStoreError::Corrupt);
+                }
+                if stored
+                    .destinations
+                    .iter()
+                    .any(|destination| !acknowledged.contains(destination))
+                {
+                    return Err(RelationScheduleStoreError::DeliveryPending);
                 }
             }
             Some(StoredStatusState::Completed { binding: existing }) if existing == &binding => {

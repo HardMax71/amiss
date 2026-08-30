@@ -10,8 +10,9 @@ use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditReference, ArtifactError, ArtifactStoreConfig,
     ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
     LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle, RelationScheduleError,
-    RelationScheduleStoreError, RelationStatusError, RelationStatusRecord, RelationSubjectHead,
-    complete_relation_status, relation_registry, stage_relation_status,
+    RelationScheduleStoreError, RelationStatusDestination, RelationStatusError,
+    RelationStatusRecord, RelationSubjectHead, complete_relation_status, relation_registry,
+    stage_relation_status,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
@@ -70,6 +71,29 @@ fn retain(
             ArtifactAuditBundle::Relation(bundle(fixture)),
         )
         .unwrap()
+}
+
+fn acknowledge_all(store: &FileRelationScheduleStore, staged: &RelationStatusRecord) {
+    for target in &staged.targets.destinations {
+        store
+            .acknowledge_status_destination(staged, target)
+            .unwrap();
+    }
+}
+
+fn assert_journal_hides_credentials(path: &std::path::Path, fixture: &RelationAuditFixture) {
+    let journal = std::fs::read(path).unwrap();
+    assert!(
+        fixture
+            .transition
+            .relation
+            .plan
+            .subjects
+            .iter()
+            .all(|subject| !journal
+                .windows(subject.credential.as_str().len())
+                .any(|window| window == subject.credential.as_str().as_bytes()))
+    );
 }
 
 #[test]
@@ -231,7 +255,13 @@ fn stale_foreign_and_conflicting_status_state_fails_closed() {
 
 #[test]
 fn durable_status_replays_and_completes_exactly_across_restart() {
-    let fixture = relation_audit(true).unwrap();
+    let mut fixture = relation_audit(true).unwrap();
+    Arc::make_mut(&mut fixture.transition.relation.plan)
+        .status_destinations
+        .push(RelationStatusDestination {
+            subject_role: ArtifactId::new("source".to_owned()).unwrap(),
+            required_status_name: "Amiss source relation".to_owned(),
+        });
     let registry =
         relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();
     let artifact_root = tempfile::tempdir().unwrap();
@@ -255,23 +285,10 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
         )
         .unwrap()
         .unwrap();
-    let journal = std::fs::read(
-        relation_root
-            .path()
-            .join(".amiss-relation-schedules.journal"),
-    )
-    .unwrap();
-    assert!(
-        fixture
-            .transition
-            .relation
-            .plan
-            .subjects
-            .iter()
-            .all(|subject| !journal
-                .windows(subject.credential.as_str().len())
-                .any(|window| window == subject.credential.as_str().as_bytes()))
-    );
+    let journal_path = relation_root
+        .path()
+        .join(".amiss-relation-schedules.journal");
+    assert_journal_hides_credentials(&journal_path, &fixture);
     drop(relations);
 
     let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
@@ -286,18 +303,34 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
             .unwrap(),
         Some(staged.clone())
     );
+    assert!(matches!(
+        relations.complete_status(&staged),
+        Err(RelationScheduleStoreError::DeliveryPending)
+    ));
+    let [first, second] = staged.targets.destinations.as_slice() else {
+        panic!("both configured destinations are staged");
+    };
+    relations
+        .acknowledge_status_destination(&staged, first)
+        .unwrap();
+    let acknowledged_bytes = std::fs::metadata(&journal_path).unwrap().len();
+    drop(relations);
+
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
+    relations
+        .acknowledge_status_destination(&staged, first)
+        .unwrap();
     assert_eq!(
-        relations
-            .stage_status(
-                &artifacts,
-                &pending,
-                heads(&fixture),
-                retained.clone(),
-                bundle(&fixture),
-            )
-            .unwrap(),
-        Some(staged.clone())
+        std::fs::metadata(&journal_path).unwrap().len(),
+        acknowledged_bytes
     );
+    assert!(matches!(
+        relations.complete_status(&staged),
+        Err(RelationScheduleStoreError::DeliveryPending)
+    ));
+    relations
+        .acknowledge_status_destination(&staged, second)
+        .unwrap();
     let completed = relations.complete_status(&staged).unwrap();
     assert!(completed.completed);
     drop(relations);
@@ -311,18 +344,6 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
                 &artifacts,
                 &staged.targets.relation,
                 &staged.targets.coordination,
-            )
-            .unwrap(),
-        None
-    );
-    assert_eq!(
-        relations
-            .stage_status(
-                &artifacts,
-                &pending,
-                heads(&fixture),
-                retained,
-                bundle(&fixture),
             )
             .unwrap(),
         None
@@ -469,6 +490,7 @@ fn status_rebinding_and_superseded_staging_do_not_change_the_journal() {
     ));
     assert_eq!(std::fs::metadata(&journal).unwrap().len(), before_stale);
     assert!(relations.is_current(&next).unwrap());
+    acknowledge_all(&relations, &staged);
     assert!(relations.complete_status(&staged).unwrap().completed);
 }
 
@@ -557,6 +579,7 @@ fn concurrent_supersession_and_status_staging_commit_in_one_order() {
     };
     let stage = stage_worker.join().unwrap();
     if let Ok(Some(staged)) = &stage {
+        acknowledge_all(&stores[0], staged);
         assert!(stores[0].complete_status(staged).unwrap().completed);
     }
     assert!(matches!(
