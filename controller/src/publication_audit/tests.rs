@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use amiss_fixtures::{PublicationAuditFixture, publication_audit};
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::digest::{Digest, hj, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::publication::{
     PublicationPlanEnvelope, PublicationVerdict, assess, parse_evidence, parse_plan,
@@ -49,6 +49,49 @@ fn the_reported_candidate_identity_has_the_published_preimage() -> Result<(), Ar
         candidate.text("commit_oid"),
         Some(report.candidate.commit.as_str())
     );
+    Ok(())
+}
+
+#[test]
+fn null_target_is_distinct_from_an_absent_target_key() -> Result<(), ArtifactError> {
+    let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
+    assert_eq!(accepted_report(&fixture.report)?.target_ref, None);
+
+    let mut report = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
+    let Value::Object(envelope) = &mut report else {
+        return Err(ArtifactError::Corrupt);
+    };
+    let payload = envelope
+        .iter_mut()
+        .find_map(|(key, value)| (key == "payload").then_some(value))
+        .ok_or(ArtifactError::Corrupt)?;
+    let Value::Object(payload_members) = payload else {
+        return Err(ArtifactError::Corrupt);
+    };
+    let evaluation = payload_members
+        .iter_mut()
+        .find_map(|(key, value)| (key == "evaluation").then_some(value))
+        .ok_or(ArtifactError::Corrupt)?;
+    let Value::Object(members) = evaluation else {
+        return Err(ArtifactError::Corrupt);
+    };
+    let target = members
+        .iter()
+        .position(|(key, _value)| key == "target_ref")
+        .ok_or(ArtifactError::Corrupt)?;
+    let mut without_target = std::mem::take(members).into_vec();
+    without_target.remove(target);
+    *members = without_target.into_boxed_slice();
+    let payload_digest = hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
+    *envelope
+        .iter_mut()
+        .find_map(|(key, value)| (key == "payload_digest").then_some(value))
+        .ok_or(ArtifactError::Corrupt)? = Value::string(payload_digest.to_string());
+
+    assert!(matches!(
+        accepted_report(&json::canonical(&report)),
+        Err(ArtifactError::Corrupt)
+    ));
     Ok(())
 }
 
@@ -121,7 +164,7 @@ fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Resul
         ("exit_code".to_owned(), Value::Integer(2)),
         ("status".to_owned(), Value::string("incomplete".to_owned())),
     ]);
-    let digest = amiss_wire::digest::hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
+    let digest = hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
     let digest_value = envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))

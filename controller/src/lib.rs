@@ -22,6 +22,7 @@ mod orchestration;
 mod plans;
 mod provider;
 mod publication_audit;
+mod relation_audit;
 mod relations;
 mod spelling;
 mod webhook;
@@ -84,6 +85,7 @@ pub use provider::{
 pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,
 };
+pub use relation_audit::{RelationAuditBundle, RelationAuditDigests, validate_relation_audit};
 pub use relations::{
     RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationLimits,
     RelationLookupError, RelationPlan, RelationRegistry, RelationRegistryError,

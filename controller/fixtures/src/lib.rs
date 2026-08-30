@@ -1,6 +1,7 @@
 pub mod clock;
 pub mod config;
 pub mod lane;
+pub mod relation;
 pub mod semantic;
 
 use aws_lc_rs::encoding::{AsDer, Pkcs8V1Der, PublicKeyX509Der};
