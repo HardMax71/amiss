@@ -10,20 +10,40 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
-    EVIDENCE_PAYLOAD_SCHEMA, LocaleCoverageEvidence, LocalePageInventory, evidence, parse_evidence,
-    parse_plan, plan,
+    EVIDENCE_PAYLOAD_SCHEMA, LocaleCoverageEvidence, LocalePageInventory, LocaleTargetInventory,
+    LocaleTargetOrigin, LocaleTargetPage, evidence, parse_evidence, parse_plan, plan,
 };
 
 use super::{digest, locale_plan};
 
-pub(super) fn inventory(input_digit: char, pages: &[(&str, char)]) -> LocalePageInventory {
-    LocalePageInventory {
-        input_digest: digest(input_digit),
-        complete: true,
-        pages: pages
-            .iter()
-            .map(|(key, digit)| ((*key).to_owned(), digest(*digit)))
-            .collect(),
+pub(super) fn page_map<T>(
+    pages: &[(&str, char)],
+    value: impl Fn(char) -> T,
+) -> BTreeMap<String, T> {
+    pages
+        .iter()
+        .map(|(key, digit)| ((*key).to_owned(), value(*digit)))
+        .collect()
+}
+
+pub(super) fn target_page(resource_digit: char) -> LocaleTargetPage {
+    LocaleTargetPage {
+        resource_digest: digest(resource_digit),
+        origin: LocaleTargetOrigin::TargetResource,
+    }
+}
+
+pub(super) fn fallback_page(
+    resource_digit: char,
+    class: &str,
+    source_digit: char,
+) -> LocaleTargetPage {
+    LocaleTargetPage {
+        resource_digest: digest(resource_digit),
+        origin: LocaleTargetOrigin::Fallback {
+            class: super::identity(class),
+            source_resource_digest: digest(source_digit),
+        },
     }
 }
 
@@ -38,11 +58,19 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
         docs: planned.docs,
         scope: planned.scope,
         producer: planned.producer,
-        source: inventory(
-            '5',
-            &[("guide/getting-started", '6'), ("reference/api", '7')],
-        ),
-        target: inventory('8', &[("guide/getting-started", '9')]),
+        source: LocalePageInventory {
+            input_digest: digest('5'),
+            complete: true,
+            pages: page_map(
+                &[("guide/getting-started", '6'), ("reference/api", '7')],
+                digest,
+            ),
+        },
+        target: LocaleTargetInventory {
+            input_digest: digest('8'),
+            complete: true,
+            pages: page_map(&[("guide/getting-started", '9')], target_page),
+        },
     }
 }
 
@@ -95,6 +123,39 @@ fn source_and_target_completeness_remain_independent() {
     assert!(!parsed.payload.source.complete);
     assert!(parsed.payload.target.complete);
     assert!(parsed.payload.source.pages.is_empty());
+}
+
+#[test]
+fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
+    let mut input = locale_evidence();
+    input.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('a', "source-copy", '7'),
+    );
+    let parsed = parse_evidence(&json::canonical(&evidence(&input).unwrap())).unwrap();
+    assert_eq!(parsed.payload, input);
+
+    let mut unknown = evidence(&input).unwrap();
+    let target = member_mut(member_mut(&mut unknown, "payload"), "target");
+    let Value::Array(pages) = member_mut(target, "pages") else {
+        panic!("the checked writer produced a non-array target page set");
+    };
+    let fallback = pages.last_mut().unwrap();
+    let origin = member_mut(fallback, "origin");
+    *member_mut(origin, "kind") = Value::string("generated");
+    let error = parse_evidence(&sealed(unknown)).unwrap_err();
+    assert_eq!(error.path, "$.payload.target.pages[1].origin.kind");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+
+    let mut missing_origin = evidence(&locale_evidence()).unwrap();
+    let target = member_mut(member_mut(&mut missing_origin, "payload"), "target");
+    let Value::Array(pages) = member_mut(target, "pages") else {
+        panic!("the checked writer produced a non-array target page set");
+    };
+    *member_mut(pages.first_mut().unwrap(), "origin") = Value::Null;
+    let error = parse_evidence(&sealed(missing_origin)).unwrap_err();
+    assert_eq!(error.path, "$.payload.target.pages[0].origin");
+    assert_eq!(error.kind, ErrorKind::WrongType);
 }
 
 #[test]

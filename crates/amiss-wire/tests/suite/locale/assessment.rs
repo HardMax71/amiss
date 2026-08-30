@@ -6,7 +6,7 @@
 
 use std::{fs, path::Path};
 
-use super::evidence::{inventory, locale_evidence};
+use super::evidence::{fallback_page, locale_evidence, page_map, target_page};
 use super::{digest, locale_plan, oid};
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -14,7 +14,8 @@ use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessmentEnvelope, LocaleCoverageEvidence,
     LocaleCoverageEvidenceEnvelope, LocaleCoverageReason, LocaleCoverageVerdict,
-    LocalePageRequirement, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    LocaleFallbackStatus, LocalePageRequirement, assess, evidence, parse_assessment,
+    parse_evidence, parse_plan, plan,
 };
 
 fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
@@ -42,7 +43,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
     input
         .target
         .pages
-        .insert("legacy/removed".to_owned(), digest('b'));
+        .insert("legacy/removed".to_owned(), target_page('b'));
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
@@ -101,7 +102,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     partial_target
         .target
         .pages
-        .insert("legacy/removed".to_owned(), digest('b'));
+        .insert("legacy/removed".to_owned(), target_page('b'));
     let evidence = evidence_envelope(&partial_target);
     let assessment = assessed(&plan, Some(&evidence));
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
@@ -133,17 +134,143 @@ fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
     let plan = plan_envelope();
     let mut input = locale_evidence();
     input.source.complete = false;
-    input.target.pages = input.source.pages.clone();
-    input
-        .target
-        .pages
-        .insert("guide/getting-started".to_owned(), digest('f'));
+    input.target.pages = page_map(
+        &[("guide/getting-started", 'f'), ("reference/api", 'e')],
+        target_page,
+    );
     let evidence = evidence_envelope(&input);
     let assessment = assessed(&plan, Some(&evidence));
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert!(assessment.payload.coverage.complete);
     assert!(assessment.payload.reasons.is_empty());
+}
+
+#[test]
+fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() {
+    let plan = plan_envelope();
+    let mut allowed = locale_evidence();
+    allowed.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    let evidence = evidence_envelope(&allowed);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert_eq!(assessment.payload.coverage.fallbacks.len(), 1);
+    assert_eq!(
+        assessment.payload.coverage.fallbacks[0].status,
+        LocaleFallbackStatus::Allowed
+    );
+
+    let mut unauthorized = allowed.clone();
+    unauthorized.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "preview-copy", '7'),
+    );
+    let evidence = evidence_envelope(&unauthorized);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::FallbackUnauthorized]
+    );
+    assert_eq!(
+        assessment.payload.coverage.fallbacks[0].status,
+        LocaleFallbackStatus::Unauthorized
+    );
+
+    let mut wrong_page = allowed.clone();
+    wrong_page.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        fallback_page('b', "source-copy", '6'),
+    );
+    let evidence = evidence_envelope(&wrong_page);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::FallbackUnauthorized]
+    );
+    assert_eq!(
+        assessment.payload.coverage.fallbacks[0].status,
+        LocaleFallbackStatus::Unauthorized
+    );
+
+    let mut stale = allowed;
+    stale.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '6'),
+    );
+    let evidence = evidence_envelope(&stale);
+    let assessment = assessed(&plan, Some(&evidence));
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![LocaleCoverageReason::FallbackSourceMismatch]
+    );
+    assert_eq!(
+        assessment.payload.coverage.fallbacks[0].status,
+        LocaleFallbackStatus::SourceMismatch
+    );
+}
+
+#[test]
+fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
+    let plan = plan_envelope();
+    let mut input = locale_evidence();
+    input.source.complete = false;
+    input.source.pages.remove("reference/api");
+    input.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    let evidence = evidence_envelope(&input);
+    let assessment = assessed(&plan, Some(&evidence));
+
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
+    assert_eq!(
+        assessment.payload.reasons,
+        vec![
+            LocaleCoverageReason::SourceIncomplete,
+            LocaleCoverageReason::FallbackUnproven,
+        ]
+    );
+    assert!(!assessment.payload.coverage.complete);
+    assert_eq!(
+        assessment.payload.coverage.fallbacks[0].status,
+        LocaleFallbackStatus::SourceUnproven
+    );
+}
+
+#[test]
+fn all_source_fallback_rules_authorize_each_observed_source_page() {
+    let mut input_plan = locale_plan();
+    input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource;
+    let value = plan(&input_plan).unwrap();
+    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let mut input = locale_evidence();
+    input.plan_payload_digest = plan.payload_digest;
+    input.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        fallback_page('9', "source-copy", '6'),
+    );
+    input.target.pages.insert(
+        "reference/api".to_owned(),
+        fallback_page('b', "source-copy", '7'),
+    );
+    let evidence = evidence_envelope(&input);
+    let assessment = assessed(&plan, Some(&evidence));
+
+    assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
+    assert!(
+        assessment
+            .payload
+            .coverage
+            .fallbacks
+            .iter()
+            .all(|fallback| fallback.status == LocaleFallbackStatus::Allowed)
+    );
 }
 
 #[test]
@@ -154,11 +281,10 @@ fn all_source_and_named_source_absence_remain_distinct() {
     let all_source_plan = parse_plan(&json::canonical(&value)).unwrap();
     let mut all_source_evidence = locale_evidence();
     all_source_evidence.plan_payload_digest = all_source_plan.payload_digest;
-    all_source_evidence.target.pages = inventory(
-        '8',
+    all_source_evidence.target.pages = page_map(
         &[("guide/getting-started", '9'), ("legacy/removed", 'a')],
-    )
-    .pages;
+        target_page,
+    );
     let evidence = evidence_envelope(&all_source_evidence);
     let assessment = assessed(&all_source_plan, Some(&evidence));
     assert_eq!(
@@ -173,7 +299,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
     let plan = plan_envelope();
     let mut source_missing = locale_evidence();
     source_missing.source.pages.remove("reference/api");
-    source_missing.target.pages = source_missing.source.pages.clone();
+    source_missing.target.pages = page_map(&[("guide/getting-started", '9')], target_page);
     let evidence = evidence_envelope(&source_missing);
     let assessment = assessed(&plan, Some(&evidence));
     assert_eq!(

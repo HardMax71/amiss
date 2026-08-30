@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-plan",
   "title": "Amiss locale coverage plan",
-  "description": "One operator-owned, report-bound plan for comparing complete source and target page-key inventories. It selects coverage policy; it does not assert that inventories exist, pages are translated, or fallback and lineage are valid.",
+  "description": "One operator-owned, report-bound plan for comparing source and target page-key inventories and authorizing exact classes of source fallback. It selects policy; it does not assert that inventories exist, pages are translated, or fallback provenance and lineage are valid.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -188,7 +188,7 @@
       }
     },
     "Requirement": {
-      "description": "All-source requires every source page key. Named requires only the listed source keys; other source keys are optional. Neither mode authorizes fallback.",
+      "description": "A source-page selector. All-source selects every source page key. Named selects only the listed keys.",
       "oneOf": [
         {
           "type": "object",
@@ -220,11 +220,25 @@
         }
       ]
     },
-    "Policy": {
-      "description": "The operator-owned coverage rule. The context digest binds rule bytes interpreted outside Amiss.",
+    "FallbackRule": {
+      "description": "One operator-authorized fallback class and the source page keys on which that class may appear. Rules are byte-sorted and unique by class.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["context_digest", "identity", "required"],
+      "required": ["class", "pages"],
+      "properties": {
+        "class": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "pages": {
+          "$ref": "#/$defs/Requirement"
+        }
+      }
+    },
+    "Policy": {
+      "description": "The operator-owned coverage and fallback rule. The context digest binds rule bytes interpreted outside Amiss.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "fallbacks", "identity", "required"],
       "properties": {
         "identity": {
           "$ref": "#/$defs/ArtifactId"
@@ -234,6 +248,14 @@
         },
         "required": {
           "$ref": "#/$defs/Requirement"
+        },
+        "fallbacks": {
+          "description": "The byte-sorted set of fallback rules, unique by class. An empty set forbids every fallback.",
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/FallbackRule"
+          }
         }
       }
     },

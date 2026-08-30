@@ -15,12 +15,14 @@ pub use crate::assessment::AssessmentVerdict as LocaleCoverageVerdict;
 pub use assessment::{
     ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope,
-    LocaleCoverageReason, LocaleCoverageResult, assess, parse_assessment,
+    LocaleCoverageReason, LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus, assess,
+    parse_assessment,
 };
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
-    LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope, LocalePageInventory, PAGE_ITEMS_LIMIT,
-    evidence, parse_evidence,
+    LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope, LocalePageInventory,
+    LocaleTargetInventory, LocaleTargetOrigin, LocaleTargetPage, PAGE_ITEMS_LIMIT, evidence,
+    parse_evidence,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-plan-envelope";
@@ -57,6 +59,13 @@ pub struct LocaleCoveragePolicy {
     pub identity: ArtifactId,
     pub context_digest: Digest,
     pub required: LocalePageRequirement,
+    pub fallbacks: Vec<LocaleFallbackRule>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocaleFallbackRule {
+    pub class: ArtifactId,
+    pub pages: LocalePageRequirement,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,28 +118,7 @@ pub fn plan(input: &LocaleCoveragePlan) -> Result<Value, Error> {
 }
 
 fn decode_plan(path: &str, value: Value) -> Result<LocaleCoveragePlan, Error> {
-    let mut plan = Obj::new(path, value)?;
-    plan.required("schema", |path, value| {
-        de::const_str(path, value, PLAN_PAYLOAD_SCHEMA)
-    })?;
-    let report_payload_digest = plan.required("report_payload_digest", de::digest)?;
-    let facts = decode_facts(&mut plan)?;
-    let policy = plan.required("policy", decode_policy)?;
-    plan.finish()?;
-    Ok(LocaleCoveragePlan {
-        report_payload_digest,
-        docs: facts.docs,
-        scope: facts.scope,
-        producer: facts.producer,
-        policy,
-    })
-}
-
-fn decode_policy(path: &str, value: Value) -> Result<LocaleCoveragePolicy, Error> {
-    let mut policy = Obj::new(path, value)?;
-    let identity = policy.required("identity", decode_identity)?;
-    let context_digest = policy.required("context_digest", de::digest)?;
-    let required = policy.required("required", |path, value| {
+    let decode_requirement = |path: &str, value: Value| {
         let mut requirement = Obj::new(path, value)?;
         let mode_path = requirement.field("mode");
         let mode = de::string(&mode_path, requirement.take("mode")?)?;
@@ -156,12 +144,47 @@ fn decode_policy(path: &str, value: Value) -> Result<LocaleCoveragePolicy, Error
             }
             _ => fail(&mode_path, ErrorKind::InvalidValue),
         }
+    };
+    let mut plan = Obj::new(path, value)?;
+    plan.required("schema", |path, value| {
+        de::const_str(path, value, PLAN_PAYLOAD_SCHEMA)
     })?;
-    policy.finish()?;
-    Ok(LocaleCoveragePolicy {
-        identity,
-        context_digest,
-        required,
+    let report_payload_digest = plan.required("report_payload_digest", de::digest)?;
+    let facts = decode_facts(&mut plan)?;
+    let policy = plan.required("policy", |path, value| {
+        let mut policy = Obj::new(path, value)?;
+        let identity = policy.required("identity", decode_identity)?;
+        let context_digest = policy.required("context_digest", de::digest)?;
+        let required = policy.required("required", decode_requirement)?;
+        let fallbacks_path = policy.field("fallbacks");
+        let fallbacks = de::sorted_items(
+            &fallbacks_path,
+            policy.take("fallbacks")?,
+            PAGE_ITEMS_LIMIT,
+            |path, value| {
+                let mut rule = Obj::new(path, value)?;
+                let class = rule.required("class", decode_identity)?;
+                let pages = rule.required("pages", decode_requirement)?;
+                rule.finish()?;
+                Ok(LocaleFallbackRule { class, pages })
+            },
+            |rule| rule.class.as_str(),
+        )?;
+        policy.finish()?;
+        Ok(LocaleCoveragePolicy {
+            identity,
+            context_digest,
+            required,
+            fallbacks,
+        })
+    })?;
+    plan.finish()?;
+    Ok(LocaleCoveragePlan {
+        report_payload_digest,
+        docs: facts.docs,
+        scope: facts.scope,
+        producer: facts.producer,
+        policy,
     })
 }
 
@@ -231,6 +254,21 @@ fn policy_value(policy: &LocaleCoveragePolicy) -> Value {
         ("identity", text(policy.identity.as_str())),
         ("context_digest", text(&policy.context_digest.to_string())),
         ("required", requirement_value(&policy.required)),
+        (
+            "fallbacks",
+            Value::array(
+                policy
+                    .fallbacks
+                    .iter()
+                    .map(|rule| {
+                        object(vec![
+                            ("class", text(rule.class.as_str())),
+                            ("pages", requirement_value(&rule.pages)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
     ])
 }
 

@@ -32,8 +32,17 @@
       "required": {
         "mode": "named",
         "keys": ["guide/getting-started", "reference/api"]
-      }
+      },
+      "fallbacks": [
+        {
+          "class": "source-copy",
+          "pages": {
+            "mode": "named",
+            "keys": ["reference/api"]
+          }
+        }
+      ]
     }
   },
-  "payload_digest": "sha256:6a6637488c31cf39cdb56fa2ebbe627f9ec9d4e553537902d1254f0de1aa1cb7"
+  "payload_digest": "sha256:7587497b1d804ead43c59ad4c89592850365c4399b39a01a8cf8008923cd09d5"
 }

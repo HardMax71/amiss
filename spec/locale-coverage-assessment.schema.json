@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-assessment",
   "title": "Amiss locale coverage assessment",
-  "description": "The deterministic offline judgment over one locale coverage plan and optional producer-normalized inventories. Every reported page is proved; incomplete results are explicit lower bounds and can never match.",
+  "description": "The deterministic offline judgment over one locale coverage plan and optional producer-normalized inventories. Every reported page and fallback status is proved; incomplete results are explicit lower bounds and can never match.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -22,6 +22,12 @@
     "Digest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ArtifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
     },
     "NullableDigest": {
       "oneOf": [
@@ -55,17 +61,41 @@
         "scope-mismatch",
         "source-incomplete",
         "target-incomplete",
+        "fallback-unproven",
         "source-missing",
         "target-missing",
-        "target-orphaned"
+        "target-orphaned",
+        "fallback-unauthorized",
+        "fallback-source-mismatch"
       ]
     },
+    "FallbackStatus": {
+      "enum": ["allowed", "unauthorized", "source-mismatch", "source-unproven"]
+    },
+    "Fallback": {
+      "description": "One observed fallback, its producer-declared class, and the policy/source comparison result.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "key", "status"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/PageKey"
+        },
+        "class": {
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "status": {
+          "$ref": "#/$defs/FallbackStatus"
+        }
+      }
+    },
     "Coverage": {
-      "description": "Confirmed page defects in byte order. False completeness means the rows remain proved but may be a lower bound because at least one relevant inventory was partial.",
+      "description": "Confirmed page defects and assessed fallback rows in byte order. False completeness means the rows remain proved but may be a lower bound because at least one relevant inventory was partial. The strict reader limits all four arrays to 200,000 rows combined.",
       "type": "object",
       "additionalProperties": false,
       "required": [
         "complete",
+        "fallbacks",
         "source_missing",
         "target_missing",
         "target_orphaned"
@@ -99,6 +129,14 @@
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/PageKey"
+          }
+        },
+        "fallbacks": {
+          "description": "Every observed target fallback, byte-sorted and unique by page key.",
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/Fallback"
           }
         }
       }
@@ -153,7 +191,7 @@
         "reasons": {
           "description": "A canonical enum-order set. The strict reader also requires page reasons to correspond exactly to nonempty page sets.",
           "type": "array",
-          "maxItems": 3,
+          "maxItems": 5,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/Reason"
@@ -197,6 +235,15 @@
                   },
                   "target_orphaned": {
                     "maxItems": 0
+                  },
+                  "fallbacks": {
+                    "items": {
+                      "properties": {
+                        "status": {
+                          "const": "allowed"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -221,7 +268,9 @@
                     "scope-mismatch",
                     "source-missing",
                     "target-missing",
-                    "target-orphaned"
+                    "target-orphaned",
+                    "fallback-unauthorized",
+                    "fallback-source-mismatch"
                   ]
                 }
               },
@@ -268,6 +317,13 @@
                   "reasons": {
                     "const": ["evidence-absent"]
                   },
+                  "coverage": {
+                    "properties": {
+                      "fallbacks": {
+                        "maxItems": 0
+                      }
+                    }
+                  },
                   "subject": {
                     "properties": {
                       "evidence_payload_digest": {
@@ -278,17 +334,63 @@
                 }
               },
               {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "reasons": {
+                        "const": ["evidence-unbound"]
+                      }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "reasons": {
+                        "const": ["producer-mismatch"]
+                      }
+                    }
+                  }
+                ],
+                "properties": {
+                  "coverage": {
+                    "properties": {
+                      "fallbacks": {
+                        "maxItems": 0
+                      }
+                    }
+                  },
+                  "subject": {
+                    "properties": {
+                      "evidence_payload_digest": {
+                        "$ref": "#/$defs/Digest"
+                      }
+                    }
+                  }
+                }
+              },
+              {
                 "properties": {
                   "reasons": {
                     "minItems": 1,
-                    "maxItems": 2,
+                    "maxItems": 3,
                     "items": {
                       "enum": [
-                        "evidence-unbound",
-                        "producer-mismatch",
                         "source-incomplete",
-                        "target-incomplete"
+                        "target-incomplete",
+                        "fallback-unproven"
                       ]
+                    }
+                  },
+                  "coverage": {
+                    "properties": {
+                      "fallbacks": {
+                        "items": {
+                          "properties": {
+                            "status": {
+                              "enum": ["allowed", "source-unproven"]
+                            }
+                          }
+                        }
+                      }
                     }
                   },
                   "subject": {
