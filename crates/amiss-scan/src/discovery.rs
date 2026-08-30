@@ -344,7 +344,9 @@ pub(crate) fn discover_scoped(
 }
 
 pub(crate) enum WalkMode<'a> {
-    Entries,
+    Entries {
+        selection: Option<(&'a [u8], &'a mut bool)>,
+    },
     Documents {
         scan: &'a mut ScanResources,
         includes: &'a Includes,
@@ -383,6 +385,19 @@ pub(crate) fn discover_walk(
             &prefix,
             &entry.name,
         ) else {
+            if let WalkMode::Entries {
+                selection: Some((root, complete)),
+            } = &mut mode
+                && discovery.path_defects.last().is_some_and(|defect| {
+                    let path = defect.raw.as_deref().unwrap_or(&prefix);
+                    path == *root
+                        || path
+                            .strip_prefix(*root)
+                            .is_some_and(|relative| relative.starts_with(b"/"))
+                })
+            {
+                **complete = false;
+            }
             continue;
         };
 
@@ -404,7 +419,7 @@ pub(crate) fn discover_walk(
         }
 
         match &mut mode {
-            WalkMode::Entries => {}
+            WalkMode::Entries { .. } => {}
             WalkMode::Documents {
                 scan,
                 includes,
