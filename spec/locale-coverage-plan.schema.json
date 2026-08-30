@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:locale-coverage-plan",
   "title": "Amiss locale coverage plan",
-  "description": "One operator-owned, report-bound plan for comparing source and target page-key inventories and authorizing exact classes of source fallback. It selects policy; it does not assert that inventories exist, pages are translated, or fallback provenance and lineage are valid.",
+  "description": "One operator-owned, report-bound plan for comparing source and target page-key inventories, authorizing source fallback, and optionally requiring exact target-to-source lineage. It selects policy; it does not assert that inventories exist, pages are translated, or provenance and lineage are valid.",
   "type": "object",
   "additionalProperties": false,
   "required": ["payload", "payload_digest", "schema"],
@@ -235,10 +235,16 @@
       }
     },
     "Policy": {
-      "description": "The operator-owned coverage and fallback rule. The context digest binds rule bytes interpreted outside Amiss.",
+      "description": "The operator-owned coverage, fallback, and lineage rule. The context digest binds rule bytes interpreted outside Amiss.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["context_digest", "fallbacks", "identity", "required"],
+      "required": [
+        "context_digest",
+        "fallbacks",
+        "identity",
+        "require_target_lineage",
+        "required"
+      ],
       "properties": {
         "identity": {
           "$ref": "#/$defs/ArtifactId"
@@ -248,6 +254,10 @@
         },
         "required": {
           "$ref": "#/$defs/Requirement"
+        },
+        "require_target_lineage": {
+          "description": "When true, every observed target-owned page whose source is available must carry the exact source resource digest it was based on. Fallback rows already carry their exact F02 source binding.",
+          "type": "boolean"
         },
         "fallbacks": {
           "description": "The byte-sorted set of fallback rules, unique by class. An empty set forbids every fallback.",

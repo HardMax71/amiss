@@ -63,6 +63,7 @@ fn locale_plan() -> LocaleCoveragePlan {
                 class: identity("source-copy"),
                 pages: LocalePageRequirement::Named(vec!["reference/api".to_owned()]),
             }],
+            require_target_lineage: false,
         },
     }
 }
@@ -107,6 +108,7 @@ fn locale_plan_keeps_all_source_and_named_policies_distinct() {
     let mut all_source = locale_plan();
     all_source.scope.version = None;
     all_source.policy.required = LocalePageRequirement::AllSource;
+    all_source.policy.require_target_lineage = true;
 
     let parsed = parse_plan(&json::canonical(&plan(&all_source).unwrap())).unwrap();
     assert_eq!(parsed.payload, all_source);

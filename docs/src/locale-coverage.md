@@ -12,7 +12,7 @@ The plan binds:
 - one site, source locale, target locale, channel, and optional version;
 - the inventory producer identity, version, and plan-owned context digest; and
 - the operator's coverage-policy identity, context digest, required-page rule, and authorized
-  fallback classes and page scopes.
+  fallback classes and page scopes, plus whether exact target lineage is required.
 
 Site and channel use the artifact-identity grammar. Locale and version labels use a broader bounded
 identity grammar so a producer can retain spellings such as `de-DE`; Amiss compares them exactly.
@@ -31,11 +31,18 @@ an `all-source` or `named` page selector describing exactly where that producer-
 mode is allowed. An empty set forbids all fallbacks. The plan chooses authorization; it does not
 prove that a target page really came from a source resource.
 
-The contract intentionally contains no translation verdict, timestamp, or current-source lineage
-for target-owned pages. A target page with the same key can prove structural coverage only. It
-cannot prove that the page was translated, is current, or is semantically equivalent. Staleness
-requires an exact producer-owned `based_on` source digest or revision and remains a separate
-contract.
+`require_target_lineage` independently chooses whether every observed target-owned page must carry
+exact source lineage. False preserves a coverage-and-fallback-only audit and ignores any supplied
+target lineage. True makes missing lineage unproven and a mismatched lineage digest an exact
+refutation. Fallback pages are excluded because their F02 origin already binds the exact current
+source resource.
+
+The contract intentionally contains no translation verdict or timestamp. A target page with the
+same key can prove structural coverage only. Exact lineage can prove which normalized source
+resource a target was based on; it cannot prove that the page was translated correctly, remains
+semantically equivalent, or required a change. This contract uses a digest because the source
+inventory supplies an exactly comparable digest. It does not accept an opaque revision without a
+matching source-side revision identity.
 
 The plan is a closed, 64 KiB, digest-bound JSON document. Unknown fields, malformed identities,
 mixed Git object formats, repeated or unsorted named keys, oversized text, or a changed payload
@@ -48,11 +55,12 @@ digest, completeness bit, and byte-sorted map from page key to exact resource di
 context defines which normalized bytes those digests identify.
 
 Every observed target page also carries one closed origin. `target-resource` says the producer
-observed a target-owned resource; it still makes no translation or freshness claim. `fallback`
-names an opaque producer-declared class and the exact source resource digest from which the
-fallback was obtained. A separate fallback list would make omission indistinguishable from target
-ownership. Requiring an origin on every target instead forces one explicit producer claim;
-authority still comes from authenticated acquisition outside the engine.
+observed a target-owned resource and carries either its exact `based_on_source_digest` or null when
+the producer has no exact lineage assertion. `fallback` names an opaque producer-declared class and
+the exact source resource digest from which the fallback was obtained. A separate fallback list
+would make omission indistinguishable from target ownership. Requiring an origin on every target
+instead forces one explicit producer claim; authority still comes from authenticated acquisition
+outside the engine.
 
 Completeness belongs to each side independently. A false value preserves the pages the producer
 did observe, but absence from that inventory is not evidence that a page is absent from the locale.
@@ -84,12 +92,20 @@ partial source inventory, `source-unproven` keeps the whole result unproven; abs
 digest mismatch until the source inventory is complete. Allowed fallback is not a translation or
 freshness verdict: it proves only the exact policy and provenance relation named by the contracts.
 
+When target lineage is required, the assessment also checks every observed target-owned page whose
+source row is available, including pages outside a named required-coverage set. `current` means its
+declared based-on digest equals that current source resource; `stale` is the exact unequal case;
+`unproven` means the producer supplied no exact based-on digest. A target absent from a complete
+source set is already orphaned. A target absent from a partial source set remains covered by the
+existing source-incomplete result, so the evaluator does not manufacture a lineage row without a
+current source value to compare.
+
 The assessment binds the exact evaluator, accepted report, plan, and optional evidence payload. Its
 three byte-sorted key sets name policy keys absent from source, required source keys absent from
 target, and target keys absent from source. A fourth byte-sorted set records every assessed
-fallback. The document is bounded to 16 MiB and 200,000 rows across those sets. Missing, unbound,
-wrong-producer, or insufficiently complete evidence is unproven rather than clean. The command and
-controller intake are not built yet.
+fallback, and a fifth records every assessed target lineage. The document is bounded to 16 MiB and
+200,000 rows across those sets. Missing, unbound, wrong-producer, or insufficiently complete
+evidence is unproven rather than clean. The command and controller intake are not built yet.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),

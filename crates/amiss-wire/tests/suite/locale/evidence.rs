@@ -26,10 +26,15 @@ pub(super) fn page_map<T>(
         .collect()
 }
 
-pub(super) fn target_page(resource_digit: char) -> LocaleTargetPage {
+pub(super) fn target_page(
+    resource_digit: char,
+    based_on_source_digit: Option<char>,
+) -> LocaleTargetPage {
     LocaleTargetPage {
         resource_digest: digest(resource_digit),
-        origin: LocaleTargetOrigin::TargetResource,
+        origin: LocaleTargetOrigin::TargetResource {
+            based_on_source_digest: based_on_source_digit.map(digest),
+        },
     }
 }
 
@@ -69,7 +74,9 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
         target: LocaleTargetInventory {
             input_digest: digest('8'),
             complete: true,
-            pages: page_map(&[("guide/getting-started", '9')], target_page),
+            pages: page_map(&[("guide/getting-started", '9')], |digit| {
+                target_page(digit, None)
+            }),
         },
     }
 }
@@ -129,6 +136,10 @@ fn source_and_target_completeness_remain_independent() {
 fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     let mut input = locale_evidence();
     input.target.pages.insert(
+        "guide/getting-started".to_owned(),
+        target_page('9', Some('6')),
+    );
+    input.target.pages.insert(
         "reference/api".to_owned(),
         fallback_page('a', "source-copy", '7'),
     );
@@ -156,6 +167,20 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     let error = parse_evidence(&sealed(missing_origin)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::WrongType);
+
+    let mut invalid_lineage = evidence(&input).unwrap();
+    let target = member_mut(member_mut(&mut invalid_lineage, "payload"), "target");
+    let Value::Array(pages) = member_mut(target, "pages") else {
+        panic!("the checked writer produced a non-array target page set");
+    };
+    let origin = member_mut(pages.first_mut().unwrap(), "origin");
+    *member_mut(origin, "based_on_source_digest") = Value::string("source-v1");
+    let error = parse_evidence(&sealed(invalid_lineage)).unwrap_err();
+    assert_eq!(
+        error.path,
+        "$.payload.target.pages[0].origin.based_on_source_digest"
+    );
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
