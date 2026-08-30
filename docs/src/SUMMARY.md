@@ -32,6 +32,7 @@
 - [Security model](security.md)
 - [Controls and policy](controls.md)
 - [Provider-verified controls](provider-controls.md)
+  - [Cross-repository relations](cross-repository-relations.md)
   - [Prepare the execution constraint](execution-constraint.md)
   - [Retained provider artifacts](provider-artifacts.md)
   - [GitHub](provider-github.md)

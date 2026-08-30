@@ -39,7 +39,8 @@ pub use policy::{
     FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
     ProjectionAssertion, ProjectionKind, ProjectionSource, RECORD_SET_SOURCE, RECORD_VALUE_SOURCE,
     RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES, ScannerPolicy,
-    TREE_PATHS_SOURCE, TreePathSelection, document_include_value, projection_source_value,
+    TREE_PATHS_SOURCE, TreePathSelection, check_projection_source, document_include_value,
+    projection_source_value,
 };
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
