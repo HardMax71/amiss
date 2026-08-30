@@ -9,7 +9,7 @@ use std::time::Duration;
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditReference, ArtifactError, ArtifactStoreConfig,
     ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
-    LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle,
+    LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle, RelationScheduleError,
     RelationScheduleStoreError, RelationStatusError, RelationStatusRecord, RelationSubjectHead,
     complete_relation_status, relation_registry, stage_relation_status,
 };
@@ -365,19 +365,25 @@ fn reopening_status_rejects_missing_rebound_and_expired_authorities() {
         Err(RelationScheduleStoreError::Configuration)
     ));
 
-    let mut rebound = fixture.transition.relation.plan.as_ref().clone();
-    rebound.subjects[0].credential =
+    let mut credential_rebound = fixture.transition.relation.plan.as_ref().clone();
+    credential_rebound.subjects[0].credential =
         amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
-    let rebound = relation_registry(vec![rebound]).unwrap();
-    assert!(matches!(
-        relations.reopen_staged_status(
-            &rebound,
-            &artifacts,
-            &staged.targets.relation,
-            &staged.targets.coordination,
-        ),
-        Err(RelationScheduleStoreError::Corrupt)
-    ));
+    let mut limits_rebound = fixture.transition.relation.plan.as_ref().clone();
+    limits_rebound.aggregate_limits.acquisition_objects += 1;
+    for rebound in [credential_rebound, limits_rebound] {
+        let rebound = relation_registry(vec![rebound]).unwrap();
+        assert!(matches!(
+            relations.reopen_staged_status(
+                &rebound,
+                &artifacts,
+                &staged.targets.relation,
+                &staged.targets.coordination,
+            ),
+            Err(RelationScheduleStoreError::Schedule(
+                RelationScheduleError::BindingConflict
+            ))
+        ));
+    }
 
     let registry =
         relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();

@@ -36,13 +36,20 @@ impl FileRelationScheduleStore {
                 relation.as_str().to_owned(),
                 coordination.as_str().to_owned(),
             )) {
-                Some(StoredStatusState::Staged { status, .. }) => Some(status.as_ref().clone()),
+                Some(StoredStatusState::Staged { status, .. }) => {
+                    let plan_binding = state
+                        .relations
+                        .get(&status.relation)
+                        .map(|relation| relation.plan_binding.clone())
+                        .ok_or(RelationScheduleStoreError::Corrupt)?;
+                    Some((status.as_ref().clone(), plan_binding))
+                }
                 Some(StoredStatusState::Completed { .. }) | None => None,
             }
         };
         stored
             .as_ref()
-            .map(|status| reopen_status(status, registry, artifacts))
+            .map(|(status, plan_binding)| reopen_status(status, plan_binding, registry, artifacts))
             .transpose()
     }
 
