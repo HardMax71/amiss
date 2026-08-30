@@ -33,6 +33,10 @@ pub use document::{Classification, classify, excluded_by_built_in};
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
 pub use pipeline::{SetupShell, commit_pair};
 pub use policy::{Effects, Includes, PolicySide};
+pub use projection::{
+    RepositoryProjectionLimits, RepositoryProjectionOutcome, RepositoryProjectionRequest,
+    project_repository,
+};
 pub use report::{Built, Setup, SnapshotIdentity, construct, construct_incomplete};
 pub use resolve::{ForgeContext, Intent, Resolution, Resolver, TargetCache};
 pub use resources::{ScanLimits, ScanResources};

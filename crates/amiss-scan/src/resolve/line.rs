@@ -238,7 +238,7 @@ fn unique_marker_line(
     unique.ok_or(absent)
 }
 
-fn named_region_bytes<'a>(
+pub(crate) fn named_region_bytes<'a>(
     body: &'a [u8],
     selection: &NamedRegionSelection,
 ) -> Result<&'a [u8], DriftReason> {
@@ -275,9 +275,9 @@ fn line_content(selected: &[u8]) -> &[u8] {
 
 /// An inclusive, one-indexed selection of raw source lines.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct LineRange {
-    first: u64,
-    last: u64,
+pub(crate) struct LineRange {
+    pub(crate) first: u64,
+    pub(crate) last: u64,
 }
 
 pub(super) fn line_resolution(
@@ -399,7 +399,7 @@ pub(super) fn line_fragment(
 /// including every original CRLF, bare CR, or LF terminator. The shared line
 /// scanner deliberately does not synthesize an empty line after a final
 /// terminator, so a range beyond the bytes is absent rather than empty.
-fn selected_line_bytes(source: &[u8], range: LineRange) -> Option<&[u8]> {
+pub(crate) fn selected_line_bytes(source: &[u8], range: LineRange) -> Option<&[u8]> {
     let mut line_number = 0_u64;
     let mut selection_start = None;
     for line in scan(source) {

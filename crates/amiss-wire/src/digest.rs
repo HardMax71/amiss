@@ -88,6 +88,15 @@ pub fn sha256(bytes: &[u8]) -> Digest {
     Digest(hasher.finalize().into())
 }
 
+/// The plain SHA-256 of byte pieces emitted in order, without joining them in
+/// memory first.
+#[must_use]
+pub fn sha256_stream(emit: impl FnOnce(&mut dyn FnMut(&[u8]))) -> Digest {
+    let mut hasher = Sha256::new();
+    emit(&mut |piece| hasher.update(piece));
+    Digest(hasher.finalize().into())
+}
+
 #[must_use]
 pub fn hb(domain: &str, bytes: &[u8]) -> Digest {
     hash(domain, |hasher| hasher.update(bytes))

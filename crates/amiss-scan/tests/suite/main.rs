@@ -20,6 +20,7 @@ mod policy;
 mod record_projection;
 mod recorded;
 mod report;
+mod repository_projection;
 mod request;
 mod resources;
 mod route;
