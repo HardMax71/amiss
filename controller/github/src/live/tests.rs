@@ -22,7 +22,7 @@ use super::model::{
     OwnerRecord, PullRefRecord, PullRepositoryRecord, PullRequestRecord, RefreshData,
     RepositoryRecord,
 };
-use super::publication::{PublicationDecision, publication_decision, validate_created};
+use super::publication::{CheckRunDecision, publication_decision, validate_created};
 use super::rest::{GitHubRest, OperationDeadline};
 use super::{Client, Config};
 
@@ -236,7 +236,7 @@ fn publication_reuses_only_one_exact_owned_check() {
     let exact = check_run(APP_ID, &expected);
     assert!(matches!(
         publication_decision(&fixture.config, &publication, std::slice::from_ref(&exact)).unwrap(),
-        PublicationDecision::Reuse
+        CheckRunDecision::Reuse
     ));
 
     let mut changed = exact.clone();
@@ -265,11 +265,11 @@ fn publication_reuses_only_one_exact_owned_check() {
             std::slice::from_ref(&other_evaluation)
         )
         .unwrap(),
-        PublicationDecision::Create(_)
+        CheckRunDecision::Create(_)
     ));
     assert!(matches!(
         publication_decision(&fixture.config, &publication, &[other_evaluation, exact]).unwrap(),
-        PublicationDecision::Reuse
+        CheckRunDecision::Reuse
     ));
 }
 
@@ -338,7 +338,7 @@ fn previous_artifact_metadata_projections_are_compatible_summaries() {
         assert!(matches!(
             publication_decision(&fixture.config, &publication, std::slice::from_ref(&run))
                 .unwrap(),
-            PublicationDecision::Reuse
+            CheckRunDecision::Reuse
         ));
     }
 }
@@ -865,7 +865,7 @@ impl GitHubRest for FakeRest {
 
     fn check_runs(
         &self,
-        _pull_request: GitHubPullRequest<'_>,
+        _repository: &RepositoryIdentity,
         _head_sha: &Oid,
         _app_id: u64,
         _name: &str,
@@ -877,7 +877,7 @@ impl GitHubRest for FakeRest {
 
     fn create_check_run(
         &self,
-        _pull_request: GitHubPullRequest<'_>,
+        _repository: &RepositoryIdentity,
         check: &CreateCheckRun,
         _deadline: OperationDeadline,
     ) -> Result<CheckRunRecord, ProviderError> {
@@ -997,10 +997,10 @@ fn artifact_reference(report: &[u8]) -> ArtifactReference {
     }
 }
 
-fn created_from_decision(decision: PublicationDecision) -> CreateCheckRun {
+fn created_from_decision(decision: CheckRunDecision) -> CreateCheckRun {
     match decision {
-        PublicationDecision::Create(expected) => Some(expected),
-        PublicationDecision::Reuse => None,
+        CheckRunDecision::Create(expected) => Some(expected),
+        CheckRunDecision::Reuse => None,
     }
     .unwrap()
 }
