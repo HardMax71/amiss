@@ -28,11 +28,20 @@ pub struct RelationAuditFixture {
 /// Builds one exact report-, registry-, and transition-bound relation audit.
 #[must_use]
 pub fn relation_audit(with_evidence: bool) -> Option<RelationAuditFixture> {
+    relation_audit_with_coordination(with_evidence, "workflow/release-42")
+}
+
+/// Builds the same exact audit under one caller-selected coordination identity.
+#[must_use]
+pub fn relation_audit_with_coordination(
+    with_evidence: bool,
+    coordination: &str,
+) -> Option<RelationAuditFixture> {
     let report = report()?;
     let parsed = json::parse(&report).ok()?;
     let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&parsed).ok()?;
     let report_payload_digest = Digest::from_wire(report_payload_digest)?;
-    let transition = transition()?;
+    let transition = transition(coordination)?;
     let registered = transition.relation.plan.as_ref();
     let subjects = transition.subjects.clone().map(|frozen| {
         let configured = registered
@@ -94,14 +103,14 @@ pub fn relation_audit(with_evidence: bool) -> Option<RelationAuditFixture> {
     })
 }
 
-fn transition() -> Option<RelationTransition> {
+fn transition(coordination: &str) -> Option<RelationTransition> {
     let registered = registered_relation()?;
     relation_transition(
         TriggeredRelation {
             plan: Arc::clone(&registered),
             trigger_role: ArtifactId::new("source".to_owned())?,
         },
-        ArtifactId::new("workflow/release-42".to_owned())?,
+        ArtifactId::new(coordination.to_owned())?,
         [
             frozen(
                 "documentation",

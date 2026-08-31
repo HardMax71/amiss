@@ -26,6 +26,7 @@ pub use status::{
 };
 pub use store::{
     FileRelationScheduleStore, RELATION_SCHEDULE_BINDING_LIMIT, RelationScheduleStoreError,
+    RelationStatusDeliveryClaim,
 };
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;

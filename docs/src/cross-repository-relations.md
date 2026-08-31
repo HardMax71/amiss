@@ -117,12 +117,10 @@ audit record. It does not duplicate provider configuration or credential identit
 Each configured external destination is retained in the staged action as a domain-separated digest
 of its stable provider-instance, repository, and status-name identity. After a provider accepts or
 reconciles the exact staged value, a separate hash-chained action acknowledges that destination.
-The same acknowledgement is idempotent across restart, a foreign destination fails closed, and
-batch completion is refused until every staged destination has a durable acknowledgement.
-Completion is itself a separate hash-chained action; an exact retry is idempotent, while a missing
-or rebound record fails closed. Completed in-memory state keeps only the status binding digest. A
-delivery boundary must reopen the immutable registry and artifact record, reproduce that binding,
-and only then expose provider fields.
+A foreign or repeated destination fails closed, and batch completion is refused until every staged
+destination has a durable acknowledgement. Completion is itself a separate hash-chained action;
+an exact retry is idempotent, while a missing or rebound record fails closed. Completed in-memory
+state keeps only the status binding digest.
 
 Restart recovery now performs that reopening without persisting a second provider configuration.
 It reads the bounded retained relation audit by artifact identity, reconstructs the frozen transition
@@ -130,9 +128,26 @@ from its exact snapshots and the immutable registry, replays the audit, and retu
 only when the complete status binding is identical. A missing or rebound registry, expired artifact,
 or changed target remains a refusal. Reopening still grants no external delivery authority.
 
-This outbox still makes no provider call, and neither its returned record nor its acknowledgement
-method is delivery authority. A later publisher must serialize external writes for each stable
-destination and recheck the retained artifact immediately before using it.
+Delivery claims use 256 deterministic operating-system lock shards derived from those stable
+destination digests. For every destination, selection retains only its lowest unresolved fence;
+candidates sharing a shard are tried in stable fence, relation, and coordination order. The shard
+is acquired without holding the journal lock, then the journal is synchronized and selection is
+repeated before the registry and artifact are reopened. This lock order lets acknowledgements take
+the journal lock without deadlock. A newer coordination cannot reach the same destination first,
+while unrelated shards may proceed in parallel. A hash collision can reduce concurrency but cannot
+change selection or authority.
+
+The returned claim directly carries the exact reopened status record and one target while a private
+file handle keeps its shard locked. Dropping it, including process failure, changes no durable state;
+the next attempt selects the same oldest unacknowledged destination. Acknowledgement consumes the
+claim and appends only after provider acceptance or provider-specific reconciliation. The final
+acknowledgement also appends completion under the journal lock. If failure lands between those two
+commits, the next claim pass completes the fully acknowledged batch before selecting more provider
+work.
+
+The outbox still makes no provider call. Provider adapters must reconcile an ambiguous response for
+the exact claimed value before acknowledging it, and a live relation lane must continue polling
+until the outbox has no claim.
 
 ## Exact Git acquisition
 
@@ -268,7 +283,7 @@ The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
 2. resolve both current heads through their independently configured provider credentials;
-3. serialize each stable destination and publish only the retained prepared subject roles.
+3. reconcile and publish each claimed value through its provider-specific status boundary.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet
